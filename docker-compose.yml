@@ -11,8 +11,9 @@ services:
       - "3000:3000"
     environment:
       - DATABASE_URL=file:./data/dev.db
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-your-secret-here}
-      - NEXTAUTH_URL=http://localhost:3000
+      - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
+      - AUTH_TRUST_HOST=true
+      - NEXTAUTH_URL=https://feedfox.wollank.cloud
     volumes:
       - feedfox_data:/app/prisma
       - ./data:/app/data
