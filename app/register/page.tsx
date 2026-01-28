@@ -83,7 +83,7 @@ export default function RegisterPage() {
             Join Feed<span className="text-blue-500">Fox</span>
           </h1>
           <p className="text-zinc-500 mt-1 text-xs font-medium tracking-wide">
-            Create your elite news HQ
+            Create your news Hub
           </p>
         </div>
 
@@ -94,7 +94,7 @@ export default function RegisterPage() {
               Account
             </CardTitle>
             <CardDescription className="text-zinc-500 text-[11px] font-medium leading-relaxed">
-              Start your journey with elite feed management.
+              Start your journey.
             </CardDescription>
           </CardHeader>
           <CardContent className="px-8 pb-6">

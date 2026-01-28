@@ -28,21 +28,21 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
-# Uncomment the following line in case you want to disable telemetry during runtime.
-# ENV NEXT_TELEMETRY_DISABLED 1
+ENV DATABASE_URL=file:/app/data/dev.db
+ENV NEXT_TELEMETRY_DISABLED 1
 
 RUN addgroup -S -g 1001 nodejs
 RUN adduser -S -u 1001 -G nodejs nextjs
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
+# Create data directory for SQLite and ensure proper permissions
+RUN mkdir -p /app/data && touch /app/data/dev.db && chown -R nextjs:nodejs /app/data
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Ensure the root directory and data folder are writeable by nextjs
-RUN chown -R nextjs:nodejs /app
+# Final check of permissions for the root directory and data folder
+RUN chown -R nextjs:nodejs /app && chmod -R 770 /app/data
 
 USER nextjs
 

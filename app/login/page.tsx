@@ -86,7 +86,7 @@ export default function LoginPage() {
           </h1>
           <p className="text-zinc-500 mt-1 text-sm font-medium tracking-wide flex items-center justify-center gap-2">
             <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-            Elite News Sanctuary
+            Your News Hub
           </p>
         </div>
 
@@ -165,7 +165,7 @@ export default function LoginPage() {
 
         <div className="text-center mt-10 opacity-10 select-none">
           <p className="text-[9px] font-black tracking-[0.4em] text-white uppercase">
-            DeepMind Elite Integrated System
+            Your News Hub
           </p>
         </div>
       </div>

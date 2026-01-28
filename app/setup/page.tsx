@@ -82,7 +82,7 @@ export default function SetupPage() {
             <span className="text-zinc-600 text-2xl">Setup</span>
           </h1>
           <p className="text-zinc-500 text-xs font-medium tracking-wide">
-            Elite personal news sanctuary initialization.
+            Your news hub initialization.
           </p>
         </div>
 
@@ -178,7 +178,7 @@ export default function SetupPage() {
           </p>
           <p className="text-[10px] font-black tracking-[.3em] text-white uppercase flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-            Elite
+            Hub
           </p>
         </div>
       </div>
