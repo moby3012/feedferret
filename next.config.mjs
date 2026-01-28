@@ -6,7 +6,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  serverExternalPackages: ["jsdom", "isomorphic-dompurify"],
+  serverExternalPackages: ["jsdom", "isomorphic-dompurify", "@prisma/client"],
 };
 
 export default nextConfig;
