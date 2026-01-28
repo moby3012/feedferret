@@ -11,18 +11,26 @@ import {
   Plus,
   ChevronDown,
   Search,
-  Settings,
+  Settings as SettingsIcon,
   Rss,
   LogOut,
   User as UserIcon,
+  Shield,
+  Folder,
+  Edit2,
+  Trash2,
+  Download,
+  Upload,
 } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { OpmlManagement } from "./opml-management";
+import { FeedManagement } from "./feed-management";
+import { SettingsDialog } from "./settings-dialog";
 import { addFeed } from "@/app/actions/feeds";
+import { useAddFeed } from "@/hooks/use-rss-data";
 
 interface RssSidebarProps {
   feeds: FeedSource[];
@@ -47,9 +55,12 @@ export function RssSidebar({
   ]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isManagementOpen, setIsManagementOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [isAddingFeed, setIsAddingFeed] = useState(false);
+
+  const addNewFeed = useAddFeed();
 
   const groupedFeeds = feeds.reduce(
     (acc, feed) => {
@@ -91,11 +102,7 @@ export function RssSidebar({
     return (
       <aside className="w-20 h-full bg-sidebar border-r border-sidebar-border flex flex-col items-center py-6 gap-3">
         <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center mb-6 shadow-lg transition-transform duration-300 hover:scale-105 overflow-hidden">
-          <img
-            src="/logo.svg"
-            alt="Logo"
-            className="w-6 h-6 invert dark:invert-0"
-          />
+          <img src="/logo.svg" alt="Logo" className="w-6 h-6 dark:invert" />
         </div>
         {navItems.map((item, index) => (
           <Button
@@ -136,7 +143,7 @@ export function RssSidebar({
               <img
                 src="/logo.svg"
                 alt="FeedFox Logo"
-                className="w-8 h-8 invert dark:invert-0"
+                className="w-8 h-8 dark:invert"
               />
             </div>
             <div>
@@ -342,6 +349,14 @@ export function RssSidebar({
             <Button
               variant="ghost"
               size="icon"
+              className="w-8 h-8 text-muted-foreground hover:text-primary transition-colors"
+              onClick={() => setIsSettingsOpen(true)}
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               className="w-8 h-8 text-muted-foreground hover:text-destructive transition-colors"
               onClick={() => signOut()}
             >
@@ -354,12 +369,16 @@ export function RssSidebar({
           className="w-full justify-start gap-4 h-12 text-base text-muted-foreground hover:text-sidebar-foreground rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
           onClick={() => setIsManagementOpen(true)}
         >
-          <Settings className="w-5 h-5" />
+          <SettingsIcon className="w-5 h-5" />
           Manage Feeds
         </Button>
-        <OpmlManagement
+        <FeedManagement
           open={isManagementOpen}
           onOpenChange={setIsManagementOpen}
+        />
+        <SettingsDialog
+          open={isSettingsOpen}
+          onOpenChange={setIsSettingsOpen}
         />
       </div>
     </aside>

@@ -28,3 +28,7 @@ next-env.d.ts
 
 # generated prisma
 /lib/prisma-client
+
+# database
+*.db
+*.db-journal

@@ -5,4 +5,5 @@ export default {
     providers: [
         Credentials({}),
     ],
+    session: { strategy: "jwt" },
 } satisfies NextAuthConfig;

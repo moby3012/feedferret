@@ -67,6 +67,71 @@ export async function addFeed(url: string, categoryId?: string) {
     return feed;
 }
 
+export async function deleteFeed(feedId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    await db.feed.delete({
+        where: { id: feedId, userId: session.user.id },
+    });
+
+    revalidatePath("/");
+}
+
+export async function updateFeed(feedId: string, data: { name?: string; categoryId?: string | null }) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    await db.feed.update({
+        where: { id: feedId, userId: session.user.id },
+        data,
+    });
+
+    revalidatePath("/");
+}
+
+export async function addCategory(name: string, parentId?: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const category = await db.category.create({
+        data: {
+            name,
+            userId: session.user.id,
+            parentId,
+        },
+    });
+
+    revalidatePath("/");
+    return category;
+}
+
+export async function updateCategory(categoryId: string, name: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    await db.category.update({
+        where: { id: categoryId, userId: session.user.id },
+        data: { name },
+    });
+
+    revalidatePath("/");
+}
+
+export async function deleteCategory(categoryId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    // Note: Prisma will handle cascading or setting null if configured, 
+    // but we should check our schema. 
+    // By default, it might error if feeds exist.
+    await db.category.delete({
+        where: { id: categoryId, userId: session.user.id },
+    });
+
+    revalidatePath("/");
+}
+
 export async function toggleArticleRead(articleId: string, isRead: boolean) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");

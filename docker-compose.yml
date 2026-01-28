@@ -15,7 +15,7 @@ services:
       - NEXTAUTH_URL=http://localhost:3000
     volumes:
       - feedfox_data:/app/prisma
-      - ./prisma/dev.db:/app/data/dev.db
+      - ./data:/app/data
 
 volumes:
   feedfox_data:

@@ -1,7 +1,8 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml } from "@/app/actions/feeds"
+import { getFeeds, getArticles, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory } from "@/app/actions/feeds"
+import { updateProfile, updateGlobalSettings } from "@/app/actions/settings"
 
 export function useFeeds() {
     return useQuery({
@@ -64,5 +65,79 @@ export function useImportOpml() {
 export function useExportOpml() {
     return useMutation({
         mutationFn: () => exportOpml(),
+    })
+}
+
+export function useAddFeed() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ url, categoryId }: { url: string; categoryId?: string }) => addFeed(url, categoryId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+        },
+    })
+}
+
+export function useUpdateFeed() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ feedId, data }: { feedId: string; data: { name?: string; categoryId?: string | null } }) =>
+            updateFeed(feedId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+        },
+    })
+}
+
+export function useDeleteFeed() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (feedId: string) => deleteFeed(feedId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+        },
+    })
+}
+
+export function useAddCategory() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ name, parentId }: { name: string; parentId?: string }) => addCategory(name, parentId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+        },
+    })
+}
+
+export function useUpdateCategory() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ categoryId, name }: { categoryId: string; name: string }) => updateCategory(categoryId, name),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+        },
+    })
+}
+
+export function useDeleteCategory() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (categoryId: string) => deleteCategory(categoryId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+        },
+    })
+}
+
+export function useUpdateProfile() {
+    return useMutation({
+        mutationFn: (data: { name?: string; email?: string }) => updateProfile(data),
+    })
+}
+
+export function useUpdateGlobalSettings() {
+    return useMutation({
+        mutationFn: (data: { defaultUpdateFrequency?: number }) => updateGlobalSettings(data),
     })
 }
