@@ -51,7 +51,7 @@ export default function LoginPage() {
             <img
               src="/logo.svg"
               alt="FeedFox"
-              className="w-12 h-12 dark:invert"
+              className="w-12 h-12 invert dark:invert-0"
             />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">

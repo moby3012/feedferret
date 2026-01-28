@@ -6,4 +6,20 @@ export default {
         Credentials({}),
     ],
     session: { strategy: "jwt" },
+    callbacks: {
+        authorized({ auth, request: { nextUrl } }) {
+            const isLoggedIn = !!auth?.user;
+            const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
+            const isPublicRoute = ["/login", "/register"].includes(nextUrl.pathname);
+
+            if (isApiAuthRoute) return true;
+
+            if (isPublicRoute) {
+                if (isLoggedIn) return Response.redirect(new URL("/", nextUrl));
+                return true;
+            }
+
+            return isLoggedIn;
+        },
+    },
 } satisfies NextAuthConfig;

@@ -101,8 +101,12 @@ export function RssSidebar({
   if (isCollapsed) {
     return (
       <aside className="w-20 h-full bg-sidebar border-r border-sidebar-border flex flex-col items-center py-6 gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center mb-6 shadow-lg transition-transform duration-300 hover:scale-105 overflow-hidden">
-          <img src="/logo.svg" alt="Logo" className="w-6 h-6 dark:invert" />
+        <div className="mb-6 shadow-sm transition-transform duration-300 hover:scale-105">
+          <img
+            src="/logo.svg"
+            alt="Logo"
+            className="w-10 h-10 invert dark:invert-0"
+          />
         </div>
         {navItems.map((item, index) => (
           <Button
@@ -139,11 +143,11 @@ export function RssSidebar({
       <div className="p-5 border-b border-sidebar-border">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center shadow-lg transition-transform duration-300 hover:scale-105 overflow-hidden">
+            <div className="transition-transform duration-300 hover:scale-105">
               <img
                 src="/logo.svg"
                 alt="FeedFox Logo"
-                className="w-8 h-8 dark:invert"
+                className="w-12 h-12 invert dark:invert-0"
               />
             </div>
             <div>
