@@ -1,7 +1,13 @@
-import Parser from "rss-parser";
-import DOMPurify from "isomorphic-dompurify";
 import { db } from "./db";
 import { getEffectiveSettings } from "./settings";
+
+// Helper to sanitize content only when needed, avoiding build-time jsdom loading issues
+async function getSanitizer() {
+    const { default: DOMPurify } = await import("isomorphic-dompurify");
+    return DOMPurify;
+}
+
+import Parser from "rss-parser";
 
 const parser = new Parser();
 
@@ -25,6 +31,8 @@ export async function syncFeed(userId: string, feedId: string) {
                 data: { name: remoteFeed.title || feed.name },
             });
         }
+
+        const DOMPurify = await getSanitizer();
 
         const articles = remoteFeed.items.map((item) => {
             const content = item.content || item["content:encoded"] || item.summary || "";
