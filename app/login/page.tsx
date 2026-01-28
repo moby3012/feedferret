@@ -65,7 +65,7 @@ export default function LoginPage() {
   if (status === "loading") return null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#05060a] relative overflow-hidden text-white selection:bg-blue-500/30">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-[#05060a] relative overflow-hidden text-white selection:bg-blue-500/30">
       {/* Background Orbs */}
       <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/20 rounded-full blur-[120px] animate-pulse" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-600/20 rounded-full blur-[120px] animate-pulse delay-700" />
@@ -92,8 +92,8 @@ export default function LoginPage() {
 
         <Card className="border-white/10 bg-white/[0.03] backdrop-blur-2xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden ring-1 ring-white/10">
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
-          <CardHeader className="pb-4">
-            <CardTitle className="text-2xl font-bold text-white flex items-center gap-2">
+          <CardHeader className="pb-6 text-center sm:text-left">
+            <CardTitle className="text-2xl font-bold text-white flex items-center justify-center sm:justify-start gap-3">
               <LogIn className="w-6 h-6 text-blue-500" />
               Sign In
             </CardTitle>
@@ -142,8 +142,8 @@ export default function LoginPage() {
                 className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white font-black text-lg rounded-xl shadow-lg shadow-blue-900/40 group transition-all transform active:scale-[0.98]"
               >
                 {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span className="flex items-center gap-2 text-sm font-bold">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Authenticating...
                   </span>
                 ) : (
@@ -156,7 +156,7 @@ export default function LoginPage() {
             </form>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4 border-t border-white/10 pt-6 pb-8 bg-white/[0.01]">
-            <div className="text-zinc-400 font-medium">
+            <div className="text-zinc-400 font-medium text-center w-full">
               Don&apos;t have an account?{" "}
               <Link
                 href="/register"

@@ -63,12 +63,12 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#05060a] relative overflow-hidden text-white selection:bg-blue-500/30">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-[#05060a] relative overflow-hidden text-white selection:bg-blue-500/30">
       {/* Background Orbs */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/15 rounded-full blur-[140px] animate-pulse" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/15 rounded-full blur-[140px] animate-pulse delay-1000" />
 
-      <div className="w-full max-md relative z-10 animate-scale-in">
+      <div className="w-full max-w-md relative z-10 animate-scale-in">
         <div className="text-center mb-10 group">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-[28%] bg-gradient-to-br from-blue-500 to-indigo-600 p-[2px] mb-6 shadow-2xl transition-all duration-500 group-hover:scale-110">
             <div className="w-full h-full bg-[#05060a] rounded-[24%] flex items-center justify-center overflow-hidden">
@@ -79,7 +79,7 @@ export default function RegisterPage() {
               />
             </div>
           </div>
-          <h1 className="text-4xl font-black tracking-tighter text-white">
+          <h1 className="text-4xl font-black tracking-tighter text-white drop-shadow-sm">
             Join Feed<span className="text-blue-500">Fox</span>
           </h1>
           <p className="text-zinc-400 mt-2 font-medium tracking-wide">
@@ -89,8 +89,8 @@ export default function RegisterPage() {
 
         <Card className="border-white/10 bg-white/[0.03] backdrop-blur-2xl shadow-2xl overflow-hidden ring-1 ring-white/10">
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold text-white flex items-center gap-2">
+          <CardHeader className="pb-6 text-center sm:text-left">
+            <CardTitle className="text-2xl font-bold text-white flex items-center justify-center sm:justify-start gap-3">
               <UserPlus className="w-6 h-6 text-blue-500" />
               Create Account
             </CardTitle>
@@ -121,7 +121,7 @@ export default function RegisterPage() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="relative group/input">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within/input:text-blue-500 transition-colors" />
                   <Input
@@ -157,15 +157,22 @@ export default function RegisterPage() {
                 disabled={isLoading}
                 className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white font-black text-lg rounded-xl shadow-lg group transition-all transform active:scale-[0.98] uppercase tracking-wide"
               >
-                {isLoading ? "Creating..." : "Register"}
-                {!isLoading && (
-                  <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                {isLoading ? (
+                  <span className="flex items-center gap-2 text-sm font-bold">
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    Creating...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    Register
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </span>
                 )}
               </Button>
             </form>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4 border-t border-white/10 pt-6 pb-8 bg-white/[0.01]">
-            <div className="text-zinc-400 font-medium">
+            <div className="text-zinc-400 font-medium text-center w-full">
               Already have an account?{" "}
               <Link
                 href="/login"
