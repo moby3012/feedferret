@@ -35,12 +35,6 @@ interface RawArticle {
 export default function RSSReaderPage() {
   const { data: session, status } = useSession();
   const [selectedFeed, setSelectedFeed] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      window.location.href = "/login";
-    }
-  }, [status]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(
     null,
