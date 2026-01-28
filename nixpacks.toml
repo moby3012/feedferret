@@ -1,0 +1,4 @@
+[providers.node]
+nodeVersion = "22"
+installCommand = "pnpm install"
+buildCommand = "pnpm run build"
