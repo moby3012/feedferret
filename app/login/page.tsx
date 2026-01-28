@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,8 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import Link from "next/link";
-import { Mail, Lock, ArrowRight, LogIn } from "lucide-react";
+import { Mail, Lock, ArrowRight, LogIn, Sparkles } from "lucide-react";
+import { hasUsers } from "../actions/onboarding";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -22,6 +23,19 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { status } = useSession();
+
+  useEffect(() => {
+    async function checkFirstRun() {
+      if (status === "unauthenticated") {
+        const usersExist = await hasUsers();
+        if (!usersExist) {
+          router.push("/setup");
+        }
+      }
+    }
+    checkFirstRun();
+  }, [status, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,62 +62,76 @@ export default function LoginPage() {
     }
   };
 
+  if (status === "loading") return null;
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#0a0b10] relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#05060a] relative overflow-hidden text-white selection:bg-orange-500/30">
       {/* Background Orbs */}
-      <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/20 rounded-full blur-[120px] animate-pulse" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-accent/20 rounded-full blur-[120px] animate-pulse delay-700" />
+      <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-orange-600/20 rounded-full blur-[120px] animate-pulse" />
+      <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/20 rounded-full blur-[120px] animate-pulse delay-700" />
 
       <div className="w-full max-w-md relative z-10 animate-scale-in">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent p-[2px] mb-6">
-            <div className="w-full h-full bg-[#0a0b10] rounded-[14px] flex items-center justify-center overflow-hidden">
-              <img src="/logo.svg" alt="FeedFox" className="w-10 h-10 invert" />
+        <div className="text-center mb-10 group">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-[28%] bg-gradient-to-br from-orange-500 to-amber-600 p-[2px] mb-6 shadow-2xl shadow-orange-500/40 transition-transform duration-500 group-hover:scale-110">
+            <div className="w-full h-full bg-[#05060a] rounded-[24%] flex items-center justify-center overflow-hidden">
+              <img
+                src="/logo.svg"
+                alt="FeedFox"
+                className="w-12 h-12 invert brightness-200"
+              />
             </div>
           </div>
-          <h1 className="text-3xl font-black tracking-tight text-white">
-            Welcome back to Feed<span className="text-primary">Fox</span>
+          <h1 className="text-4xl font-black tracking-tighter text-white drop-shadow-sm">
+            Welcome to Feed<span className="text-orange-500">Fox</span>
           </h1>
+          <p className="text-zinc-400 mt-2 font-medium tracking-wide flex items-center justify-center gap-2">
+            <Sparkles className="w-4 h-4 text-orange-400" />
+            Your Elite News Sanctuary
+          </p>
         </div>
 
-        <Card className="border-white/5 bg-white/5 backdrop-blur-xl shadow-2xl overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-          <CardHeader>
-            <CardTitle className="text-xl text-white flex items-center gap-2">
-              <LogIn className="w-5 h-5 text-primary" />
+        <Card className="border-white/10 bg-white/[0.03] backdrop-blur-2xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden ring-1 ring-white/10">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
+          <CardHeader className="pb-4">
+            <CardTitle className="text-2xl font-bold text-white flex items-center gap-2">
+              <LogIn className="w-6 h-6 text-orange-500" />
               Sign In
             </CardTitle>
-            <CardDescription className="text-white/60">
+            <CardDescription className="text-zinc-400 font-medium">
               Access your personalized feed stream
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 w-5 h-5 text-white/40" />
-                <Input
-                  type="email"
-                  placeholder="Email Address"
-                  className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary/50 transition-all h-12"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
+              <div className="space-y-2">
+                <div className="relative group/input">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within/input:text-orange-500" />
+                  <Input
+                    type="email"
+                    placeholder="Email Address"
+                    className="pl-12 bg-white/[0.05] border-white/10 text-white placeholder:text-zinc-600 focus:border-orange-500/50 focus:ring-orange-500/20 transition-all h-14 rounded-xl text-lg"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 w-5 h-5 text-white/40" />
-                <Input
-                  type="password"
-                  placeholder="Password"
-                  className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary/50 transition-all h-12"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+              <div className="space-y-2">
+                <div className="relative group/input">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 transition-colors group-focus-within/input:text-orange-500" />
+                  <Input
+                    type="password"
+                    placeholder="Password"
+                    className="pl-12 bg-white/[0.05] border-white/10 text-white placeholder:text-zinc-600 focus:border-orange-500/50 focus:ring-orange-500/20 transition-all h-14 rounded-xl text-lg"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
 
               {error && (
-                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
+                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-bold animate-shake">
                   {error}
                 </div>
               )}
@@ -111,27 +139,40 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold group transition-all"
+                className="w-full h-14 bg-orange-600 hover:bg-orange-500 text-white font-black text-lg rounded-xl shadow-lg shadow-orange-900/40 group transition-all transform active:scale-[0.98]"
               >
-                {isLoading ? "Authenticating..." : "Sign In"}
-                {!isLoading && (
-                  <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Authenticating...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2 uppercase tracking-wide">
+                    Sign In
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </span>
                 )}
               </Button>
             </form>
           </CardContent>
-          <CardFooter className="flex flex-col space-y-4 border-t border-white/5 pt-6 bg-white/[0.02]">
-            <div className="text-sm text-center text-white/60">
+          <CardFooter className="flex flex-col space-y-4 border-t border-white/10 pt-6 pb-8 bg-white/[0.01]">
+            <div className="text-zinc-400 font-medium">
               Don&apos;t have an account?{" "}
               <Link
                 href="/register"
-                className="text-primary hover:text-primary/80 font-bold transition-colors"
+                className="text-white hover:text-orange-400 font-black underline underline-offset-8 decoration-orange-500/30 transition-all"
               >
                 Create one now
               </Link>
             </div>
           </CardFooter>
         </Card>
+
+        <div className="text-center mt-12 opacity-30 select-none">
+          <p className="text-[10px] font-black tracking-[0.4em] text-white uppercase">
+            DeepMind Elite Integrated System
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -40,7 +40,16 @@ export default function RSSReaderPage() {
   const [selectedFeed, setSelectedFeed] = useState<string | null>(null);
   const router = useRouter();
 
-  if (status === "loading") return null;
+  if (status === "loading") {
+    return (
+      <div className="h-dvh flex items-center justify-center bg-[#05060a]">
+        <div className="relative w-20 h-20">
+          <div className="absolute inset-0 border-4 border-primary/20 rounded-[28%] animate-pulse" />
+          <div className="absolute inset-0 border-t-4 border-primary rounded-[28%] animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     async function checkSetup() {
@@ -158,14 +167,6 @@ export default function RSSReaderPage() {
       return () => window.removeEventListener("keydown", handleKeyDown);
     }
   }, [filteredArticles, selectedArticleId]);
-
-  if (status === "loading") {
-    return (
-      <div className="h-dvh flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
 
   return (
     <div className="h-dvh flex bg-background overflow-hidden">
