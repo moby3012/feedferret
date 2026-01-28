@@ -13,6 +13,9 @@ export const {
 } = NextAuth({
     adapter: PrismaAdapter(db),
     ...authConfig,
+    pages: {
+        signIn: "/login",
+    },
     providers: [
         Credentials({
             async authorize(credentials) {

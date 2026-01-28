@@ -32,9 +32,27 @@ interface RawArticle {
   [key: string]: any; // Allow for other properties not explicitly defined
 }
 
+import { hasUsers } from "./actions/onboarding";
+import { useRouter } from "next/navigation";
+
 export default function RSSReaderPage() {
   const { data: session, status } = useSession();
   const [selectedFeed, setSelectedFeed] = useState<string | null>(null);
+  const router = useRouter();
+
+  if (status === "loading") return null;
+
+  useEffect(() => {
+    async function checkSetup() {
+      if (status === "unauthenticated") {
+        const hasExistingUsers = await hasUsers();
+        if (!hasExistingUsers) {
+          router.push("/setup");
+        }
+      }
+    }
+    checkSetup();
+  }, [status, router]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(
     null,

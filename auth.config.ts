@@ -10,7 +10,7 @@ export default {
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user;
             const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
-            const isPublicRoute = ["/login", "/register"].includes(nextUrl.pathname);
+            const isPublicRoute = ["/login", "/register", "/setup"].includes(nextUrl.pathname);
 
             if (isApiAuthRoute) return true;
 
