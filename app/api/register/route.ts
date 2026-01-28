@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
+    console.log("Registration attempt. DB:", process.env.DATABASE_URL, "UID:", process.getuid?.());
     try {
         const { name, email, password } = await req.json();
 

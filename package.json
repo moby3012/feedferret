@@ -6,7 +6,7 @@
     "build": "prisma generate && next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "npx prisma db push --accept-data-loss && if [ -f server.js ]; then node server.js; else next start; fi"
+    "start": "mkdir -p /app/data && npx prisma db push --accept-data-loss && if [ -f server.js ]; then node server.js; else next start; fi"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",

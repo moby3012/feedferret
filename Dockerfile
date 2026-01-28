@@ -35,11 +35,14 @@ RUN addgroup -S -g 1001 nodejs
 RUN adduser -S -u 1001 -G nodejs nextjs
 
 # Create data directory for SQLite
-RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Ensure the root directory and data folder are writeable by nextjs
+RUN chown -R nextjs:nodejs /app
 
 USER nextjs
 
