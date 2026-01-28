@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { syncAllFeeds } from "@/lib/rss-sync";
 import { NextResponse } from "next/server";
 

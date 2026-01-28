@@ -6,6 +6,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-}
+  serverExternalPackages: ["jsdom", "isomorphic-dompurify"],
+};
 
-export default nextConfig
+export default nextConfig;
