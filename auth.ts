@@ -12,7 +12,6 @@ export const {
     signOut,
 } = NextAuth({
     adapter: PrismaAdapter(db),
-    session: { strategy: "jwt" },
     ...authConfig,
     providers: [
         Credentials({
@@ -37,6 +36,7 @@ export const {
         }),
     ],
     callbacks: {
+        ...authConfig.callbacks,
         async session({ session, token }) {
             if (token.sub && session.user) {
                 session.user.id = token.sub;
@@ -47,4 +47,5 @@ export const {
             return token;
         },
     },
+    trustHost: true,
 });
