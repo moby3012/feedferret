@@ -42,7 +42,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-background" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
-        <SessionProvider basePath="/api/engine-auth">
+        <SessionProvider>
           <Providers>
             <ThemeProvider
               attribute="class"

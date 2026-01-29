@@ -23,6 +23,12 @@ const config = {
     },
     providers: [
         Nodemailer({
+            server: {
+                host: "",
+                port: 0,
+                auth: { user: "", pass: "" },
+            },
+            from: "",
             async sendVerificationRequest({ identifier: email, url }) {
                 const settings = await db.globalSettings.findUnique({ where: { id: "global" } });
 
@@ -129,10 +135,7 @@ const config = {
     trustHost: true,
 };
 
-const authData = NextAuth({
-    ...config,
-    basePath: "/api/engine-auth",
-});
+const authData = NextAuth(config as any);
 
 export const handlers = authData.handlers;
 export const auth = authData.auth;
