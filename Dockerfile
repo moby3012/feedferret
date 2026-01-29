@@ -40,6 +40,13 @@ RUN mkdir -p /app/data && touch /app/data/dev.db && chown -R nextjs:nodejs /app/
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Copy Prisma schema and startup script
+COPY --chown=nextjs:nodejs prisma ./prisma
+COPY --chown=nextjs:nodejs start.sh ./start.sh
+RUN chmod +x ./start.sh
+
+# Install prisma globally in the runner so we can run migrations
+RUN npm install -g prisma
 
 # Final check of permissions for the root directory and data folder
 RUN chown -R nextjs:nodejs /app && chmod -R 770 /app/data
@@ -51,4 +58,5 @@ EXPOSE 3000
 ENV PORT 3000
 
 # server.js is created by next build from the standalone output
-CMD ["node", "server.js"]
+# server.js is created by next build from the standalone output
+CMD ["./start.sh"]
