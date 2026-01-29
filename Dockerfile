@@ -46,7 +46,7 @@ COPY --chown=nextjs:nodejs start.sh ./start.sh
 RUN chmod +x ./start.sh
 
 # Install prisma globally in the runner so we can run migrations
-RUN npm install -g prisma
+RUN npm install -g prisma@5.22.0
 
 # Final check of permissions for the root directory and data folder
 RUN chown -R nextjs:nodejs /app && chmod -R 770 /app/data

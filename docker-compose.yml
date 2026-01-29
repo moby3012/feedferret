@@ -15,9 +15,7 @@ services:
       - AUTH_TRUST_HOST=true
       - NEXTAUTH_URL=https://feedfox.wollank.cloud
     volumes:
-      - feedfox_data:/app/prisma
       - feedfox_db_data:/app/data
 
 volumes:
-  feedfox_data:
   feedfox_db_data:
