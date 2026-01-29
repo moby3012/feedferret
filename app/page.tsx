@@ -69,17 +69,23 @@ export default function RSSReaderPage() {
   const filteredArticles = useMemo(() => {
     let list = [...articles];
 
-    // Sort FIRST
-    list.sort((a: any, b: any) => b.publishedAtRaw - a.publishedAtRaw);
+    // Some views IGNORE the unread filter toggle
+    const bypassUnreadFilter = [
+      "All",
+      "All Articles",
+      "Starred",
+      "Recently Read",
+    ].includes(selectedCategory);
 
     // Apply main view filter
     if (selectedCategory === "New Articles") {
       list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
-    } else if (unreadOnly) {
+    } else if (unreadOnly && !bypassUnreadFilter) {
       list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
     }
 
-    return list;
+    // Sort AFTER filtering
+    return list.sort((a: any, b: any) => b.publishedAtRaw - a.publishedAtRaw);
   }, [articles, unreadOnly, selectedCategory, readInSession]);
 
   const headerTitle = useMemo(() => {

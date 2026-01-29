@@ -215,13 +215,13 @@ export async function getArticles(feedId?: string | null, category?: string) {
 
     if (feedId) {
         where.feedId = feedId;
-    } else if (category && category !== "All") {
+    } else if (category && category !== "All" && category !== "All Articles") {
         if (category === "Starred") {
             where.isStarred = true;
         } else if (category === "Recently Read") {
             where.isRead = true;
-        } else if (category === "Archive") {
-            where.isRead = true;
+        } else if (category === "New Articles") {
+            where.isRead = false;
         } else {
             where.feed = {
                 category: {

@@ -71,6 +71,25 @@ export function RssHeader({
       <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
         <Button
           variant="ghost"
+          size="sm"
+          className={cn(
+            "h-10 rounded-xl px-3 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-2",
+            unreadOnly
+              ? "text-blue-500 bg-blue-500/10 border border-blue-500/20 shadow-sm"
+              : "text-muted-foreground",
+          )}
+          onClick={onToggleUnreadOnly}
+        >
+          <Filter className="w-4 h-4" />
+          {unreadOnly && (
+            <span className="text-xs font-bold uppercase tracking-wider">
+              Unread Only
+            </span>
+          )}
+        </Button>
+
+        <Button
+          variant="ghost"
           size="icon"
           className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
           onClick={onRefresh}
