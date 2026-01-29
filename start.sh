@@ -16,7 +16,9 @@ mkdir -p /app/data
 echo "Running database migrations..."
 # We use db push for sqlite dev.db or migrate deploy if we had a real migration history and prod DB
 # The user's package.json uses 'prisma db push' for start, so we replicate that.
-npx prisma db push --accept-data-loss
+# Added --skip-generate because the user (nextjs) cannot write to global node_modules or potentially even local ones if ownership is tricky,
+# and the client should have been generated at build time anyway.
+npx prisma db push --accept-data-loss --skip-generate
 
 echo "Starting Next.js server..."
 node server.js
