@@ -1,5 +1,5 @@
 # Production Dockerfile
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 RUN apk add --no-cache libc6-compat openssl
 
 # Install dependencies only when needed
@@ -19,6 +19,18 @@ COPY . .
 # Next.js collects completely anonymous telemetry data about general usage.
 # Learn more here: https://nextjs.org/telemetry
 ENV NEXT_TELEMETRY_DISABLED 1
+
+# Add build arguments for Next.js build time
+ARG DATABASE_URL
+ARG AUTH_SECRET
+ARG NEXTAUTH_URL
+ARG AUTH_TRUST_HOST
+
+# Make them available as environment variables
+ENV DATABASE_URL=$DATABASE_URL
+ENV AUTH_SECRET=$AUTH_SECRET
+ENV NEXTAUTH_URL=$NEXTAUTH_URL
+ENV AUTH_TRUST_HOST=$AUTH_TRUST_HOST
 
 RUN npm install -g pnpm && pnpm run build
 

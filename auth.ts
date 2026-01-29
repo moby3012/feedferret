@@ -7,20 +7,23 @@ import Nodemailer from "next-auth/providers/nodemailer";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 
-export const {
-    handlers: { GET, POST },
-    auth,
-    signIn,
-    signOut,
-} = NextAuth({
-    adapter: PrismaAdapter(db),
+// detect if we are in the build phase to avoid database calls
+const isBuild = process.env.NEXT_PHASE === "phase-production-build" || process.env.NODE_ENV === "production" && !process.env.AUTH_SECRET;
+
+// Ensure AUTH_SECRET is present during build to avoid AuthError crash
+if (isBuild && !process.env.AUTH_SECRET) {
+    process.env.AUTH_SECRET = "build-time-secret-only";
+}
+
+const config = {
+    adapter: isBuild ? undefined : PrismaAdapter(db),
     ...authConfig,
     pages: {
         signIn: "/login",
     },
     providers: [
         Nodemailer({
-            async sendVerificationRequest({ identifier: email, url, provider }) {
+            async sendVerificationRequest({ identifier: email, url }) {
                 const settings = await db.globalSettings.findUnique({ where: { id: "global" } });
 
                 if (!settings || !settings.mailServiceEnabled || !settings.smtpHost) {
@@ -86,7 +89,7 @@ export const {
     ],
     callbacks: {
         ...authConfig.callbacks,
-        async signIn({ user, account, profile }) {
+        async signIn({ user, account }: { user: any, account?: any }) {
             // If it's a new registration, check if registrations are enabled
             if (account?.type === "credentials" || account?.provider === "nodemailer" || account?.type === "oauth") {
                 const existingUser = await db.user.findUnique({
@@ -102,14 +105,14 @@ export const {
             }
             return true;
         },
-        async session({ session, token }) {
+        async session({ session, token }: { session: any, token: any }) {
             if (token.sub && session.user) {
                 session.user.id = token.sub;
                 session.user.role = token.role as string;
             }
             return session;
         },
-        async jwt({ token }) {
+        async jwt({ token }: { token: any }) {
             if (!token.sub) return token;
 
             const user = await db.user.findUnique({
@@ -124,4 +127,14 @@ export const {
         },
     },
     trustHost: true,
+};
+
+const authData = NextAuth({
+    ...config,
+    basePath: "/api/engine-auth",
 });
+
+export const handlers = authData.handlers;
+export const auth = authData.auth;
+export const signIn = authData.signIn;
+export const signOut = authData.signOut;

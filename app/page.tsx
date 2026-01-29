@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import { useState, useMemo, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { RssSidebar } from "@/components/rss-sidebar";
