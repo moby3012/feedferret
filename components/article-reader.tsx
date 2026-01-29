@@ -35,7 +35,7 @@ export function ArticleReader({
             <img
               src="/logo.svg"
               alt="FeedFerret Logo"
-              className="w-12 h-12 dark:invert"
+              className="w-12 h-12 invert dark:invert-0"
             />
           </div>
           <h2 className="text-2xl font-bold text-foreground mb-3 text-balance">

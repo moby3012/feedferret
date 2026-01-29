@@ -70,7 +70,7 @@ export default function RegisterPage() {
             <img
               src="/logo.svg"
               alt="FeedFerret"
-              className="w-full h-full invert opacity-90"
+              className="w-full h-full opacity-90"
             />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">
