@@ -120,7 +120,7 @@ export function ArticleReader({
       </header>
 
       {/* Article Content */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 overflow-hidden min-h-0">
         <article className="max-w-3xl mx-auto px-6 py-12">
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">

@@ -9,6 +9,7 @@ import {
   useAddCategory,
   useUpdateCategory,
   useDeleteCategory,
+  useUpdateCategoryOrder,
   useImportOpml,
   useExportOpml,
 } from "@/hooks/use-rss-data";
@@ -45,6 +46,134 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+
+function SortableCategoryItem({
+  cat,
+  editingCategoryId,
+  editingCategoryName,
+  setEditingCategoryName,
+  setEditingCategoryId,
+  updateCategory,
+  deleteCategory,
+}: any) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: cat.id,
+    data: { type: "category" },
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="p-4 rounded-2xl bg-muted/20 border border-transparent hover:border-border transition-all group"
+    >
+      <div className="flex items-center gap-3">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing"
+        >
+          <Folder className="w-5 h-5 text-primary" />
+        </div>
+        {editingCategoryId === cat.id ? (
+          <div className="flex-1 flex gap-2">
+            <Input
+              autoFocus
+              value={editingCategoryName}
+              onChange={(e) => setEditingCategoryName(e.target.value)}
+              className="h-9 rounded-xl bg-background border-none"
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 text-green-500 hover:bg-green-500/10"
+              onClick={() => {
+                updateCategory.mutate({
+                  categoryId: cat.id,
+                  name: editingCategoryName,
+                });
+                setEditingCategoryId(null);
+              }}
+            >
+              <Check className="w-4 h-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 text-muted-foreground"
+              onClick={() => setEditingCategoryId(null)}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1">
+              <span className="font-bold block">{cat.name}</span>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+                Sync: {cat.updateFrequency || "Global Default"} min
+              </span>
+            </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 opacity-0 group-hover:opacity-100 rounded-xl"
+              onClick={() => {
+                setEditingCategoryId(cat.id);
+                setEditingCategoryName(cat.name);
+              }}
+            >
+              <Edit2 className="w-4 h-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 rounded-xl"
+              onClick={() => {
+                if (confirm(`Delete category ${cat.name}?`))
+                  deleteCategory.mutate(cat.id);
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function FeedManagement({
   open,
@@ -59,6 +188,7 @@ export function FeedManagement({
   const addCategory = useAddCategory();
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
+  const updateCategoryOrder = useUpdateCategoryOrder();
   const importOpml = useImportOpml();
   const exportOpml = useExportOpml();
 
@@ -114,6 +244,32 @@ export function FeedManagement({
         },
       },
     );
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = categories.findIndex((c: any) => c.id === active.id);
+    const newIndex = categories.findIndex((c: any) => c.id === over.id);
+
+    if (oldIndex !== -1 && newIndex !== -1) {
+      const newOrder = arrayMove(categories, oldIndex, newIndex);
+      await updateCategoryOrder.mutateAsync(
+        newOrder.map((c: any, i) => ({ id: c.id, order: i })),
+      );
+    }
   };
 
   return (
@@ -233,92 +389,38 @@ export function FeedManagement({
                     Add
                   </Button>
                 </div>
-                <ScrollArea className="flex-1 h-[50vh]">
-                  <div className="space-y-3 pb-8">
-                    {categories.map((cat: any) => (
-                      <div
-                        key={cat.id}
-                        className="p-4 rounded-2xl bg-muted/20 border border-transparent hover:border-border transition-all group"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Folder className="w-5 h-5 text-primary" />
-                          {editingCategoryId === cat.id ? (
-                            <div className="flex-1 flex gap-2">
-                              <Input
-                                autoFocus
-                                value={editingCategoryName}
-                                onChange={(e) =>
-                                  setEditingCategoryName(e.target.value)
-                                }
-                                className="h-9 rounded-xl bg-background border-none"
-                              />
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-9 w-9 text-green-500 hover:bg-green-500/10"
-                                onClick={() => {
-                                  updateCategory.mutate({
-                                    categoryId: cat.id,
-                                    name: editingCategoryName,
-                                  });
-                                  setEditingCategoryId(null);
-                                }}
-                              >
-                                <Check className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-9 w-9 text-muted-foreground"
-                                onClick={() => setEditingCategoryId(null)}
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex-1">
-                                <span className="font-bold block">
-                                  {cat.name}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
-                                  Sync:{" "}
-                                  {cat.updateFrequency || "Global Default"} min
-                                </span>
-                              </div>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-9 w-9 opacity-0 group-hover:opacity-100 rounded-xl"
-                                onClick={() => {
-                                  setEditingCategoryId(cat.id);
-                                  setEditingCategoryName(cat.name);
-                                }}
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-9 w-9 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 rounded-xl"
-                                onClick={() => {
-                                  if (confirm(`Delete category ${cat.name}?`))
-                                    deleteCategory.mutate(cat.id);
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
+                <ScrollArea className="flex-1 h-[50vh] overflow-hidden min-h-0">
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                    modifiers={[restrictToVerticalAxis]}
+                  >
+                    <SortableContext
+                      items={categories.map((c: any) => c.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="space-y-3 pb-8">
+                        {categories.map((cat: any) => (
+                          <SortableCategoryItem
+                            key={cat.id}
+                            cat={cat}
+                            editingCategoryId={editingCategoryId}
+                            editingCategoryName={editingCategoryName}
+                            setEditingCategoryName={setEditingCategoryName}
+                            setEditingCategoryId={setEditingCategoryId}
+                            updateCategory={updateCategory}
+                            deleteCategory={deleteCategory}
+                          />
+                        ))}
+                        {categories.length === 0 && (
+                          <p className="text-center py-10 text-muted-foreground italic">
+                            No categories yet. Create one above.
+                          </p>
+                        )}
                       </div>
-                    ))}
-                    {categories.length === 0 && (
-                      <p className="text-center py-10 text-muted-foreground italic">
-                        No categories yet. Create one above.
-                      </p>
-                    )}
-                  </div>
+                    </SortableContext>
+                  </DndContext>
                 </ScrollArea>
               </div>
             </TabsContent>

@@ -16,6 +16,7 @@ import {
   User as UserIcon,
   Folder,
   Users,
+  GripVertical,
 } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ import {
   useStarredCount,
 } from "@/hooks/use-rss-data";
 import { ServerManagementDialog } from "./server-management-dialog";
+import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -95,7 +97,11 @@ export function RssSidebar({
   const { data: starredCount = 0 } = useStarredCount();
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
@@ -137,10 +143,53 @@ export function RssSidebar({
     const { active, over } = event;
     setActiveId(null);
 
-    if (!over || active.id === over.id) return;
+    if (!over) return;
 
     const activeData = active.data.current;
     const overData = over.data.current;
+
+    // Handle Nesting (Active is dropped ON Over)
+    if (active.id !== over.id) {
+      if (activeData?.type === "category" && overData?.type === "category") {
+        // Drop category on another category -> Nest
+        // Check if we are dropping ON or ABOVE/BELOW (reordering)
+        // For simplicity, we'll reorder if they are siblings, nest if dropped on a potential parent
+        // But user specifically asked for "dropping it on that new overcategory"
+
+        // If they are different levels or we want to force nesting:
+        // For now, let's allow reordering and also handle "move" if parent changes
+        const activeCategory = allCategories.find(
+          (c: any) => c.id === active.id,
+        );
+        const overCategory = allCategories.find((c: any) => c.id === over.id);
+
+        if (activeCategory && overCategory) {
+          await updateCategoryOrder.mutateAsync([
+            {
+              id: active.id as string,
+              order: 0,
+              parentId: over.id as string,
+            },
+          ]);
+          toast.success(
+            `Moved ${activeCategory.name} into ${overCategory.name}`,
+          );
+          return;
+        }
+      } else if (activeData?.type === "feed" && overData?.type === "category") {
+        // Drop feed on category -> Move to category
+        await updateFeedOrder.mutateAsync([
+          {
+            id: active.id as string,
+            order: 0,
+            categoryId: over.id as string,
+          },
+        ]);
+        return;
+      }
+    }
+
+    if (!over || active.id === over.id) return;
 
     if (activeData?.type === "category" && overData?.type === "category") {
       const oldIndex = allCategories.findIndex((c: any) => c.id === active.id);
@@ -156,7 +205,7 @@ export function RssSidebar({
 
       if (activeFeed && overFeed) {
         const catFeeds = feeds.filter(
-          (f) => f.category === activeFeed.category,
+          (f) => f.categoryId === activeFeed.categoryId,
         );
         const oldIndex = catFeeds.findIndex((f) => f.id === active.id);
         const newIndex = catFeeds.findIndex((f) => f.id === over.id);
@@ -166,8 +215,7 @@ export function RssSidebar({
           newOrder.map((f, i) => ({
             id: f.id,
             order: i,
-            categoryId:
-              allCategories.find((c: any) => c.name === f.category)?.id || null,
+            categoryId: activeFeed.categoryId,
           })),
         );
       }
@@ -246,7 +294,7 @@ export function RssSidebar({
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 overflow-hidden min-h-0">
         <div className="p-4">
           {/* Navigation */}
           <nav className="space-y-1.5 mb-8">
@@ -499,13 +547,13 @@ function SortableCategory({
   return (
     <div ref={setNodeRef} style={style} className="group">
       <div className="flex items-center gap-2 px-4 py-2 hover:bg-sidebar-accent/30 rounded-lg transition-colors">
-        <button
+        <div
           {...attributes}
           {...listeners}
-          className="cursor-grab active:cursor-grabbing"
+          className="cursor-grab active:cursor-grabbing hover:bg-muted p-1 rounded transition-colors"
         >
-          <Folder className="w-4 h-4 text-primary/70" />
-        </button>
+          <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
+        </div>
         <button
           onClick={onToggle}
           className="flex-1 flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider"
@@ -567,7 +615,18 @@ function SortableFeedItem({ feed, isSelected, onSelect }: any) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="group/feed flex items-center"
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="opacity-0 group-hover/feed:opacity-100 cursor-grab active:cursor-grabbing p-1"
+      >
+        <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30" />
+      </div>
       <SimpleFeedItem feed={feed} isSelected={isSelected} onSelect={onSelect} />
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import readingTime from "reading-time";
 import { RssSidebar } from "@/components/rss-sidebar";
 import { ArticleList } from "@/components/article-list";
 import { ArticleReader } from "@/components/article-reader";
@@ -48,7 +49,7 @@ export default function RSSReaderPage() {
       feedName: a.feed.name,
       feedIcon: a.feed.icon || "📰",
       publishedAt: new Date(a.publishedAt).toLocaleDateString(),
-      readTime: "5 min read", // Placeholder
+      readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
       excerpt: a.excerpt || "",
       author: a.author || "Unknown",
     }));

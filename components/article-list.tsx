@@ -37,7 +37,7 @@ export function ArticleList({
   }
 
   return (
-    <ScrollArea className="flex-1">
+    <ScrollArea className="flex-1 overflow-hidden min-h-0">
       <div
         className={cn(
           "p-3 space-y-3",
