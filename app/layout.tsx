@@ -10,16 +10,16 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "FeedFox - Versatile Simple RSS Reader",
+  title: "FeedFerret - Versatile Simple RSS Reader",
   description: "A beautiful, self-hostable RSS reader for your daily news feed",
   manifest: "/manifest.json",
   icons: {
     icon: [
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
-      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/logo.svg", type: "image/svg+xml" },
     ],
-    apple: [{ url: "/apple-icon.png" }],
+    apple: [{ url: "/apple-touch-icon.png" }],
   },
 };
 

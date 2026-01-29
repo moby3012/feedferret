@@ -1,11 +1,11 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  feedfox:
+  feedferret:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: feedfox
+    container_name: feedferret
     restart: always
     ports:
       - "3000:3000"
@@ -13,9 +13,9 @@ services:
       - DATABASE_URL=file:/app/data/dev.db
       - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
       - AUTH_TRUST_HOST=true
-      - NEXTAUTH_URL=https://feedfox.wollank.cloud
+      - NEXTAUTH_URL=https://feedferret.wollank.cloud
     volumes:
-      - feedfox_db_data:/app/data
+      - feedferret_db_data:/app/data
 
 volumes:
-  feedfox_db_data:
+  feedferret_db_data:

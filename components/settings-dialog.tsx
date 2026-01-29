@@ -88,7 +88,7 @@ export function SettingsDialog({
             <div className="mt-auto border-t border-border/50 pt-4">
               <div className="flex items-center gap-2 px-3 text-xs text-muted-foreground">
                 <Info className="w-3 h-3" />
-                FeedFox v0.1.0
+                FeedFerret v0.1.0
               </div>
             </div>
           </div>

@@ -74,13 +74,13 @@ export default function RegisterPage() {
             <div className="w-full h-full bg-[#05060a] rounded-[15px] flex items-center justify-center overflow-hidden">
               <img
                 src="/logo.svg"
-                alt="FeedFox"
+                alt="FeedFerret"
                 className="w-10 h-10 invert brightness-200"
               />
             </div>
           </div>
           <h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-sm">
-            Join Feed<span className="text-blue-500">Fox</span>
+            Join Feed<span className="text-blue-500">Ferret</span>
           </h1>
           <p className="text-zinc-500 mt-1 text-xs font-medium tracking-wide">
             Create your news Hub

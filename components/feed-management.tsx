@@ -102,7 +102,7 @@ export function FeedManagement({
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "feedfox_subscriptions.opml";
+        a.download = "feedferret_subscriptions.opml";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

@@ -146,13 +146,13 @@ export function RssSidebar({
             <div className="transition-transform duration-300 hover:scale-105">
               <img
                 src="/logo.svg"
-                alt="FeedFox Logo"
+                alt="FeedFerret Logo"
                 className="w-12 h-12 invert dark:invert-0"
               />
             </div>
             <div>
               <h1 className="text-xl font-bold text-sidebar-foreground tracking-tight">
-                FeedFox
+                FeedFerret
               </h1>
               <p className="text-sm text-muted-foreground">
                 {totalUnread} unread articles

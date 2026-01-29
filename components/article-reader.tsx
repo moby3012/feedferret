@@ -34,7 +34,7 @@ export function ArticleReader({
           <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center mx-auto mb-8 shadow-lg overflow-hidden p-6">
             <img
               src="/logo.svg"
-              alt="FeedFox Logo"
+              alt="FeedFerret Logo"
               className="w-12 h-12 opacity-50 dark:invert"
             />
           </div>

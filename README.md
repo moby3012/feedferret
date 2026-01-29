@@ -1,8 +1,8 @@
-# 🦊 FeedFox
+# 🦦 FeedFerret
 
-FeedFox is a versatile, self-hostable, and multi-user capable RSS reader built with a focus on speed, privacy, and a premium reading experience. Designed for power users who want control over their information stream.
+FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader built with a focus on speed, privacy, and a premium reading experience. Designed for power users who want control over their information stream.
 
-![FeedFox Mockup](https://raw.githubusercontent.com/lucide-react/lucide/main/icons/rss.svg)
+![FeedFerret Mockup](https://raw.githubusercontent.com/lucide-react/lucide/main/icons/rss.svg)
 
 ## ✨ Features
 
@@ -19,7 +19,7 @@ FeedFox is a versatile, self-hostable, and multi-user capable RSS reader built w
 
 ## 🚀 Getting Started
 
-### Prerequisites
+## Prerequisites
 
 - **Node.js**: 20.x or later
 - **pnpm**: Recommended package manager
@@ -31,7 +31,7 @@ FeedFox is a versatile, self-hostable, and multi-user capable RSS reader built w
 
    ```bash
    git clone <your-repo-url>
-   cd feedfox
+   cd feedferret
    pnpm install
    ```
 
@@ -59,7 +59,7 @@ FeedFox is a versatile, self-hostable, and multi-user capable RSS reader built w
 
 ### 🐳 Docker Deployment
 
-The simplest way to run FeedFox in production is using Docker Compose:
+The simplest way to run FeedFerret in production is using Docker Compose:
 
 ```bash
 # Set your secret

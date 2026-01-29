@@ -72,13 +72,13 @@ export default function SetupPage() {
             <div className="w-full h-full bg-[#05060a] rounded-[15px] flex items-center justify-center overflow-hidden">
               <img
                 src="/logo.svg"
-                alt="FeedFox"
+                alt="FeedFerret"
                 className="w-10 h-10 invert brightness-200"
               />
             </div>
           </div>
           <h1 className="text-3xl font-black tracking-tighter mb-1.5 drop-shadow-2xl">
-            Feed<span className="text-blue-500">Fox</span>{" "}
+            Feed<span className="text-blue-500">Ferret</span>{" "}
             <span className="text-zinc-600 text-2xl">Setup</span>
           </h1>
           <p className="text-zinc-500 text-xs font-medium tracking-wide">
@@ -93,7 +93,7 @@ export default function SetupPage() {
               Admin
             </CardTitle>
             <CardDescription className="text-zinc-500 text-[11px] font-medium leading-relaxed">
-              Create the master account to unlock FeedFox system.
+              Create the master account to unlock FeedFerret system.
             </CardDescription>
           </CardHeader>
           <CardContent className="px-8 pb-8">
