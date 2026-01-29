@@ -57,7 +57,7 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] p-0 overflow-hidden bg-card border-none shadow-2xl rounded-3xl">
+      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] p-0 overflow-hidden bg-card border-none shadow-2xl rounded-3xl sm:max-w-none">
         <div className="flex flex-col lg:flex-row h-full">
           {/* Sidebar */}
           <div className="w-full lg:w-48 bg-muted/30 p-6 flex flex-col gap-2 shrink-0">

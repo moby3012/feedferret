@@ -142,7 +142,7 @@ export function ServerManagementDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[1200px] max-h-[90vh] h-[800px] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl rounded-3xl sm:max-w-none">
+      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl rounded-3xl sm:max-w-none">
         <DialogHeader className="p-8 pb-4">
           <div className="flex items-center justify-between">
             <div>
