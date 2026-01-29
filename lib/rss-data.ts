@@ -4,6 +4,7 @@ export interface FeedSource {
   url: string
   icon: string
   category: string
+  categoryId?: string | null
   unreadCount: number
 }
 

@@ -64,6 +64,7 @@ model Category {
   name      String
   userId    String
   parentId  String?
+  order     Int      @default(0)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent    Category? @relation("Subcategories", fields: [parentId], references: [id], onDelete: Cascade)
   children  Category[] @relation("Subcategories")
@@ -81,6 +82,7 @@ model Feed {
   icon            String?
   userId          String
   categoryId      String?
+  order           Int      @default(0)
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   articles        Article[]

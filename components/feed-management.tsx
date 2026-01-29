@@ -5,6 +5,7 @@ import {
   useFeeds,
   useDeleteFeed,
   useUpdateFeed,
+  useCategories,
   useAddCategory,
   useUpdateCategory,
   useDeleteCategory,
@@ -67,18 +68,7 @@ export function FeedManagement({
   );
   const [editingCategoryName, setEditingCategoryName] = useState("");
 
-  const uniqueCategories = Array.from(
-    new Set(feeds.map((f: any) => f.category?.name).filter(Boolean)),
-  );
-  const categoriesWithIds = feeds.reduce(
-    (acc: { id: string; name: string }[], f: any) => {
-      if (f.category && !acc.find((c: any) => c.id === f.category.id)) {
-        acc.push({ id: f.category.id, name: f.category.name });
-      }
-      return acc;
-    },
-    [] as { id: string; name: string }[],
-  );
+  const { data: categories = [] } = useCategories();
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -199,7 +189,7 @@ export function FeedManagement({
                         </SelectTrigger>
                         <SelectContent className="rounded-xl border-none shadow-xl">
                           <SelectItem value="none">No Category</SelectItem>
-                          {categoriesWithIds.map((cat: any) => (
+                          {categories.map((cat: any) => (
                             <SelectItem key={cat.id} value={cat.id}>
                               {cat.name}
                             </SelectItem>
@@ -243,78 +233,91 @@ export function FeedManagement({
                     Add
                   </Button>
                 </div>
-                <ScrollArea className="flex-1 h-[40vh]">
-                  <div className="space-y-2 pb-8">
-                    {categoriesWithIds.map((cat: any) => (
+                <ScrollArea className="flex-1 h-[50vh]">
+                  <div className="space-y-3 pb-8">
+                    {categories.map((cat: any) => (
                       <div
                         key={cat.id}
-                        className="flex items-center gap-3 p-4 rounded-xl bg-muted/20 group animate-in fade-in slide-in-from-left-2 duration-300"
+                        className="p-4 rounded-2xl bg-muted/20 border border-transparent hover:border-border transition-all group"
                       >
-                        <Folder className="w-5 h-5 text-primary" />
-                        {editingCategoryId === cat.id ? (
-                          <div className="flex-1 flex gap-2">
-                            <Input
-                              autoFocus
-                              value={editingCategoryName}
-                              onChange={(e) =>
-                                setEditingCategoryName(e.target.value)
-                              }
-                              className="h-8 rounded-lg bg-background"
-                            />
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-green-500"
-                              onClick={() => {
-                                updateCategory.mutate({
-                                  categoryId: cat.id,
-                                  name: editingCategoryName,
-                                });
-                                setEditingCategoryId(null);
-                              }}
-                            >
-                              <Check className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-muted-foreground"
-                              onClick={() => setEditingCategoryId(null)}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <>
-                            <span className="flex-1 font-medium">
-                              {cat.name}
-                            </span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-9 w-9 opacity-0 group-hover:opacity-100 rounded-lg"
-                              onClick={() => {
-                                setEditingCategoryId(cat.id);
-                                setEditingCategoryName(cat.name);
-                              }}
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-9 w-9 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 rounded-lg"
-                              onClick={() => {
-                                if (confirm(`Delete category ${cat.name}?`))
-                                  deleteCategory.mutate(cat.id);
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
+                        <div className="flex items-center gap-3">
+                          <Folder className="w-5 h-5 text-primary" />
+                          {editingCategoryId === cat.id ? (
+                            <div className="flex-1 flex gap-2">
+                              <Input
+                                autoFocus
+                                value={editingCategoryName}
+                                onChange={(e) =>
+                                  setEditingCategoryName(e.target.value)
+                                }
+                                className="h-9 rounded-xl bg-background border-none"
+                              />
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-9 w-9 text-green-500 hover:bg-green-500/10"
+                                onClick={() => {
+                                  updateCategory.mutate({
+                                    categoryId: cat.id,
+                                    name: editingCategoryName,
+                                  });
+                                  setEditingCategoryId(null);
+                                }}
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-9 w-9 text-muted-foreground"
+                                onClick={() => setEditingCategoryId(null)}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex-1">
+                                <span className="font-bold block">
+                                  {cat.name}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+                                  Sync:{" "}
+                                  {cat.updateFrequency || "Global Default"} min
+                                </span>
+                              </div>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-9 w-9 opacity-0 group-hover:opacity-100 rounded-xl"
+                                onClick={() => {
+                                  setEditingCategoryId(cat.id);
+                                  setEditingCategoryName(cat.name);
+                                }}
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-9 w-9 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 rounded-xl"
+                                onClick={() => {
+                                  if (confirm(`Delete category ${cat.name}?`))
+                                    deleteCategory.mutate(cat.id);
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     ))}
+                    {categories.length === 0 && (
+                      <p className="text-center py-10 text-muted-foreground italic">
+                        No categories yet. Create one above.
+                      </p>
+                    )}
                   </div>
                 </ScrollArea>
               </div>

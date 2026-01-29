@@ -1,11 +1,13 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState, useMemo, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { RssSidebar } from "@/components/rss-sidebar";
 import { ArticleList } from "@/components/article-list";
 import { ArticleReader } from "@/components/article-reader";
-import { RssHeader } from "@/components/rss-header";
+import { RssHeader, ViewMode } from "@/components/rss-header";
 import {
   useFeeds,
   useArticles,
@@ -15,39 +17,21 @@ import {
 } from "@/hooks/use-rss-data";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-
-// Define a type for the raw article data based on its usage
-interface RawArticle {
-  id: string;
-  title: string;
-  content: string;
-  feedId: string;
-  isRead: boolean;
-  isStarred: boolean;
-  publishedAt: string | Date;
-  excerpt?: string | null;
-  author?: string | null;
-  feed: {
-    name: string;
-    icon?: string | null;
-  };
-  [key: string]: any;
-}
-
 import { hasUsers } from "./actions/onboarding";
 import { useRouter } from "next/navigation";
 
 export default function RSSReaderPage() {
   const { data: session, status } = useSession();
-  const [selectedFeed, setSelectedFeed] = useState<string | null>(null);
   const router = useRouter();
 
+  const [selectedFeed, setSelectedFeed] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(
     null,
   );
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [unreadOnly, setUnreadOnly] = useState(false);
 
   const { data: feeds = [], isLoading: feedsLoading } = useFeeds();
   const { data: rawArticles = [], isLoading: articlesLoading } = useArticles(
@@ -61,7 +45,7 @@ export default function RSSReaderPage() {
 
   // Transform articles for UI components
   const articles = useMemo(() => {
-    return rawArticles.map((a: RawArticle) => ({
+    return rawArticles.map((a: any) => ({
       ...a,
       feedName: a.feed.name,
       feedIcon: a.feed.icon || "📰",
@@ -78,19 +62,23 @@ export default function RSSReaderPage() {
   );
 
   const filteredArticles = useMemo(() => {
-    // Already filtered by feedId in the query if selectedFeed is set
-    return [...articles].sort((a: any, b: any) => {
+    let list = [...articles];
+    if (unreadOnly) {
+      list = list.filter((a) => !a.isRead);
+    }
+    return list.sort((a: any, b: any) => {
       return (
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
       );
     });
-  }, [articles]);
+  }, [articles, unreadOnly]);
 
-  const currentFeed = selectedFeed
-    ? feeds.find((f: any) => f.id === selectedFeed)
-    : null;
-
-  const headerTitle = currentFeed ? currentFeed.name : "All Articles";
+  const headerTitle = useMemo(() => {
+    if (selectedFeed) {
+      return feeds.find((f: any) => f.id === selectedFeed)?.name || "Feed";
+    }
+    return selectedCategory;
+  }, [selectedFeed, selectedCategory, feeds]);
 
   const handleSelectArticle = (article: any) => {
     setSelectedArticleId(article.id);
@@ -112,7 +100,6 @@ export default function RSSReaderPage() {
 
   // Keyboard Shortcuts
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Don't trigger if user is typing in an input
     if (
       e.target instanceof HTMLInputElement ||
       e.target instanceof HTMLTextAreaElement
@@ -120,24 +107,20 @@ export default function RSSReaderPage() {
       return;
 
     if (e.key === "j") {
-      // Next Article
       const currentIndex = filteredArticles.findIndex(
         (a) => a.id === selectedArticleId,
       );
       const nextArticle = filteredArticles[currentIndex + 1];
       if (nextArticle) handleSelectArticle(nextArticle);
     } else if (e.key === "k") {
-      // Previous Article
       const currentIndex = filteredArticles.findIndex(
         (a) => a.id === selectedArticleId,
       );
       const prevArticle = filteredArticles[currentIndex - 1];
       if (prevArticle) handleSelectArticle(prevArticle);
     } else if (e.key === "s" && selectedArticleId) {
-      // Toggle Star
       handleToggleStar(selectedArticleId);
     } else if (e.key === "r") {
-      // Refresh
       handleRefresh();
     }
   };
@@ -172,24 +155,31 @@ export default function RSSReaderPage() {
     );
   }
 
+  const sidebarFeeds = feeds.map((f: any) => ({
+    ...f,
+    category: f.category?.name || "Uncategorized",
+    unreadCount: f._count?.articles || 0,
+    icon: f.icon || "📰",
+  }));
+
   return (
     <div className="fixed inset-0 flex bg-background overflow-hidden selection:bg-accent/20">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
+      <div className="hidden lg:block shrink-0">
         <RssSidebar
-          feeds={feeds.map((f: any) => ({
-            ...f,
-            category: f.category?.name || "Uncategorized",
-            unreadCount: f._count?.articles || 0,
-            icon: f.icon || "📰",
-          }))}
+          feeds={sidebarFeeds}
           selectedFeed={selectedFeed}
           selectedCategory={selectedCategory}
           onSelectFeed={(feedId) => {
             setSelectedFeed(feedId);
             setSelectedArticleId(null);
+            if (feedId) setSelectedCategory("All");
           }}
-          onSelectCategory={setSelectedCategory}
+          onSelectCategory={(cat) => {
+            setSelectedCategory(cat);
+            setSelectedFeed(null);
+            setSelectedArticleId(null);
+          }}
         />
       </div>
 
@@ -197,21 +187,19 @@ export default function RSSReaderPage() {
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent side="left" className="p-0 w-80 border-0">
           <RssSidebar
-            feeds={feeds.map((f: any) => ({
-              ...f,
-              category: f.category?.name || "Uncategorized",
-              unreadCount: f._count?.articles || 0,
-              icon: f.icon || "📰",
-            }))}
+            feeds={sidebarFeeds}
             selectedFeed={selectedFeed}
             selectedCategory={selectedCategory}
             onSelectFeed={(feedId) => {
               setSelectedFeed(feedId);
               setSelectedArticleId(null);
+              if (feedId) setSelectedCategory("All");
               setSidebarOpen(false);
             }}
             onSelectCategory={(category) => {
               setSelectedCategory(category);
+              setSelectedFeed(null);
+              setSelectedArticleId(null);
               setSidebarOpen(false);
             }}
           />
@@ -221,7 +209,7 @@ export default function RSSReaderPage() {
       {/* Article List Panel */}
       <div
         className={cn(
-          "w-full lg:w-[420px] flex-shrink-0 flex flex-col border-r border-border bg-card",
+          "flex-1 lg:w-[420px] lg:flex-none flex flex-col border-r border-border bg-card relative z-10",
           "transition-all duration-300 ease-out",
           selectedArticle && "hidden lg:flex",
         )}
@@ -234,20 +222,24 @@ export default function RSSReaderPage() {
           onToggleSidebar={() => setSidebarOpen(true)}
           onRefresh={handleRefresh}
           isRefreshing={articlesLoading || refresh.isPending}
+          unreadOnly={unreadOnly}
+          onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
         />
         <ArticleList
           articles={filteredArticles}
           selectedArticle={selectedArticle}
           onSelectArticle={handleSelectArticle}
+          viewMode={viewMode}
         />
       </div>
 
       {/* Article Reader Panel */}
       <div
         className={cn(
-          "flex-1 hidden lg:flex",
+          "flex-1 hidden lg:flex bg-background",
           "transition-all duration-300 ease-out",
-          selectedArticle && "flex",
+          selectedArticle &&
+            "flex fixed inset-0 z-50 lg:relative lg:inset-auto",
         )}
       >
         <ArticleReader

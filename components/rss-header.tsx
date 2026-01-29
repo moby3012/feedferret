@@ -16,18 +16,24 @@ import {
   SortAsc,
   Filter,
   MoreHorizontal,
+  AlignJustify,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+export type ViewMode = "list" | "magazine" | "minimal";
+
 interface RssHeaderProps {
   title: string;
   articleCount: number;
-  viewMode: "list" | "grid";
-  onViewModeChange: (mode: "list" | "grid") => void;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
   onToggleSidebar: () => void;
   onRefresh: () => void;
   isRefreshing?: boolean;
+  unreadOnly: boolean;
+  onToggleUnreadOnly: () => void;
 }
 
 export function RssHeader({
@@ -38,10 +44,12 @@ export function RssHeader({
   onToggleSidebar,
   onRefresh,
   isRefreshing,
+  unreadOnly,
+  onToggleUnreadOnly,
 }: RssHeaderProps) {
   return (
-    <header className="h-16 flex items-center justify-between px-5 border-b border-border bg-card/80 backdrop-blur-xl animate-fade-in">
-      <div className="flex items-center gap-4">
+    <header className="h-16 flex items-center justify-between px-5 border-b border-border bg-card/80 backdrop-blur-xl animate-fade-in relative z-20">
+      <div className="flex items-center gap-4 min-w-0">
         <Button
           variant="ghost"
           size="icon"
@@ -54,8 +62,8 @@ export function RssHeader({
           <h2 className="text-lg font-bold text-foreground tracking-tight truncate">
             {title}
           </h2>
-          <p className="text-sm text-muted-foreground truncate">
-            {articleCount} articles
+          <p className="text-xs text-muted-foreground truncate font-medium">
+            {articleCount} {unreadOnly ? "unread " : ""}articles
           </p>
         </div>
       </div>
@@ -70,7 +78,7 @@ export function RssHeader({
         >
           <RefreshCw
             className={cn(
-              "w-5 h-5 transition-transform duration-500",
+              "w-4 h-4 transition-transform duration-500",
               isRefreshing && "animate-spin",
             )}
           />
@@ -78,18 +86,26 @@ export function RssHeader({
 
         <div className="hidden sm:flex items-center border border-border rounded-xl p-1 bg-muted/50">
           <Button
+            variant={viewMode === "minimal" ? "secondary" : "ghost"}
+            size="icon"
+            className="w-8 h-8 rounded-lg transition-all"
+            onClick={() => onViewModeChange("minimal")}
+          >
+            <AlignJustify className="w-4 h-4" />
+          </Button>
+          <Button
             variant={viewMode === "list" ? "secondary" : "ghost"}
             size="icon"
-            className="w-8 h-8 rounded-lg transition-all duration-200"
+            className="w-8 h-8 rounded-lg transition-all"
             onClick={() => onViewModeChange("list")}
           >
             <List className="w-4 h-4" />
           </Button>
           <Button
-            variant={viewMode === "grid" ? "secondary" : "ghost"}
+            variant={viewMode === "magazine" ? "secondary" : "ghost"}
             size="icon"
-            className="w-8 h-8 rounded-lg transition-all duration-200"
-            onClick={() => onViewModeChange("grid")}
+            className="w-8 h-8 rounded-lg transition-all"
+            onClick={() => onViewModeChange("magazine")}
           >
             <LayoutGrid className="w-4 h-4" />
           </Button>
@@ -109,17 +125,27 @@ export function RssHeader({
               <MoreHorizontal className="w-5 h-5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52 rounded-xl p-2">
-            <DropdownMenuItem className="rounded-lg py-2.5 text-base">
-              <SortAsc className="w-5 h-5 mr-3" />
+          <DropdownMenuContent
+            align="end"
+            className="w-56 rounded-2xl p-2 shadow-2xl border-none bg-popover/95 backdrop-blur-xl"
+          >
+            <DropdownMenuItem
+              className="rounded-xl py-3 px-4 text-sm font-medium focus:bg-primary focus:text-primary-foreground"
+              onClick={onToggleUnreadOnly}
+            >
+              <Filter className="w-4 h-4 mr-3" />
+              Filter unread only
+              {unreadOnly && <Check className="w-4 h-4 ml-auto" />}
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator className="my-2 bg-border/50" />
+
+            <DropdownMenuItem className="rounded-xl py-3 px-4 text-sm font-medium">
+              <SortAsc className="w-4 h-4 mr-3" />
               Sort by date
             </DropdownMenuItem>
-            <DropdownMenuItem className="rounded-lg py-2.5 text-base">
-              <Filter className="w-5 h-5 mr-3" />
-              Filter unread
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="rounded-lg py-2.5 text-base">
+
+            <DropdownMenuItem className="rounded-xl py-3 px-4 text-sm font-medium text-destructive focus:bg-destructive/10 focus:text-destructive">
               Mark all as read
             </DropdownMenuItem>
           </DropdownMenuContent>

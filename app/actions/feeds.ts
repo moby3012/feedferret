@@ -13,8 +13,6 @@ export async function refreshAllFeeds() {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    // In a real background sync, this would be a queue. 
-    // For now, we trigger a sync for the current user's feeds at least.
     await syncAllFeeds();
     revalidatePath("/");
 }
@@ -35,7 +33,10 @@ export async function getFeeds() {
                 },
             },
         },
-        orderBy: { name: "asc" },
+        orderBy: [
+            { order: "asc" },
+            { name: "asc" }
+        ],
     });
 }
 
@@ -46,9 +47,20 @@ export async function getCategories() {
     return await db.category.findMany({
         where: { userId: session.user.id },
         include: {
-            children: true,
+            children: {
+                orderBy: { order: "asc" }
+            },
         },
-        orderBy: { name: "asc" },
+        orderBy: { order: "asc" },
+    });
+}
+
+export async function getStarredCount() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    return await db.article.count({
+        where: { userId: session.user.id, isStarred: true },
     });
 }
 
@@ -56,7 +68,6 @@ export async function addFeed(url: string, categoryId?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    // Validate the feed first
     try {
         const remoteFeed = await parser.parseURL(url);
 
@@ -69,9 +80,7 @@ export async function addFeed(url: string, categoryId?: string) {
             },
         });
 
-        // Trigger initial sync
         await syncFeed(session.user.id, feed.id);
-
         revalidatePath("/");
         return { success: true, feed };
     } catch (error) {
@@ -135,12 +144,41 @@ export async function deleteCategory(categoryId: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    // Note: Prisma will handle cascading or setting null if configured, 
-    // but we should check our schema. 
-    // By default, it might error if feeds exist.
     await db.category.delete({
         where: { id: categoryId, userId: session.user.id },
     });
+
+    revalidatePath("/");
+}
+
+export async function updateCategoryOrder(orders: { id: string; order: number; parentId?: string | null }[]) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    await db.$transaction(
+        orders.map((o) =>
+            db.category.update({
+                where: { id: o.id, userId: session.user.id },
+                data: { order: o.order, parentId: o.parentId },
+            })
+        )
+    );
+
+    revalidatePath("/");
+}
+
+export async function updateFeedOrder(orders: { id: string; order: number; categoryId?: string | null }[]) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    await db.$transaction(
+        orders.map((o) =>
+            db.feed.update({
+                where: { id: o.id, userId: session.user.id },
+                data: { order: o.order, categoryId: o.categoryId },
+            })
+        )
+    );
 
     revalidatePath("/");
 }
@@ -183,7 +221,6 @@ export async function getArticles(feedId?: string | null, category?: string) {
         } else if (category === "Recently Read") {
             where.isRead = true;
         } else if (category === "Archive") {
-            // For now, archive is just read articles
             where.isRead = true;
         } else {
             where.feed = {
@@ -223,7 +260,6 @@ export async function importOpml(xml: string) {
 
     const processOutline = async (outline: OpmlOutline, categoryId?: string) => {
         if (outline.type === "rss" && outline.xmlUrl) {
-            // Create feed
             await db.feed.upsert({
                 where: {
                     userId_url: {
@@ -243,7 +279,6 @@ export async function importOpml(xml: string) {
                 },
             });
         } else if (outline.children) {
-            // Create category and process children
             const category = await db.category.upsert({
                 where: {
                     userId_name_parentId: {

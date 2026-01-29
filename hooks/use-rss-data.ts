@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings } from "@/app/actions/settings"
 
 export function useFeeds() {
@@ -15,6 +15,13 @@ export function useCategories() {
     return useQuery({
         queryKey: ["categories"],
         queryFn: () => getCategories(),
+    })
+}
+
+export function useStarredCount() {
+    return useQuery({
+        queryKey: ["articles", "starred-count"],
+        queryFn: () => getStarredCount(),
     })
 }
 
@@ -131,6 +138,27 @@ export function useDeleteCategory() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (categoryId: string) => deleteCategory(categoryId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["categories"] })
+        },
+    })
+}
+
+export function useUpdateCategoryOrder() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (orders: { id: string; order: number; parentId?: string | null }[]) => updateCategoryOrder(orders),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["categories"] })
+        },
+    })
+}
+
+export function useUpdateFeedOrder() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (orders: { id: string; order: number; categoryId?: string | null }[]) => updateFeedOrder(orders),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
         },
