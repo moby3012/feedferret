@@ -31,7 +31,7 @@ export function ArticleReader({
     return (
       <div className="flex-1 flex items-center justify-center bg-background animate-fade-in">
         <div className="text-center max-w-md px-8">
-          <div className="w-24 h-24 rounded-3xl bg-white dark:bg-black flex items-center justify-center mx-auto mb-8 shadow-lg overflow-hidden p-6 border border-border/50">
+          <div className="w-24 h-24 rounded-3xl bg-muted flex items-center justify-center mx-auto mb-8 shadow-lg overflow-hidden p-6 border border-border/50">
             <img
               src="/logo.svg"
               alt="FeedFerret Logo"

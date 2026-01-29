@@ -110,3 +110,16 @@ model Article {
   updatedAt DateTime @updatedAt
   @@unique([userId, link])
 }
+
+model GlobalSettings {
+  id                  String   @id @default("global")
+  registrationsEnabled Boolean  @default(true)
+  mailServiceEnabled   Boolean  @default(false)
+  smtpHost            String?
+  smtpPort            Int?
+  smtpUser            String?
+  smtpPassword        String?
+  smtpFrom            String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}

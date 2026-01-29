@@ -14,6 +14,11 @@ services:
       - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
       - AUTH_TRUST_HOST=true
       - NEXTAUTH_URL=https://feedferret.wollank.cloud
+      # Example OAuth Providers (Uncomment and set values to enable)
+      # - GOOGLE_CLIENT_ID=your-google-id
+      # - GOOGLE_CLIENT_SECRET=your-google-secret
+      # - GITHUB_ID=your-github-id
+      # - GITHUB_SECRET=your-github-secret
     volumes:
       - feedferret_db_data:/app/data
 
