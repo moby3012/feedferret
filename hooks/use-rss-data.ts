@@ -11,6 +11,13 @@ export function useFeeds() {
     })
 }
 
+export function useCategories() {
+    return useQuery({
+        queryKey: ["categories"],
+        queryFn: () => getCategories(),
+    })
+}
+
 export function useArticles(feedId?: string | null) {
     return useQuery({
         queryKey: ["articles", feedId],

@@ -98,7 +98,6 @@ export default function RSSReaderPage() {
   const filteredArticles = useMemo(() => {
     // Already filtered by feedId in the query if selectedFeed is set
     return [...articles].sort((a: any, b: any) => {
-      if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
       return (
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
       );

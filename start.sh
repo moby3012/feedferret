@@ -3,22 +3,31 @@
 # Fail on any error
 set -e
 
-echo "Starting deployment script..."
+echo "🚀 Starting FeedFerret deployment script..."
 
-# Create the data directory if it doesn't exist
+# Create the data directory and ensure it exists
 mkdir -p /app/data
 
-# Ensure permissions (just in case)
-# Note: In some restricted environments chown might fail, so we might want to be careful, 
-# but since we are running as the user defined in Dockerfile or root, it depends.
-# The Dockerfile switches to 'nextjs' user. 
+# Use the globally installed prisma if available, otherwise fallback to npx
+PRISMA_CMD="prisma"
+if ! command -v prisma >/dev/null 2>&1; then
+    echo "⚠️ Global prisma not found, using npx..."
+    PRISMA_CMD="npx prisma"
+fi
 
-echo "Running database migrations..."
-# We use db push for sqlite dev.db or migrate deploy if we had a real migration history and prod DB
-# The user's package.json uses 'prisma db push' for start, so we replicate that.
-# Added --skip-generate because the user (nextjs) cannot write to global node_modules or potentially even local ones if ownership is tricky,
-# and the client should have been generated at build time anyway.
-npx prisma db push --accept-data-loss --skip-generate
+echo "📂 Current database URL: $DATABASE_URL"
+echo "🔄 Running database sync (db push)..."
 
-echo "Starting Next.js server..."
-node server.js
+# Sync schema with database
+$PRISMA_CMD db push --accept-data-loss --skip-generate
+
+echo "✅ Database is ready."
+echo "🌟 Starting Next.js server..."
+
+# server.js is the entry point for Next.js standalone mode
+if [ -f "server.js" ]; then
+    node server.js
+else
+    echo "❌ Error: server.js not found! Standalone build might have failed."
+    exit 1
+fi

@@ -43,10 +43,21 @@ export const {
         async session({ session, token }) {
             if (token.sub && session.user) {
                 session.user.id = token.sub;
+                session.user.role = token.role as string;
             }
             return session;
         },
         async jwt({ token }) {
+            if (!token.sub) return token;
+
+            const user = await db.user.findUnique({
+                where: { id: token.sub },
+            });
+
+            if (user) {
+                token.role = user.role;
+            }
+
             return token;
         },
     },

@@ -26,12 +26,15 @@ export async function POST(req: Request) {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
+        const userCount = await db.user.count();
+        const role = userCount === 0 ? "ADMIN" : "USER";
 
         const user = await db.user.create({
             data: {
                 name,
                 email,
                 password: hashedPassword,
+                role,
             },
         });
 

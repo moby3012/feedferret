@@ -29,8 +29,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FeedManagement } from "./feed-management";
 import { SettingsDialog } from "./settings-dialog";
-import { addFeed } from "@/app/actions/feeds";
-import { useAddFeed } from "@/hooks/use-rss-data";
+import { useAddFeed, useCategories, useUpdateFeed } from "@/hooks/use-rss-data";
+import { ServerManagementDialog } from "./server-management-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface RssSidebarProps {
   feeds: FeedSource[];
@@ -58,9 +65,13 @@ export function RssSidebar({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState("");
+  const [newFeedCategoryId, setNewFeedCategoryId] = useState<string>("none");
   const [isAddingFeed, setIsAddingFeed] = useState(false);
+  const [isServerManagementOpen, setIsServerManagementOpen] = useState(false);
 
   const addNewFeed = useAddFeed();
+  const { data: allCategories = [] } = useCategories();
+  const updateFeed = useUpdateFeed();
 
   const groupedFeeds = feeds.reduce(
     (acc, feed) => {
@@ -222,22 +233,29 @@ export function RssSidebar({
             </div>
 
             {isAddFeedOpen && (
-              <div className="px-4 py-2 space-y-2 animate-in slide-in-from-top-2 duration-200">
+              <div className="px-4 py-2 space-y-3 animate-in slide-in-from-top-2 duration-200">
                 <Input
                   placeholder="Feed URL (RSS/Atom)..."
                   value={newFeedUrl}
                   onChange={(e) => setNewFeedUrl(e.target.value)}
                   className="h-10 text-sm bg-sidebar-accent border-0"
-                  onKeyDown={async (e) => {
-                    if (e.key === "Enter" && newFeedUrl) {
-                      setIsAddingFeed(true);
-                      await addFeed(newFeedUrl);
-                      setNewFeedUrl("");
-                      setIsAddFeedOpen(false);
-                      setIsAddingFeed(false);
-                    }
-                  }}
                 />
+                <Select
+                  value={newFeedCategoryId}
+                  onValueChange={setNewFeedCategoryId}
+                >
+                  <SelectTrigger className="h-10 text-sm bg-sidebar-accent border-0">
+                    <SelectValue placeholder="Select Category" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-none shadow-xl">
+                    <SelectItem value="none">No Category</SelectItem>
+                    {allCategories.map((cat: any) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -245,8 +263,15 @@ export function RssSidebar({
                     disabled={!newFeedUrl || isAddingFeed}
                     onClick={async () => {
                       setIsAddingFeed(true);
-                      await addFeed(newFeedUrl);
+                      await addNewFeed.mutateAsync({
+                        url: newFeedUrl,
+                        categoryId:
+                          newFeedCategoryId === "none"
+                            ? undefined
+                            : newFeedCategoryId,
+                      });
                       setNewFeedUrl("");
+                      setNewFeedCategoryId("none");
                       setIsAddFeedOpen(false);
                       setIsAddingFeed(false);
                     }}
@@ -260,6 +285,7 @@ export function RssSidebar({
                     onClick={() => {
                       setIsAddFeedOpen(false);
                       setNewFeedUrl("");
+                      setNewFeedCategoryId("none");
                     }}
                   >
                     Cancel
@@ -290,43 +316,42 @@ export function RssSidebar({
                 ([category, categoryFeeds], categoryIndex) => (
                   <div
                     key={category}
-                    style={{ animationDelay: `${categoryIndex * 100}ms` }}
-                    className="animate-fade-in"
+                    className="py-2"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.add("bg-sidebar-accent/50");
+                    }}
+                    onDragLeave={(e) => {
+                      e.currentTarget.classList.remove("bg-sidebar-accent/50");
+                    }}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove("bg-sidebar-accent/50");
+                      const feedId = e.dataTransfer.getData("feedId");
+                      if (feedId) {
+                        const categoryObject = allCategories.find(
+                          (c: any) => c.name === category,
+                        );
+                        await updateFeed.mutateAsync({
+                          id: feedId,
+                          categoryId: categoryObject?.id || null,
+                        });
+                      }
+                    }}
                   >
-                    <button
-                      onClick={() => toggleCategory(category)}
-                      className="w-full flex items-center gap-3 px-4 py-2 text-sm font-semibold text-muted-foreground hover:text-sidebar-foreground transition-colors duration-200"
-                    >
-                      <ChevronDown
-                        className={cn(
-                          "w-4 h-4 transition-transform duration-300",
-                          !expandedCategories.includes(category) &&
-                            "-rotate-90",
-                        )}
-                      />
-                      {category}
-                      <span className="ml-auto tabular-nums text-xs bg-muted px-2 py-0.5 rounded-md">
-                        {categoryFeeds.reduce(
-                          (sum, f) => sum + f.unreadCount,
-                          0,
-                        )}
-                      </span>
-                    </button>
-                    <div
-                      className={cn(
-                        "mt-1 space-y-0.5 overflow-hidden transition-all duration-300",
-                        expandedCategories.includes(category)
-                          ? "max-h-[500px] opacity-100"
-                          : "max-h-0 opacity-0",
-                      )}
-                    >
-                      {categoryFeeds.map((feed, feedIndex) => (
+                    <div className="px-4 py-2 flex items-center justify-between group/cat">
+                      <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                        {category}
+                      </h3>
+                    </div>
+                    <div className="space-y-1 px-2">
+                      {categoryFeeds.map((feed, index) => (
                         <FeedItem
                           key={feed.id}
                           feed={feed}
                           isSelected={selectedFeed === feed.id}
                           onSelect={() => onSelectFeed(feed.id)}
-                          index={feedIndex}
+                          index={index}
                         />
                       ))}
                     </div>
@@ -376,9 +401,25 @@ export function RssSidebar({
           <SettingsIcon className="w-5 h-5" />
           Manage Feeds
         </Button>
+
+        {session?.user?.role === "ADMIN" && (
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-4 h-12 text-base text-muted-foreground hover:text-sidebar-foreground rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] mt-1"
+            onClick={() => setIsServerManagementOpen(true)}
+          >
+            <Users className="w-5 h-5" />
+            Manage Server
+          </Button>
+        )}
+
         <FeedManagement
           open={isManagementOpen}
           onOpenChange={setIsManagementOpen}
+        />
+        <ServerManagementDialog
+          open={isServerManagementOpen}
+          onOpenChange={setIsServerManagementOpen}
         />
         <SettingsDialog
           open={isSettingsOpen}
@@ -402,15 +443,25 @@ function FeedItem({
 }) {
   return (
     <button
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("feedId", feed.id);
+        e.currentTarget.classList.add("opacity-50");
+      }}
+      onDragEnd={(e) => {
+        e.currentTarget.classList.remove("opacity-50");
+      }}
       onClick={onSelect}
-      style={{ animationDelay: `${index * 30}ms` }}
       className={cn(
-        "w-full flex items-center gap-4 px-4 py-3 rounded-xl text-base transition-all duration-200 animate-fade-in",
-        "hover:scale-[1.02] active:scale-[0.98]",
+        "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all duration-300 group relative",
         isSelected
-          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-          : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02] z-10"
+          : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
       )}
+      style={{
+        animation: `slideIn 0.3s ease-out forwards ${index * 0.05}s`,
+        opacity: 0,
+      }}
     >
       <span className="text-xl">{feed.icon}</span>
       <span className="flex-1 text-left truncate font-medium">{feed.name}</span>

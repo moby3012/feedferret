@@ -128,7 +128,7 @@ export function FeedManagement({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl rounded-3xl">
+      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl rounded-3xl">
         <DialogHeader className="p-8 pb-4">
           <DialogTitle className="text-3xl font-bold tracking-tight">
             Management

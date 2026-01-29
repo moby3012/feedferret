@@ -22,6 +22,7 @@ model User {
   feeds         Feed[]
   articles      Article[]
   defaultUpdateFrequency Int @default(60)
+  role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
