@@ -177,7 +177,7 @@ function ArticlePreview({
             </span>
             <span className="text-muted-foreground/50">·</span>
             <span className="text-sm text-muted-foreground whitespace-nowrap">
-              {article.publishedAt}
+              {new Date(article.publishedAt).toLocaleDateString()}
             </span>
             {article.isStarred && (
               <Star className="w-4 h-4 text-amber-500 fill-amber-500 ml-auto transition-transform duration-300 group-hover:scale-110" />

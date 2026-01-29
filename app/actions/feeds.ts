@@ -128,13 +128,13 @@ export async function addCategory(name: string, parentId?: string) {
     return category;
 }
 
-export async function updateCategory(categoryId: string, name: string) {
+export async function updateCategory(categoryId: string, data: { name?: string; updateFrequency?: number | null }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     await db.category.update({
         where: { id: categoryId, userId: session.user.id },
-        data: { name },
+        data,
     });
 
     revalidatePath("/");

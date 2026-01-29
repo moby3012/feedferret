@@ -1,5 +1,24 @@
 @import 'tailwindcss';
+@plugin "@tailwindcss/typography";
 @import 'tw-animate-css';
+
+.article-content {
+  @apply prose prose-neutral dark:prose-invert max-w-none;
+  @apply prose-headings:font-bold prose-headings:tracking-tight;
+  @apply prose-p:leading-[1.8] prose-p:mb-6 prose-p:text-foreground/90;
+  @apply prose-a:text-accent prose-a:no-underline hover:prose-a:underline;
+  @apply prose-img:rounded-2xl prose-img:shadow-lg prose-img:my-8;
+}
+
+.article-content img {
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
+.article-content small {
+  @apply block text-muted-foreground mt-[-1.5rem] mb-8 text-sm leading-relaxed;
+}
 
 @custom-variant dark (&:is(.dark *));
 

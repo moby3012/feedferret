@@ -129,7 +129,7 @@ export function useAddCategory() {
 export function useUpdateCategory() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: ({ categoryId, name }: { categoryId: string; name: string }) => updateCategory(categoryId, name),
+        mutationFn: ({ categoryId, data }: { categoryId: string; data: { name?: string; updateFrequency?: number | null } }) => updateCategory(categoryId, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
             queryClient.invalidateQueries({ queryKey: ["categories"] })

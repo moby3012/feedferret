@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/select";
 import {
   DndContext,
-  closestCenter,
+  closestCorners,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -122,7 +122,7 @@ function SortableCategoryItem({
               onClick={() => {
                 updateCategory.mutate({
                   categoryId: cat.id,
-                  name: editingCategoryName,
+                  data: { name: editingCategoryName },
                 });
                 setEditingCategoryId(null);
               }}
@@ -146,28 +146,45 @@ function SortableCategoryItem({
                 Sync: {cat.updateFrequency || "Global Default"} min
               </span>
             </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-9 w-9 opacity-0 group-hover:opacity-100 rounded-xl"
-              onClick={() => {
-                setEditingCategoryId(cat.id);
-                setEditingCategoryName(cat.name);
-              }}
-            >
-              <Edit2 className="w-4 h-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-9 w-9 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 rounded-xl"
-              onClick={() => {
-                if (confirm(`Delete category ${cat.name}?`))
-                  deleteCategory.mutate(cat.id);
-              }}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                placeholder="min"
+                className="w-16 h-8 text-xs rounded-lg"
+                defaultValue={cat.updateFrequency || ""}
+                onBlur={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (val !== cat.updateFrequency) {
+                    updateCategory.mutate({
+                      categoryId: cat.id,
+                      data: { updateFrequency: isNaN(val) ? null : val },
+                    });
+                  }
+                }}
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9 opacity-0 group-hover:opacity-100 rounded-xl"
+                onClick={() => {
+                  setEditingCategoryId(cat.id);
+                  setEditingCategoryName(cat.name);
+                }}
+              >
+                <Edit2 className="w-4 h-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 rounded-xl"
+                onClick={() => {
+                  if (confirm(`Delete category ${cat.name}?`))
+                    deleteCategory.mutate(cat.id);
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
           </>
         )}
       </div>
@@ -259,7 +276,25 @@ export function FeedManagement({
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over) return;
+
+    if (active.id !== over.id) {
+      const activeCategory = categories.find((c: any) => c.id === active.id);
+      const overCategory = categories.find((c: any) => c.id === over.id);
+
+      if (activeCategory && overCategory) {
+        // dropped on another category -> Nest
+        await updateCategoryOrder.mutateAsync([
+          {
+            id: active.id as string,
+            order: 0,
+            parentId: over.id as string,
+          },
+        ]);
+        toast.success(`Moved ${activeCategory.name} into ${overCategory.name}`);
+        return;
+      }
+    }
 
     const oldIndex = categories.findIndex((c: any) => c.id === active.id);
     const newIndex = categories.findIndex((c: any) => c.id === over.id);
@@ -392,7 +427,7 @@ export function FeedManagement({
                 <ScrollArea className="flex-1 h-[50vh] overflow-hidden min-h-0">
                   <DndContext
                     sensors={sensors}
-                    collisionDetection={closestCenter}
+                    collisionDetection={closestCorners}
                     onDragEnd={handleDragEnd}
                     modifiers={[restrictToVerticalAxis]}
                   >

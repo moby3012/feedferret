@@ -1,11 +1,19 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, Monitor } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return <div className="w-9 h-9" />;
 
   const toggleTheme = () => {
     if (theme === "dark") setTheme("system");
@@ -17,11 +25,20 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="w-9 h-9 relative overflow-hidden transition-all duration-300 hover:bg-muted active:scale-95"
+      className="w-9 h-9 relative overflow-hidden transition-all duration-300 hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 rounded-xl"
       onClick={toggleTheme}
     >
-      <Sun className="h-4 w-4 rotate-0 scale-100 transition-all duration-500 dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all duration-500 dark:rotate-0 dark:scale-100" />
+      <div className="relative h-4 w-4">
+        <Sun
+          className={`absolute inset-0 h-4 w-4 transition-all duration-500 ${theme === "light" ? "rotate-0 scale-100 opacity-100" : "rotate-90 scale-0 opacity-0"}`}
+        />
+        <Moon
+          className={`absolute inset-0 h-4 w-4 transition-all duration-500 ${theme === "dark" ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0"}`}
+        />
+        <Monitor
+          className={`absolute inset-0 h-4 w-4 transition-all duration-500 ${theme === "system" ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0"}`}
+        />
+      </div>
       <span className="sr-only">Toggle theme</span>
     </Button>
   );

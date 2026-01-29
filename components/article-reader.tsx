@@ -132,7 +132,7 @@ export function ArticleReader({
                 {article.author}
               </span>
               <span className="text-muted-foreground/40">·</span>
-              <span>{article.publishedAt}</span>
+              <span>{new Date(article.publishedAt).toLocaleDateString()}</span>
               <span className="text-muted-foreground/40">·</span>
               <span>{article.readTime}</span>
             </div>
@@ -152,16 +152,10 @@ export function ArticleReader({
           )}
 
           {/* Article Body */}
-          <div className="animate-fade-in-up animation-delay-200">
-            {article.content.split("\n\n").map((paragraph, index) => (
-              <p
-                key={index}
-                className="text-foreground/90 leading-[1.8] mb-7 text-lg sm:text-xl"
-              >
-                {paragraph}
-              </p>
-            ))}
-          </div>
+          <div
+            className="animate-fade-in-up animation-delay-200 article-content"
+            dangerouslySetInnerHTML={{ __html: article.content }}
+          />
 
           {/* Article Footer */}
           <footer className="mt-16 pt-8 border-t border-border animate-fade-in-up animation-delay-300">
@@ -179,13 +173,6 @@ export function ArticleReader({
                   </p>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="lg"
-                className="rounded-xl px-6 font-semibold transition-all duration-200 hover:scale-105 active:scale-95 bg-transparent"
-              >
-                Subscribe
-              </Button>
             </div>
           </footer>
         </article>

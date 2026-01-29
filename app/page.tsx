@@ -41,6 +41,12 @@ export default function RSSReaderPage() {
   const refresh = useRefresh();
   const toggleRead = useToggleRead();
   const toggleStarred = useToggleStarred();
+  const [readInSession, setReadInSession] = useState<string[]>([]);
+
+  // Reset readInSession when feed or category changes
+  useEffect(() => {
+    setReadInSession([]);
+  }, [selectedFeed, selectedCategory]);
 
   // Transform articles for UI components
   const articles = useMemo(() => {
@@ -48,7 +54,7 @@ export default function RSSReaderPage() {
       ...a,
       feedName: a.feed.name,
       feedIcon: a.feed.icon || "📰",
-      publishedAt: new Date(a.publishedAt).toLocaleDateString(),
+      publishedAtRaw: new Date(a.publishedAt).getTime(),
       readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
       excerpt: a.excerpt || "",
       author: a.author || "Unknown",
@@ -62,15 +68,19 @@ export default function RSSReaderPage() {
 
   const filteredArticles = useMemo(() => {
     let list = [...articles];
-    if (unreadOnly) {
-      list = list.filter((a) => !a.isRead);
+
+    // Sort FIRST
+    list.sort((a: any, b: any) => b.publishedAtRaw - a.publishedAtRaw);
+
+    // Apply main view filter
+    if (selectedCategory === "New Articles") {
+      list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
+    } else if (unreadOnly) {
+      list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
     }
-    return list.sort((a: any, b: any) => {
-      return (
-        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-      );
-    });
-  }, [articles, unreadOnly]);
+
+    return list;
+  }, [articles, unreadOnly, selectedCategory, readInSession]);
 
   const headerTitle = useMemo(() => {
     if (selectedFeed) {
@@ -81,7 +91,8 @@ export default function RSSReaderPage() {
 
   const handleSelectArticle = (article: any) => {
     setSelectedArticleId(article.id);
-    if (!article.isRead) {
+    if (!article.isRead && !readInSession.includes(article.id)) {
+      setReadInSession((prev) => [...prev, article.id]);
       toggleRead.mutate({ articleId: article.id, isRead: true });
     }
   };

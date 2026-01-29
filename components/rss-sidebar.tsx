@@ -11,6 +11,7 @@ import {
   Plus,
   ChevronDown,
   Search,
+  Inbox,
   Settings as SettingsIcon,
   LogOut,
   User as UserIcon,
@@ -52,6 +53,7 @@ import {
   DragStartEvent,
   DragOverlay,
   defaultDropAnimationSideEffects,
+  closestCorners,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -112,10 +114,10 @@ export function RssSidebar({
   const totalUnread = feeds.reduce((sum, f) => sum + f.unreadCount, 0);
 
   const navItems = [
-    { id: "all", icon: Home, label: "All Articles", count: totalUnread },
+    { id: "new", icon: Inbox, label: "New Articles", count: totalUnread },
+    { id: "all", icon: Home, label: "All Articles", count: null },
     { id: "starred", icon: Star, label: "Starred", count: starredCount },
     { id: "recent", icon: Clock, label: "Recently Read", count: null },
-    { id: "archive", icon: Archive, label: "Archive", count: null },
   ];
 
   const { data: session } = useSession();
@@ -246,7 +248,13 @@ export function RssSidebar({
             )}
             onClick={() => {
               onSelectFeed(null);
-              onSelectCategory(item.id === "all" ? "All" : item.label);
+              onSelectCategory(
+                item.id === "all"
+                  ? "All"
+                  : item.id === "new"
+                    ? "New Articles"
+                    : item.label,
+              );
             }}
           >
             <item.icon className="w-5 h-5 text-sidebar-foreground" />
@@ -303,14 +311,22 @@ export function RssSidebar({
                 key={item.id}
                 onClick={() => {
                   onSelectFeed(null);
-                  onSelectCategory(item.id === "all" ? "All" : item.label);
+                  onSelectCategory(
+                    item.id === "all"
+                      ? "All"
+                      : item.id === "new"
+                        ? "New Articles"
+                        : item.label,
+                  );
                 }}
                 className={cn(
                   "w-full flex items-center gap-4 px-4 py-3 rounded-xl text-base transition-all",
                   selectedFeed === null &&
                     (item.id === "all"
                       ? selectedCategory === "All"
-                      : selectedCategory === item.label)
+                      : item.id === "new"
+                        ? selectedCategory === "New Articles"
+                        : selectedCategory === item.label)
                     ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
@@ -418,7 +434,7 @@ export function RssSidebar({
             ) : (
               <DndContext
                 sensors={sensors}
-                collisionDetection={closestCenter}
+                collisionDetection={closestCorners}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 modifiers={[restrictToVerticalAxis]}
