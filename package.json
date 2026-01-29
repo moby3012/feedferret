@@ -6,7 +6,7 @@
     "build": "prisma generate && next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "mkdir -p /app/data && DATABASE_URL=file:/app/data/dev.db npx prisma db push --accept-data-loss && if [ -f server.js ]; then node server.js; else next start; fi"
+    "start": "mkdir -p /app/data && NEXT_TELEMETRY_DISABLED=1 DATABASE_URL=file:/app/data/dev.db npx prisma db push --accept-data-loss && if [ -f server.js ]; then node server.js; else next start; fi"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
@@ -41,7 +41,6 @@
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
     "@tanstack/react-query": "^5.90.20",
-    "@vercel/analytics": "1.3.1",
     "autoprefixer": "^10.4.20",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",

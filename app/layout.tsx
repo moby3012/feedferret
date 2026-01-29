@@ -1,7 +1,6 @@
 import React from "react";
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Providers } from "@/components/providers";
 import { SessionProvider } from "next-auth/react";
@@ -50,7 +49,6 @@ export default function RootLayout({
             </ThemeProvider>
           </Providers>
         </SessionProvider>
-        <Analytics />
       </body>
     </html>
   );
