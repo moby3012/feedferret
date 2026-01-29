@@ -72,6 +72,7 @@ export function useImportOpml() {
         mutationFn: (xml: string) => importOpml(xml),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["categories"] })
         },
     })
 }
@@ -120,6 +121,7 @@ export function useAddCategory() {
         mutationFn: ({ name, parentId }: { name: string; parentId?: string }) => addCategory(name, parentId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["categories"] })
         },
     })
 }
@@ -130,6 +132,7 @@ export function useUpdateCategory() {
         mutationFn: ({ categoryId, name }: { categoryId: string; name: string }) => updateCategory(categoryId, name),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["categories"] })
         },
     })
 }
