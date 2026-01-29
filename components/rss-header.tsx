@@ -1,33 +1,33 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { 
-  PanelLeft, 
-  RefreshCw, 
-  LayoutGrid, 
+} from "@/components/ui/dropdown-menu";
+import {
+  PanelLeft,
+  RefreshCw,
+  LayoutGrid,
   List,
   SortAsc,
   Filter,
-  MoreHorizontal
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { ThemeToggle } from "@/components/theme-toggle"
+  MoreHorizontal,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface RssHeaderProps {
-  title: string
-  articleCount: number
-  viewMode: "list" | "grid"
-  onViewModeChange: (mode: "list" | "grid") => void
-  onToggleSidebar: () => void
-  onRefresh: () => void
-  isRefreshing?: boolean
+  title: string;
+  articleCount: number;
+  viewMode: "list" | "grid";
+  onViewModeChange: (mode: "list" | "grid") => void;
+  onToggleSidebar: () => void;
+  onRefresh: () => void;
+  isRefreshing?: boolean;
 }
 
 export function RssHeader({
@@ -50,13 +50,17 @@ export function RssHeader({
         >
           <PanelLeft className="w-5 h-5" />
         </Button>
-        <div>
-          <h2 className="text-lg font-bold text-foreground tracking-tight">{title}</h2>
-          <p className="text-sm text-muted-foreground">{articleCount} articles</p>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-bold text-foreground tracking-tight truncate">
+            {title}
+          </h2>
+          <p className="text-sm text-muted-foreground truncate">
+            {articleCount} articles
+          </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
@@ -64,7 +68,12 @@ export function RssHeader({
           onClick={onRefresh}
           disabled={isRefreshing}
         >
-          <RefreshCw className={cn("w-5 h-5 transition-transform duration-500", isRefreshing && "animate-spin")} />
+          <RefreshCw
+            className={cn(
+              "w-5 h-5 transition-transform duration-500",
+              isRefreshing && "animate-spin",
+            )}
+          />
         </Button>
 
         <div className="hidden sm:flex items-center border border-border rounded-xl p-1 bg-muted/50">
@@ -92,7 +101,11 @@ export function RssHeader({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            >
               <MoreHorizontal className="w-5 h-5" />
             </Button>
           </DropdownMenuTrigger>
@@ -106,10 +119,12 @@ export function RssHeader({
               Filter unread
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="rounded-lg py-2.5 text-base">Mark all as read</DropdownMenuItem>
+            <DropdownMenuItem className="rounded-lg py-2.5 text-base">
+              Mark all as read
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>
-  )
+  );
 }

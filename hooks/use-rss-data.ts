@@ -18,10 +18,10 @@ export function useCategories() {
     })
 }
 
-export function useArticles(feedId?: string | null) {
+export function useArticles(feedId?: string | null, category?: string) {
     return useQuery({
-        queryKey: ["articles", feedId],
-        queryFn: () => getArticles(feedId),
+        queryKey: ["articles", feedId, category],
+        queryFn: () => getArticles(feedId, category),
     })
 }
 

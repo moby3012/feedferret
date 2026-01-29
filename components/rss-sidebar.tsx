@@ -21,6 +21,7 @@ import {
   Trash2,
   Download,
   Upload,
+  Users,
 } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -73,16 +74,21 @@ export function RssSidebar({
   const { data: allCategories = [] } = useCategories();
   const updateFeed = useUpdateFeed();
 
-  const groupedFeeds = feeds.reduce(
-    (acc, feed) => {
-      if (!acc[feed.category]) {
-        acc[feed.category] = [];
-      }
-      acc[feed.category].push(feed);
+  const groupedFeeds = allCategories.reduce(
+    (acc, cat: any) => {
+      acc[cat.name] = [];
       return acc;
     },
-    {} as Record<string, FeedSource[]>,
+    { Uncategorized: [] } as Record<string, FeedSource[]>,
   );
+
+  feeds.forEach((feed) => {
+    const categoryName = feed.category || "Uncategorized";
+    if (!groupedFeeds[categoryName]) {
+      groupedFeeds[categoryName] = [];
+    }
+    groupedFeeds[categoryName].push(feed);
+  });
 
   const toggleCategory = (category: string) => {
     setExpandedCategories((prev) =>
@@ -193,7 +199,7 @@ export function RssSidebar({
                 style={{ animationDelay: `${index * 50}ms` }}
                 onClick={() => {
                   onSelectFeed(null);
-                  if (item.id === "all") onSelectCategory("All");
+                  onSelectCategory(item.id === "all" ? "All" : item.label);
                 }}
                 className={cn(
                   "w-full flex items-center gap-4 px-4 py-3 rounded-xl text-base transition-all duration-200 animate-fade-in-up",
@@ -333,8 +339,8 @@ export function RssSidebar({
                           (c: any) => c.name === category,
                         );
                         await updateFeed.mutateAsync({
-                          id: feedId,
-                          categoryId: categoryObject?.id || null,
+                          feedId: feedId,
+                          data: { categoryId: categoryObject?.id || null },
                         });
                       }
                     }}

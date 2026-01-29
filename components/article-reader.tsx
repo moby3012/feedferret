@@ -72,7 +72,7 @@ export function ArticleReader({
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           <Button
             variant="ghost"
             size="icon"

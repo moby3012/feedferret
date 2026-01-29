@@ -19,17 +19,19 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 // Define a type for the raw article data based on its usage
 interface RawArticle {
   id: string;
+  title: string;
+  content: string;
+  feedId: string;
   isRead: boolean;
   isStarred: boolean;
-  publishedAt: string;
-  excerpt?: string;
-  author?: string;
+  publishedAt: string | Date;
+  excerpt?: string | null;
+  author?: string | null;
   feed: {
     name: string;
-    icon?: string;
+    icon?: string | null;
   };
-  // Add other properties if they exist on the raw article object
-  [key: string]: any; // Allow for other properties not explicitly defined
+  [key: string]: any;
 }
 
 import { hasUsers } from "./actions/onboarding";
@@ -48,8 +50,10 @@ export default function RSSReaderPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const { data: feeds = [], isLoading: feedsLoading } = useFeeds();
-  const { data: rawArticles = [], isLoading: articlesLoading } =
-    useArticles(selectedFeed);
+  const { data: rawArticles = [], isLoading: articlesLoading } = useArticles(
+    selectedFeed,
+    selectedCategory,
+  );
 
   const refresh = useRefresh();
   const toggleRead = useToggleRead();
@@ -169,7 +173,7 @@ export default function RSSReaderPage() {
   }
 
   return (
-    <div className="h-dvh flex bg-background overflow-hidden">
+    <div className="fixed inset-0 flex bg-background overflow-hidden selection:bg-accent/20">
       {/* Desktop Sidebar */}
       <div className="hidden lg:block">
         <RssSidebar

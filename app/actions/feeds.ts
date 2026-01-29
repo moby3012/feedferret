@@ -3,8 +3,11 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { syncAllFeeds } from "@/lib/rss-sync";
+import { syncAllFeeds, syncFeed } from "@/lib/rss-sync";
 import { parseOpml, generateOpml, OpmlOutline } from "@/lib/opml";
+import Parser from "rss-parser";
+
+const parser = new Parser();
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -53,18 +56,28 @@ export async function addFeed(url: string, categoryId?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    // In a real app, we would fetch the RSS feed name/icon here
-    const feed = await db.feed.create({
-        data: {
-            url,
-            name: "New Feed", // Placeholder, will be updated by sync worker
-            userId: session.user.id,
-            categoryId,
-        },
-    });
+    // Validate the feed first
+    try {
+        const remoteFeed = await parser.parseURL(url);
 
-    revalidatePath("/");
-    return feed;
+        const feed = await db.feed.create({
+            data: {
+                url,
+                name: remoteFeed.title || "New Feed",
+                userId: session.user.id,
+                categoryId,
+            },
+        });
+
+        // Trigger initial sync
+        await syncFeed(session.user.id, feed.id);
+
+        revalidatePath("/");
+        return { success: true, feed };
+    } catch (error) {
+        console.error("Failed to add feed:", error);
+        return { success: false, error: "Invalid RSS/Atom feed URL" };
+    }
 }
 
 export async function deleteFeed(feedId: string) {
@@ -156,13 +169,29 @@ export async function toggleArticleStarred(articleId: string, isStarred: boolean
     revalidatePath("/");
 }
 
-export async function getArticles(feedId?: string | null) {
+export async function getArticles(feedId?: string | null, category?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     const where: any = { userId: session.user.id };
+
     if (feedId) {
         where.feedId = feedId;
+    } else if (category && category !== "All") {
+        if (category === "Starred") {
+            where.isStarred = true;
+        } else if (category === "Recently Read") {
+            where.isRead = true;
+        } else if (category === "Archive") {
+            // For now, archive is just read articles
+            where.isRead = true;
+        } else {
+            where.feed = {
+                category: {
+                    name: category,
+                },
+            };
+        }
     }
 
     return await db.article.findMany({
@@ -220,7 +249,7 @@ export async function importOpml(xml: string) {
                     userId_name_parentId: {
                         userId: userId,
                         name: outline.text,
-                        parentId: categoryId || null,
+                        parentId: (categoryId || null) as any,
                     }
                 },
                 update: {},

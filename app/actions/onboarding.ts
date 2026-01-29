@@ -6,3 +6,10 @@ export async function hasUsers() {
     const count = await db.user.count();
     return count > 0;
 }
+
+export async function getAuthProviders() {
+    return {
+        google: !!process.env.GOOGLE_CLIENT_ID,
+        github: !!process.env.GITHUB_CLIENT_ID,
+    };
+}

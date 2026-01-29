@@ -3,6 +3,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
 import authConfig from "./auth.config";
 import Credentials from "next-auth/providers/credentials";
+import Nodemailer from "next-auth/providers/nodemailer";
 import bcrypt from "bcryptjs";
 
 export const {
@@ -17,6 +18,17 @@ export const {
         signIn: "/login",
     },
     providers: [
+        Nodemailer({
+            server: {
+                host: process.env.SMTP_HOST,
+                port: Number(process.env.SMTP_PORT),
+                auth: {
+                    user: process.env.SMTP_USER,
+                    pass: process.env.SMTP_PASSWORD,
+                },
+            },
+            from: process.env.EMAIL_FROM,
+        }),
         Credentials({
             async authorize(credentials) {
                 if (!credentials?.email || !credentials?.password) return null;
@@ -32,7 +44,7 @@ export const {
                     user.password
                 );
 
-                if (passwordsMatch) return user;
+                if (passwordsMatch) return user as any;
 
                 return null;
             },
@@ -52,7 +64,7 @@ export const {
 
             const user = await db.user.findUnique({
                 where: { id: token.sub },
-            });
+            }) as any;
 
             if (user) {
                 token.role = user.role;

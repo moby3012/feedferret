@@ -14,27 +14,42 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import Link from "next/link";
-import { Mail, Lock, ArrowRight, LogIn, Sparkles } from "lucide-react";
-import { hasUsers } from "../actions/onboarding";
+import {
+  Mail,
+  Lock,
+  ArrowRight,
+  LogIn,
+  Sparkles,
+  Github,
+  Chrome,
+} from "lucide-react";
+import { hasUsers, getAuthProviders } from "../actions/onboarding";
+import { Separator } from "@/components/ui/separator";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [providers, setProviders] = useState<{
+    google: boolean;
+    github: boolean;
+  }>({ google: false, github: false });
   const router = useRouter();
   const { status } = useSession();
 
   useEffect(() => {
-    async function checkFirstRun() {
+    async function init() {
       if (status === "unauthenticated") {
         const usersExist = await hasUsers();
         if (!usersExist) {
           router.push("/setup");
         }
       }
+      const enabledProviders = await getAuthProviders();
+      setProviders(enabledProviders);
     }
-    checkFirstRun();
+    init();
   }, [status, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,63 +77,57 @@ export default function LoginPage() {
     }
   };
 
+  const handleOAuthSignIn = (provider: string) => {
+    signIn(provider, { callbackUrl: "/" });
+  };
+
   if (status === "loading") return null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#05060a] relative overflow-hidden text-white selection:bg-blue-500/30">
-      {/* Background Orbs */}
-      <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] animate-pulse" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[120px] animate-pulse delay-700" />
-
+    <div className="min-h-screen flex items-center justify-center p-4 bg-black text-white selection:bg-zinc-800">
       <div className="w-full max-w-[400px] relative z-10 animate-scale-in">
-        <div className="text-center mb-8 group">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 p-[1px] mb-5 shadow-2xl shadow-blue-500/40 transition-transform duration-500 group-hover:scale-105">
-            <div className="w-full h-full bg-[#05060a] rounded-[15px] flex items-center justify-center overflow-hidden">
-              <img
-                src="/logo.svg"
-                alt="FeedFerret"
-                className="w-10 h-10 invert brightness-200"
-              />
-            </div>
+        <div className="text-center mb-10 group">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl border border-white/10 bg-zinc-950 p-3 mb-6 shadow-2xl transition-transform duration-500 group-hover:scale-105">
+            <img
+              src="/logo.svg"
+              alt="FeedFerret"
+              className="w-full h-full invert opacity-90"
+            />
           </div>
-          <h1 className="text-3xl font-black tracking-tighter text-white drop-shadow-sm">
-            Welcome to Feed<span className="text-blue-500">Ferret</span>
+          <h1 className="text-2xl font-bold tracking-tight text-white">
+            Feed<span className="text-zinc-400">Ferret</span>
           </h1>
-          <p className="text-zinc-500 mt-1 text-sm font-medium tracking-wide flex items-center justify-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-            Your News Hub
+          <p className="text-zinc-500 mt-2 text-sm font-medium tracking-tight">
+            Minimalist RSS Aggregator
           </p>
         </div>
 
-        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-3xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.6)] overflow-hidden ring-1 ring-white/10">
+        <Card className="border-white/5 bg-zinc-950/50 backdrop-blur-xl shadow-2xl overflow-hidden ring-1 ring-white/10">
           <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-left">
-            <CardTitle className="text-xl font-bold text-white flex items-center justify-center sm:justify-start gap-2.5">
-              <LogIn className="w-5 h-5 text-blue-500" />
+            <CardTitle className="text-lg font-semibold text-white flex items-center justify-center sm:justify-start gap-2">
+              <LogIn className="w-4 h-4 text-zinc-400" />
               Sign In
             </CardTitle>
-            <CardDescription className="text-zinc-500 text-[11px] font-medium leading-relaxed">
-              Access your personalized feed stream.
-            </CardDescription>
           </CardHeader>
           <CardContent className="px-8 pb-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="relative group/input">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-blue-500" />
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-white" />
                 <Input
                   type="email"
-                  placeholder="Email Address"
-                  className="pl-10 bg-white/[0.04] border-white/5 text-white placeholder:text-zinc-700 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all h-12 rounded-xl text-sm"
+                  placeholder="Email"
+                  className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
               <div className="relative group/input">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-blue-500" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-white" />
                 <Input
                   type="password"
                   placeholder="Password"
-                  className="pl-10 bg-white/[0.04] border-white/5 text-white placeholder:text-zinc-700 focus:border-blue-500/50 focus:ring-blue-500/20 transition-all h-12 rounded-xl text-sm"
+                  className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -126,7 +135,7 @@ export default function LoginPage() {
               </div>
 
               {error && (
-                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-[11px] font-bold animate-shake">
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium animate-shake">
                   {error}
                 </div>
               )}
@@ -134,38 +143,73 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full h-12 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-900/40 group transition-all transform active:scale-[0.98] uppercase tracking-wider"
+                className="w-full h-11 bg-white hover:bg-zinc-200 text-black font-semibold text-sm rounded-lg transition-all active:scale-[0.98]"
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">
-                    <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                    Authenticating...
+                    <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                    Signing in...
                   </span>
                 ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    Sign In
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </span>
+                  "Continue with Email"
                 )}
               </Button>
             </form>
+
+            {(providers.google || providers.github) && (
+              <>
+                <div className="relative my-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <Separator className="w-full bg-white/10" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-[#0c0c0e] px-2 text-zinc-500 font-medium">
+                      Or continue with
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  {providers.google && (
+                    <Button
+                      variant="outline"
+                      className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
+                      onClick={() => handleOAuthSignIn("google")}
+                    >
+                      <Chrome className="w-4 h-4 mr-2" />
+                      Google
+                    </Button>
+                  )}
+                  {providers.github && (
+                    <Button
+                      variant="outline"
+                      className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
+                      onClick={() => handleOAuthSignIn("github")}
+                    >
+                      <Github className="w-4 h-4 mr-2" />
+                      GitHub
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
           </CardContent>
-          <CardFooter className="flex flex-col space-y-3 border-t border-white/5 pt-5 pb-7 bg-white/[0.01]">
-            <div className="text-zinc-500 text-[11px] font-medium text-center w-full">
+          <CardFooter className="flex flex-col space-y-4 border-t border-white/5 pt-6 pb-8 bg-white/[0.02]">
+            <div className="text-zinc-500 text-xs font-medium text-center w-full">
               Don&apos;t have an account?{" "}
               <Link
                 href="/register"
-                className="text-white hover:text-blue-400 font-bold underline underline-offset-4 decoration-blue-500/30 transition-all"
+                className="text-white hover:underline transition-all"
               >
-                Create one now
+                Create one
               </Link>
             </div>
           </CardFooter>
         </Card>
 
-        <div className="text-center mt-10 opacity-10 select-none">
-          <p className="text-[9px] font-black tracking-[0.4em] text-white uppercase">
-            Your News Hub
+        <div className="text-center mt-12 opacity-20">
+          <p className="text-[10px] font-medium tracking-[0.2em] text-white uppercase">
+            Private & Secure News Feed
           </p>
         </div>
       </div>

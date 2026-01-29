@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   title: "FeedFerret - Versatile Simple RSS Reader",
   description: "A beautiful, self-hostable RSS reader for your daily news feed",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "FeedFerret",
+  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
