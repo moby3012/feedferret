@@ -141,7 +141,17 @@ export default function RSSReaderPage() {
     )
       return;
 
-    if (e.key === "j") {
+    // "/" to open search
+    if (e.key === "/") {
+      e.preventDefault();
+      const searchInput = document.querySelector('input[type="search"]') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.focus();
+      }
+    } else if (e.key === "Escape") {
+      // Close search on Escape
+      setSearchQuery("");
+    } else if (e.key === "j") {
       const currentIndex = filteredArticles.findIndex(
         (a) => a.id === selectedArticleId,
       );

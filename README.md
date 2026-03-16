@@ -11,6 +11,8 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 - **OPML Management**: Seamlessly import your existing library or export your subscriptions.
 - **Premium UX**: Responsive design, dark mode, and smooth animations.
 - **Keyboard First**: Power-user shortcuts for blazing-fast navigation:
+  - `/`: Open search
+  - `Esc`: Close search
   - `j` / `k`: Next/Previous Article
   - `s`: Toggle Star
   - `r`: Refresh Feeds

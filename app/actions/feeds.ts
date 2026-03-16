@@ -207,7 +207,7 @@ export async function toggleArticleStarred(articleId: string, isStarred: boolean
     revalidatePath("/");
 }
 
-export async function getArticles(feedId?: string | null, category?: string, search?: string) {
+export async function getArticles(feedId?: string | null, category?: string, search?: string, filters?: { dateFrom?: string; dateTo?: string; isRead?: boolean; isStarred?: boolean }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -221,6 +221,22 @@ export async function getArticles(feedId?: string | null, category?: string, sea
             { excerpt: { contains: search.trim() } },
             { author: { contains: search.trim() } },
         ];
+    }
+
+    // Date filters
+    if (filters?.dateFrom) {
+        where.publishedAt = { ...where.publishedAt, gte: new Date(filters.dateFrom) };
+    }
+    if (filters?.dateTo) {
+        where.publishedAt = { ...where.publishedAt, lte: new Date(filters.dateTo) };
+    }
+
+    // Read/Starred filters
+    if (filters?.isRead !== undefined) {
+        where.isRead = filters.isRead;
+    }
+    if (filters?.isStarred !== undefined) {
+        where.isStarred = filters.isStarred;
     }
 
     if (feedId) {
@@ -247,7 +263,7 @@ export async function getArticles(feedId?: string | null, category?: string, sea
             feed: true,
         },
         orderBy: { publishedAt: "desc" },
-        take: 100, // Limit results for performance
+        take: 100,
     });
 }
 
