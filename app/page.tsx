@@ -13,6 +13,7 @@ import {
   useToggleRead,
   useToggleStarred,
   useRefresh,
+  useMarkAllAsRead,
 } from "@/hooks/use-rss-data";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -43,6 +44,7 @@ export default function RSSReaderPage() {
   const refresh = useRefresh();
   const toggleRead = useToggleRead();
   const toggleStarred = useToggleStarred();
+  const markAllAsRead = useMarkAllAsRead();
   const [readInSession, setReadInSession] = useState<string[]>([]);
 
   // Reset readInSession when feed or category changes
@@ -271,6 +273,8 @@ export default function RSSReaderPage() {
           onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          onMarkAllRead={() => markAllAsRead.mutate(selectedFeed || undefined)}
+          isMarkingAllRead={markAllAsRead.isPending}
         />
         <ArticleList
           articles={filteredArticles}

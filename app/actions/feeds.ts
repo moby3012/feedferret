@@ -334,3 +334,24 @@ export async function importOpml(xml: string) {
 
     revalidatePath("/");
 }
+
+export async function markAllAsRead(feedId?: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const where: any = { 
+        userId: session.user.id,
+        isRead: false 
+    };
+    
+    if (feedId) {
+        where.feedId = feedId;
+    }
+
+    await db.article.updateMany({
+        where,
+        data: { isRead: true },
+    });
+
+    revalidatePath("/");
+}

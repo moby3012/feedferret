@@ -21,6 +21,7 @@ import {
   Check,
   Search,
   X,
+  CheckCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -40,6 +41,8 @@ interface RssHeaderProps {
   onToggleUnreadOnly: () => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  onMarkAllRead?: () => void;
+  isMarkingAllRead?: boolean;
 }
 
 export function RssHeader({
@@ -54,6 +57,8 @@ export function RssHeader({
   onToggleUnreadOnly,
   searchQuery = "",
   onSearchChange,
+  onMarkAllRead,
+  isMarkingAllRead,
 }: RssHeaderProps) {
   const [showSearch, setShowSearch] = useState(!!searchQuery);
 
@@ -207,8 +212,13 @@ export function RssHeader({
               Sort by date
             </DropdownMenuItem>
 
-            <DropdownMenuItem className="rounded-xl py-3 px-4 text-sm font-medium text-destructive focus:bg-destructive/10 focus:text-destructive">
-              Mark all as read
+            <DropdownMenuItem 
+              className="rounded-xl py-3 px-4 text-sm font-medium text-destructive focus:bg-destructive/10 focus:text-destructive"
+              onClick={onMarkAllRead}
+              disabled={isMarkingAllRead}
+            >
+              <CheckCheck className="w-4 h-4 mr-3" />
+              {isMarkingAllRead ? "Marking..." : "Mark all as read"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

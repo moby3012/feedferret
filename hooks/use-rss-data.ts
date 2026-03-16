@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings } from "@/app/actions/settings"
 
 export function useFeeds() {
@@ -177,5 +177,16 @@ export function useUpdateProfile() {
 export function useUpdateGlobalSettings() {
     return useMutation({
         mutationFn: (data: { defaultUpdateFrequency?: number }) => updateGlobalSettings(data),
+    })
+}
+
+export function useMarkAllAsRead() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (feedId?: string) => markAllAsRead(feedId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+        },
     })
 }
