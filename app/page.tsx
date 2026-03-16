@@ -48,6 +48,17 @@ export default function RSSReaderPage() {
     setReadInSession([]);
   }, [selectedFeed, selectedCategory]);
 
+  // Auto-sync feeds on page load (lazy sync)
+  useEffect(() => {
+    if (status === "authenticated") {
+      // Trigger background sync when user loads the app
+      fetch("/api/sync", { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      }).catch(console.error);
+    }
+  }, [status]);
+
   // Transform articles for UI components
   const articles = useMemo(() => {
     return rawArticles.map((a: any) => ({
