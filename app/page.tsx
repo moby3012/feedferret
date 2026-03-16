@@ -31,11 +31,13 @@ export default function RSSReaderPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: feeds = [], isLoading: feedsLoading } = useFeeds();
   const { data: rawArticles = [], isLoading: articlesLoading } = useArticles(
     selectedFeed,
     selectedCategory,
+    searchQuery || undefined,
   );
 
   const refresh = useRefresh();
@@ -248,7 +250,7 @@ export default function RSSReaderPage() {
         )}
       >
         <RssHeader
-          title={headerTitle}
+          title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
           articleCount={filteredArticles.length}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
@@ -257,6 +259,8 @@ export default function RSSReaderPage() {
           isRefreshing={articlesLoading || refresh.isPending}
           unreadOnly={unreadOnly}
           onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
         />
         <ArticleList
           articles={filteredArticles}

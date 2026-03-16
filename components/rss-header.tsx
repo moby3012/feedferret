@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,9 +19,12 @@ import {
   MoreHorizontal,
   AlignJustify,
   Check,
+  Search,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useState } from "react";
 
 export type ViewMode = "list" | "magazine" | "minimal";
 
@@ -34,6 +38,8 @@ interface RssHeaderProps {
   isRefreshing?: boolean;
   unreadOnly: boolean;
   onToggleUnreadOnly: () => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 export function RssHeader({
@@ -46,7 +52,11 @@ export function RssHeader({
   isRefreshing,
   unreadOnly,
   onToggleUnreadOnly,
+  searchQuery = "",
+  onSearchChange,
 }: RssHeaderProps) {
+  const [showSearch, setShowSearch] = useState(!!searchQuery);
+
   return (
     <header className="h-16 flex items-center justify-between px-5 border-b border-border bg-card/80 backdrop-blur-xl animate-fade-in relative z-20">
       <div className="flex items-center gap-4 min-w-0">
@@ -69,6 +79,39 @@ export function RssHeader({
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        {/* Search Toggle */}
+        {onSearchChange && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
+              showSearch || searchQuery
+                ? "text-blue-500 bg-blue-500/10"
+                : "text-muted-foreground"
+            )}
+            onClick={() => {
+              setShowSearch(!showSearch);
+              if (showSearch) {
+                onSearchChange("");
+              }
+            }}
+          >
+            {showSearch || searchQuery ? <X className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+          </Button>
+        )}
+
+        {/* Search Input */}
+        {showSearch && onSearchChange && (
+          <Input
+            type="search"
+            placeholder="Search articles..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="h-10 w-40 lg:w-60 rounded-xl bg-background/50 border-border/50 focus:bg-background"
+            autoFocus
+          />
+        )}
         <Button
           variant="ghost"
           size="sm"

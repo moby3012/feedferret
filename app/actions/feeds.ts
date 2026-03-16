@@ -207,11 +207,21 @@ export async function toggleArticleStarred(articleId: string, isStarred: boolean
     revalidatePath("/");
 }
 
-export async function getArticles(feedId?: string | null, category?: string) {
+export async function getArticles(feedId?: string | null, category?: string, search?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     const where: any = { userId: session.user.id };
+
+    // Search filter
+    if (search && search.trim()) {
+        where.OR = [
+            { title: { contains: search.trim() } },
+            { content: { contains: search.trim() } },
+            { excerpt: { contains: search.trim() } },
+            { author: { contains: search.trim() } },
+        ];
+    }
 
     if (feedId) {
         where.feedId = feedId;
@@ -237,6 +247,7 @@ export async function getArticles(feedId?: string | null, category?: string) {
             feed: true,
         },
         orderBy: { publishedAt: "desc" },
+        take: 100, // Limit results for performance
     });
 }
 

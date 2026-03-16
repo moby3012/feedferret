@@ -25,10 +25,10 @@ export function useStarredCount() {
     })
 }
 
-export function useArticles(feedId?: string | null, category?: string) {
+export function useArticles(feedId?: string | null, category?: string, search?: string) {
     return useQuery({
-        queryKey: ["articles", feedId, category],
-        queryFn: () => getArticles(feedId, category),
+        queryKey: ["articles", feedId, category, search],
+        queryFn: () => getArticles(feedId, category, search),
     })
 }
 
