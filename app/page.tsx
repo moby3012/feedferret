@@ -55,19 +55,16 @@ export default function RSSReaderPage() {
   // Auto-sync feeds on page load (lazy sync)
   useEffect(() => {
     if (status === "authenticated") {
-      // Trigger background sync when user loads the app
       fetch("/api/sync", { 
         method: "POST",
         headers: { "Content-Type": "application/json" }
       }).then(() => {
-        // Store last sync time
-        localStorage.setItem("lastSync", new Date().toISOString());
+        if (typeof window !== "undefined") {
+          localStorage.setItem("lastSync", new Date().toISOString());
+        }
       }).catch(console.error);
     }
   }, [status]);
-
-  // Get last sync time from localStorage
-  const lastSync = localStorage.getItem("lastSync");
 
   // Transform articles for UI components
   const articles = useMemo(() => {
