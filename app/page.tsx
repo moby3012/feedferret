@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import readingTime from "reading-time";
 import { RssSidebar } from "@/components/rss-sidebar";
@@ -95,10 +95,11 @@ export default function RSSReaderPage() {
       "Recently Read",
     ].includes(selectedCategory);
 
-    // Apply main view filter
-    if (selectedCategory === "New Articles") {
-      list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
-    } else if (unreadOnly && !bypassUnreadFilter) {
+    // Apply main view filter - include items that are either:
+    // 1. Not yet read, OR
+    // 2. Read in this session (clicked but still visible), OR  
+    // 3. Already in readInSession (persist visibility after server update)
+    if (selectedCategory === "New Articles" || (unreadOnly && !bypassUnreadFilter)) {
       list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
     }
 
@@ -113,32 +114,45 @@ export default function RSSReaderPage() {
     return selectedCategory;
   }, [selectedFeed, selectedCategory, feeds]);
 
-  const handleSelectArticle = (article: any) => {
+  const handleSelectArticle = useCallback((article: any) => {
     setSelectedArticleId(article.id);
     if (!article.isRead && !readInSession.includes(article.id)) {
       setReadInSession((prev) => [...prev, article.id]);
       toggleRead.mutate({ articleId: article.id, isRead: true });
     }
-  };
+  }, [readInSession, toggleRead]);
 
-  const handleToggleStar = (articleId: string) => {
+  const handleToggleStar = useCallback((articleId: string) => {
     const article = articles.find((a: any) => a.id === articleId);
     if (article) {
       toggleStarred.mutate({ articleId, isStarred: !article.isStarred });
     }
-  };
+  }, [articles, toggleStarred]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(() => {
     refresh.mutate();
-  };
+  }, [refresh]);
+
+  // Use refs for keyboard navigation to avoid stale closures
+  const filteredArticlesRef = useRef(filteredArticles);
+  const selectedArticleIdRef = useRef(selectedArticleId);
+  useEffect(() => {
+    filteredArticlesRef.current = filteredArticles;
+  }, [filteredArticles]);
+  useEffect(() => {
+    selectedArticleIdRef.current = selectedArticleId;
+  }, [selectedArticleId]);
 
   // Keyboard Shortcuts
-  const handleKeyDown = (e: KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (
       e.target instanceof HTMLInputElement ||
       e.target instanceof HTMLTextAreaElement
     )
       return;
+
+    const currentFilteredArticles = filteredArticlesRef.current;
+    const currentSelectedArticleId = selectedArticleIdRef.current;
 
     // "/" to open search
     if (e.key === "/") {
@@ -151,23 +165,23 @@ export default function RSSReaderPage() {
       // Close search on Escape
       setSearchQuery("");
     } else if (e.key === "j") {
-      const currentIndex = filteredArticles.findIndex(
-        (a) => a.id === selectedArticleId,
+      const currentIndex = currentFilteredArticles.findIndex(
+        (a) => a.id === currentSelectedArticleId,
       );
-      const nextArticle = filteredArticles[currentIndex + 1];
+      const nextArticle = currentFilteredArticles[currentIndex + 1];
       if (nextArticle) handleSelectArticle(nextArticle);
     } else if (e.key === "k") {
-      const currentIndex = filteredArticles.findIndex(
-        (a) => a.id === selectedArticleId,
+      const currentIndex = currentFilteredArticles.findIndex(
+        (a) => a.id === currentSelectedArticleId,
       );
-      const prevArticle = filteredArticles[currentIndex - 1];
+      const prevArticle = currentFilteredArticles[currentIndex - 1];
       if (prevArticle) handleSelectArticle(prevArticle);
-    } else if (e.key === "s" && selectedArticleId) {
-      handleToggleStar(selectedArticleId);
+    } else if (e.key === "s" && currentSelectedArticleId) {
+      handleToggleStar(currentSelectedArticleId);
     } else if (e.key === "r") {
       handleRefresh();
     }
-  };
+  }, [handleSelectArticle, handleToggleStar, handleRefresh]);
 
   useEffect(() => {
     async function checkSetup() {
@@ -186,7 +200,7 @@ export default function RSSReaderPage() {
       window.addEventListener("keydown", handleKeyDown);
       return () => window.removeEventListener("keydown", handleKeyDown);
     }
-  }, [filteredArticles, selectedArticleId]);
+  }, [handleKeyDown]);
 
   if (status === "loading") {
     return (
