@@ -2,6 +2,7 @@
   "name": "feedferret",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.0.8",
   "scripts": {
     "build": "prisma generate && next build",
     "dev": "next dev",
