@@ -1,17 +1,15 @@
 # Production Dockerfile
 FROM node:22-alpine AS base
-RUN apk add --no-cache libc6-compat openssl
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN npm install -g pnpm@11.0.8
+RUN apk add --no-cache libc6-compat openssl python3 make g++
+RUN corepack enable pnpm
 
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app
 
 # Install package manager
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm i --frozen-lockfile
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --no-frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
