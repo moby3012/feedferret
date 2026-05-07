@@ -1,6 +1,7 @@
 # Production Dockerfile
 FROM node:22-alpine AS base
 RUN apk add --no-cache libc6-compat openssl
+RUN corepack enable pnpm
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -8,7 +9,7 @@ WORKDIR /app
 
 # Install package manager
 COPY package.json pnpm-lock.yaml* ./
-RUN npm install -g pnpm && pnpm i
+RUN pnpm i --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -32,7 +33,7 @@ ENV AUTH_SECRET=$AUTH_SECRET
 ENV NEXTAUTH_URL=$NEXTAUTH_URL
 ENV AUTH_TRUST_HOST=$AUTH_TRUST_HOST
 
-RUN npm install -g pnpm && pnpm run build
+RUN pnpm run build
 
 # Production image, copy all the files and run next
 FROM base AS runner
