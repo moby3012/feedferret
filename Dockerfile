@@ -2,13 +2,14 @@
 FROM node:22-slim AS base
 RUN apt-get update && apt-get install -y openssl python3 make g++ ca-certificates libvips-dev && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@11.0.8
+ENV CI=true
 
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app
 
 # Install package manager
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Rebuild the source code only when needed

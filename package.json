@@ -95,12 +95,6 @@
     "overrides": {
       "postcss": "^8.5.14",
       "glob": "^10.5.0"
-    },
-    "onlyBuiltDependencies": [
-      "@prisma/client",
-      "@prisma/engines",
-      "prisma",
-      "sharp"
-    ]
+    }
   }
 }
