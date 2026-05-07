@@ -1,7 +1,7 @@
 # Production Dockerfile
-FROM node:22-alpine AS base
-RUN apk add --no-cache libc6-compat openssl python3 make g++
-RUN corepack enable pnpm
+FROM node:22-slim AS base
+RUN apt-get update && apt-get install -y openssl python3 make g++ ca-certificates libvips-dev && rm -rf /var/lib/apt/lists/*
+RUN npm install -g pnpm@11.0.8
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -9,7 +9,7 @@ WORKDIR /app
 
 # Install package manager
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -43,8 +43,8 @@ ENV NODE_ENV production
 ENV DATABASE_URL=file:/app/data/dev.db
 ENV NEXT_TELEMETRY_DISABLED 1
 
-RUN addgroup -S -g 1001 nodejs
-RUN adduser -S -u 1001 -G nodejs nextjs
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 -g nodejs nextjs
 
 # Create data directory for SQLite and ensure proper permissions
 RUN mkdir -p /app/data && touch /app/data/dev.db && chown -R nextjs:nodejs /app/data
