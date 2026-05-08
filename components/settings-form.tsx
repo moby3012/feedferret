@@ -3,7 +3,24 @@
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft,
+  Laptop,
+  LogOut,
+  Moon,
+  Palette,
+  Settings,
+  Sun,
+  User,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+const themeOptions = [
+  { id: "light", label: "Light", icon: Sun },
+  { id: "dark", label: "Dark", icon: Moon },
+  { id: "system", label: "System", icon: Laptop },
+];
 
 export function SettingsForm() {
   const { data: session } = useSession();
@@ -11,86 +28,102 @@ export function SettingsForm() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-      <div className="max-w-4xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center mb-8">
-          <button
+    <main className="min-h-dvh app-chrome text-foreground">
+      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+        <header className="mb-8 flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => router.back()}
-            className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            className="h-11 w-11 rounded-2xl bg-card/70 backdrop-blur-xl border border-border/60 shadow-sm"
+            aria-label="Back"
           >
-            <ArrowLeft className="w-6 h-6" />
-          </button>
-          <h1 className="ml-4 text-3xl font-extrabold text-gray-900 dark:text-white">Settings</h1>
-        </div>
-        <div className="space-y-8">
-          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">
-                Appearance
-              </h3>
-              <div className="mt-2 max-w-xl text-sm text-gray-500 dark:text-gray-400">
-                <p>Customize the look and feel of the application.</p>
-              </div>
-              <div className="mt-5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Theme</span>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => setTheme("light")}
-                      className={`px-3 py-1 rounded-md text-sm font-medium ${
-                        theme === "light"
-                          ? "bg-indigo-600 text-white"
-                          : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      }`}
-                    >
-                      Light
-                    </button>
-                    <button
-                      onClick={() => setTheme("dark")}
-                      className={`px-3 py-1 rounded-md text-sm font-medium ${
-                        theme === "dark"
-                          ? "bg-indigo-600 text-white"
-                          : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      }`}
-                    >
-                      Dark
-                    </button>
-                    <button
-                      onClick={() => setTheme("system")}
-                      className={`px-3 py-1 rounded-md text-sm font-medium ${
-                        theme === "system"
-                          ? "bg-indigo-600 text-white"
-                          : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      }`}
-                    >
-                      System
-                    </button>
-                  </div>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Settings className="h-4 w-4" />
+              FeedFerret
+            </div>
+            <h1 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
+              Settings
+            </h1>
+          </div>
+        </header>
+
+        <div className="grid gap-5">
+          <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+                  <Palette className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">
+                    Appearance
+                  </h2>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                    Choose the visual mode. The interface uses the same calm,
+                    glassy design language throughout the app.
+                  </p>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">
-                User Profile
-              </h3>
-              <div className="mt-2 max-w-xl text-sm text-gray-500 dark:text-gray-400">
-                <p>You are signed in as {session?.user?.email}</p>
-              </div>
-              <div className="mt-5">
-                <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                  Sign out
-                </button>
+              <div className="grid grid-cols-3 gap-1 rounded-2xl border border-border/70 bg-muted/45 p-1 shadow-inner shadow-black/[0.02]">
+                {themeOptions.map((option) => {
+                  const Icon = option.icon;
+                  const active = theme === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      onClick={() => setTheme(option.id)}
+                      className={cn(
+                        "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium transition-all",
+                        active
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="hidden sm:inline">{option.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <User className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">
+                    User Profile
+                  </h2>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                    Signed in as{" "}
+                    <span className="font-medium text-foreground">
+                      {session?.user?.email || "Unknown user"}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </Button>
+            </div>
+          </section>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

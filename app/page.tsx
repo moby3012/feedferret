@@ -18,6 +18,11 @@ import {
 } from "@/hooks/use-rss-data";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { hasUsers } from "./actions/onboarding";
 import { useRouter } from "next/navigation";
 
@@ -345,12 +350,75 @@ export default function RSSReaderPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Article List Panel */}
+      {/* Desktop: resizable article list + reader */}
+      <ResizablePanelGroup
+        direction="horizontal"
+        autoSaveId="feedferret-reader-layout"
+        className="hidden min-w-0 flex-1 lg:flex"
+      >
+        <ResizablePanel
+          defaultSize={36}
+          minSize={26}
+          maxSize={55}
+          className="min-w-[360px]"
+        >
+          <div className="relative z-10 flex h-full flex-col border-r border-border/60 bg-card/70 backdrop-blur-2xl">
+            <RssHeader
+              title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
+              articleCount={filteredArticles.length}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              onToggleSidebar={() => setSidebarOpen(true)}
+              onRefresh={handleRefresh}
+              isRefreshing={articlesLoading || refresh.isPending}
+              unreadOnly={unreadOnly}
+              onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              onMarkAllRead={() =>
+                markAllAsRead.mutate({
+                  feedId: selectedFeed,
+                  category: selectedFeed ? null : selectedCategory,
+                })
+              }
+              isMarkingAllRead={markAllAsRead.isPending}
+            />
+            <ArticleList
+              articles={filteredArticles}
+              selectedArticle={selectedArticle}
+              onSelectArticle={handleSelectArticle}
+              onToggleRead={handleToggleRead}
+              onToggleStar={handleToggleStar}
+              viewMode={viewMode}
+            />
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle
+          withHandle
+          className="bg-border/40 transition-colors hover:bg-accent/35"
+        />
+
+        <ResizablePanel defaultSize={64} minSize={45}>
+          <div className="flex h-full bg-background">
+            <ArticleReader
+              article={selectedArticle}
+              onToggleStar={handleToggleStar}
+              onToggleRead={handleToggleRead}
+              onFetchFullText={handleFetchFullText}
+              isFetchingFullText={fetchFullText.isPending}
+              onBack={() => setSelectedArticleId(null)}
+              showBackButton={!!selectedArticle}
+            />
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+
+      {/* Mobile Article List Panel */}
       <div
         className={cn(
-          "flex-1 lg:w-[440px] lg:flex-none flex flex-col border-r border-border/60 bg-card/70 backdrop-blur-2xl relative z-10",
-          "transition-all duration-300 ease-out",
-          selectedArticle && "hidden lg:flex",
+          "relative z-10 flex flex-1 flex-col border-r border-border/60 bg-card/70 backdrop-blur-2xl transition-all duration-300 ease-out lg:hidden",
+          selectedArticle && "hidden",
         )}
       >
         <RssHeader
@@ -383,13 +451,11 @@ export default function RSSReaderPage() {
         />
       </div>
 
-      {/* Article Reader Panel */}
+      {/* Mobile Article Reader Panel */}
       <div
         className={cn(
-          "flex-1 hidden lg:flex bg-background",
-          "transition-all duration-300 ease-out",
-          selectedArticle &&
-            "flex fixed inset-0 z-50 lg:relative lg:inset-auto",
+          "hidden flex-1 bg-background transition-all duration-300 ease-out lg:hidden",
+          selectedArticle && "fixed inset-0 z-50 flex",
         )}
       >
         <ArticleReader

@@ -8,6 +8,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -53,6 +63,7 @@ export function ServerManagementDialog({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<any | null>(null);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -119,12 +130,6 @@ export function ServerManagementDialog({
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to delete this user? This cannot be undone.",
-      )
-    )
-      return;
     try {
       await deleteUser(userId);
       setUsers(users.filter((u) => u.id !== userId));
@@ -142,14 +147,14 @@ export function ServerManagementDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl rounded-3xl sm:max-w-none">
-        <DialogHeader className="p-8 pb-4">
+      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl sm:max-w-none">
+        <DialogHeader className="border-b border-border/60 bg-card/95 p-6 pb-5 backdrop-blur-2xl sm:p-8 sm:pb-5">
           <div className="flex items-center justify-between">
             <div>
-              <DialogTitle className="text-3xl font-bold tracking-tight">
+              <DialogTitle className="text-3xl font-semibold tracking-[-0.04em]">
                 Server Management
               </DialogTitle>
-              <DialogDescription className="text-muted-foreground text-lg">
+              <DialogDescription className="mt-1 text-sm text-muted-foreground sm:text-base">
                 Control server-wide settings, users, and integrations.
               </DialogDescription>
             </div>
@@ -157,8 +162,8 @@ export function ServerManagementDialog({
         </DialogHeader>
 
         <Tabs defaultValue="users" className="flex-1 flex flex-col min-h-0">
-          <div className="px-8 mb-4">
-            <TabsList className="bg-muted/50 p-1 rounded-2xl w-fit">
+          <div className="px-6 py-4 sm:px-8">
+            <TabsList className="bg-muted/45 p-1 rounded-2xl w-fit border border-border/60 shadow-inner shadow-black/[0.02]">
               <TabsTrigger
                 value="users"
                 className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm gap-2"
@@ -185,7 +190,7 @@ export function ServerManagementDialog({
 
           <div className="flex-1 min-h-0">
             {isLoading ? (
-              <div className="h-full flex items-center justify-center">
+              <div className="h-full flex items-center justify-center bg-background">
                 <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
               </div>
             ) : (
@@ -194,12 +199,12 @@ export function ServerManagementDialog({
                   value="users"
                   className="h-full mt-0 focus-visible:outline-none"
                 >
-                  <div className="px-8 flex flex-col h-full">
+                  <div className="px-6 sm:px-8 flex flex-col h-full">
                     <div className="flex justify-between items-center mb-6">
                       <div className="flex gap-2 flex-1 max-w-md">
                         <Input
                           placeholder="Search users..."
-                          className="rounded-xl bg-muted/20"
+                          className="h-11 rounded-2xl bg-card border-border/70"
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -211,13 +216,13 @@ export function ServerManagementDialog({
                         {filteredUsers.map((user) => (
                           <div
                             key={user.id}
-                            className="flex items-center gap-4 p-4 rounded-2xl bg-muted/30 border border-transparent hover:border-border transition-all"
+                            className="flex items-center gap-4 p-4 rounded-3xl bg-card border border-border/60 shadow-sm transition-all hover:border-border"
                           >
-                            <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-semibold">
                               {user.name?.[0] || user.email?.[0]?.toUpperCase()}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="font-bold truncate flex items-center gap-2">
+                              <div className="font-semibold truncate flex items-center gap-2 tracking-[-0.01em]">
                                 {user.name || "Unnamed User"}
                                 {user.role === "ADMIN" && (
                                   <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">
@@ -251,7 +256,7 @@ export function ServerManagementDialog({
                                 size="sm"
                                 variant="ghost"
                                 className="rounded-lg text-destructive hover:bg-destructive/10"
-                                onClick={() => handleDeleteUser(user.id)}
+                                onClick={() => setPendingDeleteUser(user)}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
@@ -265,12 +270,12 @@ export function ServerManagementDialog({
 
                 <TabsContent
                   value="registrations"
-                  className="px-8 py-6 space-y-6"
+                  className="px-6 sm:px-8 py-6 space-y-6"
                 >
                   <div className="max-w-2xl space-y-8">
-                    <div className="flex items-center justify-between p-6 rounded-3xl bg-muted/20 border">
+                    <div className="flex items-center justify-between p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold">
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">
                           Allow New Registrations
                         </h4>
                         <p className="text-sm text-muted-foreground line-clamp-2">
@@ -288,7 +293,7 @@ export function ServerManagementDialog({
                       />
                     </div>
 
-                    <div className="p-6 rounded-3xl bg-amber-500/5 border border-amber-500/20 space-y-3">
+                    <div className="p-6 rounded-3xl bg-amber-500/10 border border-amber-500/20 space-y-3">
                       <div className="flex items-center gap-2 text-amber-500">
                         <AlertCircle className="w-5 h-5" />
                         <h4 className="font-bold">Security Note</h4>
@@ -301,11 +306,11 @@ export function ServerManagementDialog({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="smtp" className="px-8 py-6 space-y-6">
+                <TabsContent value="smtp" className="px-6 sm:px-8 py-6 space-y-6">
                   <div className="max-w-2xl space-y-6">
-                    <div className="flex items-center justify-between p-6 rounded-3xl bg-muted/20 border">
+                    <div className="flex items-center justify-between p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold">
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">
                           Activate Mail Service
                         </h4>
                         <p className="text-sm text-muted-foreground line-clamp-1">
@@ -321,13 +326,13 @@ export function ServerManagementDialog({
                     </div>
 
                     {settings?.mailServiceEnabled && (
-                      <div className="grid gap-6 p-6 rounded-3xl bg-muted/20 border animate-in fade-in slide-in-from-top-4 duration-300">
+                      <div className="grid gap-6 p-6 rounded-3xl bg-card border border-border/60 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>SMTP Host</Label>
                             <Input
                               placeholder="smtp.gmail.com"
-                              className="rounded-xl"
+                              className="rounded-2xl bg-background/70 border-border/70"
                               value={settings.smtpHost || ""}
                               onChange={(e) =>
                                 setSettings({
@@ -341,7 +346,7 @@ export function ServerManagementDialog({
                             <Label>Port</Label>
                             <Input
                               placeholder="587"
-                              className="rounded-xl"
+                              className="rounded-2xl bg-background/70 border-border/70"
                               value={settings.smtpPort || ""}
                               onChange={(e) =>
                                 setSettings({
@@ -357,7 +362,7 @@ export function ServerManagementDialog({
                             <Label>SMTP Username</Label>
                             <Input
                               placeholder="user@gmail.com"
-                              className="rounded-xl"
+                              className="rounded-2xl bg-background/70 border-border/70"
                               value={settings.smtpUser || ""}
                               onChange={(e) =>
                                 setSettings({
@@ -372,7 +377,7 @@ export function ServerManagementDialog({
                             <Input
                               type="password"
                               placeholder="••••••••"
-                              className="rounded-xl"
+                              className="rounded-2xl bg-background/70 border-border/70"
                               value={settings.smtpPassword || ""}
                               onChange={(e) =>
                                 setSettings({
@@ -387,7 +392,7 @@ export function ServerManagementDialog({
                           <Label>From Email</Label>
                           <Input
                             placeholder="noreply@feedferret.cloud"
-                            className="rounded-xl"
+                            className="rounded-2xl bg-background/70 border-border/70"
                             value={settings.smtpFrom || ""}
                             onChange={(e) =>
                               setSettings({
@@ -400,7 +405,7 @@ export function ServerManagementDialog({
                         <div className="flex gap-3 justify-end pt-2">
                           <Button
                             variant="outline"
-                            className="rounded-xl px-6 gap-2"
+                            className="rounded-2xl px-6 gap-2"
                             onClick={handleTestSmtp}
                             disabled={isSaving}
                           >
@@ -412,7 +417,7 @@ export function ServerManagementDialog({
                             Test Connection
                           </Button>
                           <Button
-                            className="rounded-xl px-8"
+                            className="rounded-2xl px-8"
                             onClick={() => handleUpdateSettings(settings)}
                             disabled={isSaving}
                           >
@@ -431,6 +436,35 @@ export function ServerManagementDialog({
             )}
           </div>
         </Tabs>
+        <AlertDialog
+          open={!!pendingDeleteUser}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setPendingDeleteUser(null);
+          }}
+        >
+          <AlertDialogContent className="rounded-3xl border-border/70 bg-background">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete user?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingDeleteUser?.email || "This user"} and all related data
+                will be removed. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  if (!pendingDeleteUser) return;
+                  handleDeleteUser(pendingDeleteUser.id);
+                  setPendingDeleteUser(null);
+                }}
+              >
+                Delete user
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

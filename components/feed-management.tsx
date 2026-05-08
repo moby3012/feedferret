@@ -104,7 +104,7 @@ function SortableCategoryItem({
     <div
       ref={setNodeRef}
       style={style}
-      className="p-4 rounded-2xl bg-muted/20 border border-transparent hover:border-border transition-all group"
+      className="group rounded-3xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border"
     >
       <div className="flex items-center gap-3">
         <div
@@ -120,12 +120,12 @@ function SortableCategoryItem({
               autoFocus
               value={editingCategoryName}
               onChange={(e) => setEditingCategoryName(e.target.value)}
-              className="h-9 rounded-xl bg-background border-none"
+              className="h-9 rounded-2xl border-border/70 bg-background/70"
             />
             <Button
               size="icon"
               variant="ghost"
-              className="h-9 w-9 text-green-500 hover:bg-green-500/10"
+              className="h-9 w-9 rounded-xl text-green-500 hover:bg-green-500/10"
               onClick={() => {
                 updateCategory.mutate({
                   categoryId: cat.id,
@@ -139,7 +139,7 @@ function SortableCategoryItem({
             <Button
               size="icon"
               variant="ghost"
-              className="h-9 w-9 text-muted-foreground"
+              className="h-9 w-9 rounded-xl text-muted-foreground"
               onClick={() => setEditingCategoryId(null)}
             >
               <X className="w-4 h-4" />
@@ -148,7 +148,7 @@ function SortableCategoryItem({
         ) : (
           <>
             <div className="flex-1">
-              <span className="font-bold block">{cat.name}</span>
+              <span className="block font-semibold tracking-[-0.01em]">{cat.name}</span>
               <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
                 Sync: {cat.updateFrequency || "Global Default"} min
               </span>
@@ -157,7 +157,7 @@ function SortableCategoryItem({
               <Input
                 type="number"
                 placeholder="min"
-                className="w-16 h-8 text-xs rounded-lg"
+                className="h-8 w-16 rounded-xl border-border/70 bg-background/70 text-xs"
                 defaultValue={cat.updateFrequency || ""}
                 onBlur={(e) => {
                   const val = parseInt(e.target.value);
@@ -324,19 +324,19 @@ export function FeedManagement({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col p-0 overflow-hidden bg-card border-none shadow-2xl rounded-3xl sm:max-w-none">
-        <DialogHeader className="p-8 pb-4">
-          <DialogTitle className="text-3xl font-bold tracking-tight">
+      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl sm:max-w-none">
+        <DialogHeader className="border-b border-border/60 bg-card/95 p-6 pb-5 backdrop-blur-2xl sm:p-8 sm:pb-5">
+          <DialogTitle className="text-3xl font-semibold tracking-[-0.04em]">
             Management
           </DialogTitle>
-          <DialogDescription className="text-muted-foreground text-lg">
+          <DialogDescription className="mt-1 text-sm text-muted-foreground sm:text-base">
             Organize your feeds, categories, and data.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="feeds" className="flex-1 flex flex-col min-h-0">
-          <div className="px-8 mb-4">
-            <TabsList className="bg-muted/50 p-1 rounded-2xl w-fit">
+          <div className="px-6 py-4 sm:px-8">
+            <TabsList className="bg-muted/45 p-1 rounded-2xl w-fit border border-border/60 shadow-inner shadow-black/[0.02]">
               <TabsTrigger
                 value="feeds"
                 className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
@@ -363,18 +363,18 @@ export function FeedManagement({
               value="feeds"
               className="h-full mt-0 focus-visible:outline-none"
             >
-              <ScrollArea className="h-[50vh] px-8">
+              <ScrollArea className="h-full px-6 sm:px-8">
                 <div className="space-y-3 pb-8">
                   {feeds.map((feed: any) => (
                     <div
                       key={feed.id}
-                      className="flex items-center gap-4 p-4 rounded-2xl bg-muted/30 border border-transparent hover:border-border hover:bg-muted/50 transition-all group"
+                      className="group flex items-center gap-4 rounded-3xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border"
                     >
-                      <div className="text-2xl w-10 h-10 flex items-center justify-center bg-background rounded-xl shadow-sm">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-background text-2xl shadow-sm">
                         {feed.icon || "📰"}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-bold truncate text-foreground">
+                        <div className="truncate font-semibold tracking-[-0.01em] text-foreground">
                           {feed.name}
                         </div>
                         <div className="text-xs text-muted-foreground truncate">
@@ -406,10 +406,10 @@ export function FeedManagement({
                           })
                         }
                       >
-                        <SelectTrigger className="w-32 h-9 rounded-lg bg-background border-none shadow-sm focus:ring-1">
+                        <SelectTrigger className="h-9 w-36 rounded-2xl border-border/70 bg-background/70 shadow-sm focus:ring-1">
                           <SelectValue placeholder="Category" />
                         </SelectTrigger>
-                        <SelectContent className="rounded-xl border-none shadow-xl">
+                        <SelectContent className="rounded-2xl border-border/70 shadow-xl">
                           <SelectItem value="none">No Category</SelectItem>
                           {categories.map((cat: any) => (
                             <SelectItem key={cat.id} value={cat.id}>
@@ -421,7 +421,7 @@ export function FeedManagement({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="w-9 h-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg shrink-0 opacity-0 group-hover:opacity-100 transition-all"
+                        className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                         onClick={() =>
                           setPendingDelete({
                             type: "feed",
@@ -442,23 +442,23 @@ export function FeedManagement({
               value="categories"
               className="h-full mt-0 focus-visible:outline-none"
             >
-              <div className="px-8 flex flex-col h-full">
+              <div className="flex h-full flex-col px-6 sm:px-8">
                 <div className="flex gap-2 mb-6">
                   <Input
                     placeholder="New category name..."
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
-                    className="rounded-xl border-muted bg-muted/20 focus-visible:ring-primary h-11"
+                    className="h-11 rounded-2xl border-border/70 bg-card focus-visible:ring-primary"
                   />
                   <Button
                     onClick={handleAddCategory}
-                    className="bg-primary hover:bg-primary/90 rounded-xl px-6 transition-all active:scale-95 h-11"
+                    className="h-11 rounded-2xl bg-primary px-6 transition-all hover:bg-primary/90 active:scale-95"
                   >
                     <FolderPlus className="w-4 h-4 mr-2" />
                     Add
                   </Button>
                 </div>
-                <ScrollArea className="flex-1 h-[50vh] overflow-hidden min-h-0">
+                <ScrollArea className="flex-1 overflow-hidden min-h-0">
                   <DndContext
                     sensors={sensors}
                     collisionDetection={closestCorners}
@@ -498,9 +498,9 @@ export function FeedManagement({
               value="opml"
               className="h-full mt-0 focus-visible:outline-none"
             >
-              <div className="px-8 py-4 space-y-6">
-                <div className="p-8 rounded-3xl bg-primary/5 border border-primary/10 space-y-4">
-                  <div className="font-bold text-xl flex items-center gap-3 text-primary">
+              <div className="space-y-6 px-6 py-4 sm:px-8">
+                <div className="space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm">
+                  <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em] text-primary">
                     <Upload className="w-6 h-6" />
                     Import subscriptions
                   </div>
@@ -509,7 +509,7 @@ export function FeedManagement({
                     from another RSS reader.
                   </p>
                   <Label htmlFor="opml-upload" className="block">
-                    <div className="inline-flex h-12 items-center justify-center rounded-xl bg-primary px-8 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-95 cursor-pointer shadow-lg shadow-primary/20">
+                    <div className="inline-flex h-12 cursor-pointer items-center justify-center rounded-2xl bg-primary px-8 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-95">
                       Select OPML File
                     </div>
                     <Input
@@ -522,8 +522,8 @@ export function FeedManagement({
                   </Label>
                 </div>
 
-                <div className="p-8 rounded-3xl bg-muted/20 border border-border space-y-4 group transition-all hover:bg-muted/30">
-                  <div className="font-bold text-xl flex items-center gap-3">
+                <div className="group space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm transition-all hover:border-border">
+                  <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em]">
                     <Download className="w-6 h-6 text-muted-foreground" />
                     Export subscriptions
                   </div>
@@ -534,7 +534,7 @@ export function FeedManagement({
                   <Button
                     onClick={handleExport}
                     variant="outline"
-                    className="h-12 rounded-xl px-8 border-muted hover:bg-background transition-all active:scale-95 shadow-sm"
+                    className="h-12 rounded-2xl border-border/70 bg-background/70 px-8 shadow-sm transition-all hover:bg-background active:scale-95"
                   >
                     Generate Export
                   </Button>
@@ -542,14 +542,14 @@ export function FeedManagement({
               </div>
             </TabsContent>
           </div>
-	        </Tabs>
+        </Tabs>
         <AlertDialog
           open={!!pendingDelete}
           onOpenChange={(nextOpen) => {
             if (!nextOpen) setPendingDelete(null);
           }}
         >
-          <AlertDialogContent>
+          <AlertDialogContent className="rounded-3xl border-border/70 bg-background">
             <AlertDialogHeader>
               <AlertDialogTitle>
                 Delete {pendingDelete?.type === "feed" ? "feed" : "category"}?
@@ -559,9 +559,9 @@ export function FeedManagement({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
               <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={() => {
                   if (!pendingDelete) return;
                   if (pendingDelete.type === "feed") {
