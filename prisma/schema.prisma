@@ -23,6 +23,7 @@ model User {
   labels        Label[]
   savedSearches SavedSearch[]
   defaultUpdateFrequency Int @default(60)
+  defaultRetentionDays Int @default(90)
   role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -88,6 +89,7 @@ model Feed {
   category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   articles        Article[]
   updateFrequency Int?
+  retentionDays   Int?
   lastFetchedAt   DateTime?
   lastStatus       String?
   lastError        String?

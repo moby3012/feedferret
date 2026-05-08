@@ -16,7 +16,7 @@ export async function updateProfile(data: { name?: string; email?: string }) {
     revalidatePath("/");
 }
 
-export async function updateGlobalSettings(data: { defaultUpdateFrequency?: number }) {
+export async function updateGlobalSettings(data: { defaultUpdateFrequency?: number; defaultRetentionDays?: number }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 

@@ -263,7 +263,7 @@ export async function deleteFeed(feedId: string) {
     revalidatePath("/");
 }
 
-export async function updateFeed(feedId: string, data: { name?: string; categoryId?: string | null }) {
+export async function updateFeed(feedId: string, data: { name?: string; categoryId?: string | null; updateFrequency?: number | null; retentionDays?: number | null }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -273,6 +273,68 @@ export async function updateFeed(feedId: string, data: { name?: string; category
     });
 
     revalidatePath("/");
+}
+
+export async function getFeedHealth() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const feeds = await db.feed.findMany({
+        where: { userId: session.user.id },
+        include: {
+            category: true,
+            _count: {
+                select: { articles: true },
+            },
+        },
+        orderBy: [{ lastStatus: "desc" }, { name: "asc" }],
+    });
+
+    const unreadCounts = await db.article.groupBy({
+        by: ["feedId"],
+        where: { userId: session.user.id, isRead: false },
+        _count: { _all: true },
+    });
+    const unreadByFeed = new Map(unreadCounts.map((item) => [item.feedId, item._count._all]));
+
+    return feeds.map((feed) => ({
+        ...feed,
+        unreadCount: unreadByFeed.get(feed.id) || 0,
+        articleCount: feed._count.articles,
+    }));
+}
+
+export async function applyRetentionPolicies() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const user = await db.user.findUnique({
+        where: { id: session.user.id },
+        include: { feeds: true },
+    });
+    if (!user) throw new Error("User not found");
+
+    let deleted = 0;
+    for (const feed of user.feeds) {
+        const retentionDays = feed.retentionDays ?? user.defaultRetentionDays;
+        if (!retentionDays || retentionDays <= 0) continue;
+
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - retentionDays);
+        const result = await db.article.deleteMany({
+            where: {
+                userId: user.id,
+                feedId: feed.id,
+                isRead: true,
+                isStarred: false,
+                publishedAt: { lt: cutoff },
+            },
+        });
+        deleted += result.count;
+    }
+
+    revalidatePath("/");
+    return { deleted };
 }
 
 export async function addCategory(name: string, parentId?: string) {
@@ -615,9 +677,24 @@ export async function importOpml(xml: string) {
     if (!userId) throw new Error("Unauthorized");
 
     const outlines = await parseOpml(xml);
+    const report = {
+        feedsAdded: 0,
+        feedsUpdated: 0,
+        categoriesAdded: 0,
+        categoriesUpdated: 0,
+        errors: [] as string[],
+    };
 
     const processOutline = async (outline: OpmlOutline, categoryId?: string) => {
         if (outline.type === "rss" && outline.xmlUrl) {
+            const existing = await db.feed.findUnique({
+                where: {
+                    userId_url: {
+                        userId: userId,
+                        url: outline.xmlUrl,
+                    },
+                },
+            });
             await db.feed.upsert({
                 where: {
                     userId_url: {
@@ -636,7 +713,18 @@ export async function importOpml(xml: string) {
                     categoryId,
                 },
             });
+            if (existing) report.feedsUpdated += 1;
+            else report.feedsAdded += 1;
         } else if (outline.children) {
+            const existingCategory = await db.category.findUnique({
+                where: {
+                    userId_name_parentId: {
+                        userId: userId,
+                        name: outline.text,
+                        parentId: (categoryId || null) as any,
+                    }
+                },
+            });
             const category = await db.category.upsert({
                 where: {
                     userId_name_parentId: {
@@ -652,18 +740,29 @@ export async function importOpml(xml: string) {
                     parentId: categoryId,
                 }
             });
+            if (existingCategory) report.categoriesUpdated += 1;
+            else report.categoriesAdded += 1;
 
             for (const child of outline.children) {
-                await processOutline(child, category.id);
+                try {
+                    await processOutline(child, category.id);
+                } catch (error) {
+                    report.errors.push(`${outline.text}: ${String(error)}`);
+                }
             }
         }
     };
 
     for (const outline of outlines) {
-        await processOutline(outline);
+        try {
+            await processOutline(outline);
+        } catch (error) {
+            report.errors.push(`${outline.text}: ${String(error)}`);
+        }
     }
 
     revalidatePath("/");
+    return report;
 }
 
 export async function fetchFullText(articleId: string) {

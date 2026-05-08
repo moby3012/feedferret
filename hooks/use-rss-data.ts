@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, getFeedHealth, applyRetentionPolicies } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings } from "@/app/actions/settings"
 import { toast } from "sonner"
 
@@ -37,6 +37,13 @@ export function useSavedSearches() {
     return useQuery({
         queryKey: ["saved-searches"],
         queryFn: () => getSavedSearches(),
+    })
+}
+
+export function useFeedHealth() {
+    return useQuery({
+        queryKey: ["feed-health"],
+        queryFn: () => getFeedHealth(),
     })
 }
 
@@ -130,10 +137,26 @@ export function useAddFeed() {
 export function useUpdateFeed() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: ({ feedId, data }: { feedId: string; data: { name?: string; categoryId?: string | null } }) =>
+        mutationFn: ({ feedId, data }: { feedId: string; data: { name?: string; categoryId?: string | null; updateFrequency?: number | null; retentionDays?: number | null } }) =>
             updateFeed(feedId, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
+        },
+    })
+}
+
+export function useApplyRetentionPolicies() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: () => applyRetentionPolicies(),
+        onSuccess: (result) => {
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["feed-health"] })
+            toast.success(`Retention applied: ${result.deleted} articles removed`)
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Retention failed")
         },
     })
 }

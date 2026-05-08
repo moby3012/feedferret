@@ -17,6 +17,8 @@ import {
   useDeleteLabel,
   useSavedSearches,
   useDeleteSavedSearch,
+  useFeedHealth,
+  useApplyRetentionPolicies,
 } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +53,8 @@ import {
   Folder,
   Tag,
   Bookmark,
+  Activity,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -78,6 +82,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { cn } from "@/lib/utils";
 
 function SortableCategoryItem({
   cat,
@@ -228,10 +233,13 @@ export function FeedManagement({
   const createLabel = useCreateLabel();
   const deleteLabel = useDeleteLabel();
   const deleteSavedSearch = useDeleteSavedSearch();
+  const applyRetention = useApplyRetentionPolicies();
+  const { data: feedHealth = [] } = useFeedHealth();
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#3b82f6");
+  const [lastImportReport, setLastImportReport] = useState<any | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
     null,
   );
@@ -254,7 +262,10 @@ export function FeedManagement({
     reader.onload = async (event) => {
       const xml = event.target?.result as string;
       importOpml.mutate(xml, {
-        onSuccess: () => toast.success("Feeds imported successfully"),
+        onSuccess: (report) => {
+          setLastImportReport(report);
+          toast.success(`Import complete: ${report.feedsAdded} added, ${report.feedsUpdated} updated`);
+        },
         onError: () => toast.error("Failed to import feeds"),
       });
     };
@@ -391,6 +402,12 @@ export function FeedManagement({
               >
                 Labels & Searches
               </TabsTrigger>
+              <TabsTrigger
+                value="health"
+                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                Health
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -454,6 +471,20 @@ export function FeedManagement({
                           ))}
                         </SelectContent>
                       </Select>
+                      <Input
+                        type="number"
+                        placeholder="Keep days"
+                        defaultValue={feed.retentionDays || ""}
+                        className="h-9 w-24 rounded-2xl border-border/70 bg-background/70 text-xs"
+                        title="Retention days for read, unstarred articles"
+                        onBlur={(e) => {
+                          const value = parseInt(e.target.value, 10);
+                          updateFeed.mutate({
+                            feedId: feed.id,
+                            data: { retentionDays: Number.isNaN(value) ? null : value },
+                          });
+                        }}
+                      />
                       <Button
                         variant="ghost"
                         size="icon"
@@ -630,6 +661,69 @@ export function FeedManagement({
             </TabsContent>
 
             <TabsContent
+              value="health"
+              className="h-full mt-0 focus-visible:outline-none"
+            >
+              <div className="flex h-full flex-col px-6 py-4 sm:px-8">
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <Activity className="h-5 w-5 text-primary" />
+                    <div>
+                      <h3 className="font-semibold tracking-[-0.02em]">Feed Health Dashboard</h3>
+                      <p className="text-sm text-muted-foreground">Sync status, errors, article counts and retention.</p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => applyRetention.mutate()}
+                    disabled={applyRetention.isPending}
+                    className="rounded-2xl"
+                  >
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                    Apply retention
+                  </Button>
+                </div>
+                <ScrollArea className="min-h-0 flex-1">
+                  <div className="space-y-3 pb-8 pr-3">
+                    {feedHealth.map((feed: any) => (
+                      <div key={feed.id} className="rounded-3xl border border-border/60 bg-card p-4 shadow-sm">
+                        <div className="flex items-start gap-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-background text-2xl shadow-sm">
+                            {feed.icon || "📰"}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="truncate font-semibold tracking-[-0.01em]">{feed.name}</h4>
+                              <span className={cn(
+                                "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                                feed.lastStatus === "error"
+                                  ? "bg-destructive/10 text-destructive"
+                                  : "bg-green-500/10 text-green-600",
+                              )}>
+                                {feed.lastStatus || "unknown"}
+                              </span>
+                            </div>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">{feed.url}</p>
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
+                              <span>{feed.articleCount} articles</span>
+                              <span>{feed.unreadCount} unread</span>
+                              <span>Sync: {feed.lastFetchedAt ? new Date(feed.lastFetchedAt).toLocaleString() : "never"}</span>
+                              <span>Retention: {feed.retentionDays || "default"} days</span>
+                            </div>
+                            {feed.lastError && (
+                              <p className="mt-3 rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                                {feed.lastError}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            </TabsContent>
+
+            <TabsContent
               value="opml"
               className="h-full mt-0 focus-visible:outline-none"
             >
@@ -643,6 +737,14 @@ export function FeedManagement({
                     Upload an OPML file to import all your feeds and categories
                     from another RSS reader.
                   </p>
+                  {lastImportReport && (
+                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4 text-sm">
+                      <p className="font-medium">Last import report</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {lastImportReport.feedsAdded} feeds added · {lastImportReport.feedsUpdated} feeds updated · {lastImportReport.categoriesAdded} categories added · {lastImportReport.errors.length} errors
+                      </p>
+                    </div>
+                  )}
                   <Label htmlFor="opml-upload" className="block">
                     <div className="inline-flex h-12 cursor-pointer items-center justify-center rounded-2xl bg-primary px-8 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-95">
                       Select OPML File
