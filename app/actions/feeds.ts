@@ -3,7 +3,7 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { syncAllFeeds, syncFeed } from "@/lib/rss-sync";
+import { syncUserFeeds, syncFeed } from "@/lib/rss-sync";
 import { parseOpml, generateOpml, OpmlOutline } from "@/lib/opml";
 import Parser from "rss-parser";
 
@@ -13,8 +13,9 @@ export async function refreshAllFeeds() {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    await syncAllFeeds();
+    const result = await syncUserFeeds(session.user.id);
     revalidatePath("/");
+    return result;
 }
 
 export async function getFeeds() {
@@ -77,6 +78,7 @@ export async function addFeed(url: string, categoryId?: string) {
                 name: remoteFeed.title || "New Feed",
                 userId: session.user.id,
                 categoryId,
+                lastStatus: "pending",
             },
         });
 
@@ -189,7 +191,10 @@ export async function toggleArticleRead(articleId: string, isRead: boolean) {
 
     await db.article.update({
         where: { id: articleId, userId: session.user.id },
-        data: { isRead },
+        data: {
+            isRead,
+            readAt: isRead ? new Date() : null,
+        },
     });
 
     revalidatePath("/");
@@ -207,7 +212,7 @@ export async function toggleArticleStarred(articleId: string, isStarred: boolean
     revalidatePath("/");
 }
 
-export async function getArticles(feedId?: string | null, category?: string, search?: string, filters?: { dateFrom?: string; dateTo?: string; isRead?: boolean; isStarred?: boolean }) {
+export async function getArticles(feedId?: string | null, category?: string, search?: string, filters?: { dateFrom?: string; dateTo?: string; isRead?: boolean; isStarred?: boolean; limit?: number }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -239,6 +244,8 @@ export async function getArticles(feedId?: string | null, category?: string, sea
         where.isStarred = filters.isStarred;
     }
 
+    let orderBy: any = { publishedAt: "desc" };
+
     if (feedId) {
         where.feedId = feedId;
     } else if (category && category !== "All" && category !== "All Articles") {
@@ -246,6 +253,8 @@ export async function getArticles(feedId?: string | null, category?: string, sea
             where.isStarred = true;
         } else if (category === "Recently Read") {
             where.isRead = true;
+            where.readAt = { not: null };
+            orderBy = { readAt: "desc" };
         } else if (category === "New Articles") {
             where.isRead = false;
         } else {
@@ -262,8 +271,8 @@ export async function getArticles(feedId?: string | null, category?: string, sea
         include: {
             feed: true,
         },
-        orderBy: { publishedAt: "desc" },
-        take: 100,
+        orderBy,
+        take: filters?.limit || 200,
     });
 }
 
@@ -335,7 +344,7 @@ export async function importOpml(xml: string) {
     revalidatePath("/");
 }
 
-export async function markAllAsRead(feedId?: string) {
+export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -344,13 +353,25 @@ export async function markAllAsRead(feedId?: string) {
         isRead: false 
     };
     
-    if (feedId) {
-        where.feedId = feedId;
+    if (scope?.feedId) {
+        where.feedId = scope.feedId;
+    } else if (scope?.category && scope.category !== "All" && scope.category !== "All Articles") {
+        if (scope.category === "Starred") {
+            where.isStarred = true;
+        } else if (scope.category === "New Articles") {
+            where.isRead = false;
+        } else if (scope.category !== "Recently Read") {
+            where.feed = {
+                category: {
+                    name: scope.category,
+                },
+            };
+        }
     }
 
     await db.article.updateMany({
         where,
-        data: { isRead: true },
+        data: { isRead: true, readAt: new Date() },
     });
 
     revalidatePath("/");

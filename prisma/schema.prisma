@@ -87,6 +87,8 @@ model Feed {
   articles        Article[]
   updateFrequency Int?
   lastFetchedAt   DateTime?
+  lastStatus       String?
+  lastError        String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, url])
@@ -104,12 +106,17 @@ model Article {
   publishedAt DateTime
   imageUrl    String?
   isRead      Boolean  @default(false)
+  readAt      DateTime?
   isStarred   Boolean  @default(false)
   feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, link])
+  @@index([userId, isRead, publishedAt])
+  @@index([userId, isStarred, publishedAt])
+  @@index([userId, readAt])
+  @@index([feedId, publishedAt])
 }
 
 model GlobalSettings {

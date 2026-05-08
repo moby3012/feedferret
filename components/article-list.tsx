@@ -2,13 +2,15 @@
 
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
-import { Star, Circle, Clock, User, ImageIcon } from "lucide-react";
+import { Star, Circle, Clock, ImageIcon, CheckCircle2, CircleDot } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ArticleListProps {
   articles: Article[];
   selectedArticle: Article | null;
   onSelectArticle: (article: Article) => void;
+  onToggleRead?: (articleId: string) => void;
+  onToggleStar?: (articleId: string) => void;
   viewMode?: "list" | "grid" | "magazine" | "minimal";
 }
 
@@ -16,6 +18,8 @@ export function ArticleList({
   articles,
   selectedArticle,
   onSelectArticle,
+  onToggleRead,
+  onToggleStar,
   viewMode = "list",
 }: ArticleListProps) {
   if (articles.length === 0) {
@@ -51,6 +55,8 @@ export function ArticleList({
             article={article}
             isSelected={selectedArticle?.id === article.id}
             onClick={() => onSelectArticle(article)}
+            onToggleRead={onToggleRead}
+            onToggleStar={onToggleStar}
             index={index}
             viewMode={viewMode}
           />
@@ -64,12 +70,16 @@ function ArticlePreview({
   article,
   isSelected,
   onClick,
+  onToggleRead,
+  onToggleStar,
   index,
   viewMode,
 }: {
   article: Article;
   isSelected: boolean;
   onClick: () => void;
+  onToggleRead?: (articleId: string) => void;
+  onToggleStar?: (articleId: string) => void;
   index: number;
   viewMode: string;
 }) {
@@ -86,9 +96,13 @@ function ArticlePreview({
         )}
       >
         <span className="text-base shrink-0">{article.feedIcon}</span>
+        {!article.isRead && <CircleDot className="w-3.5 h-3.5 text-primary shrink-0" />}
         <h3 className="flex-1 text-sm truncate">{article.title}</h3>
+        {article.isStarred && (
+          <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+        )}
         <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-          {article.publishedAt}
+          {new Date(article.publishedAt).toLocaleDateString()}
         </span>
       </article>
     );
@@ -121,7 +135,7 @@ function ArticlePreview({
           </div>
         </div>
         <div className="p-4 space-y-3">
-          <h3 className="text-lg font-bold leading-tight line-clamp-2">
+          <h3 className={cn("text-lg leading-tight line-clamp-2", article.isRead ? "font-semibold text-foreground/75" : "font-bold")}>
             {article.title}
           </h3>
           <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
@@ -133,7 +147,17 @@ function ArticlePreview({
               {article.publishedAt}
             </div>
             {article.isStarred && (
-              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleStar?.(article.id);
+                }}
+                className="rounded-md p-1 hover:bg-amber-500/10"
+                aria-label="Toggle star"
+              >
+                <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+              </button>
             )}
           </div>
         </div>
@@ -152,7 +176,7 @@ function ArticlePreview({
         isSelected
           ? "bg-accent/10 ring-1 ring-accent/20 shadow-lg shadow-accent/5"
           : "hover:bg-muted/60 hover:shadow-md",
-        !article.isRead && "bg-card shadow-sm",
+        !article.isRead ? "bg-card shadow-sm" : "opacity-80",
       )}
     >
       <div className="flex gap-4">
@@ -180,7 +204,17 @@ function ArticlePreview({
               {new Date(article.publishedAt).toLocaleDateString()}
             </span>
             {article.isStarred && (
-              <Star className="w-4 h-4 text-amber-500 fill-amber-500 ml-auto transition-transform duration-300 group-hover:scale-110" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleStar?.(article.id);
+                }}
+                className="ml-auto rounded-lg p-1 hover:bg-amber-500/10 transition-colors"
+                aria-label="Remove star"
+              >
+                <Star className="w-4 h-4 text-amber-500 fill-amber-500 transition-transform duration-300 group-hover:scale-110" />
+              </button>
             )}
           </div>
 
@@ -205,6 +239,34 @@ function ArticlePreview({
             </span>
             <span className="text-muted-foreground/50">·</span>
             <span>{article.readTime}</span>
+            <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleRead?.(article.id);
+                }}
+                className="rounded-lg p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground"
+                aria-label={article.isRead ? "Mark as unread" : "Mark as read"}
+                title={article.isRead ? "Mark as unread" : "Mark as read"}
+              >
+                {article.isRead ? <Circle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+              </button>
+              {!article.isStarred && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleStar?.(article.id);
+                  }}
+                  className="rounded-lg p-1.5 hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500"
+                  aria-label="Add star"
+                  title="Star"
+                >
+                  <Star className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

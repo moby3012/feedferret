@@ -46,10 +46,14 @@ export default function RSSReaderPage() {
   const toggleStarred = useToggleStarred();
   const markAllAsRead = useMarkAllAsRead();
   const [readInSession, setReadInSession] = useState<string[]>([]);
+  const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
+  const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);
 
   // Reset readInSession when feed or category changes
   useEffect(() => {
     setReadInSession([]);
+    setSessionReadArticles([]);
+    setSelectedArticleSnapshot(null);
   }, [selectedFeed, selectedCategory]);
 
   // Auto-sync feeds on page load (lazy sync)
@@ -73,19 +77,29 @@ export default function RSSReaderPage() {
       feedName: a.feed.name,
       feedIcon: a.feed.icon || "📰",
       publishedAtRaw: new Date(a.publishedAt).getTime(),
+      publishedAt: new Date(a.publishedAt).toISOString(),
       readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
       excerpt: a.excerpt || "",
       author: a.author || "Unknown",
     }));
   }, [rawArticles]);
 
+  const displayArticles = useMemo(() => {
+    const byId = new Map<string, any>();
+    [...articles, ...sessionReadArticles].forEach((article) => {
+      const previous = byId.get(article.id);
+      byId.set(article.id, previous ? { ...previous, ...article } : article);
+    });
+    return Array.from(byId.values());
+  }, [articles, sessionReadArticles]);
+
   const selectedArticle = useMemo(
-    () => articles.find((a: any) => a.id === selectedArticleId) || null,
-    [articles, selectedArticleId],
+    () => displayArticles.find((a: any) => a.id === selectedArticleId) || selectedArticleSnapshot,
+    [displayArticles, selectedArticleId, selectedArticleSnapshot],
   );
 
   const filteredArticles = useMemo(() => {
-    let list = [...articles];
+    let list = [...displayArticles];
 
     // Some views IGNORE the unread filter toggle
     const bypassUnreadFilter = [
@@ -105,7 +119,7 @@ export default function RSSReaderPage() {
 
     // Sort AFTER filtering
     return list.sort((a: any, b: any) => b.publishedAtRaw - a.publishedAtRaw);
-  }, [articles, unreadOnly, selectedCategory, readInSession]);
+  }, [displayArticles, unreadOnly, selectedCategory, readInSession]);
 
   const headerTitle = useMemo(() => {
     if (selectedFeed) {
@@ -116,18 +130,47 @@ export default function RSSReaderPage() {
 
   const handleSelectArticle = useCallback((article: any) => {
     setSelectedArticleId(article.id);
+    setSelectedArticleSnapshot(article);
     if (!article.isRead && !readInSession.includes(article.id)) {
+      const readArticle = { ...article, isRead: true, readAt: new Date() };
       setReadInSession((prev) => [...prev, article.id]);
+      setSessionReadArticles((prev) => [
+        readArticle,
+        ...prev.filter((a) => a.id !== article.id),
+      ]);
+      setSelectedArticleSnapshot(readArticle);
       toggleRead.mutate({ articleId: article.id, isRead: true });
     }
   }, [readInSession, toggleRead]);
 
+  const handleToggleRead = useCallback((articleId: string) => {
+    const article = displayArticles.find((a: any) => a.id === articleId) || selectedArticleSnapshot;
+    if (!article) return;
+    const nextIsRead = !article.isRead;
+    const updated = { ...article, isRead: nextIsRead, readAt: nextIsRead ? new Date() : null };
+
+    setSessionReadArticles((prev) => {
+      const without = prev.filter((a) => a.id !== articleId);
+      return selectedCategory === "New Articles" || unreadOnly || !nextIsRead
+        ? [updated, ...without]
+        : without;
+    });
+    setReadInSession((prev) =>
+      nextIsRead ? Array.from(new Set([...prev, articleId])) : prev.filter((id) => id !== articleId),
+    );
+    if (selectedArticleId === articleId) setSelectedArticleSnapshot(updated);
+    toggleRead.mutate({ articleId, isRead: nextIsRead });
+  }, [displayArticles, selectedArticleSnapshot, selectedCategory, unreadOnly, selectedArticleId, toggleRead]);
+
   const handleToggleStar = useCallback((articleId: string) => {
-    const article = articles.find((a: any) => a.id === articleId);
+    const article = displayArticles.find((a: any) => a.id === articleId) || selectedArticleSnapshot;
     if (article) {
       toggleStarred.mutate({ articleId, isStarred: !article.isStarred });
+      const updated = { ...article, isStarred: !article.isStarred };
+      if (selectedArticleId === articleId) setSelectedArticleSnapshot(updated);
+      setSessionReadArticles((prev) => prev.map((a) => a.id === articleId ? updated : a));
     }
-  }, [articles, toggleStarred]);
+  }, [displayArticles, selectedArticleSnapshot, selectedArticleId, toggleStarred]);
 
   const handleRefresh = useCallback(() => {
     refresh.mutate();
@@ -178,10 +221,14 @@ export default function RSSReaderPage() {
       if (prevArticle) handleSelectArticle(prevArticle);
     } else if (e.key === "s" && currentSelectedArticleId) {
       handleToggleStar(currentSelectedArticleId);
+    } else if (e.key === "m" && currentSelectedArticleId) {
+      handleToggleRead(currentSelectedArticleId);
+    } else if (e.key === "o" && selectedArticleSnapshot?.link) {
+      window.open(selectedArticleSnapshot.link, "_blank", "noopener,noreferrer");
     } else if (e.key === "r") {
       handleRefresh();
     }
-  }, [handleSelectArticle, handleToggleStar, handleRefresh]);
+  }, [handleSelectArticle, handleToggleStar, handleToggleRead, handleRefresh, selectedArticleSnapshot]);
 
   useEffect(() => {
     async function checkSetup() {
@@ -284,13 +331,20 @@ export default function RSSReaderPage() {
           onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onMarkAllRead={() => markAllAsRead.mutate(selectedFeed || undefined)}
+          onMarkAllRead={() =>
+            markAllAsRead.mutate({
+              feedId: selectedFeed,
+              category: selectedFeed ? null : selectedCategory,
+            })
+          }
           isMarkingAllRead={markAllAsRead.isPending}
         />
         <ArticleList
           articles={filteredArticles}
           selectedArticle={selectedArticle}
           onSelectArticle={handleSelectArticle}
+          onToggleRead={handleToggleRead}
+          onToggleStar={handleToggleStar}
           viewMode={viewMode}
         />
       </div>
@@ -307,6 +361,7 @@ export default function RSSReaderPage() {
         <ArticleReader
           article={selectedArticle}
           onToggleStar={handleToggleStar}
+          onToggleRead={handleToggleRead}
           onBack={() => setSelectedArticleId(null)}
           showBackButton={!!selectedArticle}
         />

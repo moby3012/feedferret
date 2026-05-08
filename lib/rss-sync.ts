@@ -24,12 +24,14 @@ export async function syncFeed(userId: string, feedId: string) {
     try {
         const remoteFeed = await parser.parseURL(feed.url);
 
-        // Update feed info if missing
+        const feedPatch: any = {
+            lastFetchedAt: new Date(),
+            lastStatus: "ok",
+            lastError: null,
+        };
+
         if (!feed.name || feed.name === "New Feed") {
-            await db.feed.update({
-                where: { id: feedId },
-                data: { name: remoteFeed.title || feed.name },
-            });
+            feedPatch.name = remoteFeed.title || feed.name;
         }
 
         const DOMPurify = await getSanitizer();
@@ -66,22 +68,63 @@ export async function syncFeed(userId: string, feedId: string) {
                     title: article.title,
                     content: article.content,
                     excerpt: article.excerpt,
+                    author: article.author,
+                    publishedAt: article.publishedAt,
+                    imageUrl: article.imageUrl,
                 },
                 create: article,
             });
         }
 
-        // Update last fetched timestamp
         await db.feed.update({
             where: { id: feed.id },
-            data: { lastFetchedAt: new Date() },
+            data: feedPatch,
         });
 
         return { success: true, count: articles.length };
     } catch (error) {
         console.error(`Error syncing feed ${feed.url}:`, error);
+        await db.feed.update({
+            where: { id: feed.id },
+            data: {
+                lastFetchedAt: new Date(),
+                lastStatus: "error",
+                lastError: String(error).slice(0, 1000),
+            },
+        });
         return { success: false, error: String(error) };
     }
+}
+
+export async function syncUserFeeds(userId: string) {
+    const feeds = await db.feed.findMany({
+        where: { userId },
+    });
+
+    const results = [];
+    const concurrency = 4;
+
+    for (let i = 0; i < feeds.length; i += concurrency) {
+        const batch = feeds.slice(i, i + concurrency);
+        const batchResults = await Promise.all(
+            batch.map(async (feed) => {
+                const settings = await getEffectiveSettings(feed.userId, feed.id);
+                const now = new Date();
+                const lastSync = feed.lastFetchedAt || new Date(0);
+                const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
+
+                if (diffMinutes < settings.updateFrequency) {
+                    return { feed: feed.url, success: true, skipped: true, count: 0 };
+                }
+
+                const res = await syncFeed(feed.userId, feed.id);
+                return { feed: feed.url, ...res };
+            }),
+        );
+        results.push(...batchResults);
+    }
+
+    return results;
 }
 
 /**
@@ -93,17 +136,26 @@ export async function syncAllFeeds() {
     });
 
     const results = [];
-    for (const feed of feeds) {
-        const settings = await getEffectiveSettings(feed.userId, feed.id);
-        const now = new Date();
-        const lastSync = feed.lastFetchedAt || new Date(0);
+    const concurrency = 4;
 
-        const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
+    for (let i = 0; i < feeds.length; i += concurrency) {
+        const batch = feeds.slice(i, i + concurrency);
+        const batchResults = await Promise.all(
+            batch.map(async (feed) => {
+                const settings = await getEffectiveSettings(feed.userId, feed.id);
+                const now = new Date();
+                const lastSync = feed.lastFetchedAt || new Date(0);
+                const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
 
-        if (diffMinutes >= settings.updateFrequency) {
-            const res = await syncFeed(feed.userId, feed.id);
-            results.push({ feed: feed.url, ...res });
-        }
+                if (diffMinutes < settings.updateFrequency) {
+                    return { feed: feed.url, success: true, skipped: true, count: 0 };
+                }
+
+                const res = await syncFeed(feed.userId, feed.id);
+                return { feed: feed.url, ...res };
+            }),
+        );
+        results.push(...batchResults);
     }
 
     return results;

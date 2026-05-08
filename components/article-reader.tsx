@@ -7,16 +7,18 @@ import {
   Star,
   Share2,
   ExternalLink,
-  BookmarkPlus,
   ChevronLeft,
-  MoreHorizontal,
-  Rss,
+  CheckCircle2,
+  Circle,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface ArticleReaderProps {
   article: Article | null;
   onToggleStar: (articleId: string) => void;
+  onToggleRead?: (articleId: string) => void;
   onBack?: () => void;
   showBackButton?: boolean;
 }
@@ -24,6 +26,7 @@ interface ArticleReaderProps {
 export function ArticleReader({
   article,
   onToggleStar,
+  onToggleRead,
   onBack,
   showBackButton,
 }: ArticleReaderProps) {
@@ -49,6 +52,30 @@ export function ArticleReader({
       </div>
     );
   }
+
+  const openOriginal = () => {
+    if (!article.link) return;
+    window.open(article.link, "_blank", "noopener,noreferrer");
+  };
+
+  const copyLink = async () => {
+    if (!article.link) return;
+    await navigator.clipboard.writeText(article.link);
+    toast.success("Link copied");
+  };
+
+  const shareArticle = async () => {
+    if (!article.link) return copyLink();
+    if (navigator.share) {
+      await navigator.share({
+        title: article.title,
+        text: article.excerpt,
+        url: article.link,
+      });
+      return;
+    }
+    await copyLink();
+  };
 
   return (
     <div className="flex-1 flex flex-col bg-background animate-fade-in">
@@ -78,6 +105,7 @@ export function ArticleReader({
             size="icon"
             className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => onToggleStar(article.id)}
+            title={article.isStarred ? "Remove star (s)" : "Star (s)"}
           >
             <Star
               className={cn(
@@ -92,13 +120,21 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            onClick={() => onToggleRead?.(article.id)}
+            title={article.isRead ? "Mark as unread (m)" : "Mark as read (m)"}
           >
-            <BookmarkPlus className="w-5 h-5 text-muted-foreground" />
+            {article.isRead ? (
+              <Circle className="w-5 h-5 text-muted-foreground" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
+            )}
           </Button>
           <Button
             variant="ghost"
             size="icon"
             className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            onClick={shareArticle}
+            title="Share"
           >
             <Share2 className="w-5 h-5 text-muted-foreground" />
           </Button>
@@ -106,6 +142,9 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            onClick={openOriginal}
+            disabled={!article.link}
+            title="Open original (o)"
           >
             <ExternalLink className="w-5 h-5 text-muted-foreground" />
           </Button>
@@ -113,8 +152,11 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            onClick={copyLink}
+            disabled={!article.link}
+            title="Copy link"
           >
-            <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
+            <Copy className="w-5 h-5 text-muted-foreground" />
           </Button>
         </div>
       </header>
@@ -156,6 +198,18 @@ export function ArticleReader({
             className="animate-fade-in-up animation-delay-200 article-content"
             dangerouslySetInnerHTML={{ __html: article.content }}
           />
+
+          {article.link && (!article.content || article.content.length < 500) && (
+            <div className="mt-10 rounded-2xl border border-border bg-muted/30 p-5">
+              <p className="text-sm text-muted-foreground mb-4">
+                This feed appears to provide only a short excerpt.
+              </p>
+              <Button onClick={openOriginal} className="rounded-xl">
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open full article
+              </Button>
+            </div>
+          )}
 
           {/* Article Footer */}
           <footer className="mt-16 pt-8 border-t border-border animate-fade-in-up animation-delay-300">

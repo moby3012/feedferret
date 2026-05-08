@@ -29,6 +29,7 @@ export function useArticles(feedId?: string | null, category?: string, search?: 
     return useQuery({
         queryKey: ["articles", feedId, category, search],
         queryFn: () => getArticles(feedId, category, search),
+        staleTime: 30_000,
     })
 }
 
@@ -37,8 +38,26 @@ export function useToggleRead() {
     return useMutation({
         mutationFn: ({ articleId, isRead }: { articleId: string; isRead: boolean }) =>
             toggleArticleRead(articleId, isRead),
+        onMutate: async ({ articleId, isRead }) => {
+            await queryClient.cancelQueries({ queryKey: ["articles"] })
+            const snapshots = queryClient.getQueriesData({ queryKey: ["articles"] })
+            const readAt = isRead ? new Date() : null
+
+            snapshots.forEach(([queryKey, old]) => {
+                if (!Array.isArray(old)) return
+                queryClient.setQueryData(queryKey, old.map((article: any) =>
+                    article.id === articleId ? { ...article, isRead, readAt } : article
+                ))
+            })
+
+            return { snapshots }
+        },
+        onError: (_error, _variables, context) => {
+            context?.snapshots?.forEach(([queryKey, data]) => {
+                queryClient.setQueryData(queryKey, data)
+            })
+        },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["articles"] })
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
         },
     })
@@ -183,7 +202,7 @@ export function useUpdateGlobalSettings() {
 export function useMarkAllAsRead() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: (feedId?: string) => markAllAsRead(feedId),
+        mutationFn: (scope?: { feedId?: string | null; category?: string | null }) => markAllAsRead(scope),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["articles"] })
             queryClient.invalidateQueries({ queryKey: ["feeds"] })

@@ -214,7 +214,11 @@ export function RssHeader({
 
             <DropdownMenuItem 
               className="rounded-xl py-3 px-4 text-sm font-medium text-destructive focus:bg-destructive/10 focus:text-destructive"
-              onClick={onMarkAllRead}
+              onClick={() => {
+                if (confirm("Mark all articles in the current view as read?")) {
+                  onMarkAllRead?.();
+                }
+              }}
               disabled={isMarkingAllRead}
             >
               <CheckCheck className="w-4 h-4 mr-3" />

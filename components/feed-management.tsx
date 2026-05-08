@@ -20,15 +20,22 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Settings,
-  Plus,
   Trash2,
   Download,
   Upload,
@@ -72,7 +79,7 @@ function SortableCategoryItem({
   setEditingCategoryName,
   setEditingCategoryId,
   updateCategory,
-  deleteCategory,
+  requestDelete,
 }: any) {
   const {
     attributes,
@@ -177,10 +184,13 @@ function SortableCategoryItem({
                 size="icon"
                 variant="ghost"
                 className="h-9 w-9 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 rounded-xl"
-                onClick={() => {
-                  if (confirm(`Delete category ${cat.name}?`))
-                    deleteCategory.mutate(cat.id);
-                }}
+                onClick={() =>
+                  requestDelete({
+                    type: "category",
+                    id: cat.id,
+                    name: cat.name,
+                  })
+                }
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
@@ -214,6 +224,11 @@ export function FeedManagement({
     null,
   );
   const [editingCategoryName, setEditingCategoryName] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<null | {
+    type: "feed" | "category";
+    id: string;
+    name: string;
+  }>(null);
 
   const { data: categories = [] } = useCategories();
 
@@ -365,6 +380,22 @@ export function FeedManagement({
                         <div className="text-xs text-muted-foreground truncate">
                           {feed.url}
                         </div>
+                        <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                          <span>
+                            Last sync:{" "}
+                            {feed.lastFetchedAt
+                              ? new Date(feed.lastFetchedAt).toLocaleString()
+                              : "never"}
+                          </span>
+                          {feed.lastStatus === "error" && (
+                            <span
+                              className="text-destructive"
+                              title={feed.lastError || undefined}
+                            >
+                              Sync error
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <Select
                         value={feed.categoryId || "none"}
@@ -391,10 +422,13 @@ export function FeedManagement({
                         variant="ghost"
                         size="icon"
                         className="w-9 h-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg shrink-0 opacity-0 group-hover:opacity-100 transition-all"
-                        onClick={() => {
-                          if (confirm(`Delete ${feed.name}?`))
-                            deleteFeed.mutate(feed.id);
-                        }}
+                        onClick={() =>
+                          setPendingDelete({
+                            type: "feed",
+                            id: feed.id,
+                            name: feed.name,
+                          })
+                        }
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -445,7 +479,7 @@ export function FeedManagement({
                             setEditingCategoryName={setEditingCategoryName}
                             setEditingCategoryId={setEditingCategoryId}
                             updateCategory={updateCategory}
-                            deleteCategory={deleteCategory}
+                            requestDelete={setPendingDelete}
                           />
                         ))}
                         {categories.length === 0 && (
@@ -508,7 +542,41 @@ export function FeedManagement({
               </div>
             </TabsContent>
           </div>
-        </Tabs>
+	        </Tabs>
+        <AlertDialog
+          open={!!pendingDelete}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setPendingDelete(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Delete {pendingDelete?.type === "feed" ? "feed" : "category"}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                “{pendingDelete?.name}” will be removed. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  if (!pendingDelete) return;
+                  if (pendingDelete.type === "feed") {
+                    deleteFeed.mutate(pendingDelete.id);
+                  } else {
+                    deleteCategory.mutate(pendingDelete.id);
+                  }
+                  setPendingDelete(null);
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

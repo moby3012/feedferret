@@ -14,12 +14,15 @@ export interface Article {
   feedName: string
   feedIcon: string
   title: string
+  link: string
   excerpt: string
   content: string
   author: string
   publishedAt: string
+  publishedAtRaw?: number
   readTime: string
   isRead: boolean
+  readAt?: string | Date | null
   isStarred: boolean
   imageUrl?: string
 }
@@ -41,6 +44,7 @@ export const articles: Article[] = [
     feedId: "1",
     feedName: "The Verge",
     feedIcon: "📱",
+    link: "https://example.com/apple-vision-pro-2",
     title: "Apple unveils Vision Pro 2 with breakthrough spatial computing features",
     excerpt: "The next generation of Apple's mixed reality headset brings significant improvements to display technology, battery life, and developer tools.",
     content: `Apple today announced Vision Pro 2, the successor to its groundbreaking spatial computing device. The new headset features micro-OLED displays with 8K resolution per eye, representing a 60% increase in pixel density over the original model.
@@ -64,6 +68,7 @@ Pricing starts at $2,999 for the 256GB model, with availability beginning next m
     feedId: "2",
     feedName: "Wired",
     feedIcon: "⚡",
+    link: "https://example.com/ai-revolution-work",
     title: "The AI revolution is reshaping how we work, create, and think",
     excerpt: "From coding assistants to creative tools, artificial intelligence is transforming every aspect of knowledge work in ways we're only beginning to understand.",
     content: `The integration of AI into daily workflows has accelerated dramatically over the past year. What started as experimental chatbots has evolved into sophisticated systems that can write code, create art, analyze data, and even engage in complex reasoning tasks.
@@ -87,6 +92,7 @@ What's clear is that the nature of work is changing. The most successful profess
     feedId: "3",
     feedName: "TechCrunch",
     feedIcon: "🚀",
+    link: "https://example.com/modular-motors-series-b",
     title: "Startup raises $50M to build the next generation of electric vehicles",
     excerpt: "The funding round was led by Sequoia Capital and will help the company scale production of its innovative modular EV platform.",
     content: `Modular Motors, a startup focused on customizable electric vehicles, has raised $50 million in Series B funding led by Sequoia Capital with participation from existing investors a16z and Khosla Ventures.
@@ -110,6 +116,7 @@ Industry analysts are watching closely. If Modular Motors can deliver on its pro
     feedId: "5",
     feedName: "Hacker News",
     feedIcon: "💻",
+    link: "https://example.com/rust-systems-programming",
     title: "Why Rust is becoming the language of choice for systems programming",
     excerpt: "Memory safety guarantees without garbage collection are attracting developers from C and C++ to this modern systems language.",
     content: `Rust has seen explosive growth in adoption over the past year, with major tech companies including Microsoft, Google, and Amazon integrating it into critical infrastructure projects.
@@ -132,6 +139,7 @@ Critics note that Rust's complexity can slow development speed and that its stri
     feedId: "6",
     feedName: "Design Milk",
     feedIcon: "🎨",
+    link: "https://example.com/minimalist-furniture-design",
     title: "Minimalism meets functionality in this year's best furniture designs",
     excerpt: "Scandinavian influences continue to dominate as designers embrace clean lines, natural materials, and timeless aesthetics.",
     content: `The Milan Furniture Fair revealed clear trends for the coming year: simplicity, sustainability, and craftsmanship. Designers are moving away from bold statements in favor of pieces that integrate seamlessly into living spaces.
@@ -155,6 +163,7 @@ Modularity emerged as another key theme. Sofas with reconfigurable sections, she
     feedId: "4",
     feedName: "Ars Technica",
     feedIcon: "🔬",
+    link: "https://example.com/quantum-error-correction",
     title: "Quantum computing milestone: First error-corrected calculations achieved",
     excerpt: "Researchers demonstrate practical quantum error correction, bringing fault-tolerant quantum computers closer to reality.",
     content: `A team of researchers at a leading quantum computing laboratory has achieved a significant milestone: performing calculations on a quantum processor with active error correction that actually improves outcomes rather than degrading them.
