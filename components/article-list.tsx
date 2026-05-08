@@ -233,6 +233,23 @@ function ArticlePreview({
             {article.excerpt}
           </p>
 
+          {!!article.labels?.length && (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {article.labels.slice(0, 3).map((item) => (
+                <span
+                  key={item.label.id}
+                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: item.label.color }}
+                  />
+                  {item.label.name}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span className="font-medium truncate max-w-[100px]">
               {article.author}

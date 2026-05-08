@@ -65,6 +65,167 @@ export async function getStarredCount() {
     });
 }
 
+export async function getLabels() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    return await db.label.findMany({
+        where: { userId: session.user.id },
+        include: {
+            _count: {
+                select: { articles: true },
+            },
+        },
+        orderBy: { name: "asc" },
+    });
+}
+
+export async function createLabel(data: { name: string; color?: string }) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const name = data.name.trim();
+    if (!name) throw new Error("Label name is required");
+
+    const label = await db.label.create({
+        data: {
+            userId: session.user.id,
+            name,
+            color: data.color || "#3b82f6",
+        },
+    });
+
+    revalidatePath("/");
+    return label;
+}
+
+export async function updateLabel(labelId: string, data: { name?: string; color?: string }) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const label = await db.label.update({
+        where: { id: labelId, userId: session.user.id },
+        data: {
+            ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+            ...(data.color !== undefined ? { color: data.color } : {}),
+        },
+    });
+
+    revalidatePath("/");
+    return label;
+}
+
+export async function deleteLabel(labelId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    await db.label.delete({
+        where: { id: labelId, userId: session.user.id },
+    });
+
+    revalidatePath("/");
+}
+
+export async function setArticleLabels(articleId: string, labelIds: string[]) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const article = await db.article.findUnique({
+        where: { id: articleId, userId: session.user.id },
+        select: { id: true },
+    });
+    if (!article) throw new Error("Article not found");
+
+    const labels = await db.label.findMany({
+        where: {
+            userId: session.user.id,
+            id: { in: labelIds },
+        },
+        select: { id: true },
+    });
+    const allowedIds = labels.map((label) => label.id);
+
+    await db.$transaction([
+        db.articleLabel.deleteMany({
+            where: { articleId, userId: session.user.id },
+        }),
+        ...allowedIds.map((labelId) =>
+            db.articleLabel.create({
+                data: {
+                    articleId,
+                    labelId,
+                    userId: session.user.id,
+                },
+            }),
+        ),
+    ]);
+
+    revalidatePath("/");
+    return await db.article.findUnique({
+        where: { id: articleId, userId: session.user.id },
+        include: {
+            feed: true,
+            labels: { include: { label: true } },
+        },
+    });
+}
+
+export async function getSavedSearches() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    return await db.savedSearch.findMany({
+        where: { userId: session.user.id },
+        orderBy: [{ order: "asc" }, { name: "asc" }],
+    });
+}
+
+export async function createSavedSearch(data: { name: string; query: string }) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const name = data.name.trim();
+    const query = data.query.trim();
+    if (!name || !query) throw new Error("Name and query are required");
+
+    const savedSearch = await db.savedSearch.create({
+        data: {
+            userId: session.user.id,
+            name,
+            query,
+        },
+    });
+
+    revalidatePath("/");
+    return savedSearch;
+}
+
+export async function updateSavedSearch(searchId: string, data: { name?: string; query?: string; order?: number }) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const savedSearch = await db.savedSearch.update({
+        where: { id: searchId, userId: session.user.id },
+        data: {
+            ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+            ...(data.query !== undefined ? { query: data.query.trim() } : {}),
+            ...(data.order !== undefined ? { order: data.order } : {}),
+        },
+    });
+
+    revalidatePath("/");
+    return savedSearch;
+}
+
+export async function deleteSavedSearch(searchId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    await db.savedSearch.delete({
+        where: { id: searchId, userId: session.user.id },
+    });
+
+    revalidatePath("/");
+}
+
 export async function addFeed(url: string, categoryId?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -212,20 +373,163 @@ export async function toggleArticleStarred(articleId: string, isStarred: boolean
     revalidatePath("/");
 }
 
+function tokenizeSearch(query: string) {
+    const tokens: string[] = [];
+    const re = /"([^"]+)"|'([^']+)'|(\S+)/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(query)) !== null) {
+        tokens.push(match[1] || match[2] || match[3]);
+    }
+    return tokens;
+}
+
+function parseDateToken(value: string) {
+    const now = new Date();
+    const relative = value.match(/^(\d+)(d|w|m|y)$/i);
+    if (relative) {
+        const amount = Number(relative[1]);
+        const unit = relative[2].toLowerCase();
+        const date = new Date(now);
+        if (unit === "d") date.setDate(date.getDate() - amount);
+        if (unit === "w") date.setDate(date.getDate() - amount * 7);
+        if (unit === "m") date.setMonth(date.getMonth() - amount);
+        if (unit === "y") date.setFullYear(date.getFullYear() - amount);
+        return date;
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+async function buildAdvancedSearchWhere(userId: string, query?: string) {
+    if (!query?.trim()) return {};
+
+    const tokens = tokenizeSearch(query.trim());
+    const and: any[] = [];
+    const freeText: string[] = [];
+
+    for (const rawToken of tokens) {
+        const negated = rawToken.startsWith("-") || rawToken.startsWith("!");
+        const token = negated ? rawToken.slice(1) : rawToken;
+        const [rawKey, ...rest] = token.split(":");
+        const hasField = rest.length > 0;
+        const key = rawKey.toLowerCase();
+        const value = hasField ? rest.join(":").trim() : token.trim();
+        if (!value) continue;
+
+        let condition: any | null = null;
+
+        if (token.startsWith("#")) {
+            condition = {
+                labels: {
+                    some: {
+                        label: {
+                            userId,
+                            name: { contains: token.slice(1) },
+                        },
+                    },
+                },
+            };
+        } else if (hasField) {
+            if (["author", "by"].includes(key)) {
+                condition = { author: { contains: value } };
+            } else if (["intitle", "title"].includes(key)) {
+                condition = { title: { contains: value } };
+            } else if (["intext", "text", "content"].includes(key)) {
+                condition = {
+                    OR: [
+                        { content: { contains: value } },
+                        { excerpt: { contains: value } },
+                    ],
+                };
+            } else if (["inurl", "url", "link"].includes(key)) {
+                condition = { link: { contains: value } };
+            } else if (["feed", "f"].includes(key)) {
+                condition = {
+                    feed: {
+                        OR: [
+                            { id: value },
+                            { name: { contains: value } },
+                            { url: { contains: value } },
+                        ],
+                    },
+                };
+            } else if (["category", "cat", "c"].includes(key)) {
+                condition = {
+                    feed: {
+                        category: {
+                            OR: [
+                                { id: value },
+                                { name: { contains: value } },
+                            ],
+                        },
+                    },
+                };
+            } else if (["label", "tag"].includes(key)) {
+                condition = {
+                    labels: {
+                        some: {
+                            label: {
+                                userId,
+                                OR: [
+                                    { id: value },
+                                    { name: { contains: value } },
+                                ],
+                            },
+                        },
+                    },
+                };
+            } else if (key === "is" || key === "status") {
+                const normalized = value.toLowerCase();
+                if (["unread", "new"].includes(normalized)) condition = { isRead: false };
+                if (["read"].includes(normalized)) condition = { isRead: true };
+                if (["starred", "favorite", "favourite"].includes(normalized)) condition = { isStarred: true };
+                if (["unstarred"].includes(normalized)) condition = { isStarred: false };
+            } else if (["after", "since"].includes(key)) {
+                const date = parseDateToken(value);
+                if (date) condition = { publishedAt: { gte: date } };
+            } else if (["before", "until"].includes(key)) {
+                const date = parseDateToken(value);
+                if (date) condition = { publishedAt: { lte: date } };
+            } else if (key === "date" || key === "pubdate") {
+                const date = parseDateToken(value);
+                if (date) condition = { publishedAt: { gte: date } };
+            }
+        }
+
+        if (!condition) {
+            freeText.push(value);
+            continue;
+        }
+
+        and.push(negated ? { NOT: condition } : condition);
+    }
+
+    for (const term of freeText) {
+        and.push({
+            OR: [
+                { title: { contains: term } },
+                { content: { contains: term } },
+                { excerpt: { contains: term } },
+                { author: { contains: term } },
+                { link: { contains: term } },
+                { feed: { name: { contains: term } } },
+                { labels: { some: { label: { name: { contains: term }, userId } } } },
+            ],
+        });
+    }
+
+    return and.length ? { AND: and } : {};
+}
+
 export async function getArticles(feedId?: string | null, category?: string, search?: string, filters?: { dateFrom?: string; dateTo?: string; isRead?: boolean; isStarred?: boolean; limit?: number }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     const where: any = { userId: session.user.id };
 
-    // Search filter
-    if (search && search.trim()) {
-        where.OR = [
-            { title: { contains: search.trim() } },
-            { content: { contains: search.trim() } },
-            { excerpt: { contains: search.trim() } },
-            { author: { contains: search.trim() } },
-        ];
+    const advancedSearchWhere = await buildAdvancedSearchWhere(session.user.id, search);
+    if (Object.keys(advancedSearchWhere).length) {
+        where.AND = [...(where.AND || []), advancedSearchWhere];
     }
 
     // Date filters
@@ -257,6 +561,21 @@ export async function getArticles(feedId?: string | null, category?: string, sea
             orderBy = { readAt: "desc" };
         } else if (category === "New Articles") {
             where.isRead = false;
+        } else if (category.startsWith("Label:")) {
+            where.labels = {
+                some: {
+                    labelId: category.slice("Label:".length),
+                    userId: session.user.id,
+                },
+            };
+        } else if (category.startsWith("Search:")) {
+            const savedSearch = await db.savedSearch.findUnique({
+                where: { id: category.slice("Search:".length), userId: session.user.id },
+            });
+            if (savedSearch) {
+                const savedWhere = await buildAdvancedSearchWhere(session.user.id, savedSearch.query);
+                where.AND = [...(where.AND || []), savedWhere];
+            }
         } else {
             where.feed = {
                 category: {
@@ -270,6 +589,9 @@ export async function getArticles(feedId?: string | null, category?: string, sea
         where,
         include: {
             feed: true,
+            labels: {
+                include: { label: true },
+            },
         },
         orderBy,
         take: filters?.limit || 200,
@@ -426,7 +748,10 @@ export async function fetchFullText(articleId: string) {
             content: sanitized,
             excerpt: plain.slice(0, 240),
         },
-        include: { feed: true },
+        include: {
+            feed: true,
+            labels: { include: { label: true } },
+        },
     });
 }
 
@@ -446,6 +771,21 @@ export async function markAllAsRead(scope?: { feedId?: string | null; category?:
             where.isStarred = true;
         } else if (scope.category === "New Articles") {
             where.isRead = false;
+        } else if (scope.category.startsWith("Label:")) {
+            where.labels = {
+                some: {
+                    labelId: scope.category.slice("Label:".length),
+                    userId: session.user.id,
+                },
+            };
+        } else if (scope.category.startsWith("Search:")) {
+            const savedSearch = await db.savedSearch.findUnique({
+                where: { id: scope.category.slice("Search:".length), userId: session.user.id },
+            });
+            if (savedSearch) {
+                const savedWhere = await buildAdvancedSearchWhere(session.user.id, savedSearch.query);
+                where.AND = [...(where.AND || []), savedWhere];
+            }
         } else if (scope.category !== "Recently Read") {
             where.feed = {
                 category: {

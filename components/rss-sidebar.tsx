@@ -19,6 +19,8 @@ import {
   Folder,
   Users,
   GripVertical,
+  Tag,
+  Bookmark,
 } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +34,8 @@ import {
   useUpdateFeedOrder,
   useUpdateCategoryOrder,
   useStarredCount,
+  useLabels,
+  useSavedSearches,
 } from "@/hooks/use-rss-data";
 import { ServerManagementDialog } from "./server-management-dialog";
 import { toast } from "sonner";
@@ -96,6 +100,8 @@ export function RssSidebar({
   const updateFeedOrder = useUpdateFeedOrder();
   const updateCategoryOrder = useUpdateCategoryOrder();
   const { data: starredCount = 0 } = useStarredCount();
+  const { data: labels = [] } = useLabels();
+  const { data: savedSearches = [] } = useSavedSearches();
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -340,6 +346,71 @@ export function RssSidebar({
               </button>
             ))}
           </nav>
+
+          {(savedSearches.length > 0 || labels.length > 0) && (
+            <div className="mb-8 space-y-5">
+              {savedSearches.length > 0 && (
+                <div className="space-y-1">
+                  <div className="px-4 pb-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Saved Searches
+                    </span>
+                  </div>
+                  {savedSearches.map((item: any) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        onSelectFeed(null);
+                        onSelectCategory(`Search:${item.id}`);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm transition-all",
+                        selectedFeed === null && selectedCategory === `Search:${item.id}`
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+                      )}
+                    >
+                      <Bookmark className="h-4 w-4 text-muted-foreground" />
+                      <span className="flex-1 truncate text-left">{item.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {labels.length > 0 && (
+                <div className="space-y-1">
+                  <div className="px-4 pb-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Labels
+                    </span>
+                  </div>
+                  {labels.map((item: any) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        onSelectFeed(null);
+                        onSelectCategory(`Label:${item.id}`);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm transition-all",
+                        selectedFeed === null && selectedCategory === `Label:${item.id}`
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+                      )}
+                    >
+                      <Tag className="h-4 w-4" style={{ color: item.color }} />
+                      <span className="flex-1 truncate text-left">{item.name}</span>
+                      {item._count?.articles > 0 && (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
+                          {item._count.articles}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Feeds Section */}
           <div className="space-y-4">

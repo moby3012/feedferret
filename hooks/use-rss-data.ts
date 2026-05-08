@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings } from "@/app/actions/settings"
 import { toast } from "sonner"
 
@@ -23,6 +23,20 @@ export function useStarredCount() {
     return useQuery({
         queryKey: ["articles", "starred-count"],
         queryFn: () => getStarredCount(),
+    })
+}
+
+export function useLabels() {
+    return useQuery({
+        queryKey: ["labels"],
+        queryFn: () => getLabels(),
+    })
+}
+
+export function useSavedSearches() {
+    return useQuery({
+        queryKey: ["saved-searches"],
+        queryFn: () => getSavedSearches(),
     })
 }
 
@@ -224,6 +238,86 @@ export function useFetchFullText() {
         },
         onError: (error) => {
             toast.error(error instanceof Error ? error.message : "Could not fetch full text")
+        },
+    })
+}
+
+export function useCreateLabel() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: { name: string; color?: string }) => createLabel(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["labels"] })
+        },
+    })
+}
+
+export function useUpdateLabel() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ labelId, data }: { labelId: string; data: { name?: string; color?: string } }) => updateLabel(labelId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["labels"] })
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+        },
+    })
+}
+
+export function useDeleteLabel() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (labelId: string) => deleteLabel(labelId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["labels"] })
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+        },
+    })
+}
+
+export function useSetArticleLabels() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ articleId, labelIds }: { articleId: string; labelIds: string[] }) => setArticleLabels(articleId, labelIds),
+        onSuccess: (article: any) => {
+            queryClient.invalidateQueries({ queryKey: ["labels"] })
+            queryClient.setQueriesData({ queryKey: ["articles"] }, (old: any) => {
+                if (!Array.isArray(old) || !article) return old
+                return old.map((item) => item.id === article.id ? article : item)
+            })
+        },
+    })
+}
+
+export function useCreateSavedSearch() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: { name: string; query: string }) => createSavedSearch(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["saved-searches"] })
+            toast.success("Search saved")
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not save search")
+        },
+    })
+}
+
+export function useUpdateSavedSearch() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ searchId, data }: { searchId: string; data: { name?: string; query?: string; order?: number } }) => updateSavedSearch(searchId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["saved-searches"] })
+        },
+    })
+}
+
+export function useDeleteSavedSearch() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (searchId: string) => deleteSavedSearch(searchId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["saved-searches"] })
         },
     })
 }

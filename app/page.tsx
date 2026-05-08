@@ -15,6 +15,10 @@ import {
   useRefresh,
   useMarkAllAsRead,
   useFetchFullText,
+  useLabels,
+  useSavedSearches,
+  useCreateSavedSearch,
+  useSetArticleLabels,
 } from "@/hooks/use-rss-data";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -66,6 +70,10 @@ export default function RSSReaderPage() {
   const toggleStarred = useToggleStarred();
   const markAllAsRead = useMarkAllAsRead();
   const fetchFullText = useFetchFullText();
+  const { data: labels = [] } = useLabels();
+  const { data: savedSearches = [] } = useSavedSearches();
+  const createSavedSearch = useCreateSavedSearch();
+  const setArticleLabels = useSetArticleLabels();
   const [readInSession, setReadInSession] = useState<string[]>([]);
   const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
   const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);
@@ -137,8 +145,14 @@ export default function RSSReaderPage() {
     if (selectedFeed) {
       return feeds.find((f: any) => f.id === selectedFeed)?.name || "Feed";
     }
+    if (selectedCategory.startsWith("Label:")) {
+      return labels.find((label: any) => label.id === selectedCategory.slice("Label:".length))?.name || "Label";
+    }
+    if (selectedCategory.startsWith("Search:")) {
+      return savedSearches.find((search: any) => search.id === selectedCategory.slice("Search:".length))?.name || "Saved Search";
+    }
     return selectedCategory;
-  }, [selectedFeed, selectedCategory, feeds]);
+  }, [selectedFeed, selectedCategory, feeds, labels, savedSearches]);
 
   const markArticleRead = useCallback((article: any) => {
     if (!article || article.isRead || readInSession.includes(article.id)) return;
@@ -214,6 +228,27 @@ export default function RSSReaderPage() {
       },
     });
   }, [fetchFullText]);
+
+  const handleSetLabels = useCallback((articleId: string, labelIds: string[]) => {
+    setArticleLabels.mutate({ articleId, labelIds }, {
+      onSuccess: (article: any) => {
+        const uiArticle = toUiArticle(article);
+        setSelectedArticleSnapshot(uiArticle);
+        setSessionReadArticles((prev) => [
+          uiArticle,
+          ...prev.filter((a) => a.id !== uiArticle.id),
+        ]);
+      },
+    });
+  }, [setArticleLabels]);
+
+  const handleSaveSearch = useCallback(() => {
+    const query = searchQuery.trim();
+    if (!query) return;
+    const name = window.prompt("Name for this saved search", query.length > 40 ? `${query.slice(0, 40)}…` : query);
+    if (!name?.trim()) return;
+    createSavedSearch.mutate({ name: name.trim(), query });
+  }, [createSavedSearch, searchQuery]);
 
   // Use refs for keyboard navigation to avoid stale closures
   const filteredArticlesRef = useRef(filteredArticles);
@@ -382,6 +417,7 @@ export default function RSSReaderPage() {
                 })
               }
               isMarkingAllRead={markAllAsRead.isPending}
+              onSaveSearch={handleSaveSearch}
             />
             <ArticleList
               articles={filteredArticles}
@@ -407,6 +443,8 @@ export default function RSSReaderPage() {
               onToggleRead={handleToggleRead}
               onFetchFullText={handleFetchFullText}
               isFetchingFullText={fetchFullText.isPending}
+              labels={labels}
+              onSetLabels={handleSetLabels}
               onBack={() => setSelectedArticleId(null)}
               showBackButton={!!selectedArticle}
             />
@@ -440,6 +478,7 @@ export default function RSSReaderPage() {
             })
           }
           isMarkingAllRead={markAllAsRead.isPending}
+          onSaveSearch={handleSaveSearch}
         />
         <ArticleList
           articles={filteredArticles}
@@ -464,6 +503,8 @@ export default function RSSReaderPage() {
           onToggleRead={handleToggleRead}
           onFetchFullText={handleFetchFullText}
           isFetchingFullText={fetchFullText.isPending}
+          labels={labels}
+          onSetLabels={handleSetLabels}
           onBack={() => setSelectedArticleId(null)}
           showBackButton={!!selectedArticle}
         />

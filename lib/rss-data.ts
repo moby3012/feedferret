@@ -25,6 +25,13 @@ export interface Article {
   readAt?: string | Date | null
   isStarred: boolean
   imageUrl?: string
+  labels?: Array<{
+    label: {
+      id: string
+      name: string
+      color: string
+    }
+  }>
 }
 
 export const feedSources: FeedSource[] = [

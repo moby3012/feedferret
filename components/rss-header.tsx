@@ -22,6 +22,7 @@ import {
   Search,
   X,
   CheckCheck,
+  BookmarkPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -43,6 +44,7 @@ interface RssHeaderProps {
   onSearchChange?: (query: string) => void;
   onMarkAllRead?: () => void;
   isMarkingAllRead?: boolean;
+  onSaveSearch?: () => void;
 }
 
 export function RssHeader({
@@ -59,6 +61,7 @@ export function RssHeader({
   onSearchChange,
   onMarkAllRead,
   isMarkingAllRead,
+  onSaveSearch,
 }: RssHeaderProps) {
   const [showSearch, setShowSearch] = useState(!!searchQuery);
 
@@ -110,7 +113,7 @@ export function RssHeader({
         {showSearch && onSearchChange && (
           <Input
             type="search"
-            placeholder="Search articles..."
+            placeholder='Search: author:, intitle:, is:unread, label:'
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className="h-10 w-40 lg:w-60 rounded-2xl bg-background/60 border-border/50 focus:bg-background"
@@ -206,6 +209,19 @@ export function RssHeader({
             </DropdownMenuItem>
 
             <DropdownMenuSeparator className="my-2 bg-border/50" />
+
+            {searchQuery.trim() && onSaveSearch && (
+              <>
+                <DropdownMenuItem
+                  className="rounded-xl py-3 px-4 text-sm font-medium"
+                  onClick={onSaveSearch}
+                >
+                  <BookmarkPlus className="w-4 h-4 mr-3" />
+                  Save search
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="my-2 bg-border/50" />
+              </>
+            )}
 
             <DropdownMenuItem className="rounded-xl py-3 px-4 text-sm font-medium">
               <SortAsc className="w-4 h-4 mr-3" />

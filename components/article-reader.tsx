@@ -4,6 +4,14 @@ import { Article } from "@/lib/rss-data";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Star,
   Share2,
   ExternalLink,
@@ -12,6 +20,7 @@ import {
   Circle,
   Copy,
   Sparkles,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -22,6 +31,8 @@ interface ArticleReaderProps {
   onToggleRead?: (articleId: string) => void;
   onFetchFullText?: (articleId: string) => void;
   isFetchingFullText?: boolean;
+  labels?: Array<{ id: string; name: string; color: string }>;
+  onSetLabels?: (articleId: string, labelIds: string[]) => void;
   onBack?: () => void;
   showBackButton?: boolean;
 }
@@ -32,6 +43,8 @@ export function ArticleReader({
   onToggleRead,
   onFetchFullText,
   isFetchingFullText,
+  labels = [],
+  onSetLabels,
   onBack,
   showBackButton,
 }: ArticleReaderProps) {
@@ -81,6 +94,8 @@ export function ArticleReader({
     }
     await copyLink();
   };
+
+  const articleLabelIds = article.labels?.map((item) => item.label.id) || [];
 
   return (
     <div className="flex-1 flex flex-col bg-background/75 backdrop-blur-xl animate-fade-in">
@@ -163,6 +178,55 @@ export function ArticleReader({
           >
             <Copy className="w-5 h-5 text-muted-foreground" />
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                title="Labels"
+              >
+                <Tag className="w-5 h-5 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-56 rounded-2xl border-border/70 bg-popover/95 p-2 shadow-2xl backdrop-blur-xl"
+            >
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                Labels
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {labels.length === 0 ? (
+                <div className="px-2 py-3 text-sm text-muted-foreground">
+                  Create labels in Manage Feeds.
+                </div>
+              ) : (
+                labels.map((label) => {
+                  const checked = articleLabelIds.includes(label.id);
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={label.id}
+                      checked={checked}
+                      onCheckedChange={(nextChecked) => {
+                        const nextIds = nextChecked
+                          ? Array.from(new Set([...articleLabelIds, label.id]))
+                          : articleLabelIds.filter((id) => id !== label.id);
+                        onSetLabels?.(article.id, nextIds);
+                      }}
+                      className="rounded-xl"
+                    >
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: label.color }}
+                      />
+                      {label.name}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -183,6 +247,22 @@ export function ArticleReader({
               <span className="text-muted-foreground/40">·</span>
               <span>{article.readTime}</span>
             </div>
+            {!!article.labels?.length && (
+              <div className="mt-5 flex flex-wrap gap-2">
+                {article.labels.map((item) => (
+                  <span
+                    key={item.label.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                  >
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: item.label.color }}
+                    />
+                    {item.label.name}
+                  </span>
+                ))}
+              </div>
+            )}
           </header>
 
           {/* Hero Image */}

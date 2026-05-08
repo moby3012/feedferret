@@ -12,6 +12,11 @@ import {
   useUpdateCategoryOrder,
   useImportOpml,
   useExportOpml,
+  useLabels,
+  useCreateLabel,
+  useDeleteLabel,
+  useSavedSearches,
+  useDeleteSavedSearch,
 } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +49,8 @@ import {
   Check,
   X,
   Folder,
+  Tag,
+  Bookmark,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -218,19 +225,26 @@ export function FeedManagement({
   const updateCategoryOrder = useUpdateCategoryOrder();
   const importOpml = useImportOpml();
   const exportOpml = useExportOpml();
+  const createLabel = useCreateLabel();
+  const deleteLabel = useDeleteLabel();
+  const deleteSavedSearch = useDeleteSavedSearch();
 
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newLabelName, setNewLabelName] = useState("");
+  const [newLabelColor, setNewLabelColor] = useState("#3b82f6");
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
     null,
   );
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<null | {
-    type: "feed" | "category";
+    type: "feed" | "category" | "label" | "saved-search";
     id: string;
     name: string;
   }>(null);
 
   const { data: categories = [] } = useCategories();
+  const { data: labels = [] } = useLabels();
+  const { data: savedSearches = [] } = useSavedSearches();
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -273,6 +287,22 @@ export function FeedManagement({
         onSuccess: () => {
           setNewCategoryName("");
           toast.success("Category added");
+        },
+      },
+    );
+  };
+
+  const handleAddLabel = () => {
+    if (!newLabelName.trim()) return;
+    createLabel.mutate(
+      { name: newLabelName, color: newLabelColor },
+      {
+        onSuccess: () => {
+          setNewLabelName("");
+          toast.success("Label added");
+        },
+        onError: (error) => {
+          toast.error(error instanceof Error ? error.message : "Failed to add label");
         },
       },
     );
@@ -354,6 +384,12 @@ export function FeedManagement({
                 className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
               >
                 Import/Export
+              </TabsTrigger>
+              <TabsTrigger
+                value="labels"
+                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                Labels & Searches
               </TabsTrigger>
             </TabsList>
           </div>
@@ -495,6 +531,105 @@ export function FeedManagement({
             </TabsContent>
 
             <TabsContent
+              value="labels"
+              className="h-full mt-0 focus-visible:outline-none"
+            >
+              <div className="grid h-full gap-6 px-6 py-4 sm:px-8 lg:grid-cols-2">
+                <section className="min-h-0 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
+                  <div className="mb-5 flex items-center gap-3">
+                    <Tag className="h-5 w-5 text-primary" />
+                    <div>
+                      <h3 className="font-semibold tracking-[-0.02em]">Labels</h3>
+                      <p className="text-sm text-muted-foreground">Tag articles for reusable filters.</p>
+                    </div>
+                  </div>
+                  <div className="mb-5 flex gap-2">
+                    <Input
+                      placeholder="New label..."
+                      value={newLabelName}
+                      onChange={(e) => setNewLabelName(e.target.value)}
+                      className="h-11 rounded-2xl border-border/70 bg-background/70"
+                    />
+                    <Input
+                      type="color"
+                      value={newLabelColor}
+                      onChange={(e) => setNewLabelColor(e.target.value)}
+                      className="h-11 w-14 rounded-2xl border-border/70 bg-background/70 p-1"
+                    />
+                    <Button onClick={handleAddLabel} className="h-11 rounded-2xl px-5">
+                      Add
+                    </Button>
+                  </div>
+                  <ScrollArea className="h-[48vh]">
+                    <div className="space-y-2 pr-3">
+                      {labels.map((label: any) => (
+                        <div
+                          key={label.id}
+                          className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/60 p-3"
+                        >
+                          <span className="h-3 w-3 rounded-full" style={{ backgroundColor: label.color }} />
+                          <span className="flex-1 truncate text-sm font-medium">{label.name}</span>
+                          <span className="text-xs text-muted-foreground">{label._count?.articles || 0}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setPendingDelete({ type: "label", id: label.id, name: label.name })}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      {labels.length === 0 && (
+                        <p className="py-10 text-center text-sm text-muted-foreground">No labels yet.</p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </section>
+
+                <section className="min-h-0 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
+                  <div className="mb-5 flex items-center gap-3">
+                    <Bookmark className="h-5 w-5 text-primary" />
+                    <div>
+                      <h3 className="font-semibold tracking-[-0.02em]">Saved Searches</h3>
+                      <p className="text-sm text-muted-foreground">Advanced queries pinned to the sidebar.</p>
+                    </div>
+                  </div>
+                  <ScrollArea className="h-[56vh]">
+                    <div className="space-y-2 pr-3">
+                      {savedSearches.map((search: any) => (
+                        <div
+                          key={search.id}
+                          className="rounded-2xl border border-border/60 bg-background/60 p-3"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="flex-1 truncate text-sm font-medium">{search.name}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => setPendingDelete({ type: "saved-search", id: search.id, name: search.name })}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <code className="mt-2 block truncate rounded-xl bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
+                            {search.query}
+                          </code>
+                        </div>
+                      ))}
+                      {savedSearches.length === 0 && (
+                        <p className="py-10 text-center text-sm text-muted-foreground">
+                          Use the article search menu to save a query.
+                        </p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </section>
+              </div>
+            </TabsContent>
+
+            <TabsContent
               value="opml"
               className="h-full mt-0 focus-visible:outline-none"
             >
@@ -552,7 +687,13 @@ export function FeedManagement({
           <AlertDialogContent className="rounded-3xl border-border/70 bg-background">
             <AlertDialogHeader>
               <AlertDialogTitle>
-                Delete {pendingDelete?.type === "feed" ? "feed" : "category"}?
+                Delete {pendingDelete?.type === "feed"
+                  ? "feed"
+                  : pendingDelete?.type === "category"
+                    ? "category"
+                    : pendingDelete?.type === "label"
+                      ? "label"
+                      : "saved search"}?
               </AlertDialogTitle>
               <AlertDialogDescription>
                 “{pendingDelete?.name}” will be removed. This cannot be undone.
@@ -566,8 +707,12 @@ export function FeedManagement({
                   if (!pendingDelete) return;
                   if (pendingDelete.type === "feed") {
                     deleteFeed.mutate(pendingDelete.id);
-                  } else {
+                  } else if (pendingDelete.type === "category") {
                     deleteCategory.mutate(pendingDelete.id);
+                  } else if (pendingDelete.type === "label") {
+                    deleteLabel.mutate(pendingDelete.id);
+                  } else {
+                    deleteSavedSearch.mutate(pendingDelete.id);
                   }
                   setPendingDelete(null);
                 }}

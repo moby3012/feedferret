@@ -20,6 +20,8 @@ model User {
   categories    Category[]
   feeds         Feed[]
   articles      Article[]
+  labels        Label[]
+  savedSearches SavedSearch[]
   defaultUpdateFrequency Int @default(60)
   role          String    @default("USER")
   createdAt DateTime @default(now())
@@ -110,6 +112,7 @@ model Article {
   isStarred   Boolean  @default(false)
   feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  labels      ArticleLabel[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, link])
@@ -117,6 +120,44 @@ model Article {
   @@index([userId, isStarred, publishedAt])
   @@index([userId, readAt])
   @@index([feedId, publishedAt])
+}
+
+model Label {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String   @default("#3b82f6")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  articles  ArticleLabel[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model ArticleLabel {
+  articleId String
+  labelId   String
+  userId    String
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  label     Label   @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  @@id([articleId, labelId])
+  @@index([labelId])
+  @@index([userId])
+}
+
+model SavedSearch {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  query     String
+  order     Int      @default(0)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([userId, name])
+  @@index([userId, order])
 }
 
 model GlobalSettings {
