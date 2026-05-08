@@ -344,6 +344,92 @@ export async function importOpml(xml: string) {
     revalidatePath("/");
 }
 
+export async function fetchFullText(articleId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const article = await db.article.findUnique({
+        where: { id: articleId, userId: session.user.id },
+        include: { feed: true },
+    });
+
+    if (!article?.link) throw new Error("Article has no source link");
+
+    const response = await fetch(article.link, {
+        headers: {
+            "User-Agent": "FeedFerret/1.0 (+https://github.com/moby3012/feedferret)",
+            Accept: "text/html,application/xhtml+xml",
+        },
+        signal: AbortSignal.timeout(12_000),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch article: ${response.status}`);
+    }
+
+    const html = await response.text();
+    const { JSDOM } = await import("jsdom");
+    const { default: DOMPurify } = await import("isomorphic-dompurify");
+    const dom = new JSDOM(html, { url: article.link });
+    const document = dom.window.document;
+
+    document.querySelectorAll("script, style, nav, footer, header, aside, form, iframe, noscript, svg").forEach((node) => node.remove());
+    document.querySelectorAll("a[href], img[src]").forEach((node) => {
+        const attr = node instanceof dom.window.HTMLImageElement ? "src" : "href";
+        const value = node.getAttribute(attr);
+        if (!value) return;
+        try {
+            node.setAttribute(attr, new URL(value, article.link).toString());
+        } catch {
+            // Ignore malformed URLs.
+        }
+    });
+
+    const selectors = [
+        "article",
+        "main",
+        "[role='main']",
+        ".post-content",
+        ".entry-content",
+        ".article-content",
+        ".content",
+    ];
+
+    const candidates = selectors
+        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+        .concat(Array.from(document.body.children));
+
+    const best = candidates
+        .map((element) => ({
+            element,
+            score:
+                (element.textContent?.trim().length || 0) +
+                element.querySelectorAll("p").length * 250 -
+                element.querySelectorAll("a").length * 20,
+        }))
+        .sort((a, b) => b.score - a.score)[0]?.element;
+
+    if (!best) throw new Error("Could not extract article content");
+
+    const sanitized = DOMPurify.sanitize(best.innerHTML, {
+        ADD_ATTR: ["target", "rel"],
+    }).trim();
+    const plain = DOMPurify.sanitize(sanitized, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
+
+    if (plain.length < 400 || plain.length <= (article.content || "").replace(/<[^>]*>?/gm, "").length) {
+        throw new Error("Full text could not improve this article");
+    }
+
+    return await db.article.update({
+        where: { id: article.id, userId: session.user.id },
+        data: {
+            content: sanitized,
+            excerpt: plain.slice(0, 240),
+        },
+        include: { feed: true },
+    });
+}
+
 export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");

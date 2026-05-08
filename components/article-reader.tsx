@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Circle,
   Copy,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -19,6 +20,8 @@ interface ArticleReaderProps {
   article: Article | null;
   onToggleStar: (articleId: string) => void;
   onToggleRead?: (articleId: string) => void;
+  onFetchFullText?: (articleId: string) => void;
+  isFetchingFullText?: boolean;
   onBack?: () => void;
   showBackButton?: boolean;
 }
@@ -27,6 +30,8 @@ export function ArticleReader({
   article,
   onToggleStar,
   onToggleRead,
+  onFetchFullText,
+  isFetchingFullText,
   onBack,
   showBackButton,
 }: ArticleReaderProps) {
@@ -78,9 +83,9 @@ export function ArticleReader({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-background animate-fade-in">
+    <div className="flex-1 flex flex-col bg-background/75 backdrop-blur-xl animate-fade-in">
       {/* Reader Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-background/80 backdrop-blur-xl sticky top-0 z-10">
+      <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border/60 bg-background/80 backdrop-blur-2xl sticky top-0 z-10">
         <div className="flex items-center gap-4">
           {showBackButton && (
             <Button
@@ -93,8 +98,8 @@ export function ArticleReader({
             </Button>
           )}
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{article.feedIcon}</span>
-            <span className="text-base font-semibold text-foreground">
+            <span className="text-xl">{article.feedIcon}</span>
+            <span className="text-sm font-semibold text-foreground">
               {article.feedName}
             </span>
           </div>
@@ -163,14 +168,14 @@ export function ArticleReader({
 
       {/* Article Content */}
       <ScrollArea className="flex-1 overflow-hidden min-h-0">
-        <article className="max-w-3xl mx-auto px-6 py-12">
+        <article className="reader-page max-w-3xl mx-auto px-5 sm:px-8 py-10 sm:py-12">
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground leading-tight mb-6 text-balance tracking-tight">
+            <h1 className="text-3xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.04] mb-5 text-balance tracking-[-0.035em]">
               {article.title}
             </h1>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-base text-muted-foreground">
-              <span className="font-semibold text-foreground text-lg">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">
                 {article.author}
               </span>
               <span className="text-muted-foreground/40">·</span>
@@ -199,15 +204,25 @@ export function ArticleReader({
             dangerouslySetInnerHTML={{ __html: article.content }}
           />
 
-          {article.link && (!article.content || article.content.length < 500) && (
-            <div className="mt-10 rounded-2xl border border-border bg-muted/30 p-5">
+          {article.link && (!article.content || article.content.length < 900) && (
+            <div className="mt-10 rounded-3xl border border-border/70 bg-card/70 p-5 shadow-sm">
               <p className="text-sm text-muted-foreground mb-4">
-                This feed appears to provide only a short excerpt.
+                This feed appears to provide only a short excerpt. FeedFerret can try to fetch a cleaner full-text version.
               </p>
-              <Button onClick={openOriginal} className="rounded-xl">
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Open full article
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => onFetchFullText?.(article.id)}
+                  disabled={isFetchingFullText}
+                  className="rounded-xl"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  {isFetchingFullText ? "Fetching..." : "Fetch full text"}
+                </Button>
+                <Button onClick={openOriginal} variant="outline" className="rounded-xl">
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Open original
+                </Button>
+              </div>
             </div>
           )}
 

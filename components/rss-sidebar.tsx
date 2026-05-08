@@ -269,9 +269,9 @@ export function RssSidebar({
   }
 
   return (
-    <aside className="w-80 h-full bg-sidebar border-r border-sidebar-border flex flex-col">
+    <aside className="w-80 h-full bg-sidebar/85 backdrop-blur-2xl border-r border-sidebar-border/70 flex flex-col">
       {/* Header */}
-      <div className="p-5 border-b border-sidebar-border">
+      <div className="p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-4">
             <img
@@ -280,7 +280,7 @@ export function RssSidebar({
               className="w-12 h-12 invert dark:invert-0"
             />
             <div>
-              <h1 className="text-xl font-bold text-sidebar-foreground tracking-tight">
+              <h1 className="text-xl font-semibold text-sidebar-foreground tracking-[-0.03em]">
                 FeedFerret
               </h1>
               <p className="text-sm text-muted-foreground">
@@ -296,7 +296,7 @@ export function RssSidebar({
             placeholder="Search feeds..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-11 h-12 text-base bg-sidebar-accent border-0 rounded-xl"
+            className="pl-11 h-11 text-sm bg-sidebar-accent/80 border-0 rounded-2xl shadow-inner shadow-black/[0.02]"
           />
         </div>
       </div>
@@ -319,21 +319,21 @@ export function RssSidebar({
                   );
                 }}
                 className={cn(
-                  "w-full flex items-center gap-4 px-4 py-3 rounded-xl text-base transition-all",
+                  "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm transition-all",
                   selectedFeed === null &&
                     (item.id === "all"
                       ? selectedCategory === "All"
                       : item.id === "new"
                         ? selectedCategory === "New Articles"
                         : selectedCategory === item.label)
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
               >
                 <item.icon className="w-5 h-5" />
                 <span className="flex-1 text-left">{item.label}</span>
                 {item.count !== null && item.count > 0 && (
-                  <span className="text-sm tabular-nums text-muted-foreground bg-muted px-2.5 py-1 rounded-lg font-medium">
+                  <span className="text-xs tabular-nums text-muted-foreground bg-muted px-2 py-0.5 rounded-full font-medium">
                     {item.count}
                   </span>
                 )}
@@ -350,7 +350,7 @@ export function RssSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="w-8 h-8 rounded-lg"
+                className="w-8 h-8 rounded-xl"
                 onClick={() => setIsAddFeedOpen(true)}
               >
                 <Plus className="w-5 h-5" />
@@ -358,7 +358,7 @@ export function RssSidebar({
             </div>
 
             {isAddFeedOpen && (
-              <div className="px-4 py-2 space-y-3 bg-muted/20 rounded-xl">
+              <div className="px-4 py-3 space-y-3 bg-muted/25 rounded-2xl border border-border/50">
                 <Input
                   placeholder="Feed URL..."
                   value={newFeedUrl}
@@ -472,7 +472,7 @@ export function RssSidebar({
       </ScrollArea>
 
       {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border space-y-1">
+      <div className="p-4 border-t border-sidebar-border/70 space-y-1">
         {session?.user && (
           <div className="flex items-center gap-3 px-3 py-2 bg-sidebar-accent/30 rounded-xl mb-2">
             <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">

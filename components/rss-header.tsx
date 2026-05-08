@@ -63,7 +63,7 @@ export function RssHeader({
   const [showSearch, setShowSearch] = useState(!!searchQuery);
 
   return (
-    <header className="h-16 flex items-center justify-between px-5 border-b border-border bg-card/80 backdrop-blur-xl animate-fade-in relative z-20">
+    <header className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-border/60 bg-card/75 backdrop-blur-2xl animate-fade-in relative z-20">
       <div className="flex items-center gap-4 min-w-0">
         <Button
           variant="ghost"
@@ -74,7 +74,7 @@ export function RssHeader({
           <PanelLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-bold text-foreground tracking-tight truncate">
+          <h2 className="text-base font-semibold text-foreground tracking-[-0.02em] truncate">
             {title}
           </h2>
           <p className="text-xs text-muted-foreground truncate font-medium">
@@ -113,7 +113,7 @@ export function RssHeader({
             placeholder="Search articles..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="h-10 w-40 lg:w-60 rounded-xl bg-background/50 border-border/50 focus:bg-background"
+            className="h-10 w-40 lg:w-60 rounded-2xl bg-background/60 border-border/50 focus:bg-background"
             autoFocus
           />
         )}
@@ -121,7 +121,7 @@ export function RssHeader({
           variant="ghost"
           size="sm"
           className={cn(
-            "h-10 rounded-xl px-3 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-2",
+            "h-10 rounded-2xl px-3 transition-all duration-200 active:scale-95 flex items-center gap-2",
             unreadOnly
               ? "text-blue-500 bg-blue-500/10 border border-blue-500/20 shadow-sm"
               : "text-muted-foreground",
@@ -151,7 +151,7 @@ export function RssHeader({
           />
         </Button>
 
-        <div className="hidden sm:flex items-center border border-border rounded-xl p-1 bg-muted/50">
+        <div className="hidden sm:flex items-center border border-border/70 rounded-2xl p-1 bg-muted/45 shadow-inner shadow-black/[0.02]">
           <Button
             variant={viewMode === "minimal" ? "secondary" : "ghost"}
             size="icon"

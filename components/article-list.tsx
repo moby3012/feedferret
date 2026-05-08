@@ -44,7 +44,7 @@ export function ArticleList({
     <ScrollArea className="flex-1 overflow-hidden min-h-0">
       <div
         className={cn(
-          "p-3 space-y-3",
+          "p-3 space-y-2.5",
           viewMode === "magazine" &&
             "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 space-y-0",
         )}
@@ -113,7 +113,7 @@ function ArticlePreview({
       <article
         onClick={onClick}
         className={cn(
-          "cursor-pointer rounded-2xl overflow-hidden transition-all duration-300 border border-transparent bg-card shadow-sm hover:shadow-xl hover:-translate-y-1",
+          "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl",
           isSelected && "ring-2 ring-primary border-primary",
           !article.isRead && "ring-1 ring-primary/20",
         )}
@@ -171,12 +171,12 @@ function ArticlePreview({
       onClick={onClick}
       style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
       className={cn(
-        "p-4 cursor-pointer rounded-2xl transition-all duration-300 ease-out group animate-fade-in-up",
-        "hover:scale-[1.01] active:scale-[0.99]",
+        "p-3.5 cursor-pointer rounded-3xl transition-all duration-300 ease-out group animate-fade-in-up border",
+        "active:scale-[0.995]",
         isSelected
-          ? "bg-accent/10 ring-1 ring-accent/20 shadow-lg shadow-accent/5"
-          : "hover:bg-muted/60 hover:shadow-md",
-        !article.isRead ? "bg-card shadow-sm" : "opacity-80",
+          ? "bg-accent/10 border-accent/25 shadow-lg shadow-accent/5"
+          : "border-transparent hover:border-border/70 hover:bg-card/80 hover:shadow-sm",
+        !article.isRead ? "bg-card/90 shadow-sm" : "opacity-80",
       )}
     >
       <div className="flex gap-4">
@@ -220,7 +220,7 @@ function ArticlePreview({
 
           <h3
             className={cn(
-              "text-lg leading-snug mb-2 line-clamp-2 text-balance transition-colors duration-200",
+              "text-[0.98rem] leading-snug mb-2 line-clamp-2 text-balance transition-colors duration-200 tracking-[-0.015em]",
               !article.isRead
                 ? "font-semibold text-foreground"
                 : "font-medium text-foreground/75",

@@ -14,11 +14,26 @@ import {
   useToggleStarred,
   useRefresh,
   useMarkAllAsRead,
+  useFetchFullText,
 } from "@/hooks/use-rss-data";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { hasUsers } from "./actions/onboarding";
 import { useRouter } from "next/navigation";
+
+function toUiArticle(a: any) {
+  const publishedAt = new Date(a.publishedAt);
+  return {
+    ...a,
+    feedName: a.feed.name,
+    feedIcon: a.feed.icon || "📰",
+    publishedAtRaw: publishedAt.getTime(),
+    publishedAt: publishedAt.toISOString(),
+    readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
+    excerpt: a.excerpt || "",
+    author: a.author || "Unknown",
+  };
+}
 
 export default function RSSReaderPage() {
   const { data: session, status } = useSession();
@@ -45,6 +60,7 @@ export default function RSSReaderPage() {
   const toggleRead = useToggleRead();
   const toggleStarred = useToggleStarred();
   const markAllAsRead = useMarkAllAsRead();
+  const fetchFullText = useFetchFullText();
   const [readInSession, setReadInSession] = useState<string[]>([]);
   const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
   const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);
@@ -72,16 +88,7 @@ export default function RSSReaderPage() {
 
   // Transform articles for UI components
   const articles = useMemo(() => {
-    return rawArticles.map((a: any) => ({
-      ...a,
-      feedName: a.feed.name,
-      feedIcon: a.feed.icon || "📰",
-      publishedAtRaw: new Date(a.publishedAt).getTime(),
-      publishedAt: new Date(a.publishedAt).toISOString(),
-      readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
-      excerpt: a.excerpt || "",
-      author: a.author || "Unknown",
-    }));
+    return rawArticles.map(toUiArticle);
   }, [rawArticles]);
 
   const displayArticles = useMemo(() => {
@@ -128,10 +135,8 @@ export default function RSSReaderPage() {
     return selectedCategory;
   }, [selectedFeed, selectedCategory, feeds]);
 
-  const handleSelectArticle = useCallback((article: any) => {
-    setSelectedArticleId(article.id);
-    setSelectedArticleSnapshot(article);
-    if (!article.isRead && !readInSession.includes(article.id)) {
+  const markArticleRead = useCallback((article: any) => {
+    if (!article || article.isRead || readInSession.includes(article.id)) return;
       const readArticle = { ...article, isRead: true, readAt: new Date() };
       setReadInSession((prev) => [...prev, article.id]);
       setSessionReadArticles((prev) => [
@@ -140,8 +145,24 @@ export default function RSSReaderPage() {
       ]);
       setSelectedArticleSnapshot(readArticle);
       toggleRead.mutate({ articleId: article.id, isRead: true });
-    }
   }, [readInSession, toggleRead]);
+
+  const handleSelectArticle = useCallback((article: any) => {
+    setSelectedArticleId(article.id);
+    setSelectedArticleSnapshot(article);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedArticle || selectedArticle.isRead || readInSession.includes(selectedArticle.id)) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      markArticleRead(selectedArticle);
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [selectedArticle, readInSession, markArticleRead]);
 
   const handleToggleRead = useCallback((articleId: string) => {
     const article = displayArticles.find((a: any) => a.id === articleId) || selectedArticleSnapshot;
@@ -175,6 +196,19 @@ export default function RSSReaderPage() {
   const handleRefresh = useCallback(() => {
     refresh.mutate();
   }, [refresh]);
+
+  const handleFetchFullText = useCallback((articleId: string) => {
+    fetchFullText.mutate(articleId, {
+      onSuccess: (article: any) => {
+        const uiArticle = toUiArticle(article);
+        setSelectedArticleSnapshot(uiArticle);
+        setSessionReadArticles((prev) => [
+          uiArticle,
+          ...prev.filter((a) => a.id !== uiArticle.id),
+        ]);
+      },
+    });
+  }, [fetchFullText]);
 
   // Use refs for keyboard navigation to avoid stale closures
   const filteredArticlesRef = useRef(filteredArticles);
@@ -268,7 +302,7 @@ export default function RSSReaderPage() {
   }));
 
   return (
-    <div className="fixed inset-0 flex bg-background overflow-hidden selection:bg-accent/20">
+    <div className="fixed inset-0 flex bg-background overflow-hidden selection:bg-accent/20 app-chrome">
       {/* Desktop Sidebar */}
       <div className="hidden lg:block shrink-0">
         <RssSidebar
@@ -314,7 +348,7 @@ export default function RSSReaderPage() {
       {/* Article List Panel */}
       <div
         className={cn(
-          "flex-1 lg:w-[420px] lg:flex-none flex flex-col border-r border-border bg-card relative z-10",
+          "flex-1 lg:w-[440px] lg:flex-none flex flex-col border-r border-border/60 bg-card/70 backdrop-blur-2xl relative z-10",
           "transition-all duration-300 ease-out",
           selectedArticle && "hidden lg:flex",
         )}
@@ -362,6 +396,8 @@ export default function RSSReaderPage() {
           article={selectedArticle}
           onToggleStar={handleToggleStar}
           onToggleRead={handleToggleRead}
+          onFetchFullText={handleFetchFullText}
+          isFetchingFullText={fetchFullText.isPending}
           onBack={() => setSelectedArticleId(null)}
           showBackButton={!!selectedArticle}
         />

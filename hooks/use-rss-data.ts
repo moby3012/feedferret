@@ -1,8 +1,9 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings } from "@/app/actions/settings"
+import { toast } from "sonner"
 
 export function useFeeds() {
     return useQuery({
@@ -206,6 +207,23 @@ export function useMarkAllAsRead() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["articles"] })
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
+        },
+    })
+}
+
+export function useFetchFullText() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (articleId: string) => fetchFullText(articleId),
+        onSuccess: (article: any) => {
+            queryClient.setQueriesData({ queryKey: ["articles"] }, (old: any) => {
+                if (!Array.isArray(old)) return old
+                return old.map((item) => item.id === article.id ? article : item)
+            })
+            toast.success("Full text loaded")
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not fetch full text")
         },
     })
 }
