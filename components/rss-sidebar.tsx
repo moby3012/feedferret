@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { FeedSource } from "@/lib/rss-data";
+import Link from "next/link";
 import {
   Home,
   Star,
@@ -25,7 +26,6 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FeedManagement } from "./feed-management";
-import { SettingsDialog } from "./settings-dialog";
 import {
   useAddFeed,
   useCategories,
@@ -85,7 +85,6 @@ export function RssSidebar({
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isManagementOpen, setIsManagementOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [newFeedCategoryId, setNewFeedCategoryId] = useState<string>("none");
@@ -482,14 +481,15 @@ export function RssSidebar({
             <p className="flex-1 text-sm font-medium truncate">
               {session.user.name || session.user.email}
             </p>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-8 h-8"
-              onClick={() => setIsSettingsOpen(true)}
-            >
-              <SettingsIcon className="w-4 h-4" />
-            </Button>
+            <Link href="/settings" legacyBehavior>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-8 h-8"
+              >
+                <SettingsIcon className="w-4 h-4" />
+              </Button>
+            </Link>
             <Button
               variant="ghost"
               size="icon"
@@ -528,7 +528,6 @@ export function RssSidebar({
         open={isServerManagementOpen}
         onOpenChange={setIsServerManagementOpen}
       />
-      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
     </aside>
   );
 }
