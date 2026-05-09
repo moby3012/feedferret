@@ -23,6 +23,7 @@ import {
   X,
   CheckCheck,
   BookmarkPlus,
+  Keyboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -45,6 +46,7 @@ interface RssHeaderProps {
   onMarkAllRead?: () => void;
   isMarkingAllRead?: boolean;
   onSaveSearch?: () => void;
+  onShowShortcuts?: () => void;
 }
 
 export function RssHeader({
@@ -62,6 +64,7 @@ export function RssHeader({
   onMarkAllRead,
   isMarkingAllRead,
   onSaveSearch,
+  onShowShortcuts,
 }: RssHeaderProps) {
   const [showSearch, setShowSearch] = useState(!!searchQuery);
 
@@ -227,6 +230,17 @@ export function RssHeader({
               <SortAsc className="w-4 h-4 mr-3" />
               Sort by date
             </DropdownMenuItem>
+
+            {onShowShortcuts && (
+              <DropdownMenuItem
+                className="rounded-xl py-3 px-4 text-sm font-medium"
+                onClick={onShowShortcuts}
+              >
+                <Keyboard className="w-4 h-4 mr-3" />
+                Keyboard shortcuts
+                <span className="ml-auto text-xs text-muted-foreground">?</span>
+              </DropdownMenuItem>
+            )}
 
             <DropdownMenuItem 
               className="rounded-xl py-3 px-4 text-sm font-medium text-destructive focus:bg-destructive/10 focus:text-destructive"

@@ -73,6 +73,28 @@ docker-compose up -d --build
 
 The app will be available on port `3000`. Database persistence is handled via a volume.
 
+## ⏱ Background Feed Sync
+
+FeedFerret runs an in-process scheduler that refreshes feeds without requiring an external cron. It starts automatically via Next.js `instrumentation.ts` when the Node server boots and respects each feed's `updateFrequency` (per-feed → category → user → 60min default).
+
+Environment variables:
+
+| Var | Default | Effect |
+|-----|---------|--------|
+| `BACKGROUND_SYNC_INTERVAL_MINUTES` | `5` | How often the scheduler ticks. Each tick syncs feeds whose cadence has elapsed. |
+| `DISABLE_BACKGROUND_SYNC` | unset | Set to `true` to opt out (e.g. when running an external cron against `/api/sync`). |
+| `SYNC_SECRET` | unset | Required `Bearer` token for unauthenticated `GET /api/sync` and `GET /api/sync/status`. |
+
+Health/status: `GET /api/sync/status` (requires login or `SYNC_SECRET`) reports last run, last error, and config.
+
+External cron alternative (recommended when running multiple replicas):
+
+```bash
+DISABLE_BACKGROUND_SYNC=true
+SYNC_SECRET=$(openssl rand -hex 32)
+# crontab: */5 * * * * curl -fsS -H "Authorization: Bearer $SYNC_SECRET" https://your.host/api/sync
+```
+
 ## 🛠 Tech Stack
 
 - **Framework**: [Next.js 14+ (App Router)](https://nextjs.org/)

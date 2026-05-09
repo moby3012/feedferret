@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { syncUserFeeds, syncFeed } from "@/lib/rss-sync";
 import { parseOpml, generateOpml, OpmlOutline } from "@/lib/opml";
+import { buildAdvancedSearchWhere } from "@/lib/search";
 import Parser from "rss-parser";
 
 const parser = new Parser();
@@ -14,6 +15,21 @@ export async function refreshAllFeeds() {
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     const result = await syncUserFeeds(session.user.id);
+    revalidatePath("/");
+    return result;
+}
+
+export async function refreshFeed(feedId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const feed = await db.feed.findFirst({
+        where: { id: feedId, userId: session.user.id },
+        select: { id: true },
+    });
+    if (!feed) throw new Error("Feed not found");
+
+    const result = await syncFeed(session.user.id, feedId);
     revalidatePath("/");
     return result;
 }
@@ -435,153 +451,6 @@ export async function toggleArticleStarred(articleId: string, isStarred: boolean
     revalidatePath("/");
 }
 
-function tokenizeSearch(query: string) {
-    const tokens: string[] = [];
-    const re = /"([^"]+)"|'([^']+)'|(\S+)/g;
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(query)) !== null) {
-        tokens.push(match[1] || match[2] || match[3]);
-    }
-    return tokens;
-}
-
-function parseDateToken(value: string) {
-    const now = new Date();
-    const relative = value.match(/^(\d+)(d|w|m|y)$/i);
-    if (relative) {
-        const amount = Number(relative[1]);
-        const unit = relative[2].toLowerCase();
-        const date = new Date(now);
-        if (unit === "d") date.setDate(date.getDate() - amount);
-        if (unit === "w") date.setDate(date.getDate() - amount * 7);
-        if (unit === "m") date.setMonth(date.getMonth() - amount);
-        if (unit === "y") date.setFullYear(date.getFullYear() - amount);
-        return date;
-    }
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-async function buildAdvancedSearchWhere(userId: string, query?: string) {
-    if (!query?.trim()) return {};
-
-    const tokens = tokenizeSearch(query.trim());
-    const and: any[] = [];
-    const freeText: string[] = [];
-
-    for (const rawToken of tokens) {
-        const negated = rawToken.startsWith("-") || rawToken.startsWith("!");
-        const token = negated ? rawToken.slice(1) : rawToken;
-        const [rawKey, ...rest] = token.split(":");
-        const hasField = rest.length > 0;
-        const key = rawKey.toLowerCase();
-        const value = hasField ? rest.join(":").trim() : token.trim();
-        if (!value) continue;
-
-        let condition: any | null = null;
-
-        if (token.startsWith("#")) {
-            condition = {
-                labels: {
-                    some: {
-                        label: {
-                            userId,
-                            name: { contains: token.slice(1) },
-                        },
-                    },
-                },
-            };
-        } else if (hasField) {
-            if (["author", "by"].includes(key)) {
-                condition = { author: { contains: value } };
-            } else if (["intitle", "title"].includes(key)) {
-                condition = { title: { contains: value } };
-            } else if (["intext", "text", "content"].includes(key)) {
-                condition = {
-                    OR: [
-                        { content: { contains: value } },
-                        { excerpt: { contains: value } },
-                    ],
-                };
-            } else if (["inurl", "url", "link"].includes(key)) {
-                condition = { link: { contains: value } };
-            } else if (["feed", "f"].includes(key)) {
-                condition = {
-                    feed: {
-                        OR: [
-                            { id: value },
-                            { name: { contains: value } },
-                            { url: { contains: value } },
-                        ],
-                    },
-                };
-            } else if (["category", "cat", "c"].includes(key)) {
-                condition = {
-                    feed: {
-                        category: {
-                            OR: [
-                                { id: value },
-                                { name: { contains: value } },
-                            ],
-                        },
-                    },
-                };
-            } else if (["label", "tag"].includes(key)) {
-                condition = {
-                    labels: {
-                        some: {
-                            label: {
-                                userId,
-                                OR: [
-                                    { id: value },
-                                    { name: { contains: value } },
-                                ],
-                            },
-                        },
-                    },
-                };
-            } else if (key === "is" || key === "status") {
-                const normalized = value.toLowerCase();
-                if (["unread", "new"].includes(normalized)) condition = { isRead: false };
-                if (["read"].includes(normalized)) condition = { isRead: true };
-                if (["starred", "favorite", "favourite"].includes(normalized)) condition = { isStarred: true };
-                if (["unstarred"].includes(normalized)) condition = { isStarred: false };
-            } else if (["after", "since"].includes(key)) {
-                const date = parseDateToken(value);
-                if (date) condition = { publishedAt: { gte: date } };
-            } else if (["before", "until"].includes(key)) {
-                const date = parseDateToken(value);
-                if (date) condition = { publishedAt: { lte: date } };
-            } else if (key === "date" || key === "pubdate") {
-                const date = parseDateToken(value);
-                if (date) condition = { publishedAt: { gte: date } };
-            }
-        }
-
-        if (!condition) {
-            freeText.push(value);
-            continue;
-        }
-
-        and.push(negated ? { NOT: condition } : condition);
-    }
-
-    for (const term of freeText) {
-        and.push({
-            OR: [
-                { title: { contains: term } },
-                { content: { contains: term } },
-                { excerpt: { contains: term } },
-                { author: { contains: term } },
-                { link: { contains: term } },
-                { feed: { name: { contains: term } } },
-                { labels: { some: { label: { name: { contains: term }, userId } } } },
-            ],
-        });
-    }
-
-    return and.length ? { AND: and } : {};
-}
 
 export async function getArticles(feedId?: string | null, category?: string, search?: string, filters?: { dateFrom?: string; dateTo?: string; isRead?: boolean; isStarred?: boolean; limit?: number }) {
     const session = await auth();
@@ -669,6 +538,48 @@ export async function exportOpml() {
     });
 
     return generateOpml(feeds);
+}
+
+export async function exportUserData() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const userId = session.user.id;
+
+    const [feeds, labels, savedSearches, autoReadRules] = await Promise.all([
+        db.feed.findMany({
+            where: { userId },
+            include: { category: { select: { name: true } } },
+            orderBy: { name: "asc" },
+        }),
+        db.label.findMany({ where: { userId }, orderBy: { name: "asc" } }),
+        db.savedSearch.findMany({ where: { userId }, orderBy: { order: "asc" } }),
+        db.autoReadRule.findMany({ where: { userId }, orderBy: { order: "asc" } }),
+    ]);
+
+    return JSON.stringify(
+        {
+            exportedAt: new Date().toISOString(),
+            version: 1,
+            feeds: feeds.map((f) => ({
+                name: f.name,
+                url: f.url,
+                category: f.category?.name ?? null,
+                icon: f.icon,
+                updateFrequency: f.updateFrequency,
+                retentionDays: f.retentionDays,
+            })),
+            labels: labels.map((l) => ({ name: l.name, color: l.color })),
+            savedSearches: savedSearches.map((s) => ({ name: s.name, query: s.query })),
+            autoReadRules: autoReadRules.map((r) => ({
+                name: r.name,
+                query: r.query,
+                action: r.action,
+                enabled: r.enabled,
+            })),
+        },
+        null,
+        2,
+    );
 }
 
 export async function importOpml(xml: string) {
@@ -900,4 +811,76 @@ export async function markAllAsRead(scope?: { feedId?: string | null; category?:
     });
 
     revalidatePath("/");
+}
+
+// ─── Auto-Read Rules ────────────────────────────────────────────────────────
+
+export async function getAutoReadRules() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    return db.autoReadRule.findMany({
+        where: { userId: session.user.id },
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    });
+}
+
+export async function createAutoReadRule(data: {
+    name: string;
+    query: string;
+    action: string;
+}) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    if (!data.name.trim() || !data.query.trim() || !data.action.trim()) {
+        throw new Error("Name, query and action are required");
+    }
+    const rule = await db.autoReadRule.create({
+        data: {
+            userId: session.user.id,
+            name: data.name.trim(),
+            query: data.query.trim(),
+            action: data.action.trim(),
+        },
+    });
+    revalidatePath("/");
+    return rule;
+}
+
+export async function updateAutoReadRule(
+    ruleId: string,
+    data: Partial<{ name: string; query: string; action: string; enabled: boolean; order: number }>,
+) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const rule = await db.autoReadRule.update({
+        where: { id: ruleId, userId: session.user.id },
+        data,
+    });
+    revalidatePath("/");
+    return rule;
+}
+
+export async function deleteAutoReadRule(ruleId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    await db.autoReadRule.delete({
+        where: { id: ruleId, userId: session.user.id },
+    });
+    revalidatePath("/");
+}
+
+export async function applyAutoReadRulesNow() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const { applyAutoReadRules } = await import("@/lib/auto-read-rules");
+    const result = await applyAutoReadRules(session.user.id);
+    revalidatePath("/");
+    return result;
+}
+
+export async function previewAutoReadRule(query: string, limit = 10) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const { previewAutoReadRuleMatches } = await import("@/lib/auto-read-rules");
+    return previewAutoReadRuleMatches(session.user.id, query, limit);
 }

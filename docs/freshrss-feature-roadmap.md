@@ -4,27 +4,27 @@ This document lists FreshRSS-style capabilities that FeedFerret could adopt next
 
 ## Low Effort
 
-### 1. Keyboard Shortcut Help Overlay
+### 1. Keyboard Shortcut Help Overlay ✅ Done
 FreshRSS exposes many fast reading actions. FeedFerret already has shortcuts, but users need discoverability.
 
-- Add `?` shortcut overlay.
-- List existing keys: `/`, `j`, `k`, `s`, `m`, `o`, `r`.
-- Add quick actions for next unread, previous unread, open original, save search.
+- Add `?` shortcut overlay. ✅
+- List existing keys: `/`, `j`, `k`, `s`, `m`, `o`, `r`. ✅
+- Add quick actions for next unread (`n`), previous unread (`p`), open original (`o`), save search (`Shift+S`), mark all read (`Shift+A`). ✅
 
-### 2. Per-Feed Quick Actions Menu
+### 2. Per-Feed Quick Actions Menu ✅ Done
 FreshRSS has feed-level actions from the sidebar.
 
-- Refresh one feed.
-- Mark feed as read.
-- Open feed website.
-- Edit feed.
-- Show feed health details.
+- Refresh one feed. ✅ (`refreshFeed` server action + sidebar dropdown)
+- Mark feed as read. ✅ (reuses `markAllAsRead({feedId})`)
+- Open feed website. ✅ (origin derived from feed URL)
+- Edit feed. ✅ (opens Management → Feeds tab)
+- Show feed health details. ✅ (opens Management → Health tab)
 
-### 3. Better Import/Export Options
+### 3. Better Import/Export Options ✅ Partial
 FreshRSS can export selected feeds and richer backup formats.
 
 - Select categories/feeds for OPML export.
-- Export all user data as JSON.
+- Export all user data as JSON. ✅ (`exportUserData` action + JSON Export button in Import/Export tab)
 - Show import duplicates and skipped feeds separately.
 
 ### 4. Feed Statistics Cards
@@ -36,24 +36,26 @@ FreshRSS exposes statistics per feed.
 - Average articles/day.
 - Error rate.
 
-### 5. User Preferences for Reading Behaviour
+### 5. User Preferences for Reading Behaviour ✅ Partial
 FreshRSS allows reading options customization.
 
 - Mark as read after delay setting.
-- Open original by default setting.
+- Open original by default setting. ✅ (`openOriginalByDefault` User field + Settings toggle + wired into article select)
 - Default view mode setting.
 - Reader width setting.
 - Default article sort order.
 
 ## Medium Effort
 
-### 6. Auto-Mark-as-Read Rules
+### 6. Auto-Mark-as-Read Rules ✅ Done
 FreshRSS can auto-mark articles as read via filters.
 
-- Rule fields: feed/category/query/action.
-- Query syntax reuse from Advanced Search.
-- Actions: mark read, star, label.
-- Preview matching articles before enabling.
+- Rule fields: feed/category/query/action. ✅
+- Query syntax reuse from Advanced Search (extracted to `lib/search.ts`). ✅
+- Actions: mark read, star, label. ✅
+- Preview matching articles before enabling. ✅
+- Runs automatically after each sync (`syncUserFeeds` → `applyAutoReadRules`). ✅
+- "Run now" button in Management → Rules tab. ✅
 
 ### 7. Saved Search Sharing
 FreshRSS can reshare selections as HTML/RSS/OPML.
@@ -162,9 +164,9 @@ FreshRSS documents SSRF risk. FeedFerret should add first-class mitigations.
 
 ## Recommended Next Sprint
 
-1. Keyboard shortcut help overlay.
-2. Per-feed quick actions menu.
-3. Auto-mark-as-read rules using existing advanced search parser.
+1. ~~Keyboard shortcut help overlay.~~ ✅ Done
+2. ~~Per-feed quick actions menu.~~ ✅ Done
+3. ~~Auto-mark-as-read rules using existing advanced search parser.~~ ✅ Done
 4. Feed authentication/fetch options.
 5. Full-text extraction selector preview.
 

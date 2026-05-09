@@ -7,6 +7,7 @@ import { RssSidebar } from "@/components/rss-sidebar";
 import { ArticleList } from "@/components/article-list";
 import { ArticleReader } from "@/components/article-reader";
 import { RssHeader, ViewMode } from "@/components/rss-header";
+import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import {
   useFeeds,
   useArticles,
@@ -19,6 +20,7 @@ import {
   useSavedSearches,
   useCreateSavedSearch,
   useSetArticleLabels,
+  useReadingPreferences,
 } from "@/hooks/use-rss-data";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -57,6 +59,7 @@ export default function RSSReaderPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const { data: feeds = [], isLoading: feedsLoading } = useFeeds();
   const { data: rawArticles = [], isLoading: articlesLoading } = useArticles(
@@ -74,6 +77,7 @@ export default function RSSReaderPage() {
   const { data: savedSearches = [] } = useSavedSearches();
   const createSavedSearch = useCreateSavedSearch();
   const setArticleLabels = useSetArticleLabels();
+  const { data: readingPrefs } = useReadingPreferences();
   const [readInSession, setReadInSession] = useState<string[]>([]);
   const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
   const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);
@@ -169,7 +173,10 @@ export default function RSSReaderPage() {
   const handleSelectArticle = useCallback((article: any) => {
     setSelectedArticleId(article.id);
     setSelectedArticleSnapshot(article);
-  }, []);
+    if (readingPrefs?.openOriginalByDefault && article.link) {
+      window.open(article.link, "_blank", "noopener,noreferrer");
+    }
+  }, [readingPrefs?.openOriginalByDefault]);
 
   useEffect(() => {
     if (!selectedArticle || selectedArticle.isRead || readInSession.includes(selectedArticle.id)) {
@@ -264,12 +271,22 @@ export default function RSSReaderPage() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (
       e.target instanceof HTMLInputElement ||
-      e.target instanceof HTMLTextAreaElement
+      e.target instanceof HTMLTextAreaElement ||
+      (e.target instanceof HTMLElement && e.target.isContentEditable)
     )
       return;
 
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
     const currentFilteredArticles = filteredArticlesRef.current;
     const currentSelectedArticleId = selectedArticleIdRef.current;
+
+    // "?" toggles help overlay (Shift+/ on most layouts)
+    if (e.key === "?") {
+      e.preventDefault();
+      setShortcutsOpen((open) => !open);
+      return;
+    }
 
     // "/" to open search
     if (e.key === "/") {
@@ -281,6 +298,7 @@ export default function RSSReaderPage() {
     } else if (e.key === "Escape") {
       // Close search on Escape
       setSearchQuery("");
+      setShortcutsOpen(false);
     } else if (e.key === "j") {
       const currentIndex = currentFilteredArticles.findIndex(
         (a) => a.id === currentSelectedArticleId,
@@ -293,6 +311,21 @@ export default function RSSReaderPage() {
       );
       const prevArticle = currentFilteredArticles[currentIndex - 1];
       if (prevArticle) handleSelectArticle(prevArticle);
+    } else if (e.key === "n") {
+      const startIdx = currentFilteredArticles.findIndex((a) => a.id === currentSelectedArticleId);
+      const next = currentFilteredArticles
+        .slice(startIdx + 1)
+        .find((a: any) => !a.isRead);
+      if (next) handleSelectArticle(next);
+    } else if (e.key === "p") {
+      const startIdx = currentFilteredArticles.findIndex((a) => a.id === currentSelectedArticleId);
+      const slice = startIdx < 0 ? [] : currentFilteredArticles.slice(0, startIdx);
+      for (let i = slice.length - 1; i >= 0; i--) {
+        if (!slice[i].isRead) {
+          handleSelectArticle(slice[i]);
+          break;
+        }
+      }
     } else if (e.key === "s" && currentSelectedArticleId) {
       handleToggleStar(currentSelectedArticleId);
     } else if (e.key === "m" && currentSelectedArticleId) {
@@ -301,8 +334,17 @@ export default function RSSReaderPage() {
       window.open(selectedArticleSnapshot.link, "_blank", "noopener,noreferrer");
     } else if (e.key === "r") {
       handleRefresh();
+    } else if (e.key === "A" && e.shiftKey) {
+      e.preventDefault();
+      markAllAsRead.mutate({
+        feedId: selectedFeed,
+        category: selectedFeed ? null : selectedCategory,
+      });
+    } else if (e.key === "S" && e.shiftKey) {
+      e.preventDefault();
+      handleSaveSearch();
     }
-  }, [handleSelectArticle, handleToggleStar, handleToggleRead, handleRefresh, selectedArticleSnapshot]);
+  }, [handleSelectArticle, handleToggleStar, handleToggleRead, handleRefresh, selectedArticleSnapshot, markAllAsRead, selectedFeed, selectedCategory, handleSaveSearch]);
 
   useEffect(() => {
     async function checkSetup() {
@@ -418,6 +460,7 @@ export default function RSSReaderPage() {
               }
               isMarkingAllRead={markAllAsRead.isPending}
               onSaveSearch={handleSaveSearch}
+              onShowShortcuts={() => setShortcutsOpen(true)}
             />
             <ArticleList
               articles={filteredArticles}
@@ -479,6 +522,7 @@ export default function RSSReaderPage() {
           }
           isMarkingAllRead={markAllAsRead.isPending}
           onSaveSearch={handleSaveSearch}
+          onShowShortcuts={() => setShortcutsOpen(true)}
         />
         <ArticleList
           articles={filteredArticles}
@@ -509,6 +553,11 @@ export default function RSSReaderPage() {
           showBackButton={!!selectedArticle}
         />
       </div>
+
+      <KeyboardShortcutsDialog
+        open={shortcutsOpen}
+        onOpenChange={setShortcutsOpen}
+      />
     </div>
   );
 }

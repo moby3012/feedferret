@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { getEffectiveSettings } from "./settings";
+import { applyAutoReadRules } from "./auto-read-rules";
 
 // Helper to sanitize content only when needed, avoiding build-time jsdom loading issues
 async function getSanitizer() {
@@ -122,6 +123,13 @@ export async function syncUserFeeds(userId: string) {
             }),
         );
         results.push(...batchResults);
+    }
+
+    const hasSynced = results.some((r: any) => r.success && !r.skipped);
+    if (hasSynced) {
+        await applyAutoReadRules(userId).catch((e) =>
+            console.error("[rss-sync] applyAutoReadRules failed:", e),
+        );
     }
 
     return results;

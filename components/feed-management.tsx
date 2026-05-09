@@ -19,6 +19,13 @@ import {
   useDeleteSavedSearch,
   useFeedHealth,
   useApplyRetentionPolicies,
+  useAutoReadRules,
+  useCreateAutoReadRule,
+  useUpdateAutoReadRule,
+  useDeleteAutoReadRule,
+  useApplyAutoReadRulesNow,
+  usePreviewAutoReadRule,
+  useExportUserData,
 } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,6 +62,10 @@ import {
   Bookmark,
   Activity,
   ShieldCheck,
+  Plus,
+  Play,
+  Power,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -217,9 +228,11 @@ function SortableCategoryItem({
 export function FeedManagement({
   open,
   onOpenChange,
+  initialTab,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTab?: "feeds" | "categories" | "labels" | "saved-searches" | "health" | "rules";
 }) {
   const { data: feeds = [] } = useFeeds();
   const deleteFeed = useDeleteFeed();
@@ -230,11 +243,18 @@ export function FeedManagement({
   const updateCategoryOrder = useUpdateCategoryOrder();
   const importOpml = useImportOpml();
   const exportOpml = useExportOpml();
+  const exportUserData = useExportUserData();
   const createLabel = useCreateLabel();
   const deleteLabel = useDeleteLabel();
   const deleteSavedSearch = useDeleteSavedSearch();
   const applyRetention = useApplyRetentionPolicies();
   const { data: feedHealth = [] } = useFeedHealth();
+  const { data: autoReadRules = [] } = useAutoReadRules();
+  const createAutoReadRule = useCreateAutoReadRule();
+  const updateAutoReadRule = useUpdateAutoReadRule();
+  const deleteAutoReadRule = useDeleteAutoReadRule();
+  const applyAutoReadRulesNow = useApplyAutoReadRulesNow();
+  const previewAutoReadRule = usePreviewAutoReadRule();
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newLabelName, setNewLabelName] = useState("");
@@ -245,10 +265,16 @@ export function FeedManagement({
   );
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<null | {
-    type: "feed" | "category" | "label" | "saved-search";
+    type: "feed" | "category" | "label" | "saved-search" | "auto-read-rule";
     id: string;
     name: string;
   }>(null);
+
+  const [newRuleName, setNewRuleName] = useState("");
+  const [newRuleQuery, setNewRuleQuery] = useState("");
+  const [newRuleAction, setNewRuleAction] = useState("mark_read");
+  const [rulePreview, setRulePreview] = useState<any[] | null>(null);
+  const [showAddRule, setShowAddRule] = useState(false);
 
   const { data: categories = [] } = useCategories();
   const { data: labels = [] } = useLabels();
@@ -375,7 +401,11 @@ export function FeedManagement({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="feeds" className="flex-1 flex flex-col min-h-0">
+        <Tabs
+          defaultValue={initialTab ?? "feeds"}
+          key={initialTab ?? "feeds"}
+          className="flex-1 flex flex-col min-h-0"
+        >
           <div className="px-6 py-4 sm:px-8">
             <TabsList className="bg-muted/45 p-1 rounded-2xl w-fit border border-border/60 shadow-inner shadow-black/[0.02]">
               <TabsTrigger
@@ -407,6 +437,12 @@ export function FeedManagement({
                 className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
               >
                 Health
+              </TabsTrigger>
+              <TabsTrigger
+                value="rules"
+                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                Rules
               </TabsTrigger>
             </TabsList>
           </div>
@@ -776,7 +812,253 @@ export function FeedManagement({
                     Generate Export
                   </Button>
                 </div>
+
+                <div className="space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm">
+                  <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em]">
+                    <Download className="w-6 h-6 text-muted-foreground" />
+                    Export all data (JSON)
+                  </div>
+                  <p className="text-muted-foreground">
+                    Download feeds, labels, saved searches, and auto-read rules as JSON.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="h-12 rounded-2xl border-border/70 bg-background/70 px-8 shadow-sm transition-all hover:bg-background active:scale-95"
+                    disabled={exportUserData.isPending}
+                    onClick={() =>
+                      exportUserData.mutate(undefined, {
+                        onSuccess: (json) => {
+                          const blob = new Blob([json], { type: "application/json" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `feedferret-export-${new Date().toISOString().split("T")[0]}.json`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                          toast.success("Data exported");
+                        },
+                      })
+                    }
+                  >
+                    Export JSON
+                  </Button>
+                </div>
               </div>
+            </TabsContent>
+
+            <TabsContent
+              value="rules"
+              className="h-full mt-0 focus-visible:outline-none"
+            >
+              <ScrollArea className="h-full px-6 sm:px-8">
+                <div className="space-y-6 py-4 pb-8">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold tracking-tight">Auto-mark rules</h3>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        Automatically mark, star, or label articles matching a search query on each sync.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl gap-1.5"
+                        onClick={() => applyAutoReadRulesNow.mutate()}
+                        disabled={applyAutoReadRulesNow.isPending}
+                      >
+                        <Play className="w-3.5 h-3.5" />
+                        Run now
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="rounded-xl gap-1.5"
+                        onClick={() => setShowAddRule(true)}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add rule
+                      </Button>
+                    </div>
+                  </div>
+
+                  {showAddRule && (
+                    <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
+                      <h4 className="font-medium text-sm">New rule</h4>
+                      <div className="grid gap-3">
+                        <Input
+                          placeholder="Rule name"
+                          value={newRuleName}
+                          onChange={(e) => setNewRuleName(e.target.value)}
+                          className="rounded-xl h-10"
+                        />
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder='Query, e.g. feed:TechCrunch is:unread'
+                            value={newRuleQuery}
+                            onChange={(e) => {
+                              setNewRuleQuery(e.target.value);
+                              setRulePreview(null);
+                            }}
+                            className="rounded-xl h-10 flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-xl shrink-0 gap-1.5"
+                            disabled={!newRuleQuery.trim() || previewAutoReadRule.isPending}
+                            onClick={() =>
+                              previewAutoReadRule.mutate(
+                                { query: newRuleQuery },
+                                { onSuccess: (data) => setRulePreview(data) },
+                              )
+                            }
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            Preview
+                          </Button>
+                        </div>
+                        <Select value={newRuleAction} onValueChange={setNewRuleAction}>
+                          <SelectTrigger className="rounded-xl h-10">
+                            <SelectValue placeholder="Action" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="mark_read">Mark as read</SelectItem>
+                            <SelectItem value="star">Star article</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {rulePreview !== null && (
+                        <div className="rounded-xl bg-muted/40 p-3 text-sm">
+                          {rulePreview.length === 0 ? (
+                            <p className="text-muted-foreground italic">No matching articles found</p>
+                          ) : (
+                            <div className="space-y-1">
+                              <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                                {rulePreview.length} matching article{rulePreview.length !== 1 ? "s" : ""}
+                              </p>
+                              {rulePreview.map((a: any) => (
+                                <div key={a.id} className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground shrink-0">
+                                    {a.feedName}
+                                  </span>
+                                  <span className="truncate text-sm">{a.title}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="rounded-xl"
+                          onClick={() => {
+                            setShowAddRule(false);
+                            setNewRuleName("");
+                            setNewRuleQuery("");
+                            setNewRuleAction("mark_read");
+                            setRulePreview(null);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="rounded-xl"
+                          disabled={
+                            !newRuleName.trim() ||
+                            !newRuleQuery.trim() ||
+                            createAutoReadRule.isPending
+                          }
+                          onClick={() =>
+                            createAutoReadRule.mutate(
+                              {
+                                name: newRuleName.trim(),
+                                query: newRuleQuery.trim(),
+                                action: newRuleAction,
+                              },
+                              {
+                                onSuccess: () => {
+                                  setShowAddRule(false);
+                                  setNewRuleName("");
+                                  setNewRuleQuery("");
+                                  setNewRuleAction("mark_read");
+                                  setRulePreview(null);
+                                },
+                              },
+                            )
+                          }
+                        >
+                          Save rule
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {autoReadRules.length === 0 && !showAddRule ? (
+                    <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center">
+                      <p className="text-muted-foreground text-sm">No rules yet. Rules run automatically after each sync.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {autoReadRules.map((rule: any) => (
+                        <div
+                          key={rule.id}
+                          className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3"
+                        >
+                          <button
+                            onClick={() =>
+                              updateAutoReadRule.mutate({
+                                ruleId: rule.id,
+                                data: { enabled: !rule.enabled },
+                              })
+                            }
+                            className={cn(
+                              "shrink-0 rounded-lg p-1.5 transition-colors",
+                              rule.enabled
+                                ? "text-primary bg-primary/10"
+                                : "text-muted-foreground/50 bg-muted",
+                            )}
+                            title={rule.enabled ? "Disable rule" : "Enable rule"}
+                          >
+                            <Power className="w-3.5 h-3.5" />
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{rule.name}</p>
+                            <p className="text-xs text-muted-foreground font-mono truncate">{rule.query}</p>
+                          </div>
+                          <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                            {rule.action === "mark_read"
+                              ? "mark read"
+                              : rule.action === "star"
+                                ? "star"
+                                : `label`}
+                          </span>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="w-7 h-7 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                            onClick={() =>
+                              setPendingDelete({
+                                type: "auto-read-rule",
+                                id: rule.id,
+                                name: rule.name,
+                              })
+                            }
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
             </TabsContent>
           </div>
         </Tabs>
@@ -795,7 +1077,9 @@ export function FeedManagement({
                     ? "category"
                     : pendingDelete?.type === "label"
                       ? "label"
-                      : "saved search"}?
+                      : pendingDelete?.type === "auto-read-rule"
+                        ? "rule"
+                        : "saved search"}?
               </AlertDialogTitle>
               <AlertDialogDescription>
                 “{pendingDelete?.name}” will be removed. This cannot be undone.
@@ -813,6 +1097,8 @@ export function FeedManagement({
                     deleteCategory.mutate(pendingDelete.id);
                   } else if (pendingDelete.type === "label") {
                     deleteLabel.mutate(pendingDelete.id);
+                  } else if (pendingDelete.type === "auto-read-rule") {
+                    deleteAutoReadRule.mutate(pendingDelete.id);
                   } else {
                     deleteSavedSearch.mutate(pendingDelete.id);
                   }

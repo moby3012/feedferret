@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  ExternalLink,
   Laptop,
   LogOut,
   Moon,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useReadingPreferences, useUpdateGlobalSettings } from "@/hooks/use-rss-data";
 
 const themeOptions = [
   { id: "light", label: "Light", icon: Sun },
@@ -26,6 +28,8 @@ export function SettingsForm() {
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
+  const { data: prefs } = useReadingPreferences();
+  const updateSettings = useUpdateGlobalSettings();
 
   return (
     <main className="min-h-dvh app-chrome text-foreground">
@@ -90,6 +94,45 @@ export function SettingsForm() {
                   );
                 })}
               </div>
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+                  <ExternalLink className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">
+                    Reading
+                  </h2>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                    Open original article in new tab when selecting from list.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                role="switch"
+                aria-checked={prefs?.openOriginalByDefault ?? false}
+                onClick={() =>
+                  updateSettings.mutate({
+                    openOriginalByDefault: !(prefs?.openOriginalByDefault ?? false),
+                  })
+                }
+                className={cn(
+                  "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                  prefs?.openOriginalByDefault ? "bg-primary" : "bg-muted",
+                )}
+              >
+                <span
+                  className={cn(
+                    "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200",
+                    prefs?.openOriginalByDefault ? "translate-x-5" : "translate-x-0",
+                  )}
+                />
+              </button>
             </div>
           </section>
 

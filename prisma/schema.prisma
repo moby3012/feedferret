@@ -22,11 +22,27 @@ model User {
   articles      Article[]
   labels        Label[]
   savedSearches SavedSearch[]
+  autoReadRules AutoReadRule[]
   defaultUpdateFrequency Int @default(60)
   defaultRetentionDays Int @default(90)
+  openOriginalByDefault Boolean @default(false)
   role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model AutoReadRule {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  query     String
+  action    String   // "mark_read" | "star" | "label:<labelId>"
+  enabled   Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([userId, enabled, order])
 }
 
 model Account {

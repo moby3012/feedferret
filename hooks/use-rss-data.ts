@@ -1,8 +1,8 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, importOpml, exportOpml, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, getFeedHealth, applyRetentionPolicies } from "@/app/actions/feeds"
-import { updateProfile, updateGlobalSettings } from "@/app/actions/settings"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule } from "@/app/actions/feeds"
+import { updateProfile, updateGlobalSettings, getReadingPreferences } from "@/app/actions/settings"
 import { toast } from "sonner"
 
 export function useFeeds() {
@@ -107,6 +107,22 @@ export function useRefresh() {
     })
 }
 
+export function useRefreshFeed() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (feedId: string) => refreshFeed(feedId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+            queryClient.invalidateQueries({ queryKey: ["feed-health"] })
+            toast.success("Feed refreshed")
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Refresh failed")
+        },
+    })
+}
+
 export function useImportOpml() {
     const queryClient = useQueryClient()
     return useMutation({
@@ -121,6 +137,15 @@ export function useImportOpml() {
 export function useExportOpml() {
     return useMutation({
         mutationFn: () => exportOpml(),
+    })
+}
+
+export function useExportUserData() {
+    return useMutation({
+        mutationFn: () => exportUserData(),
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Export failed")
+        },
     })
 }
 
@@ -225,6 +250,13 @@ export function useUpdateFeedOrder() {
     })
 }
 
+export function useReadingPreferences() {
+    return useQuery({
+        queryKey: ["reading-preferences"],
+        queryFn: () => getReadingPreferences(),
+    })
+}
+
 export function useUpdateProfile() {
     return useMutation({
         mutationFn: (data: { name?: string; email?: string }) => updateProfile(data),
@@ -232,8 +264,13 @@ export function useUpdateProfile() {
 }
 
 export function useUpdateGlobalSettings() {
+    const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: (data: { defaultUpdateFrequency?: number }) => updateGlobalSettings(data),
+        mutationFn: (data: { defaultUpdateFrequency?: number; openOriginalByDefault?: boolean }) =>
+            updateGlobalSettings(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["reading-preferences"] })
+        },
     })
 }
 
@@ -308,6 +345,80 @@ export function useSetArticleLabels() {
                 return old.map((item) => item.id === article.id ? article : item)
             })
         },
+    })
+}
+
+export function useAutoReadRules() {
+    return useQuery({
+        queryKey: ["auto-read-rules"],
+        queryFn: () => getAutoReadRules(),
+    })
+}
+
+export function useCreateAutoReadRule() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: { name: string; query: string; action: string }) =>
+            createAutoReadRule(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
+            toast.success("Rule created")
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not create rule")
+        },
+    })
+}
+
+export function useUpdateAutoReadRule() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({
+            ruleId,
+            data,
+        }: {
+            ruleId: string
+            data: Partial<{ name: string; query: string; action: string; enabled: boolean; order: number }>
+        }) => updateAutoReadRule(ruleId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not update rule")
+        },
+    })
+}
+
+export function useDeleteAutoReadRule() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (ruleId: string) => deleteAutoReadRule(ruleId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
+            toast.success("Rule deleted")
+        },
+    })
+}
+
+export function useApplyAutoReadRulesNow() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: () => applyAutoReadRulesNow(),
+        onSuccess: (result) => {
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            toast.success(`Rules applied: ${result.applied} articles updated`)
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Failed to apply rules")
+        },
+    })
+}
+
+export function usePreviewAutoReadRule() {
+    return useMutation({
+        mutationFn: ({ query, limit }: { query: string; limit?: number }) =>
+            previewAutoReadRule(query, limit),
     })
 }
 

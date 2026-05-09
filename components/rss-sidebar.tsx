@@ -21,7 +21,20 @@ import {
   GripVertical,
   Tag,
   Bookmark,
+  MoreHorizontal,
+  RefreshCw,
+  CheckCheck,
+  ExternalLink,
+  Pencil,
+  Activity,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +49,8 @@ import {
   useStarredCount,
   useLabels,
   useSavedSearches,
+  useRefreshFeed,
+  useMarkAllAsRead,
 } from "@/hooks/use-rss-data";
 import { ServerManagementDialog } from "./server-management-dialog";
 import { toast } from "sonner";
@@ -89,6 +104,9 @@ export function RssSidebar({
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isManagementOpen, setIsManagementOpen] = useState(false);
+  const [managementInitialTab, setManagementInitialTab] = useState<
+    "feeds" | "categories" | "labels" | "saved-searches" | "health" | "rules" | undefined
+  >(undefined);
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [newFeedCategoryId, setNewFeedCategoryId] = useState<string>("none");
@@ -102,6 +120,26 @@ export function RssSidebar({
   const { data: starredCount = 0 } = useStarredCount();
   const { data: labels = [] } = useLabels();
   const { data: savedSearches = [] } = useSavedSearches();
+  const refreshFeed = useRefreshFeed();
+  const markAllRead = useMarkAllAsRead();
+
+  const openFeedManagement = (tab?: typeof managementInitialTab) => {
+    setManagementInitialTab(tab);
+    setIsManagementOpen(true);
+  };
+
+  const renderFeedRow = (feed: any) => (
+    <FeedRow
+      key={feed.id}
+      feed={feed}
+      isSelected={selectedFeed === feed.id}
+      onSelect={() => onSelectFeed(feed.id)}
+      onRefresh={() => refreshFeed.mutate(feed.id)}
+      onMarkRead={() => markAllRead.mutate({ feedId: feed.id })}
+      onEdit={() => openFeedManagement("feeds")}
+      onShowHealth={() => openFeedManagement("health")}
+    />
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -487,14 +525,7 @@ export function RssSidebar({
 
             {searchQuery ? (
               <div className="space-y-1">
-                {filteredFeeds?.map((feed) => (
-                  <SimpleFeedItem
-                    key={feed.id}
-                    feed={feed}
-                    isSelected={selectedFeed === feed.id}
-                    onSelect={() => onSelectFeed(feed.id)}
-                  />
-                ))}
+                {filteredFeeds?.map((feed) => renderFeedRow(feed))}
                 {filteredFeeds?.length === 0 && (
                   <p className="text-sm text-muted-foreground px-4">
                     No feeds found
@@ -525,14 +556,14 @@ export function RssSidebar({
                         onSelectFeed={onSelectFeed}
                         expanded={expandedCategories.includes(category.id)}
                         onToggle={() => toggleCategory(category.id)}
+                        renderFeedRow={renderFeedRow}
                       />
                     ))}
 
                     {/* Uncategorized Feeds */}
                     <UncategorizedGroup
                       feeds={feeds.filter((f) => !f.categoryId)}
-                      selectedFeed={selectedFeed}
-                      onSelectFeed={onSelectFeed}
+                      renderFeedRow={renderFeedRow}
                     />
                   </div>
                 </SortableContext>
@@ -574,7 +605,7 @@ export function RssSidebar({
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 h-11 rounded-xl"
-          onClick={() => setIsManagementOpen(true)}
+          onClick={() => openFeedManagement(undefined)}
         >
           <Folder className="w-4 h-4" />
           Manage Feeds
@@ -593,7 +624,11 @@ export function RssSidebar({
 
       <FeedManagement
         open={isManagementOpen}
-        onOpenChange={setIsManagementOpen}
+        onOpenChange={(open) => {
+          setIsManagementOpen(open);
+          if (!open) setManagementInitialTab(undefined);
+        }}
+        initialTab={managementInitialTab}
       />
       <ServerManagementDialog
         open={isServerManagementOpen}
@@ -610,6 +645,7 @@ function SortableCategory({
   onSelectFeed,
   expanded,
   onToggle,
+  renderFeedRow,
 }: any) {
   const {
     attributes,
@@ -664,8 +700,7 @@ function SortableCategory({
               <SortableFeedItem
                 key={feed.id}
                 feed={feed}
-                isSelected={selectedFeed === feed.id}
-                onSelect={() => onSelectFeed(feed.id)}
+                renderFeedRow={renderFeedRow}
               />
             ))}
           </SortableContext>
@@ -680,7 +715,7 @@ function SortableCategory({
   );
 }
 
-function SortableFeedItem({ feed, isSelected, onSelect }: any) {
+function SortableFeedItem({ feed, renderFeedRow }: any) {
   const {
     attributes,
     listeners,
@@ -704,26 +739,26 @@ function SortableFeedItem({ feed, isSelected, onSelect }: any) {
     <div
       ref={setNodeRef}
       style={style}
-      className="group/feed flex items-center"
+      className="group/feed flex items-center min-w-0"
     >
       <div
         {...attributes}
         {...listeners}
-        className="opacity-0 group-hover/feed:opacity-100 cursor-grab active:cursor-grabbing p-1"
+        className="opacity-0 group-hover/feed:opacity-100 cursor-grab active:cursor-grabbing p-1 shrink-0"
       >
         <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30" />
       </div>
-      <SimpleFeedItem feed={feed} isSelected={isSelected} onSelect={onSelect} />
+      <div className="flex-1 min-w-0">{renderFeedRow(feed)}</div>
     </div>
   );
 }
 
-function SimpleFeedItem({ feed, isSelected, onSelect }: any) {
+function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
   return (
     <button
       onClick={onSelect}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm transition-all group",
+        "w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm transition-all group min-w-0",
         isSelected
           ? "bg-primary text-primary-foreground shadow-sm"
           : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-sidebar-foreground",
@@ -731,7 +766,7 @@ function SimpleFeedItem({ feed, isSelected, onSelect }: any) {
     >
       <span className="text-lg shrink-0">{feed.icon || "📰"}</span>
       <span className="flex-1 text-left truncate font-medium">{feed.name}</span>
-      {feed.unreadCount > 0 && (
+      {!hideUnreadBadge && feed.unreadCount > 0 && (
         <span
           className={cn(
             "text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums",
@@ -747,7 +782,121 @@ function SimpleFeedItem({ feed, isSelected, onSelect }: any) {
   );
 }
 
-function UncategorizedGroup({ feeds, selectedFeed, onSelectFeed }: any) {
+function FeedQuickActions({
+  feed,
+  onRefresh,
+  onMarkRead,
+  onEdit,
+  onShowHealth,
+}: {
+  feed: any;
+  onRefresh: () => void;
+  onMarkRead: () => void;
+  onEdit: () => void;
+  onShowHealth: () => void;
+}) {
+  const websiteUrl = (() => {
+    try {
+      return new URL(feed.url).origin;
+    } catch {
+      return null;
+    }
+  })();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          aria-label="Feed actions"
+          onClick={(e) => e.stopPropagation()}
+          className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/80 hover:text-foreground hover:bg-sidebar-accent/60 transition-colors"
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-52 rounded-2xl p-2 shadow-2xl border-none bg-popover/95 backdrop-blur-xl"
+      >
+        <DropdownMenuItem
+          className="rounded-xl py-2.5 px-3 text-sm"
+          onClick={onRefresh}
+        >
+          <RefreshCw className="w-4 h-4 mr-3" />
+          Refresh feed
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="rounded-xl py-2.5 px-3 text-sm"
+          onClick={onMarkRead}
+        >
+          <CheckCheck className="w-4 h-4 mr-3" />
+          Mark all as read
+        </DropdownMenuItem>
+        {websiteUrl && (
+          <DropdownMenuItem
+            className="rounded-xl py-2.5 px-3 text-sm"
+            onClick={() => window.open(websiteUrl, "_blank", "noopener,noreferrer")}
+          >
+            <ExternalLink className="w-4 h-4 mr-3" />
+            Open website
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator className="my-1.5 bg-border/50" />
+        <DropdownMenuItem
+          className="rounded-xl py-2.5 px-3 text-sm"
+          onClick={onEdit}
+        >
+          <Pencil className="w-4 h-4 mr-3" />
+          Edit feed
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="rounded-xl py-2.5 px-3 text-sm"
+          onClick={onShowHealth}
+        >
+          <Activity className="w-4 h-4 mr-3" />
+          Feed health
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function FeedRow({
+  feed,
+  isSelected,
+  onSelect,
+  onRefresh,
+  onMarkRead,
+  onEdit,
+  onShowHealth,
+}: {
+  feed: any;
+  isSelected: boolean;
+  onSelect: () => void;
+  onRefresh: () => void;
+  onMarkRead: () => void;
+  onEdit: () => void;
+  onShowHealth: () => void;
+}) {
+  return (
+    <div className="group/row relative flex items-center gap-1 min-w-0">
+      <div className="flex-1 min-w-0">
+        <SimpleFeedItem feed={feed} isSelected={isSelected} onSelect={onSelect} />
+      </div>
+      <div className="opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 data-[state=open]:opacity-100 transition-opacity">
+        <FeedQuickActions
+          feed={feed}
+          onRefresh={onRefresh}
+          onMarkRead={onMarkRead}
+          onEdit={onEdit}
+          onShowHealth={onShowHealth}
+        />
+      </div>
+    </div>
+  );
+}
+
+function UncategorizedGroup({ feeds, renderFeedRow }: any) {
   if (feeds.length === 0) return null;
   return (
     <div className="py-2">
@@ -757,14 +906,7 @@ function UncategorizedGroup({ feeds, selectedFeed, onSelectFeed }: any) {
         </h3>
       </div>
       <div className="ml-4 pl-2 py-1 space-y-0.5">
-        {feeds.map((feed: any) => (
-          <SimpleFeedItem
-            key={feed.id}
-            feed={feed}
-            isSelected={selectedFeed === feed.id}
-            onSelect={() => onSelectFeed(feed.id)}
-          />
-        ))}
+        {feeds.map((feed: any) => renderFeedRow(feed))}
       </div>
     </div>
   );
