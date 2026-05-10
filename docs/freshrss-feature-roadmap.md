@@ -64,22 +64,22 @@ FreshRSS can reshare selections as HTML/RSS/OPML.
 - RSS feed for saved search results.
 - Optional tokenized/private links.
 
-### 8. Feed Authentication and Fetch Options
+### 8. Feed Authentication and Fetch Options ✅ Done
 FreshRSS supports feed credentials and request options.
 
-- HTTP Basic Auth per feed.
-- Custom User-Agent.
-- Timeout per feed.
-- SSL strict/ignore option.
-- Redirect handling and max-size limit.
+- HTTP Basic Auth per feed. ✅ (`authType`, `authUsername`, `authPassword` fields + FeedEditDialog Auth tab)
+- Custom User-Agent. ✅ (`customUserAgent` field)
+- Timeout per feed. ✅ (`fetchTimeoutSecs` field)
+- SSL strict/ignore option. ✅ (`sslVerify` toggle)
+- Max-size limit. ✅ (`maxSizeKb` field, truncates content)
 
-### 9. Improved Full-Text Extraction Settings
+### 9. Improved Full-Text Extraction Settings ✅ Done
 FreshRSS supports truncated-feed handling via CSS/XPath configuration.
 
-- Per-feed CSS selector for article body.
-- Per-feed remove selectors.
-- Test extraction preview.
-- Auto-fetch full text on sync.
+- Per-feed CSS selector for article body. ✅ (`fullTextSelector` field)
+- Per-feed remove selectors. ✅ (`fullTextRemoveSelectors` comma-separated)
+- Test extraction preview. ✅ (`previewFeedExtraction` action + FeedEditDialog Full-Text tab)
+- Auto-fetch full text on sync. ✅ (`autoFetchFullText` toggle, runs after each sync)
 
 ### 10. Retention Policy UI Expansion
 FreshRSS offers stronger archive/purge control.
@@ -167,7 +167,7 @@ FreshRSS documents SSRF risk. FeedFerret should add first-class mitigations.
 1. ~~Keyboard shortcut help overlay.~~ ✅ Done
 2. ~~Per-feed quick actions menu.~~ ✅ Done
 3. ~~Auto-mark-as-read rules using existing advanced search parser.~~ ✅ Done
-4. Feed authentication/fetch options.
-5. Full-text extraction selector preview.
+4. ~~Feed authentication/fetch options.~~ ✅ Done
+5. ~~Full-text extraction selector preview.~~ ✅ Done
 
 These build directly on the features already implemented and bring FeedFerret much closer to FreshRSS without sacrificing the clean Apple-like UX.

@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, previewFeedExtraction } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings, getReadingPreferences } from "@/app/actions/settings"
 import { toast } from "sonner"
 
@@ -162,7 +162,7 @@ export function useAddFeed() {
 export function useUpdateFeed() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: ({ feedId, data }: { feedId: string; data: { name?: string; categoryId?: string | null; updateFrequency?: number | null; retentionDays?: number | null } }) =>
+        mutationFn: ({ feedId, data }: { feedId: string; data: Parameters<typeof updateFeed>[1] }) =>
             updateFeed(feedId, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
@@ -453,5 +453,12 @@ export function useDeleteSavedSearch() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["saved-searches"] })
         },
+    })
+}
+
+export function usePreviewFeedExtraction() {
+    return useMutation({
+        mutationFn: ({ feedId, articleUrl }: { feedId: string; articleUrl: string }) =>
+            previewFeedExtraction(feedId, articleUrl),
     })
 }

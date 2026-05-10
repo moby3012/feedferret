@@ -279,7 +279,25 @@ export async function deleteFeed(feedId: string) {
     revalidatePath("/");
 }
 
-export async function updateFeed(feedId: string, data: { name?: string; categoryId?: string | null; updateFrequency?: number | null; retentionDays?: number | null }) {
+export async function updateFeed(feedId: string, data: {
+    name?: string;
+    categoryId?: string | null;
+    updateFrequency?: number | null;
+    retentionDays?: number | null;
+    // Auth
+    authType?: string | null;
+    authUsername?: string | null;
+    authPassword?: string | null;
+    // Fetch options
+    customUserAgent?: string | null;
+    fetchTimeoutSecs?: number | null;
+    sslVerify?: boolean;
+    maxSizeKb?: number | null;
+    // Full-text extraction
+    fullTextSelector?: string | null;
+    fullTextRemoveSelectors?: string | null;
+    autoFetchFullText?: boolean;
+}) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -883,4 +901,72 @@ export async function previewAutoReadRule(query: string, limit = 10) {
     if (!session?.user?.id) throw new Error("Unauthorized");
     const { previewAutoReadRuleMatches } = await import("@/lib/auto-read-rules");
     return previewAutoReadRuleMatches(session.user.id, query, limit);
+}
+
+export async function previewFeedExtraction(feedId: string, articleUrl: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const feed = await db.feed.findFirst({
+        where: { id: feedId, userId: session.user.id },
+        select: { fullTextSelector: true, fullTextRemoveSelectors: true },
+    });
+    if (!feed) throw new Error("Feed not found");
+
+    const response = await fetch(articleUrl, {
+        headers: {
+            "User-Agent": "FeedFerret/1.0",
+            Accept: "text/html,application/xhtml+xml",
+        },
+        signal: AbortSignal.timeout(12_000),
+    });
+    if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+
+    const html = await response.text();
+    const { JSDOM } = await import("jsdom");
+    const { default: DOMPurify } = await import("isomorphic-dompurify");
+    const dom = new JSDOM(html, { url: articleUrl });
+    const document = dom.window.document;
+
+    const removeSelectors = [
+        "script", "style", "nav", "footer", "header", "aside", "form", "iframe", "noscript", "svg",
+        ...(feed.fullTextRemoveSelectors
+            ? feed.fullTextRemoveSelectors.split(",").map((s) => s.trim()).filter(Boolean)
+            : []),
+    ];
+    document.querySelectorAll(removeSelectors.join(",")).forEach((n) => n.remove());
+
+    document.querySelectorAll("a[href], img[src]").forEach((node) => {
+        const attr = node instanceof dom.window.HTMLImageElement ? "src" : "href";
+        const value = node.getAttribute(attr);
+        if (!value) return;
+        try { node.setAttribute(attr, new URL(value, articleUrl).toString()); } catch { /* ignore */ }
+    });
+
+    let best: Element | undefined;
+    if (feed.fullTextSelector) {
+        best = document.querySelector(feed.fullTextSelector) ?? undefined;
+    }
+    if (!best) {
+        const candidates = ["article", "main", "[role='main']", ".post-content", ".entry-content", ".article-content", ".content"]
+            .flatMap((s) => Array.from(document.querySelectorAll(s)))
+            .concat(Array.from(document.body.children));
+        best = candidates
+            .map((el) => ({
+                el,
+                score: (el.textContent?.trim().length || 0) + el.querySelectorAll("p").length * 250 - el.querySelectorAll("a").length * 20,
+            }))
+            .sort((a, b) => b.score - a.score)[0]?.el;
+    }
+
+    if (!best) throw new Error("Could not find article content");
+
+    const sanitized = DOMPurify.sanitize(best.innerHTML, { ADD_ATTR: ["target", "rel"] }).trim();
+    const plain = DOMPurify.sanitize(sanitized, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
+
+    return {
+        html: sanitized.slice(0, 50_000),
+        charCount: plain.length,
+        selectorUsed: feed.fullTextSelector || "(auto-detect)",
+    };
 }

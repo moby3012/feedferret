@@ -66,7 +66,9 @@ import {
   Play,
   Power,
   Eye,
+  Settings2,
 } from "lucide-react";
+import { FeedEditDialog } from "@/components/feed-edit-dialog";
 import { toast } from "sonner";
 import {
   Select,
@@ -275,6 +277,7 @@ export function FeedManagement({
   const [newRuleAction, setNewRuleAction] = useState("mark_read");
   const [rulePreview, setRulePreview] = useState<any[] | null>(null);
   const [showAddRule, setShowAddRule] = useState(false);
+  const [editingFeed, setEditingFeed] = useState<any | null>(null);
 
   const { data: categories = [] } = useCategories();
   const { data: labels = [] } = useLabels();
@@ -521,6 +524,15 @@ export function FeedManagement({
                           });
                         }}
                       />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground opacity-0 transition-all hover:bg-accent group-hover:opacity-100"
+                        title="Feed settings"
+                        onClick={() => setEditingFeed(feed)}
+                      >
+                        <Settings2 className="w-4 h-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1062,6 +1074,12 @@ export function FeedManagement({
             </TabsContent>
           </div>
         </Tabs>
+        <FeedEditDialog
+          feed={editingFeed}
+          open={!!editingFeed}
+          onOpenChange={(open) => { if (!open) setEditingFeed(null); }}
+        />
+
         <AlertDialog
           open={!!pendingDelete}
           onOpenChange={(nextOpen) => {

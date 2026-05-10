@@ -109,6 +109,18 @@ model Feed {
   lastFetchedAt   DateTime?
   lastStatus       String?
   lastError        String?
+  // Auth & fetch options
+  authType          String?   // "basic"
+  authUsername      String?
+  authPassword      String?
+  customUserAgent   String?
+  fetchTimeoutSecs  Int?
+  sslVerify         Boolean   @default(true)
+  maxSizeKb         Int?
+  // Full-text extraction
+  fullTextSelector         String?
+  fullTextRemoveSelectors  String?
+  autoFetchFullText        Boolean   @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, url])
