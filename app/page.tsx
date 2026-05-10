@@ -56,6 +56,7 @@ export default function RSSReaderPage() {
     null,
   );
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [viewModeInitialized, setViewModeInitialized] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -81,6 +82,14 @@ export default function RSSReaderPage() {
   const [readInSession, setReadInSession] = useState<string[]>([]);
   const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
   const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);
+
+  // Initialize viewMode from user prefs (once loaded)
+  useEffect(() => {
+    if (readingPrefs && !viewModeInitialized) {
+      setViewMode((readingPrefs.defaultViewMode as ViewMode) || "list");
+      setViewModeInitialized(true);
+    }
+  }, [readingPrefs, viewModeInitialized]);
 
   // Reset readInSession when feed or category changes
   useEffect(() => {
@@ -142,8 +151,11 @@ export default function RSSReaderPage() {
     }
 
     // Sort AFTER filtering
-    return list.sort((a: any, b: any) => b.publishedAtRaw - a.publishedAtRaw);
-  }, [displayArticles, unreadOnly, selectedCategory, readInSession]);
+    const sortOldest = readingPrefs?.defaultArticleSort === "oldest";
+    return list.sort((a: any, b: any) =>
+      sortOldest ? a.publishedAtRaw - b.publishedAtRaw : b.publishedAtRaw - a.publishedAtRaw,
+    );
+  }, [displayArticles, unreadOnly, selectedCategory, readInSession, readingPrefs?.defaultArticleSort]);
 
   const headerTitle = useMemo(() => {
     if (selectedFeed) {
@@ -183,12 +195,15 @@ export default function RSSReaderPage() {
       return;
     }
 
+    const delaySecs = readingPrefs?.markReadAfterDelaySecs ?? null;
+    if (delaySecs === 0) return; // disabled
+    const delayMs = delaySecs !== null ? delaySecs * 1000 : 1000;
     const timer = window.setTimeout(() => {
       markArticleRead(selectedArticle);
-    }, 1000);
+    }, delayMs);
 
     return () => window.clearTimeout(timer);
-  }, [selectedArticle, readInSession, markArticleRead]);
+  }, [selectedArticle, readInSession, markArticleRead, readingPrefs?.markReadAfterDelaySecs]);
 
   const handleToggleRead = useCallback((articleId: string) => {
     const article = displayArticles.find((a: any) => a.id === articleId) || selectedArticleSnapshot;
@@ -490,6 +505,7 @@ export default function RSSReaderPage() {
               onSetLabels={handleSetLabels}
               onBack={() => setSelectedArticleId(null)}
               showBackButton={!!selectedArticle}
+              readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
             />
           </div>
         </ResizablePanel>
@@ -551,6 +567,7 @@ export default function RSSReaderPage() {
           onSetLabels={handleSetLabels}
           onBack={() => setSelectedArticleId(null)}
           showBackButton={!!selectedArticle}
+          readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
         />
       </div>
 

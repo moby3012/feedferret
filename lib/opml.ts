@@ -43,7 +43,8 @@ export async function parseOpml(xml: string): Promise<OpmlOutline[]> {
 }
 
 /**
- * Generates an OPML string from a list of feeds and categories.
+ * Generates an OPML string from feeds, grouped by category.
+ * Feeds must include a `category` relation object (or null).
  */
 export function generateOpml(feeds: any[]): string {
     const header = `<?xml version="1.0" encoding="UTF-8"?>
@@ -58,12 +59,33 @@ export function generateOpml(feeds: any[]): string {
   </body>
 </opml>`;
 
-    // Simple flat list for now, can be hierarchical later
-    const outlines = feeds.map(feed => {
-        return `    <outline text="${escapeXml(feed.name)}" title="${escapeXml(feed.name)}" type="rss" xmlUrl="${escapeXml(feed.url)}" htmlUrl="${escapeXml(feed.url)}"/>`;
-    }).join("\n");
+    const feedOutline = (feed: any, indent: string) =>
+        `${indent}<outline text="${escapeXml(feed.name)}" title="${escapeXml(feed.name)}" type="rss" xmlUrl="${escapeXml(feed.url)}" htmlUrl="${escapeXml(feed.url || "")}"/>`;
 
-    return header + "\n" + outlines + footer;
+    // Group by category
+    const byCategory = new Map<string | null, any[]>();
+    for (const feed of feeds) {
+        const key = feed.category?.name ?? null;
+        if (!byCategory.has(key)) byCategory.set(key, []);
+        byCategory.get(key)!.push(feed);
+    }
+
+    const lines: string[] = [];
+    // Uncategorized first
+    for (const feed of byCategory.get(null) ?? []) {
+        lines.push(feedOutline(feed, "    "));
+    }
+    // Grouped
+    for (const [catName, catFeeds] of byCategory) {
+        if (catName === null) continue;
+        lines.push(`    <outline text="${escapeXml(catName)}" title="${escapeXml(catName)}">`);
+        for (const feed of catFeeds) {
+            lines.push(feedOutline(feed, "      "));
+        }
+        lines.push(`    </outline>`);
+    }
+
+    return header + "\n" + lines.join("\n") + footer;
 }
 
 function escapeXml(unsafe: string): string {

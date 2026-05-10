@@ -136,7 +136,7 @@ export function useImportOpml() {
 
 export function useExportOpml() {
     return useMutation({
-        mutationFn: () => exportOpml(),
+        mutationFn: (selectedFeedIds?: string[]) => exportOpml(selectedFeedIds),
     })
 }
 
@@ -266,7 +266,7 @@ export function useUpdateProfile() {
 export function useUpdateGlobalSettings() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: (data: { defaultUpdateFrequency?: number; openOriginalByDefault?: boolean }) =>
+        mutationFn: (data: Parameters<typeof updateGlobalSettings>[0]) =>
             updateGlobalSettings(data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["reading-preferences"] })

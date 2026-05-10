@@ -20,30 +20,30 @@ FreshRSS has feed-level actions from the sidebar.
 - Edit feed. ✅ (opens Management → Feeds tab)
 - Show feed health details. ✅ (opens Management → Health tab)
 
-### 3. Better Import/Export Options ✅ Partial
+### 3. Better Import/Export Options ✅ Done
 FreshRSS can export selected feeds and richer backup formats.
 
-- Select categories/feeds for OPML export.
+- Select categories/feeds for OPML export. ✅ (checkboxes in Import/Export tab, `exportOpml(selectedFeedIds?)` action)
 - Export all user data as JSON. ✅ (`exportUserData` action + JSON Export button in Import/Export tab)
-- Show import duplicates and skipped feeds separately.
+- Show import duplicates and skipped feeds separately. ✅ (import report now shows new/already-existed/errors separately with color badges)
 
-### 4. Feed Statistics Cards
+### 4. Feed Statistics Cards ✅ Done
 FreshRSS exposes statistics per feed.
 
-- Articles per feed.
-- Unread trend.
-- Last successful sync.
-- Average articles/day.
-- Error rate.
+- Articles per feed. ✅ (Health tab: articleCount)
+- Unread count. ✅ (Health tab: unreadCount)
+- Last successful sync. ✅ (Health tab: lastFetchedAt)
+- Average articles/day. ✅ (Health tab: avgArticlesPerDay computed from oldest article date)
+- Error rate. ✅ (Health tab: lastStatus + lastError display)
 
-### 5. User Preferences for Reading Behaviour ✅ Partial
+### 5. User Preferences for Reading Behaviour ✅ Done
 FreshRSS allows reading options customization.
 
-- Mark as read after delay setting.
+- Mark as read after delay setting. ✅ (`markReadAfterDelaySecs` User field + Settings select + wired into page.tsx timer)
 - Open original by default setting. ✅ (`openOriginalByDefault` User field + Settings toggle + wired into article select)
-- Default view mode setting.
-- Reader width setting.
-- Default article sort order.
+- Default view mode setting. ✅ (`defaultViewMode` User field + Settings select + initializes viewMode on load)
+- Reader width setting. ✅ (`readerWidth` User field + Settings select + wired into ArticleReader)
+- Default article sort order. ✅ (`defaultArticleSort` User field + Settings select + wired into filteredArticles sort)
 
 ## Medium Effort
 

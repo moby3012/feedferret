@@ -331,11 +331,30 @@ export async function getFeedHealth() {
     });
     const unreadByFeed = new Map(unreadCounts.map((item) => [item.feedId, item._count._all]));
 
-    return feeds.map((feed) => ({
-        ...feed,
-        unreadCount: unreadByFeed.get(feed.id) || 0,
-        articleCount: feed._count.articles,
-    }));
+    // Oldest article per feed for avgArticlesPerDay calculation
+    const oldestByFeed = await db.article.groupBy({
+        by: ["feedId"],
+        where: { userId: session.user.id },
+        _min: { publishedAt: true },
+        _count: { _all: true },
+    });
+    const oldestMap = new Map(oldestByFeed.map((item) => [item.feedId, item._min.publishedAt]));
+
+    return feeds.map((feed) => {
+        const oldest = oldestMap.get(feed.id);
+        const totalArticles = feed._count.articles;
+        let avgArticlesPerDay: number | null = null;
+        if (oldest && totalArticles > 0) {
+            const ageDays = Math.max(1, (Date.now() - new Date(oldest).getTime()) / (1000 * 60 * 60 * 24));
+            avgArticlesPerDay = Math.round((totalArticles / ageDays) * 10) / 10;
+        }
+        return {
+            ...feed,
+            unreadCount: unreadByFeed.get(feed.id) || 0,
+            articleCount: totalArticles,
+            avgArticlesPerDay,
+        };
+    });
 }
 
 export async function applyRetentionPolicies() {
@@ -547,12 +566,19 @@ export async function getArticles(feedId?: string | null, category?: string, sea
     });
 }
 
-export async function exportOpml() {
+export async function exportOpml(selectedFeedIds?: string[]) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
+    const where: any = { userId: session.user.id };
+    if (selectedFeedIds && selectedFeedIds.length > 0) {
+        where.id = { in: selectedFeedIds };
+    }
+
     const feeds = await db.feed.findMany({
-        where: { userId: session.user.id },
+        where,
+        include: { category: { select: { name: true } } },
+        orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
     });
 
     return generateOpml(feeds);

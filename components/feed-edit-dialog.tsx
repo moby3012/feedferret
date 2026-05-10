@@ -52,6 +52,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [customUserAgent, setCustomUserAgent] = useState("");
+  const [updateFrequency, setUpdateFrequency] = useState("");
   const [fetchTimeoutSecs, setFetchTimeoutSecs] = useState("");
   const [sslVerify, setSslVerify] = useState(true);
   const [maxSizeKb, setMaxSizeKb] = useState("");
@@ -71,6 +72,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     setAuthUsername(feed.authUsername || "");
     setAuthPassword(feed.authPassword || "");
     setCustomUserAgent(feed.customUserAgent || "");
+    setUpdateFrequency((feed as any).updateFrequency ? String((feed as any).updateFrequency) : "");
     setFetchTimeoutSecs(feed.fetchTimeoutSecs ? String(feed.fetchTimeoutSecs) : "");
     setSslVerify(feed.sslVerify !== false);
     setMaxSizeKb(feed.maxSizeKb ? String(feed.maxSizeKb) : "");
@@ -91,6 +93,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           authUsername: authType === "basic" ? authUsername || null : null,
           authPassword: authType === "basic" ? authPassword || null : null,
           customUserAgent: customUserAgent.trim() || null,
+          updateFrequency: updateFrequency ? parseInt(updateFrequency) : null,
           fetchTimeoutSecs: fetchTimeoutSecs ? parseInt(fetchTimeoutSecs) : null,
           sslVerify,
           maxSizeKb: maxSizeKb ? parseInt(maxSizeKb) : null,
@@ -198,6 +201,20 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             </TabsContent>
 
             <TabsContent value="fetch" className="mt-0 space-y-5">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Update interval (minutes)</Label>
+                <Input
+                  type="number"
+                  min={5}
+                  max={1440}
+                  value={updateFrequency}
+                  onChange={(e) => setUpdateFrequency(e.target.value)}
+                  placeholder="Global default"
+                  className="rounded-xl h-10 border-border/70 bg-background/70"
+                />
+                <p className="text-xs text-muted-foreground">Override global sync interval for this feed. Increase for slow/rate-limited sources.</p>
+              </div>
+
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Custom User-Agent</Label>
                 <Input

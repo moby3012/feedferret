@@ -278,6 +278,7 @@ export function FeedManagement({
   const [rulePreview, setRulePreview] = useState<any[] | null>(null);
   const [showAddRule, setShowAddRule] = useState(false);
   const [editingFeed, setEditingFeed] = useState<any | null>(null);
+  const [selectedExportIds, setSelectedExportIds] = useState<Set<string>>(new Set());
 
   const { data: categories = [] } = useCategories();
   const { data: labels = [] } = useLabels();
@@ -302,7 +303,8 @@ export function FeedManagement({
   };
 
   const handleExport = () => {
-    exportOpml.mutate(undefined, {
+    const ids = selectedExportIds.size > 0 ? Array.from(selectedExportIds) : undefined;
+    exportOpml.mutate(ids, {
       onSuccess: (xml) => {
         const blob = new Blob([xml], { type: "text/xml" });
         const url = URL.createObjectURL(blob);
@@ -313,7 +315,7 @@ export function FeedManagement({
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast.success("Feeds exported successfully");
+        toast.success(ids ? `${ids.length} feeds exported` : "All feeds exported");
       },
       onError: () => toast.error("Failed to export feeds"),
     });
@@ -751,9 +753,10 @@ export function FeedManagement({
                               </span>
                             </div>
                             <p className="mt-1 truncate text-xs text-muted-foreground">{feed.url}</p>
-                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-5">
                               <span>{feed.articleCount} articles</span>
                               <span>{feed.unreadCount} unread</span>
+                              <span>{feed.avgArticlesPerDay != null ? `${feed.avgArticlesPerDay}/day` : "—"}</span>
                               <span>Sync: {feed.lastFetchedAt ? new Date(feed.lastFetchedAt).toLocaleString() : "never"}</span>
                               <span>Retention: {feed.retentionDays || "default"} days</span>
                             </div>
@@ -786,11 +789,31 @@ export function FeedManagement({
                     from another RSS reader.
                   </p>
                   {lastImportReport && (
-                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4 text-sm">
-                      <p className="font-medium">Last import report</p>
-                      <p className="mt-1 text-muted-foreground">
-                        {lastImportReport.feedsAdded} feeds added · {lastImportReport.feedsUpdated} feeds updated · {lastImportReport.categoriesAdded} categories added · {lastImportReport.errors.length} errors
-                      </p>
+                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4 text-sm space-y-2">
+                      <p className="font-medium">Import result</p>
+                      <div className="flex flex-wrap gap-3 text-xs">
+                        <span className="rounded-full bg-green-500/10 text-green-600 px-2.5 py-1 font-medium">
+                          +{lastImportReport.feedsAdded} new
+                        </span>
+                        <span className="rounded-full bg-blue-500/10 text-blue-600 px-2.5 py-1 font-medium">
+                          {lastImportReport.feedsUpdated} already existed
+                        </span>
+                        <span className="rounded-full bg-muted text-muted-foreground px-2.5 py-1 font-medium">
+                          {lastImportReport.categoriesAdded} categories
+                        </span>
+                        {lastImportReport.errors.length > 0 && (
+                          <span className="rounded-full bg-destructive/10 text-destructive px-2.5 py-1 font-medium">
+                            {lastImportReport.errors.length} errors
+                          </span>
+                        )}
+                      </div>
+                      {lastImportReport.errors.length > 0 && (
+                        <ul className="mt-2 space-y-1">
+                          {lastImportReport.errors.slice(0, 5).map((err: string, i: number) => (
+                            <li key={i} className="text-xs text-destructive truncate">{err}</li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   )}
                   <Label htmlFor="opml-upload" className="block">
@@ -807,22 +830,62 @@ export function FeedManagement({
                   </Label>
                 </div>
 
-                <div className="group space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm transition-all hover:border-border">
-                  <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em]">
-                    <Download className="w-6 h-6 text-muted-foreground" />
-                    Export subscriptions
+                <div className="space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em]">
+                      <Download className="w-6 h-6 text-muted-foreground" />
+                      Export subscriptions
+                    </div>
+                    <div className="flex gap-2 text-xs">
+                      <button
+                        className="text-primary hover:underline"
+                        onClick={() => setSelectedExportIds(new Set(feeds.map((f: any) => f.id)))}
+                      >
+                        Select all
+                      </button>
+                      <span className="text-muted-foreground">·</span>
+                      <button
+                        className="text-muted-foreground hover:underline"
+                        onClick={() => setSelectedExportIds(new Set())}
+                      >
+                        Deselect all
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-muted-foreground">
-                    Download all your feed subscriptions and categories in
-                    standard OPML format.
+                  <p className="text-muted-foreground text-sm">
+                    Select feeds to export, or leave all unchecked to export everything.
                   </p>
-                  <Button
-                    onClick={handleExport}
-                    variant="outline"
-                    className="h-12 rounded-2xl border-border/70 bg-background/70 px-8 shadow-sm transition-all hover:bg-background active:scale-95"
-                  >
-                    Generate Export
-                  </Button>
+                  <div className="max-h-48 overflow-y-auto rounded-2xl border border-border/60 bg-background/40 divide-y divide-border/40">
+                    {feeds.map((feed: any) => (
+                      <label key={feed.id} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30">
+                        <input
+                          type="checkbox"
+                          className="rounded"
+                          checked={selectedExportIds.has(feed.id)}
+                          onChange={(e) => {
+                            const next = new Set(selectedExportIds);
+                            if (e.target.checked) next.add(feed.id);
+                            else next.delete(feed.id);
+                            setSelectedExportIds(next);
+                          }}
+                        />
+                        <span className="text-sm truncate flex-1">{feed.name}</span>
+                        {feed.category && (
+                          <span className="text-xs text-muted-foreground shrink-0">{feed.category.name}</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      onClick={handleExport}
+                      variant="outline"
+                      disabled={exportOpml.isPending}
+                      className="h-12 rounded-2xl border-border/70 bg-background/70 px-8 shadow-sm transition-all hover:bg-background active:scale-95"
+                    >
+                      {selectedExportIds.size > 0 ? `Export ${selectedExportIds.size} feeds` : "Export all feeds"}
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm">

@@ -4,7 +4,10 @@ import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import {
+  AlignLeft,
+  ArrowDownAZ,
   ArrowLeft,
+  Clock,
   ExternalLink,
   Laptop,
   LogOut,
@@ -15,6 +18,13 @@ import {
   User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useReadingPreferences, useUpdateGlobalSettings } from "@/hooks/use-rss-data";
 
@@ -24,12 +34,44 @@ const themeOptions = [
   { id: "system", label: "System", icon: Laptop },
 ];
 
+function PrefRow({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: any;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+            <Icon className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold tracking-[-0.02em]">{title}</h2>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        <div className="shrink-0">{children}</div>
+      </div>
+    </section>
+  );
+}
+
 export function SettingsForm() {
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const { data: prefs } = useReadingPreferences();
   const updateSettings = useUpdateGlobalSettings();
+
+  const update = (data: Parameters<typeof updateSettings.mutate>[0]) =>
+    updateSettings.mutate(data);
 
   return (
     <main className="min-h-dvh app-chrome text-foreground">
@@ -56,6 +98,7 @@ export function SettingsForm() {
         </header>
 
         <div className="grid gap-5">
+          {/* Appearance */}
           <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-4">
@@ -63,16 +106,12 @@ export function SettingsForm() {
                   <Palette className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">
-                    Appearance
-                  </h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">Appearance</h2>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                    Choose the visual mode. The interface uses the same calm,
-                    glassy design language throughout the app.
+                    Choose the visual mode.
                   </p>
                 </div>
               </div>
-
               <div className="grid grid-cols-3 gap-1 rounded-2xl border border-border/70 bg-muted/45 p-1 shadow-inner shadow-black/[0.02]">
                 {themeOptions.map((option) => {
                   const Icon = option.icon;
@@ -97,45 +136,128 @@ export function SettingsForm() {
             </div>
           </section>
 
-          <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent">
-                  <ExternalLink className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">
-                    Reading
-                  </h2>
-                  <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                    Open original article in new tab when selecting from list.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                role="switch"
-                aria-checked={prefs?.openOriginalByDefault ?? false}
-                onClick={() =>
-                  updateSettings.mutate({
-                    openOriginalByDefault: !(prefs?.openOriginalByDefault ?? false),
-                  })
-                }
+          {/* Open original */}
+          <PrefRow
+            icon={ExternalLink}
+            title="Open original"
+            description="Open original article in new tab when selecting from list."
+          >
+            <button
+              role="switch"
+              aria-checked={prefs?.openOriginalByDefault ?? false}
+              onClick={() => update({ openOriginalByDefault: !(prefs?.openOriginalByDefault ?? false) })}
+              className={cn(
+                "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                prefs?.openOriginalByDefault ? "bg-primary" : "bg-muted",
+              )}
+            >
+              <span
                 className={cn(
-                  "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                  prefs?.openOriginalByDefault ? "bg-primary" : "bg-muted",
+                  "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200",
+                  prefs?.openOriginalByDefault ? "translate-x-5" : "translate-x-0",
                 )}
-              >
-                <span
-                  className={cn(
-                    "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200",
-                    prefs?.openOriginalByDefault ? "translate-x-5" : "translate-x-0",
-                  )}
-                />
-              </button>
-            </div>
-          </section>
+              />
+            </button>
+          </PrefRow>
 
+          {/* Mark-as-read delay */}
+          <PrefRow
+            icon={Clock}
+            title="Mark as read"
+            description="How long after opening an article it gets marked as read. 'Off' disables auto-mark."
+          >
+            <Select
+              value={
+                prefs?.markReadAfterDelaySecs === 0
+                  ? "off"
+                  : prefs?.markReadAfterDelaySecs === null || prefs?.markReadAfterDelaySecs === undefined
+                  ? "instant"
+                  : String(prefs.markReadAfterDelaySecs)
+              }
+              onValueChange={(v) =>
+                update({
+                  markReadAfterDelaySecs: v === "off" ? 0 : v === "instant" ? null : parseInt(v),
+                })
+              }
+            >
+              <SelectTrigger className="w-40 rounded-2xl border-border/70 bg-background/70 h-10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="instant">Instant (1s)</SelectItem>
+                <SelectItem value="5">After 5s</SelectItem>
+                <SelectItem value="15">After 15s</SelectItem>
+                <SelectItem value="30">After 30s</SelectItem>
+                <SelectItem value="60">After 60s</SelectItem>
+                <SelectItem value="off">Off</SelectItem>
+              </SelectContent>
+            </Select>
+          </PrefRow>
+
+          {/* Default view mode */}
+          <PrefRow
+            icon={AlignLeft}
+            title="Default view"
+            description="Article list layout shown by default when opening the app."
+          >
+            <Select
+              value={prefs?.defaultViewMode ?? "list"}
+              onValueChange={(v) => update({ defaultViewMode: v })}
+            >
+              <SelectTrigger className="w-40 rounded-2xl border-border/70 bg-background/70 h-10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="list">List</SelectItem>
+                <SelectItem value="grid">Grid</SelectItem>
+                <SelectItem value="magazine">Magazine</SelectItem>
+                <SelectItem value="minimal">Minimal</SelectItem>
+              </SelectContent>
+            </Select>
+          </PrefRow>
+
+          {/* Reader width */}
+          <PrefRow
+            icon={AlignLeft}
+            title="Reader width"
+            description="Maximum width of article content in the reader pane."
+          >
+            <Select
+              value={prefs?.readerWidth ?? "normal"}
+              onValueChange={(v) => update({ readerWidth: v })}
+            >
+              <SelectTrigger className="w-40 rounded-2xl border-border/70 bg-background/70 h-10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="normal">Normal (768px)</SelectItem>
+                <SelectItem value="wide">Wide (1024px)</SelectItem>
+                <SelectItem value="full">Full width</SelectItem>
+              </SelectContent>
+            </Select>
+          </PrefRow>
+
+          {/* Default sort order */}
+          <PrefRow
+            icon={ArrowDownAZ}
+            title="Default sort"
+            description="Default article sort order in all feeds and categories."
+          >
+            <Select
+              value={prefs?.defaultArticleSort ?? "newest"}
+              onValueChange={(v) => update({ defaultArticleSort: v })}
+            >
+              <SelectTrigger className="w-40 rounded-2xl border-border/70 bg-background/70 h-10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="newest">Newest first</SelectItem>
+                <SelectItem value="oldest">Oldest first</SelectItem>
+              </SelectContent>
+            </Select>
+          </PrefRow>
+
+          {/* User Profile */}
           <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-4">
@@ -143,9 +265,7 @@ export function SettingsForm() {
                   <User className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">
-                    User Profile
-                  </h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">User Profile</h2>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
                     Signed in as{" "}
                     <span className="font-medium text-foreground">
@@ -154,7 +274,6 @@ export function SettingsForm() {
                   </p>
                 </div>
               </div>
-
               <Button
                 variant="outline"
                 onClick={() => signOut({ callbackUrl: "/" })}
