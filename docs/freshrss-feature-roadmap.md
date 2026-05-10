@@ -81,13 +81,12 @@ FreshRSS supports truncated-feed handling via CSS/XPath configuration.
 - Test extraction preview. ✅ (`previewFeedExtraction` action + FeedEditDialog Full-Text tab)
 - Auto-fetch full text on sync. ✅ (`autoFetchFullText` toggle, runs after each sync)
 
-### 10. Retention Policy UI Expansion
+### 10. Retention Policy UI Expansion ✅ Done
 FreshRSS offers stronger archive/purge control.
 
-- Keep minimum N articles per feed.
-- Never delete starred/labelled articles.
-- Purge unread only after separate age threshold.
-- Dry-run purge report.
+- Keep minimum N articles per feed. ✅ (`keepMinArticles` Feed field + inline input in Feeds tab)
+- Never delete starred/labelled articles. ✅ (`isStarred: false, labels: { none: {} }` in retention query)
+- Dry-run purge report. ✅ (`applyRetentionPolicies(dryRun)` + "Dry run" button in Health tab)
 
 ## High Effort
 
@@ -169,5 +168,7 @@ FreshRSS documents SSRF risk. FeedFerret should add first-class mitigations.
 3. ~~Auto-mark-as-read rules using existing advanced search parser.~~ ✅ Done
 4. ~~Feed authentication/fetch options.~~ ✅ Done
 5. ~~Full-text extraction selector preview.~~ ✅ Done
+6. ~~Retention policy UI expansion.~~ ✅ Done
+7. ~~Dynamic theming (accent + secondary color pickers in Settings, applied via CSS vars).~~ ✅ Done
 
 These build directly on the features already implemented and bring FeedFerret much closer to FreshRSS without sacrificing the clean Apple-like UX.

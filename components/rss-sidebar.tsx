@@ -302,7 +302,7 @@ export function RssSidebar({
           >
             <item.icon className="w-5 h-5 text-sidebar-foreground" />
             {item.count !== null && item.count > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-accent text-accent-foreground text-xs flex items-center justify-center font-semibold shadow-sm">
+              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-brand/90 text-white text-xs flex items-center justify-center font-semibold shadow-sm">
                 {item.count > 99 ? "99+" : item.count}
               </span>
             )}
@@ -772,7 +772,7 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
             "text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums",
             isSelected
               ? "bg-primary-foreground/20 text-primary-foreground"
-              : "bg-muted text-muted-foreground",
+              : "bg-brand/15 text-brand",
           )}
         >
           {feed.unreadCount}

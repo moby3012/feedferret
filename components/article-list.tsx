@@ -92,11 +92,11 @@ function ArticlePreview({
           isSelected
             ? "bg-accent/10 ring-1 ring-accent/20"
             : "hover:bg-muted/50",
-          !article.isRead && "font-semibold border-l-4 border-primary pl-3",
+          !article.isRead && "font-semibold border-l-4 border-brand pl-3",
         )}
       >
         <span className="text-base shrink-0">{article.feedIcon}</span>
-        {!article.isRead && <CircleDot className="w-3.5 h-3.5 text-primary shrink-0" />}
+        {!article.isRead && <CircleDot className="w-3.5 h-3.5 text-brand shrink-0" />}
         <h3 className="flex-1 text-sm truncate">{article.title}</h3>
         {article.isStarred && (
           <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
@@ -114,8 +114,8 @@ function ArticlePreview({
         onClick={onClick}
         className={cn(
           "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl",
-          isSelected && "ring-2 ring-primary border-primary",
-          !article.isRead && "ring-1 ring-primary/20",
+          isSelected && "ring-2 ring-brand border-brand",
+          !article.isRead && "ring-1 ring-brand/20",
         )}
       >
         <div className="aspect-[16/10] bg-muted relative overflow-hidden">
@@ -188,7 +188,7 @@ function ArticlePreview({
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
             {!article.isRead && (
-              <div className="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-accent animate-pulse-gentle" />
+              <div className="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-brand animate-pulse-gentle" />
             )}
           </div>
         )}

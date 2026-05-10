@@ -30,6 +30,8 @@ model User {
   defaultViewMode        String    @default("list")   // "list"|"grid"|"magazine"|"minimal"
   readerWidth            String    @default("normal")  // "normal"|"wide"|"full"
   defaultArticleSort     String    @default("newest")  // "newest"|"oldest"
+  accentColor            String    @default("#5BA4CF")  // ice blue
+  secondaryColor         String    @default("#F0963C")  // soft orange
   role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -110,6 +112,7 @@ model Feed {
   articles        Article[]
   updateFrequency Int?
   retentionDays   Int?
+  keepMinArticles Int?
   lastFetchedAt   DateTime?
   lastStatus       String?
   lastError        String?

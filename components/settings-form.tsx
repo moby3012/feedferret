@@ -257,6 +257,43 @@ export function SettingsForm() {
             </Select>
           </PrefRow>
 
+          {/* Accent colors */}
+          <PrefRow
+            icon={Palette}
+            title="Accent colors"
+            description="Primary and secondary accent colors used for highlights and indicators."
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-muted-foreground">Primary</label>
+                <input
+                  type="color"
+                  value={prefs?.accentColor ?? "#5BA4CF"}
+                  onChange={(e) => update({ accentColor: e.target.value })}
+                  className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
+                  title="Primary accent color"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-muted-foreground">Secondary</label>
+                <input
+                  type="color"
+                  value={prefs?.secondaryColor ?? "#F0963C"}
+                  onChange={(e) => update({ secondaryColor: e.target.value })}
+                  className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
+                  title="Secondary accent color"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => update({ accentColor: "#5BA4CF", secondaryColor: "#F0963C" })}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          </PrefRow>
+
           {/* User Profile */}
           <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">

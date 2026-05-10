@@ -2,6 +2,7 @@ import React from "react";
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeColorApplier } from "@/components/theme-color-applier";
 import { Providers } from "@/components/providers";
 import { SessionProvider } from "next-auth/react";
 import "./globals.css";
@@ -50,6 +51,7 @@ export default function RootLayout({
               enableSystem
               disableTransitionOnChange
             >
+              <ThemeColorApplier />
               {children}
             </ThemeProvider>
           </Providers>

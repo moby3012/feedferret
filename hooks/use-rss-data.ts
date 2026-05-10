@@ -173,12 +173,16 @@ export function useUpdateFeed() {
 export function useApplyRetentionPolicies() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: () => applyRetentionPolicies(),
+        mutationFn: (dryRun: boolean) => applyRetentionPolicies(dryRun),
         onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: ["articles"] })
-            queryClient.invalidateQueries({ queryKey: ["feeds"] })
-            queryClient.invalidateQueries({ queryKey: ["feed-health"] })
-            toast.success(`Retention applied: ${result.deleted} articles removed`)
+            if (result.dryRun) {
+                toast.info(`Dry run: ${result.deleted} articles would be removed`)
+            } else {
+                queryClient.invalidateQueries({ queryKey: ["articles"] })
+                queryClient.invalidateQueries({ queryKey: ["feeds"] })
+                queryClient.invalidateQueries({ queryKey: ["feed-health"] })
+                toast.success(`Retention applied: ${result.deleted} articles removed`)
+            }
         },
         onError: (error) => {
             toast.error(error instanceof Error ? error.message : "Retention failed")

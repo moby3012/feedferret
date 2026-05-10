@@ -517,12 +517,26 @@ export function FeedManagement({
                         placeholder="Keep days"
                         defaultValue={feed.retentionDays || ""}
                         className="h-9 w-24 rounded-2xl border-border/70 bg-background/70 text-xs"
-                        title="Retention days for read, unstarred articles"
+                        title="Retention days for read, unstarred, unlabelled articles"
                         onBlur={(e) => {
                           const value = parseInt(e.target.value, 10);
                           updateFeed.mutate({
                             feedId: feed.id,
                             data: { retentionDays: Number.isNaN(value) ? null : value },
+                          });
+                        }}
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Min keep"
+                        defaultValue={feed.keepMinArticles || ""}
+                        className="h-9 w-24 rounded-2xl border-border/70 bg-background/70 text-xs"
+                        title="Keep at least N articles per feed regardless of age"
+                        onBlur={(e) => {
+                          const value = parseInt(e.target.value, 10);
+                          updateFeed.mutate({
+                            feedId: feed.id,
+                            data: { keepMinArticles: Number.isNaN(value) ? null : value },
                           });
                         }}
                       />
@@ -723,14 +737,24 @@ export function FeedManagement({
                       <p className="text-sm text-muted-foreground">Sync status, errors, article counts and retention.</p>
                     </div>
                   </div>
-                  <Button
-                    onClick={() => applyRetention.mutate()}
-                    disabled={applyRetention.isPending}
-                    className="rounded-2xl"
-                  >
-                    <ShieldCheck className="mr-2 h-4 w-4" />
-                    Apply retention
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => applyRetention.mutate(true)}
+                      disabled={applyRetention.isPending}
+                      className="rounded-2xl"
+                    >
+                      Dry run
+                    </Button>
+                    <Button
+                      onClick={() => applyRetention.mutate(false)}
+                      disabled={applyRetention.isPending}
+                      className="rounded-2xl"
+                    >
+                      <ShieldCheck className="mr-2 h-4 w-4" />
+                      Apply retention
+                    </Button>
+                  </div>
                 </div>
                 <ScrollArea className="min-h-0 flex-1">
                   <div className="space-y-3 pb-8 pr-3">

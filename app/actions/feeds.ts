@@ -284,6 +284,7 @@ export async function updateFeed(feedId: string, data: {
     categoryId?: string | null;
     updateFrequency?: number | null;
     retentionDays?: number | null;
+    keepMinArticles?: number | null;
     // Auth
     authType?: string | null;
     authUsername?: string | null;
@@ -357,7 +358,7 @@ export async function getFeedHealth() {
     });
 }
 
-export async function applyRetentionPolicies() {
+export async function applyRetentionPolicies(dryRun = false) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -374,20 +375,44 @@ export async function applyRetentionPolicies() {
 
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - retentionDays);
-        const result = await db.article.deleteMany({
+
+        // Candidates: read, not starred, no labels, older than cutoff
+        const candidates = await db.article.findMany({
             where: {
                 userId: user.id,
                 feedId: feed.id,
                 isRead: true,
                 isStarred: false,
+                labels: { none: {} },
                 publishedAt: { lt: cutoff },
             },
+            select: { id: true },
+            orderBy: { publishedAt: "asc" },
         });
-        deleted += result.count;
+
+        let toDelete = candidates;
+        if (feed.keepMinArticles && feed.keepMinArticles > 0) {
+            const totalCount = await db.article.count({
+                where: { userId: user.id, feedId: feed.id },
+            });
+            const maxDeletable = Math.max(0, totalCount - feed.keepMinArticles);
+            toDelete = candidates.slice(0, maxDeletable);
+        }
+
+        if (toDelete.length === 0) continue;
+
+        if (dryRun) {
+            deleted += toDelete.length;
+        } else {
+            const result = await db.article.deleteMany({
+                where: { id: { in: toDelete.map((a) => a.id) } },
+            });
+            deleted += result.count;
+        }
     }
 
-    revalidatePath("/");
-    return { deleted };
+    if (!dryRun) revalidatePath("/");
+    return { deleted, dryRun };
 }
 
 export async function addCategory(name: string, parentId?: string) {

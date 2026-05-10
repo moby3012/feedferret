@@ -27,6 +27,8 @@ export async function getReadingPreferences() {
             defaultViewMode: true,
             readerWidth: true,
             defaultArticleSort: true,
+            accentColor: true,
+            secondaryColor: true,
         },
     });
     return {
@@ -35,6 +37,8 @@ export async function getReadingPreferences() {
         defaultViewMode: user?.defaultViewMode ?? "list",
         readerWidth: user?.readerWidth ?? "normal",
         defaultArticleSort: user?.defaultArticleSort ?? "newest",
+        accentColor: user?.accentColor ?? "#5BA4CF",
+        secondaryColor: user?.secondaryColor ?? "#F0963C",
     };
 }
 
@@ -46,6 +50,8 @@ export async function updateGlobalSettings(data: {
     defaultViewMode?: string;
     readerWidth?: string;
     defaultArticleSort?: string;
+    accentColor?: string;
+    secondaryColor?: string;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
