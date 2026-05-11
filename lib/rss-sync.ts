@@ -3,6 +3,7 @@ import { getEffectiveSettings } from "./settings";
 import { applyAutoReadRules } from "./auto-read-rules";
 import { queueNewArticleNotifications } from "./notifications";
 import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
+import { syncDynamicOpmlCategories } from "./dynamic-opml";
 
 async function getSanitizer() {
     const { default: DOMPurify } = await import("isomorphic-dompurify");
@@ -210,6 +211,10 @@ async function autoFetchFullTextForArticles(
 }
 
 export async function syncUserFeeds(userId: string) {
+    await syncDynamicOpmlCategories(userId).catch((e) =>
+        console.error("[rss-sync] dynamic OPML sync failed:", e),
+    );
+
     const feeds = await db.feed.findMany({
         where: { userId },
     });
@@ -248,6 +253,10 @@ export async function syncUserFeeds(userId: string) {
 }
 
 export async function syncAllFeeds() {
+    await syncDynamicOpmlCategories().catch((e) =>
+        console.error("[rss-sync] dynamic OPML sync failed:", e),
+    );
+
     const feeds = await db.feed.findMany({
         include: { user: true },
     });
