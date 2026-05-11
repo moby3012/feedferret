@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, type TouchEvent } from "react";
 import { Article } from "@/lib/rss-data";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -7,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -17,11 +19,13 @@ import {
   Share2,
   ExternalLink,
   ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   Circle,
   Copy,
   Sparkles,
   Tag,
+  MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -37,6 +41,10 @@ interface ArticleReaderProps {
   onSetLabels?: (articleId: string, labelIds: string[]) => void;
   onBack?: () => void;
   showBackButton?: boolean;
+  onPreviousArticle?: () => void;
+  onNextArticle?: () => void;
+  hasPreviousArticle?: boolean;
+  hasNextArticle?: boolean;
   readerWidth?: "normal" | "wide" | "full";
 }
 
@@ -57,8 +65,14 @@ export function ArticleReader({
   onSetLabels,
   onBack,
   showBackButton,
+  onPreviousArticle,
+  onNextArticle,
+  hasPreviousArticle,
+  hasNextArticle,
   readerWidth = "normal",
 }: ArticleReaderProps) {
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
   if (!article) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background animate-fade-in">
@@ -108,8 +122,32 @@ export function ArticleReader({
 
   const articleLabelIds = article.labels?.map((item) => item.label.id) || [];
 
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    if (!touchStart.current) return;
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - touchStart.current.x;
+    const deltaY = touch.clientY - touchStart.current.y;
+    touchStart.current = null;
+
+    if (Math.abs(deltaX) < 72 || Math.abs(deltaY) > 64) return;
+    if (deltaX < 0 && hasNextArticle) onNextArticle?.();
+    if (deltaX > 0) {
+      if (hasPreviousArticle) onPreviousArticle?.();
+      else onBack?.();
+    }
+  };
+
   return (
-    <div className="flex-1 flex flex-col bg-background/75 backdrop-blur-xl animate-fade-in">
+    <div
+      className="flex-1 flex flex-col bg-background/75 backdrop-blur-xl animate-fade-in"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Reader Header */}
       <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border/60 bg-background/80 backdrop-blur-2xl sticky top-0 z-10">
         <div className="flex items-center gap-4">
@@ -130,7 +168,7 @@ export function ArticleReader({
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+        <div className="hidden lg:flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           <Button
             variant="ghost"
             size="icon"
@@ -262,10 +300,10 @@ export function ArticleReader({
 
       {/* Article Content */}
       <ScrollArea className="flex-1 overflow-hidden min-h-0">
-        <article className={cn("reader-page mx-auto px-5 sm:px-8 py-10 sm:py-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
+        <article className={cn("reader-page mx-auto px-5 pt-8 pb-28 sm:px-8 sm:py-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">
-            <h1 className="text-3xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.04] mb-5 text-balance tracking-[-0.035em]">
+            <h1 className="text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.035em]">
               {article.title}
             </h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
@@ -356,6 +394,140 @@ export function ArticleReader({
           </footer>
         </article>
       </ScrollArea>
+
+      <nav className="fixed inset-x-0 bottom-0 z-[60] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+        <div className="flex h-16 items-center gap-1.5 rounded-[2rem] border border-border/70 bg-background/90 px-2 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-11 min-w-11 rounded-2xl text-muted-foreground active:scale-95"
+            onClick={hasPreviousArticle ? onPreviousArticle : onBack}
+            aria-label={hasPreviousArticle ? "Previous article" : "Back to list"}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-11 min-w-11 rounded-2xl active:scale-95",
+              article.isStarred ? "bg-amber-500/10 text-amber-500" : "text-muted-foreground",
+            )}
+            onClick={() => onToggleStar(article.id)}
+            aria-label={article.isStarred ? "Remove star" : "Star article"}
+          >
+            <Star className={cn("h-5 w-5", article.isStarred && "fill-amber-500")} />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className={cn(
+              "h-11 flex-1 rounded-2xl px-3 text-xs font-bold uppercase tracking-[0.14em] active:scale-[0.98]",
+              article.isRead ? "bg-muted/70 text-foreground" : "bg-accent text-accent-foreground shadow-lg shadow-accent/20",
+            )}
+            onClick={() => onToggleRead?.(article.id)}
+            aria-pressed={article.isRead}
+          >
+            {article.isRead ? <Circle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+            {article.isRead ? "Unread" : "Read"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-11 min-w-11 rounded-2xl active:scale-95",
+              article.isReadLater ? "bg-accent/10 text-accent" : "text-muted-foreground",
+            )}
+            onClick={() => onToggleReadLater?.(article.id)}
+            aria-label={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
+          >
+            <Bookmark className={cn("h-5 w-5", article.isReadLater && "fill-accent")} />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-11 min-w-11 rounded-2xl text-muted-foreground active:scale-95"
+            onClick={onNextArticle}
+            disabled={!hasNextArticle}
+            aria-label="Next article"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-11 min-w-11 rounded-2xl text-muted-foreground active:scale-95"
+                aria-label="More reader actions"
+              >
+                <MoreHorizontal className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={12}
+              className="mb-2 w-64 rounded-3xl border-border/70 bg-popover/95 p-2 shadow-2xl backdrop-blur-xl"
+            >
+              <DropdownMenuItem className="rounded-2xl py-3" onClick={shareArticle}>
+                <Share2 className="mr-3 h-4 w-4" />
+                Share
+              </DropdownMenuItem>
+              <DropdownMenuItem className="rounded-2xl py-3" onClick={openOriginal} disabled={!article.link}>
+                <ExternalLink className="mr-3 h-4 w-4" />
+                Open original
+              </DropdownMenuItem>
+              <DropdownMenuItem className="rounded-2xl py-3" onClick={copyLink} disabled={!article.link}>
+                <Copy className="mr-3 h-4 w-4" />
+                Copy link
+              </DropdownMenuItem>
+              {article.link && (!article.content || article.content.length < 900) && (
+                <DropdownMenuItem
+                  className="rounded-2xl py-3"
+                  onClick={() => onFetchFullText?.(article.id)}
+                  disabled={isFetchingFullText}
+                >
+                  <Sparkles className="mr-3 h-4 w-4" />
+                  {isFetchingFullText ? "Fetching…" : "Fetch full text"}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator className="my-2" />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Labels</DropdownMenuLabel>
+              {labels.length === 0 ? (
+                <div className="px-2 py-3 text-sm text-muted-foreground">Create labels in Manage Feeds.</div>
+              ) : (
+                labels.map((label) => {
+                  const checked = articleLabelIds.includes(label.id);
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={label.id}
+                      checked={checked}
+                      onCheckedChange={(nextChecked) => {
+                        const nextIds = nextChecked
+                          ? Array.from(new Set([...articleLabelIds, label.id]))
+                          : articleLabelIds.filter((id) => id !== label.id);
+                        onSetLabels?.(article.id, nextIds);
+                      }}
+                      className="rounded-2xl py-2.5"
+                    >
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: label.color }}
+                      />
+                      {label.name}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </nav>
     </div>
   );
 }

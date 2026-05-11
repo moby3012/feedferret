@@ -89,7 +89,7 @@ export function RssHeader({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+      <div className="hidden items-center gap-1 lg:flex sm:gap-2 flex-shrink-0">
         {/* Search Toggle */}
         {onSearchChange && (
           <Button

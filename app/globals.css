@@ -241,3 +241,20 @@
 .article-content {
   font-size: 1.02rem;
 }
+
+@media (max-width: 1023px) {
+  [data-slot="scroll-area-scrollbar"] {
+    display: none;
+  }
+
+  [data-slot="scroll-area-viewport"] {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  [data-slot="scroll-area-viewport"]::-webkit-scrollbar {
+    display: none;
+  }
+}

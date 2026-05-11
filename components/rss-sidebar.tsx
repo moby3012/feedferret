@@ -316,7 +316,7 @@ export function RssSidebar({
   }
 
   return (
-    <aside className="w-80 h-full bg-sidebar/85 backdrop-blur-2xl border-r border-sidebar-border/70 flex flex-col">
+    <aside className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-r border-sidebar-border/70 flex flex-col">
       {/* Header */}
       <div className="p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">

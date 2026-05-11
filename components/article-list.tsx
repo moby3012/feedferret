@@ -46,7 +46,7 @@ export function ArticleList({
     <ScrollArea className="flex-1 overflow-hidden min-h-0">
       <div
         className={cn(
-          "p-3 space-y-2.5",
+          "p-3 pb-28 lg:pb-3 space-y-2.5",
           viewMode === "magazine" &&
             "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 space-y-0",
         )}
@@ -93,7 +93,7 @@ function ArticlePreview({
       <article
         onClick={onClick}
         className={cn(
-          "px-4 py-2.5 cursor-pointer rounded-xl transition-all duration-200 flex items-center gap-3",
+          "px-4 py-3 cursor-pointer rounded-2xl transition-all duration-200 flex items-center gap-3",
           isSelected
             ? "bg-accent/10 ring-1 ring-accent/20"
             : "hover:bg-muted/50",
@@ -187,7 +187,7 @@ function ArticlePreview({
       onClick={onClick}
       style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
       className={cn(
-        "p-3.5 cursor-pointer rounded-3xl transition-all duration-300 ease-out group animate-fade-in-up border",
+        "p-3 sm:p-3.5 cursor-pointer rounded-2xl sm:rounded-3xl transition-all duration-300 ease-out group animate-fade-in-up border",
         "active:scale-[0.995]",
         isSelected
           ? "bg-accent/10 border-accent/25 shadow-lg shadow-accent/5"
@@ -195,9 +195,9 @@ function ArticlePreview({
         !article.isRead ? "bg-card/90 shadow-sm" : "opacity-80",
       )}
     >
-      <div className="flex gap-4">
+      <div className="flex gap-3 sm:gap-4">
         {article.imageUrl && (
-          <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-xl overflow-hidden flex-shrink-0 bg-muted relative group-hover:shadow-lg transition-shadow duration-300">
+          <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden flex-shrink-0 bg-muted relative group-hover:shadow-lg transition-shadow duration-300">
             <img
               src={article.imageUrl || "/placeholder.svg"}
               alt=""
@@ -210,13 +210,13 @@ function ArticlePreview({
         )}
 
         <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
             <span className="text-lg">{article.feedIcon}</span>
             <span className="text-sm font-medium text-muted-foreground truncate">
               {article.feedName}
             </span>
             <span className="text-muted-foreground/50">·</span>
-            <span className="text-sm text-muted-foreground whitespace-nowrap">
+            <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
               {new Date(article.publishedAt).toLocaleDateString()}
             </span>
             <div className="ml-auto flex items-center gap-1">
@@ -245,7 +245,7 @@ function ArticlePreview({
 
           <h3
             className={cn(
-              "text-[0.98rem] leading-snug mb-2 line-clamp-2 text-balance transition-colors duration-200 tracking-[-0.015em]",
+              "text-[0.98rem] sm:text-[1rem] leading-snug mb-2 line-clamp-2 text-balance transition-colors duration-200 tracking-[-0.015em]",
               !article.isRead
                 ? "font-semibold text-foreground"
                 : "font-medium text-foreground/75",
@@ -254,7 +254,7 @@ function ArticlePreview({
             {article.title}
           </h3>
 
-          <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed mb-3">
+          <p className="text-sm text-muted-foreground line-clamp-1 sm:line-clamp-2 leading-relaxed mb-3">
             {article.excerpt}
           </p>
 
@@ -281,7 +281,7 @@ function ArticlePreview({
             </span>
             <span className="text-muted-foreground/50">·</span>
             <span>{article.readTime}</span>
-            <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <div className="ml-auto flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleRead?.(article.id); }}

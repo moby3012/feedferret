@@ -8,6 +8,7 @@ import { ArticleList } from "@/components/article-list";
 import { ArticleReader } from "@/components/article-reader";
 import { RssHeader, ViewMode } from "@/components/rss-header";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
+import { MobileBottomControls } from "@/components/mobile-bottom-controls";
 import {
   useFeeds,
   useArticles,
@@ -24,7 +25,7 @@ import {
   useReadingPreferences,
 } from "@/hooks/use-rss-data";
 import { cn } from "@/lib/utils";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -133,6 +134,7 @@ export default function RSSReaderPage() {
     [displayArticles, selectedArticleId, selectedArticleSnapshot],
   );
 
+
   const filteredArticles = useMemo(() => {
     let list = [...displayArticles];
 
@@ -159,6 +161,11 @@ export default function RSSReaderPage() {
       sortOldest ? a.publishedAtRaw - b.publishedAtRaw : b.publishedAtRaw - a.publishedAtRaw,
     );
   }, [displayArticles, unreadOnly, selectedCategory, readInSession, readingPrefs?.defaultArticleSort]);
+
+  const selectedArticleIndex = useMemo(
+    () => filteredArticles.findIndex((article: any) => article.id === selectedArticleId),
+    [filteredArticles, selectedArticleId],
+  );
 
   const headerTitle = useMemo(() => {
     if (selectedFeed) {
@@ -192,6 +199,14 @@ export default function RSSReaderPage() {
       window.open(article.link, "_blank", "noopener,noreferrer");
     }
   }, [readingPrefs?.openOriginalByDefault]);
+
+  const handleSelectAdjacentArticle = useCallback((direction: 1 | -1) => {
+    const currentIndex = filteredArticlesRef.current.findIndex(
+      (article: any) => article.id === selectedArticleIdRef.current,
+    );
+    const nextArticle = filteredArticlesRef.current[currentIndex + direction];
+    if (nextArticle) handleSelectArticle(nextArticle);
+  }, [handleSelectArticle]);
 
   useEffect(() => {
     if (!selectedArticle || selectedArticle.isRead || readInSession.includes(selectedArticle.id)) {
@@ -435,9 +450,9 @@ export default function RSSReaderPage() {
         />
       </div>
 
-      {/* Mobile Sidebar Sheet */}
-      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent side="left" className="p-0 w-80 border-0">
+      {/* Mobile feed picker: bottom drawer keeps navigation in thumb reach. */}
+      <Drawer open={sidebarOpen} onOpenChange={setSidebarOpen} direction="bottom">
+        <DrawerContent className="h-[86dvh] rounded-t-[2rem] border-border/70 p-0 lg:hidden">
           <RssSidebar
             feeds={sidebarFeeds}
             selectedFeed={selectedFeed}
@@ -455,8 +470,8 @@ export default function RSSReaderPage() {
               setSidebarOpen(false);
             }}
           />
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
 
       {/* Desktop: resizable article list + reader */}
       <ResizablePanelGroup
@@ -523,6 +538,10 @@ export default function RSSReaderPage() {
               onSetLabels={handleSetLabels}
               onBack={() => setSelectedArticleId(null)}
               showBackButton={!!selectedArticle}
+              onPreviousArticle={() => handleSelectAdjacentArticle(-1)}
+              onNextArticle={() => handleSelectAdjacentArticle(1)}
+              hasPreviousArticle={selectedArticleIndex > 0}
+              hasNextArticle={selectedArticleIndex >= 0 && selectedArticleIndex < filteredArticles.length - 1}
               readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
             />
           </div>
@@ -564,7 +583,28 @@ export default function RSSReaderPage() {
           onSelectArticle={handleSelectArticle}
           onToggleRead={handleToggleRead}
           onToggleStar={handleToggleStar}
+          onToggleReadLater={handleToggleReadLater}
           viewMode={viewMode}
+        />
+        <MobileBottomControls
+          unreadOnly={unreadOnly}
+          onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
+          onToggleSidebar={() => setSidebarOpen(true)}
+          onRefresh={handleRefresh}
+          isRefreshing={articlesLoading || refresh.isPending}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onMarkAllRead={() =>
+            markAllAsRead.mutate({
+              feedId: selectedFeed,
+              category: selectedFeed ? null : selectedCategory,
+            })
+          }
+          isMarkingAllRead={markAllAsRead.isPending}
+          onSaveSearch={handleSaveSearch}
+          onShowShortcuts={() => setShortcutsOpen(true)}
         />
       </div>
 
@@ -578,6 +618,7 @@ export default function RSSReaderPage() {
         <ArticleReader
           article={selectedArticle}
           onToggleStar={handleToggleStar}
+          onToggleReadLater={handleToggleReadLater}
           onToggleRead={handleToggleRead}
           onFetchFullText={handleFetchFullText}
           isFetchingFullText={fetchFullText.isPending}
@@ -585,6 +626,10 @@ export default function RSSReaderPage() {
           onSetLabels={handleSetLabels}
           onBack={() => setSelectedArticleId(null)}
           showBackButton={!!selectedArticle}
+          onPreviousArticle={() => handleSelectAdjacentArticle(-1)}
+          onNextArticle={() => handleSelectAdjacentArticle(1)}
+          hasPreviousArticle={selectedArticleIndex > 0}
+          hasNextArticle={selectedArticleIndex >= 0 && selectedArticleIndex < filteredArticles.length - 1}
           readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
         />
       </div>
