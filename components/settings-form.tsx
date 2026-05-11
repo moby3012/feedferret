@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor } from "@/hooks/use-rss-data";
 import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { SHOW_PWA_INSTALL_PROMPT_EVENT } from "@/components/pwa-install-prompt";
 
@@ -61,7 +62,7 @@ function PrefRow({
     <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+          <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
             <Icon className="h-5 w-5" />
           </div>
           <div>
@@ -114,7 +115,7 @@ export function SettingsForm() {
           <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+                <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
                   <Palette className="h-5 w-5" />
                 </div>
                 <div>
@@ -170,22 +171,11 @@ export function SettingsForm() {
             title="Open original"
             description="Open original article in new tab when selecting from list."
           >
-            <button
-              role="switch"
-              aria-checked={prefs?.openOriginalByDefault ?? false}
-              onClick={() => update({ openOriginalByDefault: !(prefs?.openOriginalByDefault ?? false) })}
-              className={cn(
-                "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                prefs?.openOriginalByDefault ? "bg-primary" : "bg-muted",
-              )}
-            >
-              <span
-                className={cn(
-                  "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200",
-                  prefs?.openOriginalByDefault ? "translate-x-5" : "translate-x-0",
-                )}
-              />
-            </button>
+            <Switch
+              checked={prefs?.openOriginalByDefault ?? false}
+              onCheckedChange={(checked) => update({ openOriginalByDefault: checked })}
+              className="h-7 w-12"
+            />
           </PrefRow>
 
           {/* Mark-as-read delay */}
@@ -291,7 +281,7 @@ export function SettingsForm() {
             title="Accent colors"
             description="Primary and secondary accent colors used for highlights and indicators."
           >
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
                 <label className="text-sm text-muted-foreground">Primary</label>
                 <input
@@ -319,6 +309,31 @@ export function SettingsForm() {
               >
                 Reset
               </button>
+              <div
+                className="ml-auto min-w-[180px] rounded-2xl border border-border/70 p-3 shadow-sm"
+                style={{
+                  background: `linear-gradient(135deg, ${(prefs?.accentColor ?? "#5BA4CF")}22 0%, ${(prefs?.secondaryColor ?? "#F0963C")}2a 100%)`,
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Preview
+                    </p>
+                    <p className="text-sm font-medium">App accents</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-7 w-7 rounded-full border border-white/40 shadow-sm"
+                      style={{ backgroundColor: prefs?.accentColor ?? "#5BA4CF" }}
+                    />
+                    <span
+                      className="h-7 w-7 rounded-full border border-white/40 shadow-sm"
+                      style={{ backgroundColor: prefs?.secondaryColor ?? "#F0963C" }}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </PrefRow>
 
