@@ -49,3 +49,62 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+async function updateBadge(count) {
+  try {
+    if (!("setAppBadge" in self.navigator) || !("clearAppBadge" in self.navigator)) return;
+    if (typeof count === "number" && count > 0) {
+      await self.navigator.setAppBadge(count);
+    } else {
+      await self.navigator.clearAppBadge();
+    }
+  } catch {
+    // Badging is best-effort and unsupported on many browsers.
+  }
+}
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = {};
+  }
+
+  const title = payload.title || "FeedFerret";
+  const options = {
+    body: payload.body || "Neue Artikel verfügbar.",
+    icon: "/icon-192.png",
+    badge: "/icon-192-maskable.png",
+    tag: payload.tag || "feedferret:notification",
+    data: {
+      url: payload.url || "/",
+      articleId: payload.articleId,
+      feedId: payload.feedId,
+    },
+  };
+
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      updateBadge(payload.unreadCount),
+    ]),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).href;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client && new URL(client.url).origin === self.location.origin) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
+    }),
+  );
+});
