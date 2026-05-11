@@ -28,5 +28,46 @@
   "start_url": "/",
   "display": "standalone",
   "background_color": "#05060a",
-  "theme_color": "#3b82f6"
+  "theme_color": "#3b82f6",
+  "id": "/",
+  "scope": "/",
+  "description": "A beautiful, self-hostable RSS reader for your daily news feed.",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "browser"
+  ],
+  "categories": [
+    "news",
+    "productivity",
+    "utilities"
+  ],
+  "shortcuts": [
+    {
+      "name": "Open FeedFerret",
+      "short_name": "Feeds",
+      "description": "Open your RSS reader.",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "short_name": "Settings",
+      "description": "Open FeedFerret settings.",
+      "url": "/settings",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
 }

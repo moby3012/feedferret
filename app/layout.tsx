@@ -4,6 +4,8 @@ import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeColorApplier } from "@/components/theme-color-applier";
 import { Providers } from "@/components/providers";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
+import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { SessionProvider } from "next-auth/react";
 import "./globals.css";
 
@@ -53,6 +55,8 @@ export default function RootLayout({
             >
               <ThemeColorApplier />
               {children}
+              <PwaInstallPrompt />
+              <ServiceWorkerRegister />
             </ThemeProvider>
           </Providers>
         </SessionProvider>

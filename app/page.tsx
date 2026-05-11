@@ -82,6 +82,29 @@ export default function RSSReaderPage() {
   const createSavedSearch = useCreateSavedSearch();
   const setArticleLabels = useSetArticleLabels();
   const { data: readingPrefs } = useReadingPreferences();
+
+  const unreadBadgeCount = useMemo(() => {
+    return feeds.reduce((sum: number, feed: any) => sum + (feed._count?.articles || 0), 0);
+  }, [feeds]);
+
+  useEffect(() => {
+    const badgeNavigator = navigator as Navigator & {
+      setAppBadge?: (contents?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+
+    if (!badgeNavigator.setAppBadge) return;
+
+    const updateBadge =
+      unreadBadgeCount > 0
+        ? badgeNavigator.setAppBadge(unreadBadgeCount)
+        : badgeNavigator.clearAppBadge?.();
+
+    updateBadge?.catch(() => {
+      // Badging is optional and platform-dependent.
+    });
+  }, [unreadBadgeCount]);
+
   const [readInSession, setReadInSession] = useState<string[]>([]);
   const [autoReadSuppressedArticles, setAutoReadSuppressedArticles] = useState<string[]>([]);
   const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);

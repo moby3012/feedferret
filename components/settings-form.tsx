@@ -18,6 +18,7 @@ import {
   Palette,
   Send,
   Settings,
+  Smartphone,
   Sun,
   Trash2,
   User,
@@ -35,6 +36,7 @@ import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useU
 import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { SHOW_PWA_INSTALL_PROMPT_EVENT } from "@/components/pwa-install-prompt";
 
 const themeOptions = [
   { id: "light", label: "Light", icon: Sun },
@@ -143,6 +145,22 @@ export function SettingsForm() {
               </div>
             </div>
           </section>
+
+          {/* Add to Home Screen */}
+          <PrefRow
+            icon={Smartphone}
+            title="Add to Home Screen"
+            description="Show instructions for installing FeedFerret as a PWA on your phone or tablet."
+          >
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.dispatchEvent(new Event(SHOW_PWA_INSTALL_PROMPT_EVENT))}
+              className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
+            >
+              Show instructions
+            </Button>
+          </PrefRow>
 
           {/* Open original */}
           <PrefRow
