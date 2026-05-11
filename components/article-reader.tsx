@@ -40,6 +40,7 @@ interface ArticleReaderProps {
   labels?: Array<{ id: string; name: string; color: string }>;
   onSetLabels?: (articleId: string, labelIds: string[]) => void;
   onBack?: () => void;
+  onOpenFeed?: (feedId: string) => void;
   showBackButton?: boolean;
   onPreviousArticle?: () => void;
   onNextArticle?: () => void;
@@ -64,6 +65,7 @@ export function ArticleReader({
   labels = [],
   onSetLabels,
   onBack,
+  onOpenFeed,
   showBackButton,
   onPreviousArticle,
   onNextArticle,
@@ -176,12 +178,17 @@ export function ArticleReader({
               <ChevronLeft className="w-5 h-5" />
             </Button>
           )}
-          <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => onOpenFeed?.(article.feedId)}
+            className="flex min-w-0 items-center gap-3 rounded-2xl px-2 py-1.5 text-left transition-colors hover:bg-muted/70 active:scale-[0.99]"
+            aria-label={`Show all articles from ${article.feedName}`}
+          >
             <span className="text-xl">{article.feedIcon}</span>
-            <span className="text-sm font-semibold text-foreground">
+            <span className="truncate text-sm font-semibold text-foreground">
               {article.feedName}
             </span>
-          </div>
+          </button>
         </div>
         <div className="hidden lg:flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           <Button
@@ -391,21 +398,23 @@ export function ArticleReader({
 
           {/* Article Footer */}
           <footer className="mt-16 pt-8 border-t border-border animate-fade-in-up animation-delay-300">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center text-2xl shadow-lg">
-                  {article.feedIcon}
-                </div>
-                <div>
-                  <p className="text-lg font-semibold text-foreground">
-                    {article.feedName}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    View all articles
-                  </p>
-                </div>
+            <button
+              type="button"
+              onClick={() => onOpenFeed?.(article.feedId)}
+              className="flex w-full items-center gap-4 rounded-3xl p-2 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center text-2xl shadow-lg">
+                {article.feedIcon}
               </div>
-            </div>
+              <div>
+                <p className="text-lg font-semibold text-foreground">
+                  {article.feedName}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  View all articles from this feed
+                </p>
+              </div>
+            </button>
           </footer>
         </article>
       </ScrollArea>

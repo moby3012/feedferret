@@ -155,7 +155,9 @@ export default function RSSReaderPage() {
   }, [articles, sessionReadArticles]);
 
   const selectedArticle = useMemo(
-    () => displayArticles.find((a: any) => a.id === selectedArticleId) || selectedArticleSnapshot,
+    () => selectedArticleId
+      ? displayArticles.find((a: any) => a.id === selectedArticleId) || selectedArticleSnapshot
+      : null,
     [displayArticles, selectedArticleId, selectedArticleSnapshot],
   );
 
@@ -230,6 +232,19 @@ export default function RSSReaderPage() {
       window.open(article.link, "_blank", "noopener,noreferrer");
     }
   }, [readingPrefs?.openOriginalByDefault]);
+
+  const handleCloseArticle = useCallback(() => {
+    setSelectedArticleId(null);
+    setSelectedArticleSnapshot(null);
+  }, []);
+
+  const handleOpenArticleFeed = useCallback((feedId: string) => {
+    setSelectedFeed(feedId);
+    setSelectedCategory("All");
+    setSelectedArticleId(null);
+    setSelectedArticleSnapshot(null);
+    setSidebarOpen(false);
+  }, []);
 
   const handleSelectAdjacentArticle = useCallback((direction: 1 | -1) => {
     const currentIndex = filteredArticlesRef.current.findIndex(
@@ -481,12 +496,14 @@ export default function RSSReaderPage() {
           onSelectFeed={(feedId) => {
             setSelectedFeed(feedId);
             setSelectedArticleId(null);
+            setSelectedArticleSnapshot(null);
             if (feedId) setSelectedCategory("All");
           }}
           onSelectCategory={(cat) => {
             setSelectedCategory(cat);
             setSelectedFeed(null);
             setSelectedArticleId(null);
+            setSelectedArticleSnapshot(null);
           }}
         />
       </div>
@@ -501,6 +518,7 @@ export default function RSSReaderPage() {
             onSelectFeed={(feedId) => {
               setSelectedFeed(feedId);
               setSelectedArticleId(null);
+              setSelectedArticleSnapshot(null);
               if (feedId) setSelectedCategory("All");
               setSidebarOpen(false);
             }}
@@ -508,6 +526,7 @@ export default function RSSReaderPage() {
               setSelectedCategory(category);
               setSelectedFeed(null);
               setSelectedArticleId(null);
+              setSelectedArticleSnapshot(null);
               setSidebarOpen(false);
             }}
           />
@@ -577,7 +596,8 @@ export default function RSSReaderPage() {
               isFetchingFullText={fetchFullText.isPending}
               labels={labels}
               onSetLabels={handleSetLabels}
-              onBack={() => setSelectedArticleId(null)}
+              onBack={handleCloseArticle}
+              onOpenFeed={handleOpenArticleFeed}
               showBackButton={!!selectedArticle}
               onPreviousArticle={() => handleSelectAdjacentArticle(-1)}
               onNextArticle={() => handleSelectAdjacentArticle(1)}
@@ -665,7 +685,8 @@ export default function RSSReaderPage() {
           isFetchingFullText={fetchFullText.isPending}
           labels={labels}
           onSetLabels={handleSetLabels}
-          onBack={() => setSelectedArticleId(null)}
+          onBack={handleCloseArticle}
+          onOpenFeed={handleOpenArticleFeed}
           showBackButton={!!selectedArticle}
           onPreviousArticle={() => handleSelectAdjacentArticle(-1)}
           onNextArticle={() => handleSelectAdjacentArticle(1)}
