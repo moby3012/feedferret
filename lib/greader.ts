@@ -45,6 +45,7 @@ export async function authenticateGReaderRequest(request: Request) {
     const [email, password] = raw.split(":");
     if (email && password) {
       const user = await db.user.findUnique({ where: { email } });
+      if (user?.twoFactorEnabled) return null;
       if (user?.password && await bcrypt.compare(password, user.password)) return user;
     }
   }

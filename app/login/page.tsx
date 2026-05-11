@@ -9,7 +9,6 @@ import {
   Card,
   CardHeader,
   CardTitle,
-  CardDescription,
   CardContent,
   CardFooter,
 } from "@/components/ui/card";
@@ -17,11 +16,10 @@ import Link from "next/link";
 import {
   Mail,
   Lock,
-  ArrowRight,
   LogIn,
-  Sparkles,
   Github,
   Chrome,
+  Shield,
 } from "lucide-react";
 import { hasUsers, getAuthProviders } from "../actions/onboarding";
 import { Separator } from "@/components/ui/separator";
@@ -29,12 +27,15 @@ import { Separator } from "@/components/ui/separator";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [providers, setProviders] = useState<{
     google: boolean;
     github: boolean;
-  }>({ google: false, github: false });
+    authelia: boolean;
+    autheliaLabel: string;
+  }>({ google: false, github: false, authelia: false, autheliaLabel: "Authelia" });
   const router = useRouter();
   const { status } = useSession();
 
@@ -61,16 +62,17 @@ export default function LoginPage() {
       const result = await signIn("credentials", {
         email,
         password,
+        otp,
         redirect: false,
       });
 
       if (result?.error) {
-        setError("Invalid email or password");
+        setError("Invalid email, password, or one-time code");
       } else {
         router.push("/");
         router.refresh();
       }
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred");
     } finally {
       setIsLoading(false);
@@ -82,6 +84,8 @@ export default function LoginPage() {
   };
 
   if (status === "loading") return null;
+
+  const hasOAuth = providers.google || providers.github || providers.authelia;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-black text-white selection:bg-zinc-800">
@@ -133,6 +137,17 @@ export default function LoginPage() {
                   required
                 />
               </div>
+              <div className="relative group/input">
+                <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-white" />
+                <Input
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="Authenticator code (if enabled)"
+                  className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                />
+              </div>
 
               {error && (
                 <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium animate-shake">
@@ -156,7 +171,7 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            {(providers.google || providers.github) && (
+            {hasOAuth && (
               <>
                 <div className="relative my-6">
                   <div className="absolute inset-0 flex items-center">
@@ -169,11 +184,11 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   {providers.google && (
                     <Button
                       variant="outline"
-                      className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
+                      className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("google")}
                     >
                       <Chrome className="w-4 h-4 mr-2" />
@@ -183,11 +198,21 @@ export default function LoginPage() {
                   {providers.github && (
                     <Button
                       variant="outline"
-                      className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
+                      className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("github")}
                     >
                       <Github className="w-4 h-4 mr-2" />
                       GitHub
+                    </Button>
+                  )}
+                  {providers.authelia && (
+                    <Button
+                      variant="outline"
+                      className="sm:col-span-2 bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
+                      onClick={() => handleOAuthSignIn("authelia")}
+                    >
+                      <Shield className="w-4 h-4 mr-2" />
+                      {providers.autheliaLabel}
                     </Button>
                   )}
                 </div>

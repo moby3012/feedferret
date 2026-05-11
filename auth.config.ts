@@ -1,41 +1,63 @@
 import type { NextAuthConfig } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
 import Github from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
 
-export default {
-    providers: [
-        Google({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        }),
-        Github({
-            clientId: process.env.GITHUB_CLIENT_ID,
-            clientSecret: process.env.GITHUB_CLIENT_SECRET,
-        }),
-        Credentials({}),
-    ].filter(p => {
-        if (p.id === "google") return !!process.env.GOOGLE_CLIENT_ID;
-        if (p.id === "github") return !!process.env.GITHUB_CLIENT_ID;
-        return true;
-    }),
-    session: { strategy: "jwt" },
-    callbacks: {
-        authorized({ auth, request: { nextUrl } }) {
-            const isLoggedIn = !!auth?.user;
-            const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
-            const isPublicRoute =
-                ["/login", "/register", "/setup"].includes(nextUrl.pathname) ||
-                nextUrl.pathname.startsWith("/shared/search/");
-
-            if (isApiAuthRoute) return true;
-
-            if (isPublicRoute) {
-                if (isLoggedIn) return Response.redirect(new URL("/", nextUrl));
-                return true;
-            }
-
-            return isLoggedIn;
+const autheliaProvider =
+  process.env.AUTHELIA_CLIENT_ID &&
+  process.env.AUTHELIA_CLIENT_SECRET &&
+  process.env.AUTHELIA_ISSUER
+    ? ({
+        id: "authelia",
+        name: process.env.AUTHELIA_PROVIDER_NAME || "Authelia",
+        type: "oidc",
+        issuer: process.env.AUTHELIA_ISSUER,
+        clientId: process.env.AUTHELIA_CLIENT_ID,
+        clientSecret: process.env.AUTHELIA_CLIENT_SECRET,
+        checks: ["pkce", "state"],
+        profile(profile: Record<string, unknown>) {
+          return {
+            id: String(profile.sub || profile.email || profile.preferred_username),
+            name: String(profile.name || profile.preferred_username || profile.email || "Authelia User"),
+            email: profile.email ? String(profile.email) : null,
+            image: null,
+          };
         },
+      } as any)
+    : null;
+
+export default {
+  providers: [
+    process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? Google({
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        })
+      : null,
+    process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+      ? Github({
+          clientId: process.env.GITHUB_CLIENT_ID,
+          clientSecret: process.env.GITHUB_CLIENT_SECRET,
+        })
+      : null,
+    autheliaProvider,
+  ].filter(Boolean),
+  session: { strategy: "jwt" },
+  callbacks: {
+    authorized({ auth, request: { nextUrl } }) {
+      const isLoggedIn = !!auth?.user;
+      const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
+      const isPublicRoute =
+        ["/login", "/register", "/setup"].includes(nextUrl.pathname) ||
+        nextUrl.pathname.startsWith("/shared/search/");
+
+      if (isApiAuthRoute) return true;
+
+      if (isPublicRoute) {
+        if (isLoggedIn) return Response.redirect(new URL("/", nextUrl));
+        return true;
+      }
+
+      return isLoggedIn;
     },
+  },
 } satisfies NextAuthConfig;

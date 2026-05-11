@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, previewFeedExtraction } from "@/app/actions/feeds"
-import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest } from "@/app/actions/settings"
+import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor } from "@/app/actions/settings"
 import { toast } from "sonner"
 
 export function useFeeds() {
@@ -529,6 +529,55 @@ export function useSendTestDigest() {
         },
         onError: (error) => {
             toast.error(error instanceof Error ? error.message : "Failed to send test digest")
+        },
+    })
+}
+
+
+export function useTwoFactorStatus() {
+    return useQuery({
+        queryKey: ["two-factor-status"],
+        queryFn: () => getTwoFactorStatus(),
+    })
+}
+
+export function useBeginTwoFactorSetup() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: () => beginTwoFactorSetup(),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["two-factor-status"] })
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not start 2FA setup")
+        },
+    })
+}
+
+export function useConfirmTwoFactorSetup() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (code: string) => confirmTwoFactorSetup(code),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["two-factor-status"] })
+            toast.success("Two-factor authentication enabled")
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not enable 2FA")
+        },
+    })
+}
+
+export function useDisableTwoFactor() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (code: string) => disableTwoFactor(code),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["two-factor-status"] })
+            toast.success("Two-factor authentication disabled")
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not disable 2FA")
         },
     })
 }

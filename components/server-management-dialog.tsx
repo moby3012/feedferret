@@ -38,6 +38,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -47,7 +48,7 @@ import {
   updateUserRole,
   getGlobalSettings,
   updateGlobalSettings,
-  testSmtp,
+  sendTestEmail,
 } from "@/app/actions/admin";
 import { toast } from "sonner";
 
@@ -100,14 +101,14 @@ export function ServerManagementDialog({
     }
   };
 
-  const handleTestSmtp = async () => {
+  const handleSendTestEmail = async () => {
     setIsSaving(true);
     try {
-      const result = await testSmtp(settings);
+      const result = await sendTestEmail(settings);
       if (result.success) {
-        toast.success("SMTP Connection successful!");
+        toast.success(`Test email sent to ${result.sentTo}`);
       } else {
-        toast.error(`SMTP Failed: ${result.error}`);
+        toast.error(`Mail test failed: ${result.error}`);
       }
     } catch (error: any) {
       toast.error(error.message);
@@ -313,8 +314,8 @@ export function ServerManagementDialog({
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">
                           Activate Mail Service
                         </h4>
-                        <p className="text-sm text-muted-foreground line-clamp-1">
-                          Enable password resets and verification emails.
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          Enable magic links, digest emails, and transactional messages.
                         </p>
                       </div>
                       <Switch
@@ -327,86 +328,122 @@ export function ServerManagementDialog({
 
                     {settings?.mailServiceEnabled && (
                       <div className="grid gap-6 p-6 rounded-3xl bg-card border border-border/60 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>SMTP Host</Label>
-                            <Input
-                              placeholder="smtp.gmail.com"
-                              className="rounded-2xl bg-background/70 border-border/70"
-                              value={settings.smtpHost || ""}
-                              onChange={(e) =>
-                                setSettings({
-                                  ...settings,
-                                  smtpHost: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Port</Label>
-                            <Input
-                              placeholder="587"
-                              className="rounded-2xl bg-background/70 border-border/70"
-                              value={settings.smtpPort || ""}
-                              onChange={(e) =>
-                                setSettings({
-                                  ...settings,
-                                  smtpPort: parseInt(e.target.value) || 0,
-                                })
-                              }
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>SMTP Username</Label>
-                            <Input
-                              placeholder="user@gmail.com"
-                              className="rounded-2xl bg-background/70 border-border/70"
-                              value={settings.smtpUser || ""}
-                              onChange={(e) =>
-                                setSettings({
-                                  ...settings,
-                                  smtpUser: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>SMTP Password</Label>
-                            <Input
-                              type="password"
-                              placeholder="••••••••"
-                              className="rounded-2xl bg-background/70 border-border/70"
-                              value={settings.smtpPassword || ""}
-                              onChange={(e) =>
-                                setSettings({
-                                  ...settings,
-                                  smtpPassword: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                        </div>
                         <div className="space-y-2">
-                          <Label>From Email</Label>
-                          <Input
-                            placeholder="noreply@feedferret.cloud"
-                            className="rounded-2xl bg-background/70 border-border/70"
-                            value={settings.smtpFrom || ""}
-                            onChange={(e) =>
+                          <Label>Email Provider</Label>
+                          <Select
+                            value={settings.mailProvider || "smtp"}
+                            onValueChange={(value) =>
                               setSettings({
                                 ...settings,
-                                smtpFrom: e.target.value,
+                                mailProvider: value,
                               })
                             }
-                          />
+                          >
+                            <SelectTrigger className="rounded-2xl bg-background/70 border-border/70">
+                              <SelectValue placeholder="Choose provider" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-2xl">
+                              {(settings.availableMailProviders || []).map((provider: any) => (
+                                <SelectItem key={provider.id} value={provider.id}>
+                                  {provider.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            API-based providers only appear when their environment variables are configured on the server.
+                          </p>
                         </div>
+
+                        {settings.mailProvider === "smtp" ? (
+                          <>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>SMTP Host</Label>
+                                <Input
+                                  placeholder="smtp.gmail.com"
+                                  className="rounded-2xl bg-background/70 border-border/70"
+                                  value={settings.smtpHost || ""}
+                                  onChange={(e) =>
+                                    setSettings({
+                                      ...settings,
+                                      smtpHost: e.target.value,
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Port</Label>
+                                <Input
+                                  placeholder="587"
+                                  className="rounded-2xl bg-background/70 border-border/70"
+                                  value={settings.smtpPort || ""}
+                                  onChange={(e) =>
+                                    setSettings({
+                                      ...settings,
+                                      smtpPort: parseInt(e.target.value) || 0,
+                                    })
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>SMTP Username</Label>
+                                <Input
+                                  placeholder="user@gmail.com"
+                                  className="rounded-2xl bg-background/70 border-border/70"
+                                  value={settings.smtpUser || ""}
+                                  onChange={(e) =>
+                                    setSettings({
+                                      ...settings,
+                                      smtpUser: e.target.value,
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>SMTP Password</Label>
+                                <Input
+                                  type="password"
+                                  placeholder="••••••••"
+                                  className="rounded-2xl bg-background/70 border-border/70"
+                                  value={settings.smtpPassword || ""}
+                                  onChange={(e) =>
+                                    setSettings({
+                                      ...settings,
+                                      smtpPassword: e.target.value,
+                                    })
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>From Email</Label>
+                              <Input
+                                placeholder="noreply@feedferret.cloud"
+                                className="rounded-2xl bg-background/70 border-border/70"
+                                value={settings.smtpFrom || ""}
+                                onChange={(e) =>
+                                  setSettings({
+                                    ...settings,
+                                    smtpFrom: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <div className="rounded-3xl border border-primary/10 bg-primary/5 p-4 text-sm text-muted-foreground">
+                            This provider is configured through environment variables only. Use the self-hosting docs for the exact variables, then save your provider choice here.
+                          </div>
+                        )}
+
                         <div className="flex gap-3 justify-end pt-2">
                           <Button
                             variant="outline"
                             className="rounded-2xl px-6 gap-2"
-                            onClick={handleTestSmtp}
+                            onClick={handleSendTestEmail}
                             disabled={isSaving}
                           >
                             {isSaving ? (
@@ -414,7 +451,7 @@ export function ServerManagementDialog({
                             ) : (
                               <Send className="w-4 h-4" />
                             )}
-                            Test Connection
+                            Send Test Email
                           </Button>
                           <Button
                             className="rounded-2xl px-8"

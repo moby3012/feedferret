@@ -7,6 +7,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 ## ✨ Features
 
 - **Multi-User Ready**: Built-in authentication and strict data isolation for shared hosting.
+- **Flexible Auth**: Local credentials, optional TOTP 2FA, Google/GitHub OAuth, and Authelia OIDC login.
 - **Smart Sync Engine**: High-performance RSS parsing with content normalization and secure sanitization.
 - **Advanced Search**: Full query syntax — filter by feed, category, `is:starred`, `is:unread`, `label:`, date ranges. Save searches for quick access.
 - **Auto-Mark-as-Read Rules**: Define filter rules (feed/category/query) that auto-mark, star, or label articles on sync. Preview matches before enabling.
@@ -31,6 +32,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
   - `Shift+A`: Mark all as read
   - `?`: Show shortcut help overlay
 - **PWA Support**: Install on mobile for a native-like experience.
+- **Flexible Email Delivery**: SMTP or API-based delivery with Resend, Postmark, Mailgun, or SendGrid.
 - **Self-Hostable**: Simple deployment with Docker and SQLite.
 
 ## 🚀 Getting Started
@@ -72,6 +74,12 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
    pnpm run dev
    ```
    Open [http://localhost:3000](http://localhost:3000) and register your first account.
+
+### 🔐 Auth & Email Provider Docs
+
+For self-hosting configuration of TOTP 2FA, Authelia OIDC, and API-based email providers, see:
+
+- [`docs/self-hosting-auth-email.md`](docs/self-hosting-auth-email.md)
 
 ### 🐳 Docker Deployment
 

@@ -13,6 +13,10 @@ export async function POST(request: Request) {
     return new NextResponse("Error=BadAuthentication\n", { status: 403 });
   }
 
+  if (user.twoFactorEnabled) {
+    return new NextResponse("Error=TwoFactorRequired\n", { status: 403 });
+  }
+
   const token = createGReaderToken(user.id);
   return new NextResponse(`SID=${token}\nLSID=${token}\nAuth=${token}\n`, {
     headers: { "content-type": "text/plain; charset=utf-8" },
