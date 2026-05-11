@@ -327,7 +327,7 @@ export function RssSidebar({
   }
 
   return (
-    <aside className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-r border-sidebar-border/70 flex flex-col">
+    <aside className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-r border-sidebar-border/70 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">
@@ -740,7 +740,7 @@ function SortableCategory({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="group">
+    <div ref={setNodeRef} style={style} className="group w-full overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2 hover:bg-sidebar-accent/30 rounded-lg transition-colors">
         <div
           {...attributes}
@@ -764,7 +764,7 @@ function SortableCategory({
       </div>
 
       {expanded && (
-        <div className="ml-4 pl-2 border-l border-sidebar-border/50 py-1 space-y-0.5">
+        <div className="ml-4 pl-2 border-l border-sidebar-border/50 py-1 space-y-0.5 overflow-hidden">
           <SortableContext
             items={feeds.map((f: any) => f.id)}
             strategy={verticalListSortingStrategy}
@@ -812,7 +812,7 @@ function SortableFeedItem({ feed, renderFeedRow }: any) {
     <div
       ref={setNodeRef}
       style={style}
-      className="group/feed flex items-center min-w-0"
+      className="group/feed w-full flex items-center min-w-0 overflow-hidden"
     >
       <div
         {...attributes}
@@ -952,7 +952,7 @@ function FeedRow({
   onShowHealth: () => void;
 }) {
   return (
-    <div className="group/row relative flex items-center gap-1 min-w-0">
+    <div className="group/row relative w-full flex items-center gap-1 min-w-0 overflow-hidden">
       <div className="flex-1 min-w-0">
         <SimpleFeedItem feed={feed} isSelected={isSelected} onSelect={onSelect} />
       </div>
