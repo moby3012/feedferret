@@ -764,7 +764,7 @@ function SortableCategory({
       </div>
 
       {expanded && (
-        <div className="pl-4 border-l border-sidebar-border/50 py-1 space-y-0.5 overflow-hidden">
+        <div className="pl-4 pr-2 border-l border-sidebar-border/50 py-1 space-y-0.5 overflow-hidden">
           <SortableContext
             items={feeds.map((f: any) => f.id)}
             strategy={verticalListSortingStrategy}
@@ -842,7 +842,7 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
       {!hideUnreadBadge && feed.unreadCount > 0 && (
         <span
           className={cn(
-            "text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums",
+            "shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums",
             isSelected
               ? "bg-primary-foreground/20 text-primary-foreground"
               : "bg-brand/15 text-brand",
@@ -978,7 +978,7 @@ function UncategorizedGroup({ feeds, renderFeedRow }: any) {
           Uncategorized
         </h3>
       </div>
-      <div className="pl-4 py-1 space-y-0.5">
+      <div className="pl-4 pr-2 py-1 space-y-0.5">
         {feeds.map((feed: any) => renderFeedRow(feed))}
       </div>
     </div>
