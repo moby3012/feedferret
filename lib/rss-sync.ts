@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { getEffectiveSettings } from "./settings";
 import { applyAutoReadRules } from "./auto-read-rules";
+import { queueNewArticleNotifications } from "./notifications";
 import https from "https";
 
 async function getSanitizer() {
@@ -91,18 +92,26 @@ export async function syncFeed(userId: string, feedId: string) {
         });
 
         const upsertedIds: string[] = [];
+        const createdArticleIds: string[] = [];
 
         for (const article of articles) {
             if (!article.link) continue;
 
-            const upserted = await db.article.upsert({
-                where: {
-                    userId_feedId_dedupeKey: {
-                        userId: userId,
-                        feedId: feed.id,
-                        dedupeKey: article.dedupeKey,
-                    },
+            const where = {
+                userId_feedId_dedupeKey: {
+                    userId: userId,
+                    feedId: feed.id,
+                    dedupeKey: article.dedupeKey,
                 },
+            };
+
+            const existing = await db.article.findUnique({
+                where,
+                select: { id: true },
+            });
+
+            const upserted = await db.article.upsert({
+                where,
                 update: {
                     title: article.title,
                     link: article.link,
@@ -116,6 +125,7 @@ export async function syncFeed(userId: string, feedId: string) {
                 create: article,
             });
             upsertedIds.push(upserted.id);
+            if (!existing) createdArticleIds.push(upserted.id);
         }
 
         await db.feed.update({
@@ -128,7 +138,13 @@ export async function syncFeed(userId: string, feedId: string) {
             await autoFetchFullTextForArticles(userId, upsertedIds, feed);
         }
 
-        return { success: true, count: articles.length };
+        if (createdArticleIds.length > 0) {
+            await queueNewArticleNotifications(userId, createdArticleIds).catch((e) =>
+                console.error("[rss-sync] push notification queue failed:", e),
+            );
+        }
+
+        return { success: true, count: articles.length, createdArticleIds };
     } catch (error) {
         console.error(`Error syncing feed ${feed.url}:`, error);
         await db.feed.update({
