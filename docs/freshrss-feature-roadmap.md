@@ -181,3 +181,24 @@ All Sprint 1 items are complete. Next priorities ordered by value/effort ratio:
 2. **Full Google Reader API** (#13) — High effort. Enables native RSS clients (Reeder, NetNewsWire, FeedMe). Biggest adoption multiplier.
 3. **Multi-Database / Postgres** (#15) — High effort. Required for production deployments at scale. Prisma already supports it.
 4. **Advanced SSRF Security** (#18) — Very High effort. Critical before recommending multi-user public hosting.
+
+## Saved Search Sharing Implementation Notes
+
+Status: ✅ Implemented.
+
+Implemented scope:
+
+- Saved searches can be toggled into a shared state from Manage Feeds → Saved Searches.
+- Sharing creates an opaque token (`shareToken`) instead of exposing internal saved-search IDs.
+- Shared read-only HTML page: `/shared/search/[token]`.
+- Shared RSS feed: `/api/shared-search/[token]/rss`.
+- Users can copy/open the public page and RSS URL from the saved-search card.
+- Disabling sharing clears the token and immediately invalidates previously shared URLs.
+
+Follow-up ideas:
+
+- Add optional per-share title/description overrides.
+- Add expiry dates for temporary shares.
+- Add share analytics/counts.
+- Add OPML export for a shared saved search if useful.
+- Add authenticated-only team shares if FeedFerret grows collaboration features.

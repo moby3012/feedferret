@@ -7,6 +7,7 @@ import { syncUserFeeds, syncFeed } from "@/lib/rss-sync";
 import { parseOpml, generateOpml, OpmlOutline } from "@/lib/opml";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import Parser from "rss-parser";
+import { randomBytes } from "crypto";
 
 const parser = new Parser();
 
@@ -252,6 +253,31 @@ export async function updateSavedSearch(searchId: string, data: { name?: string;
     });
 
     revalidatePath("/");
+    return savedSearch;
+}
+
+export async function setSavedSearchSharing(searchId: string, enabled: boolean) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const existing = await db.savedSearch.findUnique({
+        where: { id: searchId, userId: session.user.id },
+        select: { shareToken: true },
+    });
+    if (!existing) throw new Error("Saved search not found");
+
+    const savedSearch = await db.savedSearch.update({
+        where: { id: searchId, userId: session.user.id },
+        data: enabled
+            ? {
+                shareToken: existing.shareToken || randomBytes(24).toString("base64url"),
+                sharedAt: new Date(),
+            }
+            : { shareToken: null, sharedAt: null },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/settings");
     return savedSearch;
 }
 

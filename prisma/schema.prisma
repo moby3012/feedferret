@@ -197,14 +197,16 @@ model ArticleLabel {
 }
 
 model SavedSearch {
-  id        String   @id @default(cuid())
-  userId    String
-  name      String
-  query     String
-  order     Int      @default(0)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  query      String
+  order      Int       @default(0)
+  shareToken String?   @unique
+  sharedAt   DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
   @@unique([userId, name])
   @@index([userId, order])
 }

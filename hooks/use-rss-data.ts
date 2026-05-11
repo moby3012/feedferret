@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, previewFeedExtraction } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, previewFeedExtraction } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest } from "@/app/actions/settings"
 import { toast } from "sonner"
 
@@ -475,6 +475,21 @@ export function useDeleteSavedSearch() {
         mutationFn: (searchId: string) => deleteSavedSearch(searchId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["saved-searches"] })
+        },
+    })
+}
+
+export function useSetSavedSearchSharing() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ searchId, enabled }: { searchId: string; enabled: boolean }) =>
+            setSavedSearchSharing(searchId, enabled),
+        onSuccess: (_result, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["saved-searches"] })
+            toast.success(variables.enabled ? "Search sharing enabled" : "Search sharing disabled")
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not update sharing")
         },
     })
 }

@@ -17,6 +17,7 @@ import {
   useDeleteLabel,
   useSavedSearches,
   useDeleteSavedSearch,
+  useSetSavedSearchSharing,
   useFeedHealth,
   useApplyRetentionPolicies,
   useAutoReadRules,
@@ -67,6 +68,11 @@ import {
   Power,
   Eye,
   Settings2,
+  Share2,
+  Copy,
+  ExternalLink,
+  Rss,
+  Link as LinkIcon,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
 import { toast } from "sonner";
@@ -249,6 +255,7 @@ export function FeedManagement({
   const createLabel = useCreateLabel();
   const deleteLabel = useDeleteLabel();
   const deleteSavedSearch = useDeleteSavedSearch();
+  const setSavedSearchSharing = useSetSavedSearchSharing();
   const applyRetention = useApplyRetentionPolicies();
   const { data: feedHealth = [] } = useFeedHealth();
   const { data: autoReadRules = [] } = useAutoReadRules();
@@ -692,13 +699,31 @@ export function FeedManagement({
                   </div>
                   <ScrollArea className="h-[56vh]">
                     <div className="space-y-2 pr-3">
-                      {savedSearches.map((search: any) => (
+                      {savedSearches.map((search: any) => {
+                        const shareOrigin = typeof window !== "undefined" ? window.location.origin : "";
+                        const shareUrl = search.shareToken
+                          ? `${shareOrigin}/shared/search/${search.shareToken}`
+                          : "";
+                        const rssUrl = search.shareToken
+                          ? `${shareOrigin}/api/shared-search/${search.shareToken}/rss`
+                          : "";
+
+                        return (
                         <div
                           key={search.id}
                           className="rounded-2xl border border-border/60 bg-background/60 p-3"
                         >
                           <div className="flex items-center gap-3">
                             <span className="flex-1 truncate text-sm font-medium">{search.name}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-xl text-muted-foreground hover:bg-accent/10 hover:text-accent"
+                              onClick={() => setSavedSearchSharing.mutate({ searchId: search.id, enabled: !search.shareToken })}
+                              title={search.shareToken ? "Disable sharing" : "Enable sharing"}
+                            >
+                              {search.shareToken ? <LinkIcon className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -711,8 +736,39 @@ export function FeedManagement({
                           <code className="mt-2 block truncate rounded-xl bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
                             {search.query}
                           </code>
+                          {search.shareToken && (
+                            <div className="mt-3 rounded-xl border border-border/50 bg-muted/25 p-2">
+                              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                                <LinkIcon className="h-3.5 w-3.5" />
+                                Shared read-only link
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 rounded-xl"
+                                  onClick={() => { navigator.clipboard.writeText(shareUrl); toast.success("Share link copied"); }}
+                                >
+                                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                  Copy
+                                </Button>
+                                <Button asChild variant="outline" size="sm" className="h-8 rounded-xl">
+                                  <a href={shareUrl} target="_blank" rel="noreferrer">
+                                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                                    Open
+                                  </a>
+                                </Button>
+                                <Button asChild variant="outline" size="sm" className="h-8 rounded-xl">
+                                  <a href={rssUrl} target="_blank" rel="noreferrer">
+                                    <Rss className="mr-1.5 h-3.5 w-3.5" />
+                                    RSS
+                                  </a>
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ))}
+                      )})}
                       {savedSearches.length === 0 && (
                         <p className="py-10 text-center text-sm text-muted-foreground">
                           Use the article search menu to save a query.
