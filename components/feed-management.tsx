@@ -819,7 +819,7 @@ export function FeedManagement({
                         <span className="rounded-full bg-green-500/10 text-green-600 px-2.5 py-1 font-medium">
                           +{lastImportReport.feedsAdded} new
                         </span>
-                        <span className="rounded-full bg-blue-500/10 text-blue-600 px-2.5 py-1 font-medium">
+                        <span className="rounded-full bg-accent/10 text-accent px-2.5 py-1 font-medium">
                           {lastImportReport.feedsUpdated} already existed
                         </span>
                         <span className="rounded-full bg-muted text-muted-foreground px-2.5 py-1 font-medium">

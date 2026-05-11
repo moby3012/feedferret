@@ -98,7 +98,7 @@ export function RssHeader({
             className={cn(
               "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
               showSearch || searchQuery
-                ? "text-blue-500 bg-blue-500/10"
+                ? "text-accent bg-accent/10"
                 : "text-muted-foreground"
             )}
             onClick={() => {
@@ -129,7 +129,7 @@ export function RssHeader({
           className={cn(
             "h-10 rounded-2xl px-3 transition-all duration-200 active:scale-95 flex items-center gap-2",
             unreadOnly
-              ? "text-blue-500 bg-blue-500/10 border border-blue-500/20 shadow-sm"
+              ? "text-accent bg-accent/10 border border-accent/20 shadow-sm"
               : "text-muted-foreground",
           )}
           onClick={onToggleUnreadOnly}

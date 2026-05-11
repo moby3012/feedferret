@@ -8,15 +8,29 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 
 - **Multi-User Ready**: Built-in authentication and strict data isolation for shared hosting.
 - **Smart Sync Engine**: High-performance RSS parsing with content normalization and secure sanitization.
-- **OPML Management**: Seamlessly import your existing library or export your subscriptions.
-- **Premium UX**: Responsive design, dark mode, and smooth animations.
-- **Keyboard First**: Power-user shortcuts for blazing-fast navigation:
+- **Advanced Search**: Full query syntax — filter by feed, category, `is:starred`, `is:unread`, `label:`, date ranges. Save searches for quick access.
+- **Auto-Mark-as-Read Rules**: Define filter rules (feed/category/query) that auto-mark, star, or label articles on sync. Preview matches before enabling.
+- **Full-Text Extraction**: Per-feed CSS selectors to fetch full article content from truncated feeds. Auto-fetch on sync.
+- **Feed Authentication**: HTTP Basic Auth, custom User-Agent, timeout, SSL verification, and max-size per feed.
+- **Retention Policies**: Keep minimum N articles per feed, never delete starred/labelled articles, dry-run purge preview.
+- **Feed Health Dashboard**: Per-feed stats — article count, unread count, last sync, avg articles/day, error rate.
+- **Dynamic Theming**: Accent and secondary color pickers in Settings, applied via CSS variables. Full dark mode.
+- **OPML Management**: Import with duplicate detection, selective export by category/feed, JSON full-data export.
+- **Labels & Categories**: Tag articles with colored labels; organize feeds into hierarchical categories.
+- **Google Reader API**: Partial compatibility for native RSS clients (Reeder, NetNewsWire, etc.).
+- **Keyboard First**: Power-user shortcuts for blazing-fast navigation (press `?` for overlay):
   - `/`: Open search
-  - `Esc`: Close search
-  - `j` / `k`: Next/Previous Article
-  - `s`: Toggle Star
-  - `r`: Refresh Feeds
-- **PWA Support**: Install it on your mobile device for a native-like experience.
+  - `Esc`: Close search / dismiss
+  - `j` / `k`: Next / Previous article
+  - `n` / `p`: Next / Previous unread
+  - `s`: Toggle star
+  - `m`: Toggle read/unread
+  - `o`: Open original URL
+  - `r`: Refresh feeds
+  - `Shift+S`: Save current search
+  - `Shift+A`: Mark all as read
+  - `?`: Show shortcut help overlay
+- **PWA Support**: Install on mobile for a native-like experience.
 - **Self-Hostable**: Simple deployment with Docker and SQLite.
 
 ## 🚀 Getting Started
@@ -97,7 +111,7 @@ SYNC_SECRET=$(openssl rand -hex 32)
 
 ## 🛠 Tech Stack
 
-- **Framework**: [Next.js 14+ (App Router)](https://nextjs.org/)
+- **Framework**: [Next.js App Router](https://nextjs.org/) (v16+, React 19)
 - **Auth**: [Auth.js (NextAuth v5)](https://authjs.dev/)
 - **Database**: [Prisma](https://www.prisma.io/) with [SQLite](https://sqlite.org/)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/) & [shadcn/ui](https://ui.shadcn.com/)
