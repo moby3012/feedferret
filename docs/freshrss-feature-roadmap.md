@@ -108,15 +108,25 @@ FreshRSS supports instant push updates for compatible feeds.
 - Signature verification.
 - Lease renewal scheduler.
 
-### 13. Full Google Reader API Compatibility
-Current FeedFerret implementation is a baseline. FreshRSS is broadly compatible with native clients.
+### 13. Full Google Reader API Compatibility ✅ Expanded
+FeedFerret now provides a substantially more complete Google Reader-style API for native clients.
 
-- Stream item IDs and continuation tokens.
-- Stream preferences.
-- Subscription edit endpoints.
-- Quick add feed endpoint.
-- Tag edit/list completeness.
+Implemented:
+
+- Stream item IDs and continuation tokens. ✅
+- Stream contents + item refs endpoints. ✅
+- Stream preferences endpoint stub for compatibility. ✅
+- Subscription edit endpoints. ✅
+- Quick add feed endpoint. ✅
+- Tag edit/list completeness. ✅
+- Read/starred/label mapping. ✅
+- Feed/category subscription metadata. ✅
+
+Still open:
+
 - Fever API compatibility as secondary target.
+- True preference persistence, not just compatibility stubs.
+- Broader client-by-client validation against Reeder / NetNewsWire / FeedMe.
 
 ### 14. Extension System
 FreshRSS supports user/system extensions.

@@ -17,7 +17,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 - **Dynamic Theming**: Accent and secondary color pickers in Settings, applied via CSS variables. Full dark mode.
 - **OPML Management**: Import with duplicate detection, selective export by category/feed, JSON full-data export.
 - **Labels & Categories**: Tag articles with colored labels; organize feeds into hierarchical categories.
-- **Google Reader API**: Partial compatibility for native RSS clients (Reeder, NetNewsWire, etc.).
+- **Google Reader API**: Expanded compatibility for native RSS clients (Reeder, NetNewsWire, FeedMe, ReadKit, etc.).
 - **Keyboard First**: Power-user shortcuts for blazing-fast navigation (press `?` for overlay):
   - `/`: Open search
   - `Esc`: Close search / dismiss
