@@ -358,7 +358,7 @@ export function RssSidebar({
       </div>
 
       <ScrollArea className="flex-1 overflow-hidden min-h-0">
-        <div className="p-4">
+        <div className="p-4 w-full min-w-0 max-w-full">
           {/* Navigation */}
           <nav className="space-y-0.5 mb-6">
             {navItems.map((item) => (

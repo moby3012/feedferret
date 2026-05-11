@@ -509,7 +509,7 @@ export default function RSSReaderPage() {
     <div className="fixed inset-0 flex bg-background overflow-hidden selection:bg-accent/20 app-chrome">
       {/* Desktop Sidebar */}
       {!isMobileLayout && (
-      <div className="shrink-0">
+      <div className="shrink-0 w-80 overflow-hidden">
         <RssSidebar
           feeds={sidebarFeeds}
           selectedFeed={selectedFeed}
