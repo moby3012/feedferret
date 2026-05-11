@@ -35,6 +35,7 @@ model User {
   accentColor            String    @default("#5BA4CF")  // ice blue
   secondaryColor         String    @default("#F0963C")  // soft orange
   apiToken      String?   @unique
+  isActive      Boolean   @default(true)
   digestEnabled           Boolean   @default(false)
   digestFrequency         String    @default("daily")   // "daily" | "weekly"
   digestDayOfWeek         Int?                          // 0=Sun … 6=Sat, weekly only
@@ -218,11 +219,33 @@ model GlobalSettings {
   registrationsEnabled Boolean  @default(true)
   mailServiceEnabled   Boolean  @default(false)
   mailProvider        String   @default("smtp")
+  // SMTP config
   smtpHost            String?
   smtpPort            Int?
   smtpUser            String?
   smtpPassword        String?
   smtpFrom            String?
+  // API mail providers (values encrypted at rest)
+  resendApiKey        String?
+  resendFromEmail     String?
+  postmarkServerToken String?
+  postmarkFromEmail   String?
+  postmarkMessageStream String?
+  mailgunApiKey       String?
+  mailgunDomain       String?
+  mailgunFromEmail    String?
+  mailgunBaseUrl      String?
+  sendgridApiKey      String?
+  sendgridFromEmail   String?
+  // Instance settings
+  instanceName        String?
+  instanceUrl         String?
+  // Misc
+  totpIssuer          String?
+  backgroundSyncEnabled          Boolean @default(true)
+  backgroundSyncIntervalMinutes  Int     @default(5)
+  // Onboarding
+  onboardingCompleted Boolean @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

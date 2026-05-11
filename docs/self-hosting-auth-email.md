@@ -44,9 +44,15 @@ FeedFerret can send email through:
 
 ### How it works
 
-- **SMTP** is configured inside **Server Settings**.
-- **API-based providers** are configured through environment variables.
-- Once the required variables are present, that provider appears in **Server Settings → SMTP / Email** and can be selected there.
+All providers can be configured in two ways — pick whichever is easier for your setup:
+
+**Option A — Admin UI (recommended for most users):**
+Go to **Server Management → Email**, select your provider, and enter credentials directly. Credentials are stored encrypted (AES-256-GCM) in the database. No environment variables needed.
+
+**Option B — Environment variables:**
+Set the provider-specific ENV vars (see below). These act as a fallback when no DB value is set. DB values always take priority over ENV values.
+
+You can mix both: for example, set SMTP via the Admin UI and keep OAuth providers as ENV vars.
 
 ### SMTP
 
@@ -98,11 +104,14 @@ SENDGRID_FROM_EMAIL="noreply@example.com"
 After configuring a provider:
 
 1. Open **Server Management** as admin.
-2. Go to **SMTP / Email**.
-3. Enable **Activate Mail Service**.
+2. Go to the **Email** tab.
+3. Enable **Mail Service**.
 4. Choose the provider.
-5. Save.
-6. Send a test email.
+5. Enter credentials (or leave blank if set via ENV).
+6. Save.
+7. Send a test email.
+
+> **Credential security:** API keys entered through the Admin UI are stored encrypted with AES-256-GCM, with the encryption key derived from your `AUTH_SECRET`. Never lose your `AUTH_SECRET` — it is needed to decrypt stored credentials.
 
 ### What email is used for
 

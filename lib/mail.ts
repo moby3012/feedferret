@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import type { GlobalSettings } from "@prisma/client";
 import { db } from "@/lib/db";
+import { decryptIfValue } from "@/lib/crypto";
 
 export type MailProviderId = "smtp" | "resend" | "postmark" | "mailgun" | "sendgrid";
 
@@ -21,77 +22,98 @@ const PROVIDER_OPTIONS: Record<MailProviderId, MailProviderOption> = {
   resend: {
     id: "resend",
     label: "Resend",
-    envManaged: true,
+    envManaged: false,
     description: "Transactional email via Resend API.",
   },
   postmark: {
     id: "postmark",
     label: "Postmark",
-    envManaged: true,
+    envManaged: false,
     description: "Transactional email via Postmark API.",
   },
   mailgun: {
     id: "mailgun",
     label: "Mailgun",
-    envManaged: true,
+    envManaged: false,
     description: "Transactional email via Mailgun API.",
   },
   sendgrid: {
     id: "sendgrid",
     label: "SendGrid",
-    envManaged: true,
+    envManaged: false,
     description: "Transactional email via SendGrid API.",
   },
 };
 
-function hasResendEnv() {
-  return !!process.env.RESEND_API_KEY && !!process.env.RESEND_FROM_EMAIL;
+// Resolve effective API key: DB (decrypted) takes priority, ENV is fallback
+function resolveKey(dbValue: string | null | undefined, envValue: string | undefined): string | undefined {
+  const decrypted = decryptIfValue(dbValue);
+  return decrypted || envValue || undefined;
 }
 
-function hasPostmarkEnv() {
-  return !!process.env.POSTMARK_SERVER_TOKEN && !!process.env.POSTMARK_FROM_EMAIL;
+function hasResend(s?: Partial<GlobalSettings> | null): boolean {
+  return !!(resolveKey(s?.resendApiKey, process.env.RESEND_API_KEY) &&
+    (s?.resendFromEmail || process.env.RESEND_FROM_EMAIL));
 }
 
-function hasMailgunEnv() {
-  return !!process.env.MAILGUN_API_KEY && !!process.env.MAILGUN_DOMAIN && !!process.env.MAILGUN_FROM_EMAIL;
+function hasPostmark(s?: Partial<GlobalSettings> | null): boolean {
+  return !!(resolveKey(s?.postmarkServerToken, process.env.POSTMARK_SERVER_TOKEN) &&
+    (s?.postmarkFromEmail || process.env.POSTMARK_FROM_EMAIL));
 }
 
-function hasSendgridEnv() {
-  return !!process.env.SENDGRID_API_KEY && !!process.env.SENDGRID_FROM_EMAIL;
+function hasMailgun(s?: Partial<GlobalSettings> | null): boolean {
+  return !!(resolveKey(s?.mailgunApiKey, process.env.MAILGUN_API_KEY) &&
+    (s?.mailgunDomain || process.env.MAILGUN_DOMAIN) &&
+    (s?.mailgunFromEmail || process.env.MAILGUN_FROM_EMAIL));
 }
 
-export function getConfiguredMailProviders(): MailProviderOption[] {
+function hasSendgrid(s?: Partial<GlobalSettings> | null): boolean {
+  return !!(resolveKey(s?.sendgridApiKey, process.env.SENDGRID_API_KEY) &&
+    (s?.sendgridFromEmail || process.env.SENDGRID_FROM_EMAIL));
+}
+
+export async function getConfiguredMailProviders(
+  storedSettings?: Partial<GlobalSettings> | null,
+): Promise<MailProviderOption[]> {
+  const s = storedSettings ?? (await db.globalSettings.findUnique({ where: { id: "global" } }));
   const options: MailProviderOption[] = [PROVIDER_OPTIONS.smtp];
-  if (hasResendEnv()) options.push(PROVIDER_OPTIONS.resend);
-  if (hasPostmarkEnv()) options.push(PROVIDER_OPTIONS.postmark);
-  if (hasMailgunEnv()) options.push(PROVIDER_OPTIONS.mailgun);
-  if (hasSendgridEnv()) options.push(PROVIDER_OPTIONS.sendgrid);
+  if (hasResend(s)) options.push(PROVIDER_OPTIONS.resend);
+  if (hasPostmark(s)) options.push(PROVIDER_OPTIONS.postmark);
+  if (hasMailgun(s)) options.push(PROVIDER_OPTIONS.mailgun);
+  if (hasSendgrid(s)) options.push(PROVIDER_OPTIONS.sendgrid);
   return options;
 }
 
-function isProviderAvailable(provider: MailProviderId) {
+function isProviderAvailable(provider: MailProviderId, s?: Partial<GlobalSettings> | null): boolean {
   if (provider === "smtp") return true;
-  return getConfiguredMailProviders().some((option) => option.id === provider);
+  if (provider === "resend") return hasResend(s);
+  if (provider === "postmark") return hasPostmark(s);
+  if (provider === "mailgun") return hasMailgun(s);
+  if (provider === "sendgrid") return hasSendgrid(s);
+  return false;
 }
 
-async function getStoredSettings() {
+async function getStoredSettings(): Promise<GlobalSettings | null> {
   return db.globalSettings.findUnique({ where: { id: "global" } });
 }
 
-function resolveProvider(settings?: Pick<GlobalSettings, "mailProvider"> | null): MailProviderId {
+function resolveProvider(settings?: Partial<GlobalSettings> | null): MailProviderId {
   const provider = (settings?.mailProvider || "smtp") as MailProviderId;
-  return isProviderAvailable(provider) ? provider : "smtp";
+  return isProviderAvailable(provider, settings) ? provider : "smtp";
 }
 
-function resolveFromAddress(provider: MailProviderId, settings?: Pick<GlobalSettings, "smtpFrom"> | null) {
+function resolveFromAddress(
+  provider: MailProviderId,
+  settings?: Partial<GlobalSettings> | null,
+): string {
   if (provider === "smtp") return settings?.smtpFrom || "noreply@localhost";
-  if (provider === "resend") return process.env.RESEND_FROM_EMAIL!;
-  if (provider === "postmark") return process.env.POSTMARK_FROM_EMAIL!;
-  if (provider === "mailgun") return process.env.MAILGUN_FROM_EMAIL!;
-  return process.env.SENDGRID_FROM_EMAIL!;
+  if (provider === "resend") return settings?.resendFromEmail || process.env.RESEND_FROM_EMAIL!;
+  if (provider === "postmark") return settings?.postmarkFromEmail || process.env.POSTMARK_FROM_EMAIL!;
+  if (provider === "mailgun") return settings?.mailgunFromEmail || process.env.MAILGUN_FROM_EMAIL!;
+  return settings?.sendgridFromEmail || process.env.SENDGRID_FROM_EMAIL!;
 }
 
-async function assertMailEnabled(settings?: Pick<GlobalSettings, "mailServiceEnabled"> | null) {
+async function assertMailEnabled(settings?: Partial<GlobalSettings> | null) {
   if (!settings?.mailServiceEnabled) {
     throw new Error("Mail service is disabled");
   }
@@ -133,11 +155,25 @@ async function sendWithSmtp({
   });
 }
 
-async function sendWithResend({ to, subject, html, text, from }: { to: string; subject: string; html: string; text: string; from: string }) {
+async function sendWithResend({
+  to,
+  subject,
+  html,
+  text,
+  from,
+  apiKey,
+}: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  from: string;
+  apiKey: string;
+}) {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ from, to: [to], subject, html, text }),
@@ -148,13 +184,29 @@ async function sendWithResend({ to, subject, html, text, from }: { to: string; s
   }
 }
 
-async function sendWithPostmark({ to, subject, html, text, from }: { to: string; subject: string; html: string; text: string; from: string }) {
+async function sendWithPostmark({
+  to,
+  subject,
+  html,
+  text,
+  from,
+  token,
+  messageStream,
+}: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  from: string;
+  token: string;
+  messageStream?: string;
+}) {
   const response = await fetch("https://api.postmarkapp.com/email", {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      "X-Postmark-Server-Token": process.env.POSTMARK_SERVER_TOKEN!,
+      "X-Postmark-Server-Token": token,
     },
     body: JSON.stringify({
       From: from,
@@ -162,7 +214,7 @@ async function sendWithPostmark({ to, subject, html, text, from }: { to: string;
       Subject: subject,
       HtmlBody: html,
       TextBody: text,
-      MessageStream: process.env.POSTMARK_MESSAGE_STREAM || "outbound",
+      MessageStream: messageStream || process.env.POSTMARK_MESSAGE_STREAM || "outbound",
     }),
   });
 
@@ -171,15 +223,32 @@ async function sendWithPostmark({ to, subject, html, text, from }: { to: string;
   }
 }
 
-async function sendWithMailgun({ to, subject, html, text, from }: { to: string; subject: string; html: string; text: string; from: string }) {
-  const baseUrl = process.env.MAILGUN_BASE_URL || "https://api.mailgun.net";
-  const domain = process.env.MAILGUN_DOMAIN!;
+async function sendWithMailgun({
+  to,
+  subject,
+  html,
+  text,
+  from,
+  apiKey,
+  domain,
+  baseUrl,
+}: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  from: string;
+  apiKey: string;
+  domain: string;
+  baseUrl?: string;
+}) {
+  const url = `${baseUrl || process.env.MAILGUN_BASE_URL || "https://api.mailgun.net"}/v3/${domain}/messages`;
   const body = new URLSearchParams({ from, to, subject, html, text });
 
-  const response = await fetch(`${baseUrl}/v3/${domain}/messages`, {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${Buffer.from(`api:${process.env.MAILGUN_API_KEY}`).toString("base64")}`,
+      Authorization: `Basic ${Buffer.from(`api:${apiKey}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body,
@@ -190,11 +259,25 @@ async function sendWithMailgun({ to, subject, html, text, from }: { to: string; 
   }
 }
 
-async function sendWithSendgrid({ to, subject, html, text, from }: { to: string; subject: string; html: string; text: string; from: string }) {
+async function sendWithSendgrid({
+  to,
+  subject,
+  html,
+  text,
+  from,
+  apiKey,
+}: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  from: string;
+  apiKey: string;
+}) {
   const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -238,19 +321,46 @@ export async function sendSystemEmail({
     await sendWithSmtp({ settings: settings as GlobalSettings, to, subject, html, text });
     return;
   }
+
   if (provider === "resend") {
-    await sendWithResend({ to, subject, html, text, from });
+    const apiKey = resolveKey(settings?.resendApiKey, process.env.RESEND_API_KEY)!;
+    await sendWithResend({ to, subject, html, text, from, apiKey });
     return;
   }
+
   if (provider === "postmark") {
-    await sendWithPostmark({ to, subject, html, text, from });
+    const token = resolveKey(settings?.postmarkServerToken, process.env.POSTMARK_SERVER_TOKEN)!;
+    await sendWithPostmark({
+      to,
+      subject,
+      html,
+      text,
+      from,
+      token,
+      messageStream: settings?.postmarkMessageStream || undefined,
+    });
     return;
   }
+
   if (provider === "mailgun") {
-    await sendWithMailgun({ to, subject, html, text, from });
+    const apiKey = resolveKey(settings?.mailgunApiKey, process.env.MAILGUN_API_KEY)!;
+    const domain = settings?.mailgunDomain || process.env.MAILGUN_DOMAIN!;
+    await sendWithMailgun({
+      to,
+      subject,
+      html,
+      text,
+      from,
+      apiKey,
+      domain,
+      baseUrl: settings?.mailgunBaseUrl || undefined,
+    });
     return;
   }
-  await sendWithSendgrid({ to, subject, html, text, from });
+
+  // sendgrid
+  const apiKey = resolveKey(settings?.sendgridApiKey, process.env.SENDGRID_API_KEY)!;
+  await sendWithSendgrid({ to, subject, html, text, from, apiKey });
 }
 
 export async function sendSignInEmail({ email, url }: { email: string; url: string }) {
@@ -273,7 +383,10 @@ export async function sendSignInEmail({ email, url }: { email: string; url: stri
   });
 }
 
-export async function sendTestSystemEmail(to: string, overrideSettings?: Partial<GlobalSettings> | null) {
+export async function sendTestSystemEmail(
+  to: string,
+  overrideSettings?: Partial<GlobalSettings> | null,
+) {
   await sendSystemEmail({
     to,
     subject: "FeedFerret mail provider test",

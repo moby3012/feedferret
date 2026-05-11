@@ -2,6 +2,8 @@
 
 This document covers the public REST API endpoints available for external integrations such as browser extensions and mobile apps.
 
+> **Internal API (SaaS provisioning):** If you need to provision or suspend users programmatically from an external system (e.g., a Stripe webhook), see [docs/internal-api.md](./internal-api.md).
+
 ## Authentication
 
 All API endpoints require authentication. Two methods are supported:

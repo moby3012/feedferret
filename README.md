@@ -32,7 +32,10 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
   - `Shift+A`: Mark all as read
   - `?`: Show shortcut help overlay
 - **PWA Support**: Install on mobile for a native-like experience.
-- **Flexible Email Delivery**: SMTP or API-based delivery with Resend, Postmark, Mailgun, or SendGrid.
+- **Flexible Email Delivery**: SMTP or API-based delivery with Resend, Postmark, Mailgun, or SendGrid — configurable via Admin UI (credentials stored encrypted) or environment variables.
+- **Admin Onboarding Wizard**: Multi-step setup flow for first-time admins — account creation, instance settings, email, and security configuration.
+- **SaaS Provisioning API**: Internal API endpoints for creating and suspending users from external systems (Stripe webhooks, SaaS portals) via Bearer token auth.
+- **GDPR Compliance**: Self-service account deletion (Art. 17) with full cascade removal of all user data.
 - **Self-Hostable**: Simple deployment with Docker and SQLite.
 
 ## 🚀 Getting Started
@@ -81,6 +84,42 @@ For self-hosting configuration of TOTP 2FA, Authelia OIDC, and API-based email p
 
 - [`docs/self-hosting-auth-email.md`](docs/self-hosting-auth-email.md)
 
+### 🧙 Admin Onboarding
+
+On first run, navigate to `/setup` for a guided multi-step wizard:
+
+1. **Account** — create the admin account (auto sign-in)
+2. **Instance** — set name and public URL (used in welcome emails)
+3. **Email** — configure SMTP or Resend inline; skip to do it later in Server Management
+4. **Security** — disable public registration (recommended for private instances)
+5. **Done** — launch the app
+
+### ⚡ SaaS Provisioning (Internal API)
+
+FeedFerret exposes internal API routes for external systems to manage user lifecycle without SaaS logic in the OSS core.
+
+**Required:** Set `INTERNAL_API_KEY` environment variable.
+
+```bash
+# Create a user (e.g., from a Stripe checkout webhook)
+curl -X POST https://rss.example.com/api/internal/provision-user \
+  -H "Authorization: Bearer $INTERNAL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "name": "Alice"}'
+
+# Suspend a user (e.g., from a subscription cancellation)
+curl -X POST https://rss.example.com/api/internal/suspend-user \
+  -H "Authorization: Bearer $INTERNAL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com"}'
+```
+
+Full docs: [`docs/internal-api.md`](docs/internal-api.md)
+
+### 🛡 GDPR / Right to Erasure
+
+Users can delete their account from **Settings → Delete Account**. All data is cascade-deleted atomically. See [`docs/gdpr.md`](docs/gdpr.md).
+
 ### 🐳 Docker Deployment
 
 The simplest way to run FeedFerret in production is using Docker Compose:
@@ -108,6 +147,8 @@ Environment variables:
 | `SYNC_SECRET` | unset | Required `Bearer` token for unauthenticated `GET /api/sync` and `GET /api/sync/status`. |
 
 Health/status: `GET /api/sync/status` (requires login or `SYNC_SECRET`) reports last run, last error, and config.
+
+Sync interval and enabled/disabled state can also be configured in **Server Management → Sync** (stored in DB, ENV fallback still works).
 
 External cron alternative (recommended when running multiple replicas):
 

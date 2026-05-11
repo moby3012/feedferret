@@ -86,6 +86,10 @@ const config = {
           where: { email: user.email as string },
         });
 
+        if (existingUser?.isActive === false) {
+          return false;
+        }
+
         if (!existingUser) {
           const settings = await db.globalSettings.findUnique({ where: { id: "global" } });
           if (settings && !settings.registrationsEnabled) {
@@ -110,6 +114,11 @@ const config = {
       })) as any;
 
       if (user) {
+        if (user.isActive === false) {
+          // Strip sub so session becomes unauthenticated on next check
+          const { sub: _sub, ...rest } = token;
+          return rest;
+        }
         token.role = user.role;
       }
 
