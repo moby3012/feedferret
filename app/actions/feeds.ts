@@ -355,6 +355,15 @@ export async function updateFeed(feedId: string, data: {
     fullTextSelector?: string | null;
     fullTextRemoveSelectors?: string | null;
     autoFetchFullText?: boolean;
+    fullTextConditions?: string | null;
+    filtersActionRead?: string | null;
+    // FreshRSS extended source options
+    sourceType?: string;
+    priority?: string;
+    unicityCriteria?: string;
+    unicityCriteriaForced?: boolean;
+    scraperConfig?: string | null;
+    httpOptions?: string | null;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
