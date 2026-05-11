@@ -16,7 +16,7 @@ import {
   LogOut,
   User as UserIcon,
   Folder,
-  CogWheel,
+  Cog,
   GripVertical,
   Tag,
   Bookmark,
@@ -633,7 +633,7 @@ export function RssSidebar({
                     className="w-9 h-9 rounded-xl"
                     onClick={() => setIsServerManagementOpen(true)}
                   >
-                    <CogWheel className="w-4 h-4" />
+                    <Cog className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top">Server Settings</TooltipContent>
