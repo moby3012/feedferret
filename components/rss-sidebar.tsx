@@ -13,7 +13,6 @@ import {
   ChevronDown,
   Search,
   Inbox,
-  Settings as SettingsIcon,
   LogOut,
   User as UserIcon,
   Folder,
@@ -35,11 +34,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { FeedManagement } from "./feed-management";
 import {
   useAddFeed,
@@ -113,6 +123,7 @@ export function RssSidebar({
   const [newFeedCategoryId, setNewFeedCategoryId] = useState<string>("none");
   const [isAddingFeed, setIsAddingFeed] = useState(false);
   const [isServerManagementOpen, setIsServerManagementOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const addNewFeed = useAddFeed();
   const { data: allCategories = [] } = useCategories();
@@ -335,23 +346,21 @@ export function RssSidebar({
               </p>
             </div>
           </div>
-          <ThemeToggle />
-        </div>
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-          <Input
-            placeholder="Search feeds..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-11 h-11 text-sm bg-sidebar-accent/80 border-0 rounded-2xl shadow-inner shadow-black/[0.02]"
-          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-8 h-8 rounded-xl shrink-0"
+            onClick={() => setIsSearchOpen(true)}
+          >
+            <Search className="w-4 h-4" />
+          </Button>
         </div>
       </div>
 
       <ScrollArea className="flex-1 overflow-hidden min-h-0">
         <div className="p-4">
           {/* Navigation */}
-          <nav className="space-y-1.5 mb-8">
+          <nav className="space-y-0.5 mb-6">
             {navItems.map((item) => (
               <button
                 key={item.id}
@@ -366,7 +375,7 @@ export function RssSidebar({
                   );
                 }}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-sm transition-all",
+                  "w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm transition-all",
                   selectedFeed === null &&
                     (item.id === "all"
                       ? selectedCategory === "All"
@@ -526,17 +535,7 @@ export function RssSidebar({
               </div>
             )}
 
-            {searchQuery ? (
-              <div className="space-y-1">
-                {filteredFeeds?.map((feed) => renderFeedRow(feed))}
-                {filteredFeeds?.length === 0 && (
-                  <p className="text-sm text-muted-foreground px-4">
-                    No feeds found
-                  </p>
-                )}
-              </div>
-            ) : (
-              <DndContext
+            <DndContext
                 sensors={sensors}
                 collisionDetection={closestCorners}
                 onDragStart={handleDragStart}
@@ -571,59 +570,130 @@ export function RssSidebar({
                   </div>
                 </SortableContext>
               </DndContext>
-            )}
           </div>
         </div>
       </ScrollArea>
 
       {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border/70 space-y-1">
-        {session?.user && (
-          <div className="flex items-center gap-3 px-3 py-2 bg-sidebar-accent/30 rounded-xl mb-2">
-            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-              <UserIcon className="w-4 h-4" />
-            </div>
-            <p className="flex-1 text-sm font-medium truncate">
-              {session.user.name || session.user.email}
-            </p>
-            <Link href="/settings" legacyBehavior>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="w-8 h-8"
-              >
-                <SettingsIcon className="w-4 h-4" />
-              </Button>
-            </Link>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-8 h-8 text-destructive"
-              onClick={() => signOut()}
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
+      <div className="p-3 border-t border-sidebar-border/70">
+        <TooltipProvider delayDuration={500}>
+          <div className="flex items-center justify-around">
+            {session?.user && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href="/settings">
+                    <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl">
+                      <UserIcon className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {session.user.name || session.user.email}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-9 h-9 rounded-xl"
+                  onClick={() => openFeedManagement(undefined)}
+                >
+                  <Folder className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Manage Feeds</TooltipContent>
+            </Tooltip>
+            {session?.user?.role === "ADMIN" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-9 h-9 rounded-xl"
+                    onClick={() => setIsServerManagementOpen(true)}
+                  >
+                    <Users className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Server Settings</TooltipContent>
+              </Tooltip>
+            )}
+            {session?.user && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-9 h-9 rounded-xl text-destructive hover:text-destructive"
+                    onClick={() => signOut()}
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Sign out</TooltipContent>
+              </Tooltip>
+            )}
           </div>
-        )}
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 h-11 rounded-xl"
-          onClick={() => openFeedManagement(undefined)}
-        >
-          <Folder className="w-4 h-4" />
-          Manage Feeds
-        </Button>
-        {session?.user?.role === "ADMIN" && (
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-3 h-11 rounded-xl"
-            onClick={() => setIsServerManagementOpen(true)}
-          >
-            <Users className="w-4 h-4" />
-            Server Settings
-          </Button>
-        )}
+        </TooltipProvider>
       </div>
+
+      <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+        <DialogContent className="max-w-md rounded-2xl p-0 overflow-hidden">
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              Search Feeds
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-4 pb-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                autoFocus
+                placeholder="Feed suchen..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-10 text-sm bg-muted border-0 rounded-xl"
+              />
+            </div>
+          </div>
+          <div className="max-h-72 overflow-y-auto px-2 pb-3">
+            {searchQuery ? (
+              <>
+                {filteredFeeds?.map((feed) => (
+                  <button
+                    key={feed.id}
+                    onClick={() => {
+                      onSelectFeed(feed.id);
+                      setIsSearchOpen(false);
+                      setSearchQuery("");
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm hover:bg-muted transition-colors"
+                  >
+                    <span className="text-base shrink-0">{feed.icon || "📰"}</span>
+                    <span className="flex-1 text-left truncate">{feed.name}</span>
+                    {feed.unreadCount > 0 && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-brand/15 text-brand font-medium tabular-nums">
+                        {feed.unreadCount}
+                      </span>
+                    )}
+                  </button>
+                ))}
+                {filteredFeeds?.length === 0 && (
+                  <p className="text-sm text-muted-foreground px-3 py-4 text-center">
+                    Keine Feeds gefunden
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground px-3 py-4 text-center">
+                Suchbegriff eingeben…
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <FeedManagement
         open={isManagementOpen}
