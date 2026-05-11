@@ -24,7 +24,6 @@ import {
   useSetArticleLabels,
   useReadingPreferences,
 } from "@/hooks/use-rss-data";
-import { cn } from "@/lib/utils";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
   ResizableHandle,
@@ -63,6 +62,7 @@ export default function RSSReaderPage() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [isMobileLayout, setIsMobileLayout] = useState<boolean | null>(null);
 
   const { data: feeds = [], isLoading: feedsLoading } = useFeeds();
   const { data: rawArticles = [], isLoading: articlesLoading } = useArticles(
@@ -109,6 +109,15 @@ export default function RSSReaderPage() {
   const [autoReadSuppressedArticles, setAutoReadSuppressedArticles] = useState<string[]>([]);
   const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
   const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+    const updateLayout = () => setIsMobileLayout(mediaQuery.matches);
+
+    updateLayout();
+    mediaQuery.addEventListener("change", updateLayout);
+    return () => mediaQuery.removeEventListener("change", updateLayout);
+  }, []);
 
   // Initialize viewMode from user prefs (once loaded)
   useEffect(() => {
@@ -485,10 +494,22 @@ export default function RSSReaderPage() {
     icon: f.icon || "📰",
   }));
 
+  if (isMobileLayout === null) {
+    return (
+      <div className="h-dvh flex items-center justify-center bg-[#05060a]">
+        <div className="relative w-20 h-20">
+          <div className="absolute inset-0 border-4 border-primary/20 rounded-[28%] animate-pulse" />
+          <div className="absolute inset-0 border-t-4 border-primary rounded-[28%] animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 flex bg-background overflow-hidden selection:bg-accent/20 app-chrome">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:block shrink-0">
+      {!isMobileLayout && (
+      <div className="shrink-0">
         <RssSidebar
           feeds={sidebarFeeds}
           selectedFeed={selectedFeed}
@@ -507,8 +528,10 @@ export default function RSSReaderPage() {
           }}
         />
       </div>
+      )}
 
       {/* Mobile feed picker: bottom drawer keeps navigation in thumb reach. */}
+      {isMobileLayout && (
       <Drawer open={sidebarOpen} onOpenChange={setSidebarOpen} direction="bottom">
         <DrawerContent className="h-[86dvh] rounded-t-[2rem] border-border/70 p-0 lg:hidden">
           <RssSidebar
@@ -532,8 +555,10 @@ export default function RSSReaderPage() {
           />
         </DrawerContent>
       </Drawer>
+      )}
 
       {/* Desktop: resizable article list + reader */}
+      {!isMobileLayout && (
       <ResizablePanelGroup
         direction="horizontal"
         autoSaveId="feedferret-reader-layout"
@@ -608,14 +633,11 @@ export default function RSSReaderPage() {
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+      )}
 
       {/* Mobile Article List Panel */}
-      <div
-        className={cn(
-          "relative z-10 flex flex-1 flex-col border-r border-border/60 bg-card/70 backdrop-blur-2xl transition-all duration-300 ease-out lg:hidden",
-          selectedArticle && "hidden",
-        )}
-      >
+      {isMobileLayout && !selectedArticle && (
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-2xl transition-all duration-300 ease-out">
         <RssHeader
           title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
           articleCount={filteredArticles.length}
@@ -668,14 +690,11 @@ export default function RSSReaderPage() {
           onShowShortcuts={() => setShortcutsOpen(true)}
         />
       </div>
+      )}
 
       {/* Mobile Article Reader Panel */}
-      <div
-        className={cn(
-          "hidden flex-1 bg-background transition-all duration-300 ease-out lg:hidden",
-          selectedArticle && "fixed inset-0 z-50 flex",
-        )}
-      >
+      {isMobileLayout && selectedArticle && (
+      <div className="fixed inset-0 z-50 flex bg-background transition-all duration-300 ease-out">
         <ArticleReader
           article={selectedArticle}
           onToggleStar={handleToggleStar}
@@ -695,6 +714,7 @@ export default function RSSReaderPage() {
           readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
         />
       </div>
+      )}
 
       <KeyboardShortcutsDialog
         open={shortcutsOpen}
