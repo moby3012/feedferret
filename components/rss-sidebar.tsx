@@ -670,7 +670,7 @@ export function RssSidebar({
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 autoFocus
-                placeholder="Feed suchen..."
+                placeholder="Search for a feed..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 h-10 text-sm bg-muted border-0 rounded-xl"
@@ -711,7 +711,7 @@ export function RssSidebar({
               </>
             ) : (
               <p className="text-sm text-muted-foreground px-3 py-4 text-center">
-                Suchbegriff eingeben…
+                Type to search for a feed…
               </p>
             )}
           </div>
