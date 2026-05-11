@@ -16,7 +16,7 @@ import {
   LogOut,
   User as UserIcon,
   Folder,
-  Users,
+  CogWheel,
   GripVertical,
   Tag,
   Bookmark,
@@ -116,7 +116,13 @@ export function RssSidebar({
   const [searchQuery, setSearchQuery] = useState("");
   const [isManagementOpen, setIsManagementOpen] = useState(false);
   const [managementInitialTab, setManagementInitialTab] = useState<
-    "feeds" | "categories" | "labels" | "saved-searches" | "health" | "rules" | undefined
+    | "feeds"
+    | "categories"
+    | "labels"
+    | "saved-searches"
+    | "health"
+    | "rules"
+    | undefined
   >(undefined);
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState("");
@@ -173,7 +179,12 @@ export function RssSidebar({
     { id: "new", icon: Inbox, label: "New Articles", count: totalUnread },
     { id: "all", icon: Home, label: "All Articles", count: null },
     { id: "starred", icon: Star, label: "Starred", count: starredCount },
-    { id: "readlater", icon: Bookmark, label: "Read Later", count: readLaterCount },
+    {
+      id: "readlater",
+      icon: Bookmark,
+      label: "Read Later",
+      count: readLaterCount,
+    },
     { id: "recent", icon: Clock, label: "Recently Read", count: null },
   ];
 
@@ -382,7 +393,7 @@ export function RssSidebar({
                       : item.id === "new"
                         ? selectedCategory === "New Articles"
                         : selectedCategory === item.label)
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
               >
@@ -415,13 +426,16 @@ export function RssSidebar({
                       }}
                       className={cn(
                         "w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm transition-all",
-                        selectedFeed === null && selectedCategory === `Search:${item.id}`
+                        selectedFeed === null &&
+                          selectedCategory === `Search:${item.id}`
                           ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
                           : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                       )}
                     >
                       <Bookmark className="h-4 w-4 text-muted-foreground" />
-                      <span className="flex-1 truncate text-left">{item.name}</span>
+                      <span className="flex-1 truncate text-left">
+                        {item.name}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -443,13 +457,16 @@ export function RssSidebar({
                       }}
                       className={cn(
                         "w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm transition-all",
-                        selectedFeed === null && selectedCategory === `Label:${item.id}`
+                        selectedFeed === null &&
+                          selectedCategory === `Label:${item.id}`
                           ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
                           : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                       )}
                     >
                       <Tag className="h-4 w-4" style={{ color: item.color }} />
-                      <span className="flex-1 truncate text-left">{item.name}</span>
+                      <span className="flex-1 truncate text-left">
+                        {item.name}
+                      </span>
                       {item._count?.articles > 0 && (
                         <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
                           {item._count.articles}
@@ -536,40 +553,38 @@ export function RssSidebar({
             )}
 
             <DndContext
-                sensors={sensors}
-                collisionDetection={closestCorners}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                modifiers={[restrictToVerticalAxis]}
+              sensors={sensors}
+              collisionDetection={closestCorners}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis]}
+            >
+              <SortableContext
+                items={allCategories.map((c: any) => c.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <SortableContext
-                  items={allCategories.map((c: any) => c.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <div className="space-y-1">
-                    {allCategories.map((category: any) => (
-                      <SortableCategory
-                        key={category.id}
-                        category={category}
-                        feeds={feeds.filter(
-                          (f) => f.categoryId === category.id,
-                        )}
-                        selectedFeed={selectedFeed}
-                        onSelectFeed={onSelectFeed}
-                        expanded={expandedCategories.includes(category.id)}
-                        onToggle={() => toggleCategory(category.id)}
-                        renderFeedRow={renderFeedRow}
-                      />
-                    ))}
-
-                    {/* Uncategorized Feeds */}
-                    <UncategorizedGroup
-                      feeds={feeds.filter((f) => !f.categoryId)}
+                <div className="space-y-1">
+                  {allCategories.map((category: any) => (
+                    <SortableCategory
+                      key={category.id}
+                      category={category}
+                      feeds={feeds.filter((f) => f.categoryId === category.id)}
+                      selectedFeed={selectedFeed}
+                      onSelectFeed={onSelectFeed}
+                      expanded={expandedCategories.includes(category.id)}
+                      onToggle={() => toggleCategory(category.id)}
                       renderFeedRow={renderFeedRow}
                     />
-                  </div>
-                </SortableContext>
-              </DndContext>
+                  ))}
+
+                  {/* Uncategorized Feeds */}
+                  <UncategorizedGroup
+                    feeds={feeds.filter((f) => !f.categoryId)}
+                    renderFeedRow={renderFeedRow}
+                  />
+                </div>
+              </SortableContext>
+            </DndContext>
           </div>
         </div>
       </ScrollArea>
@@ -582,7 +597,11 @@ export function RssSidebar({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Link href="/settings">
-                    <Button variant="ghost" size="icon" className="w-9 h-9 rounded-xl">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-9 h-9 rounded-xl"
+                    >
                       <UserIcon className="w-4 h-4" />
                     </Button>
                   </Link>
@@ -614,7 +633,7 @@ export function RssSidebar({
                     className="w-9 h-9 rounded-xl"
                     onClick={() => setIsServerManagementOpen(true)}
                   >
-                    <Users className="w-4 h-4" />
+                    <CogWheel className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top">Server Settings</TooltipContent>
@@ -671,8 +690,12 @@ export function RssSidebar({
                     }}
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm hover:bg-muted transition-colors"
                   >
-                    <span className="text-base shrink-0">{feed.icon || "📰"}</span>
-                    <span className="flex-1 text-left truncate">{feed.name}</span>
+                    <span className="text-base shrink-0">
+                      {feed.icon || "📰"}
+                    </span>
+                    <span className="flex-1 text-left truncate">
+                      {feed.name}
+                    </span>
                     {feed.unreadCount > 0 && (
                       <span className="text-xs px-1.5 py-0.5 rounded-full bg-brand/15 text-brand font-medium tabular-nums">
                         {feed.unreadCount}
@@ -740,7 +763,11 @@ function SortableCategory({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="group w-full overflow-hidden">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="group w-full overflow-hidden"
+    >
       <div className="flex items-center gap-2 px-4 py-2 hover:bg-sidebar-accent/30 rounded-lg transition-colors">
         <div
           {...attributes}
@@ -908,7 +935,9 @@ function FeedQuickActions({
         {websiteUrl && (
           <DropdownMenuItem
             className="rounded-xl py-2.5 px-3 text-sm"
-            onClick={() => window.open(websiteUrl, "_blank", "noopener,noreferrer")}
+            onClick={() =>
+              window.open(websiteUrl, "_blank", "noopener,noreferrer")
+            }
           >
             <ExternalLink className="w-4 h-4 mr-3" />
             Open website
@@ -954,7 +983,11 @@ function FeedRow({
   return (
     <div className="group/row relative w-full flex items-center gap-1 min-w-0 overflow-hidden">
       <div className="flex-1 min-w-0">
-        <SimpleFeedItem feed={feed} isSelected={isSelected} onSelect={onSelect} />
+        <SimpleFeedItem
+          feed={feed}
+          isSelected={isSelected}
+          onSelect={onSelect}
+        />
       </div>
       <div className="opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 data-[state=open]:opacity-100 transition-opacity">
         <FeedQuickActions
