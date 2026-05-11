@@ -4,7 +4,14 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { syncUserFeeds, syncFeed } from "@/lib/rss-sync";
-import { parseOpml, generateOpml, OpmlOutline } from "@/lib/opml";
+import {
+    parseOpml,
+    generateOpml,
+    OpmlOutline,
+    scraperConfigFromOutline,
+    httpOptionsFromOutline,
+} from "@/lib/opml";
+import { normalizeSourceType, stringifyNonEmpty } from "@/lib/freshrss-opml";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import Parser from "rss-parser";
 import { randomBytes } from "crypto";
@@ -651,13 +658,19 @@ export async function exportOpml(selectedFeedIds?: string[]) {
         where.id = { in: selectedFeedIds };
     }
 
-    const feeds = await db.feed.findMany({
-        where,
-        include: { category: { select: { name: true } } },
-        orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
-    });
+    const [feeds, categories] = await Promise.all([
+        db.feed.findMany({
+            where,
+            include: { category: { select: { id: true, name: true, parentId: true, opmlUrl: true } } },
+            orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
+        }),
+        db.category.findMany({
+            where: { userId: session.user.id },
+            orderBy: [{ order: "asc" }, { name: "asc" }],
+        }),
+    ]);
 
-    return generateOpml(feeds);
+    return generateOpml(feeds, selectedFeedIds?.length ? [] : categories);
 }
 
 export async function exportUserData() {
@@ -716,8 +729,70 @@ export async function importOpml(xml: string) {
         errors: [] as string[],
     };
 
+    const getOrCreateCategory = async (name: string, parentId?: string | null, opmlUrl?: string | null) => {
+        const existingCategory = await db.category.findUnique({
+            where: {
+                userId_name_parentId: {
+                    userId,
+                    name,
+                    parentId: (parentId || null) as any,
+                },
+            },
+        });
+        const category = await db.category.upsert({
+            where: {
+                userId_name_parentId: {
+                    userId,
+                    name,
+                    parentId: (parentId || null) as any,
+                },
+            },
+            update: opmlUrl !== undefined ? { opmlUrl } : {},
+            create: {
+                userId,
+                name,
+                parentId: parentId || undefined,
+                opmlUrl: opmlUrl || undefined,
+            },
+        });
+        if (existingCategory) report.categoriesUpdated += 1;
+        else report.categoriesAdded += 1;
+        return category;
+    };
+
+    const feedDataFromOutline = (outline: OpmlOutline, categoryId?: string | null) => {
+        const scraperConfig = scraperConfigFromOutline(outline);
+        const httpOptions = httpOptionsFromOutline(outline);
+        const frss = outline.frss ?? {};
+        const sourceType = normalizeSourceType(outline.type);
+        return {
+            url: outline.xmlUrl!,
+            name: outline.text,
+            categoryId,
+            sourceType,
+            htmlUrl: outline.htmlUrl || null,
+            description: outline.description || null,
+            priority: frss.priority || "main",
+            unicityCriteria: frss.unicityCriteria || "id",
+            unicityCriteriaForced: frss.unicityCriteriaForced === "true" || frss.unicityCriteriaForced === "1",
+            scraperConfig: stringifyNonEmpty(scraperConfig),
+            httpOptions: stringifyNonEmpty(httpOptions),
+            fullTextSelector: frss.cssFullContent || null,
+            fullTextConditions: frss.cssFullContentConditions || null,
+            fullTextRemoveSelectors: frss.cssContentFilter || frss.cssFullContentFilter || null,
+            filtersActionRead: frss.filtersActionRead || null,
+            customUserAgent: typeof httpOptions.CURLOPT_USERAGENT === "string" ? httpOptions.CURLOPT_USERAGENT : undefined,
+        };
+    };
+
     const processOutline = async (outline: OpmlOutline, categoryId?: string) => {
-        if (outline.type === "rss" && outline.xmlUrl) {
+        if (outline.xmlUrl) {
+            let targetCategoryId = categoryId;
+            if (!targetCategoryId && outline.category) {
+                const category = await getOrCreateCategory(outline.category);
+                targetCategoryId = category.id;
+            }
+            const feedData = feedDataFromOutline(outline, targetCategoryId);
             const existing = await db.feed.findUnique({
                 where: {
                     userId_url: {
@@ -734,45 +809,31 @@ export async function importOpml(xml: string) {
                     },
                 },
                 update: {
-                    name: outline.text,
-                    categoryId,
+                    name: feedData.name,
+                    categoryId: feedData.categoryId,
+                    sourceType: feedData.sourceType,
+                    htmlUrl: feedData.htmlUrl,
+                    description: feedData.description,
+                    priority: feedData.priority,
+                    unicityCriteria: feedData.unicityCriteria,
+                    unicityCriteriaForced: feedData.unicityCriteriaForced,
+                    scraperConfig: feedData.scraperConfig,
+                    httpOptions: feedData.httpOptions,
+                    fullTextSelector: feedData.fullTextSelector,
+                    fullTextConditions: feedData.fullTextConditions,
+                    fullTextRemoveSelectors: feedData.fullTextRemoveSelectors,
+                    filtersActionRead: feedData.filtersActionRead,
+                    ...(feedData.customUserAgent ? { customUserAgent: feedData.customUserAgent } : {}),
                 },
                 create: {
                     userId: userId,
-                    url: outline.xmlUrl,
-                    name: outline.text,
-                    categoryId,
+                    ...feedData,
                 },
             });
             if (existing) report.feedsUpdated += 1;
             else report.feedsAdded += 1;
         } else if (outline.children) {
-            const existingCategory = await db.category.findUnique({
-                where: {
-                    userId_name_parentId: {
-                        userId: userId,
-                        name: outline.text,
-                        parentId: (categoryId || null) as any,
-                    }
-                },
-            });
-            const category = await db.category.upsert({
-                where: {
-                    userId_name_parentId: {
-                        userId: userId,
-                        name: outline.text,
-                        parentId: (categoryId || null) as any,
-                    }
-                },
-                update: {},
-                create: {
-                    userId: userId,
-                    name: outline.text,
-                    parentId: categoryId,
-                }
-            });
-            if (existingCategory) report.categoriesUpdated += 1;
-            else report.categoriesAdded += 1;
+            const category = await getOrCreateCategory(outline.text, categoryId, outline.frss?.opmlUrl ?? null);
 
             for (const child of outline.children) {
                 try {
