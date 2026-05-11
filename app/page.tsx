@@ -83,6 +83,7 @@ export default function RSSReaderPage() {
   const setArticleLabels = useSetArticleLabels();
   const { data: readingPrefs } = useReadingPreferences();
   const [readInSession, setReadInSession] = useState<string[]>([]);
+  const [autoReadSuppressedArticles, setAutoReadSuppressedArticles] = useState<string[]>([]);
   const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
   const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);
 
@@ -97,6 +98,7 @@ export default function RSSReaderPage() {
   // Reset readInSession when feed or category changes
   useEffect(() => {
     setReadInSession([]);
+    setAutoReadSuppressedArticles([]);
     setSessionReadArticles([]);
     setSelectedArticleSnapshot(null);
   }, [selectedFeed, selectedCategory]);
@@ -181,16 +183,22 @@ export default function RSSReaderPage() {
   }, [selectedFeed, selectedCategory, feeds, labels, savedSearches]);
 
   const markArticleRead = useCallback((article: any) => {
-    if (!article || article.isRead || readInSession.includes(article.id)) return;
+    if (
+      !article ||
+      article.isRead ||
+      readInSession.includes(article.id) ||
+      autoReadSuppressedArticles.includes(article.id)
+    ) return;
       const readArticle = { ...article, isRead: true, readAt: new Date() };
       setReadInSession((prev) => [...prev, article.id]);
+      setAutoReadSuppressedArticles((prev) => prev.filter((id) => id !== article.id));
       setSessionReadArticles((prev) => [
         readArticle,
         ...prev.filter((a) => a.id !== article.id),
       ]);
       setSelectedArticleSnapshot(readArticle);
       toggleRead.mutate({ articleId: article.id, isRead: true });
-  }, [readInSession, toggleRead]);
+  }, [autoReadSuppressedArticles, readInSession, toggleRead]);
 
   const handleSelectArticle = useCallback((article: any) => {
     setSelectedArticleId(article.id);
@@ -209,7 +217,12 @@ export default function RSSReaderPage() {
   }, [handleSelectArticle]);
 
   useEffect(() => {
-    if (!selectedArticle || selectedArticle.isRead || readInSession.includes(selectedArticle.id)) {
+    if (
+      !selectedArticle ||
+      selectedArticle.isRead ||
+      readInSession.includes(selectedArticle.id) ||
+      autoReadSuppressedArticles.includes(selectedArticle.id)
+    ) {
       return;
     }
 
@@ -221,7 +234,7 @@ export default function RSSReaderPage() {
     }, delayMs);
 
     return () => window.clearTimeout(timer);
-  }, [selectedArticle, readInSession, markArticleRead, readingPrefs?.markReadAfterDelaySecs]);
+  }, [selectedArticle, readInSession, autoReadSuppressedArticles, markArticleRead, readingPrefs?.markReadAfterDelaySecs]);
 
   const handleToggleRead = useCallback((articleId: string) => {
     const article = displayArticles.find((a: any) => a.id === articleId) || selectedArticleSnapshot;
@@ -238,6 +251,11 @@ export default function RSSReaderPage() {
     setReadInSession((prev) =>
       nextIsRead ? Array.from(new Set([...prev, articleId])) : prev.filter((id) => id !== articleId),
     );
+    setAutoReadSuppressedArticles((prev) => {
+      if (nextIsRead) return prev.filter((id) => id !== articleId);
+      if (selectedArticleId !== articleId) return prev;
+      return Array.from(new Set([...prev, articleId]));
+    });
     if (selectedArticleId === articleId) setSelectedArticleSnapshot(updated);
     toggleRead.mutate({ articleId, isRead: nextIsRead });
   }, [displayArticles, selectedArticleSnapshot, selectedCategory, unreadOnly, selectedArticleId, toggleRead]);
