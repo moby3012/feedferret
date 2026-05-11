@@ -212,3 +212,13 @@ Follow-up ideas:
 - Add share analytics/counts.
 - Add OPML export for a shared saved search if useful.
 - Add authenticated-only team shares if FeedFerret grows collaboration features.
+
+## Implementation update — FreshRSS Extended OPML + Notifications
+
+Status: implemented on branch `feat/notifications-freshrss-opml`.
+
+- FreshRSS extended OPML parser/exporter with `frss:*` attributes.
+- Import/export mapping for priority, unicity criteria, scraper config, cURL-style HTTP options, full-content selectors, and dynamic OPML URLs.
+- New feed source support: RSS/Atom, JSONFeed, JSON+DotNotation, HTML+XPath, XML+XPath, HTML+XPath+JSON+DotNotation.
+- FreshRSS-style dynamic OPML categories sync automatically and use SSRF protections.
+- Browser/PWA push notifications added with user-controlled frequency and article-title payloads by default.

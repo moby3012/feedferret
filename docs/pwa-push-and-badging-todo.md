@@ -217,3 +217,14 @@ Current badge implementation is client-side and best-effort. A more complete ver
 - Consider caching the app shell more aggressively after auth/offline behavior is designed.
 - Add an offline mode for already cached articles only if content privacy and storage limits are addressed.
 - Add automated Lighthouse/PWA checks to CI.
+
+## Implementation update — 2026-05-11
+
+Implemented in the notifications/FreshRSS OPML work branch:
+
+- Push subscription data model and VAPID key generation.
+- Authenticated push subscribe/unsubscribe/status/test APIs.
+- Service worker `push` and `notificationclick` handlers.
+- Settings UI for per-device enable/disable, test notification, frequency, feed filter, and title/privacy toggle.
+- Sync integration: new articles can trigger immediate notifications; hourly/daily summaries are flushed during background sync.
+- Badge updates from push payload unread counts remain best-effort.

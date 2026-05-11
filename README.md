@@ -170,3 +170,36 @@ SYNC_SECRET=$(openssl rand -hex 32)
 ## 📄 License
 
 MIT License. See [LICENSE](LICENSE) for more details.
+
+## Browser Push Notifications
+
+FeedFerret supports browser/PWA push notifications for new articles.
+
+1. Generate VAPID keys:
+
+   ```bash
+   pnpm run webpush:keys
+   ```
+
+2. Configure the generated values in your environment:
+
+   ```bash
+   WEB_PUSH_VAPID_PUBLIC_KEY="..."
+   WEB_PUSH_VAPID_PRIVATE_KEY="..."
+   WEB_PUSH_CONTACT="mailto:admin@example.com"
+   ```
+
+3. Open Settings → Browser notifications and enable notifications per device.
+
+Notification frequency is user-configurable (`immediate`, `hourly`, `daily`, `off`). By default, notifications include article titles; users can switch to generic private notifications.
+
+## FreshRSS Extended OPML
+
+FeedFerret imports and exports FreshRSS extended OPML (`xmlns:frss="https://freshrss.org/opml"`) including:
+
+- FreshRSS source types: RSS/Atom, JSONFeed, JSON+DotNotation, HTML+XPath, XML+XPath, HTML+XPath+JSON+DotNotation.
+- Feed priority and unicity criteria.
+- XPath/JSON scraper settings.
+- Full-content selectors, content filters, and auto-read filter strings.
+- FreshRSS cURL-style HTTP options such as custom headers, cookies, POST fields, redirects, proxies, and user-agent.
+- Dynamic OPML categories via `frss:opmlUrl`, synchronized automatically with SSRF protections.
