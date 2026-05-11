@@ -764,7 +764,7 @@ function SortableCategory({
       </div>
 
       {expanded && (
-        <div className="ml-4 pl-2 border-l border-sidebar-border/50 py-1 space-y-0.5 overflow-hidden">
+        <div className="pl-4 border-l border-sidebar-border/50 py-1 space-y-0.5 overflow-hidden">
           <SortableContext
             items={feeds.map((f: any) => f.id)}
             strategy={verticalListSortingStrategy}
@@ -978,7 +978,7 @@ function UncategorizedGroup({ feeds, renderFeedRow }: any) {
           Uncategorized
         </h3>
       </div>
-      <div className="ml-4 pl-2 py-1 space-y-0.5">
+      <div className="pl-4 py-1 space-y-0.5">
         {feeds.map((feed: any) => renderFeedRow(feed))}
       </div>
     </div>
