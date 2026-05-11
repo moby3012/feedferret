@@ -25,6 +25,7 @@ model User {
   labels        Label[]
   savedSearches SavedSearch[]
   autoReadRules AutoReadRule[]
+  pushSubscriptions PushSubscription[]
   defaultUpdateFrequency Int @default(60)
   defaultRetentionDays Int @default(90)
   openOriginalByDefault Boolean @default(false)
@@ -44,9 +45,30 @@ model User {
   digestFeedIds           String?                       // JSON array of feed IDs, null = all
   digestLastSentAt        DateTime?
   digestUnsubscribeToken  String?   @unique
+  pushEnabled             Boolean   @default(false)
+  pushFrequency           String    @default("immediate") // "off" | "immediate" | "hourly" | "daily"
+  pushFeedIds             String?                       // JSON array of feed IDs, null = all
+  pushPrivatePayloads     Boolean   @default(true)      // include article titles in push payloads
+  pushLastSentAt          DateTime?
   role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model PushSubscription {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  userAgent   String?
+  platform    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastUsedAt  DateTime?
+  disabledAt  DateTime?
+  @@index([userId, disabledAt])
 }
 
 model AutoReadRule {
@@ -105,6 +127,7 @@ model Category {
   parent    Category? @relation("Subcategories", fields: [parentId], references: [id], onDelete: Cascade)
   children  Category[] @relation("Subcategories")
   feeds     Feed[]
+  opmlUrl   String?
   updateFrequency Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -116,6 +139,14 @@ model Feed {
   url             String
   name            String
   icon            String?
+  sourceType      String   @default("rss") // rss | HTML+XPath | XML+XPath | JSON+DotNotation | JSONFeed | HTML+XPath+JSON+DotNotation
+  htmlUrl         String?
+  description     String?
+  priority        String   @default("main") // important | main | category | feed | hidden
+  unicityCriteria String   @default("id")
+  unicityCriteriaForced Boolean @default(false)
+  scraperConfig   String?  // JSON for XPath / JSON DotNotation / xPathToJson settings
+  httpOptions     String?  // JSON for FreshRSS cURL-like fetch options
   userId          String
   categoryId      String?
   order           Int      @default(0)
@@ -140,6 +171,8 @@ model Feed {
   fullTextSelector         String?
   fullTextRemoveSelectors  String?
   autoFetchFullText        Boolean   @default(false)
+  fullTextConditions       String?
+  filtersActionRead        String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, url])
@@ -151,6 +184,8 @@ model Article {
   userId      String
   title       String
   link        String
+  externalId  String?
+  dedupeKey   String?
   content     String
   excerpt     String?
   author      String?
@@ -166,7 +201,7 @@ model Article {
   labels      ArticleLabel[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  @@unique([userId, link])
+  @@unique([userId, feedId, dedupeKey])
   @@index([userId, isRead, publishedAt])
   @@index([userId, isStarred, publishedAt])
   @@index([userId, isReadLater, readLaterSavedAt])

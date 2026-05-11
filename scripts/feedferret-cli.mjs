@@ -35,14 +35,23 @@ async function syncUser(user) {
       const remote = await parser.parseURL(feed.url);
       for (const item of remote.items) {
         if (!item.link) continue;
+        const externalId = item.guid || item.id || item.link;
         await prisma.article.upsert({
-          where: { userId_link: { userId: feed.userId, link: item.link } },
-          update: { title: item.title || 'Untitled', excerpt: item.summary || item.contentSnippet || null },
+          where: {
+            userId_feedId_dedupeKey: {
+              userId: feed.userId,
+              feedId: feed.id,
+              dedupeKey: externalId,
+            },
+          },
+          update: { title: item.title || 'Untitled', link: item.link, externalId, excerpt: item.summary || item.contentSnippet || null },
           create: {
             userId: feed.userId,
             feedId: feed.id,
             title: item.title || 'Untitled',
             link: item.link,
+            externalId,
+            dedupeKey: externalId,
             content: item.content || item.summary || '',
             excerpt: item.summary || item.contentSnippet || null,
             author: item.creator || item.author || null,

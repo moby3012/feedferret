@@ -72,11 +72,16 @@ export async function syncFeed(userId: string, feedId: string) {
             }
             const excerpt = DOMPurify.sanitize(content, { ALLOWED_TAGS: [] }).substring(0, 200);
 
+            const externalId = item.guid || item.id || item.link || null;
+            const dedupeKey = externalId || item.link;
+
             return {
                 feedId: feed.id,
                 userId: userId,
                 title: item.title || "Untitled",
                 link: item.link || "",
+                externalId,
+                dedupeKey,
                 content: DOMPurify.sanitize(content),
                 excerpt: excerpt,
                 author: item.creator || item.author || null,
@@ -92,13 +97,16 @@ export async function syncFeed(userId: string, feedId: string) {
 
             const upserted = await db.article.upsert({
                 where: {
-                    userId_link: {
+                    userId_feedId_dedupeKey: {
                         userId: userId,
-                        link: article.link,
+                        feedId: feed.id,
+                        dedupeKey: article.dedupeKey,
                     },
                 },
                 update: {
                     title: article.title,
+                    link: article.link,
+                    externalId: article.externalId,
                     content: article.content,
                     excerpt: article.excerpt,
                     author: article.author,
