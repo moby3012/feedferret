@@ -13,8 +13,10 @@ import {
   Key,
   Laptop,
   LogOut,
+  Mail,
   Moon,
   Palette,
+  Send,
   Settings,
   Sun,
   Trash2,
@@ -29,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useReadingPreferences, useUpdateGlobalSettings } from "@/hooks/use-rss-data";
+import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds } from "@/hooks/use-rss-data";
 import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -303,6 +305,9 @@ export function SettingsForm() {
           {/* API Access */}
           <ApiTokenSection />
 
+          {/* Digest Email */}
+          <DigestSection />
+
           {/* User Profile */}
           <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
@@ -333,6 +338,212 @@ export function SettingsForm() {
         </div>
       </div>
     </main>
+  );
+}
+
+const DAYS = [
+  { value: "0", label: "Sunday" },
+  { value: "1", label: "Monday" },
+  { value: "2", label: "Tuesday" },
+  { value: "3", label: "Wednesday" },
+  { value: "4", label: "Thursday" },
+  { value: "5", label: "Friday" },
+  { value: "6", label: "Saturday" },
+];
+
+function DigestSection() {
+  const { data: digest } = useDigestSettings();
+  const { data: feedsData } = useFeeds();
+  const updateDigest = useUpdateDigestSettings();
+  const sendTest = useSendTestDigest();
+
+  if (!digest) return null;
+
+  const feeds = feedsData ?? [];
+
+  function update(data: Parameters<typeof updateDigest.mutate>[0]) {
+    updateDigest.mutate(data);
+  }
+
+  return (
+    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+      <div className="flex items-start gap-4 mb-6">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+          <Mail className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">Email Digest</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            Receive a periodic email summary of articles from your feeds.
+            Requires SMTP to be configured by your administrator.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-5">
+        {/* Enable toggle */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Enable digest emails</p>
+            {digest.digestLastSentAt && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Last sent: {new Date(digest.digestLastSentAt).toLocaleString()}
+              </p>
+            )}
+          </div>
+          <button
+            role="switch"
+            aria-checked={digest.digestEnabled}
+            onClick={() => update({ digestEnabled: !digest.digestEnabled })}
+            className={cn(
+              "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+              digest.digestEnabled ? "bg-primary" : "bg-muted",
+            )}
+          >
+            <span
+              className={cn(
+                "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200",
+                digest.digestEnabled ? "translate-x-5" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
+
+        {digest.digestEnabled && (
+          <>
+            {/* Frequency */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Frequency</label>
+                <Select
+                  value={digest.digestFrequency}
+                  onValueChange={(v) => update({ digestFrequency: v })}
+                >
+                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Day of week (weekly only) */}
+              {digest.digestFrequency === "weekly" && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Day</label>
+                  <Select
+                    value={String(digest.digestDayOfWeek)}
+                    onValueChange={(v) => update({ digestDayOfWeek: parseInt(v) })}
+                  >
+                    <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl">
+                      {DAYS.map((d) => (
+                        <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Hour */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Hour (UTC)</label>
+                <Select
+                  value={String(digest.digestHour)}
+                  onValueChange={(v) => update({ digestHour: parseInt(v) })}
+                >
+                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <SelectItem key={i} value={String(i)}>
+                        {String(i).padStart(2, "0")}:00 UTC
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Scope */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Include</label>
+                <Select
+                  value={digest.digestScope}
+                  onValueChange={(v) => update({ digestScope: v })}
+                >
+                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    <SelectItem value="unread">Unread</SelectItem>
+                    <SelectItem value="all">All new</SelectItem>
+                    <SelectItem value="starred">Starred</SelectItem>
+                    <SelectItem value="readlater">Read Later</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Feed filter */}
+            {feeds.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Feed filter{" "}
+                  <span className="normal-case font-normal">(leave empty for all feeds)</span>
+                </label>
+                <div className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-background/50 p-3 min-h-[48px]">
+                  {feeds.map((feed: any) => {
+                    const selected = digest.digestFeedIds.includes(feed.id);
+                    return (
+                      <button
+                        key={feed.id}
+                        type="button"
+                        onClick={() => {
+                          const next = selected
+                            ? digest.digestFeedIds.filter((id: string) => id !== feed.id)
+                            : [...digest.digestFeedIds, feed.id];
+                          update({ digestFeedIds: next });
+                        }}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-medium transition-all",
+                          selected
+                            ? "bg-accent text-accent-foreground"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                        )}
+                      >
+                        {feed.icon && <span>{feed.icon}</span>}
+                        {feed.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Send test */}
+            <div className="flex items-center gap-3 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => sendTest.mutate()}
+                disabled={sendTest.isPending}
+                className="rounded-2xl h-10"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                {sendTest.isPending ? "Sending…" : "Send test digest now"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Sends to your account email using the last 7 days of articles.
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 

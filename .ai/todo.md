@@ -48,64 +48,54 @@
 
 # Sprint 3
 
-## Read Later Queue — Medium Effort
+## Read Later Queue ✅ — Medium Effort
 
 **Goal:** Save articles to a persistent read-later list, separate from star/label system. Retention policy must never purge read-later articles.
 
 ### DB
-- [ ] Add `isReadLater: Boolean @default(false)` to `Article` model
-- [ ] Add `readLaterSavedAt: DateTime?` to `Article` model
-- [ ] Migration: update retention query to exclude `isReadLater: true` (like starred)
+- [x] Add `isReadLater: Boolean @default(false)` to `Article` model
+- [x] Add `readLaterSavedAt: DateTime?` to `Article` model
+- [x] Migration: update retention query to exclude `isReadLater: true` (like starred)
 
 ### Server Actions
-- [ ] `toggleReadLater(articleId)` — flip `isReadLater`, set/clear `readLaterSavedAt`
-- [ ] `getReadLaterArticles(userId)` — paginated, sorted by `readLaterSavedAt` desc
-- [ ] `clearReadLater(articleId)` — remove from queue after reading
+- [x] `toggleReadLater(articleId)` — flip `isReadLater`, set/clear `readLaterSavedAt`
+- [x] `getReadLaterCount()` — count of read-later articles
+- [x] REST API: `GET/POST/DELETE /api/read-later` with session + Bearer token auth
 
 ### UI
-- [ ] Bookmark icon button in `article-list.tsx` (alongside star) — active state uses `text-accent`
-- [ ] Bookmark button in `article-reader.tsx` header
-- [ ] Keyboard shortcut `l` → toggle read later (add to `keyboard-shortcuts-dialog.tsx`)
-- [ ] "Read Later" section in `rss-sidebar.tsx` (below Starred, above Labels)
-- [ ] `is:readlater` filter token in `lib/search.ts`
-- [ ] Badge count on sidebar Read Later entry (unread count within queue)
-- [ ] Mark-as-read on open respects `openOriginalByDefault` pref like normal articles
+- [x] Bookmark icon button in `article-list.tsx` (alongside star) — active state uses `text-accent`
+- [x] Bookmark button in `article-reader.tsx` header
+- [x] Keyboard shortcut `l` → toggle read later
+- [x] "Read Later" section in `rss-sidebar.tsx` with count badge
+- [x] `is:readlater` filter token in `lib/search.ts`
+- [x] API documented in `docs/api.md`
 
 ---
 
-## Digest Email — Medium Effort
+## Digest Email ✅ — Medium Effort
 
 **Goal:** Send scheduled email digest of new/unread articles. Uses existing admin SMTP config.
 
 ### DB
-- [ ] Add to `User` model:
-  - `digestEnabled: Boolean @default(false)`
-  - `digestFrequency: String @default("daily")` — `"daily"` | `"weekly"`
-  - `digestDayOfWeek: Int?` — 0–6, only for weekly
-  - `digestHour: Int @default(8)` — hour in user's local time (store UTC offset separately or use UTC)
-  - `digestScope: String @default("all")` — `"all"` | `"unread"` | `"starred"` | `"readlater"`
-  - `digestFeedIds: String?` — JSON array of feed IDs to include (null = all)
-  - `digestLastSentAt: DateTime?`
-- [ ] Migration
+- [x] Added to `User` model: `digestEnabled`, `digestFrequency`, `digestDayOfWeek`, `digestHour`, `digestScope`, `digestFeedIds`, `digestLastSentAt`, `digestUnsubscribeToken`
+- [x] Migration via `prisma db push`
 
 ### Email Template
-- [ ] `lib/digest-email.ts` — build HTML email: header, per-feed sections, article title+summary+link
-- [ ] Max 20 articles per digest, sorted by `publishedAt` desc
-- [ ] Unsubscribe link (one-click sets `digestEnabled: false` via token)
-- [ ] Plain-text fallback
+- [x] `lib/digest-email.ts` — HTML email (table-based, branded), plain-text fallback
+- [x] Max 20 articles per digest, sorted by `publishedAt` desc
+- [x] Unsubscribe link → `GET /api/digest/unsubscribe?token=<token>` sets `digestEnabled: false`
 
 ### Scheduler
-- [ ] `lib/digest-scheduler.ts` — runs inside existing `background-sync.ts` tick
-- [ ] On each tick: find users where `digestEnabled && digestLastSentAt < threshold`
-- [ ] Send via existing SMTP (`nodemailer` already used in admin settings)
-- [ ] Update `digestLastSentAt` after send
+- [x] `lib/digest-scheduler.ts` — runs inside `background-sync.ts` tick
+- [x] `shouldSendNow()` checks UTC hour, day-of-week (weekly), gap ≥ 23h/167h
+- [x] Send via nodemailer, update `digestLastSentAt`
 
 ### UI (Settings)
-- [ ] New "Digest" tab in `settings-form.tsx`
-- [ ] Toggle enable, frequency select, day-of-week (if weekly), hour picker
-- [ ] Scope select (all / unread / starred / read later)
-- [ ] Feed multi-select (optional filter to specific feeds)
-- [ ] "Send test digest now" button → fires immediately to user email
+- [x] Enable toggle, frequency select, day-of-week (weekly only), hour picker (UTC)
+- [x] Scope select (unread / all / starred / read later)
+- [x] Feed multi-select chip filter
+- [x] "Send test digest now" button → fires immediately to user email
+- [x] Last sent timestamp display
 
 ---
 

@@ -33,6 +33,14 @@ model User {
   accentColor            String    @default("#5BA4CF")  // ice blue
   secondaryColor         String    @default("#F0963C")  // soft orange
   apiToken      String?   @unique
+  digestEnabled           Boolean   @default(false)
+  digestFrequency         String    @default("daily")   // "daily" | "weekly"
+  digestDayOfWeek         Int?                          // 0=Sun … 6=Sat, weekly only
+  digestHour              Int       @default(8)         // UTC hour 0-23
+  digestScope             String    @default("unread")  // "unread" | "starred" | "readlater" | "all"
+  digestFeedIds           String?                       // JSON array of feed IDs, null = all
+  digestLastSentAt        DateTime?
+  digestUnsubscribeToken  String?   @unique
   role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

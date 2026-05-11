@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, previewFeedExtraction } from "@/app/actions/feeds"
-import { updateProfile, updateGlobalSettings, getReadingPreferences } from "@/app/actions/settings"
+import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest } from "@/app/actions/settings"
 import { toast } from "sonner"
 
 export function useFeeds() {
@@ -483,5 +483,37 @@ export function usePreviewFeedExtraction() {
     return useMutation({
         mutationFn: ({ feedId, articleUrl }: { feedId: string; articleUrl: string }) =>
             previewFeedExtraction(feedId, articleUrl),
+    })
+}
+
+export function useDigestSettings() {
+    return useQuery({
+        queryKey: ["digest-settings"],
+        queryFn: () => getDigestSettings(),
+    })
+}
+
+export function useUpdateDigestSettings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: Parameters<typeof updateDigestSettings>[0]) => updateDigestSettings(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["digest-settings"] })
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Failed to save digest settings")
+        },
+    })
+}
+
+export function useSendTestDigest() {
+    return useMutation({
+        mutationFn: () => sendTestDigest(),
+        onSuccess: (result) => {
+            toast.success(`Test digest sent — ${result.articleCount} article${result.articleCount !== 1 ? "s" : ""}`)
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Failed to send test digest")
+        },
     })
 }

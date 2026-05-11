@@ -1,4 +1,5 @@
 import { syncAllFeeds } from "./rss-sync";
+import { runDigestScheduler } from "./digest-scheduler";
 
 type SchedulerState = {
     timer: NodeJS.Timeout | null;
@@ -34,6 +35,10 @@ async function tick() {
         state.lastError = null;
         console.log(
             `[background-sync] tick: ${synced} synced, ${failed} failed, ${results.length} total`,
+        );
+        // Run digest scheduler after each sync tick (internally rate-limits per user)
+        void runDigestScheduler().catch((e) =>
+            console.error("[digest-scheduler] error:", e),
         );
     } catch (error) {
         state.lastError = String(error);
