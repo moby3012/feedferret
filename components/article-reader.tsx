@@ -26,6 +26,7 @@ import {
   Sparkles,
   Tag,
   MoreHorizontal,
+  ArrowUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -156,6 +157,13 @@ export function ArticleReader({
       if (hasPreviousArticle) onPreviousArticle?.();
       else onBack?.();
     }
+  };
+
+  const scrollReaderToTop = () => {
+    const viewport = rootRef.current?.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    viewport?.scrollTo({ top: 0, left: 0, behavior: "smooth" });
   };
 
   return (
@@ -420,12 +428,12 @@ export function ArticleReader({
       </ScrollArea>
 
       <nav className="fixed inset-x-0 bottom-0 z-[60] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
-        <div className="flex h-16 items-center gap-1.5 rounded-[2rem] border border-border/70 bg-background/90 px-2 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
+        <div className="flex h-16 items-center gap-1 rounded-[2rem] border border-border/70 bg-background/90 px-2 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="h-11 min-w-11 rounded-2xl text-muted-foreground active:scale-95"
+            className="h-11 min-w-10 rounded-2xl text-muted-foreground active:scale-95"
             onClick={hasPreviousArticle ? onPreviousArticle : onBack}
             aria-label={hasPreviousArticle ? "Previous article" : "Back to list"}
           >
@@ -436,7 +444,7 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className={cn(
-              "h-11 min-w-11 rounded-2xl active:scale-95",
+              "h-11 min-w-10 rounded-2xl active:scale-95",
               article.isStarred ? "bg-amber-500/10 text-amber-500" : "text-muted-foreground",
             )}
             onClick={() => onToggleStar(article.id)}
@@ -448,21 +456,31 @@ export function ArticleReader({
             type="button"
             variant="ghost"
             className={cn(
-              "h-11 flex-1 rounded-2xl px-3 text-xs font-bold uppercase tracking-[0.14em] active:scale-[0.98]",
+              "h-11 min-w-10 rounded-2xl active:scale-95",
               article.isRead ? "bg-muted/70 text-foreground" : "bg-accent text-accent-foreground shadow-lg shadow-accent/20",
             )}
             onClick={() => onToggleRead?.(article.id)}
             aria-pressed={article.isRead}
+            aria-label={article.isRead ? "Mark as unread" : "Mark as read"}
           >
-            {article.isRead ? <Circle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-            {article.isRead ? "Unread" : "Read"}
+            {article.isRead ? <Circle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-11 min-w-10 rounded-2xl text-muted-foreground active:scale-95"
+            onClick={scrollReaderToTop}
+            aria-label="Scroll to top"
+          >
+            <ArrowUp className="h-5 w-5" />
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="icon"
             className={cn(
-              "h-11 min-w-11 rounded-2xl active:scale-95",
+              "h-11 min-w-10 rounded-2xl active:scale-95",
               article.isReadLater ? "bg-accent/10 text-accent" : "text-muted-foreground",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
@@ -474,7 +492,7 @@ export function ArticleReader({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-11 min-w-11 rounded-2xl text-muted-foreground active:scale-95"
+            className="h-11 min-w-10 rounded-2xl text-muted-foreground active:scale-95"
             onClick={onNextArticle}
             disabled={!hasNextArticle}
             aria-label="Next article"
@@ -487,7 +505,7 @@ export function ArticleReader({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-11 min-w-11 rounded-2xl text-muted-foreground active:scale-95"
+                className="h-11 min-w-10 rounded-2xl text-muted-foreground active:scale-95"
                 aria-label="More reader actions"
               >
                 <MoreHorizontal className="h-5 w-5" />
