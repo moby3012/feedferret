@@ -645,7 +645,7 @@ export function RssSidebar({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="w-9 h-9 rounded-xl text-destructive hover:text-destructive"
+                    className="w-9 h-9 rounded-xl"
                     onClick={() => signOut()}
                   >
                     <LogOut className="w-4 h-4" />
