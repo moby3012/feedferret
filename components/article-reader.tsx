@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Star,
+  Bookmark,
   Share2,
   ExternalLink,
   ChevronLeft,
@@ -28,6 +29,7 @@ import { toast } from "sonner";
 interface ArticleReaderProps {
   article: Article | null;
   onToggleStar: (articleId: string) => void;
+  onToggleReadLater?: (articleId: string) => void;
   onToggleRead?: (articleId: string) => void;
   onFetchFullText?: (articleId: string) => void;
   isFetchingFullText?: boolean;
@@ -47,6 +49,7 @@ const readerWidthClass: Record<string, string> = {
 export function ArticleReader({
   article,
   onToggleStar,
+  onToggleReadLater,
   onToggleRead,
   onFetchFullText,
   isFetchingFullText,
@@ -141,6 +144,25 @@ export function ArticleReader({
                 article.isStarred
                   ? "text-amber-500 fill-amber-500 scale-110"
                   : "text-muted-foreground hover:text-amber-400",
+              )}
+            />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
+              article.isReadLater && "bg-accent/10",
+            )}
+            onClick={() => onToggleReadLater?.(article.id)}
+            title={article.isReadLater ? "Remove from Read Later (l)" : "Save to Read Later (l)"}
+          >
+            <Bookmark
+              className={cn(
+                "w-5 h-5 transition-all duration-300",
+                article.isReadLater
+                  ? "text-accent fill-accent scale-110"
+                  : "text-muted-foreground hover:text-accent",
               )}
             />
           </Button>

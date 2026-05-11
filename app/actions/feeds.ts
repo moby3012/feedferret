@@ -81,6 +81,30 @@ export async function getStarredCount() {
     });
 }
 
+export async function getReadLaterCount() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    return await db.article.count({
+        where: { userId: session.user.id, isReadLater: true },
+    });
+}
+
+export async function toggleArticleReadLater(articleId: string, isReadLater: boolean) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    await db.article.update({
+        where: { id: articleId, userId: session.user.id },
+        data: {
+            isReadLater,
+            readLaterSavedAt: isReadLater ? new Date() : null,
+        },
+    });
+
+    revalidatePath("/");
+}
+
 export async function getLabels() {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -376,13 +400,14 @@ export async function applyRetentionPolicies(dryRun = false) {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - retentionDays);
 
-        // Candidates: read, not starred, no labels, older than cutoff
+        // Candidates: read, not starred, not read-later, no labels, older than cutoff
         const candidates = await db.article.findMany({
             where: {
                 userId: user.id,
                 feedId: feed.id,
                 isRead: true,
                 isStarred: false,
+                isReadLater: false,
                 labels: { none: {} },
                 publishedAt: { lt: cutoff },
             },

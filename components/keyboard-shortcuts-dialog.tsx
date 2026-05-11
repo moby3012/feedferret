@@ -34,6 +34,7 @@ const groups: Group[] = [
     title: "Actions",
     items: [
       { keys: ["s"], description: "Toggle star on current article" },
+      { keys: ["l"], description: "Toggle Read Later on current article" },
       { keys: ["m"], description: "Toggle read/unread" },
       { keys: ["r"], description: "Refresh feeds" },
       { keys: ["Shift", "A"], description: "Mark all as read in current view" },

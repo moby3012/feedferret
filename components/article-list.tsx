@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
-import { Star, Circle, Clock, ImageIcon, CheckCircle2, CircleDot } from "lucide-react";
+import { Star, Circle, Clock, ImageIcon, CheckCircle2, CircleDot, Bookmark } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ArticleListProps {
@@ -11,6 +11,7 @@ interface ArticleListProps {
   onSelectArticle: (article: Article) => void;
   onToggleRead?: (articleId: string) => void;
   onToggleStar?: (articleId: string) => void;
+  onToggleReadLater?: (articleId: string) => void;
   viewMode?: "list" | "grid" | "magazine" | "minimal";
 }
 
@@ -20,6 +21,7 @@ export function ArticleList({
   onSelectArticle,
   onToggleRead,
   onToggleStar,
+  onToggleReadLater,
   viewMode = "list",
 }: ArticleListProps) {
   if (articles.length === 0) {
@@ -57,6 +59,7 @@ export function ArticleList({
             onClick={() => onSelectArticle(article)}
             onToggleRead={onToggleRead}
             onToggleStar={onToggleStar}
+            onToggleReadLater={onToggleReadLater}
             index={index}
             viewMode={viewMode}
           />
@@ -72,6 +75,7 @@ function ArticlePreview({
   onClick,
   onToggleRead,
   onToggleStar,
+  onToggleReadLater,
   index,
   viewMode,
 }: {
@@ -80,6 +84,7 @@ function ArticlePreview({
   onClick: () => void;
   onToggleRead?: (articleId: string) => void;
   onToggleStar?: (articleId: string) => void;
+  onToggleReadLater?: (articleId: string) => void;
   index: number;
   viewMode: string;
 }) {
@@ -100,6 +105,9 @@ function ArticlePreview({
         <h3 className="flex-1 text-sm truncate">{article.title}</h3>
         {article.isStarred && (
           <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+        )}
+        {article.isReadLater && (
+          <Bookmark className="w-3.5 h-3.5 text-accent fill-accent shrink-0" />
         )}
         <span className="text-[10px] text-muted-foreground whitespace-nowrap">
           {new Date(article.publishedAt).toLocaleDateString()}
@@ -146,19 +154,27 @@ function ArticlePreview({
               <Clock className="w-3 h-3" />
               {article.publishedAt}
             </div>
-            {article.isStarred && (
+            <div className="flex items-center gap-1">
+              {article.isStarred && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
+                  className="rounded-md p-1 hover:bg-amber-500/10"
+                  aria-label="Toggle star"
+                >
+                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                </button>
+              )}
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleStar?.(article.id);
-                }}
-                className="rounded-md p-1 hover:bg-amber-500/10"
-                aria-label="Toggle star"
+                onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
+                className={cn("rounded-md p-1 transition-colors", article.isReadLater ? "text-accent" : "text-muted-foreground/50 hover:text-accent hover:bg-accent/10")}
+                aria-label={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
+                title={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
               >
-                <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent")} />
               </button>
-            )}
+            </div>
           </div>
         </div>
       </article>
@@ -203,19 +219,28 @@ function ArticlePreview({
             <span className="text-sm text-muted-foreground whitespace-nowrap">
               {new Date(article.publishedAt).toLocaleDateString()}
             </span>
-            {article.isStarred && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleStar?.(article.id);
-                }}
-                className="ml-auto rounded-lg p-1 hover:bg-amber-500/10 transition-colors"
-                aria-label="Remove star"
-              >
-                <Star className="w-4 h-4 text-amber-500 fill-amber-500 transition-transform duration-300 group-hover:scale-110" />
-              </button>
-            )}
+            <div className="ml-auto flex items-center gap-1">
+              {article.isStarred && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
+                  className="rounded-lg p-1 hover:bg-amber-500/10 transition-colors"
+                  aria-label="Remove star"
+                >
+                  <Star className="w-4 h-4 text-amber-500 fill-amber-500 transition-transform duration-300 group-hover:scale-110" />
+                </button>
+              )}
+              {article.isReadLater && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
+                  className="rounded-lg p-1 hover:bg-accent/10 transition-colors"
+                  aria-label="Remove from Read Later"
+                >
+                  <Bookmark className="w-4 h-4 text-accent fill-accent" />
+                </button>
+              )}
+            </div>
           </div>
 
           <h3
@@ -259,10 +284,7 @@ function ArticlePreview({
             <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleRead?.(article.id);
-                }}
+                onClick={(e) => { e.stopPropagation(); onToggleRead?.(article.id); }}
                 className="rounded-lg p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground"
                 aria-label={article.isRead ? "Mark as unread" : "Mark as read"}
                 title={article.isRead ? "Mark as unread" : "Mark as read"}
@@ -272,10 +294,7 @@ function ArticlePreview({
               {!article.isStarred && (
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleStar?.(article.id);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
                   className="rounded-lg p-1.5 hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500"
                   aria-label="Add star"
                   title="Star"
@@ -283,6 +302,15 @@ function ArticlePreview({
                   <Star className="w-4 h-4" />
                 </button>
               )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
+                className={cn("rounded-lg p-1.5 transition-colors", article.isReadLater ? "text-accent bg-accent/10" : "text-muted-foreground hover:text-accent hover:bg-accent/10")}
+                aria-label={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
+                title={article.isReadLater ? "Remove from Read Later (l)" : "Save to Read Later (l)"}
+              >
+                <Bookmark className={cn("w-4 h-4", article.isReadLater && "fill-accent")} />
+              </button>
             </div>
           </div>
         </div>

@@ -32,6 +32,7 @@ model User {
   defaultArticleSort     String    @default("newest")  // "newest"|"oldest"
   accentColor            String    @default("#5BA4CF")  // ice blue
   secondaryColor         String    @default("#F0963C")  // soft orange
+  apiToken      String?   @unique
   role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -147,6 +148,8 @@ model Article {
   isRead      Boolean  @default(false)
   readAt      DateTime?
   isStarred   Boolean  @default(false)
+  isReadLater Boolean  @default(false)
+  readLaterSavedAt DateTime?
   feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   labels      ArticleLabel[]
@@ -155,6 +158,7 @@ model Article {
   @@unique([userId, link])
   @@index([userId, isRead, publishedAt])
   @@index([userId, isStarred, publishedAt])
+  @@index([userId, isReadLater, readLaterSavedAt])
   @@index([userId, readAt])
   @@index([feedId, publishedAt])
 }

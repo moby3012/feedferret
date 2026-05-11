@@ -8,13 +8,16 @@ import {
   ArrowDownAZ,
   ArrowLeft,
   Clock,
+  Copy,
   ExternalLink,
+  Key,
   Laptop,
   LogOut,
   Moon,
   Palette,
   Settings,
   Sun,
+  Trash2,
   User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +30,9 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useReadingPreferences, useUpdateGlobalSettings } from "@/hooks/use-rss-data";
+import { useState, useCallback } from "react";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 const themeOptions = [
   { id: "light", label: "Light", icon: Sun },
@@ -294,6 +300,9 @@ export function SettingsForm() {
             </div>
           </PrefRow>
 
+          {/* API Access */}
+          <ApiTokenSection />
+
           {/* User Profile */}
           <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
@@ -324,5 +333,139 @@ export function SettingsForm() {
         </div>
       </div>
     </main>
+  );
+}
+
+function ApiTokenSection() {
+  const [token, setToken] = useState<string | null>(null);
+  const [hasToken, setHasToken] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const checkToken = useCallback(async () => {
+    const res = await fetch("/api/user/token");
+    if (res.ok) {
+      const data = await res.json();
+      setHasToken(data.hasToken);
+    }
+  }, []);
+
+  const generateToken = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/user/token", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setToken(data.token);
+        setHasToken(true);
+        toast.success("API token generated — save it now, it won't be shown again");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const revokeToken = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/user/token", { method: "DELETE" });
+      if (res.ok) {
+        setToken(null);
+        setHasToken(false);
+        toast.success("API token revoked");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const copyToken = useCallback(() => {
+    if (token) {
+      navigator.clipboard.writeText(token);
+      toast.success("Token copied to clipboard");
+    }
+  }, [token]);
+
+  // Lazy-load status on first render
+  if (hasToken === null) {
+    checkToken();
+    return null;
+  }
+
+  return (
+    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+      <div className="flex items-start gap-4 mb-5">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Key className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">API Access</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            Personal API token for browser extensions, mobile apps, and external integrations.
+            Each user has one token. Treat it like a password — it grants full read-later access.
+          </p>
+        </div>
+      </div>
+
+      {token && (
+        <div className="mb-4 rounded-2xl bg-accent/5 border border-accent/20 p-4">
+          <p className="text-xs font-semibold text-accent mb-2 uppercase tracking-wider">
+            New token — copy now, won&apos;t be shown again
+          </p>
+          <div className="flex items-center gap-2">
+            <Input
+              readOnly
+              value={token}
+              className="font-mono text-xs h-9 bg-background/60"
+            />
+            <Button size="sm" variant="outline" onClick={copyToken} className="shrink-0 h-9 rounded-xl">
+              <Copy className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        {!hasToken ? (
+          <Button
+            onClick={generateToken}
+            disabled={loading}
+            className="rounded-2xl h-10"
+          >
+            <Key className="w-4 h-4 mr-2" />
+            Generate API token
+          </Button>
+        ) : (
+          <>
+            <Button
+              onClick={generateToken}
+              disabled={loading}
+              variant="outline"
+              className="rounded-2xl h-10"
+            >
+              <Key className="w-4 h-4 mr-2" />
+              Regenerate token
+            </Button>
+            <Button
+              onClick={revokeToken}
+              disabled={loading}
+              variant="outline"
+              className="rounded-2xl h-10 text-destructive border-destructive/30 hover:bg-destructive/10"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Revoke token
+            </Button>
+          </>
+        )}
+        <span className="text-sm text-muted-foreground">
+          {hasToken ? "Token is active" : "No token set"}
+        </span>
+      </div>
+
+      <p className="mt-4 text-xs text-muted-foreground">
+        See <a href="/docs/api" className="underline hover:text-foreground">API documentation</a> for
+        usage examples. Pass the token as{" "}
+        <code className="bg-muted px-1 py-0.5 rounded text-[11px]">Authorization: Bearer &lt;token&gt;</code>.
+      </p>
+    </section>
   );
 }

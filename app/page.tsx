@@ -13,6 +13,7 @@ import {
   useArticles,
   useToggleRead,
   useToggleStarred,
+  useToggleReadLater,
   useRefresh,
   useMarkAllAsRead,
   useFetchFullText,
@@ -72,6 +73,7 @@ export default function RSSReaderPage() {
   const refresh = useRefresh();
   const toggleRead = useToggleRead();
   const toggleStarred = useToggleStarred();
+  const toggleReadLater = useToggleReadLater();
   const markAllAsRead = useMarkAllAsRead();
   const fetchFullText = useFetchFullText();
   const { data: labels = [] } = useLabels();
@@ -139,6 +141,7 @@ export default function RSSReaderPage() {
       "All",
       "All Articles",
       "Starred",
+      "Read Later",
       "Recently Read",
     ].includes(selectedCategory);
 
@@ -233,6 +236,17 @@ export default function RSSReaderPage() {
       setSessionReadArticles((prev) => prev.map((a) => a.id === articleId ? updated : a));
     }
   }, [displayArticles, selectedArticleSnapshot, selectedArticleId, toggleStarred]);
+
+  const handleToggleReadLater = useCallback((articleId: string) => {
+    const article = displayArticles.find((a: any) => a.id === articleId) || selectedArticleSnapshot;
+    if (article) {
+      const next = !article.isReadLater;
+      toggleReadLater.mutate({ articleId, isReadLater: next });
+      const updated = { ...article, isReadLater: next, readLaterSavedAt: next ? new Date() : null };
+      if (selectedArticleId === articleId) setSelectedArticleSnapshot(updated);
+      setSessionReadArticles((prev) => prev.map((a) => a.id === articleId ? updated : a));
+    }
+  }, [displayArticles, selectedArticleSnapshot, selectedArticleId, toggleReadLater]);
 
   const handleRefresh = useCallback(() => {
     refresh.mutate();
@@ -343,6 +357,8 @@ export default function RSSReaderPage() {
       }
     } else if (e.key === "s" && currentSelectedArticleId) {
       handleToggleStar(currentSelectedArticleId);
+    } else if (e.key === "l" && currentSelectedArticleId) {
+      handleToggleReadLater(currentSelectedArticleId);
     } else if (e.key === "m" && currentSelectedArticleId) {
       handleToggleRead(currentSelectedArticleId);
     } else if (e.key === "o" && selectedArticleSnapshot?.link) {
@@ -359,7 +375,7 @@ export default function RSSReaderPage() {
       e.preventDefault();
       handleSaveSearch();
     }
-  }, [handleSelectArticle, handleToggleStar, handleToggleRead, handleRefresh, selectedArticleSnapshot, markAllAsRead, selectedFeed, selectedCategory, handleSaveSearch]);
+  }, [handleSelectArticle, handleToggleStar, handleToggleReadLater, handleToggleRead, handleRefresh, selectedArticleSnapshot, markAllAsRead, selectedFeed, selectedCategory, handleSaveSearch]);
 
   useEffect(() => {
     async function checkSetup() {
@@ -483,6 +499,7 @@ export default function RSSReaderPage() {
               onSelectArticle={handleSelectArticle}
               onToggleRead={handleToggleRead}
               onToggleStar={handleToggleStar}
+              onToggleReadLater={handleToggleReadLater}
               viewMode={viewMode}
             />
           </div>
@@ -498,6 +515,7 @@ export default function RSSReaderPage() {
             <ArticleReader
               article={selectedArticle}
               onToggleStar={handleToggleStar}
+              onToggleReadLater={handleToggleReadLater}
               onToggleRead={handleToggleRead}
               onFetchFullText={handleFetchFullText}
               isFetchingFullText={fetchFullText.isPending}

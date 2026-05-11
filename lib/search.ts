@@ -111,6 +111,7 @@ export async function buildAdvancedSearchWhere(userId: string, query?: string) {
                 if (["read"].includes(normalized)) condition = { isRead: true };
                 if (["starred", "favorite", "favourite"].includes(normalized)) condition = { isStarred: true };
                 if (["unstarred"].includes(normalized)) condition = { isStarred: false };
+                if (["readlater", "later", "saved", "toread"].includes(normalized)) condition = { isReadLater: true };
             } else if (["after", "since"].includes(key)) {
                 const date = parseDateToken(value);
                 if (date) condition = { publishedAt: { gte: date } };

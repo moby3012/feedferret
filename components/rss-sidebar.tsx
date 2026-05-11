@@ -47,6 +47,7 @@ import {
   useUpdateFeedOrder,
   useUpdateCategoryOrder,
   useStarredCount,
+  useReadLaterCount,
   useLabels,
   useSavedSearches,
   useRefreshFeed,
@@ -118,6 +119,7 @@ export function RssSidebar({
   const updateFeedOrder = useUpdateFeedOrder();
   const updateCategoryOrder = useUpdateCategoryOrder();
   const { data: starredCount = 0 } = useStarredCount();
+  const { data: readLaterCount = 0 } = useReadLaterCount();
   const { data: labels = [] } = useLabels();
   const { data: savedSearches = [] } = useSavedSearches();
   const refreshFeed = useRefreshFeed();
@@ -160,6 +162,7 @@ export function RssSidebar({
     { id: "new", icon: Inbox, label: "New Articles", count: totalUnread },
     { id: "all", icon: Home, label: "All Articles", count: null },
     { id: "starred", icon: Star, label: "Starred", count: starredCount },
+    { id: "readlater", icon: Bookmark, label: "Read Later", count: readLaterCount },
     { id: "recent", icon: Clock, label: "Recently Read", count: null },
   ];
 

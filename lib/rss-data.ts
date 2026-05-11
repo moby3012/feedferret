@@ -24,6 +24,8 @@ export interface Article {
   isRead: boolean
   readAt?: string | Date | null
   isStarred: boolean
+  isReadLater: boolean
+  readLaterSavedAt?: string | Date | null
   imageUrl?: string
   labels?: Array<{
     label: {
@@ -68,6 +70,7 @@ Pricing starts at $2,999 for the 256GB model, with availability beginning next m
     readTime: "4 min read",
     isRead: false,
     isStarred: true,
+    isReadLater: false,
     imageUrl: "https://images.unsplash.com/photo-1617802690992-15d93263d3a9?w=800&q=80"
   },
   {
@@ -92,6 +95,7 @@ What's clear is that the nature of work is changing. The most successful profess
     readTime: "6 min read",
     isRead: false,
     isStarred: false,
+    isReadLater: false,
     imageUrl: "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80"
   },
   {
@@ -116,6 +120,7 @@ Industry analysts are watching closely. If Modular Motors can deliver on its pro
     readTime: "3 min read",
     isRead: true,
     isStarred: false,
+    isReadLater: false,
     imageUrl: "https://images.unsplash.com/photo-1593941707882-a5bba14938c7?w=800&q=80"
   },
   {
@@ -140,6 +145,7 @@ Critics note that Rust's complexity can slow development speed and that its stri
     readTime: "5 min read",
     isRead: false,
     isStarred: true,
+    isReadLater: false,
   },
   {
     id: "5",
@@ -163,6 +169,7 @@ Modularity emerged as another key theme. Sofas with reconfigurable sections, she
     readTime: "4 min read",
     isRead: true,
     isStarred: false,
+    isReadLater: false,
     imageUrl: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80"
   },
   {
@@ -187,6 +194,7 @@ While practical applications remain years away, this breakthrough provides a cle
     readTime: "7 min read",
     isRead: false,
     isStarred: false,
+    isReadLater: false,
     imageUrl: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800&q=80"
   },
 ]

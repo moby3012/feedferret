@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, previewFeedExtraction } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, previewFeedExtraction } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings, getReadingPreferences } from "@/app/actions/settings"
 import { toast } from "sonner"
 
@@ -23,6 +23,13 @@ export function useStarredCount() {
     return useQuery({
         queryKey: ["articles", "starred-count"],
         queryFn: () => getStarredCount(),
+    })
+}
+
+export function useReadLaterCount() {
+    return useQuery({
+        queryKey: ["articles", "read-later-count"],
+        queryFn: () => getReadLaterCount(),
     })
 }
 
@@ -92,6 +99,18 @@ export function useToggleStarred() {
             toggleArticleStarred(articleId, isStarred),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["articles"] })
+        },
+    })
+}
+
+export function useToggleReadLater() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ articleId, isReadLater }: { articleId: string; isReadLater: boolean }) =>
+            toggleArticleReadLater(articleId, isReadLater),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+            queryClient.invalidateQueries({ queryKey: ["articles", "read-later-count"] })
         },
     })
 }
