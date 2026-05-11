@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type TouchEvent } from "react";
+import { useEffect, useRef, type TouchEvent } from "react";
 import { Article } from "@/lib/rss-data";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -71,7 +71,21 @@ export function ArticleReader({
   hasNextArticle,
   readerWidth = "normal",
 }: ArticleReaderProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!article?.id) return;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      const viewport = rootRef.current?.querySelector<HTMLElement>(
+        '[data-slot="scroll-area-viewport"]',
+      );
+      viewport?.scrollTo({ top: 0, left: 0 });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [article?.id]);
 
   if (!article) {
     return (
@@ -144,6 +158,7 @@ export function ArticleReader({
 
   return (
     <div
+      ref={rootRef}
       className="flex-1 flex flex-col bg-background/75 backdrop-blur-xl animate-fade-in"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
