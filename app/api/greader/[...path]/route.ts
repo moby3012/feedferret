@@ -4,9 +4,12 @@ import { db } from "@/lib/db";
 import { syncFeed } from "@/lib/rss-sync";
 import {
   authenticateGReaderRequest,
+  buildCursorWhere,
   buildStreamWhere,
+  countUnreadByGReaderTag,
   createContinuationToken,
   createGReaderToken,
+  deleteGReaderStreamPref,
   getGReaderStreamTitle,
   GREADER_BROADCAST,
   GREADER_KEEP_UNREAD,
@@ -15,12 +18,14 @@ import {
   GREADER_READ,
   GREADER_READING_LIST,
   GREADER_STARRED,
+  listGReaderStreamPrefs,
+  listGReaderTags,
   normalizeCategoryNameFromTag,
   parseContinuationToken,
   parseGReaderItemId,
-  parseGReaderStreamId,
   toGReaderArticle,
   toGReaderItemRef,
+  upsertGReaderStreamPref,
 } from "@/lib/greader";
 
 const parser = new Parser();
@@ -54,27 +59,29 @@ function getStreamId(pathParts: string[], url: URL, marker: string) {
 }
 
 async function getArticlesForStream(userId: string, streamId: string, url: URL) {
-  const limit = Math.min(Number(url.searchParams.get("n") || 20), 200);
-  const offset = parseContinuationToken(url.searchParams.get("c"));
+  const limit = Math.max(1, Math.min(Number(url.searchParams.get("n") || 20), 200));
+  const continuationToken = parseContinuationToken(url.searchParams.get("c"));
   const includeStates = url.searchParams.getAll("it");
   const excludeStates = url.searchParams.getAll("xt");
-  const where = buildStreamWhere(userId, streamId, includeStates, excludeStates);
+  const where = {
+    ...buildStreamWhere(userId, streamId, includeStates, excludeStates),
+    ...buildCursorWhere(continuationToken),
+  };
 
   const articles = await db.article.findMany({
     where,
     include: {
-      feed: true,
+      feed: { include: { category: true } },
       labels: { include: { label: true } },
     },
     orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
-    skip: offset,
+    ...(continuationToken.mode === "offset" ? { skip: continuationToken.offset } : {}),
     take: limit,
   });
 
-  const total = await db.article.count({ where });
   return {
     articles,
-    continuation: offset + articles.length < total ? createContinuationToken(offset + articles.length) : undefined,
+    continuation: articles.length === limit ? createContinuationToken(articles[articles.length - 1]) : undefined,
   };
 }
 
@@ -264,7 +271,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
     }
 
     if (path.endsWith("preference/list") || path.endsWith("stream/preferences")) {
-      return NextResponse.json({ preferences: [] });
+      const streamprefs = await listGReaderStreamPrefs(user.id);
+      return NextResponse.json({
+        preferences: [],
+        streamprefs,
+        streamPrefs: streamprefs,
+      });
+    }
+
+    if (path.endsWith("preference/stream/list")) {
+      const streamprefs = await listGReaderStreamPrefs(user.id);
+      return NextResponse.json({ streamprefs, streamPrefs: streamprefs });
     }
 
     if (path.endsWith("subscription/list")) {
@@ -289,32 +306,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
     }
 
     if (path.endsWith("tag/list")) {
-      const labels = await db.label.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } });
-      const systemTags = [
-        GREADER_READING_LIST,
-        GREADER_READ,
-        GREADER_STARRED,
-        GREADER_BROADCAST,
-        GREADER_KEEP_UNREAD,
-        GREADER_LIKE,
-      ].map((id) => ({ id, type: "state", sortid: id }));
-      const customTags = labels.map((label) => ({ id: `${GREADER_LABEL_PREFIX}${label.name}`, type: "label", sortid: label.name }));
-      return NextResponse.json({ tags: [...systemTags, ...customTags] });
+      return NextResponse.json({ tags: await listGReaderTags(user.id) });
     }
 
     if (path.endsWith("unread-count")) {
       const feeds = await db.feed.findMany({ where: { userId: user.id }, include: { category: true } });
-      const labels = await db.label.findMany({ where: { userId: user.id } });
       const [totalUnread, starredUnread, feedCounts, labelCounts] = await Promise.all([
         db.article.count({ where: { userId: user.id, isRead: false } }),
         db.article.count({ where: { userId: user.id, isRead: false, isStarred: true } }),
         db.article.groupBy({ by: ["feedId"], where: { userId: user.id, isRead: false }, _count: { _all: true } }),
-        Promise.all(labels.map(async (label) => ({
-          label,
-          count: await db.article.count({
-            where: { userId: user.id, isRead: false, labels: { some: { labelId: label.id } } },
-          }),
-        }))),
+        countUnreadByGReaderTag(user.id),
       ]);
       const feedCountMap = new Map(feedCounts.map((item) => [item.feedId, item._count._all]));
 
@@ -324,7 +325,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
           { id: GREADER_READING_LIST, count: totalUnread, newestItemTimestampUsec: "0" },
           { id: GREADER_STARRED, count: starredUnread, newestItemTimestampUsec: "0" },
           ...feeds.map((feed) => ({ id: `feed/${feed.url}`, count: feedCountMap.get(feed.id) || 0, newestItemTimestampUsec: "0" })),
-          ...labelCounts.map(({ label, count }) => ({ id: `${GREADER_LABEL_PREFIX}${label.name}`, count, newestItemTimestampUsec: "0" })),
+          ...labelCounts,
         ],
       });
     }
@@ -371,6 +372,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
 
     if (path.endsWith("subscription/edit")) {
       return handleSubscriptionEdit(user.id, form);
+    }
+
+    if (path.endsWith("preference/stream/set")) {
+      const streamId = String(form.get("s") || form.get("stream") || "").trim();
+      const key = String(form.get("k") || form.get("key") || "").trim();
+      const value = String(form.get("v") || form.get("value") || "");
+      if (!streamId || !key) return textResponse("Missing stream preference parameters", 400);
+      await upsertGReaderStreamPref(user.id, streamId, key, value);
+      return okResponse();
+    }
+
+    if (path.endsWith("preference/stream/delete")) {
+      const streamId = String(form.get("s") || form.get("stream") || "").trim();
+      const key = String(form.get("k") || form.get("key") || "").trim();
+      if (!streamId || !key) return textResponse("Missing stream preference parameters", 400);
+      await deleteGReaderStreamPref(user.id, streamId, key);
+      return okResponse();
     }
 
     if (path.endsWith("mark-all-as-read")) {

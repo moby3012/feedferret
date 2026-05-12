@@ -15,19 +15,21 @@
 
 # Sprint 2
 
-## Saved Search Sharing (#7) — Medium Effort
-- [ ] Public read-only saved-search page (tokenized URL)
-- [ ] RSS feed endpoint for saved search results
-- [ ] Optional private/tokenized links with share toggle in UI
+## Saved Search Sharing (#7) — Completed ✅
+- [x] Public read-only saved-search page (tokenized URL)
+- [x] RSS feed endpoint for saved search results
+- [x] Optional private/tokenized links with share toggle in UI
 - [ ] Admin control to enable/disable public sharing
 
-## Full Google Reader API (#13) — High Effort
-- [ ] Stream item IDs with continuation tokens (paging)
-- [ ] Stream preferences endpoints
-- [ ] Subscription edit endpoints (`/reader/api/0/subscription/edit`)
-- [ ] Quick-add feed endpoint (`/reader/api/0/subscription/quickadd`)
-- [ ] Tag list/edit completeness
-- [ ] Test with Reeder / NetNewsWire
+Follow-up ideas: per-share title/description, expiry, analytics, OPML export, team-only shares.
+
+## Full Google Reader API (#13) — Phase 1 Completed ✅
+- [x] Stream item IDs with stable continuation tokens (cursor paging)
+- [x] Stream preferences persistence endpoints (`preference/stream/list|set|delete`)
+- [x] Subscription edit endpoints (`/reader/api/0/subscription/edit`)
+- [x] Quick-add feed endpoint (`/reader/api/0/subscription/quickadd`)
+- [x] Tag/folder list and unread-count completeness for labels + categories
+- [ ] Test with Reeder / NetNewsWire / FeedMe against a deployed instance
 - [ ] (Stretch) Fever API compatibility
 
 ## Multi-Database / Postgres (#15) — High Effort

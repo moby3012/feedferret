@@ -29,7 +29,7 @@ Supported query parameters:
 
 - `s` / stream path suffix for stream selection
 - `n` for page size
-- `c` for continuation token
+- `c` for stable cursor continuation token
 - `it` include state filters
 - `xt` exclude state filters
 
@@ -39,7 +39,7 @@ Supported stream targets:
 - starred
 - read
 - specific feed (`feed/<url>`)
-- user label (`user/-/label/<name>`)
+- user label or folder/category (`user/-/label/<name>`)
 
 ### Metadata
 
@@ -48,6 +48,7 @@ Supported stream targets:
 - `GET /api/greader/reader/api/0/unread-count`
 - `GET /api/greader/reader/api/0/preference/list`
 - `GET /api/greader/reader/api/0/stream/preferences`
+- `GET /api/greader/reader/api/0/preference/stream/list`
 
 ### Mutations
 
@@ -61,10 +62,12 @@ Supported stream targets:
   - rename feed title
   - assign/remove one FeedFerret category via label-style folder tags
   - unsubscribe feed
+- `POST /api/greader/reader/api/0/preference/stream/set`
+- `POST /api/greader/reader/api/0/preference/stream/delete`
 
 ## FeedFerret mapping rules
 
-- Google Reader “folders” are mapped onto FeedFerret categories.
+- Google Reader “folders” are mapped onto FeedFerret categories and exposed through `tag/list`, `unread-count`, stream contents, and subscription metadata.
 - Google Reader labels are mapped onto FeedFerret article labels.
 - Reading list corresponds to all articles.
 - Read/starred states map directly to FeedFerret article flags.
@@ -77,10 +80,8 @@ This is much more complete than the previous baseline, but still not perfect par
 Known gaps:
 
 - No Fever API.
-- No true stream preferences persistence yet; preference endpoints currently return empty preference lists.
-- Continuation is offset-based rather than stable cursor-based.
 - Only one feed category/folder can exist at a time because FeedFerret feeds belong to one category.
-- No full subscription export/edit parity for every legacy GReader client quirk.
+- Some legacy GReader client quirks may still need client-specific testing/tuning, especially around subscription export/import metadata.
 - No content creation/social features (`broadcast`, `like`) beyond harmless metadata exposure.
 
 ## Recommended client setup

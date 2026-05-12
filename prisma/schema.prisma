@@ -25,6 +25,7 @@ model User {
   labels        Label[]
   savedSearches SavedSearch[]
   autoReadRules AutoReadRule[]
+  gReaderPreferences GReaderPreference[]
   pushSubscriptions PushSubscription[]
   defaultUpdateFrequency Int @default(60)
   defaultRetentionDays Int @default(90)
@@ -83,6 +84,20 @@ model AutoReadRule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([userId, enabled, order])
+}
+
+model GReaderPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId  String
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, streamId, key])
+  @@index([userId, streamId])
 }
 
 model Account {

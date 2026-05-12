@@ -183,14 +183,14 @@ FreshRSS documents SSRF risk. FeedFerret should add first-class mitigations.
 
 These build directly on the features already implemented and bring FeedFerret much closer to FreshRSS without sacrificing the clean Apple-like UX.
 
-## Recommended Next Sprint (Sprint 2)
+## Current Open Priorities
 
-All Sprint 1 items are complete. Next priorities ordered by value/effort ratio:
+Sprint 1 and the Saved Search Sharing / Google Reader API Phase 1 work are complete. Next priorities ordered by value/effort ratio:
 
-1. **Saved Search Sharing** (#7) — Medium effort. Extends existing `SavedSearch` model. Unblocks RSS-feed-from-search use case.
-2. **Full Google Reader API** (#13) — High effort. Enables native RSS clients (Reeder, NetNewsWire, FeedMe). Biggest adoption multiplier.
-3. **Multi-Database / Postgres** (#15) — High effort. Required for production deployments at scale. Prisma already supports it.
-4. **Advanced SSRF Security** (#18) — Very High effort. Critical before recommending multi-user public hosting.
+1. **External client verification** (#13 follow-up) — test Reeder, NetNewsWire, FeedMe against a deployed instance and tune client-specific GReader quirks.
+2. **Multi-Database / Postgres** (#15) — High effort. Required for production deployments at scale. Prisma already supports it.
+3. **Advanced SSRF Security** (#18) — Very High effort. Critical before recommending multi-user public hosting.
+4. **Keyword Monitoring & Alerts** — Medium effort. Builds on the push-notification foundation for user-defined article matches.
 
 ## Saved Search Sharing Implementation Notes
 
