@@ -57,12 +57,13 @@ FreshRSS can auto-mark articles as read via filters.
 - Runs automatically after each sync (`syncUserFeeds` → `applyAutoReadRules`). ✅
 - "Run now" button in Management → Rules tab. ✅
 
-### 7. Saved Search Sharing
+### 7. Saved Search Sharing ✅ Done
 FreshRSS can reshare selections as HTML/RSS/OPML.
 
-- Public read-only saved-search page.
-- RSS feed for saved search results.
-- Optional tokenized/private links.
+- Public read-only saved-search page. ✅
+- RSS feed for saved search results. ✅
+- Optional tokenized/private links. ✅
+- Admin policy kill switch remains a small follow-up.
 
 ### 8. Feed Authentication and Fetch Options ✅ Done
 FreshRSS supports feed credentials and request options.
@@ -108,14 +109,14 @@ FreshRSS supports instant push updates for compatible feeds.
 - Signature verification.
 - Lease renewal scheduler.
 
-### 13. Full Google Reader API Compatibility ✅ Expanded
+### 13. Full Google Reader API Compatibility ✅ Phase 1 Done
 FeedFerret now provides a substantially more complete Google Reader-style API for native clients.
 
 Implemented:
 
 - Stream item IDs and continuation tokens. ✅
 - Stream contents + item refs endpoints. ✅
-- Stream preferences endpoint stub for compatibility. ✅
+- Persisted stream preferences endpoints. ✅
 - Subscription edit endpoints. ✅
 - Quick add feed endpoint. ✅
 - Tag edit/list completeness. ✅
@@ -124,9 +125,8 @@ Implemented:
 
 Still open:
 
-- Fever API compatibility as secondary target.
-- True preference persistence, not just compatibility stubs.
 - Broader client-by-client validation against Reeder / NetNewsWire / FeedMe.
+- Fever API compatibility as secondary target if real clients require it.
 
 ### 14. Extension System
 FreshRSS supports user/system extensions.
@@ -136,23 +136,24 @@ FreshRSS supports user/system extensions.
 - UI slot hooks.
 - Safe enable/disable per user/admin.
 
-### 15. Multi-Database / Production Storage Options
+### 15. Multi-Database / Production Storage Options ✅ Done
 FreshRSS supports SQLite, MySQL/MariaDB, PostgreSQL.
 
-- Keep Prisma provider strategy documented.
-- Add Postgres production profile.
-- Migration workflow.
-- Backup/restore commands.
+- Prisma provider strategy documented. ✅
+- PostgreSQL production profile. ✅
+- Migration workflow. ✅
+- Backup/restore commands. ✅
 
 ## Very High Effort
 
-### 16. Offline-First Native-Like PWA
+### 16. Offline-First Native-Like PWA ✅ Partial
 FreshRSS works well on mobile browser; FeedFerret could go further.
 
-- IndexedDB article cache.
-- Offline reading queue.
-- Background sync when app reopens.
-- Push notifications for selected feeds.
+- Cached-article offline fallback. ✅
+- Manifest screenshots, shortcuts, deep links, and PWA checks. ✅
+- Push notifications for selected feeds. ✅
+- Offline mutation/reading queue remains future work.
+- Background sync when app reopens remains future work.
 
 ### 17. Multi-User Shared/Anonymous Reading Mode
 FreshRSS has anonymous/default-user modes.
@@ -162,16 +163,16 @@ FreshRSS has anonymous/default-user modes.
 - Public OPML/RSS exports.
 - Admin controls for anonymous access.
 
-### 18. Advanced Security for Server-Side Fetching
-FreshRSS documents SSRF risk. FeedFerret should add first-class mitigations.
+### 18. Advanced Security for Server-Side Fetching ✅ Done
+FreshRSS documents SSRF risk. FeedFerret now has first-class mitigations.
 
-- Block private IP ranges by default in multi-user mode.
-- DNS rebinding protection.
-- Max response size.
-- Protocol allowlist.
-- Admin override per trusted deployment.
+- Block private IP ranges by default in multi-user mode. ✅
+- DNS rebinding protection. ✅
+- Max response size. ✅
+- Protocol allowlist. ✅
+- Admin override per trusted deployment. ✅
 
-## Recommended Next Sprint
+## Archived Recommended Sprint ✅ Completed
 
 1. ~~Keyboard shortcut help overlay.~~ ✅ Done
 2. ~~Per-feed quick actions menu.~~ ✅ Done
@@ -181,18 +182,23 @@ FreshRSS documents SSRF risk. FeedFerret should add first-class mitigations.
 6. ~~Retention policy UI expansion.~~ ✅ Done
 7. ~~Dynamic theming (accent + secondary color pickers in Settings, applied via CSS vars).~~ ✅ Done
 
-These build directly on the features already implemented and bring FeedFerret much closer to FreshRSS without sacrificing the clean Apple-like UX.
+This sprint is complete. New recommended work is listed under **Current Open Priorities** and in [`docs/next-session-workpackages.md`](next-session-workpackages.md).
 
 ## Current Open Priorities
 
-Sprint 1 and the Saved Search Sharing / Google Reader API Phase 1 work are complete. Next priorities ordered by value/effort ratio:
+Completed baseline: Sprint 1, Saved Search Sharing MVP, Google Reader API Phase 1, Push/Keyword Alerts, PWA polish, PostgreSQL profile, and Advanced SSRF Security. The active ordered backlog is maintained in [`docs/next-session-workpackages.md`](next-session-workpackages.md).
 
-1. **External client verification** (#13 follow-up) — test Reeder, NetNewsWire, FeedMe against a deployed instance and tune client-specific GReader quirks.
-2. **Duplicate Detection** — Medium effort. Hide or badge repeated articles across feeds.
-3. **Outbound Webhooks** — Medium effort. Useful for n8n/Zapier/custom automation.
-4. **Feed Discovery** — High effort. Related feeds and starter OPML packs.
+Recommended order for the next sessions:
 
-Recently completed: **Advanced SSRF Security**, **Multi-Database / Postgres support**, **Keyword Monitoring & Alerts** with in-app notifications and optional browser push.
+1. **Duplicate Detection** — Medium effort. Product-quality improvement that reduces repeated articles across feeds.
+2. **Outbound Webhooks** — Medium effort. Builds directly on keyword alerts/notifications and enables n8n/Zapier/custom automation.
+3. **Keyword Alerts follow-up** — Low/Medium effort. Email action, full edit form, and per-alert history/analytics.
+4. **Feed Discovery** — High effort. Design first; recommended baseline is same-domain discovery plus curated starter OPML packs.
+5. **AI Article Summaries (BYOK)** — Medium/High effort. Requires careful encryption/privacy/cost documentation.
+6. **Reader Client Compatibility QA** — Medium effort. Validate Reeder, NetNewsWire, FeedMe/ReadKit and tune GReader quirks.
+7. **Saved Search Sharing admin policy** — Low effort. Global admin kill switch for public sharing.
+
+Recently completed: **Advanced SSRF Security**, **Multi-Database / Postgres support**, **Keyword Monitoring & Alerts**, **PWA Polish / Better Badging**, and **FreshRSS Extended OPML + Dynamic OPML**.
 
 ## Saved Search Sharing Implementation Notes
 

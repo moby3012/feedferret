@@ -1,6 +1,6 @@
-# PWA Push Notifications & Badging TODO
+# PWA Push Notifications & Badging Status
 
-This document tracks PWA push, badging, and polish status. Browser push, centralized badge updates, manifest screenshots, deep links, Lighthouse CI checks, and a cached-article offline fallback are implemented; all badge behavior remains best-effort because browser support differs.
+This document tracks PWA push, badging, and polish status. Browser push, centralized badge updates, manifest screenshots, deep links, Lighthouse CI checks, and a cached-article offline fallback are implemented; all badge behavior remains best-effort because browser support differs. Open follow-ups have moved to the ordered backlog in `docs/next-session-workpackages.md`. Open follow-ups have moved to the ordered backlog in `docs/next-session-workpackages.md`.
 
 ## Already done
 
@@ -51,10 +51,10 @@ Implemented in the notifications/FreshRSS OPML work branch and documented in `RE
 - Sync integration in `lib/notifications.ts` for immediate/hourly/daily new-article notifications.
 - Privacy defaults: private/generic payloads by default and explicit user-controlled browser permission flow.
 
-Remaining push-adjacent follow-ups:
+Remaining push-adjacent follow-ups are tracked in the ordered backlog:
 
 - Dedicated durable notification queue if multi-process delivery/retry semantics become necessary.
-- More granular rule/search-triggered notification controls once Keyword Alerts exist.
+- Keyword Alert follow-ups now live in `docs/next-session-workpackages.md`.
 
 ## Better app badging ✅ Implemented
 

@@ -1,67 +1,71 @@
 # Notifications + FreshRSS Extended OPML Arbeitspakete
 
-## Entscheidungen
+Status: ✅ abgeschlossen auf Branch `feat/notifications-freshrss-opml`.
 
-- Notification-Frequenz ist pro User wählbar.
-- Default ist `immediate`; falls Ressourcen/Spam problematisch werden, kann auf `hourly` gewechselt werden.
-- Browser-Push-Payloads dürfen Artikeltitel enthalten.
-- FreshRSS cURL/HTTP-Optionen werden funktional nachgebaut, nicht nur importiert/exportiert.
-- Dynamic OPML (`frss:opmlUrl`) wird beim Import automatisch aktiviert und später synchronisiert.
-- Artikel-Dedupe darf von `userId + link` auf feedbezogene Dedupe-Keys migriert werden.
+Dieses Dokument ist ein Abschlussprotokoll für die bereits umgesetzten Pakete. Die aktuelle offene Planung steht in [`docs/next-session-workpackages.md`](next-session-workpackages.md) und `.ai/todo.md`.
 
-## Paket 1: Foundations / Schema / Dependencies
+## Umgesetzte Entscheidungen ✅
 
-- Web-Push Dependencies + Key-Generation Script.
-- VAPID Env-Dokumentation.
-- Prisma-Modelle/Felder für Push, FreshRSS OPML, Source Types, Dedupe.
-- Migration + Prisma Client Generate.
-- Checks: `pnpm install`, `pnpm exec prisma generate`, `pnpm exec tsc --noEmit`, `pnpm run lint`, optional `pnpm run build`.
-- Commit: `feat: add notification and freshrss schema foundations`.
+- [x] Notification-Frequenz ist pro User wählbar (`immediate`, `hourly`, `daily`, `off`).
+- [x] Default bleibt `immediate`, kann aber pro User reduziert oder deaktiviert werden.
+- [x] Browser-Push-Payloads können Artikeltitel enthalten; private/generische Payloads sind per User wählbar.
+- [x] FreshRSS cURL/HTTP-Optionen werden funktional nachgebaut, nicht nur importiert/exportiert.
+- [x] Dynamic OPML (`frss:opmlUrl`) wird beim Import aktiviert und später synchronisiert.
+- [x] Feed-Fetching und Dynamic OPML laufen durch SSRF-Schutz; interne URLs brauchen den Admin-Override.
 
-## Paket 2: Push Notifications Backend
+## Paket 1: Foundations / Schema / Dependencies ✅
 
-- Push-Sender, Notification Scheduler/Queue.
-- API: subscribe, unsubscribe, status, test.
-- Sync-Integration für neue Artikel.
-- Checks + Commit: `feat: add web push backend`.
+- [x] Web-Push Dependencies + Key-Generation Script.
+- [x] VAPID Env-Dokumentation.
+- [x] Prisma-Modelle/Felder für Push, FreshRSS OPML, Source Types, Notifications.
+- [x] Migration + Prisma Client Generate.
+- [x] Checks: TypeScript, Lint, Build während Umsetzung ausgeführt.
 
-## Paket 3: Push Notifications Frontend + Service Worker
+## Paket 2: Push Notifications Backend ✅
 
-- Service Worker Push + Notification Click + Badging.
-- Settings UI: Enable/disable/test, Frequency, Privacy toggle, Feed-Auswahl.
-- React Query Hooks.
-- Checks + Commit: `feat: add browser notification settings`.
+- [x] Push-Sender, Notification Scheduler/Flush-Logik.
+- [x] API: subscribe, unsubscribe, status, test.
+- [x] Sync-Integration für neue Artikel.
+- [x] Expired subscriptions werden bei 404/410 deaktiviert.
 
-## Paket 4: FreshRSS Extended OPML Import/Export
+## Paket 3: Push Notifications Frontend + Service Worker ✅
 
-- Parser/Exporter für `xmlns:frss="https://freshrss.org/opml"`.
-- FreshRSS Source Types und alle dokumentierten `frss:*` Attribute.
-- Dynamic OPML Category Import.
-- Roundtrip Tests mit FreshRSS Beispiel.
-- Checks + Commit: `feat: support freshrss extended opml import export`.
+- [x] Service Worker Push + Notification Click + Badging.
+- [x] Settings UI: Enable/disable/test, Frequency, Privacy toggle, Feed-Auswahl.
+- [x] React Query Hooks / UI-Integration.
+- [x] Best-effort Badge-Updates aus App und Push Payloads.
 
-## Paket 5: FreshRSS Fetcher / Scraper Support
+## Paket 4: FreshRSS Extended OPML Import/Export ✅
 
-- RSS/Atom, JSONFeed, JSON+DotNotation, HTML/XML+XPath, HTML+XPath+JSON.
-- cURL-kompatible HTTP-Optionen.
-- Unicity/Dedupe-Strategien.
-- Full-content/filter/read rules Integration.
-- Checks + Commit: `feat: add freshrss source types and fetch options`.
+- [x] Parser/Exporter für `xmlns:frss="https://freshrss.org/opml"`.
+- [x] FreshRSS Source Types und dokumentierte `frss:*` Attribute.
+- [x] Dynamic OPML Category Import.
+- [x] Roundtrip-Verhalten in Doku und README beschrieben.
 
-## Paket 6: Dynamic OPML + SSRF-Schutz
+## Paket 5: FreshRSS Fetcher / Scraper Support ✅
 
-- Remote OPML Kategorien automatisch aktualisieren.
-- HTTP/HTTPS Allowlist, private IP Block, Timeout, Size Limit, Redirect Checks.
-- Checks + Commit: `feat: add dynamic opml sync`.
+- [x] RSS/Atom, JSONFeed, JSON+DotNotation, HTML/XML+XPath, HTML+XPath+JSON.
+- [x] cURL-kompatible HTTP-Optionen.
+- [x] Unicity/Dedupe-Strategien für FreshRSS-Importfelder.
+- [x] Full-content/filter/read-rules Integration.
 
-## Paket 7: Feed UI FreshRSS Optionen
+## Paket 6: Dynamic OPML + SSRF-Schutz ✅
 
-- Feed Edit Dialog Tabs/Inputs für Source, XPath/JSON, cURL, Priority/Unicity, Filters.
-- Import Report und Extended Export UX.
-- Checks + Commit: `feat: expose freshrss feed options in ui`.
+- [x] Remote OPML Kategorien werden automatisch aktualisiert.
+- [x] HTTP/HTTPS Allowlist, private IP Block, Timeout, Size Limit, Redirect Checks.
+- [x] Admin-Schalter für vertrauenswürdige interne Feed-URLs.
+- [x] Sicherheitsfolgen dokumentiert in `docs/security.md`.
 
-## Paket 8: Docs + Final Verification
+## Paket 7: Feed UI FreshRSS Optionen ✅
 
-- Roadmap, PWA Push Todo, README aktualisieren.
-- Final: `pnpm run lint`, `pnpm run build`.
-- Commit: `docs: document notifications and freshrss opml support`.
+- [x] Feed Edit Dialog Tabs/Inputs für Source, XPath/JSON, cURL, Priority/Unicity, Filters.
+- [x] Import Report und Extended Export UX.
+- [x] Dynamic OPML / FreshRSS Optionen in Management UI integriert.
+
+## Paket 8: Docs + Final Verification ✅
+
+- [x] Roadmap aktualisiert.
+- [x] PWA Push Status aktualisiert.
+- [x] README aktualisiert.
+- [x] Security- und Database-Dokumente ergänzt.
+- [x] Final Checks in den jeweiligen Arbeitspaketen ausgeführt.

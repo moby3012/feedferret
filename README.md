@@ -84,6 +84,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 For self-hosting configuration of TOTP 2FA, Authelia OIDC, and API-based email providers, see:
 
 - [`docs/self-hosting-auth-email.md`](docs/self-hosting-auth-email.md)
+- [`docs/next-session-workpackages.md`](docs/next-session-workpackages.md) — ordered backlog for the next development sessions.
 
 ### 🧙 Admin Onboarding
 

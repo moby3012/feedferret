@@ -1,5 +1,12 @@
-# Sprint 1 — Completed ✅
+# FeedFerret Backlog
 
+Last reviewed: 2026-05-12. This file is the active planning list; detailed next-session packages live in [`docs/next-session-workpackages.md`](../docs/next-session-workpackages.md).
+
+---
+
+## Completed on current branch ✅
+
+### Sprint 1 — FreshRSS parity basics
 - [x] Keyboard shortcut help overlay (`?` key + full overlay)
 - [x] Per-feed quick actions menu (refresh, mark read, edit, health)
 - [x] Better import/export (selective OPML export, JSON export, import report with badges)
@@ -11,249 +18,103 @@
 - [x] Retention policy UI expansion (min articles, protect starred/labelled, dry-run)
 - [x] Dynamic theming (accent + secondary color pickers, CSS vars)
 
----
+### FreshRSS / PWA / Notifications work
+- [x] FreshRSS extended OPML import/export (`frss:*` attributes, source types, cURL-style options)
+- [x] Dynamic OPML categories with automatic sync and SSRF-safe fetching
+- [x] Browser/PWA push notifications with VAPID, device subscription APIs, Settings UI, and service worker handling
+- [x] Centralized app badging updates for unread-count changes, push payloads, sync, and mark-all-read
+- [x] Manifest screenshots, richer PWA shortcuts, deep-link handling, PWA checks, cached-article offline fallback
 
-# Sprint 2
+### Product features
+- [x] Saved Search Sharing: public tokenized HTML page, RSS endpoint, UI share toggle/copy/open actions
+- [x] Google Reader API Phase 1: stable stream continuations, stream preference persistence, subscription edit/quickadd, labels/categories metadata, unread counts
+- [x] Read Later queue with API, search token, UI shortcuts, and retention protection
+- [x] Digest Email with scheduler, SMTP delivery, unsubscribe link, and Settings UI
+- [x] Keyword Alerts with in-app notifications, optional browser push, bell dropdown, Alerts tab, query preview/test
 
-## Saved Search Sharing (#7) — Completed ✅
-- [x] Public read-only saved-search page (tokenized URL)
-- [x] RSS feed endpoint for saved search results
-- [x] Optional private/tokenized links with share toggle in UI
-- [ ] Admin control to enable/disable public sharing
-
-Follow-up ideas: per-share title/description, expiry, analytics, OPML export, team-only shares.
-
-## Full Google Reader API (#13) — Phase 1 Completed ✅
-- [x] Stream item IDs with stable continuation tokens (cursor paging)
-- [x] Stream preferences persistence endpoints (`preference/stream/list|set|delete`)
-- [x] Subscription edit endpoints (`/reader/api/0/subscription/edit`)
-- [x] Quick-add feed endpoint (`/reader/api/0/subscription/quickadd`)
-- [x] Tag/folder list and unread-count completeness for labels + categories
-- [ ] Test with Reeder / NetNewsWire / FeedMe against a deployed instance
-- [ ] (Stretch) Fever API compatibility
-
-## Multi-Database / Postgres (#15) — Completed ✅
-- [x] Document Prisma provider swap (SQLite → Postgres)
-- [x] Add `DATABASE_PROVIDER` env var to docker-compose
-- [x] Add Postgres service to docker-compose.yml
-- [x] Test migration workflow on Postgres (`DATABASE_PROVIDER=postgresql` + `prisma db push`)
-- [x] Document backup/restore commands
-
-## Advanced SSRF Security (#18) — Completed ✅
-- [x] Block private IP ranges (RFC1918) in feed fetch by default
-- [x] DNS rebinding protection (resolve/check host before each fetch and redirect target)
-- [x] Protocol allowlist (http/https only)
-- [x] Max response size enforcement in fetcher
-- [x] Admin override: trusted-deployment mode to allow internal URLs
+### Platform / operations / security
+- [x] Multi-Database / PostgreSQL profile: provider switch script, Docker Compose profile, migration workflow, backup/restore docs
+- [x] Advanced SSRF security: protocol allowlist, DNS/rebinding checks, private-IP blocking, redirect checks, size limits
+- [x] Internal-admin override for trusted internal feed URLs in Server Management → Sync
 
 ---
 
-# Sprint 3
+## Next-session workpackages — ordered
 
-## Read Later Queue ✅ — Medium Effort
+### 1. Duplicate Detection — Medium Effort
+**Goal:** detect repeated articles across feeds and hide or badge duplicates.
 
-**Goal:** Save articles to a persistent read-later list, separate from star/label system. Retention policy must never purge read-later articles.
+- [ ] Add `Article.contentHash`, `Article.isDuplicate`, `Article.duplicateOfId` self-relation
+- [ ] Add `User.hideDuplicates` preference and index `(userId, contentHash)`
+- [ ] Implement `lib/dedup.ts` with URL normalization (`utm_*`, `ref`, `source` stripping) and SHA-256 hash
+- [ ] Hook dedupe into article ingest after creation
+- [ ] Hide duplicates from default article queries when enabled
+- [ ] Add Settings → Reading toggle “Hide duplicates”
+- [ ] Show duplicate badge / “Also in …” info when duplicates are visible
+- [ ] Add duplicate count to feed statistics
 
-### DB
-- [x] Add `isReadLater: Boolean @default(false)` to `Article` model
-- [x] Add `readLaterSavedAt: DateTime?` to `Article` model
-- [x] Migration: update retention query to exclude `isReadLater: true` (like starred)
+### 2. Outbound Webhooks — Medium Effort
+**Goal:** post signed event payloads to n8n, Zapier, Make, or custom endpoints.
 
-### Server Actions
-- [x] `toggleReadLater(articleId)` — flip `isReadLater`, set/clear `readLaterSavedAt`
-- [x] `getReadLaterCount()` — count of read-later articles
-- [x] REST API: `GET/POST/DELETE /api/read-later` with session + Bearer token auth
+- [ ] Add `Webhook` model (`name`, `url`, generated `secret`, event list, filters, enabled)
+- [ ] Add `WebhookDelivery` model with status/error/attempt log
+- [ ] Implement `lib/webhooks.ts` with JSON POST and `X-FeedFerret-Signature` HMAC-SHA256 header
+- [ ] Retry up to 3× with exponential backoff and log each attempt
+- [ ] Payloads for `new_article`, `keyword_match`, `feed_error`
+- [ ] Hook `new_article` into sync ingest, `keyword_match` into keyword alerts, `feed_error` into fetch errors
+- [ ] Add Management → Webhooks tab with create/edit, event checkboxes, filters, secret copy/rotate, enable toggle
+- [ ] Add delivery log and “Send test payload” action
 
-### UI
-- [x] Bookmark icon button in `article-list.tsx` (alongside star) — active state uses `text-accent`
-- [x] Bookmark button in `article-reader.tsx` header
-- [x] Keyboard shortcut `l` → toggle read later
-- [x] "Read Later" section in `rss-sidebar.tsx` with count badge
-- [x] `is:readlater` filter token in `lib/search.ts`
-- [x] API documented in `docs/api.md`
+### 3. Keyword Alerts follow-up — Low/Medium Effort
+**Goal:** complete alert management after the first implemented alerts pass.
 
----
-
-## Digest Email ✅ — Medium Effort
-
-**Goal:** Send scheduled email digest of new/unread articles. Uses existing admin SMTP config.
-
-### DB
-- [x] Added to `User` model: `digestEnabled`, `digestFrequency`, `digestDayOfWeek`, `digestHour`, `digestScope`, `digestFeedIds`, `digestLastSentAt`, `digestUnsubscribeToken`
-- [x] Migration via `prisma db push`
-
-### Email Template
-- [x] `lib/digest-email.ts` — HTML email (table-based, branded), plain-text fallback
-- [x] Max 20 articles per digest, sorted by `publishedAt` desc
-- [x] Unsubscribe link → `GET /api/digest/unsubscribe?token=<token>` sets `digestEnabled: false`
-
-### Scheduler
-- [x] `lib/digest-scheduler.ts` — runs inside `background-sync.ts` tick
-- [x] `shouldSendNow()` checks UTC hour, day-of-week (weekly), gap ≥ 23h/167h
-- [x] Send via nodemailer, update `digestLastSentAt`
-
-### UI (Settings)
-- [x] Enable toggle, frequency select, day-of-week (weekly only), hour picker (UTC)
-- [x] Scope select (unread / all / starred / read later)
-- [x] Feed multi-select chip filter
-- [x] "Send test digest now" button → fires immediately to user email
-- [x] Last sent timestamp display
-
----
-
-## Keyword Monitoring & Alerts ✅ — Medium Effort
-
-**Goal:** Notify user in-app and optionally via browser push when new articles match a keyword/query. Uses existing search parser in `lib/search.ts`.
-
-### DB
-- [x] New model `KeywordAlert` with `name`, `query`, `scope`, `actions`, `enabled`, `lastTriggeredAt`
-- [x] New model `Notification` with unread state and optional article/feed/alert links
-
-### Logic
-- [x] `lib/keyword-alerts.ts` — `applyKeywordAlerts(userId, newArticleIds[])`
-- [x] Hook into `syncFeed` after new article ingest
-- [x] Browser push action (`notify_push`) available in addition to in-app notifications
-
-### UI
-- [x] Bell icon in header with unread notification count badge
-- [x] Notification dropdown panel with mark-all-read and article links
-- [x] "Alerts" tab in Management dialog:
-  - list/create alerts
-  - query preview
-  - scope by all/feed/category
-  - enable/disable toggle
-  - "Test" button against recent articles
-
-Follow-ups:
-- [ ] Optional email action for keyword alerts
+- [ ] Optional email delivery action using existing email providers
 - [ ] Edit form for existing alert details beyond enable/disable/delete
-- [ ] Per-alert delivery history / match analytics
+- [ ] Per-alert delivery history and match analytics
+- [ ] Document action semantics and privacy expectations
+
+### 4. Feed Discovery — High Effort / design first
+**Goal:** help users find related feeds without forcing a third-party dependency.
+
+- [ ] Decision: baseline Option A + B, optional Option C behind API key
+- [ ] Option A: same-domain crawl on subscribe; extract `<link rel="alternate" type="application/rss+xml">`
+- [ ] Option B: bundle 5–10 curated starter OPML packs in `/public/starter-opml/`
+- [ ] Option C optional: `FEEDLY_API_KEY` search endpoint in Management → Add Feed
+- [ ] Add “Discover” panel in Add Feed dialog for related feeds and starter packs
+
+### 5. AI Article Summaries (BYOK) — Medium/High Effort
+**Goal:** summarize articles on demand or on sync with user-provided OpenAI/Anthropic/Ollama credentials.
+
+- [ ] Add user AI settings (`aiProvider`, encrypted API key, model, Ollama base URL, auto-summarize, language)
+- [ ] Add article summary fields (`aiSummary`, `aiSummarizedAt`)
+- [ ] Implement `lib/ai-summary.ts` with provider adapters and 8k-char input cap
+- [ ] Add on-demand summarize action and optional auto-summarize hook (rate-limited)
+- [ ] Add Settings AI section with provider/key/model/test controls
+- [ ] Add article-reader summary card, loading state, cached display, regenerate action
+
+### 6. Reader Client Compatibility QA — Medium Effort
+**Goal:** validate the GReader API against real clients and tune quirks.
+
+- [ ] Test Reeder against a deployed instance
+- [ ] Test NetNewsWire against a deployed instance
+- [ ] Test FeedMe / ReadKit where possible
+- [ ] Document per-client base URL/login instructions and known quirks in `docs/google-reader-api.md`
+- [ ] Stretch: Fever API compatibility if client support needs it
+
+### 7. Saved Search Sharing admin policy — Low Effort
+**Goal:** give admins a global kill switch for public saved-search sharing.
+
+- [ ] Add global setting to enable/disable public saved-search sharing
+- [ ] Hide/disable sharing UI when off
+- [ ] Reject shared page/RSS access or share creation according to the policy
+- [ ] Document consequences for existing share tokens
 
 ---
 
-## Outbound Webhooks — Medium Effort
+## Parking lot / later
 
-**Goal:** Fire HTTP POST to user-defined URL on events. Enables n8n, Zapier, Make, custom pipelines.
-
-### DB
-- [ ] New model `Webhook`:
-  - `id, userId, name, url`
-  - `secret: String` — HMAC-SHA256 signing key (auto-generated, user can view/rotate)
-  - `events: String` — JSON array: `["new_article", "keyword_match", "feed_error"]`
-  - `filters: String?` — JSON: `{ feedIds?: [], categoryIds?: [], labelIds?: [] }`
-  - `enabled: Boolean @default(true)`
-  - `createdAt, updatedAt`
-- [ ] New model `WebhookDelivery`:
-  - `id, webhookId, event, payload, statusCode?, error?, attempt`
-  - `sentAt: DateTime`
-
-### Logic
-- [ ] `lib/webhooks.ts` — `fireWebhook(webhook, event, payload)`:
-  - POST JSON payload with headers: `X-FeedFerret-Event`, `X-FeedFerret-Signature` (HMAC-SHA256 of body with secret)
-  - Retry up to 3× with exponential backoff (1s, 5s, 25s)
-  - Log each attempt to `WebhookDelivery`
-- [ ] Payload shape per event:
-  - `new_article`: `{ event, article: { id, title, url, feedName, publishedAt } }`
-  - `keyword_match`: `{ event, alert: { name, query }, article: {...} }`
-  - `feed_error`: `{ event, feed: { id, name, url }, error }`
-- [ ] Hook `new_article` into `syncUserFeeds` after ingest
-- [ ] Hook `keyword_match` into `applyKeywordAlerts`
-- [ ] Hook `feed_error` into fetch error handler
-
-### UI
-- [ ] "Webhooks" tab in Management dialog:
-  - List webhooks (name, URL masked, events, last delivery status)
-  - Create/edit: name, URL, secret (generated, copy button), events checkboxes, optional feed/category filter
-  - Toggle enable/disable
-  - Delivery log: last 20 deliveries, status code, timestamp, retry count
-  - "Send test payload" button
-
----
-
-## Duplicate Detection — Medium Effort
-
-**Goal:** Detect same article appearing across multiple feeds. Hide or badge duplicates.
-
-### DB
-- [ ] Add `contentHash: String?` to `Article` — hash of normalized URL + title (first 100 chars)
-- [ ] Add `isDuplicate: Boolean @default(false)` to `Article`
-- [ ] Add `duplicateOfId: String?` → `Article?` (self-relation)
-- [ ] Add `hideDuplicates: Boolean @default(true)` to `User`
-- [ ] Migration + index on `(userId, contentHash)`
-
-### Logic
-- [ ] `lib/dedup.ts` — `deduplicateArticles(userId, newArticles[])`:
-  - Normalize URL (strip tracking params: `utm_*`, `ref=`, `source=`), lowercase
-  - Hash = `sha256(normalizedUrl + title.slice(0,100).toLowerCase())`
-  - On ingest: check for existing article with same hash for this user
-  - If found: mark new article `isDuplicate: true`, set `duplicateOfId` to oldest match
-- [ ] Hook into `syncUserFeeds` after article creation
-- [ ] Filter duplicates out of default article queries when `hideDuplicates: true`
-
-### UI
-- [ ] User setting "Hide duplicates" toggle in Settings → Reading
-- [ ] When `hideDuplicates: false`: show duplicate badge on article (e.g. "Also in: Feed X")
-- [ ] In feed stats: show duplicate count per feed
-
----
-
-## Feed Discovery — High Effort ⚠️ Design Needed
-
-**Goal:** Help users find new feeds related to what they already follow.
-
-### Approach options (choose before implementing):
-- **Option A — Same-domain crawl:** When user subscribes to a feed, parse publisher's homepage for other `<link rel="alternate">` feeds. Zero external dependency.
-- **Option B — OPML directory:** Ship curated starter OPML packs by topic (tech, science, news). User picks topics on onboarding or in Management.
-- **Option C — Feedly Cloud API:** Use public Feedly search API (free tier) to find feeds by keyword/topic. Requires API key in GlobalSettings.
-- **Option D — Self-hosted index:** Build/import feed index from OPML directories (OPML.org, OpenRSS). Store in local DB table. Full-text search over it.
-
-### Agreed scope (to be decided):
-- [ ] **Decision:** pick Option A + B as baseline (no external dependency), Option C as opt-in
-- [ ] Option A: `lib/feed-discovery.ts` — on feed subscribe, fetch homepage, extract `<link rel="alternate" type="application/rss+xml">` tags, return discovered feeds list
-- [ ] Option B: bundle 5–10 curated starter OPML packs in `/public/starter-opml/`, surfaced in onboarding and Management → Add Feed
-- [ ] Option C (optional): `FEEDLY_API_KEY` env var → search endpoint in Management → Add Feed search
-- [ ] UI: "Discover" panel in Add Feed dialog — shows related feeds from same publisher, plus topic-based starter packs
-
----
-
-## AI Article Summaries (BYOK) — Medium Effort
-
-**Goal:** Summarize articles on demand or auto-summarize on sync. User brings their own API key (OpenAI, Anthropic, or Ollama).
-
-### DB
-- [ ] Add to `User` model:
-  - `aiProvider: String?` — `"openai"` | `"anthropic"` | `"ollama"`
-  - `aiApiKey: String?` — encrypted at rest (use `lib/crypto.ts` or env-level encryption)
-  - `aiModel: String?` — e.g. `"gpt-4o-mini"`, `"claude-haiku-4-5"`, `"llama3.2"`
-  - `aiOllamaBaseUrl: String?` — for self-hosted Ollama
-  - `aiAutoSummarize: Boolean @default(false)` — auto-summarize on sync
-  - `aiSummaryLanguage: String @default("original")` — `"original"` | `"en"` | `"de"` | ...
-- [ ] Add to `Article` model:
-  - `aiSummary: String?`
-  - `aiSummarizedAt: DateTime?`
-- [ ] Migration
-
-### Logic
-- [ ] `lib/ai-summary.ts`:
-  - `summarizeArticle(article, userAiSettings)` → calls provider API
-  - OpenAI: `openai` npm package, chat completions, `gpt-4o-mini` default
-  - Anthropic: `@anthropic-ai/sdk`, `claude-haiku-4-5-20251001` default (cheapest, fast)
-  - Ollama: direct HTTP POST to `aiOllamaBaseUrl/api/generate`
-  - Prompt: "Summarize this article in 3 sentences. Language: {lang}. Article: {content}"
-  - Max input: 8000 chars of `article.content` to control cost
-- [ ] `summarizeArticle` action — on-demand call from article reader
-- [ ] Auto-summarize hook in `syncUserFeeds` when `aiAutoSummarize: true` (rate-limit: max 10/sync to control cost)
-
-### UI
-- [ ] AI Settings section in `settings-form.tsx`:
-  - Provider select (OpenAI / Anthropic / Ollama)
-  - API Key input (password field, masked, stored encrypted)
-  - Model input (text, with placeholder defaults per provider)
-  - Ollama base URL input (shown only when Ollama selected)
-  - Auto-summarize toggle + language select
-  - "Test connection" button
-- [ ] In `article-reader.tsx`:
-  - "Summarize" button in article header (only shown when AI configured)
-  - Summary shown in collapsible card above article content
-  - Loading spinner during generation
-  - Cached: if `aiSummary` already set, show cached version with "regenerate" option
+- [ ] Website scraping feeds from arbitrary HTML/JSON sources beyond FreshRSS-compatible imported definitions
+- [ ] WebSub / PubSubHubbub instant updates
+- [ ] Extension system with safe server/UI hooks
+- [ ] Multi-user shared/anonymous reading mode beyond tokenized saved searches
+- [ ] Durable notification queue if multi-process retry semantics become necessary
