@@ -39,12 +39,12 @@ Follow-up ideas: per-share title/description, expiry, analytics, OPML export, te
 - [x] Test migration workflow on Postgres (`DATABASE_PROVIDER=postgresql` + `prisma db push`)
 - [x] Document backup/restore commands
 
-## Advanced SSRF Security (#18) — Very High Effort
-- [ ] Block private IP ranges (RFC1918) in feed fetch by default
-- [ ] DNS rebinding protection (resolve → recheck IP after DNS lookup)
-- [ ] Protocol allowlist (http/https only)
-- [ ] Max response size enforcement in fetcher
-- [ ] Admin override: trusted-deployment mode to allow internal URLs
+## Advanced SSRF Security (#18) — Completed ✅
+- [x] Block private IP ranges (RFC1918) in feed fetch by default
+- [x] DNS rebinding protection (resolve/check host before each fetch and redirect target)
+- [x] Protocol allowlist (http/https only)
+- [x] Max response size enforcement in fetcher
+- [x] Admin override: trusted-deployment mode to allow internal URLs
 
 ---
 

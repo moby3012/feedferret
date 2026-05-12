@@ -5,6 +5,7 @@ import { applyKeywordAlerts } from "./keyword-alerts";
 import { queueNewArticleNotifications } from "./notifications";
 import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
+import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 
 async function getSanitizer() {
     const { default: DOMPurify } = await import("isomorphic-dompurify");
@@ -154,13 +155,17 @@ async function autoFetchFullTextForArticles(
     for (const article of articles) {
         if (!article.link) continue;
         try {
-            const response = await fetch(article.link, {
-                headers: { "User-Agent": "FeedFerret/1.0", Accept: "text/html" },
-                signal: AbortSignal.timeout(12_000),
-            });
-            if (!response.ok) continue;
-
-            const html = await response.text();
+            const html = await fetchTextWithSsrfProtection(
+                article.link,
+                { headers: { "User-Agent": "FeedFerret/1.0", Accept: "text/html" } },
+                {
+                    allowInternal: await isTrustedFeedFetchingAllowed(),
+                    context: "Full-text fetch",
+                    maxBytes: 2 * 1024 * 1024,
+                    maxRedirects: 5,
+                    timeoutMs: 12_000,
+                },
+            );
             const dom = new JSDOM(html, { url: article.link });
             const document = dom.window.document;
 

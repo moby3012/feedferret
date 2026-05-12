@@ -335,6 +335,7 @@ model GlobalSettings {
   totpIssuer          String?
   backgroundSyncEnabled          Boolean @default(true)
   backgroundSyncIntervalMinutes  Int     @default(5)
+  allowInternalFeedUrls          Boolean @default(false)
   // Onboarding
   onboardingCompleted Boolean @default(false)
   createdAt           DateTime @default(now())

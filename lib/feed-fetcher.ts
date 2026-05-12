@@ -8,6 +8,7 @@ import {
   parseIntLike,
   parseJsonObject,
 } from "./freshrss-opml";
+import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 
 export type FeedFetchConfig = {
   url: string;
@@ -211,55 +212,40 @@ function headersFromFeed(feed: FeedFetchConfig, http: FreshRssHttpOptions) {
 async function fetchText(feed: FeedFetchConfig, accept: string) {
   const http = parseHttpOptions(feed);
   const timeoutMs = (feed.fetchTimeoutSecs ?? 30) * 1000;
-  const maxBytes = feed.maxSizeKb ? feed.maxSizeKb * 1024 : undefined;
+  const maxBytes = feed.maxSizeKb ? feed.maxSizeKb * 1024 : 5 * 1024 * 1024;
   const maxRedirects = parseIntLike(String(http.CURLOPT_MAXREDIRS ?? "")) ?? 10;
   const follow = http.CURLOPT_FOLLOWLOCATION === undefined ? true : parseBooleanLike(String(http.CURLOPT_FOLLOWLOCATION));
-  let url = feed.url;
+  const headers = headersFromFeed(feed, http);
+  headers.Accept = accept;
+  const init: RequestInit = {
+    method: parseBooleanLike(String(http.CURLOPT_POST ?? "")) ? "POST" : "GET",
+    body: http.CURLOPT_POSTFIELDS ? String(http.CURLOPT_POSTFIELDS) : undefined,
+    headers,
+  };
 
-  for (let redirects = 0; redirects <= maxRedirects; redirects++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  if (http.CURLOPT_PROXY) {
     try {
-      const headers = headersFromFeed(feed, http);
-      headers.Accept = accept;
-      const init: RequestInit = {
-        method: parseBooleanLike(String(http.CURLOPT_POST ?? "")) ? "POST" : "GET",
-        body: http.CURLOPT_POSTFIELDS ? String(http.CURLOPT_POSTFIELDS) : undefined,
-        headers,
-        redirect: follow ? "manual" : "follow",
-        signal: controller.signal,
-      };
-
-      if (http.CURLOPT_PROXY) {
-        try {
-          const { ProxyAgent } = await import("undici");
-          (init as any).dispatcher = new ProxyAgent(String(http.CURLOPT_PROXY));
-        } catch (error) {
-          console.warn("[feed-fetcher] proxy requested but undici ProxyAgent failed", error);
-        }
-      } else if (feed.sslVerify === false) {
-        try {
-          const { Agent } = await import("undici");
-          (init as any).dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
-        } catch (error) {
-          console.warn("[feed-fetcher] sslVerify=false requested but undici Agent failed", error);
-        }
-      }
-
-      const response = await fetch(url, init);
-      if (follow && response.status >= 300 && response.status < 400 && response.headers.get("location")) {
-        url = new URL(response.headers.get("location")!, url).toString();
-        continue;
-      }
-      if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
-      const text = await response.text();
-      return maxBytes && text.length > maxBytes ? text.slice(0, maxBytes) : text;
-    } finally {
-      clearTimeout(timer);
+      const { ProxyAgent } = await import("undici");
+      (init as any).dispatcher = new ProxyAgent(String(http.CURLOPT_PROXY));
+    } catch (error) {
+      console.warn("[feed-fetcher] proxy requested but undici ProxyAgent failed", error);
+    }
+  } else if (feed.sslVerify === false) {
+    try {
+      const { Agent } = await import("undici");
+      (init as any).dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+    } catch (error) {
+      console.warn("[feed-fetcher] sslVerify=false requested but undici Agent failed", error);
     }
   }
 
-  throw new Error(`Too many redirects fetching ${feed.url}`);
+  return fetchTextWithSsrfProtection(feed.url, init, {
+    allowInternal: await isTrustedFeedFetchingAllowed(),
+    context: "Feed fetch",
+    maxBytes,
+    maxRedirects: follow ? maxRedirects : 0,
+    timeoutMs,
+  });
 }
 
 async function fetchRssOrAtom(feed: FeedFetchConfig) {

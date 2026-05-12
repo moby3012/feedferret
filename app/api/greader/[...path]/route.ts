@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import Parser from "rss-parser";
 import { db } from "@/lib/db";
 import { syncFeed } from "@/lib/rss-sync";
+import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import {
   authenticateGReaderRequest,
   buildCursorWhere,
@@ -28,7 +28,6 @@ import {
   upsertGReaderStreamPref,
 } from "@/lib/greader";
 
-const parser = new Parser();
 
 async function requireUser(request: Request) {
   const user = await authenticateGReaderRequest(request);
@@ -172,7 +171,7 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
     return NextResponse.json({ numResults: 1, query: feedUrl, streamId: `feed/${existing.url}`, numSubscribers: 1, title: existing.name });
   }
 
-  const remoteFeed = await parser.parseURL(feedUrl);
+  const remoteFeed = await fetchFeedArticles({ url: feedUrl });
   const order = await db.feed.count({ where: { userId } });
   const feed = await db.feed.create({
     data: {

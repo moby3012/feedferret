@@ -64,6 +64,7 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
   // Misc
   if ("totpIssuer" in data) next.totpIssuer = String(data.totpIssuer || "").trim() || null;
   if (typeof data.backgroundSyncEnabled === "boolean") next.backgroundSyncEnabled = data.backgroundSyncEnabled;
+  if (typeof data.allowInternalFeedUrls === "boolean") next.allowInternalFeedUrls = data.allowInternalFeedUrls;
   if ("backgroundSyncIntervalMinutes" in data) {
     const v = Number(data.backgroundSyncIntervalMinutes);
     next.backgroundSyncIntervalMinutes = Number.isFinite(v) && v > 0 ? v : 5;

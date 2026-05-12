@@ -122,6 +122,10 @@ Full docs: [`docs/internal-api.md`](docs/internal-api.md)
 Users can delete their account from **Settings → Delete Account**. All data is cascade-deleted atomically. See [`docs/gdpr.md`](docs/gdpr.md).
 
 
+### 🔒 Feed Fetch Security
+
+FeedFerret blocks server-side feed fetches to private/internal IP ranges by default to reduce SSRF risk. Trusted single-tenant deployments can enable internal feed URLs in Server Management → Sync. See [`docs/security.md`](docs/security.md).
+
 ### 🗄 Database Providers
 
 SQLite is the default. PostgreSQL is available through `DATABASE_PROVIDER=postgresql` and the bundled Docker Compose `postgres` profile. See [`docs/database.md`](docs/database.md) for provider switching, migration, backup, and restore commands.

@@ -1,66 +1,22 @@
-import dns from "dns/promises";
-import net from "net";
 import { db } from "@/lib/db";
 import { httpOptionsFromOutline, OpmlOutline, parseOpml, scraperConfigFromOutline } from "@/lib/opml";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/freshrss-opml";
-
-function isPrivateIp(ip: string) {
-  const version = net.isIP(ip);
-  if (version === 4) {
-    const parts = ip.split(".").map(Number);
-    const [a, b] = parts;
-    return (
-      a === 10 ||
-      a === 127 ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 169 && b === 254) ||
-      a === 0
-    );
-  }
-  if (version === 6) {
-    const lower = ip.toLowerCase();
-    return lower === "::1" || lower.startsWith("fc") || lower.startsWith("fd") || lower.startsWith("fe80:");
-  }
-  return true;
-}
-
-async function assertSafeUrl(rawUrl: string) {
-  const url = new URL(rawUrl);
-  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Dynamic OPML only supports http/https URLs");
-
-  if (net.isIP(url.hostname)) {
-    if (isPrivateIp(url.hostname)) throw new Error("Dynamic OPML URL points to a private IP");
-    return url;
-  }
-
-  const addresses = await dns.lookup(url.hostname, { all: true });
-  if (addresses.length === 0 || addresses.some((entry) => isPrivateIp(entry.address))) {
-    throw new Error("Dynamic OPML hostname resolves to a private IP");
-  }
-  return url;
-}
+import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 
 async function fetchSafeOpml(url: string) {
-  let current = (await assertSafeUrl(url)).toString();
-  const maxBytes = 2 * 1024 * 1024;
-  for (let redirect = 0; redirect < 6; redirect++) {
-    await assertSafeUrl(current);
-    const response = await fetch(current, {
-      redirect: "manual",
+  return fetchTextWithSsrfProtection(
+    url,
+    {
       headers: { Accept: "text/x-opml,application/xml,text/xml,*/*", "User-Agent": "FeedFerret/1.0" },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (response.status >= 300 && response.status < 400 && response.headers.get("location")) {
-      current = new URL(response.headers.get("location")!, current).toString();
-      continue;
-    }
-    if (!response.ok) throw new Error(`Dynamic OPML fetch failed: ${response.status}`);
-    const text = await response.text();
-    if (text.length > maxBytes) throw new Error("Dynamic OPML response too large");
-    return text;
-  }
-  throw new Error("Dynamic OPML too many redirects");
+    },
+    {
+      allowInternal: await isTrustedFeedFetchingAllowed(),
+      context: "Dynamic OPML fetch",
+      maxBytes: 2 * 1024 * 1024,
+      maxRedirects: 5,
+      timeoutMs: 15_000,
+    },
+  );
 }
 
 function feedDataFromOutline(outline: OpmlOutline, userId: string, categoryId: string) {

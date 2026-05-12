@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { syncUserFeeds, syncFeed } from "@/lib/rss-sync";
+import { fetchFeedArticles } from "@/lib/feed-fetcher";
+import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import {
     parseOpml,
     generateOpml,
@@ -13,10 +15,7 @@ import {
 } from "@/lib/opml";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/freshrss-opml";
 import { buildAdvancedSearchWhere } from "@/lib/search";
-import Parser from "rss-parser";
 import { randomBytes } from "crypto";
-
-const parser = new Parser();
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -304,7 +303,7 @@ export async function addFeed(url: string, categoryId?: string) {
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     try {
-        const remoteFeed = await parser.parseURL(url);
+        const remoteFeed = await fetchFeedArticles({ url });
 
         const feed = await db.feed.create({
             data: {
@@ -877,19 +876,22 @@ export async function fetchFullText(articleId: string) {
 
     if (!article?.link) throw new Error("Article has no source link");
 
-    const response = await fetch(article.link, {
-        headers: {
-            "User-Agent": "FeedFerret/1.0 (+https://github.com/moby3012/feedferret)",
-            Accept: "text/html,application/xhtml+xml",
+    const html = await fetchTextWithSsrfProtection(
+        article.link,
+        {
+            headers: {
+                "User-Agent": "FeedFerret/1.0 (+https://github.com/moby3012/feedferret)",
+                Accept: "text/html,application/xhtml+xml",
+            },
         },
-        signal: AbortSignal.timeout(12_000),
-    });
-
-    if (!response.ok) {
-        throw new Error(`Failed to fetch article: ${response.status}`);
-    }
-
-    const html = await response.text();
+        {
+            allowInternal: await isTrustedFeedFetchingAllowed(),
+            context: "Full-text fetch",
+            maxBytes: 2 * 1024 * 1024,
+            maxRedirects: 5,
+            timeoutMs: 12_000,
+        },
+    );
     const { JSDOM } = await import("jsdom");
     const { default: DOMPurify } = await import("isomorphic-dompurify");
     const dom = new JSDOM(html, { url: article.link });
@@ -1219,16 +1221,17 @@ export async function previewFeedExtraction(feedId: string, articleUrl: string) 
     });
     if (!feed) throw new Error("Feed not found");
 
-    const response = await fetch(articleUrl, {
-        headers: {
-            "User-Agent": "FeedFerret/1.0",
-            Accept: "text/html,application/xhtml+xml",
+    const html = await fetchTextWithSsrfProtection(
+        articleUrl,
+        { headers: { "User-Agent": "FeedFerret/1.0", Accept: "text/html,application/xhtml+xml" } },
+        {
+            allowInternal: await isTrustedFeedFetchingAllowed(),
+            context: "Full-text preview fetch",
+            maxBytes: 2 * 1024 * 1024,
+            maxRedirects: 5,
+            timeoutMs: 12_000,
         },
-        signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
-
-    const html = await response.text();
+    );
     const { JSDOM } = await import("jsdom");
     const { default: DOMPurify } = await import("isomorphic-dompurify");
     const dom = new JSDOM(html, { url: articleUrl });
