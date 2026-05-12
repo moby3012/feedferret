@@ -27,6 +27,10 @@ export interface Article {
   isReadLater: boolean
   readLaterSavedAt?: string | Date | null
   imageUrl?: string
+  isDuplicate?: boolean
+  duplicateOf?: string | null
+  duplicateCount?: number
+  canonicalFeedName?: string | null
   labels?: Array<{
     label: {
       id: string

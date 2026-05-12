@@ -6,6 +6,7 @@ import { queueNewArticleNotifications } from "./notifications";
 import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
+import { computeContentHash } from "./content-hash";
 
 async function getSanitizer() {
     const { default: DOMPurify } = await import("isomorphic-dompurify");
@@ -59,6 +60,7 @@ export async function syncFeed(userId: string, feedId: string) {
                 link,
                 externalId,
                 dedupeKey,
+                contentHash: computeContentHash(link),
                 content: DOMPurify.sanitize(content),
                 excerpt: excerpt,
                 author: item.author || null,
@@ -99,7 +101,28 @@ export async function syncFeed(userId: string, feedId: string) {
                 create: article,
             });
             upsertedIds.push(upserted.id);
-            if (!existing) createdArticleIds.push(upserted.id);
+            if (!existing) {
+                createdArticleIds.push(upserted.id);
+                // Cross-feed duplicate detection for newly created articles
+                if (article.contentHash) {
+                    const canonical = await db.article.findFirst({
+                        where: {
+                            userId: userId,
+                            contentHash: article.contentHash,
+                            id: { not: upserted.id },
+                            isDuplicate: false,
+                        },
+                        orderBy: { createdAt: "asc" },
+                        select: { id: true },
+                    });
+                    if (canonical) {
+                        await db.article.update({
+                            where: { id: upserted.id },
+                            data: { isDuplicate: true, duplicateOf: canonical.id },
+                        });
+                    }
+                }
+            }
         }
 
         await db.feed.update({

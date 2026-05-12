@@ -12,8 +12,26 @@ Already implemented and documented:
 - Saved Search Sharing via tokenized public page and RSS feed.
 - PostgreSQL deployment profile and provider switching docs.
 - SSRF-safe feed fetching with trusted-admin override for internal URLs.
+- Duplicate Detection: cross-feed deduplication with SHA-256 content hashes, user setting, and badge UI.
 
-## 1. Duplicate Detection — Medium
+## 1. Duplicate Detection — ✅ Done
+
+**Implemented 2026-05-12.**
+
+Schema: `Article.contentHash` (SHA-256 of normalized URL, first 32 hex chars), `Article.isDuplicate`, `Article.duplicateOf` (self-relation to canonical), `User.hideDuplicates` (default true).
+
+URL normalization rules (`lib/content-hash.ts`):
+- Force HTTPS, strip `www.` prefix, lowercase hostname
+- Remove trailing slash from pathname
+- Strip tracking params: `utm_*`, `fbclid`, `gclid`, `msclkid`, `mc_cid`, `mc_eid`, `ref`, `source`, `_ga`, `igshid`
+- Sort remaining query params for canonical order
+- Strip fragment (#)
+
+Limitations: does not deduplicate across different URLs for the same article (e.g. AMP vs canonical). Title/content similarity matching is a future enhancement.
+
+Migration `20260512003000_add_duplicate_detection` adds columns and backfills existing articles with a simplified URL normalization (no SHA-256 in SQLite; proper hashes computed on next sync).
+
+## 2. Outbound Webhooks — Medium
 
 **Outcome:** repeated articles are hidden by default or visibly grouped/badged.
 

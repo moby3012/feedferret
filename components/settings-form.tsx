@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Key,
   Laptop,
+  Layers,
   LogOut,
   Mail,
   Moon,
@@ -181,6 +182,19 @@ export function SettingsForm() {
 
           {/* Browser notifications */}
           <PushNotificationSection />
+
+          {/* Hide duplicates */}
+          <PrefRow
+            icon={Layers}
+            title="Hide duplicates"
+            description="When the same article appears in multiple feeds, show it only once (from the first feed that synced it)."
+          >
+            <Switch
+              checked={prefs?.hideDuplicates ?? true}
+              onCheckedChange={(checked) => update({ hideDuplicates: checked })}
+              className="h-7 w-12"
+            />
+          </PrefRow>
 
           {/* Open original */}
           <PrefRow

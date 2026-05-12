@@ -53,6 +53,7 @@ model User {
   pushFeedIds             String?                       // JSON array of feed IDs, null = all
   pushPrivatePayloads     Boolean   @default(true)      // include article titles in push payloads
   pushLastSentAt          DateTime?
+  hideDuplicates          Boolean   @default(true)
   role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -239,8 +240,13 @@ model Article {
   userId      String
   title       String
   link        String
-  externalId  String?
-  dedupeKey   String?
+  externalId   String?
+  dedupeKey    String?
+  contentHash  String?
+  isDuplicate  Boolean  @default(false)
+  duplicateOf  String?
+  canonical    Article?  @relation("ArticleDuplicates", fields: [duplicateOf], references: [id], onDelete: SetNull)
+  duplicates   Article[] @relation("ArticleDuplicates")
   content     String
   excerpt     String?
   author      String?
@@ -258,6 +264,7 @@ model Article {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, feedId, dedupeKey])
+  @@index([userId, contentHash])
   @@index([userId, isRead, publishedAt])
   @@index([userId, isStarred, publishedAt])
   @@index([userId, isReadLater, readLaterSavedAt])

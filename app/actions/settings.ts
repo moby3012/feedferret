@@ -36,6 +36,7 @@ export async function getReadingPreferences() {
       defaultArticleSort: true,
       accentColor: true,
       secondaryColor: true,
+      hideDuplicates: true,
     },
   });
   return {
@@ -46,6 +47,7 @@ export async function getReadingPreferences() {
     defaultArticleSort: user?.defaultArticleSort ?? "newest",
     accentColor: user?.accentColor ?? "#5BA4CF",
     secondaryColor: user?.secondaryColor ?? "#F0963C",
+    hideDuplicates: user?.hideDuplicates ?? true,
   };
 }
 
@@ -59,6 +61,7 @@ export async function updateGlobalSettings(data: {
   defaultArticleSort?: string;
   accentColor?: string;
   secondaryColor?: string;
+  hideDuplicates?: boolean;
 }) {
   const session = await requireUser();
 

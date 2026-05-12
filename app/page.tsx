@@ -46,6 +46,8 @@ function toUiArticle(a: any) {
     readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
     excerpt: a.excerpt || "",
     author: a.author || "Unknown",
+    duplicateCount: a._count?.duplicates ?? 0,
+    canonicalFeedName: a.canonical?.feed?.name ?? null,
   };
 }
 

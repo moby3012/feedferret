@@ -397,6 +397,13 @@ export async function getFeedHealth() {
     });
     const unreadByFeed = new Map(unreadCounts.map((item) => [item.feedId, item._count._all]));
 
+    const duplicateCounts = await db.article.groupBy({
+        by: ["feedId"],
+        where: { userId: session.user.id, isDuplicate: true, duplicateOf: { not: null } },
+        _count: { _all: true },
+    });
+    const duplicateByFeed = new Map(duplicateCounts.map((item) => [item.feedId, item._count._all]));
+
     // Oldest article per feed for avgArticlesPerDay calculation
     const oldestByFeed = await db.article.groupBy({
         by: ["feedId"],
@@ -417,6 +424,7 @@ export async function getFeedHealth() {
         return {
             ...feed,
             unreadCount: unreadByFeed.get(feed.id) || 0,
+            duplicateCount: duplicateByFeed.get(feed.id) || 0,
             articleCount: totalArticles,
             avgArticlesPerDay,
         };
@@ -584,7 +592,19 @@ export async function getArticles(feedId?: string | null, category?: string, sea
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
+    const userPrefs = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { hideDuplicates: true },
+    });
+
     const where: any = { userId: session.user.id };
+
+    // Hide duplicates that have a known canonical article
+    if (userPrefs?.hideDuplicates ?? true) {
+        where.AND = [...(where.AND || []), {
+            NOT: { isDuplicate: true, duplicateOf: { not: null } },
+        }];
+    }
 
     const advancedSearchWhere = await buildAdvancedSearchWhere(session.user.id, search);
     if (Object.keys(advancedSearchWhere).length) {
@@ -650,6 +670,12 @@ export async function getArticles(feedId?: string | null, category?: string, sea
             feed: true,
             labels: {
                 include: { label: true },
+            },
+            _count: {
+                select: { duplicates: true },
+            },
+            canonical: {
+                select: { feedId: true, feed: { select: { name: true } } },
             },
         },
         orderBy,

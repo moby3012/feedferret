@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
-import { Star, Circle, Clock, ImageIcon, CheckCircle2, CircleDot, Bookmark } from "lucide-react";
+import { Star, Circle, Clock, ImageIcon, CheckCircle2, CircleDot, Bookmark, Layers } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ArticleListProps {
@@ -220,6 +220,24 @@ function ArticlePreview({
             <span className="text-sm font-medium text-muted-foreground truncate">
               {article.feedName}
             </span>
+            {(article.duplicateCount ?? 0) > 0 && (
+              <span
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium shrink-0"
+                title={`Also in ${article.duplicateCount} other feed${(article.duplicateCount ?? 0) > 1 ? "s" : ""}`}
+              >
+                <Layers className="w-2.5 h-2.5" />
+                {article.duplicateCount}
+              </span>
+            )}
+            {article.isDuplicate && article.canonicalFeedName && (
+              <span
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/70 text-[10px] font-medium shrink-0"
+                title={`First seen in: ${article.canonicalFeedName}`}
+              >
+                <Layers className="w-2.5 h-2.5" />
+                dup
+              </span>
+            )}
             <span className="text-muted-foreground/50">·</span>
             <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
               {new Date(article.publishedAt).toLocaleDateString()}
