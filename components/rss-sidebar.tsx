@@ -27,6 +27,9 @@ import {
   ExternalLink,
   Pencil,
   Activity,
+  Compass,
+  Download,
+  Rss,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -63,6 +66,7 @@ import {
   useSavedSearches,
   useRefreshFeed,
   useMarkAllAsRead,
+  useImportOpml,
 } from "@/hooks/use-rss-data";
 import { ServerManagementDialog } from "./server-management-dialog";
 import { toast } from "sonner";
@@ -131,8 +135,12 @@ export function RssSidebar({
   const [isAddingFeed, setIsAddingFeed] = useState(false);
   const [isServerManagementOpen, setIsServerManagementOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [discoveredFeeds, setDiscoveredFeeds] = useState<{ url: string; title: string; type: string }[]>([]);
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [importingPack, setImportingPack] = useState<string | null>(null);
 
   const addNewFeed = useAddFeed();
+  const importOpml = useImportOpml();
   const { data: allCategories = [] } = useCategories();
   const updateFeedOrder = useUpdateFeedOrder();
   const updateCategoryOrder = useUpdateCategoryOrder();
@@ -142,6 +150,38 @@ export function RssSidebar({
   const { data: savedSearches = [] } = useSavedSearches();
   const refreshFeed = useRefreshFeed();
   const markAllRead = useMarkAllAsRead();
+
+  const handleDiscover = async () => {
+    if (!newFeedUrl) return;
+    setIsDiscovering(true);
+    setDiscoveredFeeds([]);
+    try {
+      const params = new URLSearchParams({ url: newFeedUrl });
+      const res = await fetch(`/api/discover?${params}`);
+      const data = await res.json();
+      setDiscoveredFeeds(data.feeds || []);
+      if ((data.feeds || []).length === 0) toast.info("No feeds found at that URL");
+    } catch {
+      toast.error("Discovery failed");
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
+  const handleImportStarterPack = async (packPath: string, packName: string) => {
+    setImportingPack(packPath);
+    try {
+      const res = await fetch(`/starter-opml/${packPath}`);
+      if (!res.ok) throw new Error("Failed to fetch pack");
+      const xml = await res.text();
+      const result = await importOpml.mutateAsync(xml);
+      toast.success(`Imported ${packName}: ${result.feedsAdded} feeds added`);
+    } catch (err) {
+      toast.error(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImportingPack(null);
+    }
+  };
 
   const openFeedManagement = (tab?: typeof managementInitialTab) => {
     setManagementInitialTab(tab);
@@ -502,17 +542,65 @@ export function RssSidebar({
 
             {isAddFeedOpen && (
               <div className="px-4 py-3 space-y-3 bg-muted/25 rounded-2xl border border-border/50">
-                <Input
-                  placeholder="Feed URL..."
-                  value={newFeedUrl}
-                  onChange={(e) => setNewFeedUrl(e.target.value)}
-                  className="h-10 text-sm bg-sidebar-accent border-0"
-                />
+                {/* URL input + actions */}
+                <div className="flex gap-1.5">
+                  <Input
+                    placeholder="Feed or site URL..."
+                    value={newFeedUrl}
+                    onChange={(e) => {
+                      setNewFeedUrl(e.target.value);
+                      setDiscoveredFeeds([]);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newFeedUrl) handleDiscover();
+                    }}
+                    className="h-9 text-sm bg-sidebar-accent border-0 flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-9 px-2 shrink-0"
+                    disabled={!newFeedUrl || isDiscovering}
+                    onClick={handleDiscover}
+                    title="Find feeds at this URL"
+                  >
+                    <Compass className={`w-4 h-4 ${isDiscovering ? "animate-spin" : ""}`} />
+                  </Button>
+                </div>
+
+                {/* Discovered feeds */}
+                {discoveredFeeds.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground font-medium px-0.5">Found feeds</p>
+                    {discoveredFeeds.map((f) => (
+                      <div key={f.url} className="flex items-center gap-1.5 rounded-xl bg-sidebar-accent px-2 py-1.5">
+                        <Rss className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-xs truncate flex-1 text-foreground" title={f.url}>{f.title}</span>
+                        <Button
+                          size="sm"
+                          className="h-6 px-2 text-xs shrink-0"
+                          onClick={async () => {
+                            setIsAddingFeed(true);
+                            await addNewFeed.mutateAsync({
+                              url: f.url,
+                              categoryId: newFeedCategoryId === "none" ? undefined : newFeedCategoryId,
+                            });
+                            setIsAddingFeed(false);
+                          }}
+                          disabled={isAddingFeed}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <Select
                   value={newFeedCategoryId}
                   onValueChange={setNewFeedCategoryId}
                 >
-                  <SelectTrigger className="h-10 text-sm bg-sidebar-accent border-0">
+                  <SelectTrigger className="h-9 text-sm bg-sidebar-accent border-0">
                     <SelectValue placeholder="Category" />
                   </SelectTrigger>
                   <SelectContent>
@@ -539,6 +627,7 @@ export function RssSidebar({
                             : newFeedCategoryId,
                       });
                       setNewFeedUrl("");
+                      setDiscoveredFeeds([]);
                       setIsAddFeedOpen(false);
                       setIsAddingFeed(false);
                     }}
@@ -549,10 +638,44 @@ export function RssSidebar({
                     size="sm"
                     variant="ghost"
                     className="flex-1"
-                    onClick={() => setIsAddFeedOpen(false)}
+                    onClick={() => {
+                      setIsAddFeedOpen(false);
+                      setDiscoveredFeeds([]);
+                    }}
                   >
                     Cancel
                   </Button>
+                </div>
+
+                {/* Starter packs */}
+                <div className="pt-1 border-t border-border/40">
+                  <p className="text-xs text-muted-foreground font-medium mb-1.5">Starter packs</p>
+                  <div className="space-y-1">
+                    {[
+                      { id: "tech", name: "Technology", path: "tech.opml", count: 5 },
+                      { id: "science", name: "Science", path: "science.opml", count: 4 },
+                      { id: "news", name: "World News", path: "news.opml", count: 4 },
+                      { id: "dev", name: "Developer News", path: "dev.opml", count: 4 },
+                      { id: "design", name: "Design & UX", path: "design.opml", count: 3 },
+                    ].map((pack) => (
+                      <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-sidebar-accent px-2 py-1.5">
+                        <span className="text-xs flex-1 text-foreground">
+                          {pack.name}
+                          <span className="text-muted-foreground ml-1">({pack.count})</span>
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-xs shrink-0"
+                          disabled={importingPack === pack.path}
+                          onClick={() => handleImportStarterPack(pack.path, pack.name)}
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          Import
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

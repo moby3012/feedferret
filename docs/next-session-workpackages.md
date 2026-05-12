@@ -65,22 +65,26 @@ Delivery behavior:
 - `notify_email` — optional; requires email provider configured; sends one email per alert trigger listing all matched articles.
 - `keyword_match` webhook — fires for every matching article to all enabled webhooks with `keyword_match` in their events list.
 
-## 4. Feed Discovery — High / design first
+## 4. Feed Discovery — ✅ Done
 
-**Outcome:** users can discover related feeds and starter subscriptions.
+**Implemented 2026-05-12.**
 
-Recommended decision:
+Option A (same-domain crawl) + Option B (curated starter packs) shipped. Option C (Feedly API) skipped; no external dependency needed.
 
-- Baseline: Option A + B, no external dependency.
-- Optional: Option C behind `FEEDLY_API_KEY`.
+Architecture:
 
-Acceptance criteria:
+- `lib/feed-discovery.ts`: `discoverFeedsAtUrl(url)` fetches a publisher page (SSRF-protected, 512 KB cap, 12 s timeout) and parses `<link rel="alternate">` tags with RSS/Atom MIME types. Returns up to 10 `DiscoveredFeed` objects with `url`, `title`, `type`.
+- `app/api/discover` (GET `?url=`): authenticated route that calls `discoverFeedsAtUrl` and returns JSON. Requires session.
+- `public/starter-opml/` — five curated OPML packs: `tech.opml` (5 feeds), `science.opml` (4), `news.opml` (4), `dev.opml` (4), `design.opml` (3). Served as static files.
+- `components/rss-sidebar.tsx` — Add Feed panel expanded with:
+  - Compass icon button next to URL input triggers `/api/discover`
+  - Discovered feeds listed with per-feed Add button
+  - Starter Packs section with Import button per pack (fetches static OPML, calls `importOpml` server action)
 
-- Same-domain crawl extracts RSS/Atom alternate links from publisher homepages.
-- Curated starter OPML packs are bundled and importable.
-- Add Feed dialog has a Discover panel with related feeds and topic packs.
-- Optional external search is disabled unless API key is configured.
-- Docs describe privacy/network implications.
+Privacy/network notes:
+
+- Discovery fetches the *publisher's* page server-side (not from the user's browser). The request originates from the FeedFerret server, uses SSRF protection, and strips private IPs/localhost. No external third-party API calls are made.
+- Starter pack imports trigger individual feed syncs, which fetch from the RSS feed servers directly.
 
 ## 5. AI Article Summaries (BYOK) — Medium/High
 

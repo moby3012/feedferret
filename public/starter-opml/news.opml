@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+  <head>
+    <title>World News</title>
+  </head>
+  <body>
+    <outline text="World News">
+      <outline type="rss" text="BBC News" xmlUrl="https://feeds.bbci.co.uk/news/rss.xml" htmlUrl="https://www.bbc.com/news"/>
+      <outline type="rss" text="Reuters Top News" xmlUrl="https://feeds.reuters.com/reuters/topNews" htmlUrl="https://www.reuters.com"/>
+      <outline type="rss" text="NPR News" xmlUrl="https://feeds.npr.org/1001/rss.xml" htmlUrl="https://www.npr.org"/>
+      <outline type="rss" text="The Guardian" xmlUrl="https://www.theguardian.com/international/rss" htmlUrl="https://www.theguardian.com"/>
+    </outline>
+  </body>
+</opml>

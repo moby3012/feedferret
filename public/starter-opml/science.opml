@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+  <head>
+    <title>Science</title>
+  </head>
+  <body>
+    <outline text="Science">
+      <outline type="rss" text="NASA Breaking News" xmlUrl="https://www.nasa.gov/news-releases/feed/" htmlUrl="https://www.nasa.gov"/>
+      <outline type="rss" text="Quanta Magazine" xmlUrl="https://www.quantamagazine.org/feed/" htmlUrl="https://www.quantamagazine.org"/>
+      <outline type="rss" text="Scientific American" xmlUrl="https://www.scientificamerican.com/feed/rss/" htmlUrl="https://www.scientificamerican.com"/>
+      <outline type="rss" text="New Scientist" xmlUrl="https://www.newscientist.com/feed/home/" htmlUrl="https://www.newscientist.com"/>
+    </outline>
+  </body>
+</opml>

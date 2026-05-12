@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+  <head>
+    <title>Developer News</title>
+  </head>
+  <body>
+    <outline text="Developer News">
+      <outline type="rss" text="CSS-Tricks" xmlUrl="https://css-tricks.com/feed/" htmlUrl="https://css-tricks.com"/>
+      <outline type="rss" text="Smashing Magazine" xmlUrl="https://www.smashingmagazine.com/feed/" htmlUrl="https://www.smashingmagazine.com"/>
+      <outline type="rss" text="The Changelog" xmlUrl="https://changelog.com/feed" htmlUrl="https://changelog.com"/>
+      <outline type="rss" text="Dev.to" xmlUrl="https://dev.to/feed" htmlUrl="https://dev.to"/>
+    </outline>
+  </body>
+</opml>

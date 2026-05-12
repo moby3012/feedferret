@@ -73,14 +73,13 @@ Last reviewed: 2026-05-12. This file is the active planning list; detailed next-
 - [ ] Per-alert delivery history and match analytics
 - [ ] Document action semantics and privacy expectations
 
-### 4. Feed Discovery — High Effort / design first
+### 4. Feed Discovery — ✅ Done (2026-05-12)
 **Goal:** help users find related feeds without forcing a third-party dependency.
 
-- [ ] Decision: baseline Option A + B, optional Option C behind API key
-- [ ] Option A: same-domain crawl on subscribe; extract `<link rel="alternate" type="application/rss+xml">`
-- [ ] Option B: bundle 5–10 curated starter OPML packs in `/public/starter-opml/`
-- [ ] Option C optional: `FEEDLY_API_KEY` search endpoint in Management → Add Feed
-- [ ] Add “Discover” panel in Add Feed dialog for related feeds and starter packs
+- [x] Decision: baseline Option A + B, optional Option C behind API key
+- [x] Option A: same-domain crawl on subscribe; extract `<link rel=”alternate” type=”application/rss+xml”>`
+- [x] Option B: bundle 5 curated starter OPML packs in `/public/starter-opml/` (tech, science, news, dev, design)
+- [x] Add “Discover” panel in Add Feed dialog for related feeds and starter packs
 
 ### 5. AI Article Summaries (BYOK) — Medium/High Effort
 **Goal:** summarize articles on demand or on sync with user-provided OpenAI/Anthropic/Ollama credentials.
