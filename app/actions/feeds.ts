@@ -1107,7 +1107,7 @@ export async function previewAutoReadRule(query: string, limit = 10) {
 
 function stringifyAlertActions(actions?: string[]) {
     const allowed = (actions || ["notify_inapp"]).filter((action) =>
-        ["notify_inapp", "notify_push"].includes(action),
+        ["notify_inapp", "notify_push", "notify_email"].includes(action),
     );
     return JSON.stringify(allowed.length ? allowed : ["notify_inapp"]);
 }
@@ -1119,6 +1119,9 @@ export async function getKeywordAlerts() {
     return db.keywordAlert.findMany({
         where: { userId: session.user.id },
         orderBy: [{ enabled: "desc" }, { createdAt: "desc" }],
+        include: {
+            _count: { select: { notifications: true } },
+        },
     });
 }
 
@@ -1189,6 +1192,19 @@ export async function testKeywordAlert(alertId: string) {
     if (!alert) throw new Error("Alert not found");
     const { previewKeywordAlert } = await import("@/lib/keyword-alerts");
     return previewKeywordAlert(session.user.id, alert.query, alert.scope, 100);
+}
+
+export async function getAlertHistory(alertId: string, limit = 20) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const alert = await db.keywordAlert.findFirst({ where: { id: alertId, userId: session.user.id }, select: { id: true } });
+    if (!alert) throw new Error("Not found");
+    return db.notification.findMany({
+        where: { userId: session.user.id, alertId, type: "keyword_alert" },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        select: { id: true, title: true, body: true, isRead: true, createdAt: true, articleId: true },
+    });
 }
 
 export async function getNotifications(limit = 20) {

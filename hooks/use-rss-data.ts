@@ -771,3 +771,12 @@ export function useSendTestWebhook() {
         },
     })
 }
+
+export function useAlertHistory(alertId: string | null) {
+    return useQuery({
+        queryKey: ["alert-history", alertId],
+        queryFn: () => import("@/app/actions/feeds").then(m => m.getAlertHistory(alertId!, 20)),
+        enabled: !!alertId,
+        staleTime: 10_000,
+    })
+}

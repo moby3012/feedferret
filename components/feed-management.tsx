@@ -32,6 +32,8 @@ import {
   useDeleteKeywordAlert,
   usePreviewKeywordAlert,
   useTestKeywordAlert,
+  useMarkNotificationRead,
+  useAlertHistory,
   useExportUserData,
 } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
@@ -80,6 +82,8 @@ import {
   Rss,
   Link as LinkIcon,
   Bell,
+  History,
+  Pencil,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
 import { toast } from "sonner";
@@ -277,6 +281,7 @@ export function FeedManagement({
   const deleteKeywordAlert = useDeleteKeywordAlert();
   const previewKeywordAlert = usePreviewKeywordAlert();
   const testKeywordAlert = useTestKeywordAlert();
+  const markNotificationRead = useMarkNotificationRead();
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newLabelName, setNewLabelName] = useState("");
@@ -301,8 +306,17 @@ export function FeedManagement({
   const [newAlertQuery, setNewAlertQuery] = useState("");
   const [newAlertScope, setNewAlertScope] = useState("all");
   const [newAlertPush, setNewAlertPush] = useState(false);
+  const [newAlertEmail, setNewAlertEmail] = useState(false);
   const [alertPreview, setAlertPreview] = useState<any[] | null>(null);
   const [showAddAlert, setShowAddAlert] = useState(false);
+  const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
+  const [editAlertName, setEditAlertName] = useState("");
+  const [editAlertQuery, setEditAlertQuery] = useState("");
+  const [editAlertScope, setEditAlertScope] = useState("all");
+  const [editAlertPush, setEditAlertPush] = useState(false);
+  const [editAlertEmail, setEditAlertEmail] = useState(false);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+  const { data: alertHistory = [], isLoading: historyLoading } = useAlertHistory(expandedHistoryId);
   const [editingFeed, setEditingFeed] = useState<any | null>(null);
   const [selectedExportIds, setSelectedExportIds] = useState<Set<string>>(new Set());
 
@@ -1318,6 +1332,14 @@ export function FeedManagement({
                           />
                           Also send browser push notification when available
                         </label>
+                        <label className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={newAlertEmail}
+                            onChange={(e) => setNewAlertEmail(e.target.checked)}
+                          />
+                          Also send email (requires mail configured in admin settings)
+                        </label>
                       </div>
 
                       {alertPreview !== null && (
@@ -1366,7 +1388,11 @@ export function FeedManagement({
                                 name: newAlertName.trim(),
                                 query: newAlertQuery.trim(),
                                 scope: newAlertScope,
-                                actions: newAlertPush ? ["notify_inapp", "notify_push"] : ["notify_inapp"],
+                                actions: [
+                                  "notify_inapp",
+                                  ...(newAlertPush ? ["notify_push"] : []),
+                                  ...(newAlertEmail ? ["notify_email"] : []),
+                                ],
                               },
                               {
                                 onSuccess: () => {
@@ -1375,6 +1401,7 @@ export function FeedManagement({
                                   setNewAlertQuery("");
                                   setNewAlertScope("all");
                                   setNewAlertPush(false);
+                                  setNewAlertEmail(false);
                                   setAlertPreview(null);
                                 },
                               },
@@ -1397,49 +1424,219 @@ export function FeedManagement({
                         const actions = (() => {
                           try { return JSON.parse(alert.actions || "[]"); } catch { return []; }
                         })();
+                        const matchCount = alert._count?.notifications ?? 0;
+                        const isEditing = editingAlertId === alert.id;
+                        const isHistoryOpen = expandedHistoryId === alert.id;
                         return (
-                          <div key={alert.id} className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3">
-                            <button
-                              onClick={() =>
-                                updateKeywordAlert.mutate({
-                                  alertId: alert.id,
-                                  data: { enabled: !alert.enabled },
-                                })
-                              }
-                              className={cn(
-                                "shrink-0 rounded-lg p-1.5 transition-colors",
-                                alert.enabled ? "text-primary bg-primary/10" : "text-muted-foreground/50 bg-muted",
-                              )}
-                              title={alert.enabled ? "Disable alert" : "Enable alert"}
-                            >
-                              <Power className="w-3.5 h-3.5" />
-                            </button>
-                            <Bell className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{alert.name}</p>
-                              <p className="text-xs text-muted-foreground font-mono truncate">{alert.query}</p>
-                              <p className="text-[11px] text-muted-foreground truncate">
-                                Scope: {alert.scope === "all" ? "all feeds" : alert.scope} · {actions.includes("notify_push") ? "in-app + push" : "in-app"}
-                                {alert.lastTriggeredAt ? ` · last: ${new Date(alert.lastTriggeredAt).toLocaleString()}` : ""}
-                              </p>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 rounded-xl"
-                              onClick={() => testKeywordAlert.mutate(alert.id)}
-                              disabled={testKeywordAlert.isPending}
-                            >
-                              Test
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="w-7 h-7 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => setPendingDelete({ type: "keyword-alert", id: alert.id, name: alert.name })}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
+                          <div key={alert.id} className="rounded-2xl border border-border/60 bg-card overflow-hidden">
+                            {isEditing ? (
+                              <div className="flex flex-col gap-3 px-4 py-3">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="col-span-2">
+                                    <label className="text-xs text-muted-foreground mb-1 block">Name</label>
+                                    <Input
+                                      value={editAlertName}
+                                      onChange={(e) => setEditAlertName(e.target.value)}
+                                      className="h-8 rounded-xl text-sm"
+                                      placeholder="Alert name"
+                                    />
+                                  </div>
+                                  <div className="col-span-2">
+                                    <label className="text-xs text-muted-foreground mb-1 block">Query</label>
+                                    <Input
+                                      value={editAlertQuery}
+                                      onChange={(e) => setEditAlertQuery(e.target.value)}
+                                      className="h-8 rounded-xl text-sm font-mono"
+                                      placeholder="keyword OR phrase"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs text-muted-foreground mb-1 block">Scope</label>
+                                    <Select value={editAlertScope} onValueChange={setEditAlertScope}>
+                                      <SelectTrigger className="h-8 rounded-xl text-sm">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="all">All feeds</SelectItem>
+                                        {feeds.map((f: any) => (
+                                          <SelectItem key={f.id} value={`feed:${f.id}`}>{f.name}</SelectItem>
+                                        ))}
+                                        {categories.map((c: any) => (
+                                          <SelectItem key={c.id} value={`category:${c.id}`}>{c.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="flex flex-col gap-1.5 justify-end">
+                                    <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={editAlertPush}
+                                        onChange={(e) => setEditAlertPush(e.target.checked)}
+                                        className="rounded"
+                                      />
+                                      Push notification
+                                    </label>
+                                    <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={editAlertEmail}
+                                        onChange={(e) => setEditAlertEmail(e.target.checked)}
+                                        className="rounded"
+                                      />
+                                      Email
+                                    </label>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 justify-end">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 rounded-xl text-xs"
+                                    onClick={() => setEditingAlertId(null)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="h-7 rounded-xl text-xs"
+                                    disabled={!editAlertName.trim() || !editAlertQuery.trim() || updateKeywordAlert.isPending}
+                                    onClick={() =>
+                                      updateKeywordAlert.mutate(
+                                        {
+                                          alertId: alert.id,
+                                          data: {
+                                            name: editAlertName.trim(),
+                                            query: editAlertQuery.trim(),
+                                            scope: editAlertScope,
+                                            actions: [
+                                              "notify_inapp",
+                                              ...(editAlertPush ? ["notify_push"] : []),
+                                              ...(editAlertEmail ? ["notify_email"] : []),
+                                            ],
+                                          },
+                                        },
+                                        { onSuccess: () => setEditingAlertId(null) },
+                                      )
+                                    }
+                                  >
+                                    Save
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-3 px-4 py-3">
+                                <button
+                                  onClick={() =>
+                                    updateKeywordAlert.mutate({
+                                      alertId: alert.id,
+                                      data: { enabled: !alert.enabled },
+                                    })
+                                  }
+                                  className={cn(
+                                    "shrink-0 rounded-lg p-1.5 transition-colors",
+                                    alert.enabled ? "text-primary bg-primary/10" : "text-muted-foreground/50 bg-muted",
+                                  )}
+                                  title={alert.enabled ? "Disable alert" : "Enable alert"}
+                                >
+                                  <Power className="w-3.5 h-3.5" />
+                                </button>
+                                <Bell className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-sm truncate">{alert.name}</p>
+                                    {matchCount > 0 && (
+                                      <span className="shrink-0 rounded-full bg-primary/10 text-primary text-[10px] font-medium px-1.5 py-0.5">
+                                        {matchCount} match{matchCount !== 1 ? "es" : ""}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground font-mono truncate">{alert.query}</p>
+                                  <p className="text-[11px] text-muted-foreground truncate">
+                                    Scope: {alert.scope === "all" ? "all feeds" : alert.scope} · {
+                                      [
+                                        "in-app",
+                                        ...(actions.includes("notify_push") ? ["push"] : []),
+                                        ...(actions.includes("notify_email") ? ["email"] : []),
+                                      ].join(" + ")
+                                    }
+                                    {alert.lastTriggeredAt ? ` · last: ${new Date(alert.lastTriggeredAt).toLocaleString()}` : ""}
+                                  </p>
+                                </div>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="w-7 h-7 rounded-lg text-muted-foreground hover:text-foreground"
+                                  title="Show match history"
+                                  onClick={() => setExpandedHistoryId(isHistoryOpen ? null : alert.id)}
+                                >
+                                  <History className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="w-7 h-7 rounded-lg text-muted-foreground hover:text-foreground"
+                                  title="Edit alert"
+                                  onClick={() => {
+                                    setEditingAlertId(alert.id);
+                                    setEditAlertName(alert.name);
+                                    setEditAlertQuery(alert.query);
+                                    setEditAlertScope(alert.scope);
+                                    setEditAlertPush(actions.includes("notify_push"));
+                                    setEditAlertEmail(actions.includes("notify_email"));
+                                  }}
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 rounded-xl"
+                                  onClick={() => testKeywordAlert.mutate(alert.id)}
+                                  disabled={testKeywordAlert.isPending}
+                                >
+                                  Test
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="w-7 h-7 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() => setPendingDelete({ type: "keyword-alert", id: alert.id, name: alert.name })}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            )}
+                            {isHistoryOpen && (
+                              <div className="border-t border-border/60 px-4 py-3 bg-muted/30">
+                                <p className="text-xs font-medium text-muted-foreground mb-2">Recent matches</p>
+                                {historyLoading ? (
+                                  <p className="text-xs text-muted-foreground">Loading…</p>
+                                ) : alertHistory.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">No matches yet.</p>
+                                ) : (
+                                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                    {alertHistory.map((n: any) => (
+                                      <button
+                                        key={n.id}
+                                        className={cn(
+                                          "w-full text-left rounded-lg px-2.5 py-1.5 text-xs transition-colors",
+                                          n.read ? "text-muted-foreground" : "text-foreground font-medium bg-primary/5",
+                                        )}
+                                        onClick={() => {
+                                          if (!n.read) markNotificationRead.mutate(n.id);
+                                        }}
+                                      >
+                                        <span className="block truncate">{n.body}</span>
+                                        <span className="text-[10px] text-muted-foreground">
+                                          {new Date(n.createdAt).toLocaleString()}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}

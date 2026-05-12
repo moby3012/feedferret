@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { sendPushToUser } from "@/lib/push";
 import { dispatchWebhookEvent } from "@/lib/webhooks";
+import { sendSystemEmail } from "@/lib/mail";
 
 function parseActions(value: string | null | undefined) {
   if (!value) return ["notify_inapp"];
@@ -30,6 +31,7 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
   });
 
   let notificationsCreated = 0;
+  let userEmail: string | null | undefined = undefined;
 
   for (const alert of alerts) {
     const searchWhere = await buildAdvancedSearchWhere(userId, alert.query);
@@ -76,6 +78,27 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
         feedId: matches.length === 1 ? first.feed.id : undefined,
         tag: `keyword-alert:${alert.id}`,
       }).catch((error) => console.warn("[keyword-alerts] push failed", error));
+    }
+
+    if (actions.includes("notify_email")) {
+      // Lazy-load user email once
+      if (userEmail === undefined) {
+        const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
+        userEmail = user?.email ?? null;
+      }
+      if (userEmail) {
+        const articleRows = matches
+          .map((a) => `<li><a href="${a.link}">${a.title}</a> — ${a.feed.name}</li>`)
+          .join("");
+        const html = `<p>Keyword alert <strong>${alert.name}</strong> matched ${matches.length} article${matches.length > 1 ? "s" : ""}:</p><ul>${articleRows}</ul>`;
+        const text = `Keyword alert "${alert.name}" matched:\n` + matches.map((a) => `- ${a.title} (${a.feed.name})\n  ${a.link}`).join("\n");
+        sendSystemEmail({
+          to: userEmail,
+          subject: `Keyword alert: ${alert.name}`,
+          html,
+          text,
+        }).catch((e) => console.warn("[keyword-alerts] email failed:", e));
+      }
     }
 
     // Webhook: keyword_match event per matching article
