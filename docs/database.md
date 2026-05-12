@@ -31,7 +31,9 @@ DATABASE_PROVIDER="sqlite"
 DATABASE_URL="file:/app/data/dev.db"
 ```
 
-> **Note for Coolify and other build platforms:** `DATABASE_PROVIDER` must be set as both a **runtime environment variable** and a **build argument**. The Prisma client is compiled at image build time and must match the runtime provider. If only set at runtime, the container will start but queries may fail silently.
+> **Note for Coolify and other build platforms:** `DATABASE_PROVIDER` must be set as both a **runtime environment variable** and a **build argument**. Use `postgresql` for PostgreSQL deploys. The Prisma client is compiled at image build time and must match the runtime provider. If only set at runtime, the container will start but queries may fail silently.
+
+For Coolify, prefer the repo's Docker Compose deployment type so `docker-compose.yaml` supplies matching build args and runtime environment. Also set `AUTH_URL=https://your-domain.example.com` and `AUTH_TRUST_HOST=true` so onboarding and NextAuth callbacks work behind Coolify's reverse proxy.
 
 ---
 

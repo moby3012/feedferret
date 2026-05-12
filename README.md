@@ -149,10 +149,17 @@ Use Coolify's **Docker Compose** deployment type — this starts both FeedFerret
 | `AUTH_SECRET` | `openssl rand -base64 32` |
 | `AUTH_URL` | `https://your-domain.example.com` |
 | `AUTH_TRUST_HOST` | `true` |
+| `PORT` | `3000` |
 
-> **Important:** `DATABASE_URL` and `POSTGRES_PASSWORD` must use the **same password**. Also set `DATABASE_PROVIDER` and `DATABASE_URL` as **build arguments** in Coolify — the Prisma client is compiled at build time and must match the runtime provider.
+> **Important:** `DATABASE_URL` and `POSTGRES_PASSWORD` must use the **same password**. `DATABASE_PROVIDER` must be `postgresql` (not `postgres`) for production/Coolify deploys.
+
+> **Build args:** Coolify's Docker Compose flow reads the `build.args` from `docker-compose.yaml`. If you override build arguments manually, set both `DATABASE_PROVIDER=postgresql` and the same `DATABASE_URL` there too — the Prisma client is compiled at build time and must match runtime.
 
 > **Fresh deploy:** If you changed `POSTGRES_PASSWORD` after a previous deploy, delete the `feedferret_postgres_data` volume in Coolify first — PostgreSQL ignores `POSTGRES_PASSWORD` on an already-initialized volume.
+
+After deploy, open `https://your-domain.example.com/setup` and complete the onboarding wizard. The setup route intentionally remains accessible after the admin account is created so the wizard can save instance/email/security settings with the newly authenticated admin session.
+
+**Troubleshooting:** If Coolify logs show `Error: Unauthorized` immediately after the first admin account is created, make sure you deployed a version that includes the setup route auth fix and set `AUTH_TRUST_HOST=true`.
 
 ---
 

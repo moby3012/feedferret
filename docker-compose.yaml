@@ -15,8 +15,9 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-feedferret-change-me}
       - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
-      - AUTH_TRUST_HOST=true
+      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
       - AUTH_URL=${AUTH_URL:-https://feedferret.example.com}
+      - PORT=${PORT:-3000}
       # Example OAuth Providers (Uncomment and set values to enable)
       # - GOOGLE_CLIENT_ID=your-google-id
       # - GOOGLE_CLIENT_SECRET=your-google-secret

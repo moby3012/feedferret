@@ -67,12 +67,14 @@ export default function RSSReaderPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState<boolean | null>(null);
+  const isAuthenticated = status === "authenticated";
 
-  const { data: feeds = [], isLoading: feedsLoading } = useFeeds();
+  const { data: feeds = [], isLoading: feedsLoading } = useFeeds(isAuthenticated);
   const { data: rawArticles = [], isLoading: articlesLoading } = useArticles(
     selectedFeed,
     selectedCategory,
     searchQuery || undefined,
+    isAuthenticated,
   );
 
   const refresh = useRefresh();
@@ -81,11 +83,11 @@ export default function RSSReaderPage() {
   const toggleReadLater = useToggleReadLater();
   const markAllAsRead = useMarkAllAsRead();
   const fetchFullText = useFetchFullText();
-  const { data: labels = [] } = useLabels();
-  const { data: savedSearches = [] } = useSavedSearches();
+  const { data: labels = [] } = useLabels(isAuthenticated);
+  const { data: savedSearches = [] } = useSavedSearches(isAuthenticated);
   const createSavedSearch = useCreateSavedSearch();
   const setArticleLabels = useSetArticleLabels();
-  const { data: readingPrefs } = useReadingPreferences();
+  const { data: readingPrefs } = useReadingPreferences(isAuthenticated);
 
   const unreadBadgeCount = useUnreadBadgeCount(feeds);
   useAppBadge(unreadBadgeCount, status === "authenticated");
@@ -147,7 +149,7 @@ export default function RSSReaderPage() {
 
   // Auto-sync feeds on page load (lazy sync)
   useEffect(() => {
-    if (status === "authenticated") {
+    if (isAuthenticated) {
       fetch("/api/sync", { 
         method: "POST",
         headers: { "Content-Type": "application/json" }
@@ -157,7 +159,7 @@ export default function RSSReaderPage() {
         }
       }).catch(console.error);
     }
-  }, [status]);
+  }, [isAuthenticated]);
 
   const { articles: cachedRawArticles, isOffline, hasOfflineSnapshot } = useOfflineArticleCache(rawArticles);
 

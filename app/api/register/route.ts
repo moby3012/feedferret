@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-    console.log("Registration attempt. ENV DB:", process.env.DATABASE_URL, "UID:", process.getuid?.());
+    console.log("Registration attempt. UID:", process.getuid?.());
     try {
         const { name, email, password } = await req.json();
 

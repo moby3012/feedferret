@@ -19,7 +19,13 @@ if ! command -v prisma >/dev/null 2>&1; then
 fi
 
 echo "📂 Current database provider: $DATABASE_PROVIDER"
-echo "📂 Current database URL: $DATABASE_URL"
+if [ "$DATABASE_PROVIDER" = "postgresql" ] || [ "$DATABASE_PROVIDER" = "postgres" ]; then
+    DB_HOST_FOR_LOG=$(echo "$DATABASE_URL" | sed 's|.*@\([^:/]*\).*|\1|')
+    DB_NAME_FOR_LOG=$(echo "$DATABASE_URL" | sed 's|.*/\([^?]*\).*|\1|')
+    echo "📂 Current database target: ${DB_HOST_FOR_LOG}/${DB_NAME_FOR_LOG}"
+else
+    echo "📂 Current database target: sqlite"
+fi
 
 # Wait for Postgres to be ready (no-op for SQLite)
 if [ "$DATABASE_PROVIDER" = "postgresql" ] || [ "$DATABASE_PROVIDER" = "postgres" ]; then

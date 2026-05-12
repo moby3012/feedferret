@@ -6,17 +6,19 @@ import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSe
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, rotateWebhookSecret, getWebhookDeliveries, sendTestWebhook } from "@/app/actions/webhooks"
 import { toast } from "sonner"
 
-export function useFeeds() {
+export function useFeeds(enabled = true) {
     return useQuery({
         queryKey: ["feeds"],
         queryFn: () => getFeeds(),
+        enabled,
     })
 }
 
-export function useCategories() {
+export function useCategories(enabled = true) {
     return useQuery({
         queryKey: ["categories"],
         queryFn: () => getCategories(),
+        enabled,
     })
 }
 
@@ -34,17 +36,19 @@ export function useReadLaterCount() {
     })
 }
 
-export function useLabels() {
+export function useLabels(enabled = true) {
     return useQuery({
         queryKey: ["labels"],
         queryFn: () => getLabels(),
+        enabled,
     })
 }
 
-export function useSavedSearches() {
+export function useSavedSearches(enabled = true) {
     return useQuery({
         queryKey: ["saved-searches"],
         queryFn: () => getSavedSearches(),
+        enabled,
     })
 }
 
@@ -55,11 +59,12 @@ export function useFeedHealth() {
     })
 }
 
-export function useArticles(feedId?: string | null, category?: string, search?: string) {
+export function useArticles(feedId?: string | null, category?: string, search?: string, enabled = true) {
     return useQuery({
         queryKey: ["articles", feedId, category, search],
         queryFn: () => getArticles(feedId, category, search),
         staleTime: 30_000,
+        enabled,
     })
 }
 
@@ -274,10 +279,11 @@ export function useUpdateFeedOrder() {
     })
 }
 
-export function useReadingPreferences() {
+export function useReadingPreferences(enabled = true) {
     return useQuery({
         queryKey: ["reading-preferences"],
         queryFn: () => getReadingPreferences(),
+        enabled,
     })
 }
 

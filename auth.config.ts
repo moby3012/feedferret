@@ -26,6 +26,9 @@ const autheliaProvider =
     : null;
 
 export default {
+  pages: {
+    signIn: "/login",
+  },
   providers: [
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? Google({
@@ -46,13 +49,13 @@ export default {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth");
-      const isPublicRoute =
-        ["/login", "/register", "/setup"].includes(nextUrl.pathname) ||
-        nextUrl.pathname.startsWith("/shared/search/");
+      const isSetupRoute = nextUrl.pathname === "/setup";
+      const isAuthPage = ["/login", "/register"].includes(nextUrl.pathname);
+      const isSharedRoute = nextUrl.pathname.startsWith("/shared/search/");
 
-      if (isApiAuthRoute) return true;
+      if (isApiAuthRoute || isSetupRoute || isSharedRoute) return true;
 
-      if (isPublicRoute) {
+      if (isAuthPage) {
         if (isLoggedIn) return Response.redirect(new URL("/", nextUrl));
         return true;
       }

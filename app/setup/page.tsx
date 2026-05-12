@@ -106,6 +106,7 @@ export default function SetupPage() {
         router.push("/login?setup=success");
         return;
       }
+      router.refresh();
       setStep("instance");
     } catch {
       setError("Failed to connect to the server");
