@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useFeeds,
   useDeleteFeed,
@@ -56,7 +56,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Trash2,
@@ -148,7 +149,7 @@ function SortableCategoryItem({
       style={style}
       className="group rounded-3xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border"
     >
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div
           {...attributes}
           {...listeners}
@@ -157,7 +158,7 @@ function SortableCategoryItem({
           <Folder className="w-5 h-5 text-primary" />
         </div>
         {editingCategoryId === cat.id ? (
-          <div className="flex-1 flex gap-2">
+          <div className="flex-1 flex flex-col gap-2 sm:flex-row">
             <Input
               autoFocus
               value={editingCategoryName}
@@ -189,13 +190,13 @@ function SortableCategoryItem({
           </div>
         ) : (
           <>
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <span className="block font-semibold tracking-[-0.01em]">{cat.name}</span>
               <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
                 Sync: {cat.updateFrequency || "Global Default"} min
               </span>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center justify-end gap-1">
               <Input
                 type="number"
                 placeholder="min"
@@ -214,7 +215,7 @@ function SortableCategoryItem({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-9 w-9 opacity-0 group-hover:opacity-100 rounded-xl"
+                className="h-9 w-9 rounded-xl opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                 onClick={() => {
                   setEditingCategoryId(cat.id);
                   setEditingCategoryName(cat.name);
@@ -225,7 +226,7 @@ function SortableCategoryItem({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-9 w-9 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 rounded-xl"
+                className="h-9 w-9 rounded-xl text-muted-foreground opacity-100 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
                 onClick={() =>
                   requestDelete({
                     type: "category",
@@ -244,6 +245,19 @@ function SortableCategoryItem({
   );
 }
 
+type FeedManagementTab =
+  | "feeds"
+  | "categories"
+  | "labels"
+  | "saved-searches"
+  | "health"
+  | "rules"
+  | "alerts";
+
+function normalizeInitialTab(tab?: FeedManagementTab) {
+  return tab === "saved-searches" ? "labels" : tab ?? "feeds";
+}
+
 export function FeedManagement({
   open,
   onOpenChange,
@@ -251,7 +265,7 @@ export function FeedManagement({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialTab?: "feeds" | "categories" | "labels" | "saved-searches" | "health" | "rules" | "alerts";
+  initialTab?: FeedManagementTab;
 }) {
   const { data: feeds = [] } = useFeeds();
   const deleteFeed = useDeleteFeed();
@@ -283,6 +297,7 @@ export function FeedManagement({
   const testKeywordAlert = useTestKeywordAlert();
   const markNotificationRead = useMarkNotificationRead();
 
+  const [activeTab, setActiveTab] = useState<string>(normalizeInitialTab(initialTab));
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#3b82f6");
@@ -323,6 +338,10 @@ export function FeedManagement({
   const { data: categories = [] } = useCategories();
   const { data: labels = [] } = useLabels();
   const { data: savedSearches = [] } = useSavedSearches();
+
+  useEffect(() => {
+    if (open) setActiveTab(normalizeInitialTab(initialTab));
+  }, [initialTab, open]);
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -436,9 +455,9 @@ export function FeedManagement({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl sm:max-w-none">
-        <DialogHeader className="border-b border-border/60 bg-card/95 p-6 pb-5 backdrop-blur-2xl sm:p-8 sm:pb-5">
-          <DialogTitle className="text-3xl font-semibold tracking-[-0.04em]">
+      <DialogContent className="h-[min(95dvh,900px)] w-[calc(100vw-1rem)] max-w-[95vw] flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl sm:max-w-none">
+        <DialogHeader className="border-b border-border/60 bg-card/95 p-5 pb-4 backdrop-blur-2xl sm:p-8 sm:pb-5">
+          <DialogTitle className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
             Management
           </DialogTitle>
           <DialogDescription className="mt-1 text-sm text-muted-foreground sm:text-base">
@@ -447,55 +466,25 @@ export function FeedManagement({
         </DialogHeader>
 
         <Tabs
-          defaultValue={initialTab ?? "feeds"}
-          key={initialTab ?? "feeds"}
+          value={activeTab}
+          onValueChange={setActiveTab}
           className="flex-1 flex flex-col min-h-0"
         >
           <div className="px-6 py-4 sm:px-8">
-            <TabsList className="bg-muted/45 p-1 rounded-2xl w-fit border border-border/60 shadow-inner shadow-black/[0.02]">
-              <TabsTrigger
-                value="feeds"
-                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                Feeds
-              </TabsTrigger>
-              <TabsTrigger
-                value="categories"
-                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                Categories
-              </TabsTrigger>
-              <TabsTrigger
-                value="opml"
-                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                Import/Export
-              </TabsTrigger>
-              <TabsTrigger
-                value="labels"
-                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                Labels & Searches
-              </TabsTrigger>
-              <TabsTrigger
-                value="health"
-                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                Health
-              </TabsTrigger>
-              <TabsTrigger
-                value="rules"
-                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                Rules
-              </TabsTrigger>
-              <TabsTrigger
-                value="alerts"
-                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
-              >
-                Alerts
-              </TabsTrigger>
-            </TabsList>
+            <ResponsiveTabsNav
+              value={activeTab}
+              onValueChange={setActiveTab}
+              options={[
+                { value: "feeds", label: "Feeds" },
+                { value: "categories", label: "Categories" },
+                { value: "opml", label: "Import/Export" },
+                { value: "labels", label: "Labels & Searches" },
+                { value: "health", label: "Health" },
+                { value: "rules", label: "Rules" },
+                { value: "alerts", label: "Alerts" },
+              ]}
+              triggerClassName="px-4 lg:px-6"
+            />
           </div>
 
           <div className="flex-1 min-h-0">
@@ -508,107 +497,113 @@ export function FeedManagement({
                   {feeds.map((feed: any) => (
                     <div
                       key={feed.id}
-                      className="group flex items-center gap-4 rounded-3xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border"
+                      className="group flex flex-col gap-4 rounded-3xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border sm:flex-row sm:items-center"
                     >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-background text-2xl shadow-sm">
-                        {feed.icon || "📰"}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="truncate font-semibold tracking-[-0.01em] text-foreground">
-                          {feed.name}
+                      <div className="flex min-w-0 items-start gap-3 sm:flex-1">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-background text-2xl shadow-sm">
+                          {feed.icon || "📰"}
                         </div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {feed.url}
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
-                          <span>
-                            Last sync:{" "}
-                            {feed.lastFetchedAt
-                              ? new Date(feed.lastFetchedAt).toLocaleString()
-                              : "never"}
-                          </span>
-                          {feed.lastStatus === "error" && (
-                            <span
-                              className="text-destructive"
-                              title={feed.lastError || undefined}
-                            >
-                              Sync error
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-semibold tracking-[-0.01em] text-foreground">
+                            {feed.name}
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {feed.url}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                            <span>
+                              Last sync:{" "}
+                              {feed.lastFetchedAt
+                                ? new Date(feed.lastFetchedAt).toLocaleString()
+                                : "never"}
                             </span>
-                          )}
+                            {feed.lastStatus === "error" && (
+                              <span
+                                className="text-destructive"
+                                title={feed.lastError || undefined}
+                              >
+                                Sync error
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <Select
-                        value={feed.categoryId || "none"}
-                        onValueChange={(val: string) =>
-                          updateFeed.mutate({
-                            feedId: feed.id,
-                            data: { categoryId: val === "none" ? null : val },
-                          })
-                        }
-                      >
-                        <SelectTrigger className="h-9 w-36 rounded-2xl border-border/70 bg-background/70 shadow-sm focus:ring-1">
-                          <SelectValue placeholder="Category" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-2xl border-border/70 shadow-xl">
-                          <SelectItem value="none">No Category</SelectItem>
-                          {categories.map((cat: any) => (
-                            <SelectItem key={cat.id} value={cat.id}>
-                              {cat.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        placeholder="Keep days"
-                        defaultValue={feed.retentionDays || ""}
-                        className="h-9 w-24 rounded-2xl border-border/70 bg-background/70 text-xs"
-                        title="Retention days for read, unstarred, unlabelled articles"
-                        onBlur={(e) => {
-                          const value = parseInt(e.target.value, 10);
-                          updateFeed.mutate({
-                            feedId: feed.id,
-                            data: { retentionDays: Number.isNaN(value) ? null : value },
-                          });
-                        }}
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Min keep"
-                        defaultValue={feed.keepMinArticles || ""}
-                        className="h-9 w-24 rounded-2xl border-border/70 bg-background/70 text-xs"
-                        title="Keep at least N articles per feed regardless of age"
-                        onBlur={(e) => {
-                          const value = parseInt(e.target.value, 10);
-                          updateFeed.mutate({
-                            feedId: feed.id,
-                            data: { keepMinArticles: Number.isNaN(value) ? null : value },
-                          });
-                        }}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground opacity-0 transition-all hover:bg-accent group-hover:opacity-100"
-                        title="Feed settings"
-                        onClick={() => setEditingFeed(feed)}
-                      >
-                        <Settings2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                        onClick={() =>
-                          setPendingDelete({
-                            type: "feed",
-                            id: feed.id,
-                            name: feed.name,
-                          })
-                        }
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
+                        <Select
+                          value={feed.categoryId || "none"}
+                          onValueChange={(val: string) =>
+                            updateFeed.mutate({
+                              feedId: feed.id,
+                              data: { categoryId: val === "none" ? null : val },
+                            })
+                          }
+                        >
+                          <SelectTrigger className="col-span-2 h-9 w-full rounded-2xl border-border/70 bg-background/70 shadow-sm focus:ring-1 sm:col-span-1 sm:w-36">
+                            <SelectValue placeholder="Category" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-2xl border-border/70 shadow-xl">
+                            <SelectItem value="none">No Category</SelectItem>
+                            {categories.map((cat: any) => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                {cat.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          placeholder="Keep days"
+                          defaultValue={feed.retentionDays || ""}
+                          className="h-9 w-full rounded-2xl border-border/70 bg-background/70 text-xs sm:w-24"
+                          title="Retention days for read, unstarred, unlabelled articles"
+                          onBlur={(e) => {
+                            const value = parseInt(e.target.value, 10);
+                            updateFeed.mutate({
+                              feedId: feed.id,
+                              data: { retentionDays: Number.isNaN(value) ? null : value },
+                            });
+                          }}
+                        />
+                        <Input
+                          type="number"
+                          placeholder="Min keep"
+                          defaultValue={feed.keepMinArticles || ""}
+                          className="h-9 w-full rounded-2xl border-border/70 bg-background/70 text-xs sm:w-24"
+                          title="Keep at least N articles per feed regardless of age"
+                          onBlur={(e) => {
+                            const value = parseInt(e.target.value, 10);
+                            updateFeed.mutate({
+                              feedId: feed.id,
+                              data: { keepMinArticles: Number.isNaN(value) ? null : value },
+                            });
+                          }}
+                        />
+                        <div className="col-span-2 flex justify-end gap-1 sm:col-span-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground opacity-100 transition-all hover:bg-accent sm:opacity-0 sm:group-hover:opacity-100"
+                            title="Feed settings"
+                            onClick={() => setEditingFeed(feed)}
+                          >
+                            <Settings2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
+                            onClick={() =>
+                              setPendingDelete({
+                                type: "feed",
+                                id: feed.id,
+                                name: feed.name,
+                              })
+                            }
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -824,7 +819,7 @@ export function FeedManagement({
               className="h-full mt-0 focus-visible:outline-none"
             >
               <div className="flex h-full flex-col px-6 py-4 sm:px-8">
-                <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
+                <div className="mb-5 flex flex-col gap-4 rounded-3xl border border-border/60 bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
                     <Activity className="h-5 w-5 text-primary" />
                     <div>
@@ -832,19 +827,19 @@ export function FeedManagement({
                       <p className="text-sm text-muted-foreground">Sync status, errors, article counts and retention.</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                     <Button
                       variant="outline"
                       onClick={() => applyRetention.mutate(true)}
                       disabled={applyRetention.isPending}
-                      className="rounded-2xl"
+                      className="w-full rounded-2xl sm:w-auto"
                     >
                       Dry run
                     </Button>
                     <Button
                       onClick={() => applyRetention.mutate(false)}
                       disabled={applyRetention.isPending}
-                      className="rounded-2xl"
+                      className="w-full rounded-2xl sm:w-auto"
                     >
                       <ShieldCheck className="mr-2 h-4 w-4" />
                       Apply retention
@@ -855,7 +850,7 @@ export function FeedManagement({
                   <div className="space-y-3 pb-8 pr-3">
                     {feedHealth.map((feed: any) => (
                       <div key={feed.id} className="rounded-3xl border border-border/60 bg-card p-4 shadow-sm">
-                        <div className="flex items-start gap-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-background text-2xl shadow-sm">
                             {feed.icon || "📰"}
                           </div>
@@ -872,7 +867,7 @@ export function FeedManagement({
                               </span>
                             </div>
                             <p className="mt-1 truncate text-xs text-muted-foreground">{feed.url}</p>
-                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-5">
+                            <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-5">
                               <span>{feed.articleCount} articles</span>
                               <span>{feed.unreadCount} unread</span>
                               <span>{feed.avgArticlesPerDay != null ? `${feed.avgArticlesPerDay}/day` : "—"}</span>
@@ -950,7 +945,7 @@ export function FeedManagement({
                 </div>
 
                 <div className="space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em]">
                       <Download className="w-6 h-6 text-muted-foreground" />
                       Export subscriptions
@@ -995,7 +990,7 @@ export function FeedManagement({
                       </label>
                     ))}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <Button
                       onClick={handleExport}
                       variant="outline"
@@ -1048,18 +1043,18 @@ export function FeedManagement({
             >
               <ScrollArea className="h-full px-6 sm:px-8">
                 <div className="space-y-6 py-4 pb-8">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h3 className="text-lg font-semibold tracking-tight">Auto-mark rules</h3>
                       <p className="text-sm text-muted-foreground mt-0.5">
                         Automatically mark, star, or label articles matching a search query on each sync.
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-xl gap-1.5"
+                        className="w-full rounded-xl gap-1.5 sm:w-auto"
                         onClick={() => applyAutoReadRulesNow.mutate()}
                         disabled={applyAutoReadRulesNow.isPending}
                       >
@@ -1068,7 +1063,7 @@ export function FeedManagement({
                       </Button>
                       <Button
                         size="sm"
-                        className="rounded-xl gap-1.5"
+                        className="w-full rounded-xl gap-1.5 sm:w-auto"
                         onClick={() => setShowAddRule(true)}
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -1087,7 +1082,7 @@ export function FeedManagement({
                           onChange={(e) => setNewRuleName(e.target.value)}
                           className="rounded-xl h-10"
                         />
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-2 sm:flex-row">
                           <Input
                             placeholder='Query, e.g. feed:TechCrunch is:unread'
                             value={newRuleQuery}
@@ -1146,7 +1141,7 @@ export function FeedManagement({
                         </div>
                       )}
 
-                      <div className="flex gap-2 justify-end">
+                      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                         <Button
                           size="sm"
                           variant="ghost"
@@ -1203,7 +1198,7 @@ export function FeedManagement({
                       {autoReadRules.map((rule: any) => (
                         <div
                           key={rule.id}
-                          className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3"
+                          className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3 sm:flex-row sm:items-center"
                         >
                           <button
                             onClick={() =>
@@ -1261,14 +1256,14 @@ export function FeedManagement({
             >
               <ScrollArea className="h-full px-6 sm:px-8">
                 <div className="space-y-6 py-4 pb-8">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h3 className="text-lg font-semibold tracking-tight">Keyword alerts</h3>
                       <p className="text-sm text-muted-foreground mt-0.5">
                         Create in-app notifications when newly synced articles match a search query.
                       </p>
                     </div>
-                    <Button size="sm" className="rounded-xl gap-1.5" onClick={() => setShowAddAlert(true)}>
+                    <Button size="sm" className="w-full rounded-xl gap-1.5 sm:w-auto" onClick={() => setShowAddAlert(true)}>
                       <Plus className="w-3.5 h-3.5" />
                       Add alert
                     </Button>
@@ -1284,7 +1279,7 @@ export function FeedManagement({
                           onChange={(e) => setNewAlertName(e.target.value)}
                           className="rounded-xl h-10"
                         />
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-2 sm:flex-row">
                           <Input
                             placeholder='Query, e.g. intitle:security author:Jane'
                             value={newAlertQuery}
@@ -1362,7 +1357,7 @@ export function FeedManagement({
                         </div>
                       )}
 
-                      <div className="flex gap-2 justify-end">
+                      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                         <Button
                           size="sm"
                           variant="ghost"
@@ -1431,7 +1426,7 @@ export function FeedManagement({
                           <div key={alert.id} className="rounded-2xl border border-border/60 bg-card overflow-hidden">
                             {isEditing ? (
                               <div className="flex flex-col gap-3 px-4 py-3">
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                   <div className="col-span-2">
                                     <label className="text-xs text-muted-foreground mb-1 block">Name</label>
                                     <Input
@@ -1488,7 +1483,7 @@ export function FeedManagement({
                                     </label>
                                   </div>
                                 </div>
-                                <div className="flex gap-2 justify-end">
+                                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                                   <Button
                                     size="sm"
                                     variant="ghost"
@@ -1525,25 +1520,26 @@ export function FeedManagement({
                                 </div>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-3 px-4 py-3">
-                                <button
-                                  onClick={() =>
-                                    updateKeywordAlert.mutate({
-                                      alertId: alert.id,
-                                      data: { enabled: !alert.enabled },
-                                    })
-                                  }
-                                  className={cn(
-                                    "shrink-0 rounded-lg p-1.5 transition-colors",
-                                    alert.enabled ? "text-primary bg-primary/10" : "text-muted-foreground/50 bg-muted",
-                                  )}
-                                  title={alert.enabled ? "Disable alert" : "Enable alert"}
-                                >
-                                  <Power className="w-3.5 h-3.5" />
-                                </button>
-                                <Bell className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
+                              <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
+                                <div className="flex min-w-0 flex-1 items-start gap-3">
+                                  <button
+                                    onClick={() =>
+                                      updateKeywordAlert.mutate({
+                                        alertId: alert.id,
+                                        data: { enabled: !alert.enabled },
+                                      })
+                                    }
+                                    className={cn(
+                                      "shrink-0 rounded-lg p-1.5 transition-colors",
+                                      alert.enabled ? "text-primary bg-primary/10" : "text-muted-foreground/50 bg-muted",
+                                    )}
+                                    title={alert.enabled ? "Disable alert" : "Enable alert"}
+                                  >
+                                    <Power className="w-3.5 h-3.5" />
+                                  </button>
+                                  <Bell className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                                  <div className="min-w-0 flex-1">
+                                  <div className="flex min-w-0 items-center gap-2">
                                     <p className="font-medium text-sm truncate">{alert.name}</p>
                                     {matchCount > 0 && (
                                       <span className="shrink-0 rounded-full bg-primary/10 text-primary text-[10px] font-medium px-1.5 py-0.5">
@@ -1562,7 +1558,9 @@ export function FeedManagement({
                                     }
                                     {alert.lastTriggeredAt ? ` · last: ${new Date(alert.lastTriggeredAt).toLocaleString()}` : ""}
                                   </p>
+                                  </div>
                                 </div>
+                                <div className="flex flex-wrap justify-end gap-1">
                                 <Button
                                   size="icon"
                                   variant="ghost"
@@ -1605,6 +1603,7 @@ export function FeedManagement({
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
+                                </div>
                               </div>
                             )}
                             {isHistoryOpen && (

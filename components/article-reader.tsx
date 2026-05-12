@@ -474,16 +474,6 @@ export function ArticleReader({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-11 min-w-10 rounded-2xl text-muted-foreground active:scale-95"
-            onClick={scrollReaderToTop}
-            aria-label="Scroll to top"
-          >
-            <ArrowUp className="h-5 w-5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
             className={cn(
               "h-11 min-w-10 rounded-2xl active:scale-95",
               article.isReadLater ? "bg-accent/10 text-accent" : "text-muted-foreground",
@@ -521,6 +511,10 @@ export function ArticleReader({
               sideOffset={12}
               className="mb-2 w-64 rounded-3xl border-border/70 bg-popover/95 p-2 shadow-2xl backdrop-blur-xl"
             >
+              <DropdownMenuItem className="rounded-2xl py-3" onClick={scrollReaderToTop}>
+                <ArrowUp className="mr-3 h-4 w-4" />
+                Scroll to top
+              </DropdownMenuItem>
               <DropdownMenuItem className="rounded-2xl py-3" onClick={shareArticle}>
                 <Share2 className="mr-3 h-4 w-4" />
                 Share

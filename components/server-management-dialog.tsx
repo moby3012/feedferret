@@ -18,7 +18,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Users,
@@ -65,6 +66,7 @@ export function ServerManagementDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingDeleteUser, setPendingDeleteUser] = useState<any | null>(null);
+  const [activeTab, setActiveTab] = useState("users");
 
   const loadData = async () => {
     setIsLoading(true);
@@ -157,11 +159,11 @@ export function ServerManagementDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[95vh] h-[95vh] flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl sm:max-w-none">
-        <DialogHeader className="border-b border-border/60 bg-card/95 p-6 pb-5 backdrop-blur-2xl sm:p-8 sm:pb-5">
+      <DialogContent className="h-[min(95dvh,900px)] w-[calc(100vw-1rem)] max-w-[95vw] flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl sm:max-w-none">
+        <DialogHeader className="border-b border-border/60 bg-card/95 p-5 pb-4 backdrop-blur-2xl sm:p-8 sm:pb-5">
           <div className="flex items-center justify-between">
             <div>
-              <DialogTitle className="text-3xl font-semibold tracking-[-0.04em]">
+              <DialogTitle className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
                 Server Management
               </DialogTitle>
               <DialogDescription className="mt-1 text-sm text-muted-foreground sm:text-base">
@@ -171,30 +173,20 @@ export function ServerManagementDialog({
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue="users" className="flex-1 flex flex-col min-h-0">
-          <div className="px-6 py-4 sm:px-8 overflow-x-auto">
-            <TabsList className="bg-muted/45 p-1 rounded-2xl w-fit border border-border/60 shadow-inner shadow-black/[0.02]">
-              <TabsTrigger value="users" className="rounded-xl px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm gap-2">
-                <Users className="w-4 h-4" />
-                Users
-              </TabsTrigger>
-              <TabsTrigger value="registrations" className="rounded-xl px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm gap-2">
-                <ShieldCheck className="w-4 h-4" />
-                Access
-              </TabsTrigger>
-              <TabsTrigger value="email" className="rounded-xl px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm gap-2">
-                <Mail className="w-4 h-4" />
-                Email
-              </TabsTrigger>
-              <TabsTrigger value="instance" className="rounded-xl px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm gap-2">
-                <Globe className="w-4 h-4" />
-                Instance
-              </TabsTrigger>
-              <TabsTrigger value="sync" className="rounded-xl px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm gap-2">
-                <Settings2 className="w-4 h-4" />
-                Sync
-              </TabsTrigger>
-            </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+          <div className="px-6 py-4 sm:px-8">
+            <ResponsiveTabsNav
+              value={activeTab}
+              onValueChange={setActiveTab}
+              options={[
+                { value: "users", label: "Users", icon: <Users className="w-4 h-4" /> },
+                { value: "registrations", label: "Access", icon: <ShieldCheck className="w-4 h-4" /> },
+                { value: "email", label: "Email", icon: <Mail className="w-4 h-4" /> },
+                { value: "instance", label: "Instance", icon: <Globe className="w-4 h-4" /> },
+                { value: "sync", label: "Sync", icon: <Settings2 className="w-4 h-4" /> },
+              ]}
+              triggerClassName="gap-2"
+            />
           </div>
 
           <div className="flex-1 min-h-0">
@@ -207,10 +199,10 @@ export function ServerManagementDialog({
                 {/* ── USERS ── */}
                 <TabsContent value="users" className="h-full mt-0 focus-visible:outline-none">
                   <div className="px-6 sm:px-8 flex flex-col h-full">
-                    <div className="flex justify-between items-center mb-6">
+                    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <Input
                         placeholder="Search users..."
-                        className="h-11 rounded-2xl bg-card border-border/70 max-w-md"
+                        className="h-11 w-full rounded-2xl bg-card border-border/70 sm:max-w-md"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                       />
@@ -221,32 +213,34 @@ export function ServerManagementDialog({
                           <div
                             key={user.id}
                             className={cn(
-                              "flex items-center gap-4 p-4 rounded-3xl border shadow-sm transition-all hover:border-border",
+                              "flex flex-col gap-4 p-4 rounded-3xl border shadow-sm transition-all hover:border-border sm:flex-row sm:items-center",
                               user.isActive
                                 ? "bg-card border-border/60"
                                 : "bg-muted/30 border-border/40 opacity-70",
                             )}
                           >
-                            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-semibold">
-                              {user.name?.[0] || user.email?.[0]?.toUpperCase()}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold truncate flex items-center gap-2 tracking-[-0.01em]">
-                                {user.name || "Unnamed User"}
-                                {user.role === "ADMIN" && (
-                                  <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">
-                                    ADMIN
-                                  </span>
-                                )}
-                                {!user.isActive && (
-                                  <span className="text-[10px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full font-bold">
-                                    SUSPENDED
-                                  </span>
-                                )}
+                            <div className="flex w-full min-w-0 items-center gap-3 sm:flex-1">
+                              <div className="w-10 h-10 shrink-0 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-semibold">
+                                {user.name?.[0] || user.email?.[0]?.toUpperCase()}
                               </div>
-                              <div className="text-xs text-muted-foreground truncate">{user.email}</div>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-semibold truncate flex flex-wrap items-center gap-2 tracking-[-0.01em]">
+                                  {user.name || "Unnamed User"}
+                                  {user.role === "ADMIN" && (
+                                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">
+                                      ADMIN
+                                    </span>
+                                  )}
+                                  {!user.isActive && (
+                                    <span className="text-[10px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full font-bold">
+                                      SUSPENDED
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground truncate">{user.email}</div>
+                              </div>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex w-full justify-end gap-2 sm:w-auto">
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -284,7 +278,7 @@ export function ServerManagementDialog({
                 {/* ── ACCESS / REGISTRATIONS ── */}
                 <TabsContent value="registrations" className="px-6 sm:px-8 py-6 space-y-6">
                   <div className="max-w-2xl space-y-8">
-                    <div className="flex items-center justify-between p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
+                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">Allow New Registrations</h4>
                         <p className="text-sm text-muted-foreground">
@@ -314,7 +308,7 @@ export function ServerManagementDialog({
                   <ScrollArea className="h-full">
                     <div className="px-6 sm:px-8 py-6 space-y-6 max-w-2xl">
                       {/* Enable toggle */}
-                      <div className="flex items-center justify-between p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
+                      <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
                           <h4 className="text-lg font-semibold tracking-[-0.02em]">Mail Service</h4>
                           <p className="text-sm text-muted-foreground">
@@ -352,11 +346,11 @@ export function ServerManagementDialog({
                           {/* SMTP fields */}
                           {settings.mailProvider === "smtp" && (
                             <>
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <SettingsField label="SMTP Host" placeholder="smtp.gmail.com" field="smtpHost" settings={settings} setSettings={setSettings} />
                                 <SettingsField label="Port" placeholder="587" field="smtpPort" settings={settings} setSettings={setSettings} type="number" />
                               </div>
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <SettingsField label="Username" placeholder="user@gmail.com" field="smtpUser" settings={settings} setSettings={setSettings} />
                                 <SettingsField label="Password" placeholder="••••••••" field="smtpPassword" settings={settings} setSettings={setSettings} type="password" isSecret />
                               </div>
@@ -399,7 +393,7 @@ export function ServerManagementDialog({
                             </>
                           )}
 
-                          <div className="flex gap-3 justify-end pt-2">
+                          <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
                             <Button
                               variant="outline"
                               className="rounded-2xl px-6 gap-2"
@@ -466,7 +460,7 @@ export function ServerManagementDialog({
                 {/* ── SYNC ── */}
                 <TabsContent value="sync" className="px-6 sm:px-8 py-6 space-y-6">
                   <div className="max-w-2xl space-y-6">
-                    <div className="flex items-center justify-between p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
+                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">Background Sync</h4>
                         <p className="text-sm text-muted-foreground">
@@ -486,7 +480,7 @@ export function ServerManagementDialog({
                             type="number"
                             min={1}
                             max={60}
-                            className="rounded-2xl bg-background/70 border-border/70 w-40"
+                            className="w-full rounded-2xl bg-background/70 border-border/70 sm:w-40"
                             value={settings?.backgroundSyncIntervalMinutes ?? 5}
                             onChange={(e) =>
                               setSettings({ ...settings, backgroundSyncIntervalMinutes: parseInt(e.target.value) || 5 })
@@ -505,7 +499,7 @@ export function ServerManagementDialog({
                         </div>
                       </div>
                     )}
-                    <div className="flex items-center justify-between p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
+                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pr-6">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">Trusted internal feed URLs</h4>
                         <p className="text-sm text-muted-foreground">

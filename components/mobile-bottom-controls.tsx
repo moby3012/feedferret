@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import type { ViewMode } from "@/components/rss-header";
 import {
   AlignJustify,
+  Bell,
   Check,
   CheckCheck,
   Keyboard,
@@ -25,6 +26,11 @@ import {
   Search,
   X,
 } from "lucide-react";
+import {
+  useMarkNotificationRead,
+  useNotifications,
+  useUnreadNotificationCount,
+} from "@/hooks/use-rss-data";
 
 interface MobileBottomControlsProps {
   unreadOnly: boolean;
@@ -61,6 +67,9 @@ export function MobileBottomControls({
   onShowShortcuts,
 }: MobileBottomControlsProps) {
   const [searchOpen, setSearchOpen] = useState(!!searchQuery);
+  const { data: notifications = [] } = useNotifications();
+  const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
+  const markNotificationRead = useMarkNotificationRead();
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
@@ -150,10 +159,15 @@ export function MobileBottomControls({
               type="button"
               variant="ghost"
               size="icon"
-              className={mobileButtonClass}
+              className={cn(mobileButtonClass, "relative")}
               aria-label="More article actions"
             >
               <MoreHorizontal className="h-5 w-5" />
+              {unreadNotifications > 0 && (
+                <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-bold leading-4 text-destructive-foreground">
+                  {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                </span>
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -161,6 +175,32 @@ export function MobileBottomControls({
             sideOffset={12}
             className="mb-2 w-64 rounded-3xl border-border/70 bg-popover/95 p-2 shadow-2xl backdrop-blur-xl"
           >
+            <div className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Notifications
+            </div>
+            {notifications.length === 0 ? (
+              <div className="px-2 py-3 text-sm text-muted-foreground">No notifications yet.</div>
+            ) : (
+              notifications.slice(0, 3).map((notification: any) => (
+                <DropdownMenuItem
+                  key={notification.id}
+                  className="items-start gap-2 rounded-2xl py-2.5"
+                  onClick={() => {
+                    if (!notification.isRead) markNotificationRead.mutate(notification.id);
+                    if (notification.articleId) {
+                      window.location.href = `/?article=${encodeURIComponent(notification.articleId)}`;
+                    }
+                  }}
+                >
+                  <Bell className={cn("mt-0.5 h-4 w-4 shrink-0", notification.isRead ? "text-muted-foreground" : "text-accent")} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{notification.title}</span>
+                    <span className="line-clamp-2 text-xs text-muted-foreground">{notification.body}</span>
+                  </span>
+                </DropdownMenuItem>
+              ))
+            )}
+            <DropdownMenuSeparator className="my-2" />
             <DropdownMenuItem className="rounded-2xl py-3" onClick={() => onViewModeChange("minimal")}>
               <AlignJustify className="mr-3 h-4 w-4" />
               Compact list

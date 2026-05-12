@@ -605,7 +605,7 @@ export function RssSidebar({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="w-9 h-9 rounded-xl"
+                      className="h-11 w-11 rounded-xl sm:h-9 sm:w-9"
                     >
                       <UserIcon className="w-4 h-4" />
                     </Button>
@@ -621,7 +621,7 @@ export function RssSidebar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="w-9 h-9 rounded-xl"
+                  className="h-11 w-11 rounded-xl sm:h-9 sm:w-9"
                   onClick={() => openFeedManagement(undefined)}
                 >
                   <Folder className="w-4 h-4" />
@@ -635,7 +635,7 @@ export function RssSidebar({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="w-9 h-9 rounded-xl"
+                    className="h-11 w-11 rounded-xl sm:h-9 sm:w-9"
                     onClick={() => setIsServerManagementOpen(true)}
                   >
                     <Cog className="w-4 h-4" />
@@ -650,7 +650,7 @@ export function RssSidebar({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="w-9 h-9 rounded-xl"
+                    className="h-11 w-11 rounded-xl sm:h-9 sm:w-9"
                     onClick={() => signOut()}
                   >
                     <LogOut className="w-4 h-4" />
@@ -664,7 +664,7 @@ export function RssSidebar({
       </div>
 
       <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-        <DialogContent className="max-w-md rounded-2xl p-0 overflow-hidden">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-0 overflow-hidden">
           <DialogHeader className="px-4 pt-4 pb-2">
             <DialogTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
               Search Feeds
@@ -849,7 +849,7 @@ function SortableFeedItem({ feed, renderFeedRow }: any) {
       <div
         {...attributes}
         {...listeners}
-        className="opacity-0 group-hover/feed:opacity-100 cursor-grab active:cursor-grabbing p-1 shrink-0"
+        className="shrink-0 cursor-grab p-1 opacity-100 active:cursor-grabbing sm:opacity-0 sm:group-hover/feed:opacity-100"
       >
         <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30" />
       </div>
@@ -994,7 +994,7 @@ function FeedRow({
           onSelect={onSelect}
         />
       </div>
-      <div className="opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 data-[state=open]:opacity-100 transition-opacity">
+      <div className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover/row:opacity-100 sm:focus-within:opacity-100 data-[state=open]:opacity-100">
         <FeedQuickActions
           feed={feed}
           onRefresh={onRefresh}

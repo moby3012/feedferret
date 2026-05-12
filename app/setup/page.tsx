@@ -168,7 +168,7 @@ export default function SetupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-black text-white selection:bg-zinc-800">
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-black text-white selection:bg-zinc-800">
       <div className="w-full max-w-[520px] relative z-10">
         {/* Logo */}
         <div className="text-center mb-8 group">
@@ -207,7 +207,7 @@ export default function SetupPage() {
         </div>
 
         {/* Card */}
-        <div className="rounded-3xl border border-white/10 bg-zinc-950/80 backdrop-blur-xl shadow-2xl p-8 ring-1 ring-white/5">
+        <div className="rounded-3xl border border-white/10 bg-zinc-950/80 p-5 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl sm:p-8">
           {error && (
             <div className="mb-5 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
               {error}
@@ -306,7 +306,7 @@ export default function SetupPage() {
                   onChange={(e) => setInstanceUrl(e.target.value)}
                 />
               </div>
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("account")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
                   <ArrowLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
@@ -345,7 +345,7 @@ export default function SetupPage() {
 
               {mailServiceEnabled && (
                 <>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {["smtp", "resend"].map((p) => (
                       <button
                         key={p}
@@ -364,7 +364,7 @@ export default function SetupPage() {
 
                   {mailProvider === "smtp" && (
                     <>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Input placeholder="SMTP Host" className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
                         <Input placeholder="Port (587)" type="number" className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} />
                       </div>
@@ -383,7 +383,7 @@ export default function SetupPage() {
                 </>
               )}
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("instance")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
                   <ArrowLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
@@ -435,7 +435,7 @@ export default function SetupPage() {
                 You can enable 2FA per-account in Settings after login. OAuth providers (Google, GitHub, Authelia) are configured via environment variables.
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("email")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
                   <ArrowLeft className="w-4 h-4 mr-1" /> Back
                 </Button>

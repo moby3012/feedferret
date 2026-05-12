@@ -8,7 +8,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -77,6 +79,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const [httpOptions, setHttpOptions] = useState("");
   const [filtersActionRead, setFiltersActionRead] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
+  const [activeTab, setActiveTab] = useState("auth");
   const [previewResult, setPreviewResult] = useState<{
     html: string;
     charCount: number;
@@ -85,6 +88,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
 
   useEffect(() => {
     if (!feed) return;
+    setActiveTab("auth");
     setAuthType(feed.authType || "none");
     setAuthUsername(feed.authUsername || "");
     setAuthPassword(feed.authPassword || "");
@@ -162,9 +166,9 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl">
-        <DialogHeader className="border-b border-border/60 bg-card/95 px-8 py-6 backdrop-blur-2xl">
-          <DialogTitle className="text-2xl font-semibold tracking-[-0.04em]">
+      <DialogContent className="flex h-[min(92dvh,760px)] w-[calc(100vw-1rem)] max-w-2xl flex-col rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl">
+        <DialogHeader className="border-b border-border/60 bg-card/95 px-5 py-5 backdrop-blur-2xl sm:px-8 sm:py-6">
+          <DialogTitle className="text-xl font-semibold tracking-[-0.04em] sm:text-2xl">
             {feed.name}
           </DialogTitle>
           <DialogDescription className="mt-1 text-sm text-muted-foreground truncate">
@@ -172,25 +176,23 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="auth" className="flex flex-col">
-          <div className="px-8 pt-4">
-            <TabsList className="bg-muted/45 p-1 rounded-2xl w-fit border border-border/60">
-              <TabsTrigger value="auth" className="rounded-xl px-5 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm text-sm">
-                Authentication
-              </TabsTrigger>
-              <TabsTrigger value="fetch" className="rounded-xl px-5 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm text-sm">
-                Fetch Options
-              </TabsTrigger>
-              <TabsTrigger value="fulltext" className="rounded-xl px-5 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm text-sm">
-                Full-Text
-              </TabsTrigger>
-              <TabsTrigger value="freshrss" className="rounded-xl px-5 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm text-sm">
-                FreshRSS
-              </TabsTrigger>
-            </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
+          <div className="px-5 pt-4 sm:px-8">
+            <ResponsiveTabsNav
+              value={activeTab}
+              onValueChange={setActiveTab}
+              options={[
+                { value: "auth", label: "Authentication" },
+                { value: "fetch", label: "Fetch Options" },
+                { value: "fulltext", label: "Full-Text" },
+                { value: "freshrss", label: "FreshRSS" },
+              ]}
+              triggerClassName="px-5 py-2 text-sm"
+            />
           </div>
 
-          <div className="px-8 py-6 space-y-5">
+          <ScrollArea className="min-h-0 flex-1">
+          <div className="px-5 py-6 space-y-5 sm:px-8">
             <TabsContent value="auth" className="mt-0 space-y-5">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Auth type</Label>
@@ -261,7 +263,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium">Timeout (seconds)</Label>
                   <Input
@@ -329,7 +331,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Test extraction
                 </p>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     value={previewUrl}
                     onChange={(e) => setPreviewUrl(e.target.value)}
@@ -366,7 +368,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             </TabsContent>
 
             <TabsContent value="freshrss" className="mt-0 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium">Source type</Label>
                   <Select value={sourceType} onValueChange={setSourceType}>
@@ -400,7 +402,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 </div>
               </div>
 
-              <div className="grid grid-cols-[1fr_auto] gap-4 items-end">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium">Unicity criteria</Label>
                   <Input
@@ -458,8 +460,9 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               </div>
             </TabsContent>
           </div>
+          </ScrollArea>
 
-          <div className="flex justify-end gap-2 border-t border-border/60 px-8 py-4">
+          <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-background/95 px-5 py-4 sm:flex-row sm:justify-end sm:px-8">
             <Button
               variant="ghost"
               className="rounded-xl"

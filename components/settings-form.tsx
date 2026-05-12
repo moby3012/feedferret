@@ -86,7 +86,7 @@ function PrefRow({
             <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
           </div>
         </div>
-        <div className="shrink-0">{children}</div>
+        <div className="w-full shrink-0 sm:w-auto">{children}</div>
       </div>
     </section>
   );
@@ -230,7 +230,7 @@ export function SettingsForm() {
                 })
               }
             >
-              <SelectTrigger className="w-40 rounded-2xl border-border/70 bg-background/70 h-10">
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
@@ -254,7 +254,7 @@ export function SettingsForm() {
               value={prefs?.defaultViewMode ?? "list"}
               onValueChange={(v) => update({ defaultViewMode: v })}
             >
-              <SelectTrigger className="w-40 rounded-2xl border-border/70 bg-background/70 h-10">
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
@@ -276,7 +276,7 @@ export function SettingsForm() {
               value={prefs?.readerWidth ?? "normal"}
               onValueChange={(v) => update({ readerWidth: v })}
             >
-              <SelectTrigger className="w-40 rounded-2xl border-border/70 bg-background/70 h-10">
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
@@ -297,7 +297,7 @@ export function SettingsForm() {
               value={prefs?.defaultArticleSort ?? "newest"}
               onValueChange={(v) => update({ defaultArticleSort: v })}
             >
-              <SelectTrigger className="w-40 rounded-2xl border-border/70 bg-background/70 h-10">
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
@@ -342,7 +342,7 @@ export function SettingsForm() {
                 Reset
               </button>
               <div
-                className="ml-auto min-w-[180px] rounded-2xl border border-border/70 p-3 shadow-sm"
+                className="w-full min-w-[180px] rounded-2xl border border-border/70 p-3 shadow-sm sm:ml-auto sm:w-auto"
                 style={{
                   background: `linear-gradient(135deg, ${(prefs?.accentColor ?? "#5BA4CF")}22 0%, ${(prefs?.secondaryColor ?? "#F0963C")}2a 100%)`,
                 }}
@@ -909,7 +909,7 @@ function DigestSection() {
         {digest.digestEnabled && (
           <>
             {/* Frequency */}
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Frequency</label>
                 <Select
@@ -1023,7 +1023,7 @@ function DigestSection() {
             )}
 
             {/* Send test */}
-            <div className="flex items-center gap-3 pt-1">
+            <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center">
               <Button
                 variant="outline"
                 onClick={() => sendTest.mutate()}
