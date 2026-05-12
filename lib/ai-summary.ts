@@ -1,4 +1,4 @@
-export type AiProvider = "openai" | "anthropic" | "ollama";
+export type AiProvider = "openai" | "anthropic" | "ollama" | "gemini" | "openrouter";
 
 export type AiConfig = {
   provider: AiProvider;
@@ -32,6 +32,10 @@ export async function generateSummary(rawContent: string, config: AiConfig): Pro
       return summarizeAnthropic(prompt, config);
     case "ollama":
       return summarizeOllama(prompt, config);
+    case "gemini":
+      return summarizeGemini(prompt, config);
+    case "openrouter":
+      return summarizeOpenRouter(prompt, config);
     default:
       throw new Error(`Unknown AI provider: ${(config as any).provider}`);
   }
@@ -103,4 +107,50 @@ async function summarizeOllama(prompt: string, config: AiConfig): Promise<string
   }
   const data = await res.json();
   return String(data.message?.content ?? "").trim();
+}
+
+async function summarizeGemini(prompt: string, config: AiConfig): Promise<string> {
+  const model = config.model || "gemini-1.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey || ""}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 300 },
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`Gemini ${res.status}: ${err.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  return String(data.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
+}
+
+// OpenRouter uses OpenAI-compatible chat completions endpoint.
+async function summarizeOpenRouter(prompt: string, config: AiConfig): Promise<string> {
+  const model = config.model || "openai/gpt-4o-mini";
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.apiKey || ""}`,
+      "HTTP-Referer": "https://github.com/feedferret/feedferret",
+      "X-Title": "FeedFerret",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 300,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`OpenRouter ${res.status}: ${err.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  return String(data.choices?.[0]?.message?.content ?? "").trim();
 }

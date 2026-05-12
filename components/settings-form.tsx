@@ -1340,6 +1340,8 @@ function AiSummarySection() {
               <SelectItem value="">None (disabled)</SelectItem>
               <SelectItem value="openai">OpenAI</SelectItem>
               <SelectItem value="anthropic">Anthropic</SelectItem>
+              <SelectItem value="gemini">Google Gemini</SelectItem>
+              <SelectItem value="openrouter">OpenRouter</SelectItem>
               <SelectItem value="ollama">Ollama (local)</SelectItem>
             </SelectContent>
           </Select>
@@ -1382,6 +1384,8 @@ function AiSummarySection() {
               <span className="ml-1 text-xs font-normal text-muted-foreground">
                 {provider === "openai" && "(default: gpt-4o-mini)"}
                 {provider === "anthropic" && "(default: claude-haiku-4-5-20251001)"}
+                {provider === "gemini" && "(default: gemini-1.5-flash)"}
+                {provider === "openrouter" && "(default: openai/gpt-4o-mini)"}
                 {provider === "ollama" && "(default: llama3)"}
               </span>
             </label>

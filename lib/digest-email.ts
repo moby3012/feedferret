@@ -10,6 +10,7 @@ export interface DigestArticle {
   publishedAt: Date;
   feedName: string;
   feedIcon: string | null;
+  aiSummary: string | null;
 }
 
 export interface DigestEmailOptions {
@@ -26,8 +27,13 @@ function buildHtml(opts: DigestEmailOptions): string {
   const greeting = userName ? `Hi ${userName}` : "Hi there";
 
   const articleRows = articles
-    .map(
-      (a) => `
+    .map((a) => {
+      const blurb = a.aiSummary
+        ? `<p style="margin:6px 0 0;font-size:14px;color:#374151;line-height:1.6;font-family:sans-serif;">${a.aiSummary}</p><div style="margin-top:4px;font-size:11px;color:#9ca3af;font-family:sans-serif;">✦ AI summary</div>`
+        : a.excerpt
+          ? `<p style="margin:6px 0 0;font-size:14px;color:#6b7280;line-height:1.6;font-family:sans-serif;">${a.excerpt.slice(0, 200)}${a.excerpt.length > 200 ? "…" : ""}</p>`
+          : "";
+      return `
       <tr>
         <td style="padding:16px 0;border-bottom:1px solid #e5e7eb;">
           <div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-family:sans-serif;">
@@ -36,15 +42,11 @@ function buildHtml(opts: DigestEmailOptions): string {
           <a href="${a.link}" style="font-size:16px;font-weight:600;color:#111827;text-decoration:none;line-height:1.4;font-family:sans-serif;">
             ${a.title}
           </a>
-          ${
-            a.excerpt
-              ? `<p style="margin:6px 0 0;font-size:14px;color:#6b7280;line-height:1.6;font-family:sans-serif;">${a.excerpt.slice(0, 200)}${a.excerpt.length > 200 ? "…" : ""}</p>`
-              : ""
-          }
+          ${blurb}
           ${a.author ? `<div style="margin-top:6px;font-size:12px;color:#9ca3af;font-family:sans-serif;">By ${a.author}</div>` : ""}
         </td>
-      </tr>`,
-    )
+      </tr>`;
+    })
     .join("");
 
   return `<!DOCTYPE html>
@@ -108,7 +110,11 @@ function buildText(opts: DigestEmailOptions): string {
     lines.push(`${a.title}`);
     lines.push(`${a.feedName} · ${new Date(a.publishedAt).toLocaleDateString()}`);
     lines.push(a.link);
-    if (a.excerpt) lines.push(a.excerpt.slice(0, 150) + (a.excerpt.length > 150 ? "…" : ""));
+    if (a.aiSummary) {
+      lines.push(`[AI] ${a.aiSummary}`);
+    } else if (a.excerpt) {
+      lines.push(a.excerpt.slice(0, 150) + (a.excerpt.length > 150 ? "…" : ""));
+    }
     lines.push("");
   }
   lines.push(`Open FeedFerret: ${baseUrl}`);
@@ -162,6 +168,7 @@ export async function getDigestArticles(
       excerpt: true,
       author: true,
       publishedAt: true,
+      aiSummary: true,
       feed: { select: { name: true, icon: true } },
     },
   });
@@ -173,6 +180,7 @@ export async function getDigestArticles(
     excerpt: a.excerpt,
     author: a.author,
     publishedAt: a.publishedAt,
+    aiSummary: a.aiSummary,
     feedName: a.feed.name,
     feedIcon: a.feed.icon,
   }));
