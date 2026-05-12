@@ -1,5 +1,6 @@
 import { syncAllFeeds } from "./rss-sync";
 import { runDigestScheduler } from "./digest-scheduler";
+import { flushDueNotifications } from "./notifications";
 
 type SchedulerState = {
     timer: NodeJS.Timeout | null;
@@ -39,6 +40,9 @@ async function tick() {
         // Run digest scheduler after each sync tick (internally rate-limits per user)
         void runDigestScheduler().catch((e) =>
             console.error("[digest-scheduler] error:", e),
+        );
+        void flushDueNotifications().catch((e) =>
+            console.error("[push-notifications] flush failed:", e),
         );
     } catch (error) {
         state.lastError = String(error);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -92,9 +93,11 @@ export default function LoginPage() {
       <div className="w-full max-w-[400px] relative z-10 animate-scale-in">
         <div className="text-center mb-10 group">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl border border-white/10 bg-zinc-900/50 p-3 mb-6 shadow-2xl transition-transform duration-500 group-hover:scale-105">
-            <img
+            <Image
               src="/logo.svg"
               alt="FeedFerret"
+              width={40}
+              height={40}
               className="w-full h-full opacity-90"
             />
           </div>

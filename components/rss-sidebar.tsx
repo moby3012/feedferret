@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { FeedSource } from "@/lib/rss-data";
 import Link from "next/link";
@@ -297,9 +298,11 @@ export function RssSidebar({
     return (
       <aside className="w-20 h-full bg-sidebar border-r border-sidebar-border flex flex-col items-center py-6 gap-3">
         <div className="mb-6 shadow-sm">
-          <img
+          <Image
             src="/logo.svg"
             alt="Logo"
+            width={40}
+            height={40}
             className="w-10 h-10 invert dark:invert-0"
           />
         </div>
@@ -343,9 +346,11 @@ export function RssSidebar({
       <div className="p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-4">
-            <img
+            <Image
               src="/logo.svg"
               alt="FeedFerret Logo"
+              width={48}
+              height={48}
               className="w-12 h-12 invert dark:invert-0"
             />
             <div>

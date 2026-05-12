@@ -11,6 +11,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 - **Smart Sync Engine**: High-performance RSS parsing with content normalization and secure sanitization.
 - **Advanced Search**: Full query syntax — filter by feed, category, `is:starred`, `is:unread`, `label:`, date ranges. Save searches for quick access.
 - **Auto-Mark-as-Read Rules**: Define filter rules (feed/category/query) that auto-mark, star, or label articles on sync. Preview matches before enabling.
+- **Keyword Alerts**: Watch new articles with saved queries and receive in-app notifications or optional browser push alerts.
 - **Full-Text Extraction**: Per-feed CSS selectors to fetch full article content from truncated feeds. Auto-fetch on sync.
 - **Feed Authentication**: HTTP Basic Auth, custom User-Agent, timeout, SSL verification, and max-size per feed.
 - **Retention Policies**: Keep minimum N articles per feed, never delete starred/labelled articles, dry-run purge preview.
@@ -31,12 +32,12 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
   - `Shift+S`: Save current search
   - `Shift+A`: Mark all as read
   - `?`: Show shortcut help overlay
-- **PWA Support**: Install on mobile for a native-like experience.
+- **PWA Support**: Install on mobile for a native-like experience with app shortcuts, best-effort badging, and cached-article offline fallback.
 - **Flexible Email Delivery**: SMTP or API-based delivery with Resend, Postmark, Mailgun, or SendGrid — configurable via Admin UI (credentials stored encrypted) or environment variables.
 - **Admin Onboarding Wizard**: Multi-step setup flow for first-time admins — account creation, instance settings, email, and security configuration.
 - **SaaS Provisioning API**: Internal API endpoints for creating and suspending users from external systems (Stripe webhooks, SaaS portals) via Bearer token auth.
 - **GDPR Compliance**: Self-service account deletion (Art. 17) with full cascade removal of all user data.
-- **Self-Hostable**: Simple deployment with Docker and SQLite.
+- **Self-Hostable**: Simple deployment with Docker and SQLite by default, plus optional PostgreSQL via `DATABASE_PROVIDER=postgresql`.
 
 ## 🚀 Getting Started
 
@@ -83,6 +84,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 For self-hosting configuration of TOTP 2FA, Authelia OIDC, and API-based email providers, see:
 
 - [`docs/self-hosting-auth-email.md`](docs/self-hosting-auth-email.md)
+- [`docs/next-session-workpackages.md`](docs/next-session-workpackages.md) — ordered backlog for the next development sessions.
 
 ### 🧙 Admin Onboarding
 
@@ -119,6 +121,15 @@ Full docs: [`docs/internal-api.md`](docs/internal-api.md)
 ### 🛡 GDPR / Right to Erasure
 
 Users can delete their account from **Settings → Delete Account**. All data is cascade-deleted atomically. See [`docs/gdpr.md`](docs/gdpr.md).
+
+
+### 🔒 Feed Fetch Security
+
+FeedFerret blocks server-side feed fetches to private/internal IP ranges by default to reduce SSRF risk. Trusted single-tenant deployments can enable internal feed URLs in Server Management → Sync. See [`docs/security.md`](docs/security.md).
+
+### 🗄 Database Providers
+
+SQLite is the default. PostgreSQL is available through `DATABASE_PROVIDER=postgresql` and the bundled Docker Compose `postgres` profile. See [`docs/database.md`](docs/database.md) for provider switching, migration, backup, and restore commands.
 
 ### 🐳 Docker Deployment
 
@@ -170,3 +181,36 @@ SYNC_SECRET=$(openssl rand -hex 32)
 ## 📄 License
 
 MIT License. See [LICENSE](LICENSE) for more details.
+
+## Browser Push Notifications
+
+FeedFerret supports browser/PWA push notifications for new articles.
+
+1. Generate VAPID keys:
+
+   ```bash
+   pnpm run webpush:keys
+   ```
+
+2. Configure the generated values in your environment:
+
+   ```bash
+   WEB_PUSH_VAPID_PUBLIC_KEY="..."
+   WEB_PUSH_VAPID_PRIVATE_KEY="..."
+   WEB_PUSH_CONTACT="mailto:admin@example.com"
+   ```
+
+3. Open Settings → Browser notifications and enable notifications per device.
+
+Notification frequency is user-configurable (`immediate`, `hourly`, `daily`, `off`). By default, notifications include article titles; users can switch to generic private notifications.
+
+## FreshRSS Extended OPML
+
+FeedFerret imports and exports FreshRSS extended OPML (`xmlns:frss="https://freshrss.org/opml"`) including:
+
+- FreshRSS source types: RSS/Atom, JSONFeed, JSON+DotNotation, HTML+XPath, XML+XPath, HTML+XPath+JSON+DotNotation.
+- Feed priority and unicity criteria.
+- XPath/JSON scraper settings.
+- Full-content selectors, content filters, and auto-read filter strings.
+- FreshRSS cURL-style HTTP options such as custom headers, cookies, POST fields, redirects, proxies, and user-agent.
+- Dynamic OPML categories via `frss:opmlUrl`, synchronized automatically with SSRF protections.

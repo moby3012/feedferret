@@ -1,6 +1,6 @@
-# PWA Push Notifications & Badging TODO
+# PWA Push Notifications & Badging Status
 
-This document tracks the PWA work that is intentionally **not** finished yet because it needs backend, database, and permission-flow design.
+This document tracks PWA push, badging, and polish status. Browser push, centralized badge updates, manifest screenshots, deep links, Lighthouse CI checks, and a cached-article offline fallback are implemented; all badge behavior remains best-effort because browser support differs. Open follow-ups have moved to the ordered backlog in `docs/next-session-workpackages.md`. Open follow-ups have moved to the ordered backlog in `docs/next-session-workpackages.md`.
 
 ## Already done
 
@@ -38,182 +38,60 @@ Badges are best-effort:
 - Firefox support is limited.
 - Therefore the app must always keep in-app unread counts as the source of truth and treat icon badges as a progressive enhancement.
 
-## TODO: Push notifications
+## Push notifications ✅ Implemented
 
-### 1. Data model
+Implemented in the notifications/FreshRSS OPML work branch and documented in `README.md`:
 
-Add a table for push subscriptions, for example:
+- `PushSubscription` data model with one subscription per browser endpoint and cascade delete by user.
+- VAPID environment variables and `pnpm run webpush:keys`.
+- Settings UI for support status, enable/disable current device, test notification, frequency, feed filter, and private/title payloads.
+- Authenticated APIs: `POST /api/push/subscribe`, `POST /api/push/unsubscribe`, `POST /api/push/test`, `GET/PATCH /api/push/status`.
+- Service worker `push` and `notificationclick` handling with badge updates from `unreadCount` payloads where supported.
+- Server sender in `lib/push.ts`, including automatic disable for expired 404/410 subscriptions.
+- Sync integration in `lib/notifications.ts` for immediate/hourly/daily new-article notifications.
+- Privacy defaults: private/generic payloads by default and explicit user-controlled browser permission flow.
 
-- `id`
-- `userId`
-- `endpoint`
-- `p256dh`
-- `auth`
-- `userAgent`
-- `platform`
-- `createdAt`
-- `updatedAt`
-- `lastUsedAt`
-- `disabledAt`
+Remaining push-adjacent follow-ups are tracked in the ordered backlog:
 
-Important constraints:
+- Dedicated durable notification queue if multi-process delivery/retry semantics become necessary.
+- Keyword Alert follow-ups now live in `docs/next-session-workpackages.md`.
 
-- Unique by `endpoint`.
-- Cascade/delete when user is deleted.
-- Allow multiple subscriptions per user because users can install on multiple devices.
+## Better app badging ✅ Implemented
 
-### 2. VAPID setup
+Current badge implementation remains best-effort because browser support differs, but the FeedFerret logic is now centralized:
 
-Add environment variables:
+1. [x] Unread count calculation lives in `hooks/use-app-badge.ts`.
+2. [x] App badge updates when the shared feed unread count changes, covering read/unread toggles, sync completion, and mark-all-read invalidations.
+3. [x] Badge is cleared when the app is not authenticated/enabled.
+4. [x] Service worker updates badges from push payload `unreadCount` and accepts `SET_BADGE`/`CLEAR_BADGE` messages from the app.
+5. [x] Badge calls remain wrapped as progressive enhancement with graceful fallbacks.
 
-- `WEB_PUSH_VAPID_PUBLIC_KEY`
-- `WEB_PUSH_VAPID_PRIVATE_KEY`
-- `WEB_PUSH_CONTACT` such as `mailto:admin@example.com`
+## PWA polish ✅ Implemented
 
-Add a script to generate keys, e.g. `npm run webpush:keys`.
-
-### 3. Client permission flow
-
-Add a Settings section:
-
-- “Push notifications”
-- Status states:
-  - Unsupported
-  - Not installed as PWA on iOS
-  - Not requested
-  - Granted
-  - Denied
-- Buttons:
-  - Enable notifications
-  - Disable this device
-  - Send test notification
-
-Flow:
-
-1. Check `Notification` and `serviceWorker` support.
-2. Register/await service worker readiness.
-3. Request permission only after a user click.
-4. Subscribe via `registration.pushManager.subscribe()`.
-5. Send subscription to backend.
-6. Store subscription in DB.
-
-### 4. API routes
-
-Add authenticated routes:
-
-- `POST /api/push/subscribe`
-  - Saves/updates current browser subscription.
-- `POST /api/push/unsubscribe`
-  - Disables/deletes current endpoint.
-- `POST /api/push/test`
-  - Sends a test notification to the current user.
-- Optional: `GET /api/push/status`
-  - Returns whether the current user has active subscriptions.
-
-### 5. Service worker push handling
-
-Extend `public/sw.js` with:
-
-- `push` event listener.
-- `notificationclick` event listener.
-- Badge update when payload contains unread count.
-- Safe fallback notification title/body/icon.
-
-Notification payload should include:
-
-- `title`
-- `body`
-- `url`
-- `articleId` or feed/category destination
-- `unreadCount`
-- `tag` for deduplication
-
-### 6. Server-side sender
-
-Add a server utility, e.g. `lib/push.ts`:
-
-- Load VAPID config.
-- Send notification to all active user subscriptions.
-- Remove/disable expired subscriptions when push provider returns 404/410.
-- Log non-fatal push errors.
-
-Likely dependency:
-
-- `web-push`
-- `@types/web-push` for TypeScript
-
-### 7. Notification trigger strategy
-
-Decide product behavior before implementation:
-
-- Notify on every new article? Risk: spam.
-- Notify only for selected feeds? Better.
-- Notify only for labels/searches/rules? Best long-term.
-- Digest-style push summary? Good default.
-
-Suggested first version:
-
-- Add per-user setting: `pushEnabled`.
-- Add per-user setting: `pushFrequency` = `off | immediate | hourly | daily`.
-- Add optional per-feed enable list.
-- Start with hourly summary: “12 new unread articles”.
-
-### 8. Background job integration
-
-Current sync/background systems need to call the push utility after new articles are stored.
-
-Requirements:
-
-- Detect newly created article IDs per user/feed.
-- Avoid notifying for articles already known before subscription.
-- Rate-limit notifications.
-- Avoid duplicate sends across server restarts or repeated sync runs.
-
-A dedicated notification queue table may be needed:
-
-- `id`
-- `userId`
-- `articleId`
-- `type`
-- `status`
-- `scheduledAt`
-- `sentAt`
-- `error`
-
-### 9. Privacy/security
-
-- Never expose another user’s articles in push payloads.
-- Keep payload minimal; for private feeds maybe send generic “New articles available”.
-- Do not request notification permission on first load.
-- Provide clear disable controls.
-- Document server contact in VAPID config.
-
-## TODO: Better app badging
-
-Current badge implementation is client-side and best-effort. A more complete version should:
-
-1. Centralize unread count calculation in a shared hook.
-2. Update badge after:
-   - article read/unread toggle
-   - sync completion
-   - mark all read
-   - push notification receipt
-3. Clear badge on sign-out.
-4. In service worker, call badge APIs when a push payload contains `unreadCount`:
-   - `self.navigator.setAppBadge(count)` where supported
-   - `self.navigator.clearAppBadge()` when count is zero
-5. Keep graceful fallbacks because many browsers do not support app badges.
-
-## TODO: PWA polish
-
-- Add real manifest screenshots for install prompts/store surfaces:
-  - mobile narrow screenshot
-  - desktop wide screenshot
-- Consider richer shortcuts once deep links exist:
-  - `/ ?view=new`
-  - `/ ?view=readlater`
+- [x] Added manifest screenshots for install prompts/store surfaces:
+  - mobile narrow screenshot: `/screenshots/mobile-narrow.svg`
+  - desktop wide screenshot: `/screenshots/desktop-wide.svg`
+- [x] Added richer shortcuts:
+  - `/?view=new`
+  - `/?view=readlater`
+  - `/?view=starred`
   - `/settings`
-- Add proper deep-link handling for shortcuts.
-- Consider caching the app shell more aggressively after auth/offline behavior is designed.
-- Add an offline mode for already cached articles only if content privacy and storage limits are addressed.
-- Add automated Lighthouse/PWA checks to CI.
+- [x] Added proper deep-link handling for shortcuts and notification links:
+  - `view=new|readlater|starred|all`
+  - `article=<id>`
+- [x] Service worker now caches runtime app shell assets with stale-while-revalidate.
+- [x] Added optional offline mode for already cached articles via a local device snapshot of recent articles.
+- [x] Added automated PWA checks and Lighthouse CI workflow:
+  - `pnpm run pwa:check`
+  - `.github/workflows/pwa.yml`
+
+## Implementation update — 2026-05-11
+
+Implemented in the notifications/FreshRSS OPML work branch:
+
+- Push subscription data model and VAPID key generation.
+- Authenticated push subscribe/unsubscribe/status/test APIs.
+- Service worker `push` and `notificationclick` handlers.
+- Settings UI for per-device enable/disable, test notification, frequency, feed filter, and title/privacy toggle.
+- Sync integration: new articles can trigger immediate notifications; hourly/daily summaries are flushed during background sync.
+- Badge updates from push payload unread counts remain best-effort.

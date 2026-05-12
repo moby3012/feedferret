@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, previewFeedExtraction } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor } from "@/app/actions/settings"
 import { toast } from "sonner"
 
@@ -442,6 +442,111 @@ export function usePreviewAutoReadRule() {
     return useMutation({
         mutationFn: ({ query, limit }: { query: string; limit?: number }) =>
             previewAutoReadRule(query, limit),
+    })
+}
+
+
+export function useKeywordAlerts() {
+    return useQuery({
+        queryKey: ["keyword-alerts"],
+        queryFn: () => getKeywordAlerts(),
+    })
+}
+
+export function useCreateKeywordAlert() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: { name: string; query: string; scope?: string; actions?: string[] }) =>
+            createKeywordAlert(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["keyword-alerts"] })
+            toast.success("Alert created")
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not create alert")
+        },
+    })
+}
+
+export function useUpdateKeywordAlert() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({
+            alertId,
+            data,
+        }: {
+            alertId: string
+            data: Partial<{ name: string; query: string; scope: string; actions: string[]; enabled: boolean }>
+        }) => updateKeywordAlert(alertId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["keyword-alerts"] })
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not update alert")
+        },
+    })
+}
+
+export function useDeleteKeywordAlert() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (alertId: string) => deleteKeywordAlert(alertId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["keyword-alerts"] })
+            toast.success("Alert deleted")
+        },
+    })
+}
+
+export function usePreviewKeywordAlert() {
+    return useMutation({
+        mutationFn: ({ query, scope, limit }: { query: string; scope?: string; limit?: number }) =>
+            previewKeywordAlertMatches(query, scope, limit),
+    })
+}
+
+export function useTestKeywordAlert() {
+    return useMutation({
+        mutationFn: (alertId: string) => testKeywordAlert(alertId),
+        onSuccess: (matches) => {
+            toast.info(`Alert matches ${matches.length} recent article${matches.length !== 1 ? "s" : ""}`)
+        },
+    })
+}
+
+export function useNotifications() {
+    return useQuery({
+        queryKey: ["notifications"],
+        queryFn: () => getNotifications(),
+        refetchInterval: 60_000,
+    })
+}
+
+export function useUnreadNotificationCount() {
+    return useQuery({
+        queryKey: ["notifications", "unread-count"],
+        queryFn: () => getUnreadNotificationCount(),
+        refetchInterval: 60_000,
+    })
+}
+
+export function useMarkNotificationRead() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (notificationId: string) => markNotificationRead(notificationId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["notifications"] })
+        },
+    })
+}
+
+export function useMarkAllNotificationsRead() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: () => markAllNotificationsRead(),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["notifications"] })
+        },
     })
 }
 

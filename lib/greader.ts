@@ -79,19 +79,36 @@ export function parseGReaderStreamId(streamId?: string | null) {
   return { type: "unknown" as const, value: streamId };
 }
 
-export function parseContinuationToken(token?: string | null) {
-  if (!token) return 0;
+export type GReaderContinuation =
+  | { mode: "offset"; offset: number }
+  | { mode: "cursor"; publishedAt: Date; id: string };
+
+export function parseContinuationToken(token?: string | null): GReaderContinuation {
+  if (!token) return { mode: "offset", offset: 0 };
   try {
     const decoded = Buffer.from(token, "base64url").toString("utf8");
+    if (decoded.startsWith("{")) {
+      const parsed = JSON.parse(decoded);
+      const publishedAt = new Date(parsed.publishedAt);
+      if (parsed.id && !Number.isNaN(publishedAt.getTime())) {
+        return { mode: "cursor", publishedAt, id: String(parsed.id) };
+      }
+    }
     const value = Number(decoded);
-    return Number.isFinite(value) && value >= 0 ? value : 0;
+    return { mode: "offset", offset: Number.isFinite(value) && value >= 0 ? value : 0 };
   } catch {
-    return 0;
+    return { mode: "offset", offset: 0 };
   }
 }
 
-export function createContinuationToken(offset: number) {
-  return Buffer.from(String(offset), "utf8").toString("base64url");
+export function createContinuationToken(article: { publishedAt: Date | string; id: string }) {
+  return Buffer.from(
+    JSON.stringify({
+      publishedAt: new Date(article.publishedAt).toISOString(),
+      id: article.id,
+    }),
+    "utf8",
+  ).toString("base64url");
 }
 
 export function normalizeCategoryNameFromTag(tag: string) {
@@ -108,14 +125,26 @@ export function buildStreamWhere(userId: string, streamId?: string | null, inclu
   else if (stream.type === "read") where.isRead = true;
   else if (stream.type === "feed") where.feed = { url: stream.value };
   else if (stream.type === "label") {
-    where.labels = {
-      some: {
-        label: {
-          userId,
-          name: stream.value,
+    where.OR = [
+      {
+        labels: {
+          some: {
+            label: {
+              userId,
+              name: stream.value,
+            },
+          },
         },
       },
-    };
+      {
+        feed: {
+          category: {
+            userId,
+            name: stream.value,
+          },
+        },
+      },
+    ];
   }
 
   for (const state of includeStates) {
@@ -131,20 +160,170 @@ export function buildStreamWhere(userId: string, streamId?: string | null, inclu
       where.NOT = [
         ...(Array.isArray(where.NOT) ? where.NOT : where.NOT ? [where.NOT] : []),
         {
-          labels: {
-            some: {
-              label: {
-                userId,
-                name: labelName,
+          OR: [
+            {
+              labels: {
+                some: {
+                  label: {
+                    userId,
+                    name: labelName,
+                  },
+                },
               },
             },
-          },
+            {
+              feed: {
+                category: {
+                  userId,
+                  name: labelName,
+                },
+              },
+            },
+          ],
         },
       ];
     }
   }
 
   return where;
+}
+
+export function buildCursorWhere(continuation: GReaderContinuation) {
+  if (continuation.mode !== "cursor") return {};
+  return {
+    OR: [
+      { publishedAt: { lt: continuation.publishedAt } },
+      {
+        publishedAt: continuation.publishedAt,
+        id: { lt: continuation.id },
+      },
+    ],
+  };
+}
+
+export async function listGReaderStreamPrefs(userId: string) {
+  const prefs = await db.gReaderPreference.findMany({
+    where: { userId },
+    orderBy: [{ streamId: "asc" }, { key: "asc" }],
+  });
+
+  const grouped = new Map<string, Array<{ id: string; value: string }>>();
+  for (const pref of prefs) {
+    const values = grouped.get(pref.streamId) || [];
+    values.push({ id: pref.key, value: pref.value });
+    grouped.set(pref.streamId, values);
+  }
+
+  return Array.from(grouped.entries()).map(([id, value]) => ({ id, value }));
+}
+
+export async function upsertGReaderStreamPref(userId: string, streamId: string, key: string, value: string) {
+  return db.gReaderPreference.upsert({
+    where: {
+      userId_streamId_key: {
+        userId,
+        streamId,
+        key,
+      },
+    },
+    update: { value },
+    create: {
+      userId,
+      streamId,
+      key,
+      value,
+    },
+  });
+}
+
+export async function deleteGReaderStreamPref(userId: string, streamId: string, key: string) {
+  return db.gReaderPreference.deleteMany({
+    where: {
+      userId,
+      streamId,
+      key,
+    },
+  });
+}
+
+export async function listGReaderTags(userId: string) {
+  const [labels, categories] = await Promise.all([
+    db.label.findMany({ where: { userId }, orderBy: { name: "asc" } }),
+    db.category.findMany({ where: { userId }, orderBy: { name: "asc" } }),
+  ]);
+
+  const systemTags = [
+    GREADER_READING_LIST,
+    GREADER_READ,
+    GREADER_STARRED,
+    GREADER_BROADCAST,
+    GREADER_KEEP_UNREAD,
+    GREADER_LIKE,
+  ].map((id) => ({ id, type: "state", sortid: id }));
+
+  const seen = new Set<string>();
+  const customTags = [...categories, ...labels].flatMap((item) => {
+    const name = item.name.trim();
+    if (!name || seen.has(name.toLowerCase())) return [];
+    seen.add(name.toLowerCase());
+    return [{ id: `${GREADER_LABEL_PREFIX}${name}`, type: "label", sortid: name }];
+  });
+
+  return [...systemTags, ...customTags];
+}
+
+export async function countUnreadByGReaderTag(userId: string) {
+  const [labels, categories] = await Promise.all([
+    db.label.findMany({ where: { userId } }),
+    db.category.findMany({ where: { userId } }),
+  ]);
+
+  const rows: Array<{ id: string; count: number; newestItemTimestampUsec: string }> = [];
+  const seen = new Set<string>();
+
+  for (const category of categories) {
+    const key = category.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const [count, newest] = await Promise.all([
+      db.article.count({
+        where: { userId, isRead: false, feed: { categoryId: category.id } },
+      }),
+      db.article.findFirst({
+        where: { userId, isRead: false, feed: { categoryId: category.id } },
+        orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+        select: { publishedAt: true },
+      }),
+    ]);
+    rows.push({
+      id: `${GREADER_LABEL_PREFIX}${category.name}`,
+      count,
+      newestItemTimestampUsec: newest ? String(newest.publishedAt.getTime() * 1000) : "0",
+    });
+  }
+
+  for (const label of labels) {
+    const key = label.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const [count, newest] = await Promise.all([
+      db.article.count({
+        where: { userId, isRead: false, labels: { some: { labelId: label.id } } },
+      }),
+      db.article.findFirst({
+        where: { userId, isRead: false, labels: { some: { labelId: label.id } } },
+        orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+        select: { publishedAt: true },
+      }),
+    ]);
+    rows.push({
+      id: `${GREADER_LABEL_PREFIX}${label.name}`,
+      count,
+      newestItemTimestampUsec: newest ? String(newest.publishedAt.getTime() * 1000) : "0",
+    });
+  }
+
+  return rows;
 }
 
 export function toGReaderArticle(article: any) {
@@ -162,6 +341,7 @@ export function toGReaderArticle(article: any) {
       GREADER_READING_LIST,
       ...(article.isRead ? [GREADER_READ] : []),
       ...(article.isStarred ? [GREADER_STARRED] : []),
+      ...(article.feed?.category?.name ? [`${GREADER_LABEL_PREFIX}${article.feed.category.name}`] : []),
       ...(article.labels || []).map((item: any) => `${GREADER_LABEL_PREFIX}${item.label.name}`),
     ],
     origin: {
@@ -178,7 +358,10 @@ export function toGReaderArticle(article: any) {
 export function toGReaderItemRef(article: any) {
   return {
     id: greaderItemId(article.id),
-    directStreamIds: [`feed/${article.feed.url}`],
+    directStreamIds: [
+      `feed/${article.feed.url}`,
+      ...(article.feed?.category?.name ? [`${GREADER_LABEL_PREFIX}${article.feed.category.name}`] : []),
+    ],
     timestampUsec: String(new Date(article.publishedAt).getTime() * 1000),
   };
 }

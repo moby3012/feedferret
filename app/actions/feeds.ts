@@ -4,12 +4,18 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { syncUserFeeds, syncFeed } from "@/lib/rss-sync";
-import { parseOpml, generateOpml, OpmlOutline } from "@/lib/opml";
+import { fetchFeedArticles } from "@/lib/feed-fetcher";
+import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import {
+    parseOpml,
+    generateOpml,
+    OpmlOutline,
+    scraperConfigFromOutline,
+    httpOptionsFromOutline,
+} from "@/lib/opml";
+import { normalizeSourceType, stringifyNonEmpty } from "@/lib/freshrss-opml";
 import { buildAdvancedSearchWhere } from "@/lib/search";
-import Parser from "rss-parser";
 import { randomBytes } from "crypto";
-
-const parser = new Parser();
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -297,7 +303,7 @@ export async function addFeed(url: string, categoryId?: string) {
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     try {
-        const remoteFeed = await parser.parseURL(url);
+        const remoteFeed = await fetchFeedArticles({ url });
 
         const feed = await db.feed.create({
             data: {
@@ -348,6 +354,15 @@ export async function updateFeed(feedId: string, data: {
     fullTextSelector?: string | null;
     fullTextRemoveSelectors?: string | null;
     autoFetchFullText?: boolean;
+    fullTextConditions?: string | null;
+    filtersActionRead?: string | null;
+    // FreshRSS extended source options
+    sourceType?: string;
+    priority?: string;
+    unicityCriteria?: string;
+    unicityCriteriaForced?: boolean;
+    scraperConfig?: string | null;
+    httpOptions?: string | null;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -651,13 +666,19 @@ export async function exportOpml(selectedFeedIds?: string[]) {
         where.id = { in: selectedFeedIds };
     }
 
-    const feeds = await db.feed.findMany({
-        where,
-        include: { category: { select: { name: true } } },
-        orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
-    });
+    const [feeds, categories] = await Promise.all([
+        db.feed.findMany({
+            where,
+            include: { category: { select: { id: true, name: true, parentId: true, opmlUrl: true } } },
+            orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
+        }),
+        db.category.findMany({
+            where: { userId: session.user.id },
+            orderBy: [{ order: "asc" }, { name: "asc" }],
+        }),
+    ]);
 
-    return generateOpml(feeds);
+    return generateOpml(feeds, selectedFeedIds?.length ? [] : categories);
 }
 
 export async function exportUserData() {
@@ -716,8 +737,70 @@ export async function importOpml(xml: string) {
         errors: [] as string[],
     };
 
+    const getOrCreateCategory = async (name: string, parentId?: string | null, opmlUrl?: string | null) => {
+        const existingCategory = await db.category.findUnique({
+            where: {
+                userId_name_parentId: {
+                    userId,
+                    name,
+                    parentId: (parentId || null) as any,
+                },
+            },
+        });
+        const category = await db.category.upsert({
+            where: {
+                userId_name_parentId: {
+                    userId,
+                    name,
+                    parentId: (parentId || null) as any,
+                },
+            },
+            update: opmlUrl !== undefined ? { opmlUrl } : {},
+            create: {
+                userId,
+                name,
+                parentId: parentId || undefined,
+                opmlUrl: opmlUrl || undefined,
+            },
+        });
+        if (existingCategory) report.categoriesUpdated += 1;
+        else report.categoriesAdded += 1;
+        return category;
+    };
+
+    const feedDataFromOutline = (outline: OpmlOutline, categoryId?: string | null) => {
+        const scraperConfig = scraperConfigFromOutline(outline);
+        const httpOptions = httpOptionsFromOutline(outline);
+        const frss = outline.frss ?? {};
+        const sourceType = normalizeSourceType(outline.type);
+        return {
+            url: outline.xmlUrl!,
+            name: outline.text,
+            categoryId,
+            sourceType,
+            htmlUrl: outline.htmlUrl || null,
+            description: outline.description || null,
+            priority: frss.priority || "main",
+            unicityCriteria: frss.unicityCriteria || "id",
+            unicityCriteriaForced: frss.unicityCriteriaForced === "true" || frss.unicityCriteriaForced === "1",
+            scraperConfig: stringifyNonEmpty(scraperConfig),
+            httpOptions: stringifyNonEmpty(httpOptions),
+            fullTextSelector: frss.cssFullContent || null,
+            fullTextConditions: frss.cssFullContentConditions || null,
+            fullTextRemoveSelectors: frss.cssContentFilter || frss.cssFullContentFilter || null,
+            filtersActionRead: frss.filtersActionRead || null,
+            customUserAgent: typeof httpOptions.CURLOPT_USERAGENT === "string" ? httpOptions.CURLOPT_USERAGENT : undefined,
+        };
+    };
+
     const processOutline = async (outline: OpmlOutline, categoryId?: string) => {
-        if (outline.type === "rss" && outline.xmlUrl) {
+        if (outline.xmlUrl) {
+            let targetCategoryId = categoryId;
+            if (!targetCategoryId && outline.category) {
+                const category = await getOrCreateCategory(outline.category);
+                targetCategoryId = category.id;
+            }
+            const feedData = feedDataFromOutline(outline, targetCategoryId);
             const existing = await db.feed.findUnique({
                 where: {
                     userId_url: {
@@ -734,45 +817,31 @@ export async function importOpml(xml: string) {
                     },
                 },
                 update: {
-                    name: outline.text,
-                    categoryId,
+                    name: feedData.name,
+                    categoryId: feedData.categoryId,
+                    sourceType: feedData.sourceType,
+                    htmlUrl: feedData.htmlUrl,
+                    description: feedData.description,
+                    priority: feedData.priority,
+                    unicityCriteria: feedData.unicityCriteria,
+                    unicityCriteriaForced: feedData.unicityCriteriaForced,
+                    scraperConfig: feedData.scraperConfig,
+                    httpOptions: feedData.httpOptions,
+                    fullTextSelector: feedData.fullTextSelector,
+                    fullTextConditions: feedData.fullTextConditions,
+                    fullTextRemoveSelectors: feedData.fullTextRemoveSelectors,
+                    filtersActionRead: feedData.filtersActionRead,
+                    ...(feedData.customUserAgent ? { customUserAgent: feedData.customUserAgent } : {}),
                 },
                 create: {
                     userId: userId,
-                    url: outline.xmlUrl,
-                    name: outline.text,
-                    categoryId,
+                    ...feedData,
                 },
             });
             if (existing) report.feedsUpdated += 1;
             else report.feedsAdded += 1;
         } else if (outline.children) {
-            const existingCategory = await db.category.findUnique({
-                where: {
-                    userId_name_parentId: {
-                        userId: userId,
-                        name: outline.text,
-                        parentId: (categoryId || null) as any,
-                    }
-                },
-            });
-            const category = await db.category.upsert({
-                where: {
-                    userId_name_parentId: {
-                        userId: userId,
-                        name: outline.text,
-                        parentId: (categoryId || null) as any,
-                    }
-                },
-                update: {},
-                create: {
-                    userId: userId,
-                    name: outline.text,
-                    parentId: categoryId,
-                }
-            });
-            if (existingCategory) report.categoriesUpdated += 1;
-            else report.categoriesAdded += 1;
+            const category = await getOrCreateCategory(outline.text, categoryId, outline.frss?.opmlUrl ?? null);
 
             for (const child of outline.children) {
                 try {
@@ -807,19 +876,22 @@ export async function fetchFullText(articleId: string) {
 
     if (!article?.link) throw new Error("Article has no source link");
 
-    const response = await fetch(article.link, {
-        headers: {
-            "User-Agent": "FeedFerret/1.0 (+https://github.com/moby3012/feedferret)",
-            Accept: "text/html,application/xhtml+xml",
+    const html = await fetchTextWithSsrfProtection(
+        article.link,
+        {
+            headers: {
+                "User-Agent": "FeedFerret/1.0 (+https://github.com/moby3012/feedferret)",
+                Accept: "text/html,application/xhtml+xml",
+            },
         },
-        signal: AbortSignal.timeout(12_000),
-    });
-
-    if (!response.ok) {
-        throw new Error(`Failed to fetch article: ${response.status}`);
-    }
-
-    const html = await response.text();
+        {
+            allowInternal: await isTrustedFeedFetchingAllowed(),
+            context: "Full-text fetch",
+            maxBytes: 2 * 1024 * 1024,
+            maxRedirects: 5,
+            timeoutMs: 12_000,
+        },
+    );
     const { JSDOM } = await import("jsdom");
     const { default: DOMPurify } = await import("isomorphic-dompurify");
     const dom = new JSDOM(html, { url: article.link });
@@ -1005,6 +1077,140 @@ export async function previewAutoReadRule(query: string, limit = 10) {
     return previewAutoReadRuleMatches(session.user.id, query, limit);
 }
 
+// ─── Keyword Alerts + Notifications ────────────────────────────────────────
+
+function stringifyAlertActions(actions?: string[]) {
+    const allowed = (actions || ["notify_inapp"]).filter((action) =>
+        ["notify_inapp", "notify_push"].includes(action),
+    );
+    return JSON.stringify(allowed.length ? allowed : ["notify_inapp"]);
+}
+
+export async function getKeywordAlerts() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    return db.keywordAlert.findMany({
+        where: { userId: session.user.id },
+        orderBy: [{ enabled: "desc" }, { createdAt: "desc" }],
+    });
+}
+
+export async function createKeywordAlert(data: {
+    name: string;
+    query: string;
+    scope?: string;
+    actions?: string[];
+}) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const name = data.name.trim();
+    const query = data.query.trim();
+    if (!name || !query) throw new Error("Name and query are required");
+
+    const alert = await db.keywordAlert.create({
+        data: {
+            userId: session.user.id,
+            name,
+            query,
+            scope: data.scope || "all",
+            actions: stringifyAlertActions(data.actions),
+        },
+    });
+    revalidatePath("/");
+    return alert;
+}
+
+export async function updateKeywordAlert(
+    alertId: string,
+    data: Partial<{ name: string; query: string; scope: string; actions: string[]; enabled: boolean }>,
+) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const alert = await db.keywordAlert.update({
+        where: { id: alertId, userId: session.user.id },
+        data: {
+            ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+            ...(data.query !== undefined ? { query: data.query.trim() } : {}),
+            ...(data.scope !== undefined ? { scope: data.scope } : {}),
+            ...(data.actions !== undefined ? { actions: stringifyAlertActions(data.actions) } : {}),
+            ...(data.enabled !== undefined ? { enabled: data.enabled } : {}),
+        },
+    });
+    revalidatePath("/");
+    return alert;
+}
+
+export async function deleteKeywordAlert(alertId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    await db.keywordAlert.delete({ where: { id: alertId, userId: session.user.id } });
+    revalidatePath("/");
+}
+
+export async function previewKeywordAlertMatches(query: string, scope = "all", limit = 10) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const { previewKeywordAlert } = await import("@/lib/keyword-alerts");
+    return previewKeywordAlert(session.user.id, query, scope, limit);
+}
+
+export async function testKeywordAlert(alertId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const alert = await db.keywordAlert.findUnique({ where: { id: alertId, userId: session.user.id } });
+    if (!alert) throw new Error("Alert not found");
+    const { previewKeywordAlert } = await import("@/lib/keyword-alerts");
+    return previewKeywordAlert(session.user.id, alert.query, alert.scope, 100);
+}
+
+export async function getNotifications(limit = 20) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    return db.notification.findMany({
+        where: { userId: session.user.id },
+        include: {
+            article: {
+                select: {
+                    id: true,
+                    title: true,
+                    link: true,
+                    feed: { select: { name: true, icon: true } },
+                },
+            },
+            alert: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: Math.min(Math.max(limit, 1), 100),
+    });
+}
+
+export async function getUnreadNotificationCount() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    return db.notification.count({ where: { userId: session.user.id, isRead: false } });
+}
+
+export async function markNotificationRead(notificationId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    return db.notification.update({
+        where: { id: notificationId, userId: session.user.id },
+        data: { isRead: true },
+    });
+}
+
+export async function markAllNotificationsRead() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    return db.notification.updateMany({
+        where: { userId: session.user.id, isRead: false },
+        data: { isRead: true },
+    });
+}
+
 export async function previewFeedExtraction(feedId: string, articleUrl: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -1015,16 +1221,17 @@ export async function previewFeedExtraction(feedId: string, articleUrl: string) 
     });
     if (!feed) throw new Error("Feed not found");
 
-    const response = await fetch(articleUrl, {
-        headers: {
-            "User-Agent": "FeedFerret/1.0",
-            Accept: "text/html,application/xhtml+xml",
+    const html = await fetchTextWithSsrfProtection(
+        articleUrl,
+        { headers: { "User-Agent": "FeedFerret/1.0", Accept: "text/html,application/xhtml+xml" } },
+        {
+            allowInternal: await isTrustedFeedFetchingAllowed(),
+            context: "Full-text preview fetch",
+            maxBytes: 2 * 1024 * 1024,
+            maxRedirects: 5,
+            timeoutMs: 12_000,
         },
-        signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
-
-    const html = await response.text();
+    );
     const { JSDOM } = await import("jsdom");
     const { default: DOMPurify } = await import("isomorphic-dompurify");
     const dom = new JSDOM(html, { url: articleUrl });

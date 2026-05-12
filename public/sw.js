@@ -1,4 +1,5 @@
-const CACHE_NAME = "feedferret-pwa-v1";
+const CACHE_NAME = "feedferret-pwa-v2";
+const RUNTIME_CACHE = "feedferret-runtime-v1";
 const PRECACHE_URLS = [
   "/offline.html",
   "/manifest.json",
@@ -7,6 +8,8 @@ const PRECACHE_URLS = [
   "/icon-192-maskable.png",
   "/icon-512.png",
   "/icon-512-maskable.png",
+  "/screenshots/mobile-narrow.svg",
+  "/screenshots/desktop-wide.svg",
 ];
 
 self.addEventListener("install", (event) => {
@@ -23,11 +26,27 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))),
+        Promise.all(
+          keys
+            .filter((key) => ![CACHE_NAME, RUNTIME_CACHE].includes(key))
+            .map((key) => caches.delete(key)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
 });
+
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(RUNTIME_CACHE);
+  const cached = await cache.match(request);
+  const network = fetch(request)
+    .then((response) => {
+      if (response.ok) cache.put(request, response.clone());
+      return response;
+    })
+    .catch(() => cached);
+  return cached || network;
+}
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -38,7 +57,13 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/offline.html")),
+      fetch(request)
+        .then(async (response) => {
+          const cache = await caches.open(RUNTIME_CACHE);
+          cache.put(request, response.clone());
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match("/offline.html"))),
     );
     return;
   }
@@ -47,5 +72,83 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       caches.match(request).then((cached) => cached || fetch(request)),
     );
+    return;
   }
+
+  if (
+    request.destination === "script" ||
+    request.destination === "style" ||
+    request.destination === "image" ||
+    request.destination === "font"
+  ) {
+    event.respondWith(staleWhileRevalidate(request));
+  }
+});
+
+async function updateBadge(count) {
+  try {
+    if (!("setAppBadge" in self.navigator) || !("clearAppBadge" in self.navigator)) return;
+    if (typeof count === "number" && count > 0) {
+      await self.navigator.setAppBadge(count);
+    } else {
+      await self.navigator.clearAppBadge();
+    }
+  } catch {
+    // Badging is best-effort and unsupported on many browsers.
+  }
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SET_BADGE") {
+    event.waitUntil(updateBadge(event.data.count));
+  }
+  if (event.data?.type === "CLEAR_BADGE") {
+    event.waitUntil(updateBadge(0));
+  }
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = {};
+  }
+
+  const title = payload.title || "FeedFerret";
+  const options = {
+    body: payload.body || "Neue Artikel verfügbar.",
+    icon: "/icon-192.png",
+    badge: "/icon-192-maskable.png",
+    tag: payload.tag || "feedferret:notification",
+    data: {
+      url: payload.url || "/",
+      articleId: payload.articleId,
+      feedId: payload.feedId,
+    },
+  };
+
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      updateBadge(payload.unreadCount),
+    ]),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).href;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client && new URL(client.url).origin === self.location.origin) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
+    }),
+  );
 });

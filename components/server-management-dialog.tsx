@@ -505,6 +505,29 @@ export function ServerManagementDialog({
                         </div>
                       </div>
                     )}
+                    <div className="flex items-center justify-between p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
+                      <div className="space-y-1 pr-6">
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">Trusted internal feed URLs</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Allow feed fetches to private IPs, localhost, and internal network hosts. Keep this off for public multi-user instances.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={settings?.allowInternalFeedUrls ?? false}
+                        onCheckedChange={(checked) => handleUpdateSettings({ allowInternalFeedUrls: checked })}
+                      />
+                    </div>
+                    {settings?.allowInternalFeedUrls && (
+                      <div className="p-6 rounded-3xl bg-destructive/10 border border-destructive/20 space-y-2">
+                        <div className="flex items-center gap-2 text-destructive">
+                          <AlertCircle className="w-5 h-5" />
+                          <h4 className="font-bold">Internal URL fetching enabled</h4>
+                        </div>
+                        <p className="text-sm text-destructive/80 leading-relaxed">
+                          Users can now add feeds that resolve to private/internal network addresses. Only enable this on trusted single-tenant deployments.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
               </>

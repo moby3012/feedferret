@@ -25,6 +25,8 @@ import {
   Shield,
   ShieldOff,
   AlertTriangle,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -47,7 +49,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor } from "@/hooks/use-rss-data";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -176,6 +178,9 @@ export function SettingsForm() {
               Show instructions
             </Button>
           </PrefRow>
+
+          {/* Browser notifications */}
+          <PushNotificationSection />
 
           {/* Open original */}
           <PrefRow
@@ -391,6 +396,259 @@ export function SettingsForm() {
         </div>
       </div>
     </main>
+  );
+}
+
+type PushStatus = {
+  configured: boolean;
+  publicKey: string;
+  activeSubscriptions: number;
+  settings: {
+    pushEnabled: boolean;
+    pushFrequency: string;
+    pushFeedIds: string[];
+    pushPrivatePayloads: boolean;
+    pushLastSentAt: string | null;
+  };
+};
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
+function PushNotificationSection() {
+  const { data: feeds = [] } = useFeeds();
+  const [status, setStatus] = useState<PushStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const supported =
+    typeof window !== "undefined" &&
+    "Notification" in window &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window;
+
+  const loadStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/push/status");
+      if (res.ok) setStatus(await res.json());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStatus();
+  }, [loadStatus]);
+
+  const updateSettings = useCallback(
+    async (patch: Partial<PushStatus["settings"]>) => {
+      const next = {
+        ...(status?.settings ?? {
+          pushEnabled: false,
+          pushFrequency: "immediate",
+          pushFeedIds: [],
+          pushPrivatePayloads: true,
+          pushLastSentAt: null,
+        }),
+        ...patch,
+      };
+      setStatus((current) => current ? { ...current, settings: next } : current);
+      const res = await fetch("/api/push/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      if (!res.ok) {
+        toast.error("Could not save notification settings");
+        await loadStatus();
+      }
+    },
+    [loadStatus, status?.settings],
+  );
+
+  const enable = useCallback(async () => {
+    if (!supported || !status?.publicKey) return;
+    setBusy(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        toast.error("Notification permission was not granted");
+        return;
+      }
+      const subscription =
+        (await registration.pushManager.getSubscription()) ??
+        (await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(status.publicKey),
+        }));
+
+      const res = await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subscription,
+          platform: navigator.platform,
+          frequency: status.settings.pushFrequency || "immediate",
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Browser notifications enabled");
+      await loadStatus();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not enable notifications");
+    } finally {
+      setBusy(false);
+    }
+  }, [loadStatus, status, supported]);
+
+  const disable = useCallback(async () => {
+    setBusy(true);
+    try {
+      const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.ready : null;
+      const subscription = registration ? await registration.pushManager.getSubscription() : null;
+      await fetch("/api/push/unsubscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: subscription?.endpoint }),
+      });
+      await subscription?.unsubscribe();
+      toast.success("Notifications disabled for this device");
+      await loadStatus();
+    } finally {
+      setBusy(false);
+    }
+  }, [loadStatus]);
+
+  const sendTest = useCallback(async () => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Test notification sent");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not send test notification");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const permission =
+    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported";
+  const enabled = Boolean(status?.settings.pushEnabled && status.activeSubscriptions > 0);
+  const feedIds = new Set(status?.settings.pushFeedIds ?? []);
+
+  return (
+    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+              {enabled ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold tracking-[-0.02em]">Browser notifications</h2>
+              <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                Get notified when new articles arrive. Titles are included in notifications.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Status: {loading ? "checking…" : !supported ? "unsupported" : !status?.configured ? "server not configured" : permission}
+                {status ? ` · ${status.activeSubscriptions} active device${status.activeSubscriptions === 1 ? "" : "s"}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {!enabled ? (
+              <Button
+                type="button"
+                onClick={enable}
+                disabled={busy || loading || !supported || !status?.configured}
+                className="h-11 rounded-2xl px-5"
+              >
+                Enable
+              </Button>
+            ) : (
+              <>
+                <Button type="button" variant="outline" onClick={sendTest} disabled={busy} className="h-11 rounded-2xl px-5">
+                  Test
+                </Button>
+                <Button type="button" variant="outline" onClick={disable} disabled={busy} className="h-11 rounded-2xl px-5">
+                  Disable device
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {status && (
+          <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Frequency</label>
+              <Select
+                value={status.settings.pushFrequency}
+                onValueChange={(value) => updateSettings({ pushFrequency: value })}
+              >
+                <SelectTrigger className="rounded-2xl border-border/70 bg-background/70">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">
+                  <SelectItem value="immediate">Immediately</SelectItem>
+                  <SelectItem value="hourly">Hourly summary</SelectItem>
+                  <SelectItem value="daily">Daily summary</SelectItem>
+                  <SelectItem value="off">Off</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium">Include article titles</p>
+                <p className="text-xs text-muted-foreground">Disable for generic private notifications.</p>
+              </div>
+              <Switch
+                checked={status.settings.pushPrivatePayloads}
+                onCheckedChange={(checked) => updateSettings({ pushPrivatePayloads: checked })}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <p className="mb-2 text-sm font-medium">Feeds</p>
+              <div className="max-h-44 overflow-y-auto rounded-2xl border border-border/70 bg-background/70 p-3">
+                <label className="mb-2 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={feedIds.size === 0}
+                    onChange={() => updateSettings({ pushFeedIds: [] })}
+                  />
+                  All feeds
+                </label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {feeds.map((feed: any) => (
+                    <label key={feed.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={feedIds.size === 0 || feedIds.has(feed.id)}
+                        onChange={(event) => {
+                          const next = new Set(feedIds);
+                          if (feedIds.size === 0) feeds.forEach((item: any) => next.add(item.id));
+                          if (event.target.checked) next.add(feed.id);
+                          else next.delete(feed.id);
+                          updateSettings({ pushFeedIds: next.size === feeds.length ? [] : Array.from(next) });
+                        }}
+                      />
+                      <span className="truncate">{feed.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -908,11 +1166,11 @@ function ApiTokenSection() {
     }
   }, [token]);
 
-  // Lazy-load status on first render
-  if (hasToken === null) {
-    checkToken();
-    return null;
-  }
+  useEffect(() => {
+    void checkToken();
+  }, [checkToken]);
+
+  if (hasToken === null) return null;
 
   return (
     <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">

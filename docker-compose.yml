@@ -1,19 +1,22 @@
-version: "3.8"
-
 services:
   feedferret:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        DATABASE_PROVIDER: ${DATABASE_PROVIDER:-sqlite}
+        DATABASE_URL: ${DATABASE_URL:-file:/app/data/dev.db}
     container_name: feedferret
     restart: always
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=file:/app/data/dev.db
+      - DATABASE_PROVIDER=${DATABASE_PROVIDER:-sqlite}
+      - DATABASE_URL=${DATABASE_URL:-file:/app/data/dev.db}
       - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-your-secret-here}
       - AUTH_TRUST_HOST=true
-      - NEXTAUTH_URL=https://feedferret.wollank.cloud
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-https://feedferret.example.com}
       # Example OAuth Providers (Uncomment and set values to enable)
       # - GOOGLE_CLIENT_ID=your-google-id
       # - GOOGLE_CLIENT_SECRET=your-google-secret
@@ -22,5 +25,25 @@ services:
     volumes:
       - feedferret_db_data:/app/data
 
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    container_name: feedferret-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-feedferret}
+      - POSTGRES_USER=${POSTGRES_USER:-feedferret}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-feedferret-change-me}
+    volumes:
+      - feedferret_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   feedferret_db_data:
+  feedferret_postgres_data:

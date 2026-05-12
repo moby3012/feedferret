@@ -1,40 +1,15 @@
 import { db } from "./db";
 import { getEffectiveSettings } from "./settings";
 import { applyAutoReadRules } from "./auto-read-rules";
-import https from "https";
+import { applyKeywordAlerts } from "./keyword-alerts";
+import { queueNewArticleNotifications } from "./notifications";
+import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
+import { syncDynamicOpmlCategories } from "./dynamic-opml";
+import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 
 async function getSanitizer() {
     const { default: DOMPurify } = await import("isomorphic-dompurify");
     return DOMPurify;
-}
-
-import Parser from "rss-parser";
-
-function buildFeedParser(feed: {
-    authType?: string | null;
-    authUsername?: string | null;
-    authPassword?: string | null;
-    customUserAgent?: string | null;
-    fetchTimeoutSecs?: number | null;
-    sslVerify?: boolean;
-    maxSizeKb?: number | null;
-}) {
-    const headers: Record<string, string> = {};
-
-    if (feed.authType === "basic" && feed.authUsername) {
-        const creds = `${feed.authUsername}:${feed.authPassword ?? ""}`;
-        headers["Authorization"] = `Basic ${Buffer.from(creds).toString("base64")}`;
-    }
-    headers["User-Agent"] =
-        feed.customUserAgent || "FeedFerret/1.0 (+https://github.com/moby3012/feedferret)";
-
-    const requestOptions: Record<string, unknown> = {
-        rejectUnauthorized: feed.sslVerify !== false,
-    };
-
-    const timeoutMs = (feed.fetchTimeoutSecs ?? 30) * 1000;
-
-    return new Parser({ headers, requestOptions, timeout: timeoutMs });
 }
 
 /**
@@ -48,8 +23,7 @@ export async function syncFeed(userId: string, feedId: string) {
     if (!feed) throw new Error("Feed not found");
 
     try {
-        const feedParser = buildFeedParser(feed);
-        const remoteFeed = await feedParser.parseURL(feed.url);
+        const remoteFeed = await fetchFeedArticles(feed);
 
         const feedPatch: any = {
             lastFetchedAt: new Date(),
@@ -60,45 +34,62 @@ export async function syncFeed(userId: string, feedId: string) {
         if (!feed.name || feed.name === "New Feed") {
             feedPatch.name = remoteFeed.title || feed.name;
         }
+        if (!feed.description && remoteFeed.description) feedPatch.description = remoteFeed.description;
+        if (!feed.htmlUrl && remoteFeed.htmlUrl) feedPatch.htmlUrl = remoteFeed.htmlUrl;
 
         const DOMPurify = await getSanitizer();
 
         const maxChars = feed.maxSizeKb ? feed.maxSizeKb * 1024 : undefined;
 
-        const articles = remoteFeed.items.map((item) => {
-            let content = item.content || item["content:encoded"] || item.summary || "";
+        const articles = remoteFeed.articles.map((item) => {
+            let content = item.content || item.summary || "";
             if (maxChars && content.length > maxChars) {
                 content = content.slice(0, maxChars);
             }
             const excerpt = DOMPurify.sanitize(content, { ALLOWED_TAGS: [] }).substring(0, 200);
 
+            const externalId = item.externalId || item.link || null;
+            const dedupeKey = buildDedupeKey(feed, item, externalId);
+            const link = item.link || `${feed.url}#${encodeURIComponent(dedupeKey)}`;
+
             return {
                 feedId: feed.id,
                 userId: userId,
                 title: item.title || "Untitled",
-                link: item.link || "",
+                link,
+                externalId,
+                dedupeKey,
                 content: DOMPurify.sanitize(content),
                 excerpt: excerpt,
-                author: item.creator || item.author || null,
-                publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
-                imageUrl: extractImageUrl(item),
+                author: item.author || null,
+                publishedAt: item.publishedAt || new Date(),
+                imageUrl: item.imageUrl,
             };
         });
 
         const upsertedIds: string[] = [];
+        const createdArticleIds: string[] = [];
 
         for (const article of articles) {
-            if (!article.link) continue;
+            const where = {
+                userId_feedId_dedupeKey: {
+                    userId: userId,
+                    feedId: feed.id,
+                    dedupeKey: article.dedupeKey,
+                },
+            };
+
+            const existing = await db.article.findUnique({
+                where,
+                select: { id: true },
+            });
 
             const upserted = await db.article.upsert({
-                where: {
-                    userId_link: {
-                        userId: userId,
-                        link: article.link,
-                    },
-                },
+                where,
                 update: {
                     title: article.title,
+                    link: article.link,
+                    externalId: article.externalId,
                     content: article.content,
                     excerpt: article.excerpt,
                     author: article.author,
@@ -108,6 +99,7 @@ export async function syncFeed(userId: string, feedId: string) {
                 create: article,
             });
             upsertedIds.push(upserted.id);
+            if (!existing) createdArticleIds.push(upserted.id);
         }
 
         await db.feed.update({
@@ -120,7 +112,16 @@ export async function syncFeed(userId: string, feedId: string) {
             await autoFetchFullTextForArticles(userId, upsertedIds, feed);
         }
 
-        return { success: true, count: articles.length };
+        if (createdArticleIds.length > 0) {
+            await applyKeywordAlerts(userId, createdArticleIds).catch((e) =>
+                console.error("[rss-sync] keyword alerts failed:", e),
+            );
+            await queueNewArticleNotifications(userId, createdArticleIds).catch((e) =>
+                console.error("[rss-sync] push notification queue failed:", e),
+            );
+        }
+
+        return { success: true, count: articles.length, createdArticleIds };
     } catch (error) {
         console.error(`Error syncing feed ${feed.url}:`, error);
         await db.feed.update({
@@ -154,13 +155,17 @@ async function autoFetchFullTextForArticles(
     for (const article of articles) {
         if (!article.link) continue;
         try {
-            const response = await fetch(article.link, {
-                headers: { "User-Agent": "FeedFerret/1.0", Accept: "text/html" },
-                signal: AbortSignal.timeout(12_000),
-            });
-            if (!response.ok) continue;
-
-            const html = await response.text();
+            const html = await fetchTextWithSsrfProtection(
+                article.link,
+                { headers: { "User-Agent": "FeedFerret/1.0", Accept: "text/html" } },
+                {
+                    allowInternal: await isTrustedFeedFetchingAllowed(),
+                    context: "Full-text fetch",
+                    maxBytes: 2 * 1024 * 1024,
+                    maxRedirects: 5,
+                    timeoutMs: 12_000,
+                },
+            );
             const dom = new JSDOM(html, { url: article.link });
             const document = dom.window.document;
 
@@ -215,6 +220,10 @@ async function autoFetchFullTextForArticles(
 }
 
 export async function syncUserFeeds(userId: string) {
+    await syncDynamicOpmlCategories(userId).catch((e) =>
+        console.error("[rss-sync] dynamic OPML sync failed:", e),
+    );
+
     const feeds = await db.feed.findMany({
         where: { userId },
     });
@@ -253,6 +262,10 @@ export async function syncUserFeeds(userId: string) {
 }
 
 export async function syncAllFeeds() {
+    await syncDynamicOpmlCategories().catch((e) =>
+        console.error("[rss-sync] dynamic OPML sync failed:", e),
+    );
+
     const feeds = await db.feed.findMany({
         include: { user: true },
     });
@@ -283,15 +296,26 @@ export async function syncAllFeeds() {
     return results;
 }
 
-function extractImageUrl(item: any): string | null {
-    if (item.enclosure && item.enclosure.url && item.enclosure.type?.startsWith("image/")) {
-        return item.enclosure.url;
-    }
-    if (item["media:content"] && item["media:content"].$) {
-        return item["media:content"].$.url;
-    }
-    const content = item.content || item["content:encoded"] || "";
-    const imgMatch = content.match(/<img[^>]+src="([^">]+)"/);
-    if (imgMatch) return imgMatch[1];
-    return null;
+function buildDedupeKey(
+    feed: { unicityCriteria?: string | null },
+    item: FetchedFeedArticle,
+    externalId: string | null,
+) {
+    const parts = (feed.unicityCriteria || "id")
+        .split(":")
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+    const valueFor = (part: string) => {
+        if (part === "id" || part === "guid" || part === "uid") return externalId;
+        if (part === "link" || part === "uri" || part === "url") return item.link;
+        if (part === "title") return item.title;
+        if (part === "author") return item.author;
+        if (part === "date" || part === "timestamp") return item.publishedAt?.toISOString();
+        return null;
+    };
+
+    const values = parts.map(valueFor).filter(Boolean);
+    if (values.length > 0) return values.join(":");
+    return externalId || item.link || item.title;
 }

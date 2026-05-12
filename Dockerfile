@@ -23,13 +23,15 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
 
 # Add build arguments for Next.js build time
-ARG DATABASE_URL
+ARG DATABASE_URL=file:/app/data/dev.db
+ARG DATABASE_PROVIDER=sqlite
 ARG AUTH_SECRET
 ARG NEXTAUTH_URL
 ARG AUTH_TRUST_HOST
 
 # Make them available as environment variables
 ENV DATABASE_URL=$DATABASE_URL
+ENV DATABASE_PROVIDER=$DATABASE_PROVIDER
 ENV AUTH_SECRET=$AUTH_SECRET
 ENV NEXTAUTH_URL=$NEXTAUTH_URL
 ENV AUTH_TRUST_HOST=$AUTH_TRUST_HOST
@@ -42,6 +44,7 @@ WORKDIR /app
 
 ENV NODE_ENV production
 ENV DATABASE_URL=file:/app/data/dev.db
+ENV DATABASE_PROVIDER=sqlite
 ENV NEXT_TELEMETRY_DISABLED 1
 
 RUN groupadd --system --gid 1001 nodejs
@@ -55,6 +58,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # Copy Prisma schema and startup script
 COPY --chown=nextjs:nodejs prisma ./prisma
+COPY --chown=nextjs:nodejs scripts/prepare-prisma-schema.mjs ./scripts/prepare-prisma-schema.mjs
 COPY --chown=nextjs:nodejs start.sh ./start.sh
 RUN chmod +x ./start.sh
 

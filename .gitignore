@@ -16,6 +16,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# pnpm store
+.pnpm-store/
+
 # env files
 .env*
 
@@ -28,6 +31,7 @@ next-env.d.ts
 
 # generated prisma
 /lib/prisma-client
+/prisma/schema.generated.prisma
 
 # database
 *.db

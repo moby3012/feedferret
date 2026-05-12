@@ -79,11 +79,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Provide articleId or url" }, { status: 400 });
     }
 
-    const where = articleId
-        ? { id: articleId, userId }
-        : { userId_link: { userId, link: url! } };
-
-    const article = await db.article.findUnique({ where, select: { id: true } });
+    const article = articleId
+        ? await db.article.findFirst({ where: { id: articleId, userId }, select: { id: true } })
+        : await db.article.findFirst({ where: { userId, link: url! }, select: { id: true } });
     if (!article) return NextResponse.json({ error: "Article not found" }, { status: 404 });
 
     const updated = await db.article.update({
@@ -118,11 +116,9 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ error: "Provide articleId or url" }, { status: 400 });
     }
 
-    const where = articleId
-        ? { id: articleId, userId }
-        : { userId_link: { userId, link: url! } };
-
-    const article = await db.article.findUnique({ where, select: { id: true } });
+    const article = articleId
+        ? await db.article.findFirst({ where: { id: articleId, userId }, select: { id: true } })
+        : await db.article.findFirst({ where: { userId, link: url! }, select: { id: true } });
     if (!article) return NextResponse.json({ error: "Article not found" }, { status: 404 });
 
     const updated = await db.article.update({

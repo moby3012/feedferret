@@ -26,6 +26,12 @@ import {
   useDeleteAutoReadRule,
   useApplyAutoReadRulesNow,
   usePreviewAutoReadRule,
+  useKeywordAlerts,
+  useCreateKeywordAlert,
+  useUpdateKeywordAlert,
+  useDeleteKeywordAlert,
+  usePreviewKeywordAlert,
+  useTestKeywordAlert,
   useExportUserData,
 } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
@@ -73,6 +79,7 @@ import {
   ExternalLink,
   Rss,
   Link as LinkIcon,
+  Bell,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
 import { toast } from "sonner";
@@ -240,7 +247,7 @@ export function FeedManagement({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialTab?: "feeds" | "categories" | "labels" | "saved-searches" | "health" | "rules";
+  initialTab?: "feeds" | "categories" | "labels" | "saved-searches" | "health" | "rules" | "alerts";
 }) {
   const { data: feeds = [] } = useFeeds();
   const deleteFeed = useDeleteFeed();
@@ -264,6 +271,12 @@ export function FeedManagement({
   const deleteAutoReadRule = useDeleteAutoReadRule();
   const applyAutoReadRulesNow = useApplyAutoReadRulesNow();
   const previewAutoReadRule = usePreviewAutoReadRule();
+  const { data: keywordAlerts = [] } = useKeywordAlerts();
+  const createKeywordAlert = useCreateKeywordAlert();
+  const updateKeywordAlert = useUpdateKeywordAlert();
+  const deleteKeywordAlert = useDeleteKeywordAlert();
+  const previewKeywordAlert = usePreviewKeywordAlert();
+  const testKeywordAlert = useTestKeywordAlert();
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newLabelName, setNewLabelName] = useState("");
@@ -274,7 +287,7 @@ export function FeedManagement({
   );
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<null | {
-    type: "feed" | "category" | "label" | "saved-search" | "auto-read-rule";
+    type: "feed" | "category" | "label" | "saved-search" | "auto-read-rule" | "keyword-alert";
     id: string;
     name: string;
   }>(null);
@@ -284,6 +297,12 @@ export function FeedManagement({
   const [newRuleAction, setNewRuleAction] = useState("mark_read");
   const [rulePreview, setRulePreview] = useState<any[] | null>(null);
   const [showAddRule, setShowAddRule] = useState(false);
+  const [newAlertName, setNewAlertName] = useState("");
+  const [newAlertQuery, setNewAlertQuery] = useState("");
+  const [newAlertScope, setNewAlertScope] = useState("all");
+  const [newAlertPush, setNewAlertPush] = useState(false);
+  const [alertPreview, setAlertPreview] = useState<any[] | null>(null);
+  const [showAddAlert, setShowAddAlert] = useState(false);
   const [editingFeed, setEditingFeed] = useState<any | null>(null);
   const [selectedExportIds, setSelectedExportIds] = useState<Set<string>>(new Set());
 
@@ -455,6 +474,12 @@ export function FeedManagement({
                 className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
               >
                 Rules
+              </TabsTrigger>
+              <TabsTrigger
+                value="alerts"
+                className="rounded-xl px-6 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                Alerts
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1215,6 +1240,214 @@ export function FeedManagement({
                 </div>
               </ScrollArea>
             </TabsContent>
+
+            <TabsContent
+              value="alerts"
+              className="h-full mt-0 focus-visible:outline-none"
+            >
+              <ScrollArea className="h-full px-6 sm:px-8">
+                <div className="space-y-6 py-4 pb-8">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold tracking-tight">Keyword alerts</h3>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        Create in-app notifications when newly synced articles match a search query.
+                      </p>
+                    </div>
+                    <Button size="sm" className="rounded-xl gap-1.5" onClick={() => setShowAddAlert(true)}>
+                      <Plus className="w-3.5 h-3.5" />
+                      Add alert
+                    </Button>
+                  </div>
+
+                  {showAddAlert && (
+                    <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
+                      <h4 className="font-medium text-sm">New alert</h4>
+                      <div className="grid gap-3">
+                        <Input
+                          placeholder="Alert name"
+                          value={newAlertName}
+                          onChange={(e) => setNewAlertName(e.target.value)}
+                          className="rounded-xl h-10"
+                        />
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder='Query, e.g. intitle:security author:Jane'
+                            value={newAlertQuery}
+                            onChange={(e) => {
+                              setNewAlertQuery(e.target.value);
+                              setAlertPreview(null);
+                            }}
+                            className="rounded-xl h-10 flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-xl shrink-0 gap-1.5"
+                            disabled={!newAlertQuery.trim() || previewKeywordAlert.isPending}
+                            onClick={() =>
+                              previewKeywordAlert.mutate(
+                                { query: newAlertQuery, scope: newAlertScope },
+                                { onSuccess: (data) => setAlertPreview(data) },
+                              )
+                            }
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            Preview
+                          </Button>
+                        </div>
+                        <Select value={newAlertScope} onValueChange={setNewAlertScope}>
+                          <SelectTrigger className="rounded-xl h-10">
+                            <SelectValue placeholder="Scope" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All feeds</SelectItem>
+                            {feeds.map((feed: any) => (
+                              <SelectItem key={feed.id} value={`feed:${feed.id}`}>Feed: {feed.name}</SelectItem>
+                            ))}
+                            {categories.map((category: any) => (
+                              <SelectItem key={category.id} value={`category:${category.id}`}>Category: {category.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <label className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={newAlertPush}
+                            onChange={(e) => setNewAlertPush(e.target.checked)}
+                          />
+                          Also send browser push notification when available
+                        </label>
+                      </div>
+
+                      {alertPreview !== null && (
+                        <div className="rounded-xl bg-muted/40 p-3 text-sm">
+                          {alertPreview.length === 0 ? (
+                            <p className="text-muted-foreground italic">No matching articles found</p>
+                          ) : (
+                            <div className="space-y-1">
+                              <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                                {alertPreview.length} matching article{alertPreview.length !== 1 ? "s" : ""}
+                              </p>
+                              {alertPreview.map((a: any) => (
+                                <div key={a.id} className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground shrink-0">{a.feedName}</span>
+                                  <span className="truncate text-sm">{a.title}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="rounded-xl"
+                          onClick={() => {
+                            setShowAddAlert(false);
+                            setNewAlertName("");
+                            setNewAlertQuery("");
+                            setNewAlertScope("all");
+                            setNewAlertPush(false);
+                            setAlertPreview(null);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="rounded-xl"
+                          disabled={!newAlertName.trim() || !newAlertQuery.trim() || createKeywordAlert.isPending}
+                          onClick={() =>
+                            createKeywordAlert.mutate(
+                              {
+                                name: newAlertName.trim(),
+                                query: newAlertQuery.trim(),
+                                scope: newAlertScope,
+                                actions: newAlertPush ? ["notify_inapp", "notify_push"] : ["notify_inapp"],
+                              },
+                              {
+                                onSuccess: () => {
+                                  setShowAddAlert(false);
+                                  setNewAlertName("");
+                                  setNewAlertQuery("");
+                                  setNewAlertScope("all");
+                                  setNewAlertPush(false);
+                                  setAlertPreview(null);
+                                },
+                              },
+                            )
+                          }
+                        >
+                          Save alert
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {keywordAlerts.length === 0 && !showAddAlert ? (
+                    <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center">
+                      <p className="text-muted-foreground text-sm">No alerts yet. Alerts run against newly synced articles.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {keywordAlerts.map((alert: any) => {
+                        const actions = (() => {
+                          try { return JSON.parse(alert.actions || "[]"); } catch { return []; }
+                        })();
+                        return (
+                          <div key={alert.id} className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3">
+                            <button
+                              onClick={() =>
+                                updateKeywordAlert.mutate({
+                                  alertId: alert.id,
+                                  data: { enabled: !alert.enabled },
+                                })
+                              }
+                              className={cn(
+                                "shrink-0 rounded-lg p-1.5 transition-colors",
+                                alert.enabled ? "text-primary bg-primary/10" : "text-muted-foreground/50 bg-muted",
+                              )}
+                              title={alert.enabled ? "Disable alert" : "Enable alert"}
+                            >
+                              <Power className="w-3.5 h-3.5" />
+                            </button>
+                            <Bell className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{alert.name}</p>
+                              <p className="text-xs text-muted-foreground font-mono truncate">{alert.query}</p>
+                              <p className="text-[11px] text-muted-foreground truncate">
+                                Scope: {alert.scope === "all" ? "all feeds" : alert.scope} · {actions.includes("notify_push") ? "in-app + push" : "in-app"}
+                                {alert.lastTriggeredAt ? ` · last: ${new Date(alert.lastTriggeredAt).toLocaleString()}` : ""}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 rounded-xl"
+                              onClick={() => testKeywordAlert.mutate(alert.id)}
+                              disabled={testKeywordAlert.isPending}
+                            >
+                              Test
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="w-7 h-7 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => setPendingDelete({ type: "keyword-alert", id: alert.id, name: alert.name })}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </TabsContent>
           </div>
         </Tabs>
         <FeedEditDialog
@@ -1240,6 +1473,8 @@ export function FeedManagement({
                       ? "label"
                       : pendingDelete?.type === "auto-read-rule"
                         ? "rule"
+                        : pendingDelete?.type === "keyword-alert"
+                          ? "alert"
                         : "saved search"}?
               </AlertDialogTitle>
               <AlertDialogDescription>
@@ -1260,6 +1495,8 @@ export function FeedManagement({
                     deleteLabel.mutate(pendingDelete.id);
                   } else if (pendingDelete.type === "auto-read-rule") {
                     deleteAutoReadRule.mutate(pendingDelete.id);
+                  } else if (pendingDelete.type === "keyword-alert") {
+                    deleteKeywordAlert.mutate(pendingDelete.id);
                   } else {
                     deleteSavedSearch.mutate(pendingDelete.id);
                   }

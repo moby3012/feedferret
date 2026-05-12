@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -39,6 +40,14 @@ interface FeedEditDialogProps {
     fullTextSelector?: string | null;
     fullTextRemoveSelectors?: string | null;
     autoFetchFullText?: boolean;
+    sourceType?: string | null;
+    priority?: string | null;
+    unicityCriteria?: string | null;
+    unicityCriteriaForced?: boolean;
+    scraperConfig?: string | null;
+    httpOptions?: string | null;
+    fullTextConditions?: string | null;
+    filtersActionRead?: string | null;
   } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,7 +67,15 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const [maxSizeKb, setMaxSizeKb] = useState("");
   const [fullTextSelector, setFullTextSelector] = useState("");
   const [fullTextRemoveSelectors, setFullTextRemoveSelectors] = useState("");
+  const [fullTextConditions, setFullTextConditions] = useState("");
   const [autoFetchFullText, setAutoFetchFullText] = useState(false);
+  const [sourceType, setSourceType] = useState("rss");
+  const [priority, setPriority] = useState("main");
+  const [unicityCriteria, setUnicityCriteria] = useState("id");
+  const [unicityCriteriaForced, setUnicityCriteriaForced] = useState(false);
+  const [scraperConfig, setScraperConfig] = useState("");
+  const [httpOptions, setHttpOptions] = useState("");
+  const [filtersActionRead, setFiltersActionRead] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewResult, setPreviewResult] = useState<{
     html: string;
@@ -78,7 +95,15 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     setMaxSizeKb(feed.maxSizeKb ? String(feed.maxSizeKb) : "");
     setFullTextSelector(feed.fullTextSelector || "");
     setFullTextRemoveSelectors(feed.fullTextRemoveSelectors || "");
+    setFullTextConditions(feed.fullTextConditions || "");
     setAutoFetchFullText(feed.autoFetchFullText ?? false);
+    setSourceType(feed.sourceType || "rss");
+    setPriority(feed.priority || "main");
+    setUnicityCriteria(feed.unicityCriteria || "id");
+    setUnicityCriteriaForced(feed.unicityCriteriaForced ?? false);
+    setScraperConfig(feed.scraperConfig || "");
+    setHttpOptions(feed.httpOptions || "");
+    setFiltersActionRead(feed.filtersActionRead || "");
     setPreviewResult(null);
     setPreviewUrl("");
   }, [feed]);
@@ -99,7 +124,15 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           maxSizeKb: maxSizeKb ? parseInt(maxSizeKb) : null,
           fullTextSelector: fullTextSelector.trim() || null,
           fullTextRemoveSelectors: fullTextRemoveSelectors.trim() || null,
+          fullTextConditions: fullTextConditions.trim() || null,
           autoFetchFullText,
+          sourceType,
+          priority,
+          unicityCriteria: unicityCriteria.trim() || "id",
+          unicityCriteriaForced,
+          scraperConfig: scraperConfig.trim() || null,
+          httpOptions: httpOptions.trim() || null,
+          filtersActionRead: filtersActionRead.trim() || null,
         },
       },
       {
@@ -150,6 +183,9 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               </TabsTrigger>
               <TabsTrigger value="fulltext" className="rounded-xl px-5 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm text-sm">
                 Full-Text
+              </TabsTrigger>
+              <TabsTrigger value="freshrss" className="rounded-xl px-5 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm text-sm">
+                FreshRSS
               </TabsTrigger>
             </TabsList>
           </div>
@@ -326,6 +362,99 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                     />
                   </div>
                 )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="freshrss" className="mt-0 space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Source type</Label>
+                  <Select value={sourceType} onValueChange={setSourceType}>
+                    <SelectTrigger className="rounded-xl h-10 border-border/70 bg-background/70">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl">
+                      <SelectItem value="rss">RSS / Atom</SelectItem>
+                      <SelectItem value="JSONFeed">JSON Feed</SelectItem>
+                      <SelectItem value="JSON+DotNotation">JSON + DotNotation</SelectItem>
+                      <SelectItem value="HTML+XPath">HTML + XPath</SelectItem>
+                      <SelectItem value="XML+XPath">XML + XPath</SelectItem>
+                      <SelectItem value="HTML+XPath+JSON+DotNotation">HTML + XPath + JSON</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Priority</Label>
+                  <Select value={priority} onValueChange={setPriority}>
+                    <SelectTrigger className="rounded-xl h-10 border-border/70 bg-background/70">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl">
+                      <SelectItem value="important">Important</SelectItem>
+                      <SelectItem value="main">Main stream</SelectItem>
+                      <SelectItem value="category">Category only</SelectItem>
+                      <SelectItem value="feed">Feed only</SelectItem>
+                      <SelectItem value="hidden">Hidden</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-[1fr_auto] gap-4 items-end">
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Unicity criteria</Label>
+                  <Input
+                    value={unicityCriteria}
+                    onChange={(e) => setUnicityCriteria(e.target.value)}
+                    placeholder="id, link, title, title:link"
+                    className="rounded-xl h-10 border-border/70 bg-background/70 font-mono text-sm"
+                  />
+                </div>
+                <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
+                  <span className="text-sm">Forced</span>
+                  <Switch checked={unicityCriteriaForced} onCheckedChange={setUnicityCriteriaForced} />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Scraper config JSON</Label>
+                <Textarea
+                  value={scraperConfig}
+                  onChange={(e) => setScraperConfig(e.target.value)}
+                  placeholder='{\"xpath\":{\"xPathItem\":\"//article\",\"xPathItemTitle\":\".//h2\"}}'
+                  className="min-h-28 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
+                />
+                <p className="text-xs text-muted-foreground">Stores FreshRSS XPath / JSON DotNotation settings imported from OPML.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">HTTP / cURL options JSON</Label>
+                <Textarea
+                  value={httpOptions}
+                  onChange={(e) => setHttpOptions(e.target.value)}
+                  placeholder='{\"CURLOPT_HTTPHEADER\":\"Accept: application/json\",\"CURLOPT_USERAGENT\":\"FeedFerret\"}'
+                  className="min-h-24 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Full-content conditions</Label>
+                <Textarea
+                  value={fullTextConditions}
+                  onChange={(e) => setFullTextConditions(e.target.value)}
+                  placeholder="FreshRSS cssFullContentConditions, one per line"
+                  className="min-h-20 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Auto-read filters</Label>
+                <Textarea
+                  value={filtersActionRead}
+                  onChange={(e) => setFiltersActionRead(e.target.value)}
+                  placeholder="FreshRSS filtersActionRead, one per line"
+                  className="min-h-20 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
+                />
               </div>
             </TabsContent>
           </div>

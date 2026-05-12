@@ -24,10 +24,17 @@ import {
   CheckCheck,
   BookmarkPlus,
   Keyboard,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useState } from "react";
+import {
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotifications,
+  useUnreadNotificationCount,
+} from "@/hooks/use-rss-data";
 
 export type ViewMode = "list" | "magazine" | "minimal";
 
@@ -67,6 +74,10 @@ export function RssHeader({
   onShowShortcuts,
 }: RssHeaderProps) {
   const [showSearch, setShowSearch] = useState(!!searchQuery);
+  const { data: notifications = [] } = useNotifications();
+  const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
+  const markNotificationRead = useMarkNotificationRead();
+  const markAllNotificationsRead = useMarkAllNotificationsRead();
 
   return (
     <header className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-border/60 bg-card/75 backdrop-blur-2xl animate-fade-in relative z-20">
@@ -123,6 +134,70 @@ export function RssHeader({
             autoFocus
           />
         )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 relative",
+                unreadNotifications ? "text-accent bg-accent/10" : "text-muted-foreground",
+              )}
+            >
+              <Bell className="w-4 h-4" />
+              {unreadNotifications > 0 && (
+                <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-bold leading-4 text-destructive-foreground">
+                  {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-80 rounded-2xl border-border/70 p-2">
+            <div className="flex items-center justify-between px-2 py-1.5">
+              <p className="text-sm font-semibold">Notifications</p>
+              {unreadNotifications > 0 && (
+                <button
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => markAllNotificationsRead.mutate()}
+                >
+                  Mark all read
+                </button>
+              )}
+            </div>
+            <DropdownMenuSeparator />
+            {notifications.length === 0 ? (
+              <div className="px-2 py-8 text-center text-sm text-muted-foreground">
+                No notifications yet.
+              </div>
+            ) : (
+              notifications.slice(0, 8).map((notification: any) => (
+                <DropdownMenuItem
+                  key={notification.id}
+                  className="items-start gap-3 rounded-xl px-2 py-2"
+                  onClick={() => {
+                    if (!notification.isRead) markNotificationRead.mutate(notification.id);
+                    if (notification.articleId) {
+                      window.location.href = `/?article=${encodeURIComponent(notification.articleId)}`;
+                    }
+                  }}
+                >
+                  <span
+                    className={cn(
+                      "mt-1 h-2 w-2 shrink-0 rounded-full",
+                      notification.isRead ? "bg-muted" : "bg-accent",
+                    )}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{notification.title}</span>
+                    <span className="line-clamp-2 text-xs text-muted-foreground">
+                      {notification.body}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              ))
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button
           variant="ghost"
           size="sm"

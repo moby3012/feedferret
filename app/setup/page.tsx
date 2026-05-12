@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -172,7 +173,7 @@ export default function SetupPage() {
         {/* Logo */}
         <div className="text-center mb-8 group">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-white/10 bg-zinc-900/50 p-3 mb-5 shadow-2xl">
-            <img src="/logo.svg" alt="FeedFerret" className="w-full h-full opacity-90" />
+            <Image src="/logo.svg" alt="FeedFerret" width={44} height={44} className="w-full h-full opacity-90" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">
             Feed<span className="text-zinc-400">Ferret</span> Setup
