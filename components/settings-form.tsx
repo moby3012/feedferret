@@ -1323,7 +1323,7 @@ function AiSummarySection() {
         <div>
           <h2 className="text-lg font-semibold tracking-[-0.02em]">AI Summaries (BYOK)</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Summarize articles on demand using your own OpenAI, Anthropic, or Ollama credentials. Your API key is encrypted at rest and never shared.
+            Summarize articles on demand or automatically on sync using your own OpenAI, Anthropic, Gemini, OpenRouter, or Ollama credentials. Your API key is encrypted at rest and never shared.
           </p>
         </div>
       </div>

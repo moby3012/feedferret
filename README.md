@@ -10,6 +10,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 - **Advanced Search**: Full query syntax — filter by feed, category, `is:starred`, `is:unread`, `label:`, date ranges. Save searches for quick access.
 - **Auto-Mark-as-Read Rules**: Define filter rules (feed/category/query) that auto-mark, star, or label articles on sync. Preview matches before enabling.
 - **Keyword Alerts**: Watch new articles with saved queries and receive in-app notifications or optional browser push alerts.
+- **AI Summaries (BYOK)**: Optional article summaries on demand or during sync with user-provided OpenAI, Anthropic, Gemini, OpenRouter, or Ollama credentials.
 - **Full-Text Extraction**: Per-feed CSS selectors to fetch full article content from truncated feeds. Auto-fetch on sync.
 - **Feed Authentication**: HTTP Basic Auth, custom User-Agent, timeout, SSL verification, and max-size per feed.
 - **Retention Policies**: Keep minimum N articles per feed, never delete starred/labelled articles, dry-run purge preview.
@@ -86,6 +87,8 @@ NEXTAUTH_SECRET="$(openssl rand -base64 32)"
 NEXTAUTH_URL="https://your-domain.example.com"
 POSTGRES_PASSWORD="change-me-to-something-strong"
 ```
+
+> **Security:** Keep `AUTH_SECRET` or `NEXTAUTH_SECRET` stable across deploys. FeedFerret uses it to encrypt stored API keys, including AI summary credentials.
 
 The `DATABASE_PROVIDER`, `DATABASE_URL`, `POSTGRES_DB`, and `POSTGRES_USER` are pre-filled in `.env.example` and work out of the box.
 

@@ -82,14 +82,15 @@ Last reviewed: 2026-05-12. This file is the active planning list; detailed next-
 - [x] Add “Discover” panel in Add Feed dialog for related feeds and starter packs
 
 ### 5. AI Article Summaries (BYOK) — ✅ Done (2026-05-12)
-**Goal:** summarize articles on demand or on sync with user-provided OpenAI/Anthropic/Ollama credentials.
+**Goal:** summarize articles on demand or on sync with user-provided OpenAI/Anthropic/Gemini/OpenRouter/Ollama credentials.
 
 - [x] Add user AI settings (`aiProvider`, encrypted API key, model, Ollama base URL, auto-summarize, language)
 - [x] Add article summary fields (`aiSummary`, `aiSummarizedAt`)
 - [x] Implement `lib/ai-summary.ts` with provider adapters and 8k-char input cap
-- [x] Add on-demand summarize action and optional auto-summarize hook (rate-limited)
+- [x] Add on-demand summarize action and rate-limited auto-summarize hook on sync
 - [x] Add Settings → AI Summaries section with provider/key/model/Ollama URL/language/test controls
 - [x] Add article-reader summary card, loading state, cached display, regenerate action
+- [x] Surface cached AI summaries in digest emails
 
 ### 6. Reader Client Compatibility QA — Medium Effort
 **Goal:** validate the GReader API against real clients and tune quirks.

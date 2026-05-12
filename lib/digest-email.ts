@@ -21,6 +21,15 @@ export interface DigestEmailOptions {
   baseUrl: string;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function buildHtml(opts: DigestEmailOptions): string {
   const { userName, articles, unsubscribeToken, baseUrl } = opts;
   const unsubUrl = `${baseUrl}/api/digest/unsubscribe?token=${unsubscribeToken}`;
@@ -29,21 +38,21 @@ function buildHtml(opts: DigestEmailOptions): string {
   const articleRows = articles
     .map((a) => {
       const blurb = a.aiSummary
-        ? `<p style="margin:6px 0 0;font-size:14px;color:#374151;line-height:1.6;font-family:sans-serif;">${a.aiSummary}</p><div style="margin-top:4px;font-size:11px;color:#9ca3af;font-family:sans-serif;">✦ AI summary</div>`
+        ? `<p style="margin:6px 0 0;font-size:14px;color:#374151;line-height:1.6;font-family:sans-serif;white-space:pre-wrap;">${escapeHtml(a.aiSummary)}</p><div style="margin-top:4px;font-size:11px;color:#9ca3af;font-family:sans-serif;">✦ AI summary</div>`
         : a.excerpt
-          ? `<p style="margin:6px 0 0;font-size:14px;color:#6b7280;line-height:1.6;font-family:sans-serif;">${a.excerpt.slice(0, 200)}${a.excerpt.length > 200 ? "…" : ""}</p>`
+          ? `<p style="margin:6px 0 0;font-size:14px;color:#6b7280;line-height:1.6;font-family:sans-serif;">${escapeHtml(a.excerpt.slice(0, 200))}${a.excerpt.length > 200 ? "…" : ""}</p>`
           : "";
       return `
       <tr>
         <td style="padding:16px 0;border-bottom:1px solid #e5e7eb;">
           <div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-family:sans-serif;">
-            ${a.feedIcon ?? "📰"} ${a.feedName} &nbsp;·&nbsp; ${new Date(a.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            ${escapeHtml(a.feedIcon ?? "📰")} ${escapeHtml(a.feedName)} &nbsp;·&nbsp; ${new Date(a.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
           </div>
-          <a href="${a.link}" style="font-size:16px;font-weight:600;color:#111827;text-decoration:none;line-height:1.4;font-family:sans-serif;">
-            ${a.title}
+          <a href="${escapeHtml(a.link)}" style="font-size:16px;font-weight:600;color:#111827;text-decoration:none;line-height:1.4;font-family:sans-serif;">
+            ${escapeHtml(a.title)}
           </a>
           ${blurb}
-          ${a.author ? `<div style="margin-top:6px;font-size:12px;color:#9ca3af;font-family:sans-serif;">By ${a.author}</div>` : ""}
+          ${a.author ? `<div style="margin-top:6px;font-size:12px;color:#9ca3af;font-family:sans-serif;">By ${escapeHtml(a.author)}</div>` : ""}
         </td>
       </tr>`;
     })
@@ -64,7 +73,7 @@ function buildHtml(opts: DigestEmailOptions): string {
         </tr>
         <tr>
           <td style="padding:24px 32px 8px;font-family:sans-serif;">
-            <p style="margin:0;font-size:15px;color:#374151;">${greeting},</p>
+            <p style="margin:0;font-size:15px;color:#374151;">${escapeHtml(greeting)},</p>
             <p style="margin:8px 0 0;font-size:15px;color:#374151;">Here are <strong>${articles.length}</strong> article${articles.length !== 1 ? "s" : ""} from your feeds.</p>
           </td>
         </tr>
@@ -77,7 +86,7 @@ function buildHtml(opts: DigestEmailOptions): string {
         </tr>
         <tr>
           <td style="padding:0 32px 32px;">
-            <a href="${baseUrl}" style="display:inline-block;background:#111827;color:#ffffff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;font-family:sans-serif;">
+            <a href="${escapeHtml(baseUrl)}" style="display:inline-block;background:#111827;color:#ffffff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;font-family:sans-serif;">
               Open FeedFerret →
             </a>
           </td>
@@ -87,7 +96,7 @@ function buildHtml(opts: DigestEmailOptions): string {
             <p style="margin:0;font-size:12px;color:#9ca3af;font-family:sans-serif;">
               You're receiving this because you enabled email digests in FeedFerret.
               &nbsp;·&nbsp;
-              <a href="${unsubUrl}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
+              <a href="${escapeHtml(unsubUrl)}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
             </p>
           </td>
         </tr>

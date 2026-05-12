@@ -7,6 +7,7 @@ import { randomBytes } from "crypto";
 import { sendDigestEmail, getDigestArticles } from "@/lib/digest-email";
 import { buildOtpAuthUri, generateTotpSecret, verifyTotpToken } from "@/lib/totp";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
+import type { AiProvider } from "@/lib/ai-summary";
 
 async function requireUser() {
   const session = await auth();
@@ -330,7 +331,7 @@ export async function testAiConnection(): Promise<{ success: boolean; error?: st
   try {
     const { generateSummary } = await import("@/lib/ai-summary");
     await generateSummary("Short test content for connectivity verification.", {
-      provider: user.aiProvider as "openai" | "anthropic" | "ollama",
+      provider: user.aiProvider as AiProvider,
       apiKey: decryptIfValue(user.aiApiKey),
       model: user.aiModel,
       ollamaBaseUrl: user.aiOllamaBaseUrl,

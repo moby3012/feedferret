@@ -8,11 +8,15 @@ import { syncDynamicOpmlCategories } from "./dynamic-opml";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { computeContentHash } from "./content-hash";
 import { dispatchWebhookEvent } from "./webhooks";
+import { decryptIfValue } from "./crypto";
+import type { AiConfig } from "./ai-summary";
 
 async function getSanitizer() {
     const { default: DOMPurify } = await import("isomorphic-dompurify");
     return DOMPurify;
 }
+
+const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 
 /**
  * Syncs a single feed for a specific user.
@@ -134,6 +138,10 @@ export async function syncFeed(userId: string, feedId: string) {
         // Auto full-text extraction for newly synced articles
         if (feed.autoFetchFullText && upsertedIds.length > 0) {
             await autoFetchFullTextForArticles(userId, upsertedIds, feed);
+        }
+
+        if (createdArticleIds.length > 0) {
+            await autoSummarizeNewArticles(userId, createdArticleIds);
         }
 
         if (createdArticleIds.length > 0) {
@@ -261,6 +269,58 @@ async function autoFetchFullTextForArticles(
             });
         } catch (e) {
             console.warn(`[rss-sync] autoFetchFullText failed for ${article.link}:`, e);
+        }
+    }
+}
+
+async function autoSummarizeNewArticles(userId: string, articleIds: string[]) {
+    const user = await db.user.findUnique({
+        where: { id: userId },
+        select: {
+            aiAutoSummarize: true,
+            aiProvider: true,
+            aiApiKey: true,
+            aiModel: true,
+            aiOllamaBaseUrl: true,
+            aiSummaryLanguage: true,
+        },
+    });
+
+    if (!user?.aiAutoSummarize || !user.aiProvider) return;
+
+    const { generateSummary } = await import("./ai-summary");
+
+    const articles = await db.article.findMany({
+        where: {
+            id: { in: articleIds },
+            userId,
+            isDuplicate: false,
+            aiSummary: null,
+        },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, content: true },
+        take: MAX_AUTO_SUMMARIES_PER_SYNC,
+    });
+
+    for (const article of articles) {
+        const content = article.content?.trim();
+        if (!content) continue;
+
+        try {
+            const summary = await generateSummary(content, {
+                provider: user.aiProvider as AiConfig["provider"],
+                apiKey: decryptIfValue(user.aiApiKey),
+                model: user.aiModel,
+                ollamaBaseUrl: user.aiOllamaBaseUrl,
+                language: user.aiSummaryLanguage,
+            });
+
+            await db.article.update({
+                where: { id: article.id },
+                data: { aiSummary: summary, aiSummarizedAt: new Date() },
+            });
+        } catch (error) {
+            console.error("[rss-sync] auto-summary failed:", error);
         }
     }
 }

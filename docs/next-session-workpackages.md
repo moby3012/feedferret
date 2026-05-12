@@ -91,21 +91,23 @@ Privacy/network notes:
 **Implemented 2026-05-12.**
 
 Schema:
-- `User`: `aiProvider` (openai/anthropic/ollama), `aiApiKey` (AES-256-GCM encrypted), `aiModel`, `aiOllamaBaseUrl`, `aiAutoSummarize`, `aiSummaryLanguage`.
+- `User`: `aiProvider` (openai/anthropic/ollama/gemini/openrouter), `aiApiKey` (AES-256-GCM encrypted), `aiModel`, `aiOllamaBaseUrl`, `aiAutoSummarize`, `aiSummaryLanguage`.
 - `Article`: `aiSummary`, `aiSummarizedAt`.
 
 Architecture:
-- `lib/ai-summary.ts`: `generateSummary(content, config)` with provider adapters for OpenAI (`gpt-4o-mini` default), Anthropic (`claude-haiku-4-5-20251001` default), Ollama (`llama3` default). Input capped at 8 000 chars. HTML stripped before sending.
+- `lib/ai-summary.ts`: `generateSummary(content, config)` with provider adapters for OpenAI (`gpt-4o-mini` default), Anthropic (`claude-haiku-4-5-20251001` default), Ollama (`llama3` default), Gemini (`gemini-1.5-flash` default), and OpenRouter (`openai/gpt-4o-mini` default). Input capped at 8 000 chars. HTML stripped before sending.
 - `app/actions/settings.ts`: `getAiSettings`, `updateAiSettings`, `testAiConnection`.
 - `app/actions/feeds.ts`: `summarizeArticle(articleId)` — fetches article + user AI config, generates summary, persists to DB.
 - `hooks/use-rss-data.ts`: `useAiSettings`, `useUpdateAiSettings`, `useTestAiConnection`, `useSummarizeArticle`.
 - `components/settings-form.tsx`: AI Summaries section — provider/key/model/Ollama URL/language/auto-summarize toggle/test button.
 - `components/article-reader.tsx`: Summary card above article body — shows cached summary or placeholder. Summarize/Regenerate button triggers on-demand summarization. Local state shows result immediately without waiting for query refetch.
+- `lib/rss-sync.ts`: capped auto-summarize pass for newly created articles when the user enables it.
+- `lib/digest-email.ts`: digest emails show cached AI summaries when present.
 
 Privacy/cost notes:
 - API key encrypted with AES-256-GCM using `AUTH_SECRET` as key material.
 - Summarization is on-demand only unless `aiAutoSummarize` is enabled.
-- Auto-summarize is a stored preference; the actual rate-limiting enforcement is left to future background-sync integration.
+- Auto-summarize runs during sync and is capped per sync to avoid runaway API usage.
 
 ## 6. Reader Client Compatibility QA — Medium
 

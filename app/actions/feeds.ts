@@ -17,6 +17,7 @@ import { normalizeSourceType, stringifyNonEmpty } from "@/lib/freshrss-opml";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { randomBytes } from "crypto";
 import { decryptIfValue } from "@/lib/crypto";
+import type { AiProvider } from "@/lib/ai-summary";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -1350,7 +1351,7 @@ export async function summarizeArticle(articleId: string): Promise<{ summary: st
     const { generateSummary } = await import("@/lib/ai-summary");
 
     const summary = await generateSummary(article.content, {
-        provider: user.aiProvider as "openai" | "anthropic" | "ollama",
+        provider: user.aiProvider as AiProvider,
         apiKey: decryptIfValue(user.aiApiKey),
         model: user.aiModel,
         ollamaBaseUrl: user.aiOllamaBaseUrl,
