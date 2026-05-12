@@ -1,6 +1,6 @@
 # PWA Push Notifications & Badging TODO
 
-This document tracks remaining PWA polish. Browser push notifications have been implemented; badge/offline/install-surface work remains best-effort and platform-dependent.
+This document tracks PWA push, badging, and polish status. Browser push, centralized badge updates, manifest screenshots, deep links, Lighthouse CI checks, and a cached-article offline fallback are implemented; all badge behavior remains best-effort because browser support differs.
 
 ## Already done
 
@@ -56,35 +56,34 @@ Remaining push-adjacent follow-ups:
 - Dedicated durable notification queue if multi-process delivery/retry semantics become necessary.
 - More granular rule/search-triggered notification controls once Keyword Alerts exist.
 
-## TODO: Better app badging
+## Better app badging ✅ Implemented
 
-Current badge implementation is client-side and best-effort. A more complete version should:
+Current badge implementation remains best-effort because browser support differs, but the FeedFerret logic is now centralized:
 
-1. Centralize unread count calculation in a shared hook.
-2. Update badge after:
-   - article read/unread toggle
-   - sync completion
-   - mark all read
-   - push notification receipt
-3. Clear badge on sign-out.
-4. In service worker, call badge APIs when a push payload contains `unreadCount`:
-   - `self.navigator.setAppBadge(count)` where supported
-   - `self.navigator.clearAppBadge()` when count is zero
-5. Keep graceful fallbacks because many browsers do not support app badges.
+1. [x] Unread count calculation lives in `hooks/use-app-badge.ts`.
+2. [x] App badge updates when the shared feed unread count changes, covering read/unread toggles, sync completion, and mark-all-read invalidations.
+3. [x] Badge is cleared when the app is not authenticated/enabled.
+4. [x] Service worker updates badges from push payload `unreadCount` and accepts `SET_BADGE`/`CLEAR_BADGE` messages from the app.
+5. [x] Badge calls remain wrapped as progressive enhancement with graceful fallbacks.
 
-## TODO: PWA polish
+## PWA polish ✅ Implemented
 
-- Add real manifest screenshots for install prompts/store surfaces:
-  - mobile narrow screenshot
-  - desktop wide screenshot
-- Consider richer shortcuts once deep links exist:
-  - `/ ?view=new`
-  - `/ ?view=readlater`
+- [x] Added manifest screenshots for install prompts/store surfaces:
+  - mobile narrow screenshot: `/screenshots/mobile-narrow.svg`
+  - desktop wide screenshot: `/screenshots/desktop-wide.svg`
+- [x] Added richer shortcuts:
+  - `/?view=new`
+  - `/?view=readlater`
+  - `/?view=starred`
   - `/settings`
-- Add proper deep-link handling for shortcuts.
-- Consider caching the app shell more aggressively after auth/offline behavior is designed.
-- Add an offline mode for already cached articles only if content privacy and storage limits are addressed.
-- Add automated Lighthouse/PWA checks to CI.
+- [x] Added proper deep-link handling for shortcuts and notification links:
+  - `view=new|readlater|starred|all`
+  - `article=<id>`
+- [x] Service worker now caches runtime app shell assets with stale-while-revalidate.
+- [x] Added optional offline mode for already cached articles via a local device snapshot of recent articles.
+- [x] Added automated PWA checks and Lighthouse CI workflow:
+  - `pnpm run pwa:check`
+  - `.github/workflows/pwa.yml`
 
 ## Implementation update — 2026-05-11
 

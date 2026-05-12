@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/resizable";
 import { hasUsers } from "./actions/onboarding";
 import { useRouter } from "next/navigation";
+import { useAppBadge, useUnreadBadgeCount } from "@/hooks/use-app-badge";
+import { useOfflineArticleCache } from "@/hooks/use-offline-articles";
 
 function toUiArticle(a: any) {
   const publishedAt = new Date(a.publishedAt);
@@ -83,32 +85,15 @@ export default function RSSReaderPage() {
   const setArticleLabels = useSetArticleLabels();
   const { data: readingPrefs } = useReadingPreferences();
 
-  const unreadBadgeCount = useMemo(() => {
-    return feeds.reduce((sum: number, feed: any) => sum + (feed._count?.articles || 0), 0);
-  }, [feeds]);
-
-  useEffect(() => {
-    const badgeNavigator = navigator as Navigator & {
-      setAppBadge?: (contents?: number) => Promise<void>;
-      clearAppBadge?: () => Promise<void>;
-    };
-
-    if (!badgeNavigator.setAppBadge) return;
-
-    const updateBadge =
-      unreadBadgeCount > 0
-        ? badgeNavigator.setAppBadge(unreadBadgeCount)
-        : badgeNavigator.clearAppBadge?.();
-
-    updateBadge?.catch(() => {
-      // Badging is optional and platform-dependent.
-    });
-  }, [unreadBadgeCount]);
+  const unreadBadgeCount = useUnreadBadgeCount(feeds);
+  useAppBadge(unreadBadgeCount, status === "authenticated");
 
   const [readInSession, setReadInSession] = useState<string[]>([]);
   const [autoReadSuppressedArticles, setAutoReadSuppressedArticles] = useState<string[]>([]);
   const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
   const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);
+  const deepLinkAppliedRef = useRef(false);
+  const articleDeepLinkRef = useRef<string | null>(null);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
@@ -135,6 +120,29 @@ export default function RSSReaderPage() {
     setSelectedArticleSnapshot(null);
   }, [selectedFeed, selectedCategory]);
 
+  useEffect(() => {
+    if (deepLinkAppliedRef.current || status !== "authenticated") return;
+    deepLinkAppliedRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get("view");
+    const articleId = params.get("article");
+    if (articleId) articleDeepLinkRef.current = articleId;
+
+    if (view === "new") {
+      setSelectedCategory("New Articles");
+      setSelectedFeed(null);
+    } else if (view === "readlater") {
+      setSelectedCategory("Read Later");
+      setSelectedFeed(null);
+    } else if (view === "starred") {
+      setSelectedCategory("Starred");
+      setSelectedFeed(null);
+    } else if (view === "all") {
+      setSelectedCategory("All Articles");
+      setSelectedFeed(null);
+    }
+  }, [status]);
+
   // Auto-sync feeds on page load (lazy sync)
   useEffect(() => {
     if (status === "authenticated") {
@@ -149,10 +157,12 @@ export default function RSSReaderPage() {
     }
   }, [status]);
 
+  const { articles: cachedRawArticles, isOffline, hasOfflineSnapshot } = useOfflineArticleCache(rawArticles);
+
   // Transform articles for UI components
   const articles = useMemo(() => {
-    return rawArticles.map(toUiArticle);
-  }, [rawArticles]);
+    return cachedRawArticles.map(toUiArticle);
+  }, [cachedRawArticles]);
 
   const displayArticles = useMemo(() => {
     const byId = new Map<string, any>();
@@ -169,6 +179,16 @@ export default function RSSReaderPage() {
       : null,
     [displayArticles, selectedArticleId, selectedArticleSnapshot],
   );
+
+  useEffect(() => {
+    const articleId = articleDeepLinkRef.current;
+    if (!articleId || selectedArticleId) return;
+    const article = displayArticles.find((item: any) => item.id === articleId);
+    if (!article) return;
+    setSelectedArticleId(article.id);
+    setSelectedArticleSnapshot(article);
+    articleDeepLinkRef.current = null;
+  }, [displayArticles, selectedArticleId]);
 
 
   const filteredArticles = useMemo(() => {
@@ -593,6 +613,11 @@ export default function RSSReaderPage() {
               onSaveSearch={handleSaveSearch}
               onShowShortcuts={() => setShortcutsOpen(true)}
             />
+            {isOffline && hasOfflineSnapshot && (
+              <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
+                Offline mode: showing cached articles from this device.
+              </div>
+            )}
             <ArticleList
               articles={filteredArticles}
               selectedArticle={selectedArticle}
@@ -660,6 +685,11 @@ export default function RSSReaderPage() {
           onSaveSearch={handleSaveSearch}
           onShowShortcuts={() => setShortcutsOpen(true)}
         />
+        {isOffline && hasOfflineSnapshot && (
+          <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
+            Offline mode: showing cached articles from this device.
+          </div>
+        )}
         <ArticleList
           articles={filteredArticles}
           selectedArticle={selectedArticle}

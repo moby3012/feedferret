@@ -1,4 +1,5 @@
-const CACHE_NAME = "feedferret-pwa-v1";
+const CACHE_NAME = "feedferret-pwa-v2";
+const RUNTIME_CACHE = "feedferret-runtime-v1";
 const PRECACHE_URLS = [
   "/offline.html",
   "/manifest.json",
@@ -7,6 +8,8 @@ const PRECACHE_URLS = [
   "/icon-192-maskable.png",
   "/icon-512.png",
   "/icon-512-maskable.png",
+  "/screenshots/mobile-narrow.svg",
+  "/screenshots/desktop-wide.svg",
 ];
 
 self.addEventListener("install", (event) => {
@@ -23,11 +26,27 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))),
+        Promise.all(
+          keys
+            .filter((key) => ![CACHE_NAME, RUNTIME_CACHE].includes(key))
+            .map((key) => caches.delete(key)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
 });
+
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(RUNTIME_CACHE);
+  const cached = await cache.match(request);
+  const network = fetch(request)
+    .then((response) => {
+      if (response.ok) cache.put(request, response.clone());
+      return response;
+    })
+    .catch(() => cached);
+  return cached || network;
+}
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -38,7 +57,13 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/offline.html")),
+      fetch(request)
+        .then(async (response) => {
+          const cache = await caches.open(RUNTIME_CACHE);
+          cache.put(request, response.clone());
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match("/offline.html"))),
     );
     return;
   }
@@ -47,6 +72,16 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       caches.match(request).then((cached) => cached || fetch(request)),
     );
+    return;
+  }
+
+  if (
+    request.destination === "script" ||
+    request.destination === "style" ||
+    request.destination === "image" ||
+    request.destination === "font"
+  ) {
+    event.respondWith(staleWhileRevalidate(request));
   }
 });
 
@@ -62,6 +97,15 @@ async function updateBadge(count) {
     // Badging is best-effort and unsupported on many browsers.
   }
 }
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SET_BADGE") {
+    event.waitUntil(updateBadge(event.data.count));
+  }
+  if (event.data?.type === "CLEAR_BADGE") {
+    event.waitUntil(updateBadge(0));
+  }
+});
 
 self.addEventListener("push", (event) => {
   let payload = {};

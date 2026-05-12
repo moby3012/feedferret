@@ -32,7 +32,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
   - `Shift+S`: Save current search
   - `Shift+A`: Mark all as read
   - `?`: Show shortcut help overlay
-- **PWA Support**: Install on mobile for a native-like experience.
+- **PWA Support**: Install on mobile for a native-like experience with app shortcuts, best-effort badging, and cached-article offline fallback.
 - **Flexible Email Delivery**: SMTP or API-based delivery with Resend, Postmark, Mailgun, or SendGrid — configurable via Admin UI (credentials stored encrypted) or environment variables.
 - **Admin Onboarding Wizard**: Multi-step setup flow for first-time admins — account creation, instance settings, email, and security configuration.
 - **SaaS Provisioning API**: Internal API endpoints for creating and suspending users from external systems (Stripe webhooks, SaaS portals) via Bearer token auth.
