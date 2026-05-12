@@ -131,22 +131,28 @@ Data persists in the `feedferret_db_data` Docker volume.
 
 ### Coolify Deployment
 
-FeedFerret works with Coolify's **Dockerfile** deployment type. In Coolify → Service → Build, set **Build Pack** to `Dockerfile`.
+Use Coolify's **Docker Compose** deployment type — this starts both FeedFerret and PostgreSQL together via `docker-compose.yml` in the repo root.
 
-**Required environment variables** (set in Coolify → Service → Environment):
+**Setup steps:**
 
-| Variable | PostgreSQL value | SQLite value |
-|---|---|---|
-| `DATABASE_PROVIDER` | `postgresql` | `sqlite` |
-| `DATABASE_URL` | `postgresql://feedferret:PASSWORD@postgres:5432/feedferret?schema=public` | `file:/app/data/dev.db` |
-| `POSTGRES_PASSWORD` | your chosen password | — |
-| `AUTH_SECRET` | `openssl rand -base64 32` | same |
-| `AUTH_URL` | your public URL | same |
-| `AUTH_TRUST_HOST` | `true` | `true` |
+1. In Coolify → New Resource → select **Docker Compose**
+2. Point to your repo (GitHub/GitLab) — Coolify auto-detects `docker-compose.yml` in the root
+3. Set environment variables (Coolify → Service → Environment):
 
-> **Important:** Set `DATABASE_PROVIDER` and `DATABASE_URL` as **both** runtime environment variables **and** build arguments in Coolify. The Prisma client is compiled at image build time and must match the runtime provider.
+| Variable | Value |
+|---|---|
+| `DATABASE_PROVIDER` | `postgresql` |
+| `DATABASE_URL` | `postgresql://feedferret:YOUR_PASSWORD@postgres:5432/feedferret?schema=public` |
+| `POSTGRES_DB` | `feedferret` |
+| `POSTGRES_USER` | `feedferret` |
+| `POSTGRES_PASSWORD` | `YOUR_PASSWORD` (same as in DATABASE_URL) |
+| `AUTH_SECRET` | `openssl rand -base64 32` |
+| `AUTH_URL` | `https://your-domain.example.com` |
+| `AUTH_TRUST_HOST` | `true` |
 
-For PostgreSQL in Coolify, the internal Docker hostname for the Postgres container is `postgres` (the service name in `docker-compose.yml`).
+> **Important:** `DATABASE_URL` and `POSTGRES_PASSWORD` must use the **same password**. Also set `DATABASE_PROVIDER` and `DATABASE_URL` as **build arguments** in Coolify — the Prisma client is compiled at build time and must match the runtime provider.
+
+> **Fresh deploy:** If you changed `POSTGRES_PASSWORD` after a previous deploy, delete the `feedferret_postgres_data` volume in Coolify first — PostgreSQL ignores `POSTGRES_PASSWORD` on an already-initialized volume.
 
 ---
 
