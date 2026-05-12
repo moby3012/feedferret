@@ -37,7 +37,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 - **Admin Onboarding Wizard**: Multi-step setup flow for first-time admins — account creation, instance settings, email, and security configuration.
 - **SaaS Provisioning API**: Internal API endpoints for creating and suspending users from external systems (Stripe webhooks, SaaS portals) via Bearer token auth.
 - **GDPR Compliance**: Self-service account deletion (Art. 17) with full cascade removal of all user data.
-- **Self-Hostable**: Simple deployment with Docker and SQLite.
+- **Self-Hostable**: Simple deployment with Docker and SQLite by default, plus optional PostgreSQL via `DATABASE_PROVIDER=postgresql`.
 
 ## 🚀 Getting Started
 
@@ -120,6 +120,11 @@ Full docs: [`docs/internal-api.md`](docs/internal-api.md)
 ### 🛡 GDPR / Right to Erasure
 
 Users can delete their account from **Settings → Delete Account**. All data is cascade-deleted atomically. See [`docs/gdpr.md`](docs/gdpr.md).
+
+
+### 🗄 Database Providers
+
+SQLite is the default. PostgreSQL is available through `DATABASE_PROVIDER=postgresql` and the bundled Docker Compose `postgres` profile. See [`docs/database.md`](docs/database.md) for provider switching, migration, backup, and restore commands.
 
 ### 🐳 Docker Deployment
 

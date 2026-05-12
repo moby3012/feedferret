@@ -188,11 +188,11 @@ These build directly on the features already implemented and bring FeedFerret mu
 Sprint 1 and the Saved Search Sharing / Google Reader API Phase 1 work are complete. Next priorities ordered by value/effort ratio:
 
 1. **External client verification** (#13 follow-up) — test Reeder, NetNewsWire, FeedMe against a deployed instance and tune client-specific GReader quirks.
-2. **Multi-Database / Postgres** (#15) — High effort. Required for production deployments at scale. Prisma already supports it.
-3. **Advanced SSRF Security** (#18) — Very High effort. Critical before recommending multi-user public hosting.
-4. **Duplicate Detection** — Medium effort. Hide or badge repeated articles across feeds.
+2. **Advanced SSRF Security** (#18) — Very High effort. Critical before recommending multi-user public hosting.
+3. **Duplicate Detection** — Medium effort. Hide or badge repeated articles across feeds.
+4. **Outbound Webhooks** — Medium effort. Useful for n8n/Zapier/custom automation.
 
-Recently completed: **Keyword Monitoring & Alerts** with in-app notifications and optional browser push.
+Recently completed: **Multi-Database / Postgres support**, **Keyword Monitoring & Alerts** with in-app notifications and optional browser push.
 
 ## Saved Search Sharing Implementation Notes
 

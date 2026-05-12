@@ -32,12 +32,12 @@ Follow-up ideas: per-share title/description, expiry, analytics, OPML export, te
 - [ ] Test with Reeder / NetNewsWire / FeedMe against a deployed instance
 - [ ] (Stretch) Fever API compatibility
 
-## Multi-Database / Postgres (#15) — High Effort
-- [ ] Document Prisma provider swap (SQLite → Postgres)
-- [ ] Add `DATABASE_PROVIDER` env var to docker-compose
-- [ ] Add Postgres service to docker-compose.yml
-- [ ] Test migration workflow on Postgres
-- [ ] Document backup/restore commands
+## Multi-Database / Postgres (#15) — Completed ✅
+- [x] Document Prisma provider swap (SQLite → Postgres)
+- [x] Add `DATABASE_PROVIDER` env var to docker-compose
+- [x] Add Postgres service to docker-compose.yml
+- [x] Test migration workflow on Postgres (`DATABASE_PROVIDER=postgresql` + `prisma db push`)
+- [x] Document backup/restore commands
 
 ## Advanced SSRF Security (#18) — Very High Effort
 - [ ] Block private IP ranges (RFC1918) in feed fetch by default

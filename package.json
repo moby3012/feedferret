@@ -4,13 +4,16 @@
   "private": true,
   "packageManager": "pnpm@11.0.8",
   "scripts": {
-    "build": "prisma generate && next build",
+    "build": "pnpm run prisma:generate && next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "mkdir -p /app/data && NEXT_TELEMETRY_DISABLED=1 DATABASE_URL=file:/app/data/dev.db npx prisma db push --accept-data-loss && if [ -f server.js ]; then node server.js; else next start; fi",
+    "start": "mkdir -p /app/data && NEXT_TELEMETRY_DISABLED=1 DATABASE_URL=${DATABASE_URL:-file:/app/data/dev.db} DATABASE_PROVIDER=${DATABASE_PROVIDER:-sqlite} pnpm run prisma:push && if [ -f server.js ]; then node server.js; else next start; fi",
     "cli": "node scripts/feedferret-cli.mjs",
     "webpush:keys": "node scripts/generate-web-push-keys.mjs",
-    "pwa:check": "node scripts/check-pwa.mjs"
+    "pwa:check": "node scripts/check-pwa.mjs",
+    "prisma:prepare": "node scripts/prepare-prisma-schema.mjs",
+    "prisma:generate": "pnpm run prisma:prepare && prisma generate --schema prisma/schema.generated.prisma",
+    "prisma:push": "pnpm run prisma:prepare && prisma db push --schema prisma/schema.generated.prisma --accept-data-loss"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
