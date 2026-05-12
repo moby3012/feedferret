@@ -161,6 +161,8 @@ After deploy, open `https://your-domain.example.com/setup` and complete the onbo
 
 **Troubleshooting:** If Coolify logs show `Error: Unauthorized` immediately after the first admin account is created, make sure you deployed a version that includes the setup route auth fix and set `AUTH_TRUST_HOST=true`.
 
+After deploying a new version, hard-refresh already open browser tabs before using forms. Next.js Server Action IDs change per build; requests from an old tab can log `Failed to find Server Action ...` until the page is reloaded.
+
 ---
 
 ## 💻 Local Development
@@ -240,6 +242,7 @@ SYNC_SECRET=$(openssl rand -hex 32)
 - Google Reader compatibility: [`docs/google-reader-api.md`](docs/google-reader-api.md)
 - Outbound webhooks: [`docs/webhooks.md`](docs/webhooks.md)
 - Internal SaaS provisioning API: [`docs/internal-api.md`](docs/internal-api.md)
+- Larger admin/UX follow-up workpackages: [`docs/admin-ux-workpackages.md`](docs/admin-ux-workpackages.md)
 
 ## 🔐 Auth & Email
 

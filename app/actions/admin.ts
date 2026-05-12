@@ -120,7 +120,20 @@ export async function getUsers() {
 }
 
 export async function updateUserRole(userId: string, role: string) {
-  await checkAdmin();
+  const session = await checkAdmin();
+  if (!["ADMIN", "USER"].includes(role)) {
+    throw new Error("Invalid role");
+  }
+  if (session.user.id === userId && role !== "ADMIN") {
+    throw new Error("You cannot remove your own admin rights");
+  }
+  if (role !== "ADMIN") {
+    const adminCount = await db.user.count({ where: { role: "ADMIN" } });
+    const target = await db.user.findUnique({ where: { id: userId }, select: { role: true } });
+    if (target?.role === "ADMIN" && adminCount <= 1) {
+      throw new Error("Cannot remove the last admin");
+    }
+  }
   await db.user.update({
     where: { id: userId },
     data: { role },

@@ -766,31 +766,27 @@ export async function importOpml(xml: string) {
     };
 
     const getOrCreateCategory = async (name: string, parentId?: string | null, opmlUrl?: string | null) => {
-        const existingCategory = await db.category.findUnique({
+        const normalizedParentId = parentId || null;
+        const existingCategory = await db.category.findFirst({
             where: {
-                userId_name_parentId: {
-                    userId,
-                    name,
-                    parentId: (parentId || null) as any,
-                },
-            },
-        });
-        const category = await db.category.upsert({
-            where: {
-                userId_name_parentId: {
-                    userId,
-                    name,
-                    parentId: (parentId || null) as any,
-                },
-            },
-            update: opmlUrl !== undefined ? { opmlUrl } : {},
-            create: {
                 userId,
                 name,
-                parentId: parentId || undefined,
-                opmlUrl: opmlUrl || undefined,
+                parentId: normalizedParentId,
             },
         });
+        const category = existingCategory
+            ? await db.category.update({
+                where: { id: existingCategory.id },
+                data: opmlUrl !== undefined ? { opmlUrl } : {},
+            })
+            : await db.category.create({
+                data: {
+                userId,
+                name,
+                parentId: normalizedParentId,
+                opmlUrl: opmlUrl || undefined,
+                },
+            });
         if (existingCategory) report.categoriesUpdated += 1;
         else report.categoriesAdded += 1;
         return category;

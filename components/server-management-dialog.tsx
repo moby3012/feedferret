@@ -120,8 +120,8 @@ export function ServerManagementDialog({
       await updateUserRole(user.id, newRole);
       setUsers(users.map((u) => (u.id === user.id ? { ...u, role: newRole } : u)));
       toast.success(`Updated ${user.email} to ${newRole}`);
-    } catch {
-      toast.error("Failed to update user role");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to update user role");
     }
   };
 

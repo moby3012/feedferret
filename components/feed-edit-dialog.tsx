@@ -50,6 +50,8 @@ interface FeedEditDialogProps {
     httpOptions?: string | null;
     fullTextConditions?: string | null;
     filtersActionRead?: string | null;
+    retentionDays?: number | null;
+    keepMinArticles?: number | null;
   } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -78,6 +80,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const [scraperConfig, setScraperConfig] = useState("");
   const [httpOptions, setHttpOptions] = useState("");
   const [filtersActionRead, setFiltersActionRead] = useState("");
+  const [retentionDays, setRetentionDays] = useState("");
+  const [keepMinArticles, setKeepMinArticles] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
   const [activeTab, setActiveTab] = useState("auth");
   const [previewResult, setPreviewResult] = useState<{
@@ -108,6 +112,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     setScraperConfig(feed.scraperConfig || "");
     setHttpOptions(feed.httpOptions || "");
     setFiltersActionRead(feed.filtersActionRead || "");
+    setRetentionDays(feed.retentionDays ? String(feed.retentionDays) : "");
+    setKeepMinArticles(feed.keepMinArticles ? String(feed.keepMinArticles) : "");
     setPreviewResult(null);
     setPreviewUrl("");
   }, [feed]);
@@ -137,6 +143,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           scraperConfig: scraperConfig.trim() || null,
           httpOptions: httpOptions.trim() || null,
           filtersActionRead: filtersActionRead.trim() || null,
+          retentionDays: retentionDays ? parseInt(retentionDays) : null,
+          keepMinArticles: keepMinArticles ? parseInt(keepMinArticles) : null,
         },
       },
       {
@@ -184,6 +192,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               options={[
                 { value: "auth", label: "Authentication" },
                 { value: "fetch", label: "Fetch Options" },
+                { value: "retention", label: "Retention" },
                 { value: "fulltext", label: "Full-Text" },
                 { value: "freshrss", label: "FreshRSS" },
               ]}
@@ -236,6 +245,37 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               <p className="text-xs text-muted-foreground">
                 Credentials used when fetching this feed&apos;s RSS/Atom URL.
               </p>
+            </TabsContent>
+
+            <TabsContent value="retention" className="mt-0 space-y-5">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Keep days</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={retentionDays}
+                  onChange={(e) => setRetentionDays(e.target.value)}
+                  placeholder="Use user default"
+                  className="rounded-xl h-10 border-border/70 bg-background/70"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Delete read, unstarred, unlabelled articles older than this many days. Leave empty to use the account default.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Minimum articles to keep</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={keepMinArticles}
+                  onChange={(e) => setKeepMinArticles(e.target.value)}
+                  placeholder="Use user default"
+                  className="rounded-xl h-10 border-border/70 bg-background/70"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Always keep at least this many articles for the feed, even when they are older than the retention window.
+                </p>
+              </div>
             </TabsContent>
 
             <TabsContent value="fetch" className="mt-0 space-y-5">

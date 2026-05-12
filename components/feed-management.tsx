@@ -85,7 +85,6 @@ import {
   Bell,
   History,
   Pencil,
-  ChevronDown,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
 import { toast } from "sonner";
@@ -115,11 +114,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { cn } from "@/lib/utils";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 
 function SortableCategoryItem({
   cat,
@@ -556,56 +550,6 @@ export function FeedManagement({
                             ))}
                           </SelectContent>
                         </Select>
-                        <Collapsible className="sm:relative">
-                          <CollapsibleTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-9 w-full justify-between rounded-2xl border-border/70 bg-background/70 text-xs sm:w-36"
-                            >
-                              Retention
-                              <ChevronDown className="ml-2 h-3.5 w-3.5" />
-                            </Button>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="mt-2 rounded-2xl border border-border/70 bg-background/95 p-3 shadow-xl sm:absolute sm:right-0 sm:z-20 sm:w-64">
-                            <div className="grid gap-3">
-                              <div className="grid gap-1">
-                                <Label className="text-xs text-muted-foreground">Keep days</Label>
-                                <Input
-                                  type="number"
-                                  placeholder="Default"
-                                  defaultValue={feed.retentionDays || ""}
-                                  className="h-9 rounded-2xl border-border/70 bg-background/70 text-xs"
-                                  title="Retention days for read, unstarred, unlabelled articles"
-                                  onBlur={(e) => {
-                                    const value = parseInt(e.target.value, 10);
-                                    updateFeed.mutate({
-                                      feedId: feed.id,
-                                      data: { retentionDays: Number.isNaN(value) ? null : value },
-                                    });
-                                  }}
-                                />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label className="text-xs text-muted-foreground">Minimum articles to keep</Label>
-                                <Input
-                                  type="number"
-                                  placeholder="Default"
-                                  defaultValue={feed.keepMinArticles || ""}
-                                  className="h-9 rounded-2xl border-border/70 bg-background/70 text-xs"
-                                  title="Keep at least N articles per feed regardless of age"
-                                  onBlur={(e) => {
-                                    const value = parseInt(e.target.value, 10);
-                                    updateFeed.mutate({
-                                      feedId: feed.id,
-                                      data: { keepMinArticles: Number.isNaN(value) ? null : value },
-                                    });
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
                         <div className="flex justify-end gap-1">
                           <Button
                             variant="ghost"
@@ -922,7 +866,8 @@ export function FeedManagement({
               value="opml"
               className="h-full mt-0 focus-visible:outline-none"
             >
-              <div className="space-y-6 px-6 py-4 sm:px-8">
+              <ScrollArea className="h-full px-6 sm:px-8">
+              <div className="space-y-6 py-4 pb-8">
                 <div className="space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm">
                   <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em] text-primary">
                     <Upload className="w-6 h-6" />
@@ -1065,6 +1010,7 @@ export function FeedManagement({
                   </Button>
                 </div>
               </div>
+              </ScrollArea>
             </TabsContent>
 
             <TabsContent
