@@ -1279,7 +1279,7 @@ function AiSummarySection() {
   const { data: ai } = useAiSettings();
   const updateAi = useUpdateAiSettings();
   const testAi = useTestAiConnection();
-  const [provider, setProvider] = useState<string>("");
+  const [provider, setProvider] = useState<string>("none");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("");
@@ -1289,7 +1289,7 @@ function AiSummarySection() {
 
   useEffect(() => {
     if (!ai) return;
-    setProvider(ai.provider ?? "");
+    setProvider(ai.provider ?? "none");
     setModel(ai.model ?? "");
     setOllamaBaseUrl(ai.ollamaBaseUrl ?? "");
     setLanguage(ai.language ?? "same");
@@ -1299,7 +1299,7 @@ function AiSummarySection() {
   const handleSave = () => {
     setTestResult(null);
     updateAi.mutate({
-      provider: provider || null,
+      provider: provider === "none" ? null : provider,
       ...(apiKey ? { apiKey } : {}),
       model: model || null,
       ollamaBaseUrl: ollamaBaseUrl || null,
@@ -1337,7 +1337,7 @@ function AiSummarySection() {
               <SelectValue placeholder="Select provider" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None (disabled)</SelectItem>
+              <SelectItem value="none">None (disabled)</SelectItem>
               <SelectItem value="openai">OpenAI</SelectItem>
               <SelectItem value="anthropic">Anthropic</SelectItem>
               <SelectItem value="gemini">Google Gemini</SelectItem>
@@ -1347,7 +1347,7 @@ function AiSummarySection() {
           </Select>
         </div>
 
-        {provider && provider !== "ollama" && (
+        {provider !== "none" && provider !== "ollama" && (
           <div className="grid gap-1.5">
             <label className="text-sm font-medium">
               API Key
@@ -1377,7 +1377,7 @@ function AiSummarySection() {
           </div>
         )}
 
-        {provider && (
+        {provider !== "none" && (
           <div className="grid gap-1.5">
             <label className="text-sm font-medium">
               Model
@@ -1398,7 +1398,7 @@ function AiSummarySection() {
           </div>
         )}
 
-        {provider && (
+        {provider !== "none" && (
           <div className="grid gap-1.5">
             <label className="text-sm font-medium">Summary language</label>
             <Select value={language} onValueChange={setLanguage}>
@@ -1418,7 +1418,7 @@ function AiSummarySection() {
           </div>
         )}
 
-        {provider && (
+        {provider !== "none" && (
           <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
             <div>
               <p className="text-sm font-medium">Auto-summarize on sync</p>
@@ -1454,7 +1454,7 @@ function AiSummarySection() {
           >
             {updateAi.isPending ? "Saving…" : "Save"}
           </Button>
-          {provider && (
+          {provider !== "none" && (
             <Button
               variant="outline"
               onClick={handleTest}

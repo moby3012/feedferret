@@ -136,6 +136,7 @@ export function RssSidebar({
   const [isServerManagementOpen, setIsServerManagementOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [discoveredFeeds, setDiscoveredFeeds] = useState<{ url: string; title: string; type: string }[]>([]);
+  const [discoveryMessage, setDiscoveryMessage] = useState<string | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [importingPack, setImportingPack] = useState<string | null>(null);
 
@@ -155,16 +156,46 @@ export function RssSidebar({
     if (!newFeedUrl) return;
     setIsDiscovering(true);
     setDiscoveredFeeds([]);
+    setDiscoveryMessage(null);
     try {
       const params = new URLSearchParams({ url: newFeedUrl });
       const res = await fetch(`/api/discover?${params}`);
       const data = await res.json();
-      setDiscoveredFeeds(data.feeds || []);
-      if ((data.feeds || []).length === 0) toast.info("No feeds found at that URL");
+      const feeds = data.feeds || [];
+      setDiscoveredFeeds(feeds);
+      if (feeds.length === 0) {
+        const message = "No RSS/Atom feed found at that site.";
+        setDiscoveryMessage(message);
+        toast.info(message);
+      }
     } catch {
+      setDiscoveryMessage("Discovery failed. Try pasting a direct RSS/Atom feed URL.");
       toast.error("Discovery failed");
     } finally {
       setIsDiscovering(false);
+    }
+  };
+
+  const handleAddFeed = async (url: string) => {
+    setIsAddingFeed(true);
+    try {
+      const result = await addNewFeed.mutateAsync({
+        url,
+        categoryId: newFeedCategoryId === "none" ? undefined : newFeedCategoryId,
+      });
+      if (!result?.success) {
+        toast.error(result?.error || "Could not add feed");
+        return;
+      }
+      toast.success(`Added ${result.feed?.name || "feed"}`);
+      setNewFeedUrl("");
+      setDiscoveredFeeds([]);
+      setDiscoveryMessage(null);
+      setIsAddFeedOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add feed");
+    } finally {
+      setIsAddingFeed(false);
     }
   };
 
@@ -175,7 +206,12 @@ export function RssSidebar({
       if (!res.ok) throw new Error("Failed to fetch pack");
       const xml = await res.text();
       const result = await importOpml.mutateAsync(xml);
-      toast.success(`Imported ${packName}: ${result.feedsAdded} feeds added`);
+      const details = [
+        result.feedsAdded ? `${result.feedsAdded} added` : null,
+        result.feedsUpdated ? `${result.feedsUpdated} updated` : null,
+      ].filter(Boolean).join(", ");
+      toast.success(`Imported ${packName}${details ? `: ${details}` : ""}`);
+      setIsAddFeedOpen(false);
     } catch (err) {
       toast.error(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -550,6 +586,7 @@ export function RssSidebar({
                     onChange={(e) => {
                       setNewFeedUrl(e.target.value);
                       setDiscoveredFeeds([]);
+                      setDiscoveryMessage(null);
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && newFeedUrl) handleDiscover();
@@ -579,20 +616,19 @@ export function RssSidebar({
                         <Button
                           size="sm"
                           className="h-6 px-2 text-xs shrink-0"
-                          onClick={async () => {
-                            setIsAddingFeed(true);
-                            await addNewFeed.mutateAsync({
-                              url: f.url,
-                              categoryId: newFeedCategoryId === "none" ? undefined : newFeedCategoryId,
-                            });
-                            setIsAddingFeed(false);
-                          }}
+                          onClick={() => handleAddFeed(f.url)}
                           disabled={isAddingFeed}
                         >
                           Add
                         </Button>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {discoveryMessage && discoveredFeeds.length === 0 && (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                    {discoveryMessage}
                   </div>
                 )}
 
@@ -617,22 +653,9 @@ export function RssSidebar({
                     size="sm"
                     className="flex-1"
                     disabled={!newFeedUrl || isAddingFeed}
-                    onClick={async () => {
-                      setIsAddingFeed(true);
-                      await addNewFeed.mutateAsync({
-                        url: newFeedUrl,
-                        categoryId:
-                          newFeedCategoryId === "none"
-                            ? undefined
-                            : newFeedCategoryId,
-                      });
-                      setNewFeedUrl("");
-                      setDiscoveredFeeds([]);
-                      setIsAddFeedOpen(false);
-                      setIsAddingFeed(false);
-                    }}
+                    onClick={() => handleAddFeed(newFeedUrl)}
                   >
-                    Add
+                    Add direct URL
                   </Button>
                   <Button
                     size="sm"
@@ -641,6 +664,7 @@ export function RssSidebar({
                     onClick={() => {
                       setIsAddFeedOpen(false);
                       setDiscoveredFeeds([]);
+                      setDiscoveryMessage(null);
                     }}
                   >
                     Cancel

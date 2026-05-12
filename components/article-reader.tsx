@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type TouchEvent } from "react";
 import Image from "next/image";
 import { Article } from "@/lib/rss-data";
-import { useSummarizeArticle } from "@/hooks/use-rss-data";
+import { useAiSettings, useSummarizeArticle } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -78,6 +78,8 @@ export function ArticleReader({
 }: ArticleReaderProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const { data: aiSettings } = useAiSettings();
+  const aiSummaryEnabled = Boolean(aiSettings?.provider);
   const [localSummary, setLocalSummary] = useState<string | null>(null);
   const summarize = useSummarizeArticle();
 
@@ -374,7 +376,7 @@ export function ArticleReader({
           </header>
 
           {/* AI Summary card */}
-          {(() => {
+          {aiSummaryEnabled && (() => {
             const summary = localSummary ?? article.aiSummary;
             return (
               <div className="mb-8 rounded-2xl border border-border/60 bg-muted/40 px-5 py-4 animate-fade-in-up">

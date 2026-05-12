@@ -85,6 +85,7 @@ import {
   Bell,
   History,
   Pencil,
+  ChevronDown,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
 import { toast } from "sonner";
@@ -114,6 +115,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { cn } from "@/lib/utils";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 function SortableCategoryItem({
   cat,
@@ -528,7 +534,7 @@ export function FeedManagement({
                           </div>
                         </div>
                       </div>
-                      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
+                      <div className="grid w-full gap-2 sm:flex sm:w-auto sm:items-center">
                         <Select
                           value={feed.categoryId || "none"}
                           onValueChange={(val: string) =>
@@ -538,7 +544,7 @@ export function FeedManagement({
                             })
                           }
                         >
-                          <SelectTrigger className="col-span-2 h-9 w-full rounded-2xl border-border/70 bg-background/70 shadow-sm focus:ring-1 sm:col-span-1 sm:w-36">
+                          <SelectTrigger className="h-9 w-full rounded-2xl border-border/70 bg-background/70 shadow-sm focus:ring-1 sm:w-36">
                             <SelectValue placeholder="Category" />
                           </SelectTrigger>
                           <SelectContent className="rounded-2xl border-border/70 shadow-xl">
@@ -550,48 +556,71 @@ export function FeedManagement({
                             ))}
                           </SelectContent>
                         </Select>
-                        <Input
-                          type="number"
-                          placeholder="Keep days"
-                          defaultValue={feed.retentionDays || ""}
-                          className="h-9 w-full rounded-2xl border-border/70 bg-background/70 text-xs sm:w-24"
-                          title="Retention days for read, unstarred, unlabelled articles"
-                          onBlur={(e) => {
-                            const value = parseInt(e.target.value, 10);
-                            updateFeed.mutate({
-                              feedId: feed.id,
-                              data: { retentionDays: Number.isNaN(value) ? null : value },
-                            });
-                          }}
-                        />
-                        <Input
-                          type="number"
-                          placeholder="Min keep"
-                          defaultValue={feed.keepMinArticles || ""}
-                          className="h-9 w-full rounded-2xl border-border/70 bg-background/70 text-xs sm:w-24"
-                          title="Keep at least N articles per feed regardless of age"
-                          onBlur={(e) => {
-                            const value = parseInt(e.target.value, 10);
-                            updateFeed.mutate({
-                              feedId: feed.id,
-                              data: { keepMinArticles: Number.isNaN(value) ? null : value },
-                            });
-                          }}
-                        />
-                        <div className="col-span-2 flex justify-end gap-1 sm:col-span-1">
+                        <Collapsible className="sm:relative">
+                          <CollapsibleTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 w-full justify-between rounded-2xl border-border/70 bg-background/70 text-xs sm:w-36"
+                            >
+                              Retention
+                              <ChevronDown className="ml-2 h-3.5 w-3.5" />
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-2 rounded-2xl border border-border/70 bg-background/95 p-3 shadow-xl sm:absolute sm:right-0 sm:z-20 sm:w-64">
+                            <div className="grid gap-3">
+                              <div className="grid gap-1">
+                                <Label className="text-xs text-muted-foreground">Keep days</Label>
+                                <Input
+                                  type="number"
+                                  placeholder="Default"
+                                  defaultValue={feed.retentionDays || ""}
+                                  className="h-9 rounded-2xl border-border/70 bg-background/70 text-xs"
+                                  title="Retention days for read, unstarred, unlabelled articles"
+                                  onBlur={(e) => {
+                                    const value = parseInt(e.target.value, 10);
+                                    updateFeed.mutate({
+                                      feedId: feed.id,
+                                      data: { retentionDays: Number.isNaN(value) ? null : value },
+                                    });
+                                  }}
+                                />
+                              </div>
+                              <div className="grid gap-1">
+                                <Label className="text-xs text-muted-foreground">Minimum articles to keep</Label>
+                                <Input
+                                  type="number"
+                                  placeholder="Default"
+                                  defaultValue={feed.keepMinArticles || ""}
+                                  className="h-9 rounded-2xl border-border/70 bg-background/70 text-xs"
+                                  title="Keep at least N articles per feed regardless of age"
+                                  onBlur={(e) => {
+                                    const value = parseInt(e.target.value, 10);
+                                    updateFeed.mutate({
+                                      feedId: feed.id,
+                                      data: { keepMinArticles: Number.isNaN(value) ? null : value },
+                                    });
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                        <div className="flex justify-end gap-1">
                           <Button
                             variant="ghost"
-                            size="icon"
-                            className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground opacity-100 transition-all hover:bg-accent sm:opacity-0 sm:group-hover:opacity-100"
+                            size="sm"
+                            className="h-9 shrink-0 rounded-xl px-3 text-muted-foreground transition-all hover:bg-accent"
                             title="Feed settings"
                             onClick={() => setEditingFeed(feed)}
                           >
                             <Settings2 className="w-4 h-4" />
+                            <span className="ml-1.5 hidden lg:inline">Settings</span>
                           </Button>
                           <Button
                             variant="ghost"
-                            size="icon"
-                            className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
+                            size="sm"
+                            className="h-9 shrink-0 rounded-xl px-3 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive"
                             onClick={() =>
                               setPendingDelete({
                                 type: "feed",
@@ -601,6 +630,7 @@ export function FeedManagement({
                             }
                           >
                             <Trash2 className="w-4 h-4" />
+                            <span className="ml-1.5 hidden lg:inline">Delete</span>
                           </Button>
                         </div>
                       </div>
