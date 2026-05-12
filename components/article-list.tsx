@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
 import { Star, Circle, Clock, ImageIcon, CheckCircle2, CircleDot, Bookmark } from "lucide-react";
@@ -128,10 +129,12 @@ function ArticlePreview({
       >
         <div className="aspect-[16/10] bg-muted relative overflow-hidden">
           {article.imageUrl ? (
-            <img
+            <Image
               src={article.imageUrl}
               alt=""
-              className="w-full h-full object-cover transition-transform duration-700 hover:scale-110"
+              fill
+              sizes="(max-width: 640px) 100vw, 400px"
+              className="object-cover transition-transform duration-700 hover:scale-110"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
@@ -198,10 +201,12 @@ function ArticlePreview({
       <div className="flex gap-3 sm:gap-4">
         {article.imageUrl && (
           <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden flex-shrink-0 bg-muted relative group-hover:shadow-lg transition-shadow duration-300">
-            <img
+            <Image
               src={article.imageUrl || "/placeholder.svg"}
               alt=""
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              fill
+              sizes="(max-width: 640px) 96px, 128px"
+              className="object-cover transition-transform duration-500 group-hover:scale-105"
             />
             {!article.isRead && (
               <div className="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-brand animate-pulse-gentle" />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type TouchEvent } from "react";
+import Image from "next/image";
 import { Article } from "@/lib/rss-data";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -95,9 +96,11 @@ export function ArticleReader({
       <div className="flex-1 flex items-center justify-center bg-background animate-fade-in">
         <div className="text-center max-w-md px-8">
           <div className="w-24 h-24 rounded-3xl bg-muted flex items-center justify-center mx-auto mb-8 shadow-lg overflow-hidden p-6 border border-border/50">
-            <img
+            <Image
               src="/logo.svg"
               alt="FeedFerret Logo"
+              width={48}
+              height={48}
               className="w-12 h-12 invert dark:invert-0"
             />
           </div>
@@ -366,11 +369,13 @@ export function ArticleReader({
           {/* Hero Image */}
           {article.imageUrl && (
             <figure className="mb-12 -mx-6 sm:mx-0 animate-scale-in">
-              <div className="aspect-[16/9] sm:rounded-2xl overflow-hidden bg-muted shadow-2xl shadow-black/10">
-                <img
+              <div className="aspect-[16/9] sm:rounded-2xl overflow-hidden bg-muted shadow-2xl shadow-black/10 relative">
+                <Image
                   src={article.imageUrl || "/placeholder.svg"}
                   alt=""
-                  className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
+                  fill
+                  sizes="(max-width: 640px) 100vw, 800px"
+                  className="object-cover transition-transform duration-700 hover:scale-105"
                 />
               </div>
             </figure>
