@@ -47,17 +47,23 @@ UI: Settings → Outbound Webhooks section. Create/edit form, enable toggle, rot
 
 Docs: `docs/webhooks.md` — payload examples, Node.js + Python verification code, retry table.
 
-## 3. Keyword Alerts follow-up — Low/Medium
+## 3. Keyword Alerts follow-up — ✅ Done
 
-**Outcome:** alerts move from MVP to full management.
+**Implemented 2026-05-12.**
 
-Acceptance criteria:
+Alert rows upgraded from MVP display to full management:
 
-- Existing alerts can be fully edited.
-- Optional email action uses the already configured email providers.
-- Alert history shows recent matches/deliveries and unread/read state where relevant.
-- Analytics expose match counts per alert.
-- Docs clarify in-app, push, and email delivery behavior.
+- **Inline edit form**: name, query, scope (all/feed/category), push and email toggles.
+- **Email delivery** (`notify_email`): `sendSystemEmail` with HTML + plain-text body listing matched articles.
+- **Match count badge**: shows total in-app notifications (`_count.notifications`) per alert.
+- **History panel**: expandable list of recent keyword_alert notifications with read/unread state; clicking unread marks it read.
+- **Webhook dispatch**: `keyword_match` event fired per matching article (was already wired; confirmed end-to-end).
+
+Delivery behavior:
+- `notify_inapp` — always included; creates `Notification` rows visible in the bell menu.
+- `notify_push` — optional; fires browser push via `sendPushToUser`; bundles multiple matches.
+- `notify_email` — optional; requires email provider configured; sends one email per alert trigger listing all matched articles.
+- `keyword_match` webhook — fires for every matching article to all enabled webhooks with `keyword_match` in their events list.
 
 ## 4. Feed Discovery — High / design first
 
