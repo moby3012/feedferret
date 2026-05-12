@@ -25,6 +25,8 @@ model User {
   labels        Label[]
   savedSearches SavedSearch[]
   autoReadRules AutoReadRule[]
+  keywordAlerts KeywordAlert[]
+  notifications Notification[]
   gReaderPreferences GReaderPreference[]
   pushSubscriptions PushSubscription[]
   defaultUpdateFrequency Int @default(60)
@@ -84,6 +86,44 @@ model AutoReadRule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([userId, enabled, order])
+}
+
+model KeywordAlert {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  query           String
+  scope           String   @default("all") // "all" | "feed:<id>" | "category:<id>"
+  actions         String   @default("[\"notify_inapp\"]") // JSON array
+  enabled         Boolean  @default(true)
+  lastTriggeredAt DateTime?
+  notifications   Notification[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId, enabled])
+  @@index([userId, scope])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // "keyword_alert" | "feed_error" | "digest_sent"
+  title     String
+  body      String
+  articleId String?
+  article   Article? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  feedId    String?
+  alertId   String?
+  alert     KeywordAlert? @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead, createdAt])
+  @@index([articleId])
+  @@index([alertId])
 }
 
 model GReaderPreference {
@@ -211,6 +251,7 @@ model Article {
   isStarred   Boolean  @default(false)
   isReadLater Boolean  @default(false)
   readLaterSavedAt DateTime?
+  notifications Notification[]
   feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   labels      ArticleLabel[]

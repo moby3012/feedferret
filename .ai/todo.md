@@ -101,39 +101,33 @@ Follow-up ideas: per-share title/description, expiry, analytics, OPML export, te
 
 ---
 
-## Keyword Monitoring & Alerts — Medium Effort
+## Keyword Monitoring & Alerts ✅ — Medium Effort
 
-**Goal:** Notify user (in-app + optional email) when new articles match a keyword/query. Extension of existing `AutoReadRule` query parser in `lib/search.ts`.
+**Goal:** Notify user in-app and optionally via browser push when new articles match a keyword/query. Uses existing search parser in `lib/search.ts`.
 
 ### DB
-- [ ] New model `KeywordAlert`:
-  - `id, userId, name, query` — same query syntax as AutoReadRules
-  - `scope: String` — `"all"` | `"feed:<id>"` | `"category:<id>"`
-  - `actions: String` — JSON array: `["notify_inapp", "notify_email", "webhook"]`
-  - `enabled: Boolean @default(true)`
-  - `lastTriggeredAt: DateTime?`
-  - `createdAt, updatedAt`
-- [ ] New model `Notification`:
-  - `id, userId, type` — `"keyword_alert"` | `"feed_error"` | `"digest_sent"`
-  - `title, body, articleId?, feedId?, alertId?`
-  - `isRead: Boolean @default(false)`
-  - `createdAt`
+- [x] New model `KeywordAlert` with `name`, `query`, `scope`, `actions`, `enabled`, `lastTriggeredAt`
+- [x] New model `Notification` with unread state and optional article/feed/alert links
 
 ### Logic
-- [ ] `lib/keyword-alerts.ts` — `applyKeywordAlerts(userId, newArticles[])`:
-  - Run each enabled alert's query against new articles from sync
-  - On match: create `Notification` record, optionally send email, optionally fire webhook
-  - Update `lastTriggeredAt`
-- [ ] Hook into `syncUserFeeds` → call after article ingest (alongside `applyAutoReadRules`)
+- [x] `lib/keyword-alerts.ts` — `applyKeywordAlerts(userId, newArticleIds[])`
+- [x] Hook into `syncFeed` after new article ingest
+- [x] Browser push action (`notify_push`) available in addition to in-app notifications
 
 ### UI
-- [ ] Bell icon in header with unread notification count badge
-- [ ] Notification dropdown panel (mark all read, link to matched article)
-- [ ] "Alerts" tab in Management dialog:
-  - List alerts (name, query, scope, last triggered)
-  - Create/edit alert (name, query field with live preview, scope, actions checkboxes)
-  - Enable/disable toggle per alert
-  - "Test now" button — runs against last 100 articles
+- [x] Bell icon in header with unread notification count badge
+- [x] Notification dropdown panel with mark-all-read and article links
+- [x] "Alerts" tab in Management dialog:
+  - list/create alerts
+  - query preview
+  - scope by all/feed/category
+  - enable/disable toggle
+  - "Test" button against recent articles
+
+Follow-ups:
+- [ ] Optional email action for keyword alerts
+- [ ] Edit form for existing alert details beyond enable/disable/delete
+- [ ] Per-alert delivery history / match analytics
 
 ---
 

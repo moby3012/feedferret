@@ -11,6 +11,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 - **Smart Sync Engine**: High-performance RSS parsing with content normalization and secure sanitization.
 - **Advanced Search**: Full query syntax — filter by feed, category, `is:starred`, `is:unread`, `label:`, date ranges. Save searches for quick access.
 - **Auto-Mark-as-Read Rules**: Define filter rules (feed/category/query) that auto-mark, star, or label articles on sync. Preview matches before enabling.
+- **Keyword Alerts**: Watch new articles with saved queries and receive in-app notifications or optional browser push alerts.
 - **Full-Text Extraction**: Per-feed CSS selectors to fetch full article content from truncated feeds. Auto-fetch on sync.
 - **Feed Authentication**: HTTP Basic Auth, custom User-Agent, timeout, SSL verification, and max-size per feed.
 - **Retention Policies**: Keep minimum N articles per feed, never delete starred/labelled articles, dry-run purge preview.

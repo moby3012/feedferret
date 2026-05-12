@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { getEffectiveSettings } from "./settings";
 import { applyAutoReadRules } from "./auto-read-rules";
+import { applyKeywordAlerts } from "./keyword-alerts";
 import { queueNewArticleNotifications } from "./notifications";
 import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
@@ -111,6 +112,9 @@ export async function syncFeed(userId: string, feedId: string) {
         }
 
         if (createdArticleIds.length > 0) {
+            await applyKeywordAlerts(userId, createdArticleIds).catch((e) =>
+                console.error("[rss-sync] keyword alerts failed:", e),
+            );
             await queueNewArticleNotifications(userId, createdArticleIds).catch((e) =>
                 console.error("[rss-sync] push notification queue failed:", e),
             );

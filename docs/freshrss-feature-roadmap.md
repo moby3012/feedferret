@@ -190,7 +190,9 @@ Sprint 1 and the Saved Search Sharing / Google Reader API Phase 1 work are compl
 1. **External client verification** (#13 follow-up) — test Reeder, NetNewsWire, FeedMe against a deployed instance and tune client-specific GReader quirks.
 2. **Multi-Database / Postgres** (#15) — High effort. Required for production deployments at scale. Prisma already supports it.
 3. **Advanced SSRF Security** (#18) — Very High effort. Critical before recommending multi-user public hosting.
-4. **Keyword Monitoring & Alerts** — Medium effort. Builds on the push-notification foundation for user-defined article matches.
+4. **Duplicate Detection** — Medium effort. Hide or badge repeated articles across feeds.
+
+Recently completed: **Keyword Monitoring & Alerts** with in-app notifications and optional browser push.
 
 ## Saved Search Sharing Implementation Notes
 

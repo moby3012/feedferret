@@ -1075,6 +1075,140 @@ export async function previewAutoReadRule(query: string, limit = 10) {
     return previewAutoReadRuleMatches(session.user.id, query, limit);
 }
 
+// ─── Keyword Alerts + Notifications ────────────────────────────────────────
+
+function stringifyAlertActions(actions?: string[]) {
+    const allowed = (actions || ["notify_inapp"]).filter((action) =>
+        ["notify_inapp", "notify_push"].includes(action),
+    );
+    return JSON.stringify(allowed.length ? allowed : ["notify_inapp"]);
+}
+
+export async function getKeywordAlerts() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    return db.keywordAlert.findMany({
+        where: { userId: session.user.id },
+        orderBy: [{ enabled: "desc" }, { createdAt: "desc" }],
+    });
+}
+
+export async function createKeywordAlert(data: {
+    name: string;
+    query: string;
+    scope?: string;
+    actions?: string[];
+}) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const name = data.name.trim();
+    const query = data.query.trim();
+    if (!name || !query) throw new Error("Name and query are required");
+
+    const alert = await db.keywordAlert.create({
+        data: {
+            userId: session.user.id,
+            name,
+            query,
+            scope: data.scope || "all",
+            actions: stringifyAlertActions(data.actions),
+        },
+    });
+    revalidatePath("/");
+    return alert;
+}
+
+export async function updateKeywordAlert(
+    alertId: string,
+    data: Partial<{ name: string; query: string; scope: string; actions: string[]; enabled: boolean }>,
+) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const alert = await db.keywordAlert.update({
+        where: { id: alertId, userId: session.user.id },
+        data: {
+            ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+            ...(data.query !== undefined ? { query: data.query.trim() } : {}),
+            ...(data.scope !== undefined ? { scope: data.scope } : {}),
+            ...(data.actions !== undefined ? { actions: stringifyAlertActions(data.actions) } : {}),
+            ...(data.enabled !== undefined ? { enabled: data.enabled } : {}),
+        },
+    });
+    revalidatePath("/");
+    return alert;
+}
+
+export async function deleteKeywordAlert(alertId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    await db.keywordAlert.delete({ where: { id: alertId, userId: session.user.id } });
+    revalidatePath("/");
+}
+
+export async function previewKeywordAlertMatches(query: string, scope = "all", limit = 10) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const { previewKeywordAlert } = await import("@/lib/keyword-alerts");
+    return previewKeywordAlert(session.user.id, query, scope, limit);
+}
+
+export async function testKeywordAlert(alertId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const alert = await db.keywordAlert.findUnique({ where: { id: alertId, userId: session.user.id } });
+    if (!alert) throw new Error("Alert not found");
+    const { previewKeywordAlert } = await import("@/lib/keyword-alerts");
+    return previewKeywordAlert(session.user.id, alert.query, alert.scope, 100);
+}
+
+export async function getNotifications(limit = 20) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    return db.notification.findMany({
+        where: { userId: session.user.id },
+        include: {
+            article: {
+                select: {
+                    id: true,
+                    title: true,
+                    link: true,
+                    feed: { select: { name: true, icon: true } },
+                },
+            },
+            alert: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: Math.min(Math.max(limit, 1), 100),
+    });
+}
+
+export async function getUnreadNotificationCount() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    return db.notification.count({ where: { userId: session.user.id, isRead: false } });
+}
+
+export async function markNotificationRead(notificationId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    return db.notification.update({
+        where: { id: notificationId, userId: session.user.id },
+        data: { isRead: true },
+    });
+}
+
+export async function markAllNotificationsRead() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    return db.notification.updateMany({
+        where: { userId: session.user.id, isRead: false },
+        data: { isRead: true },
+    });
+}
+
 export async function previewFeedExtraction(feedId: string, articleUrl: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
