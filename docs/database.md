@@ -1,33 +1,43 @@
-# Database providers, Postgres, backup, and restore
+# Database: PostgreSQL and SQLite
 
-FeedFerret defaults to PostgreSQL. The bundled Docker Compose stack starts a Postgres 16 service automatically. SQLite is available as a lightweight alternative for local dev or single-user setups.
+FeedFerret supports two database providers. The right choice depends on your use case:
 
-## Provider selection
+| | **PostgreSQL** | **SQLite** |
+|---|---|---|
+| **Recommended for** | Production, multi-user, shared hosting | Personal use, local dev, minimal infra |
+| **How to set up** | Included in Docker Compose, zero config | Single file, no extra service |
+| **Docker Compose** | `docker compose up -d --build` | `docker compose up feedferret -d --build` |
+| **Backup** | `pg_dump` | Copy one `.db` file |
+| **Scales to** | Multiple replicas, managed cloud DBs | Single container only |
 
-Supported values:
+---
 
-- `postgresql` / `postgres` — **default**, uses PostgreSQL URLs, e.g. `postgresql://feedferret:secret@postgres:5432/feedferret?schema=public`
-- `sqlite` — uses file-based `DATABASE_URL`, e.g. `file:/app/data/dev.db`
+## Environment variables
 
-The source schema remains `prisma/schema.prisma`. `scripts/prepare-prisma-schema.mjs` writes an ignored `prisma/schema.generated.prisma` with the selected provider.
+Both providers require two variables: `DATABASE_PROVIDER` and `DATABASE_URL`.
 
-Useful scripts:
-
-```bash
-# Generate Prisma client for current provider
-DATABASE_PROVIDER=sqlite pnpm run prisma:generate
-DATABASE_PROVIDER=postgresql DATABASE_URL="postgresql://..." pnpm run prisma:generate
-
-# Push schema to current database
-DATABASE_PROVIDER=postgresql DATABASE_URL="postgresql://..." pnpm run prisma:push
-
-# Build with selected provider
-DATABASE_PROVIDER=postgresql DATABASE_URL="postgresql://..." pnpm run build
+**PostgreSQL:**
+```env
+DATABASE_PROVIDER="postgresql"
+DATABASE_URL="postgresql://feedferret:your-password@postgres:5432/feedferret?schema=public"
+POSTGRES_DB="feedferret"
+POSTGRES_USER="feedferret"
+POSTGRES_PASSWORD="your-password"
 ```
+
+**SQLite:**
+```env
+DATABASE_PROVIDER="sqlite"
+DATABASE_URL="file:/app/data/dev.db"
+```
+
+> **Note for Coolify and other build platforms:** `DATABASE_PROVIDER` must be set as both a **runtime environment variable** and a **build argument**. The Prisma client is compiled at image build time and must match the runtime provider. If only set at runtime, the container will start but queries may fail silently.
+
+---
 
 ## Docker Compose: PostgreSQL (default)
 
-Postgres starts automatically — no extra profile flags required:
+Postgres starts automatically — no profile flags required:
 
 ```bash
 cp .env.example .env
@@ -35,68 +45,99 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-FeedFerret waits for Postgres to pass its healthcheck before starting. Data lives in the `feedferret_postgres_data` volume. The service exposes `${POSTGRES_PORT:-5432}` on the host for local maintenance; restrict that port at the firewall for public servers.
+FeedFerret waits for Postgres to pass its healthcheck before starting. Data lives in the `feedferret_postgres_data` Docker volume.
+
+The Postgres service exposes port `5432` on the host for maintenance access. For public servers, remove or firewall that port — the app communicates with Postgres over the internal Docker network.
+
+---
 
 ## Docker Compose: SQLite (alternative)
 
-Override provider and URL in `.env`, then start without Postgres:
+Override the provider in `.env` and start only the app container:
 
-```bash
-DATABASE_PROVIDER=sqlite
-DATABASE_URL=file:/app/data/dev.db
+```env
+DATABASE_PROVIDER="sqlite"
+DATABASE_URL="file:/app/data/dev.db"
 ```
 
 ```bash
 docker compose up feedferret -d --build
 ```
 
-SQLite data lives in a bind-mount or volume at `/app/data`.
+Data lives in the `feedferret_db_data` Docker volume. No Postgres container is started.
 
-## Migration workflow
+---
 
-For now, the cross-provider workflow uses Prisma `db push` against the provider-specific generated schema. This is the same path the production container executes on startup:
+## How provider selection works
 
-```bash
-DATABASE_PROVIDER=postgresql DATABASE_URL="postgresql://..." pnpm run prisma:push
-```
+The source schema is always `prisma/schema.prisma` (provider = `sqlite` as a template).  
+At build time and at container startup, `scripts/prepare-prisma-schema.mjs` reads `DATABASE_PROVIDER` and writes `prisma/schema.generated.prisma` with the correct provider.  
+All Prisma commands (`generate`, `db push`) use the generated schema.
 
-Before switching an existing instance from SQLite to Postgres:
+Supported `DATABASE_PROVIDER` values: `postgresql`, `postgres`, `sqlite`, `file`.
+
+---
+
+## Switching providers
+
+There is no automated data migration between providers. To switch:
 
 1. Stop FeedFerret.
-2. Back up SQLite.
-3. Start Postgres.
-4. Run the schema push against Postgres.
-5. Export/import application data through FeedFerret JSON/OPML export where applicable, or migrate records with a dedicated Prisma/data migration script.
-6. Rebuild/restart with `DATABASE_PROVIDER=postgresql`.
+2. Export your data: OPML export (Settings → Import/Export) and/or JSON export for full data.
+3. Start the new provider (update `.env`, rebuild).
+4. Import via the OPML/JSON import flow.
+
+For large instances with users and article history, a custom Prisma migration script is more practical than OPML re-import.
+
+---
 
 ## Backup and restore
 
-### SQLite backup
-
-```bash
-# Backup from Docker volume to host file
-mkdir -p backups
-docker compose exec feedferret sh -lc 'cp /app/data/dev.db /tmp/feedferret-dev.db'
-docker cp feedferret:/tmp/feedferret-dev.db backups/feedferret-$(date +%F).db
-
-# Restore
-cat backups/feedferret-YYYY-MM-DD.db | docker compose exec -T feedferret sh -lc 'cat > /app/data/dev.db'
-docker compose restart feedferret
-```
-
-### PostgreSQL backup
+### PostgreSQL
 
 ```bash
 # Backup
-docker compose --profile postgres exec -T postgres pg_dump \
+mkdir -p backups
+docker compose exec -T postgres pg_dump \
   -U "${POSTGRES_USER:-feedferret}" \
   -d "${POSTGRES_DB:-feedferret}" \
   > backups/feedferret-postgres-$(date +%F).sql
 
 # Restore into an empty database
-cat backups/feedferret-postgres-YYYY-MM-DD.sql | docker compose --profile postgres exec -T postgres psql \
-  -U "${POSTGRES_USER:-feedferret}" \
-  -d "${POSTGRES_DB:-feedferret}"
+cat backups/feedferret-postgres-YYYY-MM-DD.sql \
+  | docker compose exec -T postgres psql \
+      -U "${POSTGRES_USER:-feedferret}" \
+      -d "${POSTGRES_DB:-feedferret}"
 ```
 
-For large production instances, prefer scheduled `pg_dump`/managed-provider snapshots and test restores regularly.
+For production: prefer scheduled `pg_dump` via cron or a managed Postgres provider's snapshot feature. Test restores regularly.
+
+### SQLite
+
+```bash
+# Backup
+mkdir -p backups
+docker compose exec feedferret sh -lc 'cp /app/data/dev.db /tmp/feedferret-backup.db'
+docker cp feedferret:/tmp/feedferret-backup.db backups/feedferret-$(date +%F).db
+
+# Restore
+cat backups/feedferret-YYYY-MM-DD.db \
+  | docker compose exec -T feedferret sh -lc 'cat > /app/data/dev.db'
+docker compose restart feedferret
+```
+
+---
+
+## Developer scripts
+
+```bash
+# Generate Prisma client for a specific provider
+DATABASE_PROVIDER=sqlite pnpm run prisma:generate
+DATABASE_PROVIDER=postgresql DATABASE_URL="postgresql://..." pnpm run prisma:generate
+
+# Push schema to database (apply changes without migration files)
+DATABASE_PROVIDER=postgresql DATABASE_URL="postgresql://..." pnpm run prisma:push
+
+# Build image with a specific provider baked in
+DATABASE_PROVIDER=postgresql DATABASE_URL="postgresql://..." pnpm run build
+```

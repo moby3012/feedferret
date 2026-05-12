@@ -2,8 +2,6 @@
 
 FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader built with a focus on speed, privacy, and a premium reading experience. Designed for power users who want control over their information stream.
 
-![FeedFerret Mockup](https://raw.githubusercontent.com/lucide-react/lucide/main/icons/rss.svg)
-
 ## ✨ Features
 
 - **Multi-User Ready**: Built-in authentication and strict data isolation for shared hosting.
@@ -37,64 +35,147 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 - **Admin Onboarding Wizard**: Multi-step setup flow for first-time admins — account creation, instance settings, email, and security configuration.
 - **SaaS Provisioning API**: Internal API endpoints for creating and suspending users from external systems (Stripe webhooks, SaaS portals) via Bearer token auth.
 - **GDPR Compliance**: Self-service account deletion (Art. 17) with full cascade removal of all user data.
-- **Self-Hostable**: Simple deployment with Docker Compose — PostgreSQL included and pre-configured by default. SQLite available as a lightweight alternative.
+- **Self-Hostable**: Docker Compose deployment with your choice of PostgreSQL (recommended) or SQLite.
 
-## 🚀 Getting Started
+---
 
-## Prerequisites
+## 🚀 Quick Start
 
-- **Node.js**: 20.x or later
-- **pnpm**: Recommended package manager
-- **Docker + Docker Compose**: Required for production (PostgreSQL included)
+```bash
+git clone <your-repo-url> && cd feedferret
+cp .env.example .env
+# Edit .env — at minimum set NEXTAUTH_SECRET and NEXTAUTH_URL
+docker compose up -d --build
+```
 
-### Local Development
+Open [http://localhost:3000](http://localhost:3000) and run the setup wizard. Done.
 
-1. **Clone & Install**:
+---
 
-   ```bash
-   git clone <your-repo-url>
-   cd feedferret
-   pnpm install
-   ```
+## 🗄 Choosing a Database
 
-2. **Environment Setup**:
-   Create a `.env` file based on `.env.example`:
+| | **PostgreSQL** (default) | **SQLite** |
+|---|---|---|
+| **Best for** | Multi-user, production, shared hosting | Personal use, testing, minimal infra |
+| **Setup** | Included in Docker Compose, zero config | Single file, no extra service |
+| **Persistence** | Docker volume `feedferret_postgres_data` | Docker volume `feedferret_db_data` |
+| **Scaling** | Multiple replicas, managed cloud DBs | Single container only |
+| **Backup** | `pg_dump` / managed snapshots | Copy one `.db` file |
 
-   ```env
-   DATABASE_PROVIDER="postgresql"
-   DATABASE_URL="postgresql://feedferret:feedferret-change-me@localhost:5432/feedferret?schema=public"
-   POSTGRES_PASSWORD="feedferret-change-me"
-   NEXTAUTH_SECRET="your-super-secret-key"
-   NEXTAUTH_URL="http://localhost:3000"
-   ```
+Both providers are fully supported. You can switch later (data migration is manual — export OPML/JSON first).
 
-   For local dev without Docker, use SQLite instead:
-   ```env
-   DATABASE_PROVIDER="sqlite"
-   DATABASE_URL="file:./prisma/dev.db"
-   ```
+---
 
-3. **Initialize Database**:
+## 🐳 Docker Deployment
 
-   ```bash
-   pnpm exec prisma db push
-   pnpm exec prisma generate
-   ```
+### Option A — PostgreSQL (recommended)
 
-4. **Run the App**:
-   ```bash
-   pnpm run dev
-   ```
-   Open [http://localhost:3000](http://localhost:3000) and register your first account.
+PostgreSQL starts automatically alongside FeedFerret. No extra flags required.
 
-### 🔐 Auth & Email Provider Docs
+**1. Copy and edit the env file:**
 
-For self-hosting configuration of TOTP 2FA, Authelia OIDC, and API-based email providers, see:
+```bash
+cp .env.example .env
+```
 
-- [`docs/self-hosting-auth-email.md`](docs/self-hosting-auth-email.md)
-- [`docs/next-session-workpackages.md`](docs/next-session-workpackages.md) — ordered backlog for the next development sessions.
+Minimum required values in `.env`:
 
-### 🧙 Admin Onboarding
+```env
+NEXTAUTH_SECRET="$(openssl rand -base64 32)"
+NEXTAUTH_URL="https://your-domain.example.com"
+POSTGRES_PASSWORD="change-me-to-something-strong"
+```
+
+The `DATABASE_PROVIDER`, `DATABASE_URL`, `POSTGRES_DB`, and `POSTGRES_USER` are pre-filled in `.env.example` and work out of the box.
+
+**2. Start the stack:**
+
+```bash
+docker compose up -d --build
+```
+
+FeedFerret waits for Postgres to pass its healthcheck before starting. All data persists in the `feedferret_postgres_data` Docker volume.
+
+> **Security:** The Postgres port (`5432`) is exposed on the host by default for maintenance access. For public-facing servers, either remove the `ports` entry from `docker-compose.yml` or block it at the firewall — the app container connects to Postgres over the internal Docker network.
+
+---
+
+### Option B — SQLite
+
+No separate database service. Single container, single file.
+
+**1. Edit `.env`:**
+
+```env
+DATABASE_PROVIDER="sqlite"
+DATABASE_URL="file:/app/data/dev.db"
+NEXTAUTH_SECRET="$(openssl rand -base64 32)"
+NEXTAUTH_URL="https://your-domain.example.com"
+```
+
+**2. Start only the app container:**
+
+```bash
+docker compose up feedferret -d --build
+```
+
+Data persists in the `feedferret_db_data` Docker volume.
+
+---
+
+### Coolify Deployment
+
+FeedFerret works with Coolify's **Docker Compose** deployment type.
+
+**Required environment variables** (set in Coolify → Service → Environment):
+
+| Variable | PostgreSQL value | SQLite value |
+|---|---|---|
+| `DATABASE_PROVIDER` | `postgresql` | `sqlite` |
+| `DATABASE_URL` | `postgresql://feedferret:PASSWORD@postgres:5432/feedferret?schema=public` | `file:/app/data/dev.db` |
+| `POSTGRES_PASSWORD` | your chosen password | — |
+| `NEXTAUTH_SECRET` | `openssl rand -base64 32` | same |
+| `NEXTAUTH_URL` | your public URL | same |
+
+> **Important:** Set `DATABASE_PROVIDER` and `DATABASE_URL` as **both** runtime environment variables **and** build arguments in Coolify. The Prisma client is compiled at image build time and must match the runtime provider.
+
+For PostgreSQL in Coolify, the internal Docker hostname for the Postgres container is `postgres` (the service name in `docker-compose.yml`).
+
+---
+
+## 💻 Local Development
+
+Prerequisites: Node.js 20+, pnpm
+
+**Quickest path — SQLite (no Docker needed):**
+
+```bash
+git clone <your-repo-url> && cd feedferret
+cp .env.example .env
+# Edit .env: set DATABASE_PROVIDER=sqlite, DATABASE_URL=file:./prisma/dev.db, NEXTAUTH_SECRET, NEXTAUTH_URL
+pnpm install
+pnpm run dev
+```
+
+**With PostgreSQL locally:**
+
+```bash
+# Start Postgres via Docker
+docker compose up postgres -d
+
+# Then in .env:
+# DATABASE_PROVIDER="postgresql"
+# DATABASE_URL="postgresql://feedferret:feedferret-change-me@localhost:5432/feedferret?schema=public"
+
+pnpm install
+pnpm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) and register your first account.
+
+---
+
+## 🧙 Admin Onboarding
 
 On first run, navigate to `/setup` for a guided multi-step wizard:
 
@@ -104,54 +185,7 @@ On first run, navigate to `/setup` for a guided multi-step wizard:
 4. **Security** — disable public registration (recommended for private instances)
 5. **Done** — launch the app
 
-### ⚡ SaaS Provisioning (Internal API)
-
-FeedFerret exposes internal API routes for external systems to manage user lifecycle without SaaS logic in the OSS core.
-
-**Required:** Set `INTERNAL_API_KEY` environment variable.
-
-```bash
-# Create a user (e.g., from a Stripe checkout webhook)
-curl -X POST https://rss.example.com/api/internal/provision-user \
-  -H "Authorization: Bearer $INTERNAL_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"email": "alice@example.com", "name": "Alice"}'
-
-# Suspend a user (e.g., from a subscription cancellation)
-curl -X POST https://rss.example.com/api/internal/suspend-user \
-  -H "Authorization: Bearer $INTERNAL_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"email": "alice@example.com"}'
-```
-
-Full docs: [`docs/internal-api.md`](docs/internal-api.md)
-
-### 🛡 GDPR / Right to Erasure
-
-Users can delete their account from **Settings → Delete Account**. All data is cascade-deleted atomically. See [`docs/gdpr.md`](docs/gdpr.md).
-
-
-### 🔒 Feed Fetch Security
-
-FeedFerret blocks server-side feed fetches to private/internal IP ranges by default to reduce SSRF risk. Trusted single-tenant deployments can enable internal feed URLs in Server Management → Sync. See [`docs/security.md`](docs/security.md).
-
-### 🗄 Database
-
-PostgreSQL is the default. Docker Compose starts it automatically — no extra flags needed. SQLite is available as a lightweight alternative for local dev or single-user setups. See [`docs/database.md`](docs/database.md) for provider switching, backup, and restore.
-
-### 🐳 Docker Deployment
-
-PostgreSQL starts automatically alongside FeedFerret — no extra flags required:
-
-```bash
-cp .env.example .env
-# Edit .env: set NEXTAUTH_SECRET, NEXTAUTH_URL, and POSTGRES_PASSWORD
-docker compose up -d --build
-```
-
-The app will be available on port `3000`. FeedFerret waits for Postgres to be healthy before starting. All data persists in the `feedferret_postgres_data` volume.
-
-**Change the default Postgres password** before exposing port 5432 publicly. Remove or firewall that port for production deployments.
+---
 
 ## ⏱ Background Feed Sync
 
@@ -177,20 +211,56 @@ SYNC_SECRET=$(openssl rand -hex 32)
 # crontab: */5 * * * * curl -fsS -H "Authorization: Bearer $SYNC_SECRET" https://your.host/api/sync
 ```
 
+---
+
+## 🔐 Auth & Email
+
+For TOTP 2FA, Authelia OIDC, and API-based email provider configuration, see [`docs/self-hosting-auth-email.md`](docs/self-hosting-auth-email.md).
+
+## 🔒 Feed Fetch Security
+
+FeedFerret blocks server-side feed fetches to private/internal IP ranges by default to reduce SSRF risk. Trusted single-tenant deployments can enable internal feed URLs in Server Management → Sync. See [`docs/security.md`](docs/security.md).
+
+## ⚡ SaaS Provisioning (Internal API)
+
+FeedFerret exposes internal API routes for external systems to manage user lifecycle without SaaS logic in the OSS core.
+
+**Required:** Set `INTERNAL_API_KEY` environment variable.
+
+```bash
+# Create a user (e.g., from a Stripe checkout webhook)
+curl -X POST https://rss.example.com/api/internal/provision-user \
+  -H "Authorization: Bearer $INTERNAL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "name": "Alice"}'
+
+# Suspend a user (e.g., from a subscription cancellation)
+curl -X POST https://rss.example.com/api/internal/suspend-user \
+  -H "Authorization: Bearer $INTERNAL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com"}'
+```
+
+Full docs: [`docs/internal-api.md`](docs/internal-api.md)
+
+## 🛡 GDPR / Right to Erasure
+
+Users can delete their account from **Settings → Delete Account**. All data is cascade-deleted atomically. See [`docs/gdpr.md`](docs/gdpr.md).
+
+---
+
 ## 🛠 Tech Stack
 
 - **Framework**: [Next.js App Router](https://nextjs.org/) (v16+, React 19)
 - **Auth**: [Auth.js (NextAuth v5)](https://authjs.dev/)
-- **Database**: [Prisma](https://www.prisma.io/) with [SQLite](https://sqlite.org/)
+- **Database**: [Prisma](https://www.prisma.io/) with [PostgreSQL](https://www.postgresql.org/) (default) or [SQLite](https://sqlite.org/)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/) & [shadcn/ui](https://ui.shadcn.com/)
 - **State Management**: [TanStack Query](https://tanstack.com/query/latest)
 - **Parsing**: [rss-parser](https://github.com/rbren/rss-parser) & [isomorphic-dompurify](https://github.com/kkomelin/isomorphic-dompurify)
 
-## 📄 License
+---
 
-MIT License. See [LICENSE](LICENSE) for more details.
-
-## Browser Push Notifications
+## 🔔 Browser Push Notifications
 
 FeedFerret supports browser/PWA push notifications for new articles.
 
@@ -212,7 +282,9 @@ FeedFerret supports browser/PWA push notifications for new articles.
 
 Notification frequency is user-configurable (`immediate`, `hourly`, `daily`, `off`). By default, notifications include article titles; users can switch to generic private notifications.
 
-## FreshRSS Extended OPML
+---
+
+## 📥 FreshRSS Extended OPML
 
 FeedFerret imports and exports FreshRSS extended OPML (`xmlns:frss="https://freshrss.org/opml"`) including:
 
@@ -222,3 +294,9 @@ FeedFerret imports and exports FreshRSS extended OPML (`xmlns:frss="https://fres
 - Full-content selectors, content filters, and auto-read filter strings.
 - FreshRSS cURL-style HTTP options such as custom headers, cookies, POST fields, redirects, proxies, and user-agent.
 - Dynamic OPML categories via `frss:opmlUrl`, synchronized automatically with SSRF protections.
+
+---
+
+## 📄 License
+
+MIT License. See [LICENSE](LICENSE) for more details.
