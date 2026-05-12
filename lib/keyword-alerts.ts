@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { sendPushToUser } from "@/lib/push";
+import { dispatchWebhookEvent } from "@/lib/webhooks";
 
 function parseActions(value: string | null | undefined) {
   if (!value) return ["notify_inapp"];
@@ -39,7 +40,7 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
         ...scopeWhere(alert.scope),
         ...searchWhere,
       },
-      include: { feed: { select: { id: true, name: true } } },
+      select: { id: true, title: true, link: true, publishedAt: true, feed: { select: { id: true, name: true } } },
       orderBy: { publishedAt: "desc" },
       take: 50,
     });
@@ -75,6 +76,23 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
         feedId: matches.length === 1 ? first.feed.id : undefined,
         tag: `keyword-alert:${alert.id}`,
       }).catch((error) => console.warn("[keyword-alerts] push failed", error));
+    }
+
+    // Webhook: keyword_match event per matching article
+    for (const article of matches) {
+      dispatchWebhookEvent(userId, "keyword_match", {
+        alertId: alert.id,
+        alertName: alert.name,
+        query: alert.query,
+        article: {
+          id: article.id,
+          title: article.title,
+          link: article.link,
+          feedId: article.feed.id,
+          feedName: article.feed.name,
+          publishedAt: article.publishedAt,
+        },
+      }, article.feed.id).catch(() => {});
     }
 
     await db.keywordAlert.update({

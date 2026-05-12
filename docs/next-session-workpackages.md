@@ -31,31 +31,21 @@ Limitations: does not deduplicate across different URLs for the same article (e.
 
 Migration `20260512003000_add_duplicate_detection` adds columns and backfills existing articles with a simplified URL normalization (no SHA-256 in SQLite; proper hashes computed on next sync).
 
-## 2. Outbound Webhooks — Medium
+## 2. Outbound Webhooks — ✅ Done
 
-**Outcome:** repeated articles are hidden by default or visibly grouped/badged.
+**Implemented 2026-05-12.**
 
-Acceptance criteria:
+Schema: `Webhook` (id, userId, name, url, secret, enabled, events JSON, feedFilter JSON), `WebhookDelivery` (id, webhookId, event, payload, status, statusCode, error, attempts, nextRetryAt, deliveredAt).
 
-- Schema stores normalized content hashes and duplicate relationships.
-- New articles are deduplicated during sync without breaking existing per-feed history.
-- Default article queries respect a user-level “Hide duplicates” setting.
-- UI can reveal/badge duplicates and show which feed first contained the article.
-- Feed stats include duplicate counts.
-- Docs mention the URL-normalization rules and limitations.
+Events: `new_article` (non-duplicate only), `keyword_match` (per matching article), `feed_error`, `test`.
 
-## 2. Outbound Webhooks — Medium
+Signature: `X-FeedFerret-Signature: sha256=HMAC-SHA256(secret, raw_body)` — same format as GitHub webhooks.
 
-**Outcome:** users can send signed automation events to n8n/Zapier/Make/custom endpoints.
+Retry: 5 attempts with delays [0, 5min, 30min, 2h, 8h]. Processed in background sync tick.
 
-Acceptance criteria:
+UI: Settings → Outbound Webhooks section. Create/edit form, enable toggle, rotate secret, test ping, delivery log per webhook.
 
-- Webhook configuration supports name, URL, generated secret, enabled state, events, and optional filters.
-- Deliveries are signed with HMAC-SHA256 and logged with status/error/attempt count.
-- Events exist for `new_article`, `keyword_match`, and `feed_error`.
-- Delivery retry uses bounded exponential backoff.
-- Management UI includes create/edit, enable toggle, secret copy/rotate, delivery log, and test payload.
-- Docs include payload examples and signature verification guidance.
+Docs: `docs/webhooks.md` — payload examples, Node.js + Python verification code, retry table.
 
 ## 3. Keyword Alerts follow-up — Low/Medium
 

@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor } from "@/hooks/use-rss-data";
+import { WebhookSection } from "@/components/webhook-management";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -376,6 +377,9 @@ export function SettingsForm() {
 
           {/* Digest Email */}
           <DigestSection />
+
+          {/* Outbound Webhooks */}
+          <WebhookSection />
 
           {/* User Profile */}
           <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">

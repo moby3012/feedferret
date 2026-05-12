@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor } from "@/app/actions/settings"
+import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, rotateWebhookSecret, getWebhookDeliveries, sendTestWebhook } from "@/app/actions/webhooks"
 import { toast } from "sonner"
 
 export function useFeeds() {
@@ -683,6 +684,90 @@ export function useDisableTwoFactor() {
         },
         onError: (error) => {
             toast.error(error instanceof Error ? error.message : "Could not disable 2FA")
+        },
+    })
+}
+
+export function useWebhooks() {
+    return useQuery({
+        queryKey: ["webhooks"],
+        queryFn: () => getWebhooks(),
+        staleTime: 30_000,
+    })
+}
+
+export function useCreateWebhook() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: { name: string; url: string; events: string[]; feedFilter?: string[] | null }) =>
+            createWebhook(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["webhooks"] })
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not create webhook")
+        },
+    })
+}
+
+export function useUpdateWebhook() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Parameters<typeof updateWebhook>[1] }) =>
+            updateWebhook(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["webhooks"] })
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not update webhook")
+        },
+    })
+}
+
+export function useDeleteWebhook() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (id: string) => deleteWebhook(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["webhooks"] })
+            toast.success("Webhook deleted")
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not delete webhook")
+        },
+    })
+}
+
+export function useRotateWebhookSecret() {
+    return useMutation({
+        mutationFn: (id: string) => rotateWebhookSecret(id),
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Could not rotate secret")
+        },
+    })
+}
+
+export function useWebhookDeliveries(webhookId: string | null) {
+    return useQuery({
+        queryKey: ["webhook-deliveries", webhookId],
+        queryFn: () => getWebhookDeliveries(webhookId!),
+        enabled: !!webhookId,
+        staleTime: 10_000,
+    })
+}
+
+export function useSendTestWebhook() {
+    return useMutation({
+        mutationFn: (id: string) => sendTestWebhook(id),
+        onSuccess: (result) => {
+            if (result.ok) {
+                toast.success(`Test delivered (HTTP ${result.status})`)
+            } else {
+                toast.error(`Test failed: ${(result as any).error ?? `HTTP ${result.status}`}`)
+            }
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Test failed")
         },
     })
 }
