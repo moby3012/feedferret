@@ -16,6 +16,7 @@ import {
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/freshrss-opml";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { randomBytes } from "crypto";
+import { decryptIfValue } from "@/lib/crypto";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -1320,4 +1321,47 @@ export async function previewFeedExtraction(feedId: string, articleUrl: string) 
         charCount: plain.length,
         selectorUsed: feed.fullTextSelector || "(auto-detect)",
     };
+}
+
+export async function summarizeArticle(articleId: string): Promise<{ summary: string }> {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const [article, user] = await Promise.all([
+        db.article.findFirst({
+            where: { id: articleId, userId: session.user.id },
+            select: { id: true, content: true },
+        }),
+        db.user.findUnique({
+            where: { id: session.user.id },
+            select: {
+                aiProvider: true,
+                aiApiKey: true,
+                aiModel: true,
+                aiOllamaBaseUrl: true,
+                aiSummaryLanguage: true,
+            },
+        }),
+    ]);
+
+    if (!article) throw new Error("Article not found");
+    if (!user?.aiProvider) throw new Error("No AI provider configured. Set up AI in Settings → AI Summaries.");
+
+    const { generateSummary } = await import("@/lib/ai-summary");
+
+    const summary = await generateSummary(article.content, {
+        provider: user.aiProvider as "openai" | "anthropic" | "ollama",
+        apiKey: decryptIfValue(user.aiApiKey),
+        model: user.aiModel,
+        ollamaBaseUrl: user.aiOllamaBaseUrl,
+        language: user.aiSummaryLanguage,
+    });
+
+    await db.article.update({
+        where: { id: articleId },
+        data: { aiSummary: summary, aiSummarizedAt: new Date() },
+    });
+
+    revalidatePath("/");
+    return { summary };
 }

@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import { sendDigestEmail, getDigestArticles } from "@/lib/digest-email";
 import { buildOtpAuthUri, generateTotpSecret, verifyTotpToken } from "@/lib/totp";
+import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 
 async function requireUser() {
   const session = await auth();
@@ -269,4 +270,73 @@ export async function sendTestDigest() {
   });
 
   return { sent: true, articleCount: articles.length };
+}
+
+export async function getAiSettings() {
+  const session = await requireUser();
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      aiProvider: true,
+      aiApiKey: true,
+      aiModel: true,
+      aiOllamaBaseUrl: true,
+      aiAutoSummarize: true,
+      aiSummaryLanguage: true,
+    },
+  });
+  return {
+    provider: user?.aiProvider ?? null,
+    hasApiKey: !!user?.aiApiKey,
+    model: user?.aiModel ?? null,
+    ollamaBaseUrl: user?.aiOllamaBaseUrl ?? null,
+    autoSummarize: user?.aiAutoSummarize ?? false,
+    language: user?.aiSummaryLanguage ?? "same",
+  };
+}
+
+export async function updateAiSettings(data: {
+  provider?: string | null;
+  apiKey?: string | null;
+  clearApiKey?: boolean;
+  model?: string | null;
+  ollamaBaseUrl?: string | null;
+  autoSummarize?: boolean;
+  language?: string;
+}) {
+  const session = await requireUser();
+  const updateData: Record<string, unknown> = {};
+  if ("provider" in data) updateData.aiProvider = data.provider;
+  if (data.clearApiKey) {
+    updateData.aiApiKey = null;
+  } else if (data.apiKey) {
+    updateData.aiApiKey = encryptIfValue(data.apiKey);
+  }
+  if ("model" in data) updateData.aiModel = data.model;
+  if ("ollamaBaseUrl" in data) updateData.aiOllamaBaseUrl = data.ollamaBaseUrl;
+  if ("autoSummarize" in data) updateData.aiAutoSummarize = data.autoSummarize;
+  if ("language" in data) updateData.aiSummaryLanguage = data.language;
+  await db.user.update({ where: { id: session.user.id }, data: updateData });
+  revalidatePath("/settings");
+}
+
+export async function testAiConnection(): Promise<{ success: boolean; error?: string }> {
+  const session = await requireUser();
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: { aiProvider: true, aiApiKey: true, aiModel: true, aiOllamaBaseUrl: true },
+  });
+  if (!user?.aiProvider) return { success: false, error: "No AI provider configured" };
+  try {
+    const { generateSummary } = await import("@/lib/ai-summary");
+    await generateSummary("Short test content for connectivity verification.", {
+      provider: user.aiProvider as "openai" | "anthropic" | "ollama",
+      apiKey: decryptIfValue(user.aiApiKey),
+      model: user.aiModel,
+      ollamaBaseUrl: user.aiOllamaBaseUrl,
+    });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }

@@ -28,6 +28,9 @@ import {
   AlertTriangle,
   Bell,
   BellOff,
+  Sparkles,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -49,7 +52,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor } from "@/hooks/use-rss-data";
+import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection } from "@/hooks/use-rss-data";
 import { WebhookSection } from "@/components/webhook-management";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -377,6 +380,9 @@ export function SettingsForm() {
 
           {/* Digest Email */}
           <DigestSection />
+
+          {/* AI Summaries */}
+          <AiSummarySection />
 
           {/* Outbound Webhooks */}
           <WebhookSection />
@@ -1265,6 +1271,198 @@ function ApiTokenSection() {
         usage examples. Pass the token as{" "}
         <code className="bg-muted px-1 py-0.5 rounded text-[11px]">Authorization: Bearer &lt;token&gt;</code>.
       </p>
+    </section>
+  );
+}
+
+function AiSummarySection() {
+  const { data: ai } = useAiSettings();
+  const updateAi = useUpdateAiSettings();
+  const testAi = useTestAiConnection();
+  const [provider, setProvider] = useState<string>("");
+  const [apiKey, setApiKey] = useState("");
+  const [model, setModel] = useState("");
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState("");
+  const [language, setLanguage] = useState("same");
+  const [autoSummarize, setAutoSummarize] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+  useEffect(() => {
+    if (!ai) return;
+    setProvider(ai.provider ?? "");
+    setModel(ai.model ?? "");
+    setOllamaBaseUrl(ai.ollamaBaseUrl ?? "");
+    setLanguage(ai.language ?? "same");
+    setAutoSummarize(ai.autoSummarize ?? false);
+  }, [ai]);
+
+  const handleSave = () => {
+    setTestResult(null);
+    updateAi.mutate({
+      provider: provider || null,
+      ...(apiKey ? { apiKey } : {}),
+      model: model || null,
+      ollamaBaseUrl: ollamaBaseUrl || null,
+      autoSummarize,
+      language,
+    });
+  };
+
+  const handleTest = async () => {
+    setTestResult(null);
+    const result = await testAi.mutateAsync();
+    setTestResult(result);
+  };
+
+  return (
+    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+      <div className="flex items-start gap-4 mb-6">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Sparkles className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">AI Summaries (BYOK)</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            Summarize articles on demand using your own OpenAI, Anthropic, or Ollama credentials. Your API key is encrypted at rest and never shared.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {/* Provider */}
+        <div className="grid gap-1.5">
+          <label className="text-sm font-medium">Provider</label>
+          <Select value={provider} onValueChange={setProvider}>
+            <SelectTrigger className="h-10 rounded-xl">
+              <SelectValue placeholder="Select provider" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">None (disabled)</SelectItem>
+              <SelectItem value="openai">OpenAI</SelectItem>
+              <SelectItem value="anthropic">Anthropic</SelectItem>
+              <SelectItem value="ollama">Ollama (local)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {provider && provider !== "ollama" && (
+          <div className="grid gap-1.5">
+            <label className="text-sm font-medium">
+              API Key
+              {ai?.hasApiKey && !apiKey && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">(currently set)</span>
+              )}
+            </label>
+            <Input
+              type="password"
+              placeholder={ai?.hasApiKey ? "Leave blank to keep existing key" : "sk-..."}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="h-10 rounded-xl font-mono text-sm"
+            />
+          </div>
+        )}
+
+        {provider === "ollama" && (
+          <div className="grid gap-1.5">
+            <label className="text-sm font-medium">Ollama Base URL</label>
+            <Input
+              placeholder="http://localhost:11434"
+              value={ollamaBaseUrl}
+              onChange={(e) => setOllamaBaseUrl(e.target.value)}
+              className="h-10 rounded-xl font-mono text-sm"
+            />
+          </div>
+        )}
+
+        {provider && (
+          <div className="grid gap-1.5">
+            <label className="text-sm font-medium">
+              Model
+              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                {provider === "openai" && "(default: gpt-4o-mini)"}
+                {provider === "anthropic" && "(default: claude-haiku-4-5-20251001)"}
+                {provider === "ollama" && "(default: llama3)"}
+              </span>
+            </label>
+            <Input
+              placeholder="optional override"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="h-10 rounded-xl font-mono text-sm"
+            />
+          </div>
+        )}
+
+        {provider && (
+          <div className="grid gap-1.5">
+            <label className="text-sm font-medium">Summary language</label>
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger className="h-10 rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="same">Same as article</SelectItem>
+                <SelectItem value="English">English</SelectItem>
+                <SelectItem value="German">German</SelectItem>
+                <SelectItem value="French">French</SelectItem>
+                <SelectItem value="Spanish">Spanish</SelectItem>
+                <SelectItem value="Japanese">Japanese</SelectItem>
+                <SelectItem value="Chinese">Chinese</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {provider && (
+          <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Auto-summarize on sync</p>
+              <p className="text-xs text-muted-foreground">Automatically summarize new articles (uses API credits)</p>
+            </div>
+            <Switch
+              checked={autoSummarize}
+              onCheckedChange={setAutoSummarize}
+              className="h-7 w-12"
+            />
+          </div>
+        )}
+
+        {testResult && (
+          <div className={cn(
+            "flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm",
+            testResult.success
+              ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400"
+              : "border-destructive/30 bg-destructive/10 text-destructive"
+          )}>
+            {testResult.success
+              ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+              : <XCircle className="h-4 w-4 shrink-0" />}
+            <span>{testResult.success ? "Connection successful" : testResult.error}</span>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <Button
+            onClick={handleSave}
+            disabled={updateAi.isPending}
+            className="rounded-2xl h-10"
+          >
+            {updateAi.isPending ? "Saving…" : "Save"}
+          </Button>
+          {provider && (
+            <Button
+              variant="outline"
+              onClick={handleTest}
+              disabled={testAi.isPending}
+              className="rounded-2xl h-10"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              {testAi.isPending ? "Testing…" : "Test connection"}
+            </Button>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

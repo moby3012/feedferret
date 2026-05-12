@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, type TouchEvent } from "react";
+import { useEffect, useRef, useState, type TouchEvent } from "react";
 import Image from "next/image";
 import { Article } from "@/lib/rss-data";
+import { useSummarizeArticle } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -77,6 +78,12 @@ export function ArticleReader({
 }: ArticleReaderProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const [localSummary, setLocalSummary] = useState<string | null>(null);
+  const summarize = useSummarizeArticle();
+
+  useEffect(() => {
+    setLocalSummary(null);
+  }, [article?.id]);
 
   useEffect(() => {
     if (!article?.id) return;
@@ -365,6 +372,46 @@ export function ArticleReader({
               </div>
             )}
           </header>
+
+          {/* AI Summary card */}
+          {(() => {
+            const summary = localSummary ?? article.aiSummary;
+            return (
+              <div className="mb-8 rounded-2xl border border-border/60 bg-muted/40 px-5 py-4 animate-fade-in-up">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    AI Summary
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs rounded-xl text-muted-foreground hover:text-foreground"
+                    disabled={summarize.isPending}
+                    onClick={async () => {
+                      const result = await summarize.mutateAsync(article.id);
+                      setLocalSummary(result.summary);
+                    }}
+                  >
+                    {summarize.isPending ? (
+                      <span className="animate-pulse">Summarizing…</span>
+                    ) : summary ? (
+                      "Regenerate"
+                    ) : (
+                      "Summarize"
+                    )}
+                  </Button>
+                </div>
+                {summary ? (
+                  <p className="mt-2 text-sm leading-relaxed text-foreground/80">{summary}</p>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground italic">
+                    Click &ldquo;Summarize&rdquo; to generate an AI summary. Requires AI provider configured in Settings.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Hero Image */}
           {article.imageUrl && (

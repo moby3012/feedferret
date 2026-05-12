@@ -55,6 +55,12 @@ model User {
   pushPrivatePayloads     Boolean   @default(true)      // include article titles in push payloads
   pushLastSentAt          DateTime?
   hideDuplicates          Boolean   @default(true)
+  aiProvider              String?                       // "openai" | "anthropic" | "ollama"
+  aiApiKey                String?                       // encrypted at rest
+  aiModel                 String?
+  aiOllamaBaseUrl         String?
+  aiAutoSummarize         Boolean   @default(false)
+  aiSummaryLanguage       String    @default("same")   // "same" | BCP-47 tag e.g. "de"
   role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -262,6 +268,8 @@ model Article {
   feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   labels      ArticleLabel[]
+  aiSummary      String?
+  aiSummarizedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, feedId, dedupeKey])

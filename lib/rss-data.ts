@@ -31,6 +31,8 @@ export interface Article {
   duplicateOf?: string | null
   duplicateCount?: number
   canonicalFeedName?: string | null
+  aiSummary?: string | null
+  aiSummarizedAt?: string | Date | null
   labels?: Array<{
     label: {
       id: string

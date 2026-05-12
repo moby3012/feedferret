@@ -86,18 +86,26 @@ Privacy/network notes:
 - Discovery fetches the *publisher's* page server-side (not from the user's browser). The request originates from the FeedFerret server, uses SSRF protection, and strips private IPs/localhost. No external third-party API calls are made.
 - Starter pack imports trigger individual feed syncs, which fetch from the RSS feed servers directly.
 
-## 5. AI Article Summaries (BYOK) — Medium/High
+## 5. AI Article Summaries (BYOK) — ✅ Done
 
-**Outcome:** users can summarize articles on demand or during sync using their own provider credentials.
+**Implemented 2026-05-12.**
 
-Acceptance criteria:
+Schema:
+- `User`: `aiProvider` (openai/anthropic/ollama), `aiApiKey` (AES-256-GCM encrypted), `aiModel`, `aiOllamaBaseUrl`, `aiAutoSummarize`, `aiSummaryLanguage`.
+- `Article`: `aiSummary`, `aiSummarizedAt`.
 
-- User settings store provider, encrypted key, model, optional Ollama URL, auto-summarize flag, and language.
-- Article model stores cached summary and timestamp.
-- Provider adapters exist for OpenAI, Anthropic, and Ollama.
-- On-demand summarize action works from article reader.
-- Auto-summarize is rate-limited and cost-conscious.
-- Docs explain BYOK, privacy, cost, and provider setup.
+Architecture:
+- `lib/ai-summary.ts`: `generateSummary(content, config)` with provider adapters for OpenAI (`gpt-4o-mini` default), Anthropic (`claude-haiku-4-5-20251001` default), Ollama (`llama3` default). Input capped at 8 000 chars. HTML stripped before sending.
+- `app/actions/settings.ts`: `getAiSettings`, `updateAiSettings`, `testAiConnection`.
+- `app/actions/feeds.ts`: `summarizeArticle(articleId)` — fetches article + user AI config, generates summary, persists to DB.
+- `hooks/use-rss-data.ts`: `useAiSettings`, `useUpdateAiSettings`, `useTestAiConnection`, `useSummarizeArticle`.
+- `components/settings-form.tsx`: AI Summaries section — provider/key/model/Ollama URL/language/auto-summarize toggle/test button.
+- `components/article-reader.tsx`: Summary card above article body — shows cached summary or placeholder. Summarize/Regenerate button triggers on-demand summarization. Local state shows result immediately without waiting for query refetch.
+
+Privacy/cost notes:
+- API key encrypted with AES-256-GCM using `AUTH_SECRET` as key material.
+- Summarization is on-demand only unless `aiAutoSummarize` is enabled.
+- Auto-summarize is a stored preference; the actual rate-limiting enforcement is left to future background-sync integration.
 
 ## 6. Reader Client Compatibility QA — Medium
 

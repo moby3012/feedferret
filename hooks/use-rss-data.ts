@@ -1,8 +1,8 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction } from "@/app/actions/feeds"
-import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor } from "@/app/actions/settings"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle } from "@/app/actions/feeds"
+import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection } from "@/app/actions/settings"
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, rotateWebhookSecret, getWebhookDeliveries, sendTestWebhook } from "@/app/actions/webhooks"
 import { toast } from "sonner"
 
@@ -778,5 +778,45 @@ export function useAlertHistory(alertId: string | null) {
         queryFn: () => import("@/app/actions/feeds").then(m => m.getAlertHistory(alertId!, 20)),
         enabled: !!alertId,
         staleTime: 10_000,
+    })
+}
+
+export function useAiSettings() {
+    return useQuery({
+        queryKey: ["ai-settings"],
+        queryFn: () => getAiSettings(),
+    })
+}
+
+export function useUpdateAiSettings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: Parameters<typeof updateAiSettings>[0]) => updateAiSettings(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["ai-settings"] })
+            toast.success("AI settings saved")
+        },
+        onError: (err) => {
+            toast.error(err instanceof Error ? err.message : "Save failed")
+        },
+    })
+}
+
+export function useTestAiConnection() {
+    return useMutation({
+        mutationFn: () => testAiConnection(),
+    })
+}
+
+export function useSummarizeArticle() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (articleId: string) => summarizeArticle(articleId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+        },
+        onError: (err) => {
+            toast.error(err instanceof Error ? err.message : "Summarize failed")
+        },
     })
 }
