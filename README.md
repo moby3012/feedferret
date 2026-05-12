@@ -18,6 +18,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 - **OPML Management**: Import with duplicate detection, selective export by category/feed, JSON full-data export.
 - **Labels & Categories**: Tag articles with colored labels; organize feeds into hierarchical categories.
 - **Google Reader API**: Expanded compatibility for native RSS clients (Reeder, NetNewsWire, FeedMe, ReadKit, etc.).
+- **Public REST API + MCP**: Token-authenticated `/api/v1/*` endpoints and `/api/mcp` for n8n, automations, and AI agents.
 - **Keyboard First**: Power-user shortcuts for blazing-fast navigation (press `?` for overlay):
   - `/`: Open search
   - `Esc`: Close search / dismiss
@@ -212,6 +213,14 @@ SYNC_SECRET=$(openssl rand -hex 32)
 ```
 
 ---
+
+## 🔌 API & Integrations
+
+- Public REST API v1, n8n examples, OpenAPI: [`docs/api.md`](docs/api.md)
+- MCP endpoint for AI agents: [`docs/mcp.md`](docs/mcp.md)
+- Google Reader compatibility: [`docs/google-reader-api.md`](docs/google-reader-api.md)
+- Outbound webhooks: [`docs/webhooks.md`](docs/webhooks.md)
+- Internal SaaS provisioning API: [`docs/internal-api.md`](docs/internal-api.md)
 
 ## 🔐 Auth & Email
 

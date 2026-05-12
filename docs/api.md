@@ -1,245 +1,517 @@
-# FeedFerret REST API
+# FeedFerret API-Dokumentation
 
-This document covers the public REST API endpoints available for external integrations such as browser extensions and mobile apps.
+FeedFerret stellt jetzt drei Integrationsflächen bereit:
 
-> **Internal API (SaaS provisioning):** If you need to provision or suspend users programmatically from an external system (e.g., a Stripe webhook), see [docs/internal-api.md](./internal-api.md).
+1. **Public REST API v1** für n8n, mobile Apps, Browser Extensions und eigene Automationen.
+2. **MCP Endpoint** für Sprachmodelle und Agenten: [`docs/mcp.md`](./mcp.md).
+3. **Kompatibilitäts-APIs** wie Google Reader und bestehende Read-Later-/Webhook-Endpunkte.
 
-## Authentication
-
-All API endpoints require authentication. Two methods are supported:
-
-### Session Cookie (Web App)
-Standard Next.js session cookie set after logging in at `/login`. Works automatically in same-origin contexts (the web UI).
-
-### Bearer Token (External Apps)
-For browser extensions, mobile apps, or any non-browser client:
-
-1. Log in to FeedFerret in your browser
-2. Go to **Settings → API Access**
-3. Click **Generate API token**
-4. Copy the token immediately — it is only shown once
-
-Pass the token in every API request:
-```
-Authorization: Bearer <your-token>
-```
-
-> **Security:** The token grants access to the Read Later list (and future API endpoints) scoped to your account only. Treat it like a password. Revoke and regenerate it in Settings if compromised.
+> Ziel: Alle externen Schreibzugriffe sind benutzerbezogen, tokenbasiert und ohne Admin-/Server-Secrets nutzbar. Interne SaaS-Provisionierung bleibt getrennt in [`docs/internal-api.md`](./internal-api.md).
 
 ---
 
 ## Base URL
 
-```
+```text
 https://your-feedferret-host
 ```
 
-All endpoints are relative to this base URL.
+---
+
+## Authentifizierung
+
+### Session Cookie
+
+Für Same-Origin-UI-Integrationen kann die normale FeedFerret-Session genutzt werden.
+
+### Bearer Token
+
+Für n8n, MCP, externe Apps und Skripte:
+
+1. In FeedFerret einloggen.
+2. **Settings → API Access** öffnen.
+3. API-Token generieren.
+4. Token sicher speichern; er wird nur einmal angezeigt.
+
+```http
+Authorization: Bearer <feedferret-api-token>
+```
+
+Sicherheitsregeln:
+
+- Der Token ist einem Benutzerkonto zugeordnet.
+- Ein deaktivierter Benutzer verliert API-Zugriff.
+- Token-Rotation über `POST /api/user/token`; Widerruf über `DELETE /api/user/token`.
+- Token nie clientseitig in öffentlichen Webseiten ausliefern.
 
 ---
 
-## Endpoints
+## Fehlerformat
 
-### Read Later
+Public REST v1 nutzt ein einheitliches JSON-Fehlerformat:
 
-#### `GET /api/read-later`
-
-List all articles in your Read Later queue, sorted by most recently saved first.
-
-**Auth:** Session or Bearer token
-
-**Response `200 OK`:**
 ```json
-[
-  {
-    "id": "clxyz123",
-    "title": "Article Title",
-    "link": "https://example.com/article",
-    "excerpt": "Short preview text…",
-    "author": "Author Name",
-    "publishedAt": "2026-05-11T10:00:00.000Z",
-    "imageUrl": "https://example.com/image.jpg",
-    "isRead": false,
-    "isStarred": false,
-    "isReadLater": true,
-    "readLaterSavedAt": "2026-05-11T12:34:56.000Z",
-    "feed": {
-      "id": "feed123",
-      "name": "The Verge",
-      "icon": "📱"
-    }
+{
+  "error": {
+    "message": "Unauthorized"
   }
-]
-```
-
----
-
-#### `POST /api/read-later`
-
-Add an article to your Read Later queue.
-
-**Auth:** Session or Bearer token
-
-**Body (JSON):** Provide either `articleId` or `url`:
-```json
-{ "articleId": "clxyz123" }
-```
-```json
-{ "url": "https://example.com/article" }
-```
-
-The `url` field looks up the article by its stored link. The article must already exist in your FeedFerret feeds.
-
-**Response `200 OK`:**
-```json
-{
-  "id": "clxyz123",
-  "isReadLater": true,
-  "readLaterSavedAt": "2026-05-11T12:34:56.000Z"
 }
 ```
 
-**Response `404 Not Found`:**
-```json
-{ "error": "Article not found" }
-```
-
-**Response `400 Bad Request`:**
-```json
-{ "error": "Provide articleId or url" }
-```
-
----
-
-#### `DELETE /api/read-later`
-
-Remove an article from your Read Later queue.
-
-**Auth:** Session or Bearer token
-
-**Body (JSON):** Provide either `articleId` or `url`:
-```json
-{ "articleId": "clxyz123" }
-```
-```json
-{ "url": "https://example.com/article" }
-```
-
-**Response `200 OK`:**
-```json
-{
-  "id": "clxyz123",
-  "isReadLater": false
-}
-```
-
----
-
-### API Token Management
-
-These endpoints are for managing your personal API token. They require **session cookie auth only** (not Bearer token), to prevent a compromised token from being used to regenerate itself.
-
-#### `GET /api/user/token`
-
-Check whether you have an active API token.
-
-**Auth:** Session cookie only
-
-**Response `200 OK`:**
-```json
-{ "hasToken": true }
-```
-
----
-
-#### `POST /api/user/token`
-
-Generate or regenerate your API token. **Returns the raw token only once** — it cannot be retrieved again after this response.
-
-**Auth:** Session cookie only
-
-**Response `200 OK`:**
-```json
-{ "token": "a3f4e8b2c1d5...64-char hex string" }
-```
-
----
-
-#### `DELETE /api/user/token`
-
-Revoke your API token. All active integrations will immediately stop working.
-
-**Auth:** Session cookie only
-
-**Response `200 OK`:**
-```json
-{ "revoked": true }
-```
-
----
-
-## Search Syntax
-
-When using the web app or future search API endpoints, you can use advanced search tokens:
-
-| Token | Description | Example |
-|---|---|---|
-| `is:readlater` | Articles in Read Later queue | `is:readlater` |
-| `is:unread` | Unread articles | `is:unread` |
-| `is:starred` | Starred articles | `is:starred` |
-| `feed:name` | Filter by feed name | `feed:verge` |
-| `category:name` | Filter by category | `category:tech` |
-| `label:name` | Filter by label | `label:important` |
-| `author:name` | Filter by author | `author:john` |
-| `intitle:word` | Word in title | `intitle:react` |
-| `after:date` | Published after date | `after:2026-01-01` |
-| `before:date` | Published before date | `before:2026-06-01` |
-
-Aliases: `is:later`, `is:saved`, `is:toread` all match Read Later.
-
----
-
-## Browser Extension Integration Pattern
-
-A typical browser extension workflow for "Save current page to Read Later":
-
-```js
-// 1. User clicks extension button on https://example.com/some-article
-
-const FEEDFERRET_HOST = "https://your-feedferret-host";
-const API_TOKEN = "<stored-token>";
-
-const response = await fetch(`${FEEDFERRET_HOST}/api/read-later`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${API_TOKEN}`,
-  },
-  body: JSON.stringify({ url: window.location.href }),
-});
-
-if (response.ok) {
-  showBadge("Saved to Read Later ✓");
-} else if (response.status === 404) {
-  showBadge("Article not in your feeds");
-} else if (response.status === 401) {
-  showBadge("Check your API token in FeedFerret Settings");
-}
-```
-
----
-
-## Error Responses
-
-All endpoints return JSON error objects on failure:
-
-| Status | Meaning |
+| Status | Bedeutung |
 |---|---|
-| `400` | Bad request — missing or invalid body parameters |
-| `401` | Unauthorized — missing or invalid auth |
-| `404` | Not found — article does not exist in your feeds |
-| `500` | Internal server error |
+| `400` | Ungültige Anfrage / fehlende Pflichtfelder |
+| `401` | Kein oder ungültiger Token |
+| `404` | Ressource nicht gefunden oder gehört nicht dem Benutzer |
+| `500` | Serverfehler |
+
+---
+
+## OpenAPI
+
+Eine maschinenlesbare OpenAPI-Zusammenfassung ist verfügbar unter:
+
+```http
+GET /api/v1/openapi.json
+```
+
+Dieser Endpoint ist öffentlich lesbar und beschreibt die wichtigsten REST-v1-Routen.
+
+---
+
+# Public REST API v1
+
+Alle Endpunkte unter `/api/v1/*` akzeptieren Session Cookie oder `Authorization: Bearer <token>`.
+
+## Account
+
+### `GET /api/v1/me`
+
+Gibt das aktuelle API-Konto zurück.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  https://your-host/api/v1/me
+```
+
+Antwort:
 
 ```json
-{ "error": "Human-readable error message" }
+{
+  "id": "clu123",
+  "email": "alice@example.com",
+  "name": "Alice",
+  "role": "USER"
+}
 ```
+
+---
+
+## Artikel
+
+### `GET /api/v1/articles`
+
+Sucht oder listet Artikel.
+
+Query-Parameter:
+
+| Parameter | Typ | Beschreibung |
+|---|---:|---|
+| `q` / `search` | string | Volltext + erweiterte Suchsyntax |
+| `feedId` | string | Nur ein Feed |
+| `categoryId` | string | Nur eine Kategorie |
+| `labelId` | string | Nur ein Label |
+| `isRead` | boolean | `true`/`false` |
+| `isStarred` | boolean | `true`/`false` |
+| `isReadLater` | boolean | `true`/`false` |
+| `after` | date | Publiziert nach Datum |
+| `before` | date | Publiziert vor Datum |
+| `sort` | enum | `newest` (default), `oldest`, `recentlyRead` |
+| `limit` | number | 1–200, default 50 |
+| `offset` | number | Pagination-Offset |
+| `includeDuplicates` | boolean | Duplikate mitliefern |
+
+Beispiel für n8n HTTP Request Node:
+
+```bash
+curl -G "https://your-host/api/v1/articles" \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-urlencode "q=is:unread intitle:AI after:7d" \
+  --data-urlencode "limit=20"
+```
+
+Antwort:
+
+```json
+{
+  "items": [
+    {
+      "id": "cla1",
+      "feedId": "clf1",
+      "title": "Example article",
+      "link": "https://example.com/article",
+      "excerpt": "Short summary…",
+      "content": "<p>Full content…</p>",
+      "author": "Author",
+      "publishedAt": "2026-05-12T09:00:00.000Z",
+      "isRead": false,
+      "isStarred": false,
+      "isReadLater": false,
+      "feed": { "id": "clf1", "name": "Example Feed", "url": "https://example.com/rss.xml" },
+      "labels": []
+    }
+  ],
+  "pagination": {
+    "limit": 20,
+    "offset": 0,
+    "total": 42,
+    "nextOffset": 20
+  }
+}
+```
+
+### `GET /api/v1/articles/{id}`
+
+Lädt einen Artikel inkl. Feed und Labels.
+
+### `PATCH /api/v1/articles/{id}`
+
+Ändert Artikelstatus und optional Labels.
+
+Body:
+
+```json
+{
+  "isRead": true,
+  "isStarred": true,
+  "isReadLater": false,
+  "labelIds": ["lbl1", "lbl2"]
+}
+```
+
+### `POST /api/v1/articles/mark-all-read`
+
+Markiert passende ungelesene Artikel als gelesen.
+
+Body-Filter sind kombinierbar:
+
+```json
+{
+  "query": "feed:verge after:30d",
+  "feedId": "clf1",
+  "categoryId": "cat1",
+  "labelId": "lbl1"
+}
+```
+
+Antwort:
+
+```json
+{ "updated": 12 }
+```
+
+---
+
+## Feeds
+
+### `GET /api/v1/feeds`
+
+Listet alle Feeds inkl. Kategorie, Status und Unread Count.
+
+### `POST /api/v1/feeds`
+
+Fügt einen Feed hinzu und synchronisiert standardmäßig direkt.
+
+Body:
+
+```json
+{
+  "url": "https://example.com/feed.xml",
+  "name": "Example",
+  "categoryId": "cat1",
+  "sync": true
+}
+```
+
+### `GET /api/v1/feeds/{id}`
+
+Lädt einen Feed.
+
+### `PATCH /api/v1/feeds/{id}`
+
+Aktualisiert Feed-Metadaten und Fetch-/Reader-Optionen.
+
+Wichtige Felder:
+
+```json
+{
+  "name": "New title",
+  "categoryId": "cat1",
+  "updateFrequency": 60,
+  "retentionDays": 90,
+  "keepMinArticles": 100,
+  "customUserAgent": "MyBot/1.0",
+  "fetchTimeoutSecs": 15,
+  "sslVerify": true,
+  "maxSizeKb": 4096,
+  "fullTextSelector": "article",
+  "fullTextRemoveSelectors": "nav,.ads",
+  "autoFetchFullText": true
+}
+```
+
+### `DELETE /api/v1/feeds/{id}`
+
+Löscht einen Feed mit Artikeln.
+
+### `POST /api/v1/feeds/{id}/sync`
+
+Synchronisiert genau einen Feed.
+
+---
+
+## Kategorien
+
+### `GET /api/v1/categories`
+
+Listet Kategorien/Folders.
+
+### `POST /api/v1/categories`
+
+```json
+{ "name": "AI", "parentId": null, "order": 10 }
+```
+
+### `PATCH /api/v1/categories/{id}`
+
+```json
+{ "name": "Machine Learning", "order": 20 }
+```
+
+### `DELETE /api/v1/categories/{id}`
+
+Löscht eine Kategorie. Feeds werden per Datenmodell entsprechend entkoppelt/gelöscht, falls Cascade greift.
+
+---
+
+## Labels
+
+### `GET /api/v1/labels`
+
+Listet Labels inkl. Artikelzählung.
+
+### `POST /api/v1/labels`
+
+```json
+{ "name": "Research", "color": "#8b5cf6" }
+```
+
+### `PATCH /api/v1/labels/{id}`
+
+```json
+{ "name": "Important", "color": "#ef4444" }
+```
+
+### `DELETE /api/v1/labels/{id}`
+
+Löscht ein Label und seine Artikelzuordnungen.
+
+---
+
+## Gespeicherte Suchen
+
+### `GET /api/v1/saved-searches`
+
+Listet gespeicherte Suchen.
+
+### `POST /api/v1/saved-searches`
+
+```json
+{ "name": "Unread AI", "query": "is:unread AI", "order": 1 }
+```
+
+### `PATCH /api/v1/saved-searches/{id}`
+
+```json
+{ "query": "is:unread AI after:14d" }
+```
+
+### `DELETE /api/v1/saved-searches/{id}`
+
+Löscht eine gespeicherte Suche.
+
+### `POST /api/v1/saved-searches/{id}/share`
+
+Aktiviert/deaktiviert öffentliche RSS-/Web-Freigabe der Suche.
+
+```json
+{ "enabled": true }
+```
+
+---
+
+## OPML
+
+### `GET /api/v1/opml`
+
+Exportiert alle Feeds und Kategorien als OPML/XML.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  https://your-host/api/v1/opml > feedferret.opml
+```
+
+### `POST /api/v1/opml`
+
+Importiert OPML.
+
+```json
+{ "xml": "<?xml version=\"1.0\"?><opml>...</opml>" }
+```
+
+Antwort:
+
+```json
+{
+  "feedsAdded": 10,
+  "feedsUpdated": 2,
+  "categoriesAdded": 3,
+  "categoriesUpdated": 1,
+  "errors": []
+}
+```
+
+---
+
+## Sync
+
+### `POST /api/v1/sync`
+
+Synchronisiert alle Feeds des aktuellen Benutzers.
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  https://your-host/api/v1/sync
+```
+
+---
+
+# Bestehende Spezial-APIs
+
+## Read Later Kurz-API
+
+Die ältere Kurz-API bleibt kompatibel:
+
+- `GET /api/read-later`
+- `POST /api/read-later`
+- `DELETE /api/read-later`
+
+Sie ist für Browser Extensions weiter praktisch. Neue Integrationen können alternativ `GET /api/v1/articles?isReadLater=true` und `PATCH /api/v1/articles/{id}` verwenden.
+
+## API Token Management
+
+Diese Endpunkte benötigen **Session Cookie**, nicht Bearer Token:
+
+- `GET /api/user/token` → `{ "hasToken": true }`
+- `POST /api/user/token` → erzeugt Token, zeigt ihn einmalig an
+- `DELETE /api/user/token` → widerruft Token
+
+## Google Reader API
+
+Für native RSS-Clients: [`docs/google-reader-api.md`](./google-reader-api.md)
+
+## Webhooks
+
+Outbound Events zu externen Systemen: [`docs/webhooks.md`](./webhooks.md)
+
+## Internal API
+
+Admin-/SaaS-Provisionierung mit `INTERNAL_API_KEY`: [`docs/internal-api.md`](./internal-api.md)
+
+---
+
+# Suchsyntax
+
+Die REST- und MCP-Suche nutzt die vorhandene Advanced Search Syntax.
+
+| Token | Beschreibung | Beispiel |
+|---|---|---|
+| Freitext | Titel, Inhalt, Excerpt, Autor, URL, Feed, Labels | `OpenAI` |
+| Phrase | Exakte Phrase | `"model context protocol"` |
+| `is:unread` | Ungelesene Artikel | `is:unread` |
+| `is:read` | Gelesene Artikel | `is:read` |
+| `is:starred` | Favoriten | `is:starred` |
+| `is:readlater` | Read Later | `is:readlater` |
+| `feed:name` | Feed nach ID, Name oder URL | `feed:verge` |
+| `category:name` | Kategorie nach ID oder Name | `category:AI` |
+| `label:name` | Label nach ID oder Name | `label:research` |
+| `#label` | Kurzform für Label | `#research` |
+| `author:name` | Autor | `author:alice` |
+| `intitle:word` | Titel enthält | `intitle:llm` |
+| `intext:word` | Content/Excerpt enthält | `intext:security` |
+| `inurl:word` | URL enthält | `inurl:github` |
+| `after:date` | Nach Datum | `after:2026-01-01` |
+| `before:date` | Vor Datum | `before:2026-06-01` |
+| Relative Zeit | `d`, `w`, `m`, `y` | `after:7d` |
+| Negation | `-` oder `!` | `AI -feed:spam` |
+
+Aliases:
+
+- `is:later`, `is:saved`, `is:toread` → `is:readlater`
+- `by:` → `author:`
+- `title:` → `intitle:`
+- `text:` / `content:` → `intext:`
+- `url:` / `link:` → `inurl:`
+
+---
+
+# n8n Beispiele
+
+## Neue ungelesene KI-Artikel ziehen
+
+HTTP Request Node:
+
+- Method: `GET`
+- URL: `https://your-host/api/v1/articles`
+- Authentication: Header Auth
+- Header: `Authorization = Bearer {{$env.FEEDFERRET_TOKEN}}`
+- Query:
+  - `q = is:unread AI after:1d`
+  - `limit = 25`
+
+## Artikel nach Verarbeitung markieren
+
+```http
+PATCH /api/v1/articles/{{ $json.id }}
+Authorization: Bearer {{$env.FEEDFERRET_TOKEN}}
+Content-Type: application/json
+
+{ "isRead": true, "isStarred": true }
+```
+
+## Feed per Workflow hinzufügen
+
+```http
+POST /api/v1/feeds
+Authorization: Bearer {{$env.FEEDFERRET_TOKEN}}
+Content-Type: application/json
+
+{
+  "url": "https://example.com/rss.xml",
+  "name": "Example",
+  "sync": true
+}
+```
+
+---
+
+# Weitere sinnvolle öffentliche Schnittstellen (Roadmap)
+
+Bereits umgesetzt sind Artikel, Feeds, Kategorien, Labels, gespeicherte Suchen, OPML, Sync und MCP. Als nächste öffentliche APIs wären besonders nützlich:
+
+- Webhook-Management über REST v1 (derzeit UI/Server Actions + Outbound-Doku).
+- Benachrichtigungen/Keyword Alerts als REST v1.
+- Digest-/Push-Einstellungen als REST v1.
+- Batch-Endpunkte für sehr große Automationen (`POST /api/v1/articles/batch`).
+- Feingranulare API Scopes statt eines globalen User-Tokens.
+- Token-Hashing/Token-Präfixe im Datenmodell für bessere Secret Hygiene.
