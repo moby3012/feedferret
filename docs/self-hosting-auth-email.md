@@ -168,8 +168,8 @@ Make sure the userinfo/id token provides at least:
 
 ```env
 DATABASE_URL="file:./prisma/dev.db"
-NEXTAUTH_SECRET="replace-me"
-NEXTAUTH_URL="https://rss.example.com"
+AUTH_SECRET="replace-me"
+AUTH_URL="https://rss.example.com"
 
 # Optional OAuth
 GOOGLE_CLIENT_ID=""

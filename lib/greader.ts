@@ -11,7 +11,7 @@ export const GREADER_LIKE = "user/-/state/com.google/like";
 export const GREADER_LABEL_PREFIX = "user/-/label/";
 
 function secret() {
-  return process.env.NEXTAUTH_SECRET || "feedferret-dev-secret";
+  return process.env.AUTH_SECRET || "feedferret-dev-secret";
 }
 
 export function createGReaderToken(userId: string) {

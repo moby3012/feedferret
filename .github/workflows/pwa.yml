@@ -24,12 +24,12 @@ jobs:
       - run: pnpm run build
         env:
           DATABASE_URL: file:./dev.db
-          NEXTAUTH_SECRET: ci-secret
-          NEXTAUTH_URL: http://localhost:3000
+          AUTH_SECRET: ci-secret
+          AUTH_URL: http://localhost:3000
       - run: pnpm exec next start -p 3000 > /tmp/feedferret.log 2>&1 &
         env:
           DATABASE_URL: file:./dev.db
-          NEXTAUTH_SECRET: ci-secret
-          NEXTAUTH_URL: http://localhost:3000
+          AUTH_SECRET: ci-secret
+          AUTH_URL: http://localhost:3000
       - run: pnpm dlx wait-on http://localhost:3000/login
       - run: pnpm dlx @lhci/cli@0.15.1 autorun --collect.url=http://localhost:3000/login --upload.target=temporary-public-storage

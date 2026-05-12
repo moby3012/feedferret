@@ -5,7 +5,6 @@ const ALGORITHM = "aes-256-gcm";
 function getKey(): Buffer {
   const secret =
     process.env.AUTH_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
     "feedferret-fallback-key-change-in-production";
   return createHash("sha256").update(secret).digest();
 }

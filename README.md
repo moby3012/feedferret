@@ -46,7 +46,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 ```bash
 git clone <your-repo-url> && cd feedferret
 cp .env.example .env
-# Edit .env — at minimum set NEXTAUTH_SECRET and NEXTAUTH_URL
+# Edit .env — at minimum set AUTH_SECRET and AUTH_URL
 docker compose up -d --build
 ```
 
@@ -83,12 +83,13 @@ cp .env.example .env
 Minimum required values in `.env`:
 
 ```env
-NEXTAUTH_SECRET="$(openssl rand -base64 32)"
-NEXTAUTH_URL="https://your-domain.example.com"
+AUTH_SECRET="$(openssl rand -base64 32)"
+AUTH_URL="https://your-domain.example.com"
+AUTH_TRUST_HOST=true
 POSTGRES_PASSWORD="change-me-to-something-strong"
 ```
 
-> **Security:** Keep `AUTH_SECRET` or `NEXTAUTH_SECRET` stable across deploys. FeedFerret uses it to encrypt stored API keys, including AI summary credentials.
+> **Security:** Keep `AUTH_SECRET` stable across deploys. FeedFerret uses it to encrypt stored API keys, including AI summary credentials.
 
 The `DATABASE_PROVIDER`, `DATABASE_URL`, `POSTGRES_DB`, and `POSTGRES_USER` are pre-filled in `.env.example` and work out of the box.
 
@@ -113,8 +114,9 @@ No separate database service. Single container, single file.
 ```env
 DATABASE_PROVIDER="sqlite"
 DATABASE_URL="file:/app/data/dev.db"
-NEXTAUTH_SECRET="$(openssl rand -base64 32)"
-NEXTAUTH_URL="https://your-domain.example.com"
+AUTH_SECRET="$(openssl rand -base64 32)"
+AUTH_URL="https://your-domain.example.com"
+AUTH_TRUST_HOST=true
 ```
 
 **2. Start only the app container:**
@@ -129,7 +131,7 @@ Data persists in the `feedferret_db_data` Docker volume.
 
 ### Coolify Deployment
 
-FeedFerret works with Coolify's **Docker Compose** deployment type.
+FeedFerret works with Coolify's **Dockerfile** deployment type. In Coolify → Service → Build, set **Build Pack** to `Dockerfile`.
 
 **Required environment variables** (set in Coolify → Service → Environment):
 
@@ -138,8 +140,9 @@ FeedFerret works with Coolify's **Docker Compose** deployment type.
 | `DATABASE_PROVIDER` | `postgresql` | `sqlite` |
 | `DATABASE_URL` | `postgresql://feedferret:PASSWORD@postgres:5432/feedferret?schema=public` | `file:/app/data/dev.db` |
 | `POSTGRES_PASSWORD` | your chosen password | — |
-| `NEXTAUTH_SECRET` | `openssl rand -base64 32` | same |
-| `NEXTAUTH_URL` | your public URL | same |
+| `AUTH_SECRET` | `openssl rand -base64 32` | same |
+| `AUTH_URL` | your public URL | same |
+| `AUTH_TRUST_HOST` | `true` | `true` |
 
 > **Important:** Set `DATABASE_PROVIDER` and `DATABASE_URL` as **both** runtime environment variables **and** build arguments in Coolify. The Prisma client is compiled at image build time and must match the runtime provider.
 
@@ -156,7 +159,7 @@ Prerequisites: Node.js 20+, pnpm
 ```bash
 git clone <your-repo-url> && cd feedferret
 cp .env.example .env
-# Edit .env: set DATABASE_PROVIDER=sqlite, DATABASE_URL=file:./prisma/dev.db, NEXTAUTH_SECRET, NEXTAUTH_URL
+# Edit .env: set DATABASE_PROVIDER=sqlite, DATABASE_URL=file:./prisma/dev.db, AUTH_SECRET, AUTH_URL
 pnpm install
 pnpm run dev
 ```

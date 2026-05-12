@@ -41,7 +41,7 @@ Postgres starts automatically — no profile flags required:
 
 ```bash
 cp .env.example .env
-# Edit .env: set NEXTAUTH_SECRET, NEXTAUTH_URL, and POSTGRES_PASSWORD
+# Edit .env: set AUTH_SECRET, AUTH_URL, and POSTGRES_PASSWORD
 docker compose up -d --build
 ```
 

@@ -260,7 +260,7 @@ export async function sendTestDigest() {
   const feedIds: string[] | null = user.digestFeedIds ? JSON.parse(user.digestFeedIds) : null;
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const articles = await getDigestArticles(session.user.id, user.digestScope, feedIds, since);
-  const baseUrl = process.env.NEXTAUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+  const baseUrl = process.env.AUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
 
   await sendDigestEmail({
     to: user.email,

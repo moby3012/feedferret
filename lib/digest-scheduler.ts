@@ -3,7 +3,7 @@ import { sendDigestEmail, getDigestArticles } from "@/lib/digest-email";
 import { randomBytes } from "crypto";
 
 function getBaseUrl(): string {
-    if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL.replace(/\/$/, "");
+    if (process.env.AUTH_URL) return process.env.AUTH_URL.replace(/\/$/, "");
     if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
     return "http://localhost:3000";
 }
