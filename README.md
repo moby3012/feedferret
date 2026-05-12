@@ -101,7 +101,7 @@ docker compose up -d --build
 
 FeedFerret waits for Postgres to pass its healthcheck before starting. All data persists in the `feedferret_postgres_data` Docker volume.
 
-> **Security:** The Postgres port (`5432`) is exposed on the host by default for maintenance access. For public-facing servers, either remove the `ports` entry from `docker-compose.yml` or block it at the firewall — the app container connects to Postgres over the internal Docker network.
+> **Security:** The Postgres port (`5432`) is exposed on the host by default for maintenance access. For public-facing servers, either remove the `ports` entry from `docker-compose.yaml` or block it at the firewall — the app container connects to Postgres over the internal Docker network.
 
 ---
 
@@ -131,12 +131,12 @@ Data persists in the `feedferret_db_data` Docker volume.
 
 ### Coolify Deployment
 
-Use Coolify's **Docker Compose** deployment type — this starts both FeedFerret and PostgreSQL together via `docker-compose.yml` in the repo root.
+Use Coolify's **Docker Compose** deployment type — this starts both FeedFerret and PostgreSQL together via `docker-compose.yaml` in the repo root.
 
 **Setup steps:**
 
 1. In Coolify → New Resource → select **Docker Compose**
-2. Point to your repo (GitHub/GitLab) — Coolify auto-detects `docker-compose.yml` in the root
+2. Point to your repo (GitHub/GitLab) — Coolify auto-detects `docker-compose.yaml` in the root
 3. Set environment variables (Coolify → Service → Environment):
 
 | Variable | Value |

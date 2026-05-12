@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
@@ -48,6 +48,10 @@ export default function SetupPage() {
   // Step 2 — Instance
   const [instanceName, setInstanceName] = useState("FeedFerret");
   const [instanceUrl, setInstanceUrl] = useState("");
+
+  useEffect(() => {
+    setInstanceUrl(window.location.origin);
+  }, []);
 
   // Step 3 — Email
   const [mailProvider, setMailProvider] = useState("smtp");
