@@ -23,8 +23,8 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
 
 # Add build arguments for Next.js build time
-ARG DATABASE_URL=file:/app/data/dev.db
-ARG DATABASE_PROVIDER=sqlite
+ARG DATABASE_URL=postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public
+ARG DATABASE_PROVIDER=postgresql
 ARG AUTH_SECRET
 ARG NEXTAUTH_URL
 ARG AUTH_TRUST_HOST
@@ -43,8 +43,8 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
-ENV DATABASE_URL=file:/app/data/dev.db
-ENV DATABASE_PROVIDER=sqlite
+ENV DATABASE_URL=postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public
+ENV DATABASE_PROVIDER=postgresql
 ENV NEXT_TELEMETRY_DISABLED 1
 
 RUN groupadd --system --gid 1001 nodejs

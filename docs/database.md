@@ -1,13 +1,13 @@
 # Database providers, Postgres, backup, and restore
 
-FeedFerret defaults to SQLite for simple self-hosting, but the Prisma schema can be generated for PostgreSQL by setting `DATABASE_PROVIDER=postgresql` before `prisma generate`, `prisma db push`, or `next build`.
+FeedFerret defaults to PostgreSQL. The bundled Docker Compose stack starts a Postgres 16 service automatically. SQLite is available as a lightweight alternative for local dev or single-user setups.
 
 ## Provider selection
 
 Supported values:
 
-- `sqlite` — default, uses file-based `DATABASE_URL`, e.g. `file:/app/data/dev.db`
-- `postgresql` / `postgres` — uses PostgreSQL URLs, e.g. `postgresql://feedferret:secret@postgres:5432/feedferret?schema=public`
+- `postgresql` / `postgres` — **default**, uses PostgreSQL URLs, e.g. `postgresql://feedferret:secret@postgres:5432/feedferret?schema=public`
+- `sqlite` — uses file-based `DATABASE_URL`, e.g. `file:/app/data/dev.db`
 
 The source schema remains `prisma/schema.prisma`. `scripts/prepare-prisma-schema.mjs` writes an ignored `prisma/schema.generated.prisma` with the selected provider.
 
@@ -25,37 +25,32 @@ DATABASE_PROVIDER=postgresql DATABASE_URL="postgresql://..." pnpm run prisma:pus
 DATABASE_PROVIDER=postgresql DATABASE_URL="postgresql://..." pnpm run build
 ```
 
-## Docker Compose: SQLite
+## Docker Compose: PostgreSQL (default)
 
-SQLite is the default profile:
+Postgres starts automatically — no extra profile flags required:
 
 ```bash
 cp .env.example .env
-# Set NEXTAUTH_SECRET / AUTH_SECRET and NEXTAUTH_URL
-DATABASE_PROVIDER=sqlite \
-DATABASE_URL=file:/app/data/dev.db \
+# Edit .env: set NEXTAUTH_SECRET, NEXTAUTH_URL, and POSTGRES_PASSWORD
 docker compose up -d --build
 ```
 
-SQLite data lives in the `feedferret_db_data` volume.
+FeedFerret waits for Postgres to pass its healthcheck before starting. Data lives in the `feedferret_postgres_data` volume. The service exposes `${POSTGRES_PORT:-5432}` on the host for local maintenance; restrict that port at the firewall for public servers.
 
-## Docker Compose: PostgreSQL
+## Docker Compose: SQLite (alternative)
 
-Start the bundled Postgres service with the `postgres` profile and point FeedFerret at it:
+Override provider and URL in `.env`, then start without Postgres:
 
 ```bash
-cat >> .env <<'EOF'
-DATABASE_PROVIDER=postgresql
-DATABASE_URL=postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public
-POSTGRES_DB=feedferret
-POSTGRES_USER=feedferret
-POSTGRES_PASSWORD=feedferret-change-me
-EOF
-
-docker compose --profile postgres up -d --build
+DATABASE_PROVIDER=sqlite
+DATABASE_URL=file:/app/data/dev.db
 ```
 
-Postgres data lives in the `feedferret_postgres_data` volume. The service exposes `${POSTGRES_PORT:-5432}` on the host for local maintenance and migration tests; restrict that port at the firewall for public servers.
+```bash
+docker compose up feedferret -d --build
+```
+
+SQLite data lives in a bind-mount or volume at `/app/data`.
 
 ## Migration workflow
 

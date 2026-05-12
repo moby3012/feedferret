@@ -37,7 +37,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 - **Admin Onboarding Wizard**: Multi-step setup flow for first-time admins — account creation, instance settings, email, and security configuration.
 - **SaaS Provisioning API**: Internal API endpoints for creating and suspending users from external systems (Stripe webhooks, SaaS portals) via Bearer token auth.
 - **GDPR Compliance**: Self-service account deletion (Art. 17) with full cascade removal of all user data.
-- **Self-Hostable**: Simple deployment with Docker and SQLite by default, plus optional PostgreSQL via `DATABASE_PROVIDER=postgresql`.
+- **Self-Hostable**: Simple deployment with Docker Compose — PostgreSQL included and pre-configured by default. SQLite available as a lightweight alternative.
 
 ## 🚀 Getting Started
 
@@ -45,7 +45,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 
 - **Node.js**: 20.x or later
 - **pnpm**: Recommended package manager
-- **SQLite**: (Built-in, no setup required)
+- **Docker + Docker Compose**: Required for production (PostgreSQL included)
 
 ### Local Development
 
@@ -61,9 +61,17 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
    Create a `.env` file based on `.env.example`:
 
    ```env
-   DATABASE_URL="file:./prisma/dev.db"
+   DATABASE_PROVIDER="postgresql"
+   DATABASE_URL="postgresql://feedferret:feedferret-change-me@localhost:5432/feedferret?schema=public"
+   POSTGRES_PASSWORD="feedferret-change-me"
    NEXTAUTH_SECRET="your-super-secret-key"
    NEXTAUTH_URL="http://localhost:3000"
+   ```
+
+   For local dev without Docker, use SQLite instead:
+   ```env
+   DATABASE_PROVIDER="sqlite"
+   DATABASE_URL="file:./prisma/dev.db"
    ```
 
 3. **Initialize Database**:
@@ -127,23 +135,23 @@ Users can delete their account from **Settings → Delete Account**. All data is
 
 FeedFerret blocks server-side feed fetches to private/internal IP ranges by default to reduce SSRF risk. Trusted single-tenant deployments can enable internal feed URLs in Server Management → Sync. See [`docs/security.md`](docs/security.md).
 
-### 🗄 Database Providers
+### 🗄 Database
 
-SQLite is the default. PostgreSQL is available through `DATABASE_PROVIDER=postgresql` and the bundled Docker Compose `postgres` profile. See [`docs/database.md`](docs/database.md) for provider switching, migration, backup, and restore commands.
+PostgreSQL is the default. Docker Compose starts it automatically — no extra flags needed. SQLite is available as a lightweight alternative for local dev or single-user setups. See [`docs/database.md`](docs/database.md) for provider switching, backup, and restore.
 
 ### 🐳 Docker Deployment
 
-The simplest way to run FeedFerret in production is using Docker Compose:
+PostgreSQL starts automatically alongside FeedFerret — no extra flags required:
 
 ```bash
-# Set your secret
-export NEXTAUTH_SECRET=$(openssl rand -base64 32)
-
-# Start the services
-docker-compose up -d --build
+cp .env.example .env
+# Edit .env: set NEXTAUTH_SECRET, NEXTAUTH_URL, and POSTGRES_PASSWORD
+docker compose up -d --build
 ```
 
-The app will be available on port `3000`. Database persistence is handled via a volume.
+The app will be available on port `3000`. FeedFerret waits for Postgres to be healthy before starting. All data persists in the `feedferret_postgres_data` volume.
+
+**Change the default Postgres password** before exposing port 5432 publicly. Remove or firewall that port for production deployments.
 
 ## ⏱ Background Feed Sync
 
