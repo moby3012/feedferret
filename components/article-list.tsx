@@ -44,10 +44,19 @@ export function ArticleList({
 }: ArticleListProps) {
   const [visibleCount, setVisibleCount] = useState(pageSize ?? 30);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     setVisibleCount(pageSize ?? 30);
   }, [articles, pageSize]);
+
+  useEffect(() => {
+    const nextRoot = contentRef.current?.closest(
+      '[data-slot="scroll-area-viewport"]',
+    ) as HTMLElement | null;
+    setScrollRoot(nextRoot);
+  }, [articles.length, viewMode]);
 
   const visibleArticles = articles.slice(0, visibleCount);
   const hasMore = visibleCount < articles.length;
@@ -62,11 +71,11 @@ export function ArticleList({
           setVisibleCount(prev => Math.min(prev + (pageSize ?? 30), articles.length));
         }
       },
-      { threshold: 0.1 }
+      { root: scrollRoot, threshold: 0.1 }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, articles.length, pageSize]);
+  }, [hasMore, articles.length, pageSize, scrollRoot]);
 
   if (articles.length === 0) {
     return (
@@ -89,6 +98,7 @@ export function ArticleList({
   return (
     <ScrollArea className="flex-1 overflow-hidden min-h-0">
       <div
+        ref={contentRef}
         className={cn(
           "p-3 pb-28 lg:pb-3 space-y-2.5",
           viewMode === "magazine" &&
@@ -108,6 +118,7 @@ export function ArticleList({
             viewMode={viewMode}
             markReadOnScroll={markReadOnScroll}
             onMarkRead={onMarkRead}
+            scrollRoot={scrollRoot}
           />
         ))}
         {hasMore && (
@@ -132,6 +143,7 @@ function ArticlePreview({
   viewMode,
   markReadOnScroll,
   onMarkRead,
+  scrollRoot,
 }: {
   article: Article;
   isSelected: boolean;
@@ -143,6 +155,7 @@ function ArticlePreview({
   viewMode: string;
   markReadOnScroll?: boolean;
   onMarkRead?: (articleId: string) => void;
+  scrollRoot?: HTMLElement | null;
 }) {
   const articleRef = useRef<HTMLElement>(null);
 
@@ -150,20 +163,23 @@ function ArticlePreview({
     if (!markReadOnScroll || !onMarkRead || article.isRead) return;
     const el = articleRef.current;
     if (!el) return;
+    const root =
+      scrollRoot ??
+      (el.closest('[data-slot="scroll-area-viewport"]') as HTMLElement | null);
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          // Article left viewport scrolling upward (bottom edge above viewport top)
-          if (!entry.isIntersecting && entry.boundingClientRect.bottom < 0) {
+          const rootTop = entry.rootBounds?.top ?? 0;
+          if (!entry.isIntersecting && entry.boundingClientRect.bottom <= rootTop) {
             onMarkRead(article.id);
           }
         });
       },
-      { threshold: 0 },
+      { root, threshold: 0 },
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [article.id, article.isRead, markReadOnScroll, onMarkRead]);
+  }, [article.id, article.isRead, markReadOnScroll, onMarkRead, scrollRoot]);
   if (viewMode === "minimal") {
     return (
       <article

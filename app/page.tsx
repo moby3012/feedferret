@@ -23,6 +23,7 @@ import {
   useCreateSavedSearch,
   useSetArticleLabels,
   useReadingPreferences,
+  useUpdateGlobalSettings,
 } from "@/hooks/use-rss-data";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import {
@@ -62,6 +63,8 @@ export default function RSSReaderPage() {
   );
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [viewModeInitialized, setViewModeInitialized] = useState(false);
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const [sortOrderInitialized, setSortOrderInitialized] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -88,6 +91,7 @@ export default function RSSReaderPage() {
   const createSavedSearch = useCreateSavedSearch();
   const setArticleLabels = useSetArticleLabels();
   const { data: readingPrefs } = useReadingPreferences(isAuthenticated);
+  const updateGlobalSettings = useUpdateGlobalSettings();
 
   const unreadBadgeCount = useUnreadBadgeCount(feeds);
   useAppBadge(unreadBadgeCount, status === "authenticated");
@@ -114,7 +118,11 @@ export default function RSSReaderPage() {
       setViewMode((readingPrefs.defaultViewMode as ViewMode) || "list");
       setViewModeInitialized(true);
     }
-  }, [readingPrefs, viewModeInitialized]);
+    if (readingPrefs && !sortOrderInitialized) {
+      setSortOrder(readingPrefs.defaultArticleSort === "oldest" ? "oldest" : "newest");
+      setSortOrderInitialized(true);
+    }
+  }, [readingPrefs, sortOrderInitialized, viewModeInitialized]);
 
   // Reset readInSession when feed or category changes
   useEffect(() => {
@@ -209,28 +217,19 @@ export default function RSSReaderPage() {
   const filteredArticles = useMemo(() => {
     let list = [...displayArticles];
 
-    // Some views IGNORE the unread filter toggle
-    const bypassUnreadFilter = [
-      "All",
-      "All Articles",
-      "Starred",
-      "Read Later",
-    ].includes(selectedCategory);
-
     // Apply main view filter - include items that are either:
     // 1. Not yet read, OR
     // 2. Read in this session (clicked but still visible), OR
     // 3. Already in readInSession (persist visibility after server update)
-    if (unreadOnly && !bypassUnreadFilter) {
+    if (unreadOnly) {
       list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
     }
 
     // Sort AFTER filtering
-    const sortOldest = readingPrefs?.defaultArticleSort === "oldest";
     return list.sort((a: any, b: any) =>
-      sortOldest ? a.publishedAtRaw - b.publishedAtRaw : b.publishedAtRaw - a.publishedAtRaw,
+      sortOrder === "oldest" ? a.publishedAtRaw - b.publishedAtRaw : b.publishedAtRaw - a.publishedAtRaw,
     );
-  }, [displayArticles, unreadOnly, selectedCategory, readInSession, readingPrefs?.defaultArticleSort]);
+  }, [displayArticles, unreadOnly, readInSession, sortOrder]);
 
   const selectedArticleIndex = useMemo(
     () => filteredArticles.findIndex((article: any) => article.id === selectedArticleId),
@@ -339,7 +338,7 @@ export default function RSSReaderPage() {
     });
     if (selectedArticleId === articleId) setSelectedArticleSnapshot(updated);
     toggleRead.mutate({ articleId, isRead: nextIsRead });
-  }, [displayArticles, selectedArticleSnapshot, selectedCategory, unreadOnly, selectedArticleId, toggleRead]);
+  }, [displayArticles, selectedArticleSnapshot, unreadOnly, selectedArticleId, toggleRead]);
 
   const handleToggleStar = useCallback((articleId: string) => {
     const article = displayArticles.find((a: any) => a.id === articleId) || selectedArticleSnapshot;
@@ -365,6 +364,14 @@ export default function RSSReaderPage() {
   const handleRefresh = useCallback(() => {
     refresh.mutate();
   }, [refresh]);
+
+  const handleToggleSort = useCallback(() => {
+    setSortOrder((prev) => {
+      const next = prev === "newest" ? "oldest" : "newest";
+      updateGlobalSettings.mutate({ defaultArticleSort: next });
+      return next;
+    });
+  }, [updateGlobalSettings]);
 
   const handleFetchFullText = useCallback((articleId: string) => {
     fetchFullText.mutate(articleId, {
@@ -626,8 +633,8 @@ export default function RSSReaderPage() {
               isMarkingAllRead={markAllAsRead.isPending}
               onSaveSearch={handleSaveSearch}
               onShowShortcuts={() => setShortcutsOpen(true)}
-              sortOrder={readingPrefs?.defaultArticleSort === "oldest" ? "oldest" : "newest"}
-              onToggleSort={() => {}}
+              sortOrder={sortOrder}
+              onToggleSort={handleToggleSort}
             />
             {isOffline && hasOfflineSnapshot && (
               <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
@@ -705,8 +712,8 @@ export default function RSSReaderPage() {
           isMarkingAllRead={markAllAsRead.isPending}
           onSaveSearch={handleSaveSearch}
           onShowShortcuts={() => setShortcutsOpen(true)}
-          sortOrder={readingPrefs?.defaultArticleSort === "oldest" ? "oldest" : "newest"}
-          onToggleSort={() => {}}
+          sortOrder={sortOrder}
+          onToggleSort={handleToggleSort}
         />
         {isOffline && hasOfflineSnapshot && (
           <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
@@ -735,8 +742,8 @@ export default function RSSReaderPage() {
           isRefreshing={articlesLoading || refresh.isPending}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
+          sortOrder={sortOrder}
+          onToggleSort={handleToggleSort}
           onMarkAllRead={() =>
             markAllAsRead.mutate({
               feedId: selectedFeed,
@@ -744,8 +751,6 @@ export default function RSSReaderPage() {
             })
           }
           isMarkingAllRead={markAllAsRead.isPending}
-          onSaveSearch={handleSaveSearch}
-          onShowShortcuts={() => setShortcutsOpen(true)}
         />
       </div>
       )}

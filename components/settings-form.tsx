@@ -29,6 +29,7 @@ import {
   AlertTriangle,
   Bell,
   BellOff,
+  Keyboard,
   Sparkles,
   CheckCircle2,
   XCircle,
@@ -58,6 +59,7 @@ import { WebhookSection } from "@/components/webhook-management";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { MobileFloatingBackButton } from "@/components/mobile-floating-back-button";
 import { toast } from "sonner";
 import { SHOW_PWA_INSTALL_PROMPT_EVENT } from "@/components/pwa-install-prompt";
 
@@ -108,7 +110,7 @@ export function SettingsForm() {
 
   return (
     <main className="min-h-dvh app-chrome text-foreground">
-      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-6">
         <header className="mb-8 flex items-center gap-4">
           <Button
             variant="ghost"
@@ -259,6 +261,27 @@ export function SettingsForm() {
               onCheckedChange={(checked) => update({ markReadOnScroll: checked })}
               className="h-7 w-12"
             />
+          </PrefRow>
+
+          <PrefRow
+            icon={Keyboard}
+            title="Keyboard shortcuts"
+            description="Die Desktop-Tastenkürzel sind nicht mehr im Feed-Menü versteckt."
+          >
+            <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground sm:min-w-80">
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                <span className="font-mono text-foreground">j / k</span>
+                <span>Nächster / vorheriger Artikel</span>
+                <span className="font-mono text-foreground">n / p</span>
+                <span>Nächster / vorheriger ungelesener Artikel</span>
+                <span className="font-mono text-foreground">m / s</span>
+                <span>Gelesen / Favorit umschalten</span>
+                <span className="font-mono text-foreground">/</span>
+                <span>Suche fokussieren</span>
+                <span className="font-mono text-foreground">?</span>
+                <span>Shortcut-Hilfe öffnen</span>
+              </div>
+            </div>
           </PrefRow>
 
           {/* Default view mode */}
@@ -433,6 +456,7 @@ export function SettingsForm() {
           <DeleteAccountSection />
         </div>
       </div>
+      <MobileFloatingBackButton fallbackHref="/" />
     </main>
   );
 }
