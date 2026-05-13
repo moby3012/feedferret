@@ -38,13 +38,6 @@ import {
 } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -56,8 +49,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
+import { TabsContent } from "@/components/ui/tabs";
+import { SettingsModalShell } from "@/components/settings-shell";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Trash2,
@@ -454,39 +447,23 @@ export function FeedManagement({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(92dvh,900px)] w-[calc(100vw-1rem)] max-w-5xl flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl">
-        <DialogHeader className="border-b border-border/60 bg-card/95 p-5 pb-4 backdrop-blur-2xl sm:p-8 sm:pb-5">
-          <DialogTitle className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
-            Management
-          </DialogTitle>
-          <DialogDescription className="mt-1 text-sm text-muted-foreground sm:text-base">
-            Organize your feeds, categories, and data.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="flex-1 flex flex-col min-h-0"
-        >
-          <div className="px-6 py-4 sm:px-8">
-            <ResponsiveTabsNav
-              value={activeTab}
-              onValueChange={setActiveTab}
-              options={[
-                { value: "feeds", label: "Feeds" },
-                { value: "categories", label: "Categories" },
-                { value: "opml", label: "Import/Export" },
-                { value: "labels", label: "Labels & Searches" },
-                { value: "health", label: "Health" },
-                { value: "rules", label: "Rules" },
-                { value: "alerts", label: "Alerts" },
-              ]}
-              triggerClassName="px-4 lg:px-6"
-            />
-          </div>
-
+    <SettingsModalShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Management"
+      description="Organize your feeds, categories, and data."
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      tabs={[
+        { value: "feeds", label: "Feeds" },
+        { value: "categories", label: "Categories" },
+        { value: "opml", label: "Import/Export" },
+        { value: "labels", label: "Labels & Searches" },
+        { value: "health", label: "Health" },
+        { value: "rules", label: "Rules" },
+        { value: "alerts", label: "Alerts" },
+      ]}
+    >
           <div className="flex-1 min-h-0">
             <TabsContent
               value="feeds"
@@ -1621,7 +1598,6 @@ export function FeedManagement({
               </ScrollArea>
             </TabsContent>
           </div>
-        </Tabs>
         <FeedEditDialog
           feed={editingFeed}
           open={!!editingFeed}
@@ -1680,7 +1656,6 @@ export function FeedManagement({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </DialogContent>
-    </Dialog>
+    </SettingsModalShell>
   );
 }

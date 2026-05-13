@@ -244,6 +244,7 @@ SYNC_SECRET=$(openssl rand -hex 32)
 - Internal SaaS provisioning API: [`docs/internal-api.md`](docs/internal-api.md)
 - Admin customization: [`docs/admin-customization.md`](docs/admin-customization.md)
 - Larger admin/UX follow-up workpackages: [`docs/admin-ux-workpackages.md`](docs/admin-ux-workpackages.md)
+- Unified settings modal UX notes: [`docs/unified-settings-ux.md`](docs/unified-settings-ux.md)
 
 ## 🔐 Auth & Email
 

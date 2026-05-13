@@ -2,13 +2,6 @@
 
 import { useState, useEffect } from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -18,8 +11,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
+import { TabsContent } from "@/components/ui/tabs";
+import { SettingsModalShell } from "@/components/settings-shell";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Users,
@@ -209,38 +202,22 @@ export function ServerManagementDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(92dvh,900px)] w-[calc(100vw-1rem)] max-w-5xl flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl">
-        <DialogHeader className="border-b border-border/60 bg-card/95 p-5 pb-4 backdrop-blur-2xl sm:p-8 sm:pb-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <DialogTitle className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
-                Server Management
-              </DialogTitle>
-              <DialogDescription className="mt-1 text-sm text-muted-foreground sm:text-base">
-                Control server-wide settings, users, and integrations.
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <div className="px-6 py-4 sm:px-8">
-            <ResponsiveTabsNav
-              value={activeTab}
-              onValueChange={setActiveTab}
-              options={[
-                { value: "users", label: "Users", icon: <Users className="w-4 h-4" /> },
-                { value: "registrations", label: "Access", icon: <ShieldCheck className="w-4 h-4" /> },
-                { value: "email", label: "Email", icon: <Mail className="w-4 h-4" /> },
-                { value: "instance", label: "Instance", icon: <Globe className="w-4 h-4" /> },
-                { value: "starter-packs", label: "Starter Packs", icon: <PackagePlus className="w-4 h-4" /> },
-                { value: "sync", label: "Sync", icon: <Settings2 className="w-4 h-4" /> },
-              ]}
-              triggerClassName="gap-2"
-            />
-          </div>
-
+    <SettingsModalShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Server Management"
+      description="Control server-wide settings, users, and integrations."
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      tabs={[
+        { value: "users", label: "Users", icon: <Users className="w-4 h-4" /> },
+        { value: "registrations", label: "Access", icon: <ShieldCheck className="w-4 h-4" /> },
+        { value: "email", label: "Email", icon: <Mail className="w-4 h-4" /> },
+        { value: "instance", label: "Instance", icon: <Globe className="w-4 h-4" /> },
+        { value: "starter-packs", label: "Starter Packs", icon: <PackagePlus className="w-4 h-4" /> },
+        { value: "sync", label: "Sync", icon: <Settings2 className="w-4 h-4" /> },
+      ]}
+    >
           <div className="flex-1 min-h-0">
             {isLoading ? (
               <div className="h-full flex items-center justify-center bg-background">
@@ -328,8 +305,9 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── ACCESS / REGISTRATIONS ── */}
-                <TabsContent value="registrations" className="px-6 sm:px-8 py-6 space-y-6">
-                  <div className="max-w-2xl space-y-8">
+                <TabsContent value="registrations" className="h-full mt-0 focus-visible:outline-none">
+                  <ScrollArea className="h-full">
+                    <div className="max-w-2xl space-y-8 px-6 py-6 sm:px-8">
                     <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">Allow New Registrations</h4>
@@ -352,11 +330,12 @@ export function ServerManagementDialog({
                         SaaS-provisioned users are created via the internal API regardless of this setting.
                       </p>
                     </div>
-                  </div>
+                    </div>
+                  </ScrollArea>
                 </TabsContent>
 
                 {/* ── EMAIL ── */}
-                <TabsContent value="email" className="mt-0 focus-visible:outline-none">
+                <TabsContent value="email" className="h-full mt-0 focus-visible:outline-none">
                   <ScrollArea className="h-full">
                     <div className="px-6 sm:px-8 py-6 space-y-6 max-w-2xl">
                       {/* Enable toggle */}
@@ -470,7 +449,9 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── INSTANCE ── */}
-                <TabsContent value="instance" className="px-6 sm:px-8 py-6 space-y-6">
+                <TabsContent value="instance" className="h-full mt-0 focus-visible:outline-none">
+                  <ScrollArea className="h-full">
+                    <div className="px-6 py-6 sm:px-8">
                   <div className="max-w-2xl grid gap-6 p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
                     <div className="grid gap-3">
                       <Label>Sidebar logo</Label>
@@ -543,6 +524,8 @@ export function ServerManagementDialog({
                       </Button>
                     </div>
                   </div>
+                    </div>
+                  </ScrollArea>
                 </TabsContent>
 
                 {/* ── STARTER PACKS ── */}
@@ -671,8 +654,9 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── SYNC ── */}
-                <TabsContent value="sync" className="px-6 sm:px-8 py-6 space-y-6">
-                  <div className="max-w-2xl space-y-6">
+                <TabsContent value="sync" className="h-full mt-0 focus-visible:outline-none">
+                  <ScrollArea className="h-full">
+                    <div className="max-w-2xl space-y-6 px-6 py-6 sm:px-8">
                     <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">Background Sync</h4>
@@ -735,12 +719,12 @@ export function ServerManagementDialog({
                         </p>
                       </div>
                     )}
-                  </div>
+                    </div>
+                  </ScrollArea>
                 </TabsContent>
               </>
             )}
           </div>
-        </Tabs>
 
         <AlertDialog
           open={!!pendingDeleteUser}
@@ -768,8 +752,7 @@ export function ServerManagementDialog({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </DialogContent>
-    </Dialog>
+    </SettingsModalShell>
   );
 }
 

@@ -199,7 +199,7 @@ Allow admins to create, edit, remove, and reorder starter packs and starter-pack
 
 ## 4. Unified settings shell UX
 
-Status: partial. Feed Management and Server Management now use a narrower settings-style modal shell. A full shared component extraction remains future work.
+Status: complete baseline. Feed Management and Server Management now share `SettingsModalShell`, with consistent header, responsive tabs, and independently scrolling tab bodies. See [`docs/unified-settings-ux.md`](unified-settings-ux.md).
 
 ### Problem
 
@@ -225,7 +225,8 @@ Create one shared settings shell component:
 
 ### Acceptance criteria
 
-- Feed Management and Server Management no longer implement their own modal chrome.
-- All tab bodies scroll independently.
-- Mobile layout uses drawer/full-screen modal.
-- Desktop layout matches User Settings card/section style.
+- [x] Feed Management and Server Management no longer implement their own modal chrome.
+- [x] Shared responsive tabs are used in both management overlays.
+- [x] Long tab bodies scroll inside the modal instead of the page.
+- [x] Desktop styling follows the User Settings header/card direction.
+- [ ] Optional future polish: promote the same shell to drawer/full-screen variants if product direction changes.
