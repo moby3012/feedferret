@@ -636,6 +636,8 @@ export async function getArticles(feedId?: string | null, category?: string, sea
     } else if (category && category !== "All" && category !== "All Articles") {
         if (category === "Starred") {
             where.isStarred = true;
+        } else if (category === "Read Later") {
+            where.isReadLater = true;
         } else if (category === "Recently Read") {
             where.isRead = true;
             where.readAt = { not: null };
