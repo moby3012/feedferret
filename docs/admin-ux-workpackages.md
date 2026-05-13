@@ -142,7 +142,7 @@ Allow admins to replace the sidebar brand with:
 
 ## 3. Admin-customizable starter packs
 
-Status: baseline implemented. Admins can edit packs and feeds in Server Management → Starter Packs. Future iterations can add ordering drag-and-drop, OPML import into packs, and richer validation.
+Status: complete baseline. Admins can edit, validate, reorder, duplicate, import OPML into, export, enable/disable, add, and remove starter packs and feeds in Server Management → Starter Packs.
 
 ### Problem
 
@@ -176,24 +176,28 @@ Allow admins to create, edit, remove, and reorder starter packs and starter-pack
 - Server Management → Starter Packs tab.
 - Admin can:
   - Add pack.
-  - Add/edit/remove feeds.
+  - Add/edit/remove/reorder feeds.
   - Import OPML into a pack.
   - Export pack as OPML.
+  - Duplicate and reorder packs.
   - Disable pack without deleting it.
+  - See validation warnings before save.
 - Sidebar reads enabled packs from API.
 
 ### Migration plan
 
-1. Seed DB starter packs from existing static OPML files on first run.
-2. Keep static files as fallback.
-3. Later remove static-only logic.
+1. Built-in static OPML files are hydrated on read when packs still reference `path`.
+2. Saved custom packs are stored in `GlobalSettings.starterPacksJson`.
+3. Static files remain a fallback/default source for self-hosted resets.
 
 ### Testing
 
-- Pack import creates feeds.
-- Duplicate feeds update rather than fail.
-- Empty packs are hidden or shown as disabled.
-- Postgres nullable category edge cases covered.
+- [x] Pack import creates feeds.
+- [x] Duplicate feeds update rather than fail.
+- [x] Empty enabled custom packs are rejected by validation.
+- [x] Default packs hydrate from static OPML for admin editing and sidebar import.
+- [x] OPML import/export paths are documented and build-tested.
+- [ ] Future polish: drag-and-drop ordering instead of up/down controls.
 
 ---
 

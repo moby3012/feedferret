@@ -21,17 +21,27 @@ Open **Server Management → Starter Packs**:
 - Enable/disable packs.
 - Rename packs.
 - Add or remove custom packs.
-- Add, edit, or remove feeds inside a pack.
+- Add, edit, remove, reorder, or duplicate feeds inside a pack.
+- Import OPML into a pack.
+- Export a pack as OPML.
+- Reorder and duplicate packs.
 - Reset to built-in defaults.
 
-Default packs still point to the static OPML files until edited. If a pack has custom feeds, FeedFerret generates OPML from the database-backed pack definition during import.
+Default packs are hydrated from the built-in static OPML files so admins can inspect and edit their feeds. During sidebar import, FeedFerret generates OPML from the database-backed pack definition and updates existing feeds instead of creating duplicates.
 
 Starter pack fields:
 
 - **Title**: Display name of the feed in the OPML.
 - **RSS/Atom URL**: Feed URL to import.
 - **Website URL**: Optional website URL.
-- **Category**: Optional category assigned during OPML import.
+- **Category**: Optional category assigned during OPML import. Feeds with the same category are grouped in the generated OPML.
+
+Validation rules:
+
+- Enabled custom packs must contain at least one feed.
+- RSS/Atom and website URLs must be valid `http` or `https` URLs.
+- Duplicate feed URLs inside one pack are removed on save.
+- Pack IDs are normalized and made unique automatically.
 
 ## User roles
 

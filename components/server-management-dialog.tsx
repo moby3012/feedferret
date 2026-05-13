@@ -31,6 +31,11 @@ import {
   Plus,
   X,
   Image as ImageIcon,
+  Download,
+  Upload,
+  ArrowUp,
+  ArrowDown,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +54,14 @@ import {
   sendTestEmail,
 } from "@/app/actions/admin";
 import { toast } from "sonner";
-import { DEFAULT_STARTER_PACKS, stringifyStarterPacks, type StarterPack } from "@/lib/starter-packs";
+import {
+  DEFAULT_STARTER_PACKS,
+  normalizeStarterPacksInput,
+  starterPackToOpml,
+  stringifyStarterPacks,
+  type StarterPack,
+  type StarterPackFeed,
+} from "@/lib/starter-packs";
 
 export function ServerManagementDialog({
   open,
@@ -155,8 +167,9 @@ export function ServerManagementDialog({
       u.name?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
   const starterPacks = (settings?.starterPacks ?? []) as StarterPack[];
+  const starterPackValidation = normalizeStarterPacksInput(starterPacks);
   const setStarterPacks = (packs: StarterPack[]) => {
-    setSettings({ ...settings, starterPacks: packs, starterPacksJson: stringifyStarterPacks(packs) });
+    setSettings({ ...settings, starterPacks: packs, starterPacksJson: JSON.stringify(packs, null, 2) });
   };
   const updatePack = (index: number, patch: Partial<StarterPack>) => {
     setStarterPacks(starterPacks.map((pack, i) => (i === index ? { ...pack, ...patch } : pack)));
@@ -174,6 +187,31 @@ export function ServerManagementDialog({
       { id: `custom-${Date.now()}`, name: "New starter pack", description: "", enabled: true, feeds: [] },
     ]);
   };
+  const resetStarterPacks = async () => {
+    try {
+      const response = await fetch("/api/starter-packs?defaults=1");
+      const data = response.ok ? await response.json() : null;
+      setStarterPacks(Array.isArray(data?.packs) ? data.packs : DEFAULT_STARTER_PACKS);
+    } catch {
+      setStarterPacks(DEFAULT_STARTER_PACKS);
+    }
+  };
+  const duplicatePack = (packIndex: number) => {
+    const pack = starterPacks[packIndex];
+    if (!pack) return;
+    setStarterPacks([
+      ...starterPacks.slice(0, packIndex + 1),
+      { ...pack, id: `${pack.id}-copy-${Date.now()}`, name: `${pack.name} copy`, path: undefined },
+      ...starterPacks.slice(packIndex + 1),
+    ]);
+  };
+  const movePack = (from: number, to: number) => {
+    if (to < 0 || to >= starterPacks.length) return;
+    const next = [...starterPacks];
+    const [pack] = next.splice(from, 1);
+    next.splice(to, 0, pack);
+    setStarterPacks(next);
+  };
   const addPackFeed = (packIndex: number) => {
     setStarterPacks(starterPacks.map((pack, i) => (
       i === packIndex
@@ -185,6 +223,69 @@ export function ServerManagementDialog({
     setStarterPacks(starterPacks.map((pack, i) => (
       i === packIndex ? { ...pack, feeds: pack.feeds.filter((_, j) => j !== feedIndex) } : pack
     )));
+  };
+  const movePackFeed = (packIndex: number, from: number, to: number) => {
+    const pack = starterPacks[packIndex];
+    if (!pack || to < 0 || to >= pack.feeds.length) return;
+    const feeds = [...pack.feeds];
+    const [feed] = feeds.splice(from, 1);
+    feeds.splice(to, 0, feed);
+    updatePack(packIndex, { feeds });
+  };
+  const importOpmlIntoPack = async (packIndex: number, file?: File) => {
+    if (!file) return;
+    try {
+      const xml = await file.text();
+      const document = new DOMParser().parseFromString(xml, "text/xml");
+      if (document.querySelector("parsererror")) throw new Error("Invalid OPML/XML file");
+      const readOutlines = (elements: Element[], category = ""): StarterPackFeed[] =>
+        elements.flatMap((element) => {
+          const xmlUrl = element.getAttribute("xmlUrl") || "";
+          const nextCategory = element.getAttribute("category") || category;
+          if (xmlUrl) {
+            return [{
+              title: element.getAttribute("text") || element.getAttribute("title") || xmlUrl,
+              xmlUrl,
+              htmlUrl: element.getAttribute("htmlUrl") || "",
+              category: nextCategory,
+            }];
+          }
+          return readOutlines(
+            Array.from(element.children).filter((child) => child.tagName.toLowerCase() === "outline"),
+            element.getAttribute("text") || element.getAttribute("title") || category,
+          );
+        });
+      const feeds = readOutlines(Array.from(document.querySelectorAll("body > outline")));
+      if (feeds.length === 0) throw new Error("No feeds found in OPML");
+      const current = starterPacks[packIndex]?.feeds || [];
+      const merged = [...current, ...feeds].filter((feed, index, all) => (
+        all.findIndex((candidate) => candidate.xmlUrl.trim().toLowerCase() === feed.xmlUrl.trim().toLowerCase()) === index
+      ));
+      updatePack(packIndex, { feeds: merged, path: undefined });
+      toast.success(`Imported ${feeds.length} feeds into starter pack`);
+    } catch (error: any) {
+      toast.error(error?.message || "Could not import OPML");
+    }
+  };
+  const exportStarterPack = (pack: StarterPack) => {
+    const xml = starterPackToOpml(pack);
+    const blob = new Blob([xml], { type: "text/xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${pack.id || "starter-pack"}.opml`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  const saveStarterPacks = async () => {
+    const result = normalizeStarterPacksInput(starterPacks);
+    if (result.errors.length > 0) {
+      toast.error(result.errors[0]);
+      return;
+    }
+    setStarterPacks(result.packs);
+    if (result.warnings.length > 0) toast.info(result.warnings[0]);
+    await handleUpdateSettings({ starterPacksJson: stringifyStarterPacks(result.packs) });
   };
   const handleIconUpload = (file?: File) => {
     if (!file) return;
@@ -536,11 +637,11 @@ export function ServerManagementDialog({
                         <div>
                           <h4 className="text-lg font-semibold tracking-[-0.02em]">Starter Packs</h4>
                           <p className="text-sm text-muted-foreground">
-                            Customize the packs users can import from the sidebar.
+                            Customize, validate, import, export, and reorder the packs users can import from the sidebar.
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setStarterPacks(DEFAULT_STARTER_PACKS)}>
+                          <Button type="button" variant="outline" className="rounded-2xl" onClick={resetStarterPacks}>
                             Reset defaults
                           </Button>
                           <Button type="button" className="rounded-2xl" onClick={addPack}>
@@ -548,6 +649,24 @@ export function ServerManagementDialog({
                           </Button>
                         </div>
                       </div>
+
+                      {(starterPackValidation.errors.length > 0 || starterPackValidation.warnings.length > 0) && (
+                        <div className={cn(
+                          "rounded-2xl border px-4 py-3 text-sm",
+                          starterPackValidation.errors.length > 0
+                            ? "border-destructive/25 bg-destructive/10 text-destructive"
+                            : "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                        )}>
+                          <p className="font-semibold">
+                            {starterPackValidation.errors.length > 0 ? "Starter pack validation needs attention" : "Starter pack cleanup will be applied on save"}
+                          </p>
+                          <ul className="mt-2 list-disc space-y-1 pl-5">
+                            {[...starterPackValidation.errors, ...starterPackValidation.warnings].slice(0, 4).map((message) => (
+                              <li key={message}>{message}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
 
                       {starterPacks.map((pack, packIndex) => (
                         <div key={pack.id} className="space-y-4 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
@@ -569,10 +688,28 @@ export function ServerManagementDialog({
                               />
                             </div>
                             <div className="flex items-center justify-end gap-3">
+                              <div className="flex items-center gap-1">
+                                <Button type="button" variant="ghost" size="icon" className="rounded-xl" disabled={packIndex === 0} onClick={() => movePack(packIndex, packIndex - 1)}>
+                                  <ArrowUp className="h-4 w-4" />
+                                </Button>
+                                <Button type="button" variant="ghost" size="icon" className="rounded-xl" disabled={packIndex === starterPacks.length - 1} onClick={() => movePack(packIndex, packIndex + 1)}>
+                                  <ArrowDown className="h-4 w-4" />
+                                </Button>
+                              </div>
                               <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-background/70 px-3 py-2">
                                 <span className="text-sm">Enabled</span>
                                 <Switch checked={pack.enabled} onCheckedChange={(checked) => updatePack(packIndex, { enabled: checked })} />
                               </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="rounded-xl"
+                                onClick={() => duplicatePack(packIndex)}
+                                title="Duplicate pack"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -592,15 +729,40 @@ export function ServerManagementDialog({
                           )}
 
                           <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <Label>Feeds</Label>
-                              <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => addPackFeed(packIndex)}>
-                                <Plus className="mr-1.5 h-3.5 w-3.5" /> Add feed
-                              </Button>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <Label>Feeds ({pack.feeds.length})</Label>
+                              <div className="flex flex-wrap gap-2">
+                                <Label className="inline-flex h-9 cursor-pointer items-center rounded-xl border border-border/70 bg-background/70 px-3 text-sm font-medium hover:bg-muted">
+                                  <Upload className="mr-1.5 h-3.5 w-3.5" /> Import OPML
+                                  <Input
+                                    type="file"
+                                    accept=".opml,.xml,text/xml,application/xml"
+                                    className="hidden"
+                                    onChange={(event) => {
+                                      importOpmlIntoPack(packIndex, event.target.files?.[0]);
+                                      event.currentTarget.value = "";
+                                    }}
+                                  />
+                                </Label>
+                                <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => exportStarterPack(pack)} disabled={pack.feeds.length === 0}>
+                                  <Download className="mr-1.5 h-3.5 w-3.5" /> Export
+                                </Button>
+                                <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => addPackFeed(packIndex)}>
+                                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add feed
+                                </Button>
+                              </div>
                             </div>
                             <div className="space-y-2">
                               {pack.feeds.map((feed, feedIndex) => (
-                                <div key={`${pack.id}-${feedIndex}`} className="grid gap-2 rounded-2xl border border-border/60 bg-background/60 p-3 lg:grid-cols-[1fr_1.4fr_1fr_1fr_auto]">
+                                <div key={`${pack.id}-${feedIndex}`} className="grid gap-2 rounded-2xl border border-border/60 bg-background/60 p-3 lg:grid-cols-[auto_1fr_1.4fr_1fr_1fr_auto]">
+                                  <div className="flex gap-1 lg:flex-col">
+                                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl" disabled={feedIndex === 0} onClick={() => movePackFeed(packIndex, feedIndex, feedIndex - 1)}>
+                                      <ArrowUp className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl" disabled={feedIndex === pack.feeds.length - 1} onClick={() => movePackFeed(packIndex, feedIndex, feedIndex + 1)}>
+                                      <ArrowDown className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
                                   <Input
                                     placeholder="Title"
                                     className="rounded-xl bg-background/70 border-border/70"
@@ -644,7 +806,7 @@ export function ServerManagementDialog({
                         <Button
                           className="rounded-2xl px-8"
                           disabled={isSaving}
-                          onClick={() => handleUpdateSettings({ starterPacksJson: stringifyStarterPacks(starterPacks) })}
+                          onClick={saveStarterPacks}
                         >
                           {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save starter packs"}
                         </Button>

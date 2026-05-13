@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { getConfiguredMailProviders, sendTestSystemEmail, type MailProviderId } from "@/lib/mail";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import { revalidatePath } from "next/cache";
-import { parseStarterPacksJson } from "@/lib/starter-packs";
+import { normalizeStarterPacksInput, stringifyStarterPacks } from "@/lib/starter-packs";
+import { getStarterPacksFromSettings } from "@/lib/starter-packs.server";
 
 async function checkAdmin() {
   const session = await auth();
@@ -70,8 +71,16 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
   }
   if ("starterPacksJson" in data) {
     const value = String(data.starterPacksJson || "").trim();
-    if (value) JSON.parse(value);
-    next.starterPacksJson = value || null;
+    if (value) {
+      const parsed = JSON.parse(value);
+      const result = normalizeStarterPacksInput(parsed);
+      if (result.errors.length > 0) {
+        throw new Error(result.errors.join("; "));
+      }
+      next.starterPacksJson = stringifyStarterPacks(result.packs);
+    } else {
+      next.starterPacksJson = null;
+    }
   }
 
   // Misc
@@ -193,7 +202,7 @@ export async function getGlobalSettings() {
     ...decryptSettingsForDisplay(settings),
     mailProvider: normalizedMailProvider,
     availableMailProviders,
-    starterPacks: parseStarterPacksJson(settings.starterPacksJson),
+    starterPacks: await getStarterPacksFromSettings(settings.starterPacksJson),
   };
 }
 

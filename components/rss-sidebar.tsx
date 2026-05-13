@@ -156,6 +156,15 @@ export function RssSidebar({
   const refreshFeed = useRefreshFeed();
   const markAllRead = useMarkAllAsRead();
 
+  const loadStarterPacks = () => {
+    fetch("/api/starter-packs")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.packs)) setStarterPacks(data.packs);
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
     fetch("/api/instance")
       .then((res) => (res.ok ? res.json() : null))
@@ -167,12 +176,7 @@ export function RssSidebar({
       })
       .catch(() => {});
 
-    fetch("/api/starter-packs")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (Array.isArray(data?.packs)) setStarterPacks(data.packs);
-      })
-      .catch(() => {});
+    loadStarterPacks();
   }, []);
 
   const handleDiscover = async () => {
@@ -223,6 +227,10 @@ export function RssSidebar({
   };
 
   const handleImportStarterPack = async (pack: StarterPack) => {
+    if (pack.feeds.length === 0 && !pack.path) {
+      toast.error(`${pack.name} has no feeds to import`);
+      return;
+    }
     setImportingPack(pack.id);
     try {
       let xml = "";
@@ -238,7 +246,11 @@ export function RssSidebar({
         result.feedsAdded ? `${result.feedsAdded} added` : null,
         result.feedsUpdated ? `${result.feedsUpdated} updated` : null,
       ].filter(Boolean).join(", ");
-      toast.success(`Imported ${pack.name}${details ? `: ${details}` : ""}`);
+      if (!result.feedsAdded && !result.feedsUpdated) {
+        toast.info(`${pack.name} did not contain new feeds`);
+      } else {
+        toast.success(`Imported ${pack.name}${details ? `: ${details}` : ""}`);
+      }
       setIsAddFeedOpen(false);
     } catch (err) {
       toast.error(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -722,11 +734,11 @@ export function RssSidebar({
                           size="sm"
                           variant="ghost"
                           className="h-6 px-2 text-xs shrink-0"
-                          disabled={importingPack === pack.id}
+                          disabled={importingPack === pack.id || (pack.feeds.length === 0 && !pack.path)}
                           onClick={() => handleImportStarterPack(pack)}
                         >
-                          <Download className="w-3 h-3 mr-1" />
-                          Import
+                          <Download className={cn("w-3 h-3 mr-1", importingPack === pack.id && "animate-bounce")} />
+                          {importingPack === pack.id ? "Importing" : "Import"}
                         </Button>
                       </div>
                     ))}
@@ -918,7 +930,10 @@ export function RssSidebar({
       />
       <ServerManagementDialog
         open={isServerManagementOpen}
-        onOpenChange={setIsServerManagementOpen}
+        onOpenChange={(nextOpen) => {
+          setIsServerManagementOpen(nextOpen);
+          if (!nextOpen) loadStarterPacks();
+        }}
       />
     </aside>
   );
