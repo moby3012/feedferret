@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { FeedSource } from "@/lib/rss-data";
@@ -9,12 +9,10 @@ import { useRouter } from "next/navigation";
 import {
   Home,
   Star,
-  Clock,
-  Archive,
   Plus,
   ChevronDown,
   Search,
-  Inbox,
+  Bell,
   LogOut,
   Cog,
   GripVertical,
@@ -53,7 +51,6 @@ import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FeedManagement } from "./feed-management";
 import {
   useAddFeed,
   useCategories,
@@ -66,8 +63,11 @@ import {
   useRefreshFeed,
   useMarkAllAsRead,
   useImportOpml,
+  useNotifications,
+  useUnreadNotificationCount,
+  useMarkNotificationRead,
+  useMarkAllNotificationsRead,
 } from "@/hooks/use-rss-data";
-import { ServerManagementDialog } from "./server-management-dialog";
 import { toast } from "sonner";
 import {
   Select,
@@ -119,12 +119,10 @@ export function RssSidebar({
 }: RssSidebarProps) {
   const router = useRouter();
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [newFeedCategoryId, setNewFeedCategoryId] = useState<string>("none");
   const [isAddingFeed, setIsAddingFeed] = useState(false);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [discoveredFeeds, setDiscoveredFeeds] = useState<{ url: string; title: string; type: string }[]>([]);
   const [discoveryMessage, setDiscoveryMessage] = useState<string | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(false);
@@ -146,6 +144,10 @@ export function RssSidebar({
   const { data: savedSearches = [] } = useSavedSearches();
   const refreshFeed = useRefreshFeed();
   const markAllRead = useMarkAllAsRead();
+  const { data: notifications = [] } = useNotifications();
+  const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
+  const markNotificationRead = useMarkNotificationRead();
+  const markAllNotificationsRead = useMarkAllNotificationsRead();
 
   const loadStarterPacks = () => {
     fetch("/api/starter-packs")
@@ -279,16 +281,9 @@ export function RssSidebar({
   const totalUnread = feeds.reduce((sum, f) => sum + f.unreadCount, 0);
 
   const navItems = [
-    { id: "new", icon: Inbox, label: "New Articles", count: totalUnread },
-    { id: "all", icon: Home, label: "All Articles", count: null },
-    { id: "starred", icon: Star, label: "Starred", count: starredCount },
-    {
-      id: "readlater",
-      icon: Bookmark,
-      label: "Read Later",
-      count: readLaterCount,
-    },
-    { id: "recent", icon: Clock, label: "Recently Read", count: null },
+    { id: "all", icon: Home, label: "All Articles", count: totalUnread },
+    ...(starredCount > 0 ? [{ id: "starred", icon: Star, label: "Starred", count: starredCount }] : []),
+    ...(readLaterCount > 0 ? [{ id: "readlater", icon: Bookmark, label: "Read Later", count: readLaterCount }] : []),
   ];
 
   const { data: session } = useSession();
@@ -300,13 +295,6 @@ export function RssSidebar({
         : [...prev, categoryId],
     );
   };
-
-  const filteredFeeds = useMemo(() => {
-    if (!searchQuery) return null;
-    return feeds.filter((f) =>
-      f.name.toLowerCase().includes(searchQuery.toLowerCase()),
-    );
-  }, [feeds, searchQuery]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
@@ -321,35 +309,9 @@ export function RssSidebar({
     const activeData = active.data.current;
     const overData = over.data.current;
 
-    // Handle Nesting (Active is dropped ON Over)
+    // Handle feed dropped onto a category -> Move to category
     if (active.id !== over.id) {
-      if (activeData?.type === "category" && overData?.type === "category") {
-        // Drop category on another category -> Nest
-        // Check if we are dropping ON or ABOVE/BELOW (reordering)
-        // For simplicity, we'll reorder if they are siblings, nest if dropped on a potential parent
-        // But user specifically asked for "dropping it on that new overcategory"
-
-        // If they are different levels or we want to force nesting:
-        // For now, let's allow reordering and also handle "move" if parent changes
-        const activeCategory = allCategories.find(
-          (c: any) => c.id === active.id,
-        );
-        const overCategory = allCategories.find((c: any) => c.id === over.id);
-
-        if (activeCategory && overCategory) {
-          await updateCategoryOrder.mutateAsync([
-            {
-              id: active.id as string,
-              order: 0,
-              parentId: over.id as string,
-            },
-          ]);
-          toast.success(
-            `Moved ${activeCategory.name} into ${overCategory.name}`,
-          );
-          return;
-        }
-      } else if (activeData?.type === "feed" && overData?.type === "category") {
+      if (activeData?.type === "feed" && overData?.type === "category") {
         // Drop feed on category -> Move to category
         await updateFeedOrder.mutateAsync([
           {
@@ -422,11 +384,7 @@ export function RssSidebar({
             onClick={() => {
               onSelectFeed(null);
               onSelectCategory(
-                item.id === "all"
-                  ? "All"
-                  : item.id === "new"
-                    ? "New Articles"
-                    : item.label,
+                item.id === "all" ? "All" : item.label,
               );
             }}
           >
@@ -477,7 +435,7 @@ export function RssSidebar({
             variant="ghost"
             size="icon"
             className="w-8 h-8 rounded-xl shrink-0"
-            onClick={() => setIsSearchOpen(true)}
+            onClick={() => window.dispatchEvent(new Event('focus-search'))}
           >
             <Search className="w-4 h-4" />
           </Button>
@@ -494,11 +452,7 @@ export function RssSidebar({
                 onClick={() => {
                   onSelectFeed(null);
                   onSelectCategory(
-                    item.id === "all"
-                      ? "All"
-                      : item.id === "new"
-                        ? "New Articles"
-                        : item.label,
+                    item.id === "all" ? "All" : item.label,
                   );
                 }}
                 className={cn(
@@ -506,9 +460,7 @@ export function RssSidebar({
                   selectedFeed === null &&
                     (item.id === "all"
                       ? selectedCategory === "All"
-                      : item.id === "new"
-                        ? selectedCategory === "New Articles"
-                        : selectedCategory === item.label)
+                      : selectedCategory === item.label)
                     ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
@@ -611,127 +563,6 @@ export function RssSidebar({
               </Button>
             </div>
 
-            {isAddFeedOpen && (
-              <div className="px-4 py-3 space-y-3 bg-muted/25 rounded-2xl border border-border/50">
-                {/* URL input + actions */}
-                <div className="flex gap-1.5">
-                  <Input
-                    placeholder="Feed or site URL..."
-                    value={newFeedUrl}
-                    onChange={(e) => {
-                      setNewFeedUrl(e.target.value);
-                      setDiscoveredFeeds([]);
-                      setDiscoveryMessage(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && newFeedUrl) handleDiscover();
-                    }}
-                    className="h-9 text-sm bg-sidebar-accent border-0 flex-1"
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-9 px-2 shrink-0"
-                    disabled={!newFeedUrl || isDiscovering}
-                    onClick={handleDiscover}
-                    title="Find feeds at this URL"
-                  >
-                    <Compass className={`w-4 h-4 ${isDiscovering ? "animate-spin" : ""}`} />
-                  </Button>
-                </div>
-
-                {/* Discovered feeds */}
-                {discoveredFeeds.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium px-0.5">Found feeds</p>
-                    {discoveredFeeds.map((f) => (
-                      <div key={f.url} className="flex items-center gap-1.5 rounded-xl bg-sidebar-accent px-2 py-1.5">
-                        <Rss className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-xs truncate flex-1 text-foreground" title={f.url}>{f.title}</span>
-                        <Button
-                          size="sm"
-                          className="h-6 px-2 text-xs shrink-0"
-                          onClick={() => handleAddFeed(f.url)}
-                          disabled={isAddingFeed}
-                        >
-                          Add
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {discoveryMessage && discoveredFeeds.length === 0 && (
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                    {discoveryMessage}
-                  </div>
-                )}
-
-                <Select
-                  value={newFeedCategoryId}
-                  onValueChange={setNewFeedCategoryId}
-                >
-                  <SelectTrigger className="h-9 text-sm bg-sidebar-accent border-0">
-                    <SelectValue placeholder="Category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Category</SelectItem>
-                    {allCategories.map((cat: any) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    className="flex-1"
-                    disabled={!newFeedUrl || isAddingFeed}
-                    onClick={() => handleAddFeed(newFeedUrl)}
-                  >
-                    Add direct URL
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="flex-1"
-                    onClick={() => {
-                      setIsAddFeedOpen(false);
-                      setDiscoveredFeeds([]);
-                      setDiscoveryMessage(null);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-
-                {/* Starter packs */}
-                <div className="pt-1 border-t border-border/40">
-                  <p className="text-xs text-muted-foreground font-medium mb-1.5">Starter packs</p>
-                  <div className="space-y-1">
-                    {starterPacks.map((pack) => (
-                      <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-sidebar-accent px-2 py-1.5">
-                        <span className="text-xs flex-1 text-foreground">
-                          {pack.name}
-                          <span className="text-muted-foreground ml-1">({pack.feeds.length || "OPML"})</span>
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 px-2 text-xs shrink-0"
-                          disabled={importingPack === pack.id || (pack.feeds.length === 0 && !pack.path)}
-                          onClick={() => handleImportStarterPack(pack)}
-                        >
-                          <Download className={cn("w-3 h-3 mr-1", importingPack === pack.id && "animate-bounce")} />
-                          {importingPack === pack.id ? "Importing" : "Import"}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
 
             <DndContext
               sensors={sensors}
@@ -755,6 +586,7 @@ export function RssSidebar({
                       expanded={expandedCategories.includes(category.id)}
                       onToggle={() => toggleCategory(category.id)}
                       renderFeedRow={renderFeedRow}
+                      onSelectCategory={onSelectCategory}
                     />
                   ))}
 
@@ -829,6 +661,75 @@ export function RssSidebar({
                 <TooltipContent side="top">Server Settings</TooltipContent>
               </Tooltip>
             )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-11 w-11 rounded-xl sm:h-9 sm:w-9 relative",
+                        unreadNotifications ? "text-accent bg-accent/10" : "",
+                      )}
+                    >
+                      <Bell className="w-4 h-4" />
+                      {unreadNotifications > 0 && (
+                        <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-bold leading-4 text-destructive-foreground">
+                          {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                        </span>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" side="top" className="w-80 rounded-2xl border-border/70 p-2">
+                    <div className="flex items-center justify-between px-2 py-1.5">
+                      <p className="text-sm font-semibold">Notifications</p>
+                      {unreadNotifications > 0 && (
+                        <button
+                          className="text-xs text-primary hover:underline"
+                          onClick={() => markAllNotificationsRead.mutate()}
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+                    <DropdownMenuSeparator />
+                    {notifications.length === 0 ? (
+                      <div className="px-2 py-8 text-center text-sm text-muted-foreground">
+                        No notifications yet.
+                      </div>
+                    ) : (
+                      (notifications as any[]).slice(0, 8).map((notification: any) => (
+                        <DropdownMenuItem
+                          key={notification.id}
+                          className="items-start gap-3 rounded-xl px-2 py-2"
+                          onClick={() => {
+                            if (!notification.isRead) markNotificationRead.mutate(notification.id);
+                            if (notification.articleId) {
+                              window.location.href = `/?article=${encodeURIComponent(notification.articleId)}`;
+                            }
+                          }}
+                        >
+                          <span
+                            className={cn(
+                              "mt-1 h-2 w-2 shrink-0 rounded-full",
+                              notification.isRead ? "bg-muted" : "bg-accent",
+                            )}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{notification.title}</span>
+                            <span className="line-clamp-2 text-xs text-muted-foreground">
+                              {notification.body}
+                            </span>
+                          </span>
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TooltipTrigger>
+              <TooltipContent side="top">Notifications</TooltipContent>
+            </Tooltip>
             {session?.user && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -848,81 +749,139 @@ export function RssSidebar({
         </TooltipProvider>
       </div>
 
-      <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-md rounded-2xl p-0 overflow-hidden">
-          <DialogHeader className="px-4 pt-4 pb-2">
-            <DialogTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Search Feeds
-            </DialogTitle>
+      <Dialog open={isAddFeedOpen} onOpenChange={(open) => {
+        setIsAddFeedOpen(open);
+        if (!open) {
+          setDiscoveredFeeds([]);
+          setDiscoveryMessage(null);
+        }
+      }}>
+        <DialogContent className="max-w-md w-full rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Feed</DialogTitle>
           </DialogHeader>
-          <div className="px-4 pb-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <div className="space-y-3">
+            {/* URL input + actions */}
+            <div className="flex gap-1.5">
               <Input
-                autoFocus
-                placeholder="Search for a feed..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-10 text-sm bg-muted border-0 rounded-xl"
+                placeholder="Feed or site URL..."
+                value={newFeedUrl}
+                onChange={(e) => {
+                  setNewFeedUrl(e.target.value);
+                  setDiscoveredFeeds([]);
+                  setDiscoveryMessage(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newFeedUrl) handleDiscover();
+                }}
+                className="h-9 text-sm flex-1"
               />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-9 px-2 shrink-0"
+                disabled={!newFeedUrl || isDiscovering}
+                onClick={handleDiscover}
+                title="Find feeds at this URL"
+              >
+                <Compass className={`w-4 h-4 ${isDiscovering ? "animate-spin" : ""}`} />
+              </Button>
             </div>
-          </div>
-          <div className="max-h-72 overflow-y-auto px-2 pb-3">
-            {searchQuery ? (
-              <>
-                {filteredFeeds?.map((feed) => (
-                  <button
-                    key={feed.id}
-                    onClick={() => {
-                      onSelectFeed(feed.id);
-                      setIsSearchOpen(false);
-                      setSearchQuery("");
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm hover:bg-muted transition-colors"
-                  >
-                    <span className="text-base shrink-0">
-                      {feed.icon || "📰"}
-                    </span>
-                    <span className="flex-1 text-left truncate">
-                      {feed.name}
-                    </span>
-                    {feed.unreadCount > 0 && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-brand/15 text-brand font-medium tabular-nums">
-                        {feed.unreadCount}
-                      </span>
-                    )}
-                  </button>
+
+            {/* Discovered feeds */}
+            {discoveredFeeds.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground font-medium px-0.5">Found feeds</p>
+                {discoveredFeeds.map((f) => (
+                  <div key={f.url} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
+                    <Rss className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs truncate flex-1 text-foreground" title={f.url}>{f.title}</span>
+                    <Button
+                      size="sm"
+                      className="h-6 px-2 text-xs shrink-0"
+                      onClick={() => handleAddFeed(f.url)}
+                      disabled={isAddingFeed}
+                    >
+                      Add
+                    </Button>
+                  </div>
                 ))}
-                {filteredFeeds?.length === 0 && (
-                  <p className="text-sm text-muted-foreground px-3 py-4 text-center">
-                    Keine Feeds gefunden
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground px-3 py-4 text-center">
-                Type to search for a feed…
-              </p>
+              </div>
             )}
+
+            {discoveryMessage && discoveredFeeds.length === 0 && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                {discoveryMessage}
+              </div>
+            )}
+
+            <Select
+              value={newFeedCategoryId}
+              onValueChange={setNewFeedCategoryId}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Category</SelectItem>
+                {allCategories.map((cat: any) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="flex-1"
+                disabled={!newFeedUrl || isAddingFeed}
+                onClick={() => handleAddFeed(newFeedUrl)}
+              >
+                Add direct URL
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="flex-1"
+                onClick={() => {
+                  setIsAddFeedOpen(false);
+                  setDiscoveredFeeds([]);
+                  setDiscoveryMessage(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+
+            {/* Starter packs */}
+            <div className="pt-1 border-t border-border/40">
+              <p className="text-xs text-muted-foreground font-medium mb-1.5">Starter packs</p>
+              <div className="space-y-1">
+                {starterPacks.map((pack) => (
+                  <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
+                    <span className="text-xs flex-1 text-foreground">
+                      {pack.name}
+                      <span className="text-muted-foreground ml-1">({pack.feeds.length || "OPML"})</span>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs shrink-0"
+                      disabled={importingPack === pack.id || (pack.feeds.length === 0 && !pack.path)}
+                      onClick={() => handleImportStarterPack(pack)}
+                    >
+                      <Download className={cn("w-3 h-3 mr-1", importingPack === pack.id && "animate-bounce")} />
+                      {importingPack === pack.id ? "Importing" : "Import"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <FeedManagement
-        open={isManagementOpen}
-        onOpenChange={(open) => {
-          setIsManagementOpen(open);
-          if (!open) setManagementInitialTab(undefined);
-        }}
-        initialTab={managementInitialTab}
-      />
-      <ServerManagementDialog
-        open={isServerManagementOpen}
-        onOpenChange={(nextOpen) => {
-          setIsServerManagementOpen(nextOpen);
-          if (!nextOpen) loadStarterPacks();
-        }}
-      />
     </aside>
   );
 }
@@ -935,6 +894,7 @@ function SortableCategory({
   expanded,
   onToggle,
   renderFeedRow,
+  onSelectCategory,
 }: any) {
   const {
     attributes,
@@ -970,10 +930,15 @@ function SortableCategory({
           <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
         </div>
         <button
-          onClick={onToggle}
-          className="flex-1 flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider"
+          onClick={() => onSelectCategory?.(category.name)}
+          className="flex-1 flex items-center text-xs font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
         >
           <span>{category.name}</span>
+        </button>
+        <button
+          onClick={onToggle}
+          className="p-1 rounded hover:bg-muted transition-colors"
+        >
           <ChevronDown
             className={cn(
               "w-3.5 h-3.5 transition-transform",
@@ -1057,7 +1022,26 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
           : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-sidebar-foreground",
       )}
     >
-      <span className="text-lg shrink-0">{feed.icon || "📰"}</span>
+      <div className="w-5 h-5 shrink-0 rounded-sm overflow-hidden bg-muted flex items-center justify-center">
+        {feed.url ? (() => {
+          try {
+            const hostname = new URL(feed.url).hostname;
+            return (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=32`}
+                alt=""
+                className="w-5 h-5"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            );
+          } catch {
+            return <span className="text-xs">{feed.icon || "📰"}</span>;
+          }
+        })() : (
+          <span className="text-xs">{feed.icon || "📰"}</span>
+        )}
+      </div>
       <span className="flex-1 text-left truncate font-medium">{feed.name}</span>
       {!hideUnreadBadge && feed.unreadCount > 0 && (
         <span

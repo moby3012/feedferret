@@ -133,7 +133,8 @@ export default function RSSReaderPage() {
     if (articleId) articleDeepLinkRef.current = articleId;
 
     if (view === "new") {
-      setSelectedCategory("New Articles");
+      setSelectedCategory("All Articles");
+      setUnreadOnly(true);
       setSelectedFeed(null);
     } else if (view === "readlater") {
       setSelectedCategory("Read Later");
@@ -146,6 +147,16 @@ export default function RSSReaderPage() {
       setSelectedFeed(null);
     }
   }, [status]);
+
+  // Focus main search when sidebar search icon is clicked
+  useEffect(() => {
+    const handler = () => {
+      const input = document.querySelector('input[type="search"]') as HTMLInputElement;
+      input?.focus();
+    };
+    window.addEventListener('focus-search', handler);
+    return () => window.removeEventListener('focus-search', handler);
+  }, []);
 
   // Auto-sync feeds on page load (lazy sync)
   useEffect(() => {
@@ -204,14 +215,13 @@ export default function RSSReaderPage() {
       "All Articles",
       "Starred",
       "Read Later",
-      "Recently Read",
     ].includes(selectedCategory);
 
     // Apply main view filter - include items that are either:
     // 1. Not yet read, OR
-    // 2. Read in this session (clicked but still visible), OR  
+    // 2. Read in this session (clicked but still visible), OR
     // 3. Already in readInSession (persist visibility after server update)
-    if (selectedCategory === "New Articles" || (unreadOnly && !bypassUnreadFilter)) {
+    if (unreadOnly && !bypassUnreadFilter) {
       list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
     }
 
@@ -315,7 +325,7 @@ export default function RSSReaderPage() {
 
     setSessionReadArticles((prev) => {
       const without = prev.filter((a) => a.id !== articleId);
-      return selectedCategory === "New Articles" || unreadOnly || !nextIsRead
+      return unreadOnly || !nextIsRead
         ? [updated, ...without]
         : without;
     });
