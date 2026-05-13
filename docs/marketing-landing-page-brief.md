@@ -35,7 +35,7 @@ FeedFerret helps users **collect, filter, organize, and read RSS feeds in a fast
 - RSS power users
 - privacy-conscious readers
 - researchers and analysts
-- people replacing services like Feedly, Inoreader, or self-hosted FreshRSS setups
+- people replacing services like Feedly, Inoreader, or self-hosted Scout Studio setups
 - users who want a modern mobile-friendly reader UI
 - users who want Reeder-style ergonomics with self-hosting flexibility
 

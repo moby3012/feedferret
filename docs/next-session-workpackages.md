@@ -1,12 +1,12 @@
 # Next Session Workpackages
 
-Last reviewed: 2026-05-12. Workpackages are ordered by value/effort and dependency fit after the completed notifications, FreshRSS OPML, PWA polish, Postgres, and SSRF-security work.
+Last reviewed: 2026-05-12. Workpackages are ordered by value/effort and dependency fit after the completed notifications, Scout Studio OPML, PWA polish, Postgres, and SSRF-security work.
 
 ## 0. Current baseline ✅
 
 Already implemented and documented:
 
-- FreshRSS extended OPML import/export and Dynamic OPML sync.
+- Scout Studio extended OPML import/export and Dynamic OPML sync.
 - Browser push, keyword alerts, notification bell, centralized PWA badging, cached-article offline fallback.
 - Google Reader API Phase 1 with cursor continuations and stream preferences.
 - Saved Search Sharing via tokenized public page and RSS feed.

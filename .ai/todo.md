@@ -6,7 +6,7 @@ Last reviewed: 2026-05-12. This file is the active planning list; detailed next-
 
 ## Completed on current branch ✅
 
-### Sprint 1 — FreshRSS parity basics
+### Sprint 1 — Scout Studio parity basics
 - [x] Keyboard shortcut help overlay (`?` key + full overlay)
 - [x] Per-feed quick actions menu (refresh, mark read, edit, health)
 - [x] Better import/export (selective OPML export, JSON export, import report with badges)
@@ -18,8 +18,8 @@ Last reviewed: 2026-05-12. This file is the active planning list; detailed next-
 - [x] Retention policy UI expansion (min articles, protect starred/labelled, dry-run)
 - [x] Dynamic theming (accent + secondary color pickers, CSS vars)
 
-### FreshRSS / PWA / Notifications work
-- [x] FreshRSS extended OPML import/export (`frss:*` attributes, source types, cURL-style options)
+### Scout Studio / PWA / Notifications work
+- [x] Scout Studio extended OPML import/export (`ffx:*` attributes, source types, cURL-style options)
 - [x] Dynamic OPML categories with automatic sync and SSRF-safe fetching
 - [x] Browser/PWA push notifications with VAPID, device subscription APIs, Settings UI, and service worker handling
 - [x] Centralized app badging updates for unread-count changes, push payloads, sync, and mark-all-read
@@ -113,7 +113,7 @@ Last reviewed: 2026-05-12. This file is the active planning list; detailed next-
 
 ## Parking lot / later
 
-- [ ] Website scraping feeds from arbitrary HTML/JSON sources beyond FreshRSS-compatible imported definitions
+- [ ] Website scraping feeds from arbitrary HTML/JSON sources beyond Scout Studio-compatible imported definitions
 - [ ] WebSub / PubSubHubbub instant updates
 - [ ] Extension system with safe server/UI hooks
 - [ ] Multi-user shared/anonymous reading mode beyond tokenized saved searches

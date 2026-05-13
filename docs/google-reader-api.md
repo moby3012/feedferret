@@ -92,4 +92,4 @@ Most clients work with:
 - Username: FeedFerret account email
 - Password: FeedFerret password
 
-If a client expects Google Reader / BazQux / FreshRSS style endpoints, use the same base and let the client append `reader/api/0/...` paths.
+If a client expects Google Reader / BazQux / Scout Studio style endpoints, use the same base and let the client append `reader/api/0/...` paths.

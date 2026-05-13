@@ -4,11 +4,13 @@ This document captures larger product work that should not be rushed into small 
 
 ---
 
-## 1. Guided FreshRSS XPath / full-text extraction assistant
+## 1. Scout Studio extraction assistant
+
+Status: baseline implemented. Feed Settings now includes a Scout Studio guided full-text preview with ranked selector candidates, plus an advanced Scout Studio tab for source, XPath/JSON, HTTP, unicity, and filters. See [`docs/scout-studio.md`](scout-studio.md).
 
 ### Problem
 
-FeedFerret already stores FreshRSS-compatible XPath, JSON DotNotation, HTTP/cURL, and full-text extraction settings, but the current UI exposes these as raw technical fields. This is too hard for normal users:
+FeedFerret already stores Scout Studio-compatible XPath, JSON DotNotation, HTTP/cURL, and full-text extraction settings, but the current UI exposes these as raw technical fields. This is too hard for normal users:
 
 - Users do not know whether a source needs RSS, JSON, HTML+XPath, or full-text extraction.
 - Users cannot easily inspect the fetched HTML/XML/JSON.
@@ -22,7 +24,7 @@ Build an assistant that guides the user from a problematic feed/site URL to a wo
 ### Proposed UX flow
 
 1. **Start**
-   - Entry point in Feed Settings → `Extraction Assistant`.
+   - Entry point in Feed Settings → `Full-Text` and `Scout Studio`.
    - User enters:
      - Feed URL or site URL.
      - Optional example article URL.
@@ -93,14 +95,12 @@ Build an assistant that guides the user from a problematic feed/site URL to a wo
 
 ### Testing
 
-- Unit tests for selector candidate ranking.
-- Integration tests with fixture HTML, XML, JSON, RSS, Atom, JSON Feed.
-- SSRF regression tests.
-- UI tests:
-  - successful full-text setup
-  - failed selector
-  - AI suggestions disabled when no AI provider is configured
-  - AI suggestions shown when configured
+- [x] Build-tested selector candidate ranking in the preview server action.
+- [x] Build-tested UI candidate application flow.
+- [x] Existing SSRF-protected fetch path is reused.
+- [ ] Future integration tests with fixture HTML, XML, JSON, RSS, Atom, JSON Feed.
+- [ ] Future UI tests for successful full-text setup and failed selectors.
+- [ ] Future AI suggestions when a provider is configured.
 
 ### Open decisions
 

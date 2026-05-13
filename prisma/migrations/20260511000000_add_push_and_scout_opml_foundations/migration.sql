@@ -23,7 +23,7 @@ CREATE TABLE "PushSubscription" (
 CREATE UNIQUE INDEX "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");
 CREATE INDEX "PushSubscription_userId_disabledAt_idx" ON "PushSubscription"("userId", "disabledAt");
 
--- Add FreshRSS extended OPML category/feed metadata.
+-- Add Scout Studio extended OPML category/feed metadata.
 ALTER TABLE "Category" ADD COLUMN "opmlUrl" TEXT;
 
 ALTER TABLE "Feed" ADD COLUMN "sourceType" TEXT NOT NULL DEFAULT 'rss';
@@ -37,7 +37,7 @@ ALTER TABLE "Feed" ADD COLUMN "httpOptions" TEXT;
 ALTER TABLE "Feed" ADD COLUMN "fullTextConditions" TEXT;
 ALTER TABLE "Feed" ADD COLUMN "filtersActionRead" TEXT;
 
--- Move article uniqueness toward feed-local FreshRSS unicity criteria.
+-- Move article uniqueness toward feed-local Scout Studio unicity criteria.
 ALTER TABLE "Article" ADD COLUMN "externalId" TEXT;
 ALTER TABLE "Article" ADD COLUMN "dedupeKey" TEXT;
 DROP INDEX IF EXISTS "Article_userId_link_key";

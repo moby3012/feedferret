@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { httpOptionsFromOutline, OpmlOutline, parseOpml, scraperConfigFromOutline } from "@/lib/opml";
-import { normalizeSourceType, stringifyNonEmpty } from "@/lib/freshrss-opml";
+import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 
 async function fetchSafeOpml(url: string) {
@@ -20,7 +20,7 @@ async function fetchSafeOpml(url: string) {
 }
 
 function feedDataFromOutline(outline: OpmlOutline, userId: string, categoryId: string) {
-  const frss = outline.frss ?? {};
+  const extensions = outline.extensions ?? {};
   const scraperConfig = scraperConfigFromOutline(outline);
   const httpOptions = httpOptionsFromOutline(outline);
   return {
@@ -31,15 +31,15 @@ function feedDataFromOutline(outline: OpmlOutline, userId: string, categoryId: s
     sourceType: normalizeSourceType(outline.type),
     htmlUrl: outline.htmlUrl || null,
     description: outline.description || null,
-    priority: frss.priority || "main",
-    unicityCriteria: frss.unicityCriteria || "id",
-    unicityCriteriaForced: frss.unicityCriteriaForced === "true" || frss.unicityCriteriaForced === "1",
+    priority: extensions.priority || "main",
+    unicityCriteria: extensions.unicityCriteria || "id",
+    unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1",
     scraperConfig: stringifyNonEmpty(scraperConfig),
     httpOptions: stringifyNonEmpty(httpOptions),
-    fullTextSelector: frss.cssFullContent || null,
-    fullTextConditions: frss.cssFullContentConditions || null,
-    fullTextRemoveSelectors: frss.cssContentFilter || frss.cssFullContentFilter || null,
-    filtersActionRead: frss.filtersActionRead || null,
+    fullTextSelector: extensions.cssFullContent || null,
+    fullTextConditions: extensions.cssFullContentConditions || null,
+    fullTextRemoveSelectors: extensions.cssContentFilter || extensions.cssFullContentFilter || null,
+    filtersActionRead: extensions.filtersActionRead || null,
     customUserAgent: typeof httpOptions.CURLOPT_USERAGENT === "string" ? httpOptions.CURLOPT_USERAGENT : undefined,
   };
 }
@@ -74,8 +74,8 @@ async function importDynamicOutline(userId: string, outline: OpmlOutline, parent
   if (!outline.children?.length) return;
   const category = await db.category.upsert({
     where: { userId_name_parentId: { userId, name: outline.text, parentId: parentCategoryId } },
-    update: { opmlUrl: outline.frss?.opmlUrl ?? undefined },
-    create: { userId, name: outline.text, parentId: parentCategoryId, opmlUrl: outline.frss?.opmlUrl ?? undefined },
+    update: { opmlUrl: outline.extensions?.opmlUrl ?? undefined },
+    create: { userId, name: outline.text, parentId: parentCategoryId, opmlUrl: outline.extensions?.opmlUrl ?? undefined },
   });
   for (const child of outline.children) await importDynamicOutline(userId, child, category.id);
 }

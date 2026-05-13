@@ -1,18 +1,18 @@
-# FreshRSS Feature Roadmap for FeedFerret
+# Scout Studio Feature Roadmap for FeedFerret
 
-This document lists FreshRSS-style capabilities that FeedFerret could adopt next. Items are sorted by estimated implementation effort and practical product value.
+This document lists Scout Studio-style capabilities that FeedFerret could adopt next. Items are sorted by estimated implementation effort and practical product value.
 
 ## Low Effort
 
 ### 1. Keyboard Shortcut Help Overlay ✅ Done
-FreshRSS exposes many fast reading actions. FeedFerret already has shortcuts, but users need discoverability.
+Scout Studio exposes many fast reading actions. FeedFerret already has shortcuts, but users need discoverability.
 
 - Add `?` shortcut overlay. ✅
 - List existing keys: `/`, `j`, `k`, `s`, `m`, `o`, `r`. ✅
 - Add quick actions for next unread (`n`), previous unread (`p`), open original (`o`), save search (`Shift+S`), mark all read (`Shift+A`). ✅
 
 ### 2. Per-Feed Quick Actions Menu ✅ Done
-FreshRSS has feed-level actions from the sidebar.
+Scout Studio has feed-level actions from the sidebar.
 
 - Refresh one feed. ✅ (`refreshFeed` server action + sidebar dropdown)
 - Mark feed as read. ✅ (reuses `markAllAsRead({feedId})`)
@@ -21,14 +21,14 @@ FreshRSS has feed-level actions from the sidebar.
 - Show feed health details. ✅ (opens Management → Health tab)
 
 ### 3. Better Import/Export Options ✅ Done
-FreshRSS can export selected feeds and richer backup formats.
+Scout Studio can export selected feeds and richer backup formats.
 
 - Select categories/feeds for OPML export. ✅ (checkboxes in Import/Export tab, `exportOpml(selectedFeedIds?)` action)
 - Export all user data as JSON. ✅ (`exportUserData` action + JSON Export button in Import/Export tab)
 - Show import duplicates and skipped feeds separately. ✅ (import report now shows new/already-existed/errors separately with color badges)
 
 ### 4. Feed Statistics Cards ✅ Done
-FreshRSS exposes statistics per feed.
+Scout Studio exposes statistics per feed.
 
 - Articles per feed. ✅ (Health tab: articleCount)
 - Unread count. ✅ (Health tab: unreadCount)
@@ -37,7 +37,7 @@ FreshRSS exposes statistics per feed.
 - Error rate. ✅ (Health tab: lastStatus + lastError display)
 
 ### 5. User Preferences for Reading Behaviour ✅ Done
-FreshRSS allows reading options customization.
+Scout Studio allows reading options customization.
 
 - Mark as read after delay setting. ✅ (`markReadAfterDelaySecs` User field + Settings select + wired into page.tsx timer)
 - Open original by default setting. ✅ (`openOriginalByDefault` User field + Settings toggle + wired into article select)
@@ -48,7 +48,7 @@ FreshRSS allows reading options customization.
 ## Medium Effort
 
 ### 6. Auto-Mark-as-Read Rules ✅ Done
-FreshRSS can auto-mark articles as read via filters.
+Scout Studio can auto-mark articles as read via filters.
 
 - Rule fields: feed/category/query/action. ✅
 - Query syntax reuse from Advanced Search (extracted to `lib/search.ts`). ✅
@@ -58,7 +58,7 @@ FreshRSS can auto-mark articles as read via filters.
 - "Run now" button in Management → Rules tab. ✅
 
 ### 7. Saved Search Sharing ✅ Done
-FreshRSS can reshare selections as HTML/RSS/OPML.
+Scout Studio can reshare selections as HTML/RSS/OPML.
 
 - Public read-only saved-search page. ✅
 - RSS feed for saved search results. ✅
@@ -66,7 +66,7 @@ FreshRSS can reshare selections as HTML/RSS/OPML.
 - Admin policy kill switch remains a small follow-up.
 
 ### 8. Feed Authentication and Fetch Options ✅ Done
-FreshRSS supports feed credentials and request options.
+Scout Studio supports feed credentials and request options.
 
 - HTTP Basic Auth per feed. ✅ (`authType`, `authUsername`, `authPassword` fields + FeedEditDialog Auth tab)
 - Custom User-Agent. ✅ (`customUserAgent` field)
@@ -75,7 +75,7 @@ FreshRSS supports feed credentials and request options.
 - Max-size limit. ✅ (`maxSizeKb` field, truncates content)
 
 ### 9. Improved Full-Text Extraction Settings ✅ Done
-FreshRSS supports truncated-feed handling via CSS/XPath configuration.
+Scout Studio supports truncated-feed handling via CSS/XPath configuration.
 
 - Per-feed CSS selector for article body. ✅ (`fullTextSelector` field)
 - Per-feed remove selectors. ✅ (`fullTextRemoveSelectors` comma-separated)
@@ -83,7 +83,7 @@ FreshRSS supports truncated-feed handling via CSS/XPath configuration.
 - Auto-fetch full text on sync. ✅ (`autoFetchFullText` toggle, runs after each sync)
 
 ### 10. Retention Policy UI Expansion ✅ Done
-FreshRSS offers stronger archive/purge control.
+Scout Studio offers stronger archive/purge control.
 
 - Keep minimum N articles per feed. ✅ (`keepMinArticles` Feed field + inline input in Feeds tab)
 - Never delete starred/labelled articles. ✅ (`isStarred: false, labels: { none: {} }` in retention query)
@@ -92,7 +92,7 @@ FreshRSS offers stronger archive/purge control.
 ## High Effort
 
 ### 11. Website Scraping Feeds
-FreshRSS can create feeds from websites without RSS.
+Scout Studio can create feeds from websites without RSS.
 
 - HTML + CSS selector/XPath source type.
 - JSON dotted-path source type.
@@ -101,7 +101,7 @@ FreshRSS can create feeds from websites without RSS.
 - Store scraper definitions per feed.
 
 ### 12. WebSub / PubSubHubbub
-FreshRSS supports instant push updates for compatible feeds.
+Scout Studio supports instant push updates for compatible feeds.
 
 - Discover hub links in Atom/RSS.
 - Subscribe/unsubscribe lifecycle.
@@ -129,7 +129,7 @@ Still open:
 - Fever API compatibility as secondary target if real clients require it.
 
 ### 14. Extension System
-FreshRSS supports user/system extensions.
+Scout Studio supports user/system extensions.
 
 - Extension manifest format.
 - Server-side hook points: sync, article ingest, render, action menu.
@@ -137,7 +137,7 @@ FreshRSS supports user/system extensions.
 - Safe enable/disable per user/admin.
 
 ### 15. Multi-Database / Production Storage Options ✅ Done
-FreshRSS supports SQLite, MySQL/MariaDB, PostgreSQL.
+Scout Studio supports SQLite, MySQL/MariaDB, PostgreSQL.
 
 - Prisma provider strategy documented. ✅
 - PostgreSQL production profile. ✅
@@ -147,7 +147,7 @@ FreshRSS supports SQLite, MySQL/MariaDB, PostgreSQL.
 ## Very High Effort
 
 ### 16. Offline-First Native-Like PWA ✅ Partial
-FreshRSS works well on mobile browser; FeedFerret could go further.
+Scout Studio works well on mobile browser; FeedFerret could go further.
 
 - Cached-article offline fallback. ✅
 - Manifest screenshots, shortcuts, deep links, and PWA checks. ✅
@@ -156,7 +156,7 @@ FreshRSS works well on mobile browser; FeedFerret could go further.
 - Background sync when app reopens remains future work.
 
 ### 17. Multi-User Shared/Anonymous Reading Mode
-FreshRSS has anonymous/default-user modes.
+Scout Studio has anonymous/default-user modes.
 
 - Public read-only collections.
 - Shared saved searches.
@@ -164,7 +164,7 @@ FreshRSS has anonymous/default-user modes.
 - Admin controls for anonymous access.
 
 ### 18. Advanced Security for Server-Side Fetching ✅ Done
-FreshRSS documents SSRF risk. FeedFerret now has first-class mitigations.
+Scout Studio documents SSRF risk. FeedFerret now has first-class mitigations.
 
 - Block private IP ranges by default in multi-user mode. ✅
 - DNS rebinding protection. ✅
@@ -198,7 +198,7 @@ Recommended order for the next sessions:
 6. **Reader Client Compatibility QA** — Medium effort. Validate Reeder, NetNewsWire, FeedMe/ReadKit and tune GReader quirks.
 7. **Saved Search Sharing admin policy** — Low effort. Global admin kill switch for public sharing.
 
-Recently completed: **Advanced SSRF Security**, **Multi-Database / Postgres support**, **Keyword Monitoring & Alerts**, **PWA Polish / Better Badging**, and **FreshRSS Extended OPML + Dynamic OPML**.
+Recently completed: **Advanced SSRF Security**, **Multi-Database / Postgres support**, **Keyword Monitoring & Alerts**, **PWA Polish / Better Badging**, and **Scout Studio Extended OPML + Dynamic OPML**.
 
 ## Saved Search Sharing Implementation Notes
 
@@ -221,12 +221,12 @@ Follow-up ideas:
 - Add OPML export for a shared saved search if useful.
 - Add authenticated-only team shares if FeedFerret grows collaboration features.
 
-## Implementation update — FreshRSS Extended OPML + Notifications
+## Implementation update — Scout Studio Extended OPML + Notifications
 
-Status: implemented on branch `feat/notifications-freshrss-opml`.
+Status: implemented on branch `feat/notifications-scout-studio-opml`.
 
-- FreshRSS extended OPML parser/exporter with `frss:*` attributes.
+- Scout Studio extended OPML parser/exporter with `ffx:*` attributes.
 - Import/export mapping for priority, unicity criteria, scraper config, cURL-style HTTP options, full-content selectors, and dynamic OPML URLs.
 - New feed source support: RSS/Atom, JSONFeed, JSON+DotNotation, HTML+XPath, XML+XPath, HTML+XPath+JSON+DotNotation.
-- FreshRSS-style dynamic OPML categories sync automatically and use SSRF protections.
+- Scout Studio-style dynamic OPML categories sync automatically and use SSRF protections.
 - Browser/PWA push notifications added with user-controlled frequency and article-title payloads by default.

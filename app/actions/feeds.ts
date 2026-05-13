@@ -13,7 +13,7 @@ import {
     scraperConfigFromOutline,
     httpOptionsFromOutline,
 } from "@/lib/opml";
-import { normalizeSourceType, stringifyNonEmpty } from "@/lib/freshrss-opml";
+import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { randomBytes } from "crypto";
 import { decryptIfValue } from "@/lib/crypto";
@@ -358,7 +358,7 @@ export async function updateFeed(feedId: string, data: {
     autoFetchFullText?: boolean;
     fullTextConditions?: string | null;
     filtersActionRead?: string | null;
-    // FreshRSS extended source options
+    // Scout Studio source options
     sourceType?: string;
     priority?: string;
     unicityCriteria?: string;
@@ -795,7 +795,7 @@ export async function importOpml(xml: string) {
     const feedDataFromOutline = (outline: OpmlOutline, categoryId?: string | null) => {
         const scraperConfig = scraperConfigFromOutline(outline);
         const httpOptions = httpOptionsFromOutline(outline);
-        const frss = outline.frss ?? {};
+        const extensions = outline.extensions ?? {};
         const sourceType = normalizeSourceType(outline.type);
         return {
             url: outline.xmlUrl!,
@@ -804,15 +804,15 @@ export async function importOpml(xml: string) {
             sourceType,
             htmlUrl: outline.htmlUrl || null,
             description: outline.description || null,
-            priority: frss.priority || "main",
-            unicityCriteria: frss.unicityCriteria || "id",
-            unicityCriteriaForced: frss.unicityCriteriaForced === "true" || frss.unicityCriteriaForced === "1",
+            priority: extensions.priority || "main",
+            unicityCriteria: extensions.unicityCriteria || "id",
+            unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1",
             scraperConfig: stringifyNonEmpty(scraperConfig),
             httpOptions: stringifyNonEmpty(httpOptions),
-            fullTextSelector: frss.cssFullContent || null,
-            fullTextConditions: frss.cssFullContentConditions || null,
-            fullTextRemoveSelectors: frss.cssContentFilter || frss.cssFullContentFilter || null,
-            filtersActionRead: frss.filtersActionRead || null,
+            fullTextSelector: extensions.cssFullContent || null,
+            fullTextConditions: extensions.cssFullContentConditions || null,
+            fullTextRemoveSelectors: extensions.cssContentFilter || extensions.cssFullContentFilter || null,
+            filtersActionRead: extensions.filtersActionRead || null,
             customUserAgent: typeof httpOptions.CURLOPT_USERAGENT === "string" ? httpOptions.CURLOPT_USERAGENT : undefined,
         };
     };
@@ -865,7 +865,7 @@ export async function importOpml(xml: string) {
             if (existing) report.feedsUpdated += 1;
             else report.feedsAdded += 1;
         } else if (outline.children) {
-            const category = await getOrCreateCategory(outline.text, categoryId, outline.frss?.opmlUrl ?? null);
+            const category = await getOrCreateCategory(outline.text, categoryId, outline.extensions?.opmlUrl ?? null);
 
             for (const child of outline.children) {
                 try {
@@ -1292,20 +1292,57 @@ export async function previewFeedExtraction(feedId: string, articleUrl: string) 
         try { node.setAttribute(attr, new URL(value, articleUrl).toString()); } catch { /* ignore */ }
     });
 
+    const cssEscape = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, (char) => `\\${char}`);
+    const selectorFor = (element: Element) => {
+        const tag = element.tagName.toLowerCase();
+        const id = element.getAttribute("id");
+        if (id) return `${tag}#${cssEscape(id)}`;
+        const classes = Array.from(element.classList).slice(0, 3);
+        if (classes.length > 0) return `${tag}.${classes.map(cssEscape).join(".")}`;
+        const parent = element.parentElement;
+        if (!parent) return tag;
+        const siblings = Array.from(parent.children).filter((child) => child.tagName === element.tagName);
+        const index = siblings.indexOf(element);
+        return siblings.length > 1 ? `${tag}:nth-of-type(${index + 1})` : tag;
+    };
+    const plainText = (element: Element) => (element.textContent || "").replace(/\s+/g, " ").trim();
+    const scoredCandidates = [
+        "article",
+        "main",
+        "[role='main']",
+        ".post-content",
+        ".entry-content",
+        ".article-content",
+        ".content",
+        ".post",
+        ".entry",
+    ]
+        .flatMap((s) => Array.from(document.querySelectorAll(s)))
+        .concat(Array.from(document.body.children))
+        .map((el) => {
+            const text = plainText(el);
+            return {
+                el,
+                selector: selectorFor(el),
+                charCount: text.length,
+                paragraphCount: el.querySelectorAll("p").length,
+                linkCount: el.querySelectorAll("a").length,
+                sample: text.slice(0, 220),
+                score: text.length + el.querySelectorAll("p").length * 250 - el.querySelectorAll("a").length * 20,
+            };
+        })
+        .filter((candidate, index, all) => (
+            candidate.charCount > 80 &&
+            all.findIndex((other) => other.selector === candidate.selector) === index
+        ))
+        .sort((a, b) => b.score - a.score);
+
     let best: Element | undefined;
     if (feed.fullTextSelector) {
         best = document.querySelector(feed.fullTextSelector) ?? undefined;
     }
     if (!best) {
-        const candidates = ["article", "main", "[role='main']", ".post-content", ".entry-content", ".article-content", ".content"]
-            .flatMap((s) => Array.from(document.querySelectorAll(s)))
-            .concat(Array.from(document.body.children));
-        best = candidates
-            .map((el) => ({
-                el,
-                score: (el.textContent?.trim().length || 0) + el.querySelectorAll("p").length * 250 - el.querySelectorAll("a").length * 20,
-            }))
-            .sort((a, b) => b.score - a.score)[0]?.el;
+        best = scoredCandidates[0]?.el;
     }
 
     if (!best) throw new Error("Could not find article content");
@@ -1317,6 +1354,13 @@ export async function previewFeedExtraction(feedId: string, articleUrl: string) 
         html: sanitized.slice(0, 50_000),
         charCount: plain.length,
         selectorUsed: feed.fullTextSelector || "(auto-detect)",
+        candidates: scoredCandidates.slice(0, 5).map(({ selector, charCount, paragraphCount, linkCount, sample }) => ({
+            selector,
+            charCount,
+            paragraphCount,
+            linkCount,
+            sample,
+        })),
     };
 }
 

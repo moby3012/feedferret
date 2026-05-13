@@ -209,7 +209,7 @@ model Feed {
   unicityCriteria String   @default("id")
   unicityCriteriaForced Boolean @default(false)
   scraperConfig   String?  // JSON for XPath / JSON DotNotation / xPathToJson settings
-  httpOptions     String?  // JSON for FreshRSS cURL-like fetch options
+  httpOptions     String?  // JSON for Scout Studio cURL-like fetch options
   userId          String
   categoryId      String?
   order           Int      @default(0)

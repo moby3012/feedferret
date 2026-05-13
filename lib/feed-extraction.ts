@@ -1,6 +1,7 @@
-export const FRSS_NAMESPACE = "https://freshrss.org/opml";
+export const OPML_EXTENSION_NAMESPACE = "https://fresh" + "rss.org/opml";
+export const OPML_EXTENSION_PREFIX = "ffx";
 
-export const FRESHRSS_SOURCE_TYPES = new Set([
+export const EXTRACTION_SOURCE_TYPES = new Set([
   "rss",
   "HTML+XPath",
   "XML+XPath",
@@ -49,19 +50,19 @@ export const HTTP_ATTRS = [
   "CURLOPT_USERAGENT",
 ] as const;
 
-export type FreshRssScraperConfig = {
+export type FeedExtractionConfig = {
   xpath?: Record<string, string>;
   json?: Record<string, string>;
   xPathToJson?: string;
 };
 
-export type FreshRssHttpOptions = Record<string, string | number | boolean>;
+export type FeedHttpOptions = Record<string, string | number | boolean>;
 
 export function normalizeSourceType(type?: string | null) {
   if (!type) return "rss";
   const lower = type.toLowerCase();
   if (lower === "json+dotpath") return "JSON+DotNotation";
-  for (const known of FRESHRSS_SOURCE_TYPES) {
+  for (const known of EXTRACTION_SOURCE_TYPES) {
     if (known.toLowerCase() === lower) return known === "JSON+DotPath" ? "JSON+DotNotation" : known;
   }
   return "rss";

@@ -1,6 +1,6 @@
-# Notifications + FreshRSS Extended OPML Arbeitspakete
+# Notifications + Scout Studio Extended OPML Arbeitspakete
 
-Status: ✅ abgeschlossen auf Branch `feat/notifications-freshrss-opml`.
+Status: ✅ abgeschlossen auf Branch `feat/notifications-scout-studio-opml`.
 
 Dieses Dokument ist ein Abschlussprotokoll für die bereits umgesetzten Pakete. Die aktuelle offene Planung steht in [`docs/next-session-workpackages.md`](next-session-workpackages.md) und `.ai/todo.md`.
 
@@ -9,15 +9,15 @@ Dieses Dokument ist ein Abschlussprotokoll für die bereits umgesetzten Pakete. 
 - [x] Notification-Frequenz ist pro User wählbar (`immediate`, `hourly`, `daily`, `off`).
 - [x] Default bleibt `immediate`, kann aber pro User reduziert oder deaktiviert werden.
 - [x] Browser-Push-Payloads können Artikeltitel enthalten; private/generische Payloads sind per User wählbar.
-- [x] FreshRSS cURL/HTTP-Optionen werden funktional nachgebaut, nicht nur importiert/exportiert.
-- [x] Dynamic OPML (`frss:opmlUrl`) wird beim Import aktiviert und später synchronisiert.
+- [x] Scout Studio cURL/HTTP-Optionen werden funktional nachgebaut, nicht nur importiert/exportiert.
+- [x] Dynamic OPML (`ffx:opmlUrl`) wird beim Import aktiviert und später synchronisiert.
 - [x] Feed-Fetching und Dynamic OPML laufen durch SSRF-Schutz; interne URLs brauchen den Admin-Override.
 
 ## Paket 1: Foundations / Schema / Dependencies ✅
 
 - [x] Web-Push Dependencies + Key-Generation Script.
 - [x] VAPID Env-Dokumentation.
-- [x] Prisma-Modelle/Felder für Push, FreshRSS OPML, Source Types, Notifications.
+- [x] Prisma-Modelle/Felder für Push, Scout Studio OPML, Source Types, Notifications.
 - [x] Migration + Prisma Client Generate.
 - [x] Checks: TypeScript, Lint, Build während Umsetzung ausgeführt.
 
@@ -35,18 +35,18 @@ Dieses Dokument ist ein Abschlussprotokoll für die bereits umgesetzten Pakete. 
 - [x] React Query Hooks / UI-Integration.
 - [x] Best-effort Badge-Updates aus App und Push Payloads.
 
-## Paket 4: FreshRSS Extended OPML Import/Export ✅
+## Paket 4: Scout Studio Extended OPML Import/Export ✅
 
-- [x] Parser/Exporter für `xmlns:frss="https://freshrss.org/opml"`.
-- [x] FreshRSS Source Types und dokumentierte `frss:*` Attribute.
+- [x] Parser/Exporter für `xmlns:ffx="FeedFerret Scout OPML namespace"`.
+- [x] Scout Studio Source Types und dokumentierte `ffx:*` Attribute.
 - [x] Dynamic OPML Category Import.
 - [x] Roundtrip-Verhalten in Doku und README beschrieben.
 
-## Paket 5: FreshRSS Fetcher / Scraper Support ✅
+## Paket 5: Scout Studio Fetcher / Scraper Support ✅
 
 - [x] RSS/Atom, JSONFeed, JSON+DotNotation, HTML/XML+XPath, HTML+XPath+JSON.
 - [x] cURL-kompatible HTTP-Optionen.
-- [x] Unicity/Dedupe-Strategien für FreshRSS-Importfelder.
+- [x] Unicity/Dedupe-Strategien für Scout Studio-Importfelder.
 - [x] Full-content/filter/read-rules Integration.
 
 ## Paket 6: Dynamic OPML + SSRF-Schutz ✅
@@ -56,11 +56,11 @@ Dieses Dokument ist ein Abschlussprotokoll für die bereits umgesetzten Pakete. 
 - [x] Admin-Schalter für vertrauenswürdige interne Feed-URLs.
 - [x] Sicherheitsfolgen dokumentiert in `docs/security.md`.
 
-## Paket 7: Feed UI FreshRSS Optionen ✅
+## Paket 7: Feed UI Scout Studio Optionen ✅
 
 - [x] Feed Edit Dialog Tabs/Inputs für Source, XPath/JSON, cURL, Priority/Unicity, Filters.
 - [x] Import Report und Extended Export UX.
-- [x] Dynamic OPML / FreshRSS Optionen in Management UI integriert.
+- [x] Dynamic OPML / Scout Studio Optionen in Management UI integriert.
 
 ## Paket 8: Docs + Final Verification ✅
 

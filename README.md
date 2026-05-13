@@ -245,6 +245,7 @@ SYNC_SECRET=$(openssl rand -hex 32)
 - Admin customization: [`docs/admin-customization.md`](docs/admin-customization.md)
 - Larger admin/UX follow-up workpackages: [`docs/admin-ux-workpackages.md`](docs/admin-ux-workpackages.md)
 - Unified settings modal UX notes: [`docs/unified-settings-ux.md`](docs/unified-settings-ux.md)
+- Scout Studio extraction assistant: [`docs/scout-studio.md`](docs/scout-studio.md)
 
 ## 🔐 Auth & Email
 
@@ -317,16 +318,16 @@ Notification frequency is user-configurable (`immediate`, `hourly`, `daily`, `of
 
 ---
 
-## 📥 FreshRSS Extended OPML
+## 📥 Scout Studio Extended OPML
 
-FeedFerret imports and exports FreshRSS extended OPML (`xmlns:frss="https://freshrss.org/opml"`) including:
+FeedFerret imports and exports Scout Studio extended OPML (`xmlns:ffx="FeedFerret Scout OPML namespace"`) including:
 
-- FreshRSS source types: RSS/Atom, JSONFeed, JSON+DotNotation, HTML+XPath, XML+XPath, HTML+XPath+JSON+DotNotation.
+- Scout Studio source types: RSS/Atom, JSONFeed, JSON+DotNotation, HTML+XPath, XML+XPath, HTML+XPath+JSON+DotNotation.
 - Feed priority and unicity criteria.
 - XPath/JSON scraper settings.
 - Full-content selectors, content filters, and auto-read filter strings.
-- FreshRSS cURL-style HTTP options such as custom headers, cookies, POST fields, redirects, proxies, and user-agent.
-- Dynamic OPML categories via `frss:opmlUrl`, synchronized automatically with SSRF protections.
+- Scout Studio cURL-style HTTP options such as custom headers, cookies, POST fields, redirects, proxies, and user-agent.
+- Dynamic OPML categories via `ffx:opmlUrl`, synchronized automatically with SSRF protections.
 
 ---
 

@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Eye, Loader2 } from "lucide-react";
+import { CheckCircle2, Eye, Loader2, Sparkles } from "lucide-react";
 import { useUpdateFeed, usePreviewFeedExtraction } from "@/hooks/use-rss-data";
 
 interface FeedEditDialogProps {
@@ -88,6 +88,13 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     html: string;
     charCount: number;
     selectorUsed: string;
+    candidates?: Array<{
+      selector: string;
+      charCount: number;
+      paragraphCount: number;
+      linkCount: number;
+      sample: string;
+    }>;
   } | null>(null);
 
   useEffect(() => {
@@ -194,7 +201,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 { value: "fetch", label: "Fetch Options" },
                 { value: "retention", label: "Retention" },
                 { value: "fulltext", label: "Full-Text" },
-                { value: "freshrss", label: "FreshRSS" },
+                { value: "scout", label: "Scout Studio" },
               ]}
               triggerClassName="px-5 py-2 text-sm"
             />
@@ -339,6 +346,20 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             </TabsContent>
 
             <TabsContent value="fulltext" className="mt-0 space-y-5">
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-2xl bg-primary/10 p-2 text-primary">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold tracking-[-0.02em]">Scout Studio</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Guided extraction: paste an article URL, preview the cleaned content, then apply the best selector candidate.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
                 <div>
                   <p className="text-sm font-medium">Auto-fetch full text on sync</p>
@@ -398,6 +419,41 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                     <p className="text-xs text-muted-foreground">
                       {previewResult.charCount.toLocaleString()} chars extracted · selector: <code className="font-mono">{previewResult.selectorUsed}</code>
                     </p>
+                    {previewResult.candidates && previewResult.candidates.length > 0 && (
+                      <div className="grid gap-2">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Scout selector candidates
+                        </p>
+                        {previewResult.candidates.map((candidate, index) => (
+                          <button
+                            key={`${candidate.selector}-${index}`}
+                            type="button"
+                            className="rounded-xl border border-border/60 bg-background/70 p-3 text-left transition hover:border-primary/50 hover:bg-primary/5"
+                            onClick={() => {
+                              setFullTextSelector(candidate.selector);
+                              toast.success("Selector applied");
+                            }}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <code className="truncate font-mono text-xs">{candidate.selector}</code>
+                              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                {candidate.charCount.toLocaleString()} chars
+                              </span>
+                            </div>
+                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{candidate.sample}</p>
+                            <div className="mt-2 flex gap-2 text-[10px] text-muted-foreground">
+                              <span>{candidate.paragraphCount} paragraphs</span>
+                              <span>{candidate.linkCount} links</span>
+                              {index === 0 && (
+                                <span className="inline-flex items-center gap-1 text-primary">
+                                  <CheckCircle2 className="h-3 w-3" /> recommended
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <div
                       className="max-h-48 overflow-y-auto rounded-xl bg-background/80 p-3 text-sm prose prose-sm dark:prose-invert max-w-none"
                       dangerouslySetInnerHTML={{ __html: previewResult.html.slice(0, 10_000) }}
@@ -407,7 +463,14 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               </div>
             </TabsContent>
 
-            <TabsContent value="freshrss" className="mt-0 space-y-5">
+            <TabsContent value="scout" className="mt-0 space-y-5">
+              <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+                <h3 className="font-semibold tracking-[-0.02em]">Scout Studio advanced source controls</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Use these fields when a site needs custom HTML, XML, JSON, or request handling beyond normal RSS/Atom feeds.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium">Source type</Label>
@@ -466,7 +529,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   placeholder='{\"xpath\":{\"xPathItem\":\"//article\",\"xPathItemTitle\":\".//h2\"}}'
                   className="min-h-28 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
                 />
-                <p className="text-xs text-muted-foreground">Stores FreshRSS XPath / JSON DotNotation settings imported from OPML.</p>
+                <p className="text-xs text-muted-foreground">Stores Scout Studio XPath / JSON DotNotation settings imported from OPML.</p>
               </div>
 
               <div className="space-y-1.5">
@@ -484,7 +547,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 <Textarea
                   value={fullTextConditions}
                   onChange={(e) => setFullTextConditions(e.target.value)}
-                  placeholder="FreshRSS cssFullContentConditions, one per line"
+                  placeholder="cssFullContentConditions, one per line"
                   className="min-h-20 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
                 />
               </div>
@@ -494,7 +557,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 <Textarea
                   value={filtersActionRead}
                   onChange={(e) => setFiltersActionRead(e.target.value)}
-                  placeholder="FreshRSS filtersActionRead, one per line"
+                  placeholder="filtersActionRead, one per line"
                   className="min-h-20 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
                 />
               </div>

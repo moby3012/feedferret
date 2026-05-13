@@ -1,13 +1,13 @@
 import Parser from "rss-parser";
 import { JSDOM } from "jsdom";
 import {
-  FreshRssHttpOptions,
-  FreshRssScraperConfig,
+  FeedHttpOptions,
+  FeedExtractionConfig,
   normalizeSourceType,
   parseBooleanLike,
   parseIntLike,
   parseJsonObject,
-} from "./freshrss-opml";
+} from "./feed-extraction";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 
 export type FeedFetchConfig = {
@@ -100,7 +100,7 @@ function itemContent(value: unknown) {
   return String(value);
 }
 
-function buildJsonArticles(json: unknown, config: FreshRssScraperConfig): FetchedFeed {
+function buildJsonArticles(json: unknown, config: FeedExtractionConfig): FetchedFeed {
   const settings = config.json ?? {};
   const itemsValue = dotGet(json, settings.jsonItem || settings.item || "items");
   const items = Array.isArray(itemsValue) ? itemsValue : [];
@@ -150,7 +150,7 @@ function evaluateContent(xpath: XPathEvaluator, expression: string | undefined, 
   }
 }
 
-function buildXPathArticles(raw: string, feedUrl: string, config: FreshRssScraperConfig, contentType: "text/html" | "text/xml"): FetchedFeed {
+function buildXPathArticles(raw: string, feedUrl: string, config: FeedExtractionConfig, contentType: "text/html" | "text/xml"): FetchedFeed {
   const dom = new JSDOM(raw, { url: feedUrl, contentType });
   const document = dom.window.document;
   const xpath = new dom.window.XPathEvaluator();
@@ -190,10 +190,10 @@ function extractImageFromHtml(html: string) {
 }
 
 function parseHttpOptions(feed: FeedFetchConfig) {
-  return parseJsonObject<FreshRssHttpOptions>(feed.httpOptions);
+  return parseJsonObject<FeedHttpOptions>(feed.httpOptions);
 }
 
-function headersFromFeed(feed: FeedFetchConfig, http: FreshRssHttpOptions) {
+function headersFromFeed(feed: FeedFetchConfig, http: FeedHttpOptions) {
   const headers: Record<string, string> = {};
   for (const header of splitHeaderLines(http.CURLOPT_HTTPHEADER)) {
     const idx = header.indexOf(":");
@@ -274,7 +274,7 @@ async function fetchRssOrAtom(feed: FeedFetchConfig) {
 
 export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedFeed> {
   const sourceType = normalizeSourceType(feed.sourceType);
-  const scraperConfig = parseJsonObject<FreshRssScraperConfig>(feed.scraperConfig);
+  const scraperConfig = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
 
   if (sourceType === "JSONFeed" || sourceType === "JSON+DotNotation") {
     const raw = await fetchText(feed, "application/feed+json,application/json,*/*");

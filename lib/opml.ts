@@ -1,15 +1,16 @@
 import {
-    FRSS_NAMESPACE,
+    OPML_EXTENSION_NAMESPACE,
+    OPML_EXTENSION_PREFIX,
     HTTP_ATTRS,
     JSON_ATTRS,
     XPATH_ATTRS,
-    FreshRssHttpOptions,
-    FreshRssScraperConfig,
+    FeedHttpOptions,
+    FeedExtractionConfig,
     normalizeSourceType,
     parseBooleanLike,
     parseIntLike,
     parseJsonObject,
-} from "./freshrss-opml";
+} from "./feed-extraction";
 
 export interface OpmlOutline {
     text: string;
@@ -19,21 +20,21 @@ export interface OpmlOutline {
     htmlUrl?: string;
     description?: string;
     category?: string;
-    frss?: Record<string, string>;
+    extensions?: Record<string, string>;
     children?: OpmlOutline[];
 }
 
-function getFrssAttr(element: Element, name: string): string | undefined {
+function getExtensionAttr(element: Element, name: string): string | undefined {
     return (
-        element.getAttribute(`frss:${name}`) ||
-        element.getAttributeNS(FRSS_NAMESPACE, name) ||
+        element.getAttribute(`${OPML_EXTENSION_PREFIX}:${name}`) ||
+        element.getAttributeNS(OPML_EXTENSION_NAMESPACE, name) ||
         undefined
     );
 }
 
 /**
- * Parses an OPML string into a hierarchical list of outlines, preserving FreshRSS
- * extended attributes under `outline.frss`.
+ * Parses an OPML string into a hierarchical list of outlines, preserving Scout Studio
+ * extended attributes under `outline.extensions`.
  */
 export async function parseOpml(xml: string): Promise<OpmlOutline[]> {
     const { JSDOM } = await import("jsdom");
@@ -44,8 +45,8 @@ export async function parseOpml(xml: string): Promise<OpmlOutline[]> {
     if (!body) return [];
 
     const parseOutline = (element: Element): OpmlOutline => {
-        const frss: Record<string, string> = {};
-        const frssNames = [
+        const extensions: Record<string, string> = {};
+        const extensionNames = [
             "opmlUrl",
             "priority",
             "unicityCriteria",
@@ -60,9 +61,9 @@ export async function parseOpml(xml: string): Promise<OpmlOutline[]> {
             ...JSON_ATTRS,
             ...HTTP_ATTRS,
         ];
-        for (const name of frssNames) {
-            const value = getFrssAttr(element, name);
-            if (value !== undefined && value !== "") frss[name] = value;
+        for (const name of extensionNames) {
+            const value = getExtensionAttr(element, name);
+            if (value !== undefined && value !== "") extensions[name] = value;
         }
 
         const outline: OpmlOutline = {
@@ -73,7 +74,7 @@ export async function parseOpml(xml: string): Promise<OpmlOutline[]> {
             htmlUrl: element.getAttribute("htmlUrl") || undefined,
             description: element.getAttribute("description") || undefined,
             category: element.getAttribute("category") || undefined,
-            frss: Object.keys(frss).length ? frss : undefined,
+            extensions: Object.keys(extensions).length ? extensions : undefined,
         };
 
         const children = Array.from(element.children).filter(el => el.tagName.toLowerCase() === "outline");
@@ -94,42 +95,42 @@ function attr(name: string, value: unknown) {
     return ` ${name}="${escapeXml(String(value))}"`;
 }
 
-function frssAttr(name: string, value: unknown) {
-    return attr(`frss:${name}`, value);
+function extensionsAttr(name: string, value: unknown) {
+    return attr(`${OPML_EXTENSION_PREFIX}:${name}`, value);
 }
 
-function feedFrssAttributes(feed: any) {
-    const scraper = parseJsonObject<FreshRssScraperConfig>(feed.scraperConfig);
-    const httpOptions = parseJsonObject<FreshRssHttpOptions>(feed.httpOptions);
+function feedExtensionAttributes(feed: any) {
+    const scraper = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
+    const httpOptions = parseJsonObject<FeedHttpOptions>(feed.httpOptions);
     let out = "";
 
-    out += frssAttr("priority", feed.priority && feed.priority !== "main" ? feed.priority : undefined);
-    out += frssAttr("unicityCriteria", feed.unicityCriteria && feed.unicityCriteria !== "id" ? feed.unicityCriteria : undefined);
-    out += frssAttr("unicityCriteriaForced", feed.unicityCriteriaForced ? "true" : undefined);
+    out += extensionsAttr("priority", feed.priority && feed.priority !== "main" ? feed.priority : undefined);
+    out += extensionsAttr("unicityCriteria", feed.unicityCriteria && feed.unicityCriteria !== "id" ? feed.unicityCriteria : undefined);
+    out += extensionsAttr("unicityCriteriaForced", feed.unicityCriteriaForced ? "true" : undefined);
 
-    for (const name of XPATH_ATTRS) out += frssAttr(name, scraper.xpath?.[name]);
-    for (const name of JSON_ATTRS) out += frssAttr(name, scraper.json?.[name]);
-    out += frssAttr("xPathToJson", scraper.xPathToJson);
+    for (const name of XPATH_ATTRS) out += extensionsAttr(name, scraper.xpath?.[name]);
+    for (const name of JSON_ATTRS) out += extensionsAttr(name, scraper.json?.[name]);
+    out += extensionsAttr("xPathToJson", scraper.xPathToJson);
 
-    out += frssAttr("filtersActionRead", feed.filtersActionRead);
-    out += frssAttr("cssFullContent", feed.fullTextSelector);
-    out += frssAttr("cssFullContentConditions", feed.fullTextConditions);
-    out += frssAttr("cssContentFilter", feed.fullTextRemoveSelectors);
+    out += extensionsAttr("filtersActionRead", feed.filtersActionRead);
+    out += extensionsAttr("cssFullContent", feed.fullTextSelector);
+    out += extensionsAttr("cssFullContentConditions", feed.fullTextConditions);
+    out += extensionsAttr("cssContentFilter", feed.fullTextRemoveSelectors);
 
-    for (const name of HTTP_ATTRS) out += frssAttr(name, httpOptions[name]);
+    for (const name of HTTP_ATTRS) out += extensionsAttr(name, httpOptions[name]);
 
     return out;
 }
 
 function feedOutline(feed: any, indent: string) {
     const type = normalizeSourceType(feed.sourceType || "rss");
-    return `${indent}<outline text="${escapeXml(feed.name)}" title="${escapeXml(feed.name)}" type="${escapeXml(type)}" xmlUrl="${escapeXml(feed.url)}"${attr("htmlUrl", feed.htmlUrl || feed.url)}${attr("description", feed.description)}${feedFrssAttributes(feed)}/>`;
+    return `${indent}<outline text="${escapeXml(feed.name)}" title="${escapeXml(feed.name)}" type="${escapeXml(type)}" xmlUrl="${escapeXml(feed.url)}"${attr("htmlUrl", feed.htmlUrl || feed.url)}${attr("description", feed.description)}${feedExtensionAttributes(feed)}/>`;
 }
 
 function categoryOutline(category: any, lines: string[], indent: string, childrenByParent: Map<string | null, any[]>, feedsByCategory: Map<string | null, any[]>) {
     const children = childrenByParent.get(category.id) ?? [];
     const feeds = feedsByCategory.get(category.id) ?? [];
-    lines.push(`${indent}<outline text="${escapeXml(category.name)}" title="${escapeXml(category.name)}"${frssAttr("opmlUrl", category.opmlUrl)}>`);
+    lines.push(`${indent}<outline text="${escapeXml(category.name)}" title="${escapeXml(category.name)}"${extensionsAttr("opmlUrl", category.opmlUrl)}>`);
     for (const child of children) categoryOutline(child, lines, `${indent}  `, childrenByParent, feedsByCategory);
     for (const feed of feeds) lines.push(feedOutline(feed, `${indent}  `));
     lines.push(`${indent}</outline>`);
@@ -137,11 +138,11 @@ function categoryOutline(category: any, lines: string[], indent: string, childre
 
 /**
  * Generates an OPML string from feeds and optional categories. When categories
- * are provided, FreshRSS dynamic OPML categories and nested structure are kept.
+ * are provided, Scout Studio dynamic OPML categories and nested structure are kept.
  */
 export function generateOpml(feeds: any[], categories: any[] = []): string {
     const header = `<?xml version="1.0" encoding="UTF-8"?>
-<opml version="2.0" xmlns:frss="${FRSS_NAMESPACE}">
+<opml version="2.0" xmlns:${OPML_EXTENSION_PREFIX}="${OPML_EXTENSION_NAMESPACE}">
   <head>
     <title>FeedFerret Subscriptions</title>
     <dateCreated>${new Date().toUTCString()}</dateCreated>
@@ -190,23 +191,23 @@ export function generateOpml(feeds: any[], categories: any[] = []): string {
 }
 
 export function scraperConfigFromOutline(outline: OpmlOutline) {
-    const frss = outline.frss ?? {};
+    const extensions = outline.extensions ?? {};
     const xpath: Record<string, string> = {};
     const json: Record<string, string> = {};
-    for (const name of XPATH_ATTRS) if (frss[name]) xpath[name] = frss[name];
-    for (const name of JSON_ATTRS) if (frss[name]) json[name] = frss[name];
+    for (const name of XPATH_ATTRS) if (extensions[name]) xpath[name] = extensions[name];
+    for (const name of JSON_ATTRS) if (extensions[name]) json[name] = extensions[name];
     return {
         ...(Object.keys(xpath).length ? { xpath } : {}),
         ...(Object.keys(json).length ? { json } : {}),
-        ...(frss.xPathToJson ? { xPathToJson: frss.xPathToJson } : {}),
-    } satisfies FreshRssScraperConfig;
+        ...(extensions.xPathToJson ? { xPathToJson: extensions.xPathToJson } : {}),
+    } satisfies FeedExtractionConfig;
 }
 
 export function httpOptionsFromOutline(outline: OpmlOutline) {
-    const frss = outline.frss ?? {};
-    const http: FreshRssHttpOptions = {};
+    const extensions = outline.extensions ?? {};
+    const http: FeedHttpOptions = {};
     for (const name of HTTP_ATTRS) {
-        const value = frss[name];
+        const value = extensions[name];
         if (!value) continue;
         if (["CURLOPT_FOLLOWLOCATION", "CURLOPT_POST"].includes(name)) http[name] = parseBooleanLike(value);
         else if (["CURLOPT_MAXREDIRS", "CURLOPT_PROXYTYPE"].includes(name)) http[name] = parseIntLike(value) ?? value;

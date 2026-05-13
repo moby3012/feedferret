@@ -8,7 +8,7 @@ import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { generateOpml, parseOpml, scraperConfigFromOutline, httpOptionsFromOutline, type OpmlOutline } from "@/lib/opml";
-import { normalizeSourceType, stringifyNonEmpty } from "@/lib/freshrss-opml";
+import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
@@ -382,17 +382,17 @@ async function importOpml(user: ApiUser, request: Request) {
       if (!targetCategoryId && outline.category) targetCategoryId = (await getOrCreateCategory(outline.category)).id;
       const scraperConfig = scraperConfigFromOutline(outline);
       const httpOptions = httpOptionsFromOutline(outline);
-      const frss = outline.frss ?? {};
+      const extensions = outline.extensions ?? {};
       const existing = await db.feed.findUnique({ where: { userId_url: { userId: user.id, url: outline.xmlUrl } } });
       await db.feed.upsert({
         where: { userId_url: { userId: user.id, url: outline.xmlUrl } },
-        update: { name: outline.text, categoryId: targetCategoryId, sourceType: normalizeSourceType(outline.type), htmlUrl: outline.htmlUrl || null, description: outline.description || null, priority: frss.priority || "main", unicityCriteria: frss.unicityCriteria || "id", unicityCriteriaForced: frss.unicityCriteriaForced === "true" || frss.unicityCriteriaForced === "1", scraperConfig: stringifyNonEmpty(scraperConfig), httpOptions: stringifyNonEmpty(httpOptions) },
-        create: { userId: user.id, url: outline.xmlUrl, name: outline.text, categoryId: targetCategoryId, sourceType: normalizeSourceType(outline.type), htmlUrl: outline.htmlUrl || null, description: outline.description || null, priority: frss.priority || "main", unicityCriteria: frss.unicityCriteria || "id", unicityCriteriaForced: frss.unicityCriteriaForced === "true" || frss.unicityCriteriaForced === "1", scraperConfig: stringifyNonEmpty(scraperConfig), httpOptions: stringifyNonEmpty(httpOptions) },
+        update: { name: outline.text, categoryId: targetCategoryId, sourceType: normalizeSourceType(outline.type), htmlUrl: outline.htmlUrl || null, description: outline.description || null, priority: extensions.priority || "main", unicityCriteria: extensions.unicityCriteria || "id", unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1", scraperConfig: stringifyNonEmpty(scraperConfig), httpOptions: stringifyNonEmpty(httpOptions) },
+        create: { userId: user.id, url: outline.xmlUrl, name: outline.text, categoryId: targetCategoryId, sourceType: normalizeSourceType(outline.type), htmlUrl: outline.htmlUrl || null, description: outline.description || null, priority: extensions.priority || "main", unicityCriteria: extensions.unicityCriteria || "id", unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1", scraperConfig: stringifyNonEmpty(scraperConfig), httpOptions: stringifyNonEmpty(httpOptions) },
       });
       if (existing) report.feedsUpdated += 1;
       else report.feedsAdded += 1;
     } else if (outline.children) {
-      const category = await getOrCreateCategory(outline.text, categoryId, outline.frss?.opmlUrl ?? null);
+      const category = await getOrCreateCategory(outline.text, categoryId, outline.extensions?.opmlUrl ?? null);
       for (const child of outline.children) await processOutline(child, category.id);
     }
   };

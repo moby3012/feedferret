@@ -40,7 +40,7 @@ Badges are best-effort:
 
 ## Push notifications ✅ Implemented
 
-Implemented in the notifications/FreshRSS OPML work branch and documented in `README.md`:
+Implemented in the notifications/Scout Studio OPML work branch and documented in `README.md`:
 
 - `PushSubscription` data model with one subscription per browser endpoint and cascade delete by user.
 - VAPID environment variables and `pnpm run webpush:keys`.
@@ -87,7 +87,7 @@ Current badge implementation remains best-effort because browser support differs
 
 ## Implementation update — 2026-05-11
 
-Implemented in the notifications/FreshRSS OPML work branch:
+Implemented in the notifications/Scout Studio OPML work branch:
 
 - Push subscription data model and VAPID key generation.
 - Authenticated push subscribe/unsubscribe/status/test APIs.

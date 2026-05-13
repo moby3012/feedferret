@@ -12,7 +12,7 @@
     <rect x="392" y="126" width="366" height="118" rx="24"/><rect x="392" y="268" width="366" height="118" rx="24"/><rect x="392" y="410" width="366" height="118" rx="24"/><rect x="392" y="552" width="366" height="118" rx="24"/>
   </g>
   <g fill="#e2e8f0" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="18" font-weight="700">
-    <text x="426" y="172">RSS without the noise</text><text x="426" y="314">Keyword alert matched</text><text x="426" y="456">FreshRSS OPML sync</text><text x="426" y="598">PWA offline polish</text>
+    <text x="426" y="172">RSS without the noise</text><text x="426" y="314">Keyword alert matched</text><text x="426" y="456">Scout Studio OPML sync</text><text x="426" y="598">PWA offline polish</text>
   </g>
   <g fill="#64748b" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="14">
     <text x="426" y="202">4 min read · FeedFerret</text><text x="426" y="344">2 min read · Alerts</text><text x="426" y="486">6 min read · Integrations</text><text x="426" y="628">3 min read · Mobile</text>
