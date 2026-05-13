@@ -9,21 +9,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
 import {
   PanelLeft,
   RefreshCw,
   LayoutGrid,
   List,
   SortAsc,
+  SortDesc,
   Filter,
-  MoreHorizontal,
   AlignJustify,
-  Check,
   Search,
   X,
   CheckCheck,
   BookmarkPlus,
-  Keyboard,
   Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -54,6 +53,8 @@ interface RssHeaderProps {
   isMarkingAllRead?: boolean;
   onSaveSearch?: () => void;
   onShowShortcuts?: () => void;
+  sortOrder?: "newest" | "oldest";
+  onToggleSort?: () => void;
 }
 
 export function RssHeader({
@@ -72,6 +73,8 @@ export function RssHeader({
   isMarkingAllRead,
   onSaveSearch,
   onShowShortcuts,
+  sortOrder = "newest",
+  onToggleSort,
 }: RssHeaderProps) {
   const [showSearch, setShowSearch] = useState(!!searchQuery);
   const { data: notifications = [] } = useNotifications();
@@ -200,21 +203,17 @@ export function RssHeader({
         </DropdownMenu>
         <Button
           variant="ghost"
-          size="sm"
+          size="icon"
           className={cn(
-            "h-10 rounded-2xl px-3 transition-all duration-200 active:scale-95 flex items-center gap-2",
+            "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
             unreadOnly
-              ? "text-accent bg-accent/10 border border-accent/20 shadow-sm"
+              ? "text-accent bg-accent/10"
               : "text-muted-foreground",
           )}
           onClick={onToggleUnreadOnly}
+          title={unreadOnly ? "Nur Ungelesene (aktiv)" : "Nur Ungelesene anzeigen"}
         >
           <Filter className="w-4 h-4" />
-          {unreadOnly && (
-            <span className="text-xs font-bold uppercase tracking-wider">
-              Unread Only
-            </span>
-          )}
         </Button>
 
         <Button
@@ -232,105 +231,66 @@ export function RssHeader({
           />
         </Button>
 
-        <div className="hidden sm:flex items-center border border-border/70 rounded-2xl p-1 bg-muted/45 shadow-inner shadow-black/[0.02]">
+        {/* Sort button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+          onClick={() => onToggleSort?.()}
+          title={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
+        >
+          {sortOrder === "oldest" ? (
+            <SortAsc className="w-4 h-4" />
+          ) : (
+            <SortDesc className="w-4 h-4" />
+          )}
+        </Button>
+
+        {/* Mark all as read button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+          onClick={() => onMarkAllRead?.()}
+          disabled={isMarkingAllRead}
+          title="Mark all as read"
+        >
+          <CheckCheck className={cn("w-4 h-4", isMarkingAllRead && "animate-pulse")} />
+        </Button>
+
+        {/* Save search button (only when search is active) */}
+        {searchQuery.trim() && onSaveSearch && (
           <Button
-            variant={viewMode === "minimal" ? "secondary" : "ghost"}
+            variant="ghost"
             size="icon"
-            className="w-8 h-8 rounded-lg transition-all"
-            onClick={() => onViewModeChange("minimal")}
+            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+            onClick={onSaveSearch}
+            title="Save search"
           >
-            <AlignJustify className="w-4 h-4" />
+            <BookmarkPlus className="w-4 h-4" />
           </Button>
-          <Button
-            variant={viewMode === "list" ? "secondary" : "ghost"}
-            size="icon"
-            className="w-8 h-8 rounded-lg transition-all"
-            onClick={() => onViewModeChange("list")}
-          >
-            <List className="w-4 h-4" />
-          </Button>
-          <Button
-            variant={viewMode === "magazine" ? "secondary" : "ghost"}
-            size="icon"
-            className="w-8 h-8 rounded-lg transition-all"
-            onClick={() => onViewModeChange("magazine")}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </Button>
-        </div>
+        )}
+
+        {/* View cycling button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+          onClick={() => {
+            const modes: ViewMode[] = ["list", "minimal", "magazine"];
+            const idx = modes.indexOf(viewMode);
+            onViewModeChange(modes[(idx + 1) % modes.length]);
+          }}
+          title={`View: ${viewMode} (click to cycle)`}
+        >
+          {viewMode === "minimal" && <AlignJustify className="w-4 h-4" />}
+          {viewMode === "list" && <List className="w-4 h-4" />}
+          {viewMode === "magazine" && <LayoutGrid className="w-4 h-4" />}
+        </Button>
 
         <div className="lg:hidden">
           <ThemeToggle />
         </div>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-            >
-              <MoreHorizontal className="w-5 h-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-56 rounded-2xl p-2 shadow-2xl border-none bg-popover/95 backdrop-blur-xl"
-          >
-            <DropdownMenuItem
-              className="rounded-xl py-3 px-4 text-sm font-medium focus:bg-primary focus:text-primary-foreground"
-              onClick={onToggleUnreadOnly}
-            >
-              <Filter className="w-4 h-4 mr-3" />
-              Filter unread only
-              {unreadOnly && <Check className="w-4 h-4 ml-auto" />}
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator className="my-2 bg-border/50" />
-
-            {searchQuery.trim() && onSaveSearch && (
-              <>
-                <DropdownMenuItem
-                  className="rounded-xl py-3 px-4 text-sm font-medium"
-                  onClick={onSaveSearch}
-                >
-                  <BookmarkPlus className="w-4 h-4 mr-3" />
-                  Save search
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="my-2 bg-border/50" />
-              </>
-            )}
-
-            <DropdownMenuItem className="rounded-xl py-3 px-4 text-sm font-medium">
-              <SortAsc className="w-4 h-4 mr-3" />
-              Sort by date
-            </DropdownMenuItem>
-
-            {onShowShortcuts && (
-              <DropdownMenuItem
-                className="rounded-xl py-3 px-4 text-sm font-medium"
-                onClick={onShowShortcuts}
-              >
-                <Keyboard className="w-4 h-4 mr-3" />
-                Keyboard shortcuts
-                <span className="ml-auto text-xs text-muted-foreground">?</span>
-              </DropdownMenuItem>
-            )}
-
-            <DropdownMenuItem 
-              className="rounded-xl py-3 px-4 text-sm font-medium text-destructive focus:bg-destructive/10 focus:text-destructive"
-              onClick={() => {
-                if (confirm("Mark all articles in the current view as read?")) {
-                  onMarkAllRead?.();
-                }
-              }}
-              disabled={isMarkingAllRead}
-            >
-              <CheckCheck className="w-4 h-4 mr-3" />
-              {isMarkingAllRead ? "Marking..." : "Mark all as read"}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </header>
   );
