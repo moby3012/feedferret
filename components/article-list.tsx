@@ -7,6 +7,16 @@ import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers } from "
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useState, useRef, useEffect } from "react";
 
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(2);
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${day}.${month}.${year} - ${hours}:${minutes}`;
+}
+
 interface ArticleListProps {
   articles: Article[];
   selectedArticle: Article | null;
@@ -16,16 +26,8 @@ interface ArticleListProps {
   onToggleReadLater?: (articleId: string) => void;
   viewMode?: "list" | "grid" | "magazine" | "minimal";
   pageSize?: number;
-}
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = String(d.getFullYear()).slice(2);
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${day}.${month}.${year} - ${hours}:${minutes}`;
+  markReadOnScroll?: boolean;
+  onMarkRead?: (articleId: string) => void;
 }
 
 export function ArticleList({
@@ -37,6 +39,8 @@ export function ArticleList({
   onToggleReadLater,
   viewMode = "list",
   pageSize,
+  markReadOnScroll = false,
+  onMarkRead,
 }: ArticleListProps) {
   const [visibleCount, setVisibleCount] = useState(pageSize ?? 30);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -102,6 +106,8 @@ export function ArticleList({
             onToggleReadLater={onToggleReadLater}
             index={index}
             viewMode={viewMode}
+            markReadOnScroll={markReadOnScroll}
+            onMarkRead={onMarkRead}
           />
         ))}
         {hasMore && (
@@ -124,6 +130,8 @@ function ArticlePreview({
   onToggleReadLater,
   index,
   viewMode,
+  markReadOnScroll,
+  onMarkRead,
 }: {
   article: Article;
   isSelected: boolean;
@@ -133,10 +141,33 @@ function ArticlePreview({
   onToggleReadLater?: (articleId: string) => void;
   index: number;
   viewMode: string;
+  markReadOnScroll?: boolean;
+  onMarkRead?: (articleId: string) => void;
 }) {
+  const articleRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!markReadOnScroll || !onMarkRead || article.isRead) return;
+    const el = articleRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          // Article left viewport scrolling upward (bottom edge above viewport top)
+          if (!entry.isIntersecting && entry.boundingClientRect.bottom < 0) {
+            onMarkRead(article.id);
+          }
+        });
+      },
+      { threshold: 0 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [article.id, article.isRead, markReadOnScroll, onMarkRead]);
   if (viewMode === "minimal") {
     return (
       <article
+        ref={articleRef}
         onClick={onClick}
         className={cn(
           "px-4 py-3 cursor-pointer rounded-2xl transition-all duration-200 flex min-w-0 max-w-full items-center gap-3 overflow-hidden",
@@ -165,6 +196,7 @@ function ArticlePreview({
   if (viewMode === "magazine") {
     return (
       <article
+        ref={articleRef}
         onClick={onClick}
         className={cn(
           "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full",
@@ -233,6 +265,7 @@ function ArticlePreview({
   // Classic View (Default)
   return (
     <article
+      ref={articleRef}
       onClick={onClick}
       style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
       className={cn(

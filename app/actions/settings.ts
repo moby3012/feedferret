@@ -39,6 +39,7 @@ export async function getReadingPreferences() {
       accentColor: true,
       secondaryColor: true,
       hideDuplicates: true,
+      markReadOnScroll: true,
     },
   });
   return {
@@ -50,6 +51,7 @@ export async function getReadingPreferences() {
     accentColor: user?.accentColor ?? "#5BA4CF",
     secondaryColor: user?.secondaryColor ?? "#F0963C",
     hideDuplicates: user?.hideDuplicates ?? true,
+    markReadOnScroll: user?.markReadOnScroll ?? false,
   };
 }
 
@@ -64,6 +66,7 @@ export async function updateGlobalSettings(data: {
   accentColor?: string;
   secondaryColor?: string;
   hideDuplicates?: boolean;
+  markReadOnScroll?: boolean;
 }) {
   const session = await requireUser();
 

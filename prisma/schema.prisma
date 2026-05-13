@@ -55,6 +55,7 @@ model User {
   pushPrivatePayloads     Boolean   @default(true)      // include article titles in push payloads
   pushLastSentAt          DateTime?
   hideDuplicates          Boolean   @default(true)
+  markReadOnScroll        Boolean   @default(false)
   aiProvider              String?                       // "openai" | "anthropic" | "ollama" | "gemini" | "openrouter"
   aiApiKey                String?                       // encrypted at rest
   aiModel                 String?
