@@ -17,6 +17,7 @@ import {
   Mail,
   Moon,
   Palette,
+  ScrollText,
   Send,
   Settings,
   Smartphone,
@@ -245,6 +246,19 @@ export function SettingsForm() {
                 <SelectItem value="off">Off</SelectItem>
               </SelectContent>
             </Select>
+          </PrefRow>
+
+          {/* Mark as read on scroll */}
+          <PrefRow
+            icon={ScrollText}
+            title="Mark as read while scrolling"
+            description="Artikel werden automatisch als gelesen markiert, sobald sie beim Scrollen aus dem Sichtfeld verschwinden."
+          >
+            <Switch
+              checked={prefs?.markReadOnScroll ?? false}
+              onCheckedChange={(checked) => update({ markReadOnScroll: checked })}
+              className="h-7 w-12"
+            />
           </PrefRow>
 
           {/* Default view mode */}

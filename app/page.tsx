@@ -632,6 +632,11 @@ export default function RSSReaderPage() {
               onToggleStar={handleToggleStar}
               onToggleReadLater={handleToggleReadLater}
               viewMode={viewMode}
+              markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
+              onMarkRead={(articleId) => {
+                const article = displayArticles.find((a: any) => a.id === articleId);
+                if (article) markArticleRead(article);
+              }}
             />
           </div>
         </ResizablePanel>
@@ -706,6 +711,11 @@ export default function RSSReaderPage() {
           onToggleStar={handleToggleStar}
           onToggleReadLater={handleToggleReadLater}
           viewMode={viewMode}
+          markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
+          onMarkRead={(articleId) => {
+            const article = displayArticles.find((a: any) => a.id === articleId);
+            if (article) markArticleRead(article);
+          }}
         />
         <MobileBottomControls
           unreadOnly={unreadOnly}
