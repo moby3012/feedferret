@@ -264,6 +264,9 @@
   * {
     @apply border-border outline-ring/50;
   }
+  button, [role="button"], a {
+    cursor: pointer;
+  }
   html {
     scroll-behavior: smooth;
   }
