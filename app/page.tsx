@@ -616,6 +616,8 @@ export default function RSSReaderPage() {
               isMarkingAllRead={markAllAsRead.isPending}
               onSaveSearch={handleSaveSearch}
               onShowShortcuts={() => setShortcutsOpen(true)}
+              sortOrder={readingPrefs?.defaultArticleSort === "oldest" ? "oldest" : "newest"}
+              onToggleSort={() => {}}
             />
             {isOffline && hasOfflineSnapshot && (
               <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
@@ -688,6 +690,8 @@ export default function RSSReaderPage() {
           isMarkingAllRead={markAllAsRead.isPending}
           onSaveSearch={handleSaveSearch}
           onShowShortcuts={() => setShortcutsOpen(true)}
+          sortOrder={readingPrefs?.defaultArticleSort === "oldest" ? "oldest" : "newest"}
+          onToggleSort={() => {}}
         />
         {isOffline && hasOfflineSnapshot && (
           <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
