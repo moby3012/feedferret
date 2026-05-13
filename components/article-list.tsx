@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
-import { Star, Circle, Clock, ImageIcon, CheckCircle2, CircleDot, Bookmark, Layers } from "lucide-react";
+import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ArticleListProps {
@@ -14,6 +14,16 @@ interface ArticleListProps {
   onToggleStar?: (articleId: string) => void;
   onToggleReadLater?: (articleId: string) => void;
   viewMode?: "list" | "grid" | "magazine" | "minimal";
+}
+
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(2);
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${day}.${month}.${year} - ${hours}:${minutes}`;
 }
 
 export function ArticleList({
@@ -111,7 +121,7 @@ function ArticlePreview({
           <Bookmark className="w-3.5 h-3.5 text-accent fill-accent shrink-0" />
         )}
         <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-          {new Date(article.publishedAt).toLocaleDateString()}
+          {formatDate(article.publishedAt)}
         </span>
       </article>
     );
@@ -127,8 +137,8 @@ function ArticlePreview({
           !article.isRead && "ring-1 ring-brand/20",
         )}
       >
-        <div className="aspect-[16/10] bg-muted relative overflow-hidden">
-          {article.imageUrl ? (
+        {article.imageUrl && (
+          <div className="aspect-[16/10] bg-muted relative overflow-hidden">
             <Image
               src={article.imageUrl}
               alt=""
@@ -136,15 +146,16 @@ function ArticlePreview({
               sizes="(max-width: 640px) 100vw, 400px"
               className="object-cover transition-transform duration-700 hover:scale-110"
             />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
-              <ImageIcon className="w-12 h-12" />
+            <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-white text-[10px] font-bold">
+              {article.feedName}
             </div>
-          )}
-          <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-white text-[10px] font-bold">
-            {article.feedName}
           </div>
-        </div>
+        )}
+        {!article.imageUrl && (
+          <div className="px-4 pt-3">
+            <span className="inline-block px-2 py-1 bg-black/10 dark:bg-white/10 rounded-lg text-[10px] font-bold">{article.feedName}</span>
+          </div>
+        )}
         <div className="p-4 space-y-3">
         <h3 className={cn("text-lg leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]", article.isRead ? "font-semibold text-foreground/75" : "font-bold")}>
             {article.title}
@@ -155,7 +166,7 @@ function ArticlePreview({
           <div className="flex items-center justify-between pt-2 border-t border-border/50">
             <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground font-medium">
               <Clock className="w-3 h-3" />
-              {article.publishedAt}
+              {formatDate(article.publishedAt)}
             </div>
             <div className="flex items-center gap-1">
               {article.isStarred && (
@@ -240,7 +251,7 @@ function ArticlePreview({
             )}
             <span className="text-muted-foreground/50">·</span>
             <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
-              {new Date(article.publishedAt).toLocaleDateString()}
+              {formatDate(article.publishedAt)}
             </span>
             <div className="ml-auto flex items-center gap-1">
               {article.isStarred && (
@@ -302,8 +313,6 @@ function ArticlePreview({
             <span className="font-medium truncate max-w-[100px]">
               {article.author}
             </span>
-            <span className="text-muted-foreground/50">·</span>
-            <span>{article.readTime}</span>
             <div className="ml-auto flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <button
                 type="button"
