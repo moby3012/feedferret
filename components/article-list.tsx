@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
 import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useState, useRef, useEffect } from "react";
 
 interface ArticleListProps {
   articles: Article[];
@@ -14,6 +15,7 @@ interface ArticleListProps {
   onToggleStar?: (articleId: string) => void;
   onToggleReadLater?: (articleId: string) => void;
   viewMode?: "list" | "grid" | "magazine" | "minimal";
+  pageSize?: number;
 }
 
 function formatDate(dateStr: string) {
@@ -34,7 +36,34 @@ export function ArticleList({
   onToggleStar,
   onToggleReadLater,
   viewMode = "list",
+  pageSize,
 }: ArticleListProps) {
+  const [visibleCount, setVisibleCount] = useState(pageSize ?? 30);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setVisibleCount(pageSize ?? 30);
+  }, [articles, pageSize]);
+
+  const visibleArticles = articles.slice(0, visibleCount);
+  const hasMore = visibleCount < articles.length;
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount(prev => Math.min(prev + (pageSize ?? 30), articles.length));
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, articles.length, pageSize]);
+
   if (articles.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 animate-fade-in">
@@ -62,7 +91,7 @@ export function ArticleList({
             "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 space-y-0",
         )}
       >
-        {articles.map((article, index) => (
+        {visibleArticles.map((article, index) => (
           <ArticlePreview
             key={article.id}
             article={article}
@@ -75,6 +104,12 @@ export function ArticleList({
             viewMode={viewMode}
           />
         ))}
+        {hasMore && (
+          <div ref={sentinelRef} className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+            <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin mr-2" />
+            Loading more...
+          </div>
+        )}
       </div>
     </ScrollArea>
   );
