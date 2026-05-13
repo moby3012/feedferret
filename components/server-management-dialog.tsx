@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { TabsContent } from "@/components/ui/tabs";
-import { SettingsModalShell } from "@/components/settings-shell";
+import { SettingsModalShell, SettingsPageShell } from "@/components/settings-shell";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Users,
@@ -66,9 +66,11 @@ import {
 export function ServerManagementDialog({
   open,
   onOpenChange,
+  pageMode = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  pageMode?: boolean;
 }) {
   const [users, setUsers] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
@@ -302,23 +304,32 @@ export function ServerManagementDialog({
     reader.readAsDataURL(file);
   };
 
+  const shellTabs = [
+    { value: "users", label: "Users", icon: <Users className="w-4 h-4" /> },
+    { value: "registrations", label: "Access", icon: <ShieldCheck className="w-4 h-4" /> },
+    { value: "email", label: "Email", icon: <Mail className="w-4 h-4" /> },
+    { value: "instance", label: "Instance", icon: <Globe className="w-4 h-4" /> },
+    { value: "starter-packs", label: "Starter Packs", icon: <PackagePlus className="w-4 h-4" /> },
+    { value: "sync", label: "Sync", icon: <Settings2 className="w-4 h-4" /> },
+  ];
+
+  const shellProps = {
+    title: "Server Settings",
+    description: "Control server-wide settings, users, and integrations.",
+    activeTab,
+    onTabChange: setActiveTab,
+    tabs: shellTabs,
+  };
+
+  const Wrapper = ({ children }: { children: React.ReactNode }) =>
+    pageMode ? (
+      <SettingsPageShell {...shellProps} backHref="/">{children}</SettingsPageShell>
+    ) : (
+      <SettingsModalShell {...shellProps} open={open} onOpenChange={onOpenChange}>{children}</SettingsModalShell>
+    );
+
   return (
-    <SettingsModalShell
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Server Management"
-      description="Control server-wide settings, users, and integrations."
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      tabs={[
-        { value: "users", label: "Users", icon: <Users className="w-4 h-4" /> },
-        { value: "registrations", label: "Access", icon: <ShieldCheck className="w-4 h-4" /> },
-        { value: "email", label: "Email", icon: <Mail className="w-4 h-4" /> },
-        { value: "instance", label: "Instance", icon: <Globe className="w-4 h-4" /> },
-        { value: "starter-packs", label: "Starter Packs", icon: <PackagePlus className="w-4 h-4" /> },
-        { value: "sync", label: "Sync", icon: <Settings2 className="w-4 h-4" /> },
-      ]}
-    >
+    <Wrapper>
           <div className="flex-1 min-h-0">
             {isLoading ? (
               <div className="h-full flex items-center justify-center bg-background">
@@ -914,7 +925,7 @@ export function ServerManagementDialog({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-    </SettingsModalShell>
+    </Wrapper>
   );
 }
 

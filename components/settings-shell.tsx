@@ -1,6 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import {
   ResponsiveTabsNav,
@@ -81,6 +84,64 @@ export function SettingsModalShell({
         </Tabs>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function SettingsPageShell({
+  title,
+  description,
+  tabs,
+  activeTab,
+  onTabChange,
+  children,
+  backHref = "/",
+  className,
+}: {
+  title: string;
+  description?: string;
+  tabs: ResponsiveTabOption[];
+  activeTab: string;
+  onTabChange: (value: string) => void;
+  children: ReactNode;
+  backHref?: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("min-h-screen bg-background", className)}>
+      <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-xl">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
+          <Link href={backHref}>
+            <Button variant="ghost" size="icon" className="rounded-xl shrink-0">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-[-0.03em] truncate sm:text-2xl">{title}</h1>
+            {description && (
+              <p className="text-sm text-muted-foreground truncate">{description}</p>
+            )}
+          </div>
+        </div>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-3">
+          <ResponsiveTabsNav
+            value={activeTab}
+            onValueChange={onTabChange}
+            options={tabs}
+            triggerClassName="gap-2 px-4 lg:px-5"
+          />
+        </div>
+      </div>
+
+      <Tabs
+        value={activeTab}
+        onValueChange={onTabChange}
+        className="flex flex-col"
+      >
+        <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-6">
+          {children}
+        </div>
+      </Tabs>
+    </div>
   );
 }
 
