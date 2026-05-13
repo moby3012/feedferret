@@ -34,6 +34,10 @@ import {
   Ban,
   RefreshCw,
   Trash2,
+  PackagePlus,
+  Plus,
+  X,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +56,7 @@ import {
   sendTestEmail,
 } from "@/app/actions/admin";
 import { toast } from "sonner";
+import { DEFAULT_STARTER_PACKS, stringifyStarterPacks, type StarterPack } from "@/lib/starter-packs";
 
 export function ServerManagementDialog({
   open,
@@ -156,10 +161,56 @@ export function ServerManagementDialog({
       u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.name?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+  const starterPacks = (settings?.starterPacks ?? []) as StarterPack[];
+  const setStarterPacks = (packs: StarterPack[]) => {
+    setSettings({ ...settings, starterPacks: packs, starterPacksJson: stringifyStarterPacks(packs) });
+  };
+  const updatePack = (index: number, patch: Partial<StarterPack>) => {
+    setStarterPacks(starterPacks.map((pack, i) => (i === index ? { ...pack, ...patch } : pack)));
+  };
+  const updatePackFeed = (packIndex: number, feedIndex: number, patch: any) => {
+    setStarterPacks(starterPacks.map((pack, i) => (
+      i === packIndex
+        ? { ...pack, feeds: pack.feeds.map((feed, j) => (j === feedIndex ? { ...feed, ...patch } : feed)) }
+        : pack
+    )));
+  };
+  const addPack = () => {
+    setStarterPacks([
+      ...starterPacks,
+      { id: `custom-${Date.now()}`, name: "New starter pack", description: "", enabled: true, feeds: [] },
+    ]);
+  };
+  const addPackFeed = (packIndex: number) => {
+    setStarterPacks(starterPacks.map((pack, i) => (
+      i === packIndex
+        ? { ...pack, feeds: [...pack.feeds, { title: "New feed", xmlUrl: "", htmlUrl: "", category: "" }] }
+        : pack
+    )));
+  };
+  const removePackFeed = (packIndex: number, feedIndex: number) => {
+    setStarterPacks(starterPacks.map((pack, i) => (
+      i === packIndex ? { ...pack, feeds: pack.feeds.filter((_, j) => j !== feedIndex) } : pack
+    )));
+  };
+  const handleIconUpload = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file");
+      return;
+    }
+    if (file.size > 180_000) {
+      toast.error("Logo must be smaller than 180 KB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setSettings({ ...settings, instanceIconDataUrl: String(reader.result || "") });
+    reader.readAsDataURL(file);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(95dvh,900px)] w-[calc(100vw-1rem)] max-w-[95vw] flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl sm:max-w-none">
+      <DialogContent className="h-[min(92dvh,900px)] w-[calc(100vw-1rem)] max-w-5xl flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl">
         <DialogHeader className="border-b border-border/60 bg-card/95 p-5 pb-4 backdrop-blur-2xl sm:p-8 sm:pb-5">
           <div className="flex items-center justify-between">
             <div>
@@ -183,6 +234,7 @@ export function ServerManagementDialog({
                 { value: "registrations", label: "Access", icon: <ShieldCheck className="w-4 h-4" /> },
                 { value: "email", label: "Email", icon: <Mail className="w-4 h-4" /> },
                 { value: "instance", label: "Instance", icon: <Globe className="w-4 h-4" /> },
+                { value: "starter-packs", label: "Starter Packs", icon: <PackagePlus className="w-4 h-4" /> },
                 { value: "sync", label: "Sync", icon: <Settings2 className="w-4 h-4" /> },
               ]}
               triggerClassName="gap-2"
@@ -420,6 +472,41 @@ export function ServerManagementDialog({
                 {/* ── INSTANCE ── */}
                 <TabsContent value="instance" className="px-6 sm:px-8 py-6 space-y-6">
                   <div className="max-w-2xl grid gap-6 p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
+                    <div className="grid gap-3">
+                      <Label>Sidebar logo</Label>
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-background/70">
+                          {settings?.instanceIconDataUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={settings.instanceIconDataUrl} alt="Instance logo preview" className="h-full w-full object-cover" />
+                          ) : (
+                            <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Label className="inline-flex h-10 cursor-pointer items-center rounded-2xl border border-border/70 bg-background/70 px-4 text-sm font-medium hover:bg-muted">
+                            Upload icon
+                            <Input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(event) => handleIconUpload(event.target.files?.[0])}
+                            />
+                          </Label>
+                          {settings?.instanceIconDataUrl && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-2xl"
+                              onClick={() => setSettings({ ...settings, instanceIconDataUrl: null })}
+                            >
+                              Reset
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">PNG/SVG/JPEG up to 180 KB. Stored in the database for self-hosted persistence.</p>
+                    </div>
                     <SettingsField
                       label="Instance Name"
                       placeholder="FeedFerret"
@@ -447,6 +534,7 @@ export function ServerManagementDialog({
                         onClick={() => handleUpdateSettings({
                           instanceName: settings?.instanceName,
                           instanceUrl: settings?.instanceUrl,
+                          instanceIconDataUrl: settings?.instanceIconDataUrl,
                           totpIssuer: settings?.totpIssuer,
                         })}
                         disabled={isSaving}
@@ -455,6 +543,131 @@ export function ServerManagementDialog({
                       </Button>
                     </div>
                   </div>
+                </TabsContent>
+
+                {/* ── STARTER PACKS ── */}
+                <TabsContent value="starter-packs" className="h-full mt-0 focus-visible:outline-none">
+                  <ScrollArea className="h-full">
+                    <div className="space-y-4 px-6 py-6 sm:px-8">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <h4 className="text-lg font-semibold tracking-[-0.02em]">Starter Packs</h4>
+                          <p className="text-sm text-muted-foreground">
+                            Customize the packs users can import from the sidebar.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setStarterPacks(DEFAULT_STARTER_PACKS)}>
+                            Reset defaults
+                          </Button>
+                          <Button type="button" className="rounded-2xl" onClick={addPack}>
+                            <Plus className="mr-2 h-4 w-4" /> Add pack
+                          </Button>
+                        </div>
+                      </div>
+
+                      {starterPacks.map((pack, packIndex) => (
+                        <div key={pack.id} className="space-y-4 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
+                          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+                            <div className="space-y-1.5">
+                              <Label>Name</Label>
+                              <Input
+                                className="rounded-2xl bg-background/70 border-border/70"
+                                value={pack.name}
+                                onChange={(event) => updatePack(packIndex, { name: event.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Description</Label>
+                              <Input
+                                className="rounded-2xl bg-background/70 border-border/70"
+                                value={pack.description || ""}
+                                onChange={(event) => updatePack(packIndex, { description: event.target.value })}
+                              />
+                            </div>
+                            <div className="flex items-center justify-end gap-3">
+                              <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-background/70 px-3 py-2">
+                                <span className="text-sm">Enabled</span>
+                                <Switch checked={pack.enabled} onCheckedChange={(checked) => updatePack(packIndex, { enabled: checked })} />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="rounded-xl text-destructive hover:bg-destructive/10"
+                                onClick={() => setStarterPacks(starterPacks.filter((_, i) => i !== packIndex))}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          {pack.path && (
+                            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                              This default pack imports from <code>{pack.path}</code>. Add custom feeds below to override future custom pack content, or remove/reset as needed.
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label>Feeds</Label>
+                              <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => addPackFeed(packIndex)}>
+                                <Plus className="mr-1.5 h-3.5 w-3.5" /> Add feed
+                              </Button>
+                            </div>
+                            <div className="space-y-2">
+                              {pack.feeds.map((feed, feedIndex) => (
+                                <div key={`${pack.id}-${feedIndex}`} className="grid gap-2 rounded-2xl border border-border/60 bg-background/60 p-3 lg:grid-cols-[1fr_1.4fr_1fr_1fr_auto]">
+                                  <Input
+                                    placeholder="Title"
+                                    className="rounded-xl bg-background/70 border-border/70"
+                                    value={feed.title}
+                                    onChange={(event) => updatePackFeed(packIndex, feedIndex, { title: event.target.value })}
+                                  />
+                                  <Input
+                                    placeholder="RSS/Atom URL"
+                                    className="rounded-xl bg-background/70 border-border/70"
+                                    value={feed.xmlUrl}
+                                    onChange={(event) => updatePackFeed(packIndex, feedIndex, { xmlUrl: event.target.value })}
+                                  />
+                                  <Input
+                                    placeholder="Website URL"
+                                    className="rounded-xl bg-background/70 border-border/70"
+                                    value={feed.htmlUrl || ""}
+                                    onChange={(event) => updatePackFeed(packIndex, feedIndex, { htmlUrl: event.target.value })}
+                                  />
+                                  <Input
+                                    placeholder="Category"
+                                    className="rounded-xl bg-background/70 border-border/70"
+                                    value={feed.category || ""}
+                                    onChange={(event) => updatePackFeed(packIndex, feedIndex, { category: event.target.value })}
+                                  />
+                                  <Button type="button" variant="ghost" size="icon" className="rounded-xl text-destructive hover:bg-destructive/10" onClick={() => removePackFeed(packIndex, feedIndex)}>
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                              {pack.feeds.length === 0 && !pack.path && (
+                                <div className="rounded-2xl border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
+                                  No feeds yet. Add at least one feed before enabling this pack.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="flex justify-end pb-4">
+                        <Button
+                          className="rounded-2xl px-8"
+                          disabled={isSaving}
+                          onClick={() => handleUpdateSettings({ starterPacksJson: stringifyStarterPacks(starterPacks) })}
+                        >
+                          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save starter packs"}
+                        </Button>
+                      </div>
+                    </div>
+                  </ScrollArea>
                 </TabsContent>
 
                 {/* ── SYNC ── */}

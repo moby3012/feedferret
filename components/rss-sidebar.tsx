@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { FeedSource } from "@/lib/rss-data";
@@ -97,6 +97,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { DEFAULT_STARTER_PACKS, starterPackToOpml, type StarterPack } from "@/lib/starter-packs";
 
 interface RssSidebarProps {
   feeds: FeedSource[];
@@ -137,6 +138,11 @@ export function RssSidebar({
   const [discoveryMessage, setDiscoveryMessage] = useState<string | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [importingPack, setImportingPack] = useState<string | null>(null);
+  const [starterPacks, setStarterPacks] = useState<StarterPack[]>(DEFAULT_STARTER_PACKS);
+  const [branding, setBranding] = useState<{ instanceName: string; instanceIconDataUrl: string | null }>({
+    instanceName: "FeedFerret",
+    instanceIconDataUrl: null,
+  });
 
   const addNewFeed = useAddFeed();
   const importOpml = useImportOpml();
@@ -149,6 +155,25 @@ export function RssSidebar({
   const { data: savedSearches = [] } = useSavedSearches();
   const refreshFeed = useRefreshFeed();
   const markAllRead = useMarkAllAsRead();
+
+  useEffect(() => {
+    fetch("/api/instance")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setBranding({
+          instanceName: data.instanceName || "FeedFerret",
+          instanceIconDataUrl: data.instanceIconDataUrl || null,
+        });
+      })
+      .catch(() => {});
+
+    fetch("/api/starter-packs")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.packs)) setStarterPacks(data.packs);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleDiscover = async () => {
     if (!newFeedUrl) return;
@@ -197,18 +222,23 @@ export function RssSidebar({
     }
   };
 
-  const handleImportStarterPack = async (packPath: string, packName: string) => {
-    setImportingPack(packPath);
+  const handleImportStarterPack = async (pack: StarterPack) => {
+    setImportingPack(pack.id);
     try {
-      const res = await fetch(`/starter-opml/${packPath}`);
-      if (!res.ok) throw new Error("Failed to fetch pack");
-      const xml = await res.text();
+      let xml = "";
+      if (pack.path && pack.feeds.length === 0) {
+        const res = await fetch(`/starter-opml/${pack.path}`);
+        if (!res.ok) throw new Error("Failed to fetch pack");
+        xml = await res.text();
+      } else {
+        xml = starterPackToOpml(pack);
+      }
       const result = await importOpml.mutateAsync(xml);
       const details = [
         result.feedsAdded ? `${result.feedsAdded} added` : null,
         result.feedsUpdated ? `${result.feedsUpdated} updated` : null,
       ].filter(Boolean).join(", ");
-      toast.success(`Imported ${packName}${details ? `: ${details}` : ""}`);
+      toast.success(`Imported ${pack.name}${details ? `: ${details}` : ""}`);
       setIsAddFeedOpen(false);
     } catch (err) {
       toast.error(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -420,16 +450,25 @@ export function RssSidebar({
       <div className="p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-4">
-            <Image
-              src="/logo.svg"
-              alt="FeedFerret Logo"
-              width={48}
-              height={48}
-              className="w-12 h-12 invert dark:invert-0"
-            />
+            {branding.instanceIconDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={branding.instanceIconDataUrl}
+                alt={`${branding.instanceName} logo`}
+                className="h-12 w-12 rounded-2xl object-cover"
+              />
+            ) : (
+              <Image
+                src="/logo.svg"
+                alt="FeedFerret Logo"
+                width={48}
+                height={48}
+                className="w-12 h-12 invert dark:invert-0"
+              />
+            )}
             <div>
               <h1 className="text-xl font-semibold text-sidebar-foreground tracking-[-0.03em]">
-                FeedFerret
+                {branding.instanceName}
               </h1>
               <p className="text-sm text-muted-foreground">
                 {totalUnread} unread
@@ -673,24 +712,18 @@ export function RssSidebar({
                 <div className="pt-1 border-t border-border/40">
                   <p className="text-xs text-muted-foreground font-medium mb-1.5">Starter packs</p>
                   <div className="space-y-1">
-                    {[
-                      { id: "tech", name: "Technology", path: "tech.opml", count: 5 },
-                      { id: "science", name: "Science", path: "science.opml", count: 4 },
-                      { id: "news", name: "World News", path: "news.opml", count: 4 },
-                      { id: "dev", name: "Developer News", path: "dev.opml", count: 4 },
-                      { id: "design", name: "Design & UX", path: "design.opml", count: 3 },
-                    ].map((pack) => (
+                    {starterPacks.map((pack) => (
                       <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-sidebar-accent px-2 py-1.5">
                         <span className="text-xs flex-1 text-foreground">
                           {pack.name}
-                          <span className="text-muted-foreground ml-1">({pack.count})</span>
+                          <span className="text-muted-foreground ml-1">({pack.feeds.length || "OPML"})</span>
                         </span>
                         <Button
                           size="sm"
                           variant="ghost"
                           className="h-6 px-2 text-xs shrink-0"
-                          disabled={importingPack === pack.path}
-                          onClick={() => handleImportStarterPack(pack.path, pack.name)}
+                          disabled={importingPack === pack.id}
+                          onClick={() => handleImportStarterPack(pack)}
                         >
                           <Download className="w-3 h-3 mr-1" />
                           Import

@@ -112,6 +112,8 @@ Build an assistant that guides the user from a problematic feed/site URL to a wo
 
 ## 2. Instance branding customization
 
+Status: baseline implemented. Admins can set the instance name and upload/reset a small DB-stored sidebar icon in Server Management → Instance. Future iterations can add theming and file-backed uploads.
+
 ### Goal
 
 Allow admins to replace the sidebar brand with:
@@ -139,6 +141,8 @@ Allow admins to replace the sidebar brand with:
 ---
 
 ## 3. Admin-customizable starter packs
+
+Status: baseline implemented. Admins can edit packs and feeds in Server Management → Starter Packs. Future iterations can add ordering drag-and-drop, OPML import into packs, and richer validation.
 
 ### Problem
 
@@ -195,6 +199,8 @@ Allow admins to create, edit, remove, and reorder starter packs and starter-pack
 
 ## 4. Unified settings shell UX
 
+Status: partial. Feed Management and Server Management now use a narrower settings-style modal shell. A full shared component extraction remains future work.
+
 ### Problem
 
 User Settings, Feed Management, and Server Management use different presentation patterns. User Settings currently feels better and should become the common UX direction.
@@ -223,4 +229,3 @@ Create one shared settings shell component:
 - All tab bodies scroll independently.
 - Mobile layout uses drawer/full-screen modal.
 - Desktop layout matches User Settings card/section style.
-

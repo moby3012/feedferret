@@ -455,7 +455,7 @@ export function FeedManagement({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(95dvh,900px)] w-[calc(100vw-1rem)] max-w-[95vw] flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl sm:max-w-none">
+      <DialogContent className="h-[min(92dvh,900px)] w-[calc(100vw-1rem)] max-w-5xl flex flex-col overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl">
         <DialogHeader className="border-b border-border/60 bg-card/95 p-5 pb-4 backdrop-blur-2xl sm:p-8 sm:pb-5">
           <DialogTitle className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
             Management

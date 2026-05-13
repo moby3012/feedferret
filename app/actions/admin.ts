@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getConfiguredMailProviders, sendTestSystemEmail, type MailProviderId } from "@/lib/mail";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import { revalidatePath } from "next/cache";
+import { parseStarterPacksJson } from "@/lib/starter-packs";
 
 async function checkAdmin() {
   const session = await auth();
@@ -60,6 +61,18 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
   // Instance
   if ("instanceName" in data) next.instanceName = String(data.instanceName || "").trim() || null;
   if ("instanceUrl" in data) next.instanceUrl = String(data.instanceUrl || "").trim() || null;
+  if ("instanceIconDataUrl" in data) {
+    const value = String(data.instanceIconDataUrl || "").trim();
+    if (value && (!value.startsWith("data:image/") || value.length > 250_000)) {
+      throw new Error("Logo must be an image data URL smaller than 250 KB");
+    }
+    next.instanceIconDataUrl = value || null;
+  }
+  if ("starterPacksJson" in data) {
+    const value = String(data.starterPacksJson || "").trim();
+    if (value) JSON.parse(value);
+    next.starterPacksJson = value || null;
+  }
 
   // Misc
   if ("totpIssuer" in data) next.totpIssuer = String(data.totpIssuer || "").trim() || null;
@@ -180,6 +193,7 @@ export async function getGlobalSettings() {
     ...decryptSettingsForDisplay(settings),
     mailProvider: normalizedMailProvider,
     availableMailProviders,
+    starterPacks: parseStarterPacksJson(settings.starterPacksJson),
   };
 }
 

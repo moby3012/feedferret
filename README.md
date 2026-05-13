@@ -242,6 +242,7 @@ SYNC_SECRET=$(openssl rand -hex 32)
 - Google Reader compatibility: [`docs/google-reader-api.md`](docs/google-reader-api.md)
 - Outbound webhooks: [`docs/webhooks.md`](docs/webhooks.md)
 - Internal SaaS provisioning API: [`docs/internal-api.md`](docs/internal-api.md)
+- Admin customization: [`docs/admin-customization.md`](docs/admin-customization.md)
 - Larger admin/UX follow-up workpackages: [`docs/admin-ux-workpackages.md`](docs/admin-ux-workpackages.md)
 
 ## 🔐 Auth & Email

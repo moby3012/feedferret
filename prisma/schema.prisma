@@ -347,6 +347,8 @@ model GlobalSettings {
   // Instance settings
   instanceName        String?
   instanceUrl         String?
+  instanceIconDataUrl String?
+  starterPacksJson    String?
   // Misc
   totpIssuer          String?
   backgroundSyncEnabled          Boolean @default(true)
