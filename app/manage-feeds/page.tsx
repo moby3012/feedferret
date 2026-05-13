@@ -1,3 +1,5 @@
+"use client";
+
 import { FeedManagement } from "@/components/feed-management";
 
 export default function ManageFeedsPage() {

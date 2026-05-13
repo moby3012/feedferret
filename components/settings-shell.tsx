@@ -107,7 +107,11 @@ export function SettingsPageShell({
   className?: string;
 }) {
   return (
-    <div className={cn("min-h-screen bg-background", className)}>
+    <Tabs
+      value={activeTab}
+      onValueChange={onTabChange}
+      className={cn("min-h-screen bg-background flex flex-col", className)}
+    >
       <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-xl">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
           <Link href={backHref}>
@@ -131,17 +135,10 @@ export function SettingsPageShell({
           />
         </div>
       </div>
-
-      <Tabs
-        value={activeTab}
-        onValueChange={onTabChange}
-        className="flex flex-col"
-      >
-        <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-6">
-          {children}
-        </div>
-      </Tabs>
-    </div>
+      <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-6">
+        {children}
+      </div>
+    </Tabs>
   );
 }
 

@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { ServerManagementDialog } from "@/components/server-management-dialog";
+import { ServerSettingsClient } from "./client";
 
 export default async function ServerSettingsPage() {
   const session = await auth();
@@ -9,11 +9,5 @@ export default async function ServerSettingsPage() {
     redirect("/");
   }
 
-  return (
-    <ServerManagementDialog
-      pageMode
-      open={true}
-      onOpenChange={() => {}}
-    />
-  );
+  return <ServerSettingsClient />;
 }
