@@ -50,7 +50,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TabsContent } from "@/components/ui/tabs";
-import { SettingsModalShell } from "@/components/settings-shell";
+import { SettingsModalShell, SettingsPageShell } from "@/components/settings-shell";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Trash2,
@@ -255,10 +255,12 @@ export function FeedManagement({
   open,
   onOpenChange,
   initialTab,
+  pageMode = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialTab?: FeedManagementTab;
+  pageMode?: boolean;
 }) {
   const { data: feeds = [] } = useFeeds();
   const deleteFeed = useDeleteFeed();
@@ -446,24 +448,27 @@ export function FeedManagement({
     }
   };
 
+  const shellTabs = [
+    { value: "feeds", label: "Feeds" },
+    { value: "categories", label: "Categories" },
+    { value: "opml", label: "Import/Export" },
+    { value: "labels", label: "Labels & Searches" },
+    { value: "health", label: "Health" },
+    { value: "rules", label: "Rules" },
+    { value: "alerts", label: "Alerts" },
+  ];
+
+  const shellProps = { title: "Manage Feeds", description: "Organize your feeds, categories, and data.", activeTab, onTabChange: setActiveTab, tabs: shellTabs };
+
+  const Wrapper = ({ children }: { children: React.ReactNode }) =>
+    pageMode ? (
+      <SettingsPageShell {...shellProps} backHref="/">{children}</SettingsPageShell>
+    ) : (
+      <SettingsModalShell {...shellProps} open={open} onOpenChange={onOpenChange}>{children}</SettingsModalShell>
+    );
+
   return (
-    <SettingsModalShell
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Management"
-      description="Organize your feeds, categories, and data."
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      tabs={[
-        { value: "feeds", label: "Feeds" },
-        { value: "categories", label: "Categories" },
-        { value: "opml", label: "Import/Export" },
-        { value: "labels", label: "Labels & Searches" },
-        { value: "health", label: "Health" },
-        { value: "rules", label: "Rules" },
-        { value: "alerts", label: "Alerts" },
-      ]}
-    >
+    <Wrapper>
           <div className="flex-1 min-h-0">
             <TabsContent
               value="feeds"
@@ -1656,6 +1661,6 @@ export function FeedManagement({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-    </SettingsModalShell>
+    </Wrapper>
   );
 }
