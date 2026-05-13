@@ -94,7 +94,7 @@ function ArticlePreview({
       <article
         onClick={onClick}
         className={cn(
-          "px-4 py-3 cursor-pointer rounded-2xl transition-all duration-200 flex items-center gap-3",
+          "px-4 py-3 cursor-pointer rounded-2xl transition-all duration-200 flex min-w-0 max-w-full items-center gap-3 overflow-hidden",
           isSelected
             ? "bg-accent/10 ring-1 ring-accent/20"
             : "hover:bg-muted/50",
@@ -122,7 +122,7 @@ function ArticlePreview({
       <article
         onClick={onClick}
         className={cn(
-          "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl",
+          "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full",
           isSelected && "ring-2 ring-brand border-brand",
           !article.isRead && "ring-1 ring-brand/20",
         )}
@@ -146,14 +146,14 @@ function ArticlePreview({
           </div>
         </div>
         <div className="p-4 space-y-3">
-          <h3 className={cn("text-lg leading-tight line-clamp-2", article.isRead ? "font-semibold text-foreground/75" : "font-bold")}>
+        <h3 className={cn("text-lg leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]", article.isRead ? "font-semibold text-foreground/75" : "font-bold")}>
             {article.title}
           </h3>
-          <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+          <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed break-words [overflow-wrap:anywhere]">
             {article.excerpt}
           </p>
           <div className="flex items-center justify-between pt-2 border-t border-border/50">
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium">
+            <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground font-medium">
               <Clock className="w-3 h-3" />
               {article.publishedAt}
             </div>
@@ -190,7 +190,7 @@ function ArticlePreview({
       onClick={onClick}
       style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
       className={cn(
-        "p-3 sm:p-3.5 cursor-pointer rounded-2xl sm:rounded-3xl transition-all duration-300 ease-out group animate-fade-in-up border",
+        "p-3 sm:p-3.5 cursor-pointer rounded-2xl sm:rounded-3xl transition-all duration-300 ease-out group animate-fade-in-up border min-w-0 max-w-full overflow-hidden",
         "active:scale-[0.995]",
         isSelected
           ? "bg-accent/10 border-accent/25 shadow-lg shadow-accent/5"
@@ -198,7 +198,7 @@ function ArticlePreview({
         !article.isRead ? "bg-card/90 shadow-sm" : "opacity-80",
       )}
     >
-      <div className="flex gap-3 sm:gap-4">
+      <div className="flex min-w-0 gap-3 sm:gap-4">
         {article.imageUrl && (
           <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden flex-shrink-0 bg-muted relative group-hover:shadow-lg transition-shadow duration-300">
             <Image
@@ -268,7 +268,7 @@ function ArticlePreview({
 
           <h3
             className={cn(
-              "text-[0.98rem] sm:text-[1rem] leading-snug mb-2 line-clamp-2 text-balance transition-colors duration-200 tracking-[-0.015em]",
+              "text-[0.98rem] sm:text-[1rem] leading-snug mb-2 line-clamp-2 text-balance transition-colors duration-200 tracking-[-0.015em] break-words [overflow-wrap:anywhere]",
               !article.isRead
                 ? "font-semibold text-foreground"
                 : "font-medium text-foreground/75",
@@ -277,7 +277,7 @@ function ArticlePreview({
             {article.title}
           </h3>
 
-          <p className="text-sm text-muted-foreground line-clamp-1 sm:line-clamp-2 leading-relaxed mb-3">
+          <p className="text-sm text-muted-foreground line-clamp-1 sm:line-clamp-2 leading-relaxed mb-3 break-words [overflow-wrap:anywhere]">
             {article.excerpt}
           </p>
 
@@ -298,7 +298,7 @@ function ArticlePreview({
             </div>
           )}
 
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-3 text-sm text-muted-foreground">
             <span className="font-medium truncate max-w-[100px]">
               {article.author}
             </span>

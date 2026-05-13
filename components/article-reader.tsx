@@ -342,10 +342,10 @@ export function ArticleReader({
 
       {/* Article Content */}
       <ScrollArea className="flex-1 overflow-hidden min-h-0">
-        <article className={cn("reader-page mx-auto px-5 pt-8 pb-28 sm:px-8 sm:py-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
+        <article className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-28 sm:px-8 sm:py-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">
-            <h1 className="text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.035em]">
+            <h1 className="text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.035em] break-words [overflow-wrap:anywhere]">
               {article.title}
             </h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
@@ -432,7 +432,7 @@ export function ArticleReader({
 
           {/* Article Body */}
           <div
-            className="animate-fade-in-up animation-delay-200 article-content"
+            className="animate-fade-in-up animation-delay-200 article-content min-w-0 max-w-full overflow-hidden"
             dangerouslySetInnerHTML={{ __html: article.content }}
           />
 
