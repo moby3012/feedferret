@@ -213,6 +213,9 @@ export function RssSidebar({
         return;
       }
       toast.success(`Added ${result.feed?.name || title || "feed"}`);
+      if (addFeedTab === "discover") {
+        return;
+      }
       setNewFeedUrl("");
       setDiscoveredFeeds([]);
       setDiscoveryMessage(null);
