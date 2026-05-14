@@ -76,7 +76,7 @@ export default function RSSReaderPage() {
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [sortOrderInitialized, setSortOrderInitialized] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [unreadOnly, setUnreadOnly] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState<boolean | null>(null);
@@ -211,6 +211,11 @@ export default function RSSReaderPage() {
       ? displayArticles.find((a: any) => a.id === selectedArticleId) || selectedArticleSnapshot
       : null,
     [displayArticles, selectedArticleId, selectedArticleSnapshot],
+  );
+
+  const unreadCount = useMemo(
+    () => displayArticles.filter((a: any) => !a.isRead).length,
+    [displayArticles],
   );
 
   useEffect(() => {
@@ -569,13 +574,18 @@ export default function RSSReaderPage() {
             setSelectedFeed(feedId);
             setSelectedArticleId(null);
             setSelectedArticleSnapshot(null);
-            if (feedId) setSelectedCategory("All");
+            if (feedId) {
+              setSelectedCategory("All");
+              setUnreadOnly(true);
+            }
           }}
           onSelectCategory={(cat) => {
             setSelectedCategory(cat);
             setSelectedFeed(null);
             setSelectedArticleId(null);
             setSelectedArticleSnapshot(null);
+            const noUnreadFilter = cat === "Starred" || cat === "Read Later";
+            setUnreadOnly(!noUnreadFilter);
           }}
         />
       </div>
@@ -593,7 +603,10 @@ export default function RSSReaderPage() {
               setSelectedFeed(feedId);
               setSelectedArticleId(null);
               setSelectedArticleSnapshot(null);
-              if (feedId) setSelectedCategory("All");
+              if (feedId) {
+                setSelectedCategory("All");
+                setUnreadOnly(true);
+              }
               setSidebarOpen(false);
             }}
             onSelectCategory={(category) => {
@@ -601,6 +614,8 @@ export default function RSSReaderPage() {
               setSelectedFeed(null);
               setSelectedArticleId(null);
               setSelectedArticleSnapshot(null);
+              const noUnreadFilter = category === "Starred" || category === "Read Later";
+              setUnreadOnly(!noUnreadFilter);
               setSidebarOpen(false);
             }}
           />
@@ -625,6 +640,7 @@ export default function RSSReaderPage() {
             <RssHeader
               title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
               articleCount={filteredArticles.length}
+              unreadCount={unreadCount}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
               onToggleSidebar={() => setSidebarOpen(true)}
@@ -704,6 +720,7 @@ export default function RSSReaderPage() {
         <RssHeader
           title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
           articleCount={filteredArticles.length}
+          unreadCount={unreadCount}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onToggleSidebar={() => setSidebarOpen(true)}

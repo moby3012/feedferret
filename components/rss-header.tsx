@@ -19,27 +19,19 @@ import {
   SortDesc,
   Filter,
   AlignJustify,
-  Search,
-  X,
   CheckCheck,
   BookmarkPlus,
-  Bell,
+  MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { useState } from "react";
-import {
-  useMarkAllNotificationsRead,
-  useMarkNotificationRead,
-  useNotifications,
-  useUnreadNotificationCount,
-} from "@/hooks/use-rss-data";
 
 export type ViewMode = "list" | "magazine" | "minimal";
 
 interface RssHeaderProps {
   title: string;
   articleCount: number;
+  unreadCount?: number;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   onToggleSidebar: () => void;
@@ -57,91 +49,10 @@ interface RssHeaderProps {
   onToggleSort?: () => void;
 }
 
-function NotificationsMenuButton({
-  unreadNotifications,
-  notifications,
-  onMarkNotificationRead,
-  onMarkAllNotificationsRead,
-  className,
-}: {
-  unreadNotifications: number;
-  notifications: any[];
-  onMarkNotificationRead: (id: string) => void;
-  onMarkAllNotificationsRead: () => void;
-  className?: string;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 relative",
-            unreadNotifications ? "text-accent bg-accent/10" : "text-muted-foreground",
-            className,
-          )}
-        >
-          <Bell className="w-4 h-4" />
-          {unreadNotifications > 0 && (
-            <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-bold leading-4 text-destructive-foreground">
-              {unreadNotifications > 9 ? "9+" : unreadNotifications}
-            </span>
-          )}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80 rounded-2xl border-border/70 p-2">
-        <div className="flex items-center justify-between px-2 py-1.5">
-          <p className="text-sm font-semibold">Notifications</p>
-          {unreadNotifications > 0 && (
-            <button
-              className="text-xs text-primary hover:underline"
-              onClick={onMarkAllNotificationsRead}
-            >
-              Mark all read
-            </button>
-          )}
-        </div>
-        <DropdownMenuSeparator />
-        {notifications.length === 0 ? (
-          <div className="px-2 py-8 text-center text-sm text-muted-foreground">
-            No notifications yet.
-          </div>
-        ) : (
-          notifications.slice(0, 8).map((notification: any) => (
-            <DropdownMenuItem
-              key={notification.id}
-              className="items-start gap-3 rounded-xl px-2 py-2"
-              onClick={() => {
-                if (!notification.isRead) onMarkNotificationRead(notification.id);
-                if (notification.articleId) {
-                  window.location.href = `/?article=${encodeURIComponent(notification.articleId)}`;
-                }
-              }}
-            >
-              <span
-                className={cn(
-                  "mt-1 h-2 w-2 shrink-0 rounded-full",
-                  notification.isRead ? "bg-muted" : "bg-accent",
-                )}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{notification.title}</span>
-                <span className="line-clamp-2 text-xs text-muted-foreground">
-                  {notification.body}
-                </span>
-              </span>
-            </DropdownMenuItem>
-          ))
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 export function RssHeader({
   title,
   articleCount,
+  unreadCount,
   viewMode,
   onViewModeChange,
   onToggleSidebar,
@@ -158,42 +69,34 @@ export function RssHeader({
   sortOrder = "newest",
   onToggleSort,
 }: RssHeaderProps) {
-  const [showSearch, setShowSearch] = useState(!!searchQuery);
-  const { data: notifications = [] } = useNotifications();
-  const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
-  const markNotificationRead = useMarkNotificationRead();
-  const markAllNotificationsRead = useMarkAllNotificationsRead();
   const activeViewMode: ViewMode =
     viewMode === "minimal" || viewMode === "magazine" ? viewMode : "list";
 
+  const displayCount = unreadCount ?? articleCount;
+
   return (
     <header className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-border/60 bg-card/75 backdrop-blur-2xl animate-fade-in relative z-20">
-      <div className="flex items-center gap-4 min-w-0">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
         <Button
           variant="ghost"
           size="icon"
-          className="w-10 h-10 rounded-xl lg:hidden transition-all duration-200 hover:scale-105 active:scale-95"
+          className="w-10 h-10 rounded-xl lg:hidden shrink-0 transition-all duration-200 hover:scale-105 active:scale-95"
           onClick={onToggleSidebar}
         >
           <PanelLeft className="w-5 h-5" />
         </Button>
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-foreground tracking-[-0.02em] truncate">
             {title}
           </h2>
           <p className="text-xs text-muted-foreground truncate font-medium">
-            {articleCount} {unreadOnly ? "unread " : ""}articles
+            {displayCount} unread
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 lg:hidden flex-shrink-0">
-        <NotificationsMenuButton
-          unreadNotifications={unreadNotifications}
-          notifications={notifications}
-          onMarkNotificationRead={(id) => markNotificationRead.mutate(id)}
-          onMarkAllNotificationsRead={() => markAllNotificationsRead.mutate()}
-        />
+      {/* Mobile: view cycle only */}
+      <div className="flex items-center gap-1 lg:hidden flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
@@ -211,46 +114,9 @@ export function RssHeader({
         </Button>
       </div>
 
-      <div className="hidden items-center gap-1 lg:flex sm:gap-2 flex-shrink-0">
-        {/* Search Toggle */}
-        {onSearchChange && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
-              showSearch || searchQuery
-                ? "text-accent bg-accent/10"
-                : "text-muted-foreground"
-            )}
-            onClick={() => {
-              setShowSearch(!showSearch);
-              if (showSearch) {
-                onSearchChange("");
-              }
-            }}
-          >
-            {showSearch || searchQuery ? <X className="w-4 h-4" /> : <Search className="w-4 h-4" />}
-          </Button>
-        )}
-
-        {/* Search Input */}
-        {showSearch && onSearchChange && (
-          <Input
-            type="search"
-            placeholder='Search: author:, intitle:, is:unread, label:'
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="h-10 w-40 lg:w-60 rounded-2xl bg-background/60 border-border/50 focus:bg-background"
-            autoFocus
-          />
-        )}
-        <NotificationsMenuButton
-          unreadNotifications={unreadNotifications}
-          notifications={notifications}
-          onMarkNotificationRead={(id) => markNotificationRead.mutate(id)}
-          onMarkAllNotificationsRead={() => markAllNotificationsRead.mutate()}
-        />
+      {/* Desktop: responsive button bar */}
+      <div className="hidden items-center gap-0.5 lg:flex xl:gap-1 flex-shrink-0">
+        {/* Filter – always visible */}
         <Button
           variant="ghost"
           size="icon"
@@ -261,15 +127,16 @@ export function RssHeader({
               : "text-muted-foreground",
           )}
           onClick={onToggleUnreadOnly}
-          title={unreadOnly ? "Nur Ungelesene (aktiv)" : "Nur Ungelesene anzeigen"}
+          title={unreadOnly ? "Showing unread only (click to show all)" : "Show unread only"}
         >
           <Filter className="w-4 h-4" />
         </Button>
 
+        {/* Refresh – always visible */}
         <Button
           variant="ghost"
           size="icon"
-          className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+          className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={onRefresh}
           disabled={isRefreshing}
         >
@@ -281,11 +148,11 @@ export function RssHeader({
           />
         </Button>
 
-        {/* Sort button */}
+        {/* Sort – visible at xl+, hidden at lg-xl */}
         <Button
           variant="ghost"
           size="icon"
-          className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+          className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={() => onToggleSort?.()}
           title={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
         >
@@ -296,11 +163,11 @@ export function RssHeader({
           )}
         </Button>
 
-        {/* Mark all as read button */}
+        {/* Mark all read – visible at xl+, hidden at lg-xl */}
         <Button
           variant="ghost"
           size="icon"
-          className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+          className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={() => onMarkAllRead?.()}
           disabled={isMarkingAllRead}
           title="Mark all as read"
@@ -308,12 +175,12 @@ export function RssHeader({
           <CheckCheck className={cn("w-4 h-4", isMarkingAllRead && "animate-pulse")} />
         </Button>
 
-        {/* Save search button (only when search is active) */}
+        {/* Save search – visible at xl+ when active search */}
         {searchQuery.trim() && onSaveSearch && (
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+            className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
             onClick={onSaveSearch}
             title="Save search"
           >
@@ -321,7 +188,7 @@ export function RssHeader({
           </Button>
         )}
 
-        {/* View cycling button */}
+        {/* View cycling – always visible */}
         <Button
           variant="ghost"
           size="icon"
@@ -338,9 +205,52 @@ export function RssHeader({
           {activeViewMode === "magazine" && <LayoutGrid className="w-4 h-4" />}
         </Button>
 
-        <div className="lg:hidden">
-          <ThemeToggle />
-        </div>
+        {/* Overflow dropdown – visible at lg-xl, hidden at xl+ */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="xl:hidden w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+              title="More options"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52 rounded-2xl border-border/70 p-2">
+            <DropdownMenuItem
+              className="rounded-xl gap-2 cursor-pointer"
+              onClick={() => onToggleSort?.()}
+            >
+              {sortOrder === "oldest" ? (
+                <SortAsc className="w-4 h-4" />
+              ) : (
+                <SortDesc className="w-4 h-4" />
+              )}
+              Sort: {sortOrder === "oldest" ? "oldest first" : "newest first"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="rounded-xl gap-2 cursor-pointer"
+              onClick={() => onMarkAllRead?.()}
+              disabled={isMarkingAllRead}
+            >
+              <CheckCheck className="w-4 h-4" />
+              Mark all as read
+            </DropdownMenuItem>
+            {searchQuery.trim() && onSaveSearch && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="rounded-xl gap-2 cursor-pointer"
+                  onClick={onSaveSearch}
+                >
+                  <BookmarkPlus className="w-4 h-4" />
+                  Save search
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
