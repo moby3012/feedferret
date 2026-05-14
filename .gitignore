@@ -36,3 +36,7 @@ next-env.d.ts
 # database
 *.db
 *.db-journal
+
+# AI/Agent working directories (Claude Code internal)
+.ai/
+.agent/
