@@ -763,11 +763,14 @@ export function RssSidebar({
           setAddFeedTab("url");
         }
       }}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent
+          className="rounded-2xl"
+          style={{ width: "calc(100vw - 1rem)", maxWidth: "28rem" }}
+        >
           <DialogHeader>
             <DialogTitle>Add Feed</DialogTitle>
           </DialogHeader>
-          <Tabs value={addFeedTab} onValueChange={(v) => setAddFeedTab(v as "url" | "discover")} className="w-full">
+          <Tabs value={addFeedTab} onValueChange={(v) => setAddFeedTab(v as "url" | "discover")} className="w-full min-w-0">
             <TabsList className="grid w-full grid-cols-2 h-9 rounded-xl">
               <TabsTrigger value="url" className="text-xs rounded-lg">By URL</TabsTrigger>
               <TabsTrigger value="discover" className="text-xs rounded-lg">Discover</TabsTrigger>
@@ -894,7 +897,7 @@ export function RssSidebar({
             </TabsContent>
 
             {/* Discover Tab */}
-            <TabsContent value="discover" className="mt-3">
+            <TabsContent value="discover" className="mt-3 min-w-0 overflow-hidden">
               <div className="mb-3">
                 <Select
                   value={newFeedCategoryId}
