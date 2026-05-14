@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type TouchEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Article } from "@/lib/rss-data";
 import { useAiSettings, useSummarizeArticle } from "@/hooks/use-rss-data";
@@ -77,7 +77,6 @@ export function ArticleReader({
   readerWidth = "normal",
 }: ArticleReaderProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const { data: aiSettings } = useAiSettings();
   const aiSummaryEnabled = Boolean(aiSettings?.provider);
   const [localSummary, setLocalSummary] = useState<string | null>(null);
@@ -151,25 +150,6 @@ export function ArticleReader({
 
   const articleLabelIds = article.labels?.map((item) => item.label.id) || [];
 
-  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    const touch = event.touches[0];
-    touchStart.current = { x: touch.clientX, y: touch.clientY };
-  };
-
-  const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
-    if (!touchStart.current) return;
-    const touch = event.changedTouches[0];
-    const deltaX = touch.clientX - touchStart.current.x;
-    const deltaY = touch.clientY - touchStart.current.y;
-    touchStart.current = null;
-
-    if (Math.abs(deltaX) < 72 || Math.abs(deltaY) > 64) return;
-    if (deltaX < 0 && hasNextArticle) onNextArticle?.();
-    if (deltaX > 0) {
-      if (hasPreviousArticle) onPreviousArticle?.();
-      else onBack?.();
-    }
-  };
 
   const scrollReaderToTop = () => {
     const viewport = rootRef.current?.querySelector<HTMLElement>(
@@ -182,8 +162,6 @@ export function ArticleReader({
     <div
       ref={rootRef}
       className="flex-1 flex flex-col bg-background/75 backdrop-blur-xl animate-fade-in"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
     >
       {/* Reader Header */}
       <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border/60 bg-background/80 backdrop-blur-2xl sticky top-0 z-10">
@@ -482,12 +460,12 @@ export function ArticleReader({
       </ScrollArea>
 
       <nav className="fixed inset-x-0 bottom-0 z-[60] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
-        <div className="flex h-16 items-center gap-1 rounded-[2rem] border border-border/70 bg-background/90 px-2 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
+        <div className="flex h-16 items-center rounded-[2rem] border border-border/70 bg-background/90 px-1 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="h-11 min-w-10 rounded-2xl text-muted-foreground active:scale-95"
+            className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
             onClick={hasPreviousArticle ? onPreviousArticle : onBack}
             aria-label={hasPreviousArticle ? "Previous article" : "Back to list"}
           >
@@ -498,7 +476,7 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className={cn(
-              "h-11 min-w-10 rounded-2xl active:scale-95",
+              "h-11 flex-1 rounded-2xl active:scale-95",
               article.isStarred ? "bg-amber-500/10 text-amber-500" : "text-muted-foreground",
             )}
             onClick={() => onToggleStar(article.id)}
@@ -510,7 +488,7 @@ export function ArticleReader({
             type="button"
             variant="ghost"
             className={cn(
-              "h-11 min-w-10 rounded-2xl active:scale-95",
+              "h-11 flex-1 rounded-2xl active:scale-95 transition-all duration-200",
               article.isRead ? "bg-muted/70 text-foreground" : "bg-accent text-accent-foreground shadow-lg shadow-accent/20",
             )}
             onClick={() => onToggleRead?.(article.id)}
@@ -524,7 +502,7 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className={cn(
-              "h-11 min-w-10 rounded-2xl active:scale-95",
+              "h-11 flex-1 rounded-2xl active:scale-95",
               article.isReadLater ? "bg-accent/10 text-accent" : "text-muted-foreground",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
@@ -532,24 +510,13 @@ export function ArticleReader({
           >
             <Bookmark className={cn("h-5 w-5", article.isReadLater && "fill-accent")} />
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-11 min-w-10 rounded-2xl text-muted-foreground active:scale-95"
-            onClick={onNextArticle}
-            disabled={!hasNextArticle}
-            aria-label="Next article"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-11 min-w-10 rounded-2xl text-muted-foreground active:scale-95"
+                className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
                 aria-label="More reader actions"
               >
                 <MoreHorizontal className="h-5 w-5" />
@@ -616,6 +583,17 @@ export function ArticleReader({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
+            onClick={onNextArticle}
+            disabled={!hasNextArticle}
+            aria-label="Next article"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </Button>
         </div>
       </nav>
     </div>

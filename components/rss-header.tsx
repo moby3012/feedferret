@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import {
-  PanelLeft,
   RefreshCw,
   LayoutGrid,
   List,
@@ -77,14 +76,6 @@ export function RssHeader({
   return (
     <header className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-border/60 bg-card/75 backdrop-blur-2xl animate-fade-in relative z-20">
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="w-10 h-10 rounded-xl lg:hidden shrink-0 transition-all duration-200 hover:scale-105 active:scale-95"
-          onClick={onToggleSidebar}
-        >
-          <PanelLeft className="w-5 h-5" />
-        </Button>
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-foreground tracking-[-0.02em] truncate">
             {title}
@@ -95,8 +86,17 @@ export function RssHeader({
         </div>
       </div>
 
-      {/* Mobile: view cycle only */}
+      {/* Mobile: sort + view cycle */}
       <div className="flex items-center gap-1 lg:hidden flex-shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-10 h-10 rounded-xl transition-all duration-200 active:scale-95 text-muted-foreground"
+          onClick={() => onToggleSort?.()}
+          title={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
+        >
+          {sortOrder === "oldest" ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />}
+        </Button>
         <Button
           variant="ghost"
           size="icon"

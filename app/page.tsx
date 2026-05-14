@@ -381,6 +381,31 @@ export default function RSSReaderPage() {
     refresh.mutate();
   }, [refresh]);
 
+  const handleMarkAllRead = useCallback(() => {
+    const feedsList = feeds as any[];
+    markAllAsRead.mutate(
+      { feedId: selectedFeed, category: selectedFeed ? null : selectedCategory },
+      {
+        onSuccess: () => {
+          if (!selectedFeed) return;
+          const currentIdx = feedsList.findIndex((f) => f.id === selectedFeed);
+          const ordered = [
+            ...feedsList.slice(currentIdx + 1),
+            ...feedsList.slice(0, currentIdx),
+          ];
+          const nextFeed = ordered.find((f) => (f._count?.articles ?? 0) > 0);
+          if (nextFeed) {
+            setSelectedFeed(nextFeed.id);
+            setSelectedCategory("All");
+            setUnreadOnly(true);
+            setSelectedArticleId(null);
+            setSelectedArticleSnapshot(null);
+          }
+        },
+      },
+    );
+  }, [feeds, markAllAsRead, selectedFeed, selectedCategory]);
+
   const handleToggleSort = useCallback(() => {
     setSortOrder((prev) => {
       const next = prev === "newest" ? "oldest" : "newest";
@@ -499,15 +524,12 @@ export default function RSSReaderPage() {
       handleRefresh();
     } else if (e.key === "A" && e.shiftKey) {
       e.preventDefault();
-      markAllAsRead.mutate({
-        feedId: selectedFeed,
-        category: selectedFeed ? null : selectedCategory,
-      });
+      handleMarkAllRead();
     } else if (e.key === "S" && e.shiftKey) {
       e.preventDefault();
       handleSaveSearch();
     }
-  }, [handleSelectArticle, handleToggleStar, handleToggleReadLater, handleToggleRead, handleRefresh, selectedArticleSnapshot, markAllAsRead, selectedFeed, selectedCategory, handleSaveSearch]);
+  }, [handleSelectArticle, handleToggleStar, handleToggleReadLater, handleToggleRead, handleRefresh, handleMarkAllRead, selectedArticleSnapshot, handleSaveSearch]);
 
   useEffect(() => {
     async function checkSetup() {
@@ -646,12 +668,7 @@ export default function RSSReaderPage() {
               onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
-              onMarkAllRead={() =>
-                markAllAsRead.mutate({
-                  feedId: selectedFeed,
-                  category: selectedFeed ? null : selectedCategory,
-                })
-              }
+              onMarkAllRead={handleMarkAllRead}
               isMarkingAllRead={markAllAsRead.isPending}
               onSaveSearch={handleSaveSearch}
               onShowShortcuts={() => setShortcutsOpen(true)}
@@ -726,12 +743,7 @@ export default function RSSReaderPage() {
           onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onMarkAllRead={() =>
-            markAllAsRead.mutate({
-              feedId: selectedFeed,
-              category: selectedFeed ? null : selectedCategory,
-            })
-          }
+          onMarkAllRead={handleMarkAllRead}
           isMarkingAllRead={markAllAsRead.isPending}
           onSaveSearch={handleSaveSearch}
           onShowShortcuts={() => setShortcutsOpen(true)}
@@ -770,12 +782,7 @@ export default function RSSReaderPage() {
           onSearchChange={setSearchQuery}
           sortOrder={sortOrder}
           onToggleSort={handleToggleSort}
-          onMarkAllRead={() =>
-            markAllAsRead.mutate({
-              feedId: selectedFeed,
-              category: selectedFeed ? null : selectedCategory,
-            })
-          }
+          onMarkAllRead={handleMarkAllRead}
           isMarkingAllRead={markAllAsRead.isPending}
         />
       </div>

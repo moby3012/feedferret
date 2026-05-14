@@ -119,7 +119,7 @@ export function SettingsForm() {
     updateSettings.mutate(data);
 
   return (
-    <main className="min-h-dvh app-chrome text-foreground">
+    <main className="min-h-dvh app-chrome text-foreground overflow-x-hidden">
       <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-6">
         <header className="mb-8 flex items-center gap-4">
           <Button
