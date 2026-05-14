@@ -31,6 +31,7 @@ export default function LoginPage() {
   const [otp, setOtp] = useState("");
   const [showOtpField, setShowOtpField] = useState(false);
   const [error, setError] = useState("");
+  const [errorIsWarning, setErrorIsWarning] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [providers, setProviders] = useState<{
     google: boolean;
@@ -58,27 +59,32 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setErrorIsWarning(false);
     setIsLoading(true);
 
     try {
       if (!showOtpField) {
+        // Only check if the account exists and whether 2FA is enabled.
+        // Password is NOT verified here to prevent brute-force probing.
         const preflight = await fetch("/api/auth/credentials-status", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email }),
         });
 
         if (!preflight.ok) {
-          setError("Invalid email or password");
+          setError("Username or password incorrect");
           return;
         }
 
         const preflightData = await preflight.json();
         if (preflightData.requiresTwoFactor) {
           setShowOtpField(true);
-          setError("Enter your 2FA code to continue");
+          setErrorIsWarning(true);
+          setError("2FA required — enter your authenticator code below");
           return;
         }
+        // 2FA not enabled: fall through to signIn which verifies the password
       }
 
       const result = await signIn("credentials", {
@@ -89,7 +95,8 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError("Invalid email, password, or one-time code");
+        setErrorIsWarning(false);
+        setError(showOtpField ? "Password or 2FA code is incorrect" : "Username or password incorrect");
       } else {
         router.push("/");
         router.refresh();
@@ -151,6 +158,7 @@ export default function LoginPage() {
                     setShowOtpField(false);
                     setOtp("");
                     setError("");
+                    setErrorIsWarning(false);
                   }}
                   required
                 />
@@ -167,6 +175,7 @@ export default function LoginPage() {
                     setShowOtpField(false);
                     setOtp("");
                     setError("");
+                    setErrorIsWarning(false);
                   }}
                   required
                 />
@@ -187,7 +196,13 @@ export default function LoginPage() {
               )}
 
               {error && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium animate-shake">
+                <div
+                  className={`p-3 rounded-lg text-xs font-medium ${
+                    errorIsWarning
+                      ? "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400"
+                      : "bg-red-500/10 border border-red-500/20 text-red-400 animate-shake"
+                  }`}
+                >
                   {error}
                 </div>
               )}
