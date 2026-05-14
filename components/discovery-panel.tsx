@@ -204,13 +204,15 @@ function FeedList({
 }) {
   return (
     <div className="space-y-2">
-      <button
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={onBack}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        className="h-9 px-3 -ml-3 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-3 w-3" />
+        <ArrowLeft className="h-4 w-4 mr-1.5" />
         Back to categories
-      </button>
+      </Button>
       <p className="text-xs font-medium text-muted-foreground px-0.5">
         {categoryName}
       </p>
@@ -333,7 +335,7 @@ function FeedCard({
   isAdding: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl bg-muted/50 px-2.5 py-2">
+    <div className="flex items-start gap-2 rounded-xl bg-muted/50 px-2.5 py-2">
       {feed.iconUrl ? (
         <img
           src={feed.iconUrl}
@@ -351,7 +353,7 @@ function FeedCard({
           {feed.title}
         </p>
         {feed.description && (
-          <p className="text-xs text-muted-foreground truncate">
+          <p className="text-xs text-muted-foreground line-clamp-2">
             {feed.description}
           </p>
         )}
