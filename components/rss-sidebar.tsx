@@ -917,6 +917,7 @@ export function RssSidebar({
                 onAddFeed={handleAddFeed}
                 isAddingFeed={isAddingFeed}
                 addingUrl={addingFeedUrl}
+                subscribedUrls={new Set(feeds.map((f: any) => f.url).filter(Boolean))}
               />
             </TabsContent>
           </Tabs>

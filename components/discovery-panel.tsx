@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, ArrowLeft, Plus, Loader2, Rss, Globe, AlertCircle } from "lucide-react";
+import { Search, ArrowLeft, Plus, Loader2, Rss, Globe, AlertCircle, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -19,12 +19,14 @@ interface DiscoveryPanelProps {
   onAddFeed: (url: string, title?: string) => void;
   isAddingFeed: boolean;
   addingUrl: string | null;
+  subscribedUrls?: Set<string>;
 }
 
 export function DiscoveryPanel({
   onAddFeed,
   isAddingFeed,
   addingUrl,
+  subscribedUrls = new Set(),
 }: DiscoveryPanelProps) {
   const [mode, setMode] = useState<"categories" | "feeds" | "search">("categories");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -100,6 +102,7 @@ export function DiscoveryPanel({
             onAddFeed={onAddFeed}
             isAddingFeed={isAddingFeed}
             addingUrl={addingUrl}
+            subscribedUrls={subscribedUrls}
           />
         ) : mode === "feeds" ? (
           <FeedList
@@ -112,6 +115,7 @@ export function DiscoveryPanel({
             onAddFeed={onAddFeed}
             isAddingFeed={isAddingFeed}
             addingUrl={addingUrl}
+            subscribedUrls={subscribedUrls}
           />
         ) : (
           <CategoryGrid
@@ -193,6 +197,7 @@ function FeedList({
   onAddFeed,
   isAddingFeed,
   addingUrl,
+  subscribedUrls,
 }: {
   feeds: CatalogFeed[];
   isLoading: boolean;
@@ -201,6 +206,7 @@ function FeedList({
   onAddFeed: (url: string, title?: string) => void;
   isAddingFeed: boolean;
   addingUrl: string | null;
+  subscribedUrls: Set<string>;
 }) {
   return (
     <div className="space-y-2">
@@ -233,6 +239,7 @@ function FeedList({
               feed={feed}
               onAdd={() => onAddFeed(feed.url, feed.title)}
               isAdding={isAddingFeed && addingUrl === feed.url}
+              isSubscribed={subscribedUrls.has(feed.url)}
             />
           ))}
         </div>
@@ -250,6 +257,7 @@ function SearchResults({
   onAddFeed,
   isAddingFeed,
   addingUrl,
+  subscribedUrls,
 }: {
   query: string;
   feeds: DiscoveryFeed[];
@@ -259,6 +267,7 @@ function SearchResults({
   onAddFeed: (url: string, title?: string) => void;
   isAddingFeed: boolean;
   addingUrl: string | null;
+  subscribedUrls: Set<string>;
 }) {
   if (query.length < 2) {
     return (
@@ -319,6 +328,7 @@ function SearchResults({
           }}
           onAdd={() => onAddFeed(feed.url, feed.title)}
           isAdding={isAddingFeed && addingUrl === feed.url}
+          isSubscribed={subscribedUrls.has(feed.url)}
         />
       ))}
     </div>
@@ -329,52 +339,57 @@ function FeedCard({
   feed,
   onAdd,
   isAdding,
+  isSubscribed,
 }: {
   feed: CatalogFeed;
   onAdd: () => void;
   isAdding: boolean;
+  isSubscribed: boolean;
 }) {
   return (
-    <div className="flex items-start gap-2 rounded-xl bg-muted/50 px-2.5 py-2 overflow-hidden">
-      {feed.iconUrl ? (
-        <img
-          src={feed.iconUrl}
-          alt=""
-          className="h-5 w-5 rounded object-cover shrink-0"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
-        />
-      ) : (
-        <Rss className="h-4 w-4 text-muted-foreground shrink-0" />
-      )}
-      <div className="min-w-0 flex-1 overflow-hidden">
+    <div className="relative rounded-xl bg-muted/50 px-2.5 py-2 pr-10">
+      <div className="flex items-center gap-2 min-w-0">
+        {feed.iconUrl ? (
+          <img
+            src={feed.iconUrl}
+            alt=""
+            className="h-4 w-4 rounded object-cover shrink-0"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        ) : (
+          <Rss className="h-4 w-4 text-muted-foreground shrink-0" />
+        )}
         <p className="text-sm font-medium truncate" title={feed.title}>
           {feed.title}
         </p>
-        {feed.description && (
-          <p
-            className="text-xs text-muted-foreground"
-            style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
-          >
-            {feed.description}
-          </p>
-        )}
       </div>
+      {feed.description && (
+        <p
+          className="text-xs text-muted-foreground mt-0.5 pr-1"
+          style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+        >
+          {feed.description}
+        </p>
+      )}
       <Button
         size="sm"
-        variant="ghost"
-        className="h-7 px-2 text-xs shrink-0"
-        onClick={onAdd}
-        disabled={isAdding}
+        variant={isSubscribed ? "ghost" : "ghost"}
+        className={cn(
+          "absolute right-1.5 top-1.5 h-7 w-7 p-0 rounded-lg shrink-0",
+          isSubscribed && "text-green-500 cursor-default"
+        )}
+        onClick={isSubscribed ? undefined : onAdd}
+        disabled={isAdding || isSubscribed}
+        title={isSubscribed ? "Already added" : "Add feed"}
       >
         {isAdding ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : isSubscribed ? (
+          <Check className="h-3.5 w-3.5" />
         ) : (
-          <>
-            <Plus className="h-3 w-3 mr-1" />
-            Add
-          </>
+          <Plus className="h-3.5 w-3.5" />
         )}
       </Button>
     </div>
