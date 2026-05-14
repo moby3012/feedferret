@@ -76,9 +76,10 @@ export function ArticleList({
   const pullDistanceRef = useRef(0);
   const isPullingRef = useRef(false);
 
+  const firstArticleId = articles[0]?.id ?? null;
   useEffect(() => {
     setVisibleCount(pageSize ?? 30);
-  }, [articles, pageSize]);
+  }, [firstArticleId, pageSize]);
 
   useEffect(() => {
     const nextRoot = contentRef.current?.closest(
@@ -327,11 +328,12 @@ function ArticlePreview({
         onTouchStart={handleSwipeStart}
         onTouchEnd={handleSwipeEnd}
         className={cn(
-          "px-3 py-2.5 cursor-pointer rounded-2xl transition-all duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden",
+          "px-3 py-2.5 cursor-pointer rounded-2xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden",
+          "border-l-4",
           isSelected
             ? "bg-accent/10 ring-1 ring-accent/20"
             : "hover:bg-muted/50",
-          !article.isRead && "border-l-4 border-brand",
+          !article.isRead ? "border-brand" : "border-transparent",
         )}
       >
         <FeedFavicon icon={article.feedIcon} name={article.feedName} size={14} />
@@ -442,9 +444,9 @@ function ArticlePreview({
       onClick={onClick}
       onTouchStart={handleSwipeStart}
       onTouchEnd={handleSwipeEnd}
-      style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
       className={cn(
-        "p-3 sm:p-3.5 cursor-pointer rounded-2xl sm:rounded-3xl transition-all duration-300 ease-out group animate-fade-in-up border min-w-0 max-w-full overflow-hidden",
+        "p-3 sm:p-3.5 cursor-pointer rounded-2xl sm:rounded-3xl group border min-w-0 max-w-full overflow-hidden",
+        "transition-[opacity,background-color,border-color,box-shadow,transform] duration-200 ease-out",
         "active:scale-[0.995]",
         isSelected
           ? "bg-accent/10 border-accent/25 shadow-lg shadow-accent/5"

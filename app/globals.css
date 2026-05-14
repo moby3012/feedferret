@@ -295,6 +295,15 @@
   animation: slide-in-right 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
+@keyframes slide-out-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+.animate-slide-out-right {
+  animation: slide-out-right 0.24s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
 .app-chrome {
   background:
     radial-gradient(circle at 12% 8%, color-mix(in oklab, var(--accent) 12%, transparent), transparent 28rem),

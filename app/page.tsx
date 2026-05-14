@@ -84,6 +84,7 @@ export default function RSSReaderPage() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState<boolean | null>(null);
+  const [isClosingReader, setIsClosingReader] = useState(false);
   const isAuthenticated = status === "authenticated";
 
   const { data: feeds = [], isLoading: feedsLoading } = useFeeds(isAuthenticated);
@@ -295,6 +296,14 @@ export default function RSSReaderPage() {
     setSelectedArticleId(null);
     setSelectedArticleSnapshot(null);
   }, []);
+
+  const handleMobileBack = useCallback(() => {
+    setIsClosingReader(true);
+    setTimeout(() => {
+      handleCloseArticle();
+      setIsClosingReader(false);
+    }, 240);
+  }, [handleCloseArticle]);
 
   const handleOpenArticleFeed = useCallback((feedId: string) => {
     setSelectedFeed(feedId);
@@ -789,8 +798,8 @@ export default function RSSReaderPage() {
       )}
 
       {/* Mobile Article Reader Panel */}
-      {isMobileLayout && selectedArticle && (
-      <div className="fixed inset-0 z-50 flex bg-background animate-slide-in-right">
+      {isMobileLayout && (selectedArticle || isClosingReader) && (
+      <div className={`fixed inset-0 z-50 flex bg-background ${isClosingReader ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
         <ArticleReader
           article={selectedArticle}
           onToggleStar={handleToggleStar}
@@ -800,7 +809,7 @@ export default function RSSReaderPage() {
           isFetchingFullText={fetchFullText.isPending}
           labels={labels}
           onSetLabels={handleSetLabels}
-          onBack={handleCloseArticle}
+          onBack={handleMobileBack}
           onOpenFeed={handleOpenArticleFeed}
           showBackButton={!!selectedArticle}
           onPreviousArticle={() => handleSelectAdjacentArticle(-1)}
