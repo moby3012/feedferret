@@ -58,6 +58,25 @@ const readerWidthClass: Record<string, string> = {
   full: "max-w-none",
 };
 
+function FeedFaviconInReader({ feedIcon, feedName, articleLink, size }: { feedIcon: string; feedName: string; articleLink: string; size: number }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const isIconUrl = feedIcon?.startsWith("http") || feedIcon?.startsWith("/");
+  let src: string | null = null;
+  if (isIconUrl) {
+    src = feedIcon;
+  } else {
+    try {
+      const domain = new URL(articleLink).hostname;
+      src = `https://www.google.com/s2/favicons?domain=${domain}&sz=${size * 2}`;
+    } catch {}
+  }
+  if (src && !imgFailed) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={feedName} width={size} height={size} className="object-contain rounded-sm" style={{ width: size, height: size }} onError={() => setImgFailed(true)} />;
+  }
+  return <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>{feedIcon || "📰"}</span>;
+}
+
 export function ArticleReader({
   article,
   onToggleStar,
@@ -201,7 +220,9 @@ export function ArticleReader({
             className="flex min-w-0 items-center gap-3 rounded-2xl px-2 py-1.5 text-left transition-colors hover:bg-muted/70 active:scale-[0.99]"
             aria-label={`Show all articles from ${article.feedName}`}
           >
-            <span className="text-xl">{article.feedIcon}</span>
+            <div className="w-6 h-6 rounded-md overflow-hidden bg-muted flex items-center justify-center shrink-0">
+              <FeedFaviconInReader feedIcon={article.feedIcon} feedName={article.feedName} articleLink={article.link} size={24} />
+            </div>
             <span className="truncate text-sm font-semibold text-foreground">
               {article.feedName}
             </span>
@@ -462,8 +483,8 @@ export function ArticleReader({
               onClick={() => onOpenFeed?.(article.feedId)}
               className="flex w-full items-center gap-4 rounded-3xl p-2 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
             >
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center text-2xl shadow-lg">
-                {article.feedIcon}
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center shadow-lg overflow-hidden">
+                <FeedFaviconInReader feedIcon={article.feedIcon} feedName={article.feedName} articleLink={article.link} size={36} />
               </div>
               <div>
                 <p className="text-lg font-semibold text-foreground">
