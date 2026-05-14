@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
-import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers } from "lucide-react";
+import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useState, useRef, useEffect } from "react";
 
@@ -28,6 +28,9 @@ interface ArticleListProps {
   pageSize?: number;
   markReadOnScroll?: boolean;
   onMarkRead?: (articleId: string) => void;
+  enablePullToRefresh?: boolean;
+  isRefreshing?: boolean;
+  onPullToRefresh?: () => void;
 }
 
 export function ArticleList({
@@ -41,11 +44,19 @@ export function ArticleList({
   pageSize,
   markReadOnScroll = false,
   onMarkRead,
+  enablePullToRefresh = false,
+  isRefreshing = false,
+  onPullToRefresh,
 }: ArticleListProps) {
   const [visibleCount, setVisibleCount] = useState(pageSize ?? 30);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
+  const [pullTriggered, setPullTriggered] = useState(false);
+  const pullDistanceRef = useRef(0);
+  const isPullingRef = useRef(false);
 
   useEffect(() => {
     setVisibleCount(pageSize ?? 30);
@@ -58,8 +69,83 @@ export function ArticleList({
     setScrollRoot(nextRoot);
   }, [articles.length, viewMode]);
 
+  useEffect(() => {
+    if (!isRefreshing) setPullTriggered(false);
+  }, [isRefreshing]);
+
+  useEffect(() => {
+    if (!enablePullToRefresh || !scrollRoot) return;
+
+    let startY = 0;
+    let gestureActive = false;
+
+    const resetPull = () => {
+      gestureActive = false;
+      isPullingRef.current = false;
+      pullDistanceRef.current = 0;
+      setIsPulling(false);
+      setPullDistance(0);
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || isRefreshing || scrollRoot.scrollTop > 0) return;
+      startY = event.touches[0].clientY;
+      gestureActive = true;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!gestureActive || event.touches.length !== 1) return;
+      if (scrollRoot.scrollTop > 0) {
+        resetPull();
+        return;
+      }
+
+      const deltaY = event.touches[0].clientY - startY;
+      if (deltaY <= 0) {
+        if (pullDistanceRef.current > 0) {
+          pullDistanceRef.current = 0;
+          isPullingRef.current = false;
+          setPullDistance(0);
+          setIsPulling(false);
+        }
+        return;
+      }
+
+      const nextDistance = Math.min(96, deltaY * 0.45);
+      pullDistanceRef.current = nextDistance;
+      isPullingRef.current = true;
+      setIsPulling(true);
+      setPullDistance(nextDistance);
+      event.preventDefault();
+    };
+
+    const handleTouchEnd = () => {
+      if (!gestureActive && !isPullingRef.current) return;
+      const shouldRefresh = pullDistanceRef.current >= 72;
+      resetPull();
+      if (shouldRefresh && !isRefreshing) {
+        setPullTriggered(true);
+        onPullToRefresh?.();
+      }
+    };
+
+    scrollRoot.addEventListener("touchstart", handleTouchStart, { passive: true });
+    scrollRoot.addEventListener("touchmove", handleTouchMove, { passive: false });
+    scrollRoot.addEventListener("touchend", handleTouchEnd);
+    scrollRoot.addEventListener("touchcancel", handleTouchEnd);
+
+    return () => {
+      scrollRoot.removeEventListener("touchstart", handleTouchStart);
+      scrollRoot.removeEventListener("touchmove", handleTouchMove);
+      scrollRoot.removeEventListener("touchend", handleTouchEnd);
+      scrollRoot.removeEventListener("touchcancel", handleTouchEnd);
+    };
+  }, [enablePullToRefresh, isRefreshing, onPullToRefresh, scrollRoot]);
+
   const visibleArticles = articles.slice(0, visibleCount);
   const hasMore = visibleCount < articles.length;
+  const showPullIndicator = enablePullToRefresh && (pullDistance > 0 || pullTriggered);
+  const pullReady = pullDistance >= 72;
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -97,8 +183,26 @@ export function ArticleList({
 
   return (
     <ScrollArea className="flex-1 overflow-hidden min-h-0">
+      {showPullIndicator && (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
+          <div className="flex items-center gap-2 rounded-full border border-border/70 bg-background/95 px-4 py-2 text-xs font-medium text-muted-foreground shadow-lg backdrop-blur-xl">
+            <RefreshCw className={cn("h-3.5 w-3.5", (isRefreshing || pullTriggered) && "animate-spin", pullReady && !isRefreshing && "text-foreground")} />
+            <span>
+              {isRefreshing || pullTriggered
+                ? "Refreshing feeds…"
+                : pullReady
+                  ? "Release to refresh"
+                  : "Pull to refresh"}
+            </span>
+          </div>
+        </div>
+      )}
       <div
         ref={contentRef}
+        style={{
+          transform: pullDistance > 0 ? `translateY(${pullDistance}px)` : undefined,
+          transition: isPulling ? "none" : "transform 180ms ease",
+        }}
         className={cn(
           "p-3 pb-28 lg:pb-3 space-y-2.5",
           viewMode === "magazine" &&

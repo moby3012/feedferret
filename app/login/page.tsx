@@ -29,6 +29,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
+  const [showOtpField, setShowOtpField] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [providers, setProviders] = useState<{
@@ -60,6 +61,26 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
+      if (!showOtpField) {
+        const preflight = await fetch("/api/auth/credentials-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!preflight.ok) {
+          setError("Invalid email or password");
+          return;
+        }
+
+        const preflightData = await preflight.json();
+        if (preflightData.requiresTwoFactor) {
+          setShowOtpField(true);
+          setError("Enter your 2FA code to continue");
+          return;
+        }
+      }
+
       const result = await signIn("credentials", {
         email,
         password,
@@ -125,7 +146,12 @@ export default function LoginPage() {
                   placeholder="Email"
                   className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setShowOtpField(false);
+                    setOtp("");
+                    setError("");
+                  }}
                   required
                 />
               </div>
@@ -136,20 +162,26 @@ export default function LoginPage() {
                   placeholder="Password"
                   className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setShowOtpField(false);
+                    setOtp("");
+                    setError("");
+                  }}
                   required
                 />
               </div>
-              {email.trim() && password.trim() && (
+              {showOtpField && (
                 <div className="relative group/input">
                   <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-white" />
                   <Input
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    placeholder="Authenticator code (if enabled)"
+                    placeholder="Authenticator code"
                     className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    autoFocus
                   />
                 </div>
               )}

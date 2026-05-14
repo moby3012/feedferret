@@ -163,6 +163,8 @@ export function RssHeader({
   const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
   const markNotificationRead = useMarkNotificationRead();
   const markAllNotificationsRead = useMarkAllNotificationsRead();
+  const activeViewMode: ViewMode =
+    viewMode === "minimal" || viewMode === "magazine" ? viewMode : "list";
 
   return (
     <header className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-border/60 bg-card/75 backdrop-blur-2xl animate-fade-in relative z-20">
@@ -198,14 +200,14 @@ export function RssHeader({
           className="w-10 h-10 rounded-xl transition-all duration-200 active:scale-95"
           onClick={() => {
             const modes: ViewMode[] = ["list", "minimal", "magazine"];
-            const idx = modes.indexOf(viewMode);
+            const idx = modes.indexOf(activeViewMode);
             onViewModeChange(modes[(idx + 1) % modes.length]);
           }}
-          title={`View: ${viewMode} (click to cycle)`}
+          title={`View: ${activeViewMode} (click to cycle)`}
         >
-          {viewMode === "minimal" && <AlignJustify className="w-4 h-4" />}
-          {viewMode === "list" && <List className="w-4 h-4" />}
-          {viewMode === "magazine" && <LayoutGrid className="w-4 h-4" />}
+          {activeViewMode === "minimal" && <AlignJustify className="w-4 h-4" />}
+          {activeViewMode === "list" && <List className="w-4 h-4" />}
+          {activeViewMode === "magazine" && <LayoutGrid className="w-4 h-4" />}
         </Button>
       </div>
 
@@ -326,14 +328,14 @@ export function RssHeader({
           className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
           onClick={() => {
             const modes: ViewMode[] = ["list", "minimal", "magazine"];
-            const idx = modes.indexOf(viewMode);
+            const idx = modes.indexOf(activeViewMode);
             onViewModeChange(modes[(idx + 1) % modes.length]);
           }}
-          title={`View: ${viewMode} (click to cycle)`}
+          title={`View: ${activeViewMode} (click to cycle)`}
         >
-          {viewMode === "minimal" && <AlignJustify className="w-4 h-4" />}
-          {viewMode === "list" && <List className="w-4 h-4" />}
-          {viewMode === "magazine" && <LayoutGrid className="w-4 h-4" />}
+          {activeViewMode === "minimal" && <AlignJustify className="w-4 h-4" />}
+          {activeViewMode === "list" && <List className="w-4 h-4" />}
+          {activeViewMode === "magazine" && <LayoutGrid className="w-4 h-4" />}
         </Button>
 
         <div className="lg:hidden">

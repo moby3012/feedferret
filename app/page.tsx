@@ -52,6 +52,16 @@ function toUiArticle(a: any) {
   };
 }
 
+function normalizeViewMode(value?: string | null): ViewMode {
+  if (value === "minimal" || value === "magazine" || value === "list") {
+    return value;
+  }
+  if (value === "grid") {
+    return "magazine";
+  }
+  return "list";
+}
+
 export default function RSSReaderPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -115,7 +125,7 @@ export default function RSSReaderPage() {
   // Initialize viewMode from user prefs (once loaded)
   useEffect(() => {
     if (readingPrefs && !viewModeInitialized) {
-      setViewMode((readingPrefs.defaultViewMode as ViewMode) || "list");
+      setViewMode(normalizeViewMode(readingPrefs.defaultViewMode));
       setViewModeInitialized(true);
     }
     if (readingPrefs && !sortOrderInitialized) {
@@ -733,6 +743,9 @@ export default function RSSReaderPage() {
             const article = displayArticles.find((a: any) => a.id === articleId);
             if (article) markArticleRead(article);
           }}
+          enablePullToRefresh
+          isRefreshing={articlesLoading || refresh.isPending}
+          onPullToRefresh={handleRefresh}
         />
         <MobileBottomControls
           unreadOnly={unreadOnly}

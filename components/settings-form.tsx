@@ -69,6 +69,16 @@ const themeOptions = [
   { id: "system", label: "System", icon: Laptop },
 ];
 
+function normalizeDefaultViewMode(value?: string | null) {
+  if (value === "minimal" || value === "magazine" || value === "list") {
+    return value;
+  }
+  if (value === "grid") {
+    return "magazine";
+  }
+  return "list";
+}
+
 function PrefRow({
   icon: Icon,
   title,
@@ -291,7 +301,7 @@ export function SettingsForm() {
             description="Article list layout shown by default when opening the app."
           >
             <Select
-              value={prefs?.defaultViewMode ?? "list"}
+              value={normalizeDefaultViewMode(prefs?.defaultViewMode)}
               onValueChange={(v) => update({ defaultViewMode: v })}
             >
               <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
@@ -299,7 +309,6 @@ export function SettingsForm() {
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
                 <SelectItem value="list">List</SelectItem>
-                <SelectItem value="grid">Grid</SelectItem>
                 <SelectItem value="magazine">Magazine</SelectItem>
                 <SelectItem value="minimal">Minimal</SelectItem>
               </SelectContent>
