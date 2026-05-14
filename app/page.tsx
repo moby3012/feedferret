@@ -26,6 +26,9 @@ import {
   useUpdateGlobalSettings,
 } from "@/hooks/use-rss-data";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Search as SearchIcon, X as XIcon } from "lucide-react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -79,6 +82,7 @@ export default function RSSReaderPage() {
   const [unreadOnly, setUnreadOnly] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState<boolean | null>(null);
   const isAuthenticated = status === "authenticated";
 
@@ -166,12 +170,9 @@ export default function RSSReaderPage() {
     }
   }, [status]);
 
-  // Focus main search when sidebar search icon is clicked
+  // Open search modal when sidebar search icon is clicked
   useEffect(() => {
-    const handler = () => {
-      const input = document.querySelector('input[type="search"]') as HTMLInputElement;
-      input?.focus();
-    };
+    const handler = () => setSearchOpen(true);
     window.addEventListener('focus-search', handler);
     return () => window.removeEventListener('focus-search', handler);
   }, []);
@@ -453,16 +454,11 @@ export default function RSSReaderPage() {
       return;
     }
 
-    // "/" to open search
+    // "/" to open search modal
     if (e.key === "/") {
       e.preventDefault();
-      const searchInput = document.querySelector('input[type="search"]') as HTMLInputElement;
-      if (searchInput) {
-        searchInput.focus();
-      }
+      setSearchOpen(true);
     } else if (e.key === "Escape") {
-      // Close search on Escape
-      setSearchQuery("");
       setShortcutsOpen(false);
     } else if (e.key === "j") {
       const currentIndex = currentFilteredArticles.findIndex(
@@ -808,6 +804,39 @@ export default function RSSReaderPage() {
         />
       </div>
       )}
+
+      {/* Search modal */}
+      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <DialogContent className="sm:max-w-xl rounded-2xl border-border/60 bg-card/95 backdrop-blur-2xl shadow-2xl p-0 gap-0 overflow-hidden">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Search articles</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
+            <SearchIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+            <Input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search… author:, intitle:, is:unread, label:"
+              className="border-0 bg-transparent text-sm focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto py-0"
+              autoFocus
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              >
+                <XIcon className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <div className="px-4 py-3 text-xs text-muted-foreground">
+            {searchQuery.trim()
+              ? `${filteredArticles.filter((a: any) => !a.isRead).length} unread · ${filteredArticles.length} total matches`
+              : "Type to search across all articles in the current view"}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <KeyboardShortcutsDialog
         open={shortcutsOpen}
