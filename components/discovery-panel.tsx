@@ -353,7 +353,10 @@ function FeedCard({
           {feed.title}
         </p>
         {feed.description && (
-          <p className="text-xs text-muted-foreground line-clamp-2">
+          <p
+            className="text-xs text-muted-foreground"
+            style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+          >
             {feed.description}
           </p>
         )}
