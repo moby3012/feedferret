@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   useFeeds,
   useDeleteFeed,
@@ -78,6 +78,8 @@ import {
   Bell,
   History,
   Pencil,
+  ChevronRight,
+  Info,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
 import { toast } from "sonner";
@@ -129,6 +131,9 @@ function SortableCategoryItem({
     data: { type: "category" },
   });
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [syncValue, setSyncValue] = useState<string>(cat.updateFrequency ? String(cat.updateFrequency) : "");
+
   const style = {
     transform: CSS.Translate.toString(transform),
     transition,
@@ -137,10 +142,11 @@ function SortableCategoryItem({
   };
 
   return (
+    <>
     <div
       ref={setNodeRef}
       style={style}
-      className="group rounded-3xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border"
+      className="rounded-3xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div
@@ -186,29 +192,24 @@ function SortableCategoryItem({
             <div className="min-w-0 flex-1">
               <span className="block font-semibold tracking-[-0.01em]">{cat.name}</span>
               <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
-                Sync: {cat.updateFrequency || "Global Default"} min
+                Sync: {cat.updateFrequency ? `${cat.updateFrequency} min` : "Global Default"}
               </span>
             </div>
+            {/* Always-visible action buttons (#17) */}
             <div className="flex flex-wrap items-center justify-end gap-1">
-              <Input
-                type="number"
-                placeholder="min"
-                className="h-8 w-16 rounded-xl border-border/70 bg-background/70 text-xs"
-                defaultValue={cat.updateFrequency || ""}
-                onBlur={(e) => {
-                  const val = parseInt(e.target.value);
-                  if (val !== cat.updateFrequency) {
-                    updateCategory.mutate({
-                      categoryId: cat.id,
-                      data: { updateFrequency: isNaN(val) ? null : val },
-                    });
-                  }
-                }}
-              />
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-9 w-9 rounded-xl opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground"
+                title="Category settings"
+                onClick={() => { setSyncValue(cat.updateFrequency ? String(cat.updateFrequency) : ""); setSettingsOpen(true); }}
+              >
+                <Settings2 className="w-4 h-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9 rounded-xl"
                 onClick={() => {
                   setEditingCategoryId(cat.id);
                   setEditingCategoryName(cat.name);
@@ -219,7 +220,7 @@ function SortableCategoryItem({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-9 w-9 rounded-xl text-muted-foreground opacity-100 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
+                className="h-9 w-9 rounded-xl text-muted-foreground hover:text-destructive"
                 onClick={() =>
                   requestDelete({
                     type: "category",
@@ -235,6 +236,37 @@ function SortableCategoryItem({
         )}
       </div>
     </div>
+    {/* Category settings dialog (#17) */}
+    {settingsOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setSettingsOpen(false)}>
+        <div className="w-full max-w-sm rounded-3xl border border-border/70 bg-background p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-3">
+            <Folder className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold tracking-tight">Category Settings — {cat.name}</h3>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Sync interval (minutes)</label>
+            <p className="text-xs text-muted-foreground">Leave empty to use the global default.</p>
+            <Input
+              type="number"
+              placeholder="e.g. 60"
+              value={syncValue}
+              onChange={(e) => setSyncValue(e.target.value)}
+              className="h-10 rounded-2xl border-border/70 bg-background/70"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" className="rounded-2xl" onClick={() => setSettingsOpen(false)}>Cancel</Button>
+            <Button className="rounded-2xl" onClick={() => {
+              const val = parseInt(syncValue);
+              updateCategory.mutate({ categoryId: cat.id, data: { updateFrequency: isNaN(val) ? null : val } });
+              setSettingsOpen(false);
+            }}>Save</Button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -307,6 +339,31 @@ export function FeedManagement({
     name: string;
   }>(null);
 
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+
+  const feedsByCategory = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    const uncategorized: any[] = [];
+    (feeds as any[]).forEach((feed) => {
+      if (feed.categoryId) {
+        if (!groups[feed.categoryId]) groups[feed.categoryId] = [];
+        groups[feed.categoryId].push(feed);
+      } else {
+        uncategorized.push(feed);
+      }
+    });
+    return { groups, uncategorized };
+  }, [feeds]);
+
+  const toggleCategory = (id: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const [newRuleName, setNewRuleName] = useState("");
   const [newRuleQuery, setNewRuleQuery] = useState("");
   const [newRuleAction, setNewRuleAction] = useState("mark_read");
@@ -337,6 +394,13 @@ export function FeedManagement({
   useEffect(() => {
     if (open) setActiveTab(normalizeInitialTab(initialTab));
   }, [initialTab, open]);
+
+  // Initialize all categories as expanded when categories load
+  useEffect(() => {
+    if (categories.length > 0) {
+      setExpandedCategories(new Set([...categories.map((c: any) => c.id), "__uncategorized__"]));
+    }
+  }, [categories.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -468,93 +532,123 @@ export function FeedManagement({
               className="h-full mt-0 focus-visible:outline-none"
             >
               <ScrollArea className="h-full px-6 sm:px-8">
-                <div className="space-y-3 pb-8">
-                  {feeds.map((feed: any) => (
-                    <div
-                      key={feed.id}
-                      className="group flex flex-col gap-4 rounded-3xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border sm:flex-row sm:items-center"
-                    >
-                      <div className="flex min-w-0 items-start gap-3 sm:flex-1">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-background text-2xl shadow-sm">
-                          {feed.icon || "📰"}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-semibold tracking-[-0.01em] text-foreground">
-                            {feed.name}
-                          </div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {feed.url}
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
-                            <span>
-                              Last sync:{" "}
-                              {feed.lastFetchedAt
-                                ? new Date(feed.lastFetchedAt).toLocaleString()
-                                : "never"}
-                            </span>
-                            {feed.lastStatus === "error" && (
-                              <span
-                                className="text-destructive"
-                                title={feed.lastError || undefined}
+                <div className="space-y-4 pb-8">
+                  {/* Category groups */}
+                  {[
+                    ...categories.map((cat: any) => ({
+                      id: cat.id,
+                      name: cat.name,
+                      feeds: feedsByCategory.groups[cat.id] ?? [],
+                    })),
+                    ...(feedsByCategory.uncategorized.length > 0
+                      ? [{ id: "__uncategorized__", name: "Uncategorized", feeds: feedsByCategory.uncategorized }]
+                      : []),
+                  ].map(({ id: groupId, name: groupName, feeds: groupFeeds }) => {
+                    const expanded = expandedCategories.has(groupId);
+                    return (
+                      <div key={groupId}>
+                        <button
+                          type="button"
+                          onClick={() => toggleCategory(groupId)}
+                          className="flex w-full items-center gap-2 py-1.5 text-left text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <ChevronRight className={cn("w-4 h-4 transition-transform duration-200", expanded && "rotate-90")} />
+                          <Folder className="w-3.5 h-3.5 text-primary" />
+                          {groupName}
+                          <span className="text-xs font-normal text-muted-foreground/60">({groupFeeds.length})</span>
+                        </button>
+                        {expanded && (
+                          <div className="mt-1.5 space-y-2 pl-6 border-l-2 border-border/40">
+                            {groupFeeds.map((feed: any) => (
+                              <div
+                                key={feed.id}
+                                className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm transition-all hover:border-border sm:flex-row sm:items-center"
                               >
-                                Sync error
-                              </span>
+                                <div className="flex min-w-0 items-start gap-3 sm:flex-1">
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-background text-xl shadow-sm">
+                                    {feed.icon || "📰"}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate font-semibold tracking-[-0.01em] text-foreground text-sm">
+                                      {feed.name}
+                                    </div>
+                                    <div className="truncate text-xs text-muted-foreground">
+                                      {feed.url}
+                                    </div>
+                                    <div className="mt-0.5 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                                      <span>
+                                        Last sync:{" "}
+                                        {feed.lastFetchedAt
+                                          ? new Date(feed.lastFetchedAt).toLocaleString()
+                                          : "never"}
+                                      </span>
+                                      {feed.lastStatus === "error" && (
+                                        <span className="text-destructive" title={feed.lastError || undefined}>
+                                          Sync error
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="grid w-full gap-2 sm:flex sm:w-auto sm:items-center">
+                                  <Select
+                                    value={feed.categoryId || "none"}
+                                    onValueChange={(val: string) =>
+                                      updateFeed.mutate({
+                                        feedId: feed.id,
+                                        data: { categoryId: val === "none" ? null : val },
+                                      })
+                                    }
+                                  >
+                                    <SelectTrigger className="h-8 w-full rounded-xl border-border/70 bg-background/70 shadow-sm text-xs sm:w-32">
+                                      <SelectValue placeholder="Category" />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-2xl border-border/70 shadow-xl">
+                                      <SelectItem value="none">No Category</SelectItem>
+                                      {categories.map((cat: any) => (
+                                        <SelectItem key={cat.id} value={cat.id}>
+                                          {cat.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <div className="flex justify-end gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 shrink-0 rounded-xl px-2.5 text-muted-foreground transition-all hover:bg-accent"
+                                      title="Feed settings"
+                                      onClick={() => setEditingFeed(feed)}
+                                    >
+                                      <Settings2 className="w-4 h-4" />
+                                      <span className="ml-1.5 hidden lg:inline text-xs">Settings</span>
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 shrink-0 rounded-xl px-2.5 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive"
+                                      onClick={() =>
+                                        setPendingDelete({ type: "feed", id: feed.id, name: feed.name })
+                                      }
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                      <span className="ml-1.5 hidden lg:inline text-xs">Delete</span>
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            {groupFeeds.length === 0 && (
+                              <p className="py-2 text-xs text-muted-foreground italic">No feeds in this category.</p>
                             )}
                           </div>
-                        </div>
+                        )}
                       </div>
-                      <div className="grid w-full gap-2 sm:flex sm:w-auto sm:items-center">
-                        <Select
-                          value={feed.categoryId || "none"}
-                          onValueChange={(val: string) =>
-                            updateFeed.mutate({
-                              feedId: feed.id,
-                              data: { categoryId: val === "none" ? null : val },
-                            })
-                          }
-                        >
-                          <SelectTrigger className="h-9 w-full rounded-2xl border-border/70 bg-background/70 shadow-sm focus:ring-1 sm:w-36">
-                            <SelectValue placeholder="Category" />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-2xl border-border/70 shadow-xl">
-                            <SelectItem value="none">No Category</SelectItem>
-                            {categories.map((cat: any) => (
-                              <SelectItem key={cat.id} value={cat.id}>
-                                {cat.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-9 shrink-0 rounded-xl px-3 text-muted-foreground transition-all hover:bg-accent"
-                            title="Feed settings"
-                            onClick={() => setEditingFeed(feed)}
-                          >
-                            <Settings2 className="w-4 h-4" />
-                            <span className="ml-1.5 hidden lg:inline">Settings</span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-9 shrink-0 rounded-xl px-3 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() =>
-                              setPendingDelete({
-                                type: "feed",
-                                id: feed.id,
-                                name: feed.name,
-                              })
-                            }
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span className="ml-1.5 hidden lg:inline">Delete</span>
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                  {feeds.length === 0 && (
+                    <p className="py-10 text-center text-muted-foreground italic">No feeds yet.</p>
+                  )}
                 </div>
               </ScrollArea>
             </TabsContent>
@@ -1023,6 +1117,31 @@ export function FeedManagement({
                     </div>
                   </div>
 
+                  <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-blue-400">
+                      <Info className="w-4 h-4 shrink-0" />
+                      How rules work
+                    </div>
+                    <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+                      <p>Rules run after each sync and apply actions to all matching articles. Use the same query syntax as search.</p>
+                      <div className="space-y-1.5 font-mono">
+                        <div className="flex flex-col gap-0.5">
+                          <code className="text-foreground/80">feed:Hacker&#8203;News is:unread</code>
+                          <span className="font-sans">→ target unread articles from a specific feed</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <code className="text-foreground/80">intitle:AI OR intitle:LLM</code>
+                          <span className="font-sans">→ star all AI-related headlines (use OR to combine)</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <code className="text-foreground/80">category:News author:Reuters</code>
+                          <span className="font-sans">→ auto-read wire news from Reuters</span>
+                        </div>
+                      </div>
+                      <p><strong className="text-foreground/70">Wildcards:</strong> use <code className="bg-background/60 px-1 rounded">*</code> inside a term — <code className="bg-background/60 px-1 rounded">intitle:invest*</code> matches "investment", "investor", etc. Prefix with <code className="bg-background/60 px-1 rounded">-</code> to exclude — <code className="bg-background/60 px-1 rounded">-intitle:sponsored</code>.</p>
+                    </div>
+                  </div>
+
                   {showAddRule && (
                     <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
                       <h4 className="font-medium text-sm">New rule</h4>
@@ -1218,6 +1337,31 @@ export function FeedManagement({
                       <Plus className="w-3.5 h-3.5" />
                       Add alert
                     </Button>
+                  </div>
+
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-amber-400">
+                      <Info className="w-4 h-4 shrink-0" />
+                      How alerts work
+                    </div>
+                    <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+                      <p>Alerts fire whenever a newly synced article matches your query. You'll see a notification badge in the app. Scope can be limited to a specific feed or category.</p>
+                      <div className="space-y-1.5 font-mono">
+                        <div className="flex flex-col gap-0.5">
+                          <code className="text-foreground/80">intitle:security breach</code>
+                          <span className="font-sans">→ alert on any headline containing both words</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <code className="text-foreground/80">author:Jane OR author:John</code>
+                          <span className="font-sans">→ alert when specific authors publish</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <code className="text-foreground/80">intitle:recall* category:Tech</code>
+                          <span className="font-sans">→ wildcard + category scope together</span>
+                        </div>
+                      </div>
+                      <p><strong className="text-foreground/70">Wildcards:</strong> <code className="bg-background/60 px-1 rounded">*</code> matches any suffix — <code className="bg-background/60 px-1 rounded">crypto*</code> catches "crypto", "cryptocurrency", "cryptography". Combine terms with <code className="bg-background/60 px-1 rounded">OR</code>; prefix with <code className="bg-background/60 px-1 rounded">-</code> to exclude.</p>
+                    </div>
                   </div>
 
                   {showAddAlert && (

@@ -127,12 +127,13 @@ export function SettingsPageShell({
             )}
           </div>
         </div>
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-3">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-3 flex sm:justify-center">
           <ResponsiveTabsNav
             value={activeTab}
             onValueChange={onTabChange}
             options={tabs}
             triggerClassName="gap-2 px-4 lg:px-5"
+            className="sm:w-auto"
           />
         </div>
       </div>
