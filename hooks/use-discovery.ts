@@ -33,6 +33,7 @@ async function searchFeeds(query: string): Promise<{
   feeds: DiscoveryFeed[];
   source: string;
   error?: string;
+  hint?: string;
 }> {
   const res = await fetch(`/api/discovery/search?q=${encodeURIComponent(query)}`);
   if (res.status === 429) {
@@ -40,7 +41,8 @@ async function searchFeeds(query: string): Promise<{
     throw new Error(`Rate limit exceeded. Try again in ${data.retryAfter}s`);
   }
   if (!res.ok) {
-    throw new Error("Search failed");
+    const data = await res.json().catch(() => ({ error: "Search failed" }));
+    throw new Error(data.error || "Search failed");
   }
   return res.json();
 }

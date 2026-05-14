@@ -71,6 +71,7 @@ export function DiscoveryPanel({
   const categories = categoriesData?.categories || [];
   const catalogFeeds = catalogData?.feeds || [];
   const searchFeeds = searchData?.feeds || [];
+  const searchHint = searchData?.hint;
   const hasEmptyCatalog = categories.every((c) => c.feedCount === 0);
 
   return (
@@ -79,7 +80,7 @@ export function DiscoveryPanel({
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search for feeds (domain or topic)..."
+          placeholder="Enter a domain (e.g. bbc.com, techcrunch.com)..."
           value={searchQuery}
           onChange={(e) => handleSearchChange(e.target.value)}
           onFocus={handleSearchFocus}
@@ -95,6 +96,7 @@ export function DiscoveryPanel({
             feeds={searchFeeds}
             isLoading={loadingSearch}
             error={searchError}
+            hint={searchHint}
             onAddFeed={onAddFeed}
             isAddingFeed={isAddingFeed}
             addingUrl={addingUrl}
@@ -242,6 +244,7 @@ function SearchResults({
   feeds,
   isLoading,
   error,
+  hint,
   onAddFeed,
   isAddingFeed,
   addingUrl,
@@ -250,6 +253,7 @@ function SearchResults({
   feeds: DiscoveryFeed[];
   isLoading: boolean;
   error: Error | null;
+  hint?: string;
   onAddFeed: (url: string, title?: string) => void;
   isAddingFeed: boolean;
   addingUrl: string | null;
@@ -284,7 +288,7 @@ function SearchResults({
     return (
       <div className="py-8 text-center">
         <p className="text-sm text-muted-foreground">
-          No feeds found for &ldquo;{query}&rdquo;
+          {hint || `No feeds found for "${query}"`}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           Try a domain like &ldquo;techcrunch.com&rdquo; or &ldquo;bbc.com&rdquo;

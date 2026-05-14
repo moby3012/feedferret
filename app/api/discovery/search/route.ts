@@ -6,6 +6,7 @@ import {
   rateLimitHeaders,
   RATE_LIMITS,
 } from "@/lib/rate-limit";
+import { discoverFeedsAtUrl } from "@/lib/feed-discovery";
 
 export const runtime = "nodejs";
 
@@ -50,17 +51,45 @@ export async function GET(request: Request) {
     );
   }
 
+  // Normalize query to URL format for Feedsearch.dev API
+  // API requires a valid URL/domain - keywords won't work
+  let searchUrl = query.trim();
+  const looksLikeDomain = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/.test(searchUrl);
+  const isUrl = searchUrl.startsWith("http://") || searchUrl.startsWith("https://");
+
+  if (!isUrl && looksLikeDomain) {
+    searchUrl = `https://${searchUrl}`;
+  }
+
+  // If query is not a valid URL/domain, skip external API and use local discovery only
+  const canUseExternalApi = isUrl || looksLikeDomain;
+
   try {
-    // Feedsearch.dev API - searches for RSS feeds at a given URL or domain
-    const feedsearchUrl = `https://feedsearch.dev/api/v1/search?url=${encodeURIComponent(query)}`;
+    // Skip external API for keyword searches - only works with domains/URLs
+    if (!canUseExternalApi) {
+      console.log("[discovery/search] query is not a domain/URL, returning hint");
+      return NextResponse.json(
+        {
+          feeds: [],
+          source: "none",
+          hint: "Enter a domain like techcrunch.com or bbc.com to search for feeds",
+        },
+        { headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
+    const feedsearchUrl = `https://feedsearch.dev/api/v1/search?url=${encodeURIComponent(searchUrl)}`;
+    console.log("[discovery/search] querying:", feedsearchUrl);
 
     const response = await fetch(feedsearchUrl, {
       headers: {
         Accept: "application/json",
         "User-Agent": "FeedFerret/1.0 (RSS Reader; +https://github.com/feedferret)",
       },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
     });
+
+    console.log("[discovery/search] response status:", response.status);
 
     if (!response.ok) {
       // Feedsearch might return 404 for no results
@@ -70,10 +99,13 @@ export async function GET(request: Request) {
           { headers: rateLimitHeaders(rateCheck) }
         );
       }
+      const errorText = await response.text().catch(() => "");
+      console.error("[discovery/search] API error:", response.status, errorText);
       throw new Error(`Feedsearch returned ${response.status}`);
     }
 
     const data: FeedsearchResult[] = await response.json();
+    console.log("[discovery/search] found feeds:", data.length);
 
     // Transform to our format
     const feeds = (Array.isArray(data) ? data : []).map((item) => ({
@@ -94,9 +126,35 @@ export async function GET(request: Request) {
       { headers: rateLimitHeaders(rateCheck) }
     );
   } catch (error) {
-    console.error("[discovery/search] error:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[discovery/search] feedsearch.dev error:", message);
+
+    // Fallback: try local feed discovery if query looks like a URL
+    if (searchUrl.startsWith("http")) {
+      try {
+        console.log("[discovery/search] falling back to local discovery for:", searchUrl);
+        const localFeeds = await discoverFeedsAtUrl(searchUrl);
+        if (localFeeds.length > 0) {
+          const feeds = localFeeds.map((f) => ({
+            url: f.url,
+            title: f.title,
+            description: null,
+            siteUrl: searchUrl,
+            iconUrl: null,
+            type: f.type,
+          }));
+          return NextResponse.json(
+            { feeds, source: "local" },
+            { headers: rateLimitHeaders(rateCheck) }
+          );
+        }
+      } catch (localError) {
+        console.error("[discovery/search] local fallback also failed:", localError);
+      }
+    }
+
     return NextResponse.json(
-      { error: "Search failed", feeds: [] },
+      { error: `Search failed: ${message}`, feeds: [] },
       { status: 500, headers: rateLimitHeaders(rateCheck) }
     );
   }
