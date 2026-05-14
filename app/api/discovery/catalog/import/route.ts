@@ -14,8 +14,23 @@ const OPML_SOURCES = [
     defaultCategory: "dev",
   },
   {
+    name: "Web Development",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Web%20Development.opml",
+    defaultCategory: "dev",
+  },
+  {
     name: "Tech",
     url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Tech.opml",
+    defaultCategory: "tech",
+  },
+  {
+    name: "Android",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Android.opml",
+    defaultCategory: "tech",
+  },
+  {
+    name: "Apple",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Apple.opml",
     defaultCategory: "tech",
   },
   {
@@ -29,13 +44,28 @@ const OPML_SOURCES = [
     defaultCategory: "science",
   },
   {
-    name: "Finance",
-    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Finance.opml",
+    name: "Space",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Space.opml",
+    defaultCategory: "science",
+  },
+  {
+    name: "Business & Economy",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Business%20%26%20Economy.opml",
     defaultCategory: "business",
   },
   {
-    name: "Entertainment",
-    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Entertainment.opml",
+    name: "Startups",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Startups.opml",
+    defaultCategory: "business",
+  },
+  {
+    name: "Movies",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Movies.opml",
+    defaultCategory: "entertainment",
+  },
+  {
+    name: "Music",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Music.opml",
     defaultCategory: "entertainment",
   },
   {
@@ -44,20 +74,61 @@ const OPML_SOURCES = [
     defaultCategory: "gaming",
   },
   {
-    name: "Design",
-    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Design.opml",
+    name: "UI/UX Design",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/UI%20-%20UX.opml",
     defaultCategory: "design",
   },
   {
-    name: "Lifestyle",
-    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Lifestyle.opml",
+    name: "Food",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Food.opml",
     defaultCategory: "lifestyle",
+  },
+  {
+    name: "Travel",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Travel.opml",
+    defaultCategory: "lifestyle",
+  },
+  {
+    name: "Sports",
+    url: "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/recommended/with_category/Sports.opml",
+    defaultCategory: "sports",
   },
   // awesome-tech-rss
   {
     name: "Tech RSS",
     url: "https://raw.githubusercontent.com/tuan3w/awesome-tech-rss/main/feeds.opml",
     defaultCategory: "tech",
+  },
+  // ooh.directory - curated personal blogs
+  {
+    name: "ooh.directory Tech",
+    url: "https://ooh.directory/feeds/cats/b7q2w7/opml/technology.xml",
+    defaultCategory: "tech",
+  },
+  {
+    name: "ooh.directory Science",
+    url: "https://ooh.directory/feeds/cats/q7397w/opml/science.xml",
+    defaultCategory: "science",
+  },
+  {
+    name: "ooh.directory Arts",
+    url: "https://ooh.directory/feeds/cats/d6ky72/opml/arts.xml",
+    defaultCategory: "entertainment",
+  },
+  {
+    name: "ooh.directory Economics",
+    url: "https://ooh.directory/feeds/cats/97jd72/opml/economics.xml",
+    defaultCategory: "business",
+  },
+  {
+    name: "ooh.directory Recreation",
+    url: "https://ooh.directory/feeds/cats/d724v8/opml/recreation.xml",
+    defaultCategory: "lifestyle",
+  },
+  {
+    name: "ooh.directory Personal",
+    url: "https://ooh.directory/feeds/cats/n7yp7q/opml/personal.xml",
+    defaultCategory: "lifestyle",
   },
 ];
 
@@ -72,38 +143,34 @@ function extractFeedsFromOpml(xml: string, defaultCategory: string): ParsedFeed[
   const feeds: ParsedFeed[] = [];
 
   try {
-    const dom = new JSDOM(xml, { contentType: "text/xml" });
+    // Use HTML mode - more lenient with malformed XML (some OPMLs have unclosed tags)
+    const dom = new JSDOM(xml);
     const document = dom.window.document;
     const body = document.querySelector("body");
     if (!body) return feeds;
 
-    function processOutline(element: Element, parentCategory?: string) {
-      const xmlUrl = element.getAttribute("xmlUrl");
+    // Get all outlines and process them
+    const allOutlines = body.querySelectorAll("outline");
+
+    for (const element of allOutlines) {
+      // HTML mode lowercases attributes, check both variants
+      const xmlUrl = element.getAttribute("xmlurl") || element.getAttribute("xmlUrl");
+      if (!xmlUrl) continue; // Skip category outlines
+
       const title = element.getAttribute("title") || element.getAttribute("text") || "";
       const description = element.getAttribute("description") || undefined;
 
-      // If it has xmlUrl, it's a feed
-      if (xmlUrl) {
-        feeds.push({
-          url: xmlUrl,
-          title: title || xmlUrl,
-          description,
-          category: parentCategory || defaultCategory,
-        });
-      }
+      // Get category from parent outline
+      const parent = element.parentElement;
+      const parentTitle = parent?.getAttribute("title") || parent?.getAttribute("text") || "";
+      const category = parentTitle ? mapCategory(parentTitle) : defaultCategory;
 
-      // Process child outlines
-      const children = element.querySelectorAll(":scope > outline");
-      const categoryName = title;
-      for (const child of children) {
-        processOutline(child, categoryName ? mapCategory(categoryName) : parentCategory);
-      }
-    }
-
-    // Process top-level outlines
-    const topOutlines = body.querySelectorAll(":scope > outline");
-    for (const outline of topOutlines) {
-      processOutline(outline, defaultCategory);
+      feeds.push({
+        url: xmlUrl,
+        title: title || xmlUrl,
+        description,
+        category,
+      });
     }
   } catch (e) {
     console.error("Error extracting feeds from OPML:", e);
