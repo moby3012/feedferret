@@ -143,7 +143,9 @@ export function SettingsForm() {
         </header>
 
         <div className="grid gap-5">
-          {/* Appearance */}
+          {/* ── Appearance & Interface ── */}
+
+          {/* Theme */}
           <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-4">
@@ -180,181 +182,6 @@ export function SettingsForm() {
               </div>
             </div>
           </section>
-
-          {/* Add to Home Screen */}
-          <PrefRow
-            icon={Smartphone}
-            title="Add to Home Screen"
-            description="Show instructions for installing FeedFerret as a PWA on your phone or tablet."
-          >
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => window.dispatchEvent(new Event(SHOW_PWA_INSTALL_PROMPT_EVENT))}
-              className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
-            >
-              Show instructions
-            </Button>
-          </PrefRow>
-
-          {/* Browser notifications */}
-          <PushNotificationSection />
-
-          {/* Hide duplicates */}
-          <PrefRow
-            icon={Layers}
-            title="Hide duplicates"
-            description="When the same article appears in multiple feeds, show it only once (from the first feed that synced it)."
-          >
-            <Switch
-              checked={prefs?.hideDuplicates ?? true}
-              onCheckedChange={(checked) => update({ hideDuplicates: checked })}
-              className="h-7 w-12"
-            />
-          </PrefRow>
-
-          {/* Open original */}
-          <PrefRow
-            icon={ExternalLink}
-            title="Open original"
-            description="Open original article in new tab when selecting from list."
-          >
-            <Switch
-              checked={prefs?.openOriginalByDefault ?? false}
-              onCheckedChange={(checked) => update({ openOriginalByDefault: checked })}
-              className="h-7 w-12"
-            />
-          </PrefRow>
-
-          {/* Mark-as-read delay */}
-          <PrefRow
-            icon={Clock}
-            title="Mark as read"
-            description="How long after opening an article it gets marked as read. 'Off' disables auto-mark."
-          >
-            <Select
-              value={
-                prefs?.markReadAfterDelaySecs === 0
-                  ? "off"
-                  : prefs?.markReadAfterDelaySecs === null || prefs?.markReadAfterDelaySecs === undefined
-                  ? "instant"
-                  : String(prefs.markReadAfterDelaySecs)
-              }
-              onValueChange={(v) =>
-                update({
-                  markReadAfterDelaySecs: v === "off" ? 0 : v === "instant" ? null : parseInt(v),
-                })
-              }
-            >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                <SelectItem value="instant">Instant (1s)</SelectItem>
-                <SelectItem value="5">After 5s</SelectItem>
-                <SelectItem value="15">After 15s</SelectItem>
-                <SelectItem value="30">After 30s</SelectItem>
-                <SelectItem value="60">After 60s</SelectItem>
-                <SelectItem value="off">Off</SelectItem>
-              </SelectContent>
-            </Select>
-          </PrefRow>
-
-          {/* Mark as read on scroll */}
-          <PrefRow
-            icon={ScrollText}
-            title="Mark as read while scrolling"
-            description="Artikel werden automatisch als gelesen markiert, sobald sie beim Scrollen aus dem Sichtfeld verschwinden."
-          >
-            <Switch
-              checked={prefs?.markReadOnScroll ?? false}
-              onCheckedChange={(checked) => update({ markReadOnScroll: checked })}
-              className="h-7 w-12"
-            />
-          </PrefRow>
-
-          <PrefRow
-            icon={Keyboard}
-            title="Keyboard shortcuts"
-            description="Die Desktop-Tastenkürzel sind nicht mehr im Feed-Menü versteckt."
-          >
-            <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground sm:min-w-80">
-              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                <span className="font-mono text-foreground">j / k</span>
-                <span>Nächster / vorheriger Artikel</span>
-                <span className="font-mono text-foreground">n / p</span>
-                <span>Nächster / vorheriger ungelesener Artikel</span>
-                <span className="font-mono text-foreground">m / s</span>
-                <span>Gelesen / Favorit umschalten</span>
-                <span className="font-mono text-foreground">/</span>
-                <span>Suche fokussieren</span>
-                <span className="font-mono text-foreground">?</span>
-                <span>Shortcut-Hilfe öffnen</span>
-              </div>
-            </div>
-          </PrefRow>
-
-          {/* Default view mode */}
-          <PrefRow
-            icon={AlignLeft}
-            title="Default view"
-            description="Article list layout shown by default when opening the app."
-          >
-            <Select
-              value={normalizeDefaultViewMode(prefs?.defaultViewMode)}
-              onValueChange={(v) => update({ defaultViewMode: v })}
-            >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                <SelectItem value="list">List</SelectItem>
-                <SelectItem value="magazine">Magazine</SelectItem>
-                <SelectItem value="minimal">Minimal</SelectItem>
-              </SelectContent>
-            </Select>
-          </PrefRow>
-
-          {/* Reader width */}
-          <PrefRow
-            icon={AlignLeft}
-            title="Reader width"
-            description="Maximum width of article content in the reader pane."
-          >
-            <Select
-              value={prefs?.readerWidth ?? "normal"}
-              onValueChange={(v) => update({ readerWidth: v })}
-            >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                <SelectItem value="normal">Normal (768px)</SelectItem>
-                <SelectItem value="wide">Wide (1024px)</SelectItem>
-                <SelectItem value="full">Full width</SelectItem>
-              </SelectContent>
-            </Select>
-          </PrefRow>
-
-          {/* Default sort order */}
-          <PrefRow
-            icon={ArrowDownAZ}
-            title="Default sort"
-            description="Default article sort order in all feeds and categories."
-          >
-            <Select
-              value={prefs?.defaultArticleSort ?? "newest"}
-              onValueChange={(v) => update({ defaultArticleSort: v })}
-            >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                <SelectItem value="newest">Newest first</SelectItem>
-                <SelectItem value="oldest">Oldest first</SelectItem>
-              </SelectContent>
-            </Select>
-          </PrefRow>
 
           {/* Accent colors */}
           <PrefRow
@@ -418,20 +245,144 @@ export function SettingsForm() {
             </div>
           </PrefRow>
 
-          {/* API Access */}
-          <ApiTokenSection />
+          {/* Default view mode */}
+          <PrefRow
+            icon={AlignLeft}
+            title="Default view"
+            description="Article list layout shown by default when opening the app."
+          >
+            <Select
+              value={normalizeDefaultViewMode(prefs?.defaultViewMode)}
+              onValueChange={(v) => update({ defaultViewMode: v })}
+            >
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="list">List</SelectItem>
+                <SelectItem value="magazine">Magazine</SelectItem>
+                <SelectItem value="minimal">Minimal</SelectItem>
+              </SelectContent>
+            </Select>
+          </PrefRow>
 
-          {/* Two-factor authentication */}
-          <TwoFactorSection />
+          {/* Reader width */}
+          <PrefRow
+            icon={AlignLeft}
+            title="Reader width"
+            description="Maximum width of article content in the reader pane."
+          >
+            <Select
+              value={prefs?.readerWidth ?? "normal"}
+              onValueChange={(v) => update({ readerWidth: v })}
+            >
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="normal">Normal (768px)</SelectItem>
+                <SelectItem value="wide">Wide (1024px)</SelectItem>
+                <SelectItem value="full">Full width</SelectItem>
+              </SelectContent>
+            </Select>
+          </PrefRow>
 
-          {/* Digest Email */}
-          <DigestSection />
+          {/* ── Reading Behaviour ── */}
 
-          {/* AI Summaries */}
-          <AiSummarySection />
+          {/* Default sort order */}
+          <PrefRow
+            icon={ArrowDownAZ}
+            title="Default sort"
+            description="Default article sort order in all feeds and categories."
+          >
+            <Select
+              value={prefs?.defaultArticleSort ?? "newest"}
+              onValueChange={(v) => update({ defaultArticleSort: v })}
+            >
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="newest">Newest first</SelectItem>
+                <SelectItem value="oldest">Oldest first</SelectItem>
+              </SelectContent>
+            </Select>
+          </PrefRow>
 
-          {/* Outbound Webhooks */}
-          <WebhookSection />
+          {/* Mark-as-read delay */}
+          <PrefRow
+            icon={Clock}
+            title="Mark as read"
+            description="How long after opening an article it gets marked as read. 'Off' disables auto-mark."
+          >
+            <Select
+              value={
+                prefs?.markReadAfterDelaySecs === 0
+                  ? "off"
+                  : prefs?.markReadAfterDelaySecs === null || prefs?.markReadAfterDelaySecs === undefined
+                  ? "instant"
+                  : String(prefs.markReadAfterDelaySecs)
+              }
+              onValueChange={(v) =>
+                update({
+                  markReadAfterDelaySecs: v === "off" ? 0 : v === "instant" ? null : parseInt(v),
+                })
+              }
+            >
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="instant">Instant (1s)</SelectItem>
+                <SelectItem value="5">After 5s</SelectItem>
+                <SelectItem value="15">After 15s</SelectItem>
+                <SelectItem value="30">After 30s</SelectItem>
+                <SelectItem value="60">After 60s</SelectItem>
+                <SelectItem value="off">Off</SelectItem>
+              </SelectContent>
+            </Select>
+          </PrefRow>
+
+          {/* Mark as read on scroll */}
+          <PrefRow
+            icon={ScrollText}
+            title="Mark as read while scrolling"
+            description="Articles are automatically marked as read once they scroll out of view."
+          >
+            <Switch
+              checked={prefs?.markReadOnScroll ?? false}
+              onCheckedChange={(checked) => update({ markReadOnScroll: checked })}
+              className="h-7 w-12"
+            />
+          </PrefRow>
+
+          {/* Open original */}
+          <PrefRow
+            icon={ExternalLink}
+            title="Open original"
+            description="Open original article in new tab when selecting from list."
+          >
+            <Switch
+              checked={prefs?.openOriginalByDefault ?? false}
+              onCheckedChange={(checked) => update({ openOriginalByDefault: checked })}
+              className="h-7 w-12"
+            />
+          </PrefRow>
+
+          {/* Hide duplicates */}
+          <PrefRow
+            icon={Layers}
+            title="Hide duplicates"
+            description="When the same article appears in multiple feeds, show it only once (from the first feed that synced it)."
+          >
+            <Switch
+              checked={prefs?.hideDuplicates ?? true}
+              onCheckedChange={(checked) => update({ hideDuplicates: checked })}
+              className="h-7 w-12"
+            />
+          </PrefRow>
+
+          {/* ── Account & Security ── */}
 
           {/* User Profile */}
           <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
@@ -460,6 +411,67 @@ export function SettingsForm() {
               </Button>
             </div>
           </section>
+
+          {/* Two-factor authentication */}
+          <TwoFactorSection />
+
+          {/* API Access */}
+          <ApiTokenSection />
+
+          {/* ── Integrations & Notifications ── */}
+
+          {/* Browser notifications – hidden when server not configured (#13) */}
+          <PushNotificationSection />
+
+          {/* Digest Email – hidden when mail not configured (#13, handled inside) */}
+          <DigestSection />
+
+          {/* AI Summaries */}
+          <AiSummarySection />
+
+          {/* Outbound Webhooks */}
+          <WebhookSection />
+
+          {/* ── Device & Misc ── */}
+
+          {/* Add to Home Screen */}
+          <PrefRow
+            icon={Smartphone}
+            title="Add to Home Screen"
+            description="Show instructions for installing FeedFerret as a PWA on your phone or tablet."
+          >
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.dispatchEvent(new Event(SHOW_PWA_INSTALL_PROMPT_EVENT))}
+              className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
+            >
+              Show instructions
+            </Button>
+          </PrefRow>
+
+          <PrefRow
+            icon={Keyboard}
+            title="Keyboard shortcuts"
+            description="Desktop keyboard shortcuts for fast navigation without a mouse."
+          >
+            <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground sm:min-w-80">
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                <span className="font-mono text-foreground">j / k</span>
+                <span>Next / previous article</span>
+                <span className="font-mono text-foreground">n / p</span>
+                <span>Next / previous unread article</span>
+                <span className="font-mono text-foreground">m / s</span>
+                <span>Toggle read / star</span>
+                <span className="font-mono text-foreground">/</span>
+                <span>Open search</span>
+                <span className="font-mono text-foreground">?</span>
+                <span>Open shortcut help</span>
+              </div>
+            </div>
+          </PrefRow>
+
+          {/* ── Danger Zone ── */}
 
           {/* GDPR Account Deletion */}
           <DeleteAccountSection />
@@ -613,6 +625,9 @@ function PushNotificationSection() {
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported";
   const enabled = Boolean(status?.settings.pushEnabled && status.activeSubscriptions > 0);
   const feedIds = new Set(status?.settings.pushFeedIds ?? []);
+
+  // Hide when push server not configured and we've finished loading (#13)
+  if (!loading && status && !status.configured) return null;
 
   return (
     <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
