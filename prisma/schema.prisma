@@ -394,3 +394,19 @@ model WebhookDelivery {
   @@index([webhookId, createdAt])
   @@index([status, nextRetryAt])
 }
+
+model DiscoveryCatalogFeed {
+  id          String   @id @default(cuid())
+  url         String   @unique
+  title       String
+  description String?
+  category    String   // "tech", "news", "gaming", "science", "business", "entertainment", "sports", "lifestyle", "dev", "design"
+  language    String   @default("en") // "en", "de", "multi"
+  iconUrl     String?
+  popularity  Int      @default(0)
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([category, enabled, popularity])
+  @@index([language, enabled])
+}

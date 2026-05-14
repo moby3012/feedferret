@@ -41,6 +41,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DiscoveryPanel } from "@/components/discovery-panel";
 import {
   Tooltip,
   TooltipContent,
@@ -128,6 +130,8 @@ export function RssSidebar({
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [importingPack, setImportingPack] = useState<string | null>(null);
   const [starterPacks, setStarterPacks] = useState<StarterPack[]>(DEFAULT_STARTER_PACKS);
+  const [addingFeedUrl, setAddingFeedUrl] = useState<string | null>(null);
+  const [addFeedTab, setAddFeedTab] = useState<"url" | "discover">("url");
   const [branding, setBranding] = useState<{ instanceName: string; instanceIconDataUrl: string | null }>({
     instanceName: "FeedFerret",
     instanceIconDataUrl: null,
@@ -196,8 +200,9 @@ export function RssSidebar({
     }
   };
 
-  const handleAddFeed = async (url: string) => {
+  const handleAddFeed = async (url: string, title?: string) => {
     setIsAddingFeed(true);
+    setAddingFeedUrl(url);
     try {
       const result = await addNewFeed.mutateAsync({
         url,
@@ -207,7 +212,7 @@ export function RssSidebar({
         toast.error(result?.error || "Could not add feed");
         return;
       }
-      toast.success(`Added ${result.feed?.name || "feed"}`);
+      toast.success(`Added ${result.feed?.name || title || "feed"}`);
       setNewFeedUrl("");
       setDiscoveredFeeds([]);
       setDiscoveryMessage(null);
@@ -216,6 +221,7 @@ export function RssSidebar({
       toast.error(err instanceof Error ? err.message : "Could not add feed");
     } finally {
       setIsAddingFeed(false);
+      setAddingFeedUrl(null);
     }
   };
 
@@ -754,131 +760,166 @@ export function RssSidebar({
         if (!open) {
           setDiscoveredFeeds([]);
           setDiscoveryMessage(null);
+          setAddFeedTab("url");
         }
       }}>
         <DialogContent className="max-w-md w-full rounded-2xl">
           <DialogHeader>
             <DialogTitle>Add Feed</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            {/* URL input + actions */}
-            <div className="flex gap-1.5">
-              <Input
-                placeholder="Feed or site URL..."
-                value={newFeedUrl}
-                onChange={(e) => {
-                  setNewFeedUrl(e.target.value);
-                  setDiscoveredFeeds([]);
-                  setDiscoveryMessage(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newFeedUrl) handleDiscover();
-                }}
-                className="h-9 text-sm flex-1"
+          <Tabs value={addFeedTab} onValueChange={(v) => setAddFeedTab(v as "url" | "discover")} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 h-9 rounded-xl">
+              <TabsTrigger value="url" className="text-xs rounded-lg">By URL</TabsTrigger>
+              <TabsTrigger value="discover" className="text-xs rounded-lg">Discover</TabsTrigger>
+            </TabsList>
+
+            {/* URL Tab */}
+            <TabsContent value="url" className="mt-3 space-y-3">
+              <div className="flex gap-1.5">
+                <Input
+                  placeholder="Feed or site URL..."
+                  value={newFeedUrl}
+                  onChange={(e) => {
+                    setNewFeedUrl(e.target.value);
+                    setDiscoveredFeeds([]);
+                    setDiscoveryMessage(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newFeedUrl) handleDiscover();
+                  }}
+                  className="h-9 text-sm flex-1"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 px-2 shrink-0"
+                  disabled={!newFeedUrl || isDiscovering}
+                  onClick={handleDiscover}
+                  title="Find feeds at this URL"
+                >
+                  <Compass className={`w-4 h-4 ${isDiscovering ? "animate-spin" : ""}`} />
+                </Button>
+              </div>
+
+              {discoveredFeeds.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground font-medium px-0.5">Found feeds</p>
+                  {discoveredFeeds.map((f) => (
+                    <div key={f.url} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
+                      <Rss className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-xs truncate flex-1 text-foreground" title={f.url}>{f.title}</span>
+                      <Button
+                        size="sm"
+                        className="h-6 px-2 text-xs shrink-0"
+                        onClick={() => handleAddFeed(f.url, f.title)}
+                        disabled={isAddingFeed}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {discoveryMessage && discoveredFeeds.length === 0 && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                  {discoveryMessage}
+                </div>
+              )}
+
+              <Select
+                value={newFeedCategoryId}
+                onValueChange={setNewFeedCategoryId}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Category</SelectItem>
+                  {allCategories.map((cat: any) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1"
+                  disabled={!newFeedUrl || isAddingFeed}
+                  onClick={() => handleAddFeed(newFeedUrl)}
+                >
+                  Add direct URL
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="flex-1"
+                  onClick={() => {
+                    setIsAddFeedOpen(false);
+                    setDiscoveredFeeds([]);
+                    setDiscoveryMessage(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+
+              {/* Starter packs */}
+              <div className="pt-1 border-t border-border/40">
+                <p className="text-xs text-muted-foreground font-medium mb-1.5">Starter packs</p>
+                <div className="space-y-1">
+                  {starterPacks.map((pack) => (
+                    <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
+                      <span className="text-xs flex-1 text-foreground">
+                        {pack.name}
+                        <span className="text-muted-foreground ml-1">({pack.feeds.length || "OPML"})</span>
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs shrink-0"
+                        disabled={importingPack === pack.id || (pack.feeds.length === 0 && !pack.path)}
+                        onClick={() => handleImportStarterPack(pack)}
+                      >
+                        <Download className={cn("w-3 h-3 mr-1", importingPack === pack.id && "animate-bounce")} />
+                        {importingPack === pack.id ? "Importing" : "Import"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Discover Tab */}
+            <TabsContent value="discover" className="mt-3">
+              <div className="mb-3">
+                <Select
+                  value={newFeedCategoryId}
+                  onValueChange={setNewFeedCategoryId}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Add to category..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Category</SelectItem>
+                    {allCategories.map((cat: any) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <DiscoveryPanel
+                onAddFeed={handleAddFeed}
+                isAddingFeed={isAddingFeed}
+                addingUrl={addingFeedUrl}
               />
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-9 px-2 shrink-0"
-                disabled={!newFeedUrl || isDiscovering}
-                onClick={handleDiscover}
-                title="Find feeds at this URL"
-              >
-                <Compass className={`w-4 h-4 ${isDiscovering ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
-
-            {/* Discovered feeds */}
-            {discoveredFeeds.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground font-medium px-0.5">Found feeds</p>
-                {discoveredFeeds.map((f) => (
-                  <div key={f.url} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
-                    <Rss className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs truncate flex-1 text-foreground" title={f.url}>{f.title}</span>
-                    <Button
-                      size="sm"
-                      className="h-6 px-2 text-xs shrink-0"
-                      onClick={() => handleAddFeed(f.url)}
-                      disabled={isAddingFeed}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {discoveryMessage && discoveredFeeds.length === 0 && (
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                {discoveryMessage}
-              </div>
-            )}
-
-            <Select
-              value={newFeedCategoryId}
-              onValueChange={setNewFeedCategoryId}
-            >
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No Category</SelectItem>
-                {allCategories.map((cat: any) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                className="flex-1"
-                disabled={!newFeedUrl || isAddingFeed}
-                onClick={() => handleAddFeed(newFeedUrl)}
-              >
-                Add direct URL
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="flex-1"
-                onClick={() => {
-                  setIsAddFeedOpen(false);
-                  setDiscoveredFeeds([]);
-                  setDiscoveryMessage(null);
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-
-            {/* Starter packs */}
-            <div className="pt-1 border-t border-border/40">
-              <p className="text-xs text-muted-foreground font-medium mb-1.5">Starter packs</p>
-              <div className="space-y-1">
-                {starterPacks.map((pack) => (
-                  <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
-                    <span className="text-xs flex-1 text-foreground">
-                      {pack.name}
-                      <span className="text-muted-foreground ml-1">({pack.feeds.length || "OPML"})</span>
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 px-2 text-xs shrink-0"
-                      disabled={importingPack === pack.id || (pack.feeds.length === 0 && !pack.path)}
-                      onClick={() => handleImportStarterPack(pack)}
-                    >
-                      <Download className={cn("w-3 h-3 mr-1", importingPack === pack.id && "animate-bounce")} />
-                      {importingPack === pack.id ? "Importing" : "Import"}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
