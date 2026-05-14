@@ -7,6 +7,7 @@ import {
   RATE_LIMITS,
 } from "@/lib/rate-limit";
 import { discoverFeedsAtUrl } from "@/lib/feed-discovery";
+import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -65,21 +66,50 @@ export async function GET(request: Request) {
   const canUseExternalApi = isUrl || looksLikeDomain;
 
   try {
-    // Skip external API for keyword searches - only works with domains/URLs
+    // For keywords (not URLs/domains): search local catalog
     if (!canUseExternalApi) {
-      console.log("[discovery/search] query is not a domain/URL, returning hint");
-      return NextResponse.json(
-        {
-          feeds: [],
-          source: "none",
-          hint: "Enter a domain like techcrunch.com or bbc.com to search for feeds",
+      console.log("[discovery/search] keyword search in local catalog:", query);
+
+      const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length >= 2);
+      if (keywords.length === 0) {
+        return NextResponse.json(
+          { feeds: [], source: "catalog" },
+          { headers: rateLimitHeaders(rateCheck) }
+        );
+      }
+
+      // Search catalog by title, description, category
+      const catalogResults = await db.discoveryCatalogFeed.findMany({
+        where: {
+          enabled: true,
+          OR: keywords.flatMap(keyword => [
+            { title: { contains: keyword } },
+            { description: { contains: keyword } },
+            { category: { contains: keyword } },
+          ]),
         },
+        orderBy: { popularity: "desc" },
+        take: 20,
+      });
+
+      const feeds = catalogResults.map((item) => ({
+        url: item.url,
+        title: item.title,
+        description: item.description,
+        siteUrl: null,
+        iconUrl: item.iconUrl,
+        type: "rss" as const,
+      }));
+
+      return NextResponse.json(
+        { feeds, source: "catalog" },
         { headers: rateLimitHeaders(rateCheck) }
       );
     }
 
+    // For URLs/domains: use Feedsearch.dev API
     const feedsearchUrl = `https://feedsearch.dev/api/v1/search?url=${encodeURIComponent(searchUrl)}`;
-    console.log("[discovery/search] querying:", feedsearchUrl);
+    console.log("[discovery/search] querying feedsearch.dev:", feedsearchUrl);
 
     const response = await fetch(feedsearchUrl, {
       headers: {

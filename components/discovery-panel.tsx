@@ -80,7 +80,7 @@ export function DiscoveryPanel({
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Enter a domain (e.g. bbc.com, techcrunch.com)..."
+          placeholder="Search by topic or domain..."
           value={searchQuery}
           onChange={(e) => handleSearchChange(e.target.value)}
           onFocus={handleSearchFocus}
@@ -291,7 +291,7 @@ function SearchResults({
           {hint || `No feeds found for "${query}"`}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Try a domain like &ldquo;techcrunch.com&rdquo; or &ldquo;bbc.com&rdquo;
+          Try topics like &ldquo;tech&rdquo;, &ldquo;news&rdquo; or domains like &ldquo;bbc.com&rdquo;
         </p>
       </div>
     );

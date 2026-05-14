@@ -36,6 +36,7 @@ import {
   ArrowUp,
   ArrowDown,
   Copy,
+  Compass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -311,6 +312,7 @@ export function ServerManagementDialog({
     { value: "instance", label: "Instance", icon: <Globe className="w-4 h-4" /> },
     { value: "starter-packs", label: "Starter Packs", icon: <PackagePlus className="w-4 h-4" /> },
     { value: "sync", label: "Sync", icon: <Settings2 className="w-4 h-4" /> },
+    { value: "discovery", label: "Discovery", icon: <Compass className="w-4 h-4" /> },
   ];
 
   const shellProps = {
@@ -895,6 +897,11 @@ export function ServerManagementDialog({
                     </div>
                   </ScrollArea>
                 </TabsContent>
+
+                {/* ── DISCOVERY CATALOG ── */}
+                <TabsContent value="discovery" className="h-full mt-0 focus-visible:outline-none">
+                  <DiscoveryCatalogTab />
+                </TabsContent>
               </>
             )}
           </div>
@@ -963,5 +970,199 @@ function SettingsField({
         <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ Value stored securely. Leave blank to keep existing.</p>
       )}
     </div>
+  );
+}
+
+function DiscoveryCatalogTab() {
+  const [stats, setStats] = useState<{
+    totalFeeds: number;
+    byCategory: { category: string; count: number }[];
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    totalFetched: number;
+    totalAdded: number;
+    totalSkipped: number;
+    totalInCatalog: number;
+    sources: { name: string; fetched: number; added: number; error?: string }[];
+  } | null>(null);
+
+  const loadStats = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/discovery/catalog/import");
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const handleImport = async () => {
+    setIsImporting(true);
+    setImportResult(null);
+    try {
+      const res = await fetch("/api/discovery/catalog/import", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setImportResult(data);
+        toast.success(`Imported ${data.totalAdded} new feeds`);
+        loadStats();
+      } else {
+        toast.error(data.error || "Import failed");
+      }
+    } catch (error) {
+      toast.error("Import failed");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleClear = async () => {
+    if (!confirm("Clear all feeds from discovery catalog?")) return;
+    try {
+      const res = await fetch("/api/discovery/catalog", { method: "DELETE" });
+      if (res.ok) {
+        toast.success("Catalog cleared");
+        loadStats();
+        setImportResult(null);
+      }
+    } catch {
+      toast.error("Failed to clear catalog");
+    }
+  };
+
+  return (
+    <ScrollArea className="h-full">
+      <div className="px-6 sm:px-8 py-6 space-y-6">
+        <div>
+          <h3 className="text-lg font-semibold mb-1">Feed Discovery Catalog</h3>
+          <p className="text-sm text-muted-foreground">
+            Import feeds from public directories to enable topic-based feed discovery for users.
+          </p>
+        </div>
+
+        {/* Stats */}
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">Loading stats...</span>
+          </div>
+        ) : stats ? (
+          <div className="p-4 rounded-2xl bg-muted/50 border border-border/50">
+            <div className="flex items-center justify-between mb-3">
+              <span className="font-medium">Catalog Status</span>
+              <span className="text-2xl font-bold">{stats.totalFeeds} feeds</span>
+            </div>
+            {stats.byCategory.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {stats.byCategory.map((cat) => (
+                  <span
+                    key={cat.category}
+                    className="px-2 py-1 text-xs rounded-lg bg-background border border-border/50"
+                  >
+                    {cat.category}: {cat.count}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {/* Import Button */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Button
+            onClick={handleImport}
+            disabled={isImporting}
+            className="rounded-2xl"
+          >
+            {isImporting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Importing...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4 mr-2" />
+                Import from Public Directories
+              </>
+            )}
+          </Button>
+          {stats && stats.totalFeeds > 0 && (
+            <Button
+              variant="outline"
+              onClick={handleClear}
+              className="rounded-2xl"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Clear Catalog
+            </Button>
+          )}
+        </div>
+
+        {/* Import Result */}
+        {importResult && (
+          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-3">
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+              <ShieldCheck className="w-5 h-5" />
+              <span className="font-medium">Import Complete</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div>
+                <span className="text-muted-foreground">Fetched</span>
+                <p className="font-medium">{importResult.totalFetched}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Added</span>
+                <p className="font-medium text-emerald-600">{importResult.totalAdded}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Skipped</span>
+                <p className="font-medium">{importResult.totalSkipped}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Total</span>
+                <p className="font-medium">{importResult.totalInCatalog}</p>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-emerald-500/20">
+              <p className="text-xs text-muted-foreground mb-2">Sources:</p>
+              <div className="space-y-1">
+                {importResult.sources.map((src) => (
+                  <div key={src.name} className="flex items-center justify-between text-xs">
+                    <span>{src.name}</span>
+                    {src.error ? (
+                      <span className="text-destructive">{src.error}</span>
+                    ) : (
+                      <span className="text-muted-foreground">+{src.added} feeds</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Info */}
+        <div className="p-4 rounded-2xl bg-muted/30 border border-border/50 text-sm text-muted-foreground">
+          <p className="mb-2">
+            <strong>Sources:</strong> awesome-rss-feeds, awesome-tech-rss (GitHub)
+          </p>
+          <p>
+            Feeds are imported once and stored locally. Users can then search the catalog by topic or keyword.
+            Re-importing will update existing feeds and add new ones.
+          </p>
+        </div>
+      </div>
+    </ScrollArea>
   );
 }

@@ -83,3 +83,24 @@ export async function GET(request: Request) {
     { headers: rateLimitHeaders(rateCheck) }
   );
 }
+
+// DELETE /api/discovery/catalog - Admin only: clear the catalog
+export async function DELETE(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true },
+  });
+
+  if (user?.role !== "ADMIN") {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
+  await db.discoveryCatalogFeed.deleteMany({});
+
+  return NextResponse.json({ success: true });
+}
