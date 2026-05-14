@@ -460,15 +460,8 @@ export function FeedManagement({
 
   const shellProps = { title: "Manage Feeds", description: "Organize your feeds, categories, and data.", activeTab, onTabChange: setActiveTab, tabs: shellTabs };
 
-  const Wrapper = ({ children }: { children: React.ReactNode }) =>
-    pageMode ? (
-      <SettingsPageShell {...shellProps} backHref="/">{children}</SettingsPageShell>
-    ) : (
-      <SettingsModalShell {...shellProps} open={open} onOpenChange={onOpenChange}>{children}</SettingsModalShell>
-    );
-
-  return (
-    <Wrapper>
+  const body = (
+    <>
           <div className="flex-1 min-h-0">
             <TabsContent
               value="feeds"
@@ -1661,6 +1654,11 @@ export function FeedManagement({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-    </Wrapper>
+    </>
+  );
+  return pageMode ? (
+    <SettingsPageShell {...shellProps} backHref="/">{body}</SettingsPageShell>
+  ) : (
+    <SettingsModalShell {...shellProps} open={open} onOpenChange={onOpenChange}>{body}</SettingsModalShell>
   );
 }

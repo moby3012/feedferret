@@ -323,15 +323,8 @@ export function ServerManagementDialog({
     tabs: shellTabs,
   };
 
-  const Wrapper = ({ children }: { children: React.ReactNode }) =>
-    pageMode ? (
-      <SettingsPageShell {...shellProps} backHref="/">{children}</SettingsPageShell>
-    ) : (
-      <SettingsModalShell {...shellProps} open={open} onOpenChange={onOpenChange}>{children}</SettingsModalShell>
-    );
-
-  return (
-    <Wrapper>
+  const body = (
+    <>
           <div className="flex-1 min-h-0">
             {isLoading ? (
               <div className="h-full flex items-center justify-center bg-background">
@@ -932,7 +925,12 @@ export function ServerManagementDialog({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-    </Wrapper>
+    </>
+  );
+  return pageMode ? (
+    <SettingsPageShell {...shellProps} backHref="/">{body}</SettingsPageShell>
+  ) : (
+    <SettingsModalShell {...shellProps} open={open} onOpenChange={onOpenChange}>{body}</SettingsModalShell>
   );
 }
 
