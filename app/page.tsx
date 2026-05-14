@@ -790,7 +790,7 @@ export default function RSSReaderPage() {
 
       {/* Mobile Article Reader Panel */}
       {isMobileLayout && selectedArticle && (
-      <div className="fixed inset-0 z-50 flex bg-background transition-all duration-300 ease-out">
+      <div className="fixed inset-0 z-50 flex bg-background animate-slide-in-right">
         <ArticleReader
           article={selectedArticle}
           onToggleStar={handleToggleStar}

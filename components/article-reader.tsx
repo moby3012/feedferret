@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type TouchEvent } from "react";
 import Image from "next/image";
 import { Article } from "@/lib/rss-data";
 import { useAiSettings, useSummarizeArticle } from "@/hooks/use-rss-data";
@@ -77,6 +77,23 @@ export function ArticleReader({
   readerWidth = "normal",
 }: ArticleReaderProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    const t = e.touches[0];
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
+    if (!touchStartRef.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartRef.current.x;
+    const dy = t.clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
+    if (Math.abs(dx) < 72 || Math.abs(dy) > Math.abs(dx) * 0.75) return;
+    if (dx > 0) onBack?.();
+    else if (dx < 0 && article?.link) window.open(article.link, "_blank", "noopener,noreferrer");
+  };
   const { data: aiSettings } = useAiSettings();
   const aiSummaryEnabled = Boolean(aiSettings?.provider);
   const [localSummary, setLocalSummary] = useState<string | null>(null);
@@ -162,6 +179,8 @@ export function ArticleReader({
     <div
       ref={rootRef}
       className="flex-1 flex flex-col bg-background/75 backdrop-blur-xl animate-fade-in"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Reader Header */}
       <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border/60 bg-background/80 backdrop-blur-2xl sticky top-0 z-10">

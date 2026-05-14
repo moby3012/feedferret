@@ -280,6 +280,23 @@ function ArticlePreview({
   scrollRoot?: HTMLElement | null;
 }) {
   const articleRef = useRef<HTMLElement>(null);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleSwipeStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    swipeStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const handleSwipeEnd = (e: React.TouchEvent) => {
+    if (!swipeStartRef.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipeStartRef.current.x;
+    const dy = t.clientY - swipeStartRef.current.y;
+    swipeStartRef.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.75) return;
+    if (dx > 0) onToggleRead?.(article.id);
+    else onToggleStar?.(article.id);
+  };
 
   useEffect(() => {
     if (!markReadOnScroll || !onMarkRead || article.isRead) return;
@@ -307,6 +324,8 @@ function ArticlePreview({
       <article
         ref={articleRef}
         onClick={onClick}
+        onTouchStart={handleSwipeStart}
+        onTouchEnd={handleSwipeEnd}
         className={cn(
           "px-3 py-2.5 cursor-pointer rounded-2xl transition-all duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden",
           isSelected
@@ -347,6 +366,8 @@ function ArticlePreview({
       <article
         ref={articleRef}
         onClick={onClick}
+        onTouchStart={handleSwipeStart}
+        onTouchEnd={handleSwipeEnd}
         className={cn(
           "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full",
           isSelected && "ring-2 ring-brand border-brand",
@@ -419,6 +440,8 @@ function ArticlePreview({
     <article
       ref={articleRef}
       onClick={onClick}
+      onTouchStart={handleSwipeStart}
+      onTouchEnd={handleSwipeEnd}
       style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
       className={cn(
         "p-3 sm:p-3.5 cursor-pointer rounded-2xl sm:rounded-3xl transition-all duration-300 ease-out group animate-fade-in-up border min-w-0 max-w-full overflow-hidden",
