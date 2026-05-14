@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   useFeeds,
   useDeleteFeed,
@@ -402,6 +403,25 @@ export function FeedManagement({
     }
   }, [categories.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const searchParams = useSearchParams();
+  const highlightFeedId = searchParams.get("feedId");
+
+  useEffect(() => {
+    if (!highlightFeedId || feeds.length === 0) return;
+    setActiveTab("feeds");
+    const feed = (feeds as any[]).find((f) => f.id === highlightFeedId);
+    const groupId = feed?.categoryId ?? "__uncategorized__";
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      next.add(groupId);
+      return next;
+    });
+    setTimeout(() => {
+      const el = document.getElementById(`feed-row-${highlightFeedId}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+  }, [highlightFeedId, feeds.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -562,7 +582,13 @@ export function FeedManagement({
                             {groupFeeds.map((feed: any) => (
                               <div
                                 key={feed.id}
-                                className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm transition-all hover:border-border sm:flex-row sm:items-center"
+                                id={`feed-row-${feed.id}`}
+                                className={cn(
+                                  "flex flex-col gap-3 rounded-2xl border bg-card p-3.5 shadow-sm transition-all sm:flex-row sm:items-center",
+                                  highlightFeedId === feed.id
+                                    ? "border-primary/50 ring-2 ring-primary/20"
+                                    : "border-border/60 hover:border-border",
+                                )}
                               >
                                 <div className="flex min-w-0 items-start gap-3 sm:flex-1">
                                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-background text-xl shadow-sm">

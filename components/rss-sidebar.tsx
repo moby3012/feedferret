@@ -27,6 +27,7 @@ import {
   Compass,
   Download,
   Rss,
+  Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -64,6 +65,7 @@ import {
   useSavedSearches,
   useRefreshFeed,
   useMarkAllAsRead,
+  useDeleteFeed,
   useImportOpml,
   useNotifications,
   useUnreadNotificationCount,
@@ -138,6 +140,7 @@ export function RssSidebar({
   });
 
   const addNewFeed = useAddFeed();
+  const deleteFeedMutation = useDeleteFeed();
   const importOpml = useImportOpml();
   const { data: allCategories = [] } = useCategories();
   const updateFeedOrder = useUpdateFeedOrder();
@@ -269,8 +272,15 @@ export function RssSidebar({
       onSelect={() => onSelectFeed(feed.id)}
       onRefresh={() => refreshFeed.mutate(feed.id)}
       onMarkRead={() => markAllRead.mutate({ feedId: feed.id })}
-      onEdit={() => router.push("/manage-feeds")}
+      onEdit={() => router.push(`/manage-feeds?feedId=${feed.id}`)}
       onShowHealth={() => router.push("/manage-feeds?tab=health")}
+      onDelete={() => {
+        if (!window.confirm(`Delete "${feed.name}"? This cannot be undone.`)) return;
+        deleteFeedMutation.mutate(feed.id, {
+          onSuccess: () => toast.success(`Deleted ${feed.name}`),
+          onError: () => toast.error("Failed to delete feed"),
+        });
+      }}
     />
   );
 
@@ -1113,12 +1123,14 @@ function FeedQuickActions({
   onMarkRead,
   onEdit,
   onShowHealth,
+  onDelete,
 }: {
   feed: any;
   onRefresh: () => void;
   onMarkRead: () => void;
   onEdit: () => void;
   onShowHealth: () => void;
+  onDelete: () => void;
 }) {
   const websiteUrl = (() => {
     try {
@@ -1183,6 +1195,14 @@ function FeedQuickActions({
           <Activity className="w-4 h-4 mr-3" />
           Feed health
         </DropdownMenuItem>
+        <DropdownMenuSeparator className="my-1.5 bg-border/50" />
+        <DropdownMenuItem
+          className="rounded-xl py-2.5 px-3 text-sm text-destructive focus:text-destructive focus:bg-destructive/10"
+          onClick={onDelete}
+        >
+          <Trash2 className="w-4 h-4 mr-3" />
+          Delete feed
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -1196,6 +1216,7 @@ function FeedRow({
   onMarkRead,
   onEdit,
   onShowHealth,
+  onDelete,
 }: {
   feed: any;
   isSelected: boolean;
@@ -1204,6 +1225,7 @@ function FeedRow({
   onMarkRead: () => void;
   onEdit: () => void;
   onShowHealth: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div className="group/row relative w-full flex items-center gap-1 min-w-0 overflow-hidden">
@@ -1221,6 +1243,7 @@ function FeedRow({
           onMarkRead={onMarkRead}
           onEdit={onEdit}
           onShowHealth={onShowHealth}
+          onDelete={onDelete}
         />
       </div>
     </div>
