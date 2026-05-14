@@ -348,8 +348,8 @@ function FeedCard({
       ) : (
         <Rss className="h-4 w-4 text-muted-foreground shrink-0" />
       )}
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium truncate" title={feed.url}>
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <p className="text-sm font-medium truncate" title={feed.title}>
           {feed.title}
         </p>
         {feed.description && (
