@@ -335,7 +335,7 @@ function FeedCard({
   isAdding: boolean;
 }) {
   return (
-    <div className="flex items-start gap-2 rounded-xl bg-muted/50 px-2.5 py-2">
+    <div className="flex items-start gap-2 rounded-xl bg-muted/50 px-2.5 py-2 overflow-hidden">
       {feed.iconUrl ? (
         <img
           src={feed.iconUrl}

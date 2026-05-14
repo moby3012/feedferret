@@ -78,7 +78,7 @@ export async function GET(request: Request) {
         );
       }
 
-      // Search catalog by title, description, category
+      // Search catalog by title, description, category, url
       const catalogResults = await db.discoveryCatalogFeed.findMany({
         where: {
           enabled: true,
@@ -86,10 +86,11 @@ export async function GET(request: Request) {
             { title: { contains: keyword } },
             { description: { contains: keyword } },
             { category: { contains: keyword } },
+            { url: { contains: keyword } },
           ]),
         },
         orderBy: { popularity: "desc" },
-        take: 20,
+        take: 100,
       });
 
       const feeds = catalogResults.map((item) => ({

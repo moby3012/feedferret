@@ -763,7 +763,7 @@ export function RssSidebar({
           setAddFeedTab("url");
         }
       }}>
-        <DialogContent className="max-w-md w-full rounded-2xl max-h-[90svh] overflow-y-auto">
+        <DialogContent className="max-w-md w-full rounded-2xl">
           <DialogHeader>
             <DialogTitle>Add Feed</DialogTitle>
           </DialogHeader>
