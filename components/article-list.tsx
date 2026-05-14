@@ -11,10 +11,28 @@ function formatDate(dateStr: string) {
   const d = new Date(dateStr);
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = String(d.getFullYear()).slice(2);
   const hours = String(d.getHours()).padStart(2, '0');
   const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${day}.${month}.${year} - ${hours}:${minutes}`;
+  return `${day}.${month} - ${hours}:${minutes}`;
+}
+
+function FeedFavicon({ icon, name, size = 16 }: { icon: string; name?: string; size?: number }) {
+  const isUrl = icon.startsWith("http") || icon.startsWith("/");
+  if (isUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={icon}
+        alt={name ?? ""}
+        width={size}
+        height={size}
+        className="rounded-sm object-contain shrink-0"
+        style={{ width: size, height: size }}
+        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+      />
+    );
+  }
+  return <span style={{ fontSize: size, lineHeight: 1 }} className="shrink-0">{icon}</span>;
 }
 
 interface ArticleListProps {
@@ -290,25 +308,36 @@ function ArticlePreview({
         ref={articleRef}
         onClick={onClick}
         className={cn(
-          "px-4 py-3 cursor-pointer rounded-2xl transition-all duration-200 flex min-w-0 max-w-full items-center gap-3 overflow-hidden",
+          "px-3 py-2.5 cursor-pointer rounded-2xl transition-all duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden",
           isSelected
             ? "bg-accent/10 ring-1 ring-accent/20"
             : "hover:bg-muted/50",
-          !article.isRead && "font-semibold border-l-4 border-brand pl-3",
+          !article.isRead && "border-l-4 border-brand",
         )}
       >
-        <span className="text-base shrink-0">{article.feedIcon}</span>
-        {!article.isRead && <CircleDot className="w-3.5 h-3.5 text-brand shrink-0" />}
-        <h3 className="flex-1 text-sm truncate">{article.title}</h3>
-        {article.isStarred && (
-          <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
-        )}
-        {article.isReadLater && (
-          <Bookmark className="w-3.5 h-3.5 text-accent fill-accent shrink-0" />
-        )}
+        <FeedFavicon icon={article.feedIcon} name={article.feedName} size={14} />
+        {!article.isRead && <CircleDot className="w-3 h-3 text-brand shrink-0" />}
+        <h3 className={cn("flex-1 text-sm truncate", !article.isRead && "font-semibold")}>{article.title}</h3>
         <span className="text-[10px] text-muted-foreground whitespace-nowrap">
           {formatDate(article.publishedAt)}
         </span>
+        {/* Action buttons */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
+          className={cn("rounded-md p-1 transition-colors shrink-0", article.isStarred ? "text-amber-500" : "text-muted-foreground/40 hover:text-amber-500")}
+          aria-label={article.isStarred ? "Remove star" : "Star"}
+        >
+          <Star className={cn("w-3.5 h-3.5", article.isStarred && "fill-amber-500")} />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
+          className={cn("rounded-md p-1 transition-colors shrink-0", article.isReadLater ? "text-accent" : "text-muted-foreground/40 hover:text-accent")}
+          aria-label={article.isReadLater ? "Remove from Read Later" : "Read Later"}
+        >
+          <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent")} />
+        </button>
       </article>
     );
   }
@@ -333,18 +362,22 @@ function ArticlePreview({
               sizes="(max-width: 640px) 100vw, 400px"
               className="object-cover transition-transform duration-700 hover:scale-110"
             />
-            <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-white text-[10px] font-bold">
+            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-white text-[10px] font-bold">
+              <FeedFavicon icon={article.feedIcon} name={article.feedName} size={12} />
               {article.feedName}
             </div>
           </div>
         )}
         {!article.imageUrl && (
           <div className="px-4 pt-3">
-            <span className="inline-block px-2 py-1 bg-black/10 dark:bg-white/10 rounded-lg text-[10px] font-bold">{article.feedName}</span>
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-black/10 dark:bg-white/10 rounded-lg text-[10px] font-bold">
+              <FeedFavicon icon={article.feedIcon} name={article.feedName} size={12} />
+              {article.feedName}
+            </span>
           </div>
         )}
         <div className="p-4 space-y-3">
-        <h3 className={cn("text-lg leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]", article.isRead ? "font-semibold text-foreground/75" : "font-bold")}>
+          <h3 className={cn("text-lg leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]", article.isRead ? "font-semibold text-foreground/75" : "font-bold")}>
             {article.title}
           </h3>
           <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed break-words [overflow-wrap:anywhere]">
@@ -355,17 +388,16 @@ function ArticlePreview({
               <Clock className="w-3 h-3" />
               {formatDate(article.publishedAt)}
             </div>
+            {/* Always-visible action buttons — no hover gating (#11) */}
             <div className="flex items-center gap-1">
-              {article.isStarred && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
-                  className="rounded-md p-1 hover:bg-amber-500/10"
-                  aria-label="Toggle star"
-                >
-                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
+                className={cn("rounded-md p-1 transition-colors", article.isStarred ? "text-amber-500 hover:bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}
+                aria-label={article.isStarred ? "Remove star" : "Star"}
+              >
+                <Star className={cn("w-3.5 h-3.5", article.isStarred && "fill-amber-500")} />
+              </button>
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
@@ -415,7 +447,7 @@ function ArticlePreview({
 
         <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
           <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
-            <span className="text-lg">{article.feedIcon}</span>
+            <FeedFavicon icon={article.feedIcon} name={article.feedName} size={16} />
             <span className="text-sm font-medium text-muted-foreground truncate">
               {article.feedName}
             </span>
