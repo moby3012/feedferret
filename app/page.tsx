@@ -754,6 +754,8 @@ export default function RSSReaderPage() {
               }}
               onOverscrollPastEnd={() => navigateFeed(1)}
               onOverscrollPastTop={() => navigateFeed(-1)}
+              onSwipeNextFeed={() => navigateFeed(1)}
+              onSwipePreviousFeed={() => navigateFeed(-1)}
             />
           </div>
         </ResizablePanel>
@@ -837,6 +839,8 @@ export default function RSSReaderPage() {
           onPullToRefresh={handleRefresh}
           onOverscrollPastEnd={() => navigateFeed(1)}
           onOverscrollPastTop={() => navigateFeed(-1)}
+          onSwipeNextFeed={() => navigateFeed(1)}
+          onSwipePreviousFeed={() => navigateFeed(-1)}
         />
         <MobileBottomControls
           unreadOnly={unreadOnly}

@@ -71,6 +71,8 @@ interface ArticleListProps {
   transitionStyle?: "fade" | "flip" | "filter";
   onOverscrollPastEnd?: () => void;
   onOverscrollPastTop?: () => void;
+  onSwipeNextFeed?: () => void;
+  onSwipePreviousFeed?: () => void;
 }
 
 export function ArticleList({
@@ -91,6 +93,8 @@ export function ArticleList({
   transitionStyle = "fade",
   onOverscrollPastEnd,
   onOverscrollPastTop,
+  onSwipeNextFeed,
+  onSwipePreviousFeed,
 }: ArticleListProps) {
   const transitionClass =
     transitionStyle === "flip"
@@ -98,6 +102,28 @@ export function ArticleList({
       : transitionStyle === "filter"
         ? "animate-filter-swap"
         : "animate-fade-in";
+
+  // Background horizontal swipe handlers — only fire when the touch started
+  // outside an <article> element so per-article swipes (star/read) keep working.
+  const bgSwipeRef = useRef<{ x: number; y: number; onArticle: boolean } | null>(null);
+  const handleBgSwipeStart = (e: React.TouchEvent) => {
+    if (!onSwipeNextFeed && !onSwipePreviousFeed) return;
+    const t = e.touches[0];
+    const onArticle = !!(t.target as HTMLElement | null)?.closest?.("article");
+    bgSwipeRef.current = { x: t.clientX, y: t.clientY, onArticle };
+  };
+  const handleBgSwipeEnd = (e: React.TouchEvent) => {
+    if (!bgSwipeRef.current) return;
+    const start = bgSwipeRef.current;
+    bgSwipeRef.current = null;
+    if (start.onArticle) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+    if (dx < 0) onSwipeNextFeed?.();
+    else onSwipePreviousFeed?.();
+  };
   const [visibleCount, setVisibleCount] = useState(pageSize ?? 30);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -258,7 +284,12 @@ export function ArticleList({
 
   if (articles.length === 0) {
     return (
-      <div key={filterKey ?? "empty"} className={cn("flex-1 flex items-center justify-center p-8", transitionClass)}>
+      <div
+        key={filterKey ?? "empty"}
+        onTouchStart={handleBgSwipeStart}
+        onTouchEnd={handleBgSwipeEnd}
+        className={cn("flex-1 flex items-center justify-center p-8", transitionClass)}
+      >
         <div className="text-center">
           <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-5">
             <Circle className="w-10 h-10 text-muted-foreground" />
@@ -275,7 +306,12 @@ export function ArticleList({
   }
 
   return (
-    <ScrollArea key={filterKey ?? "default"} className={cn("flex-1 overflow-hidden min-h-0", transitionClass)}>
+    <ScrollArea
+      key={filterKey ?? "default"}
+      onTouchStart={handleBgSwipeStart}
+      onTouchEnd={handleBgSwipeEnd}
+      className={cn("flex-1 overflow-hidden min-h-0", transitionClass)}
+    >
       {showPullIndicator && (
         <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
           <div className="flex items-center gap-2 rounded-full border border-border/70 bg-background/95 px-4 py-2 text-xs font-medium text-muted-foreground shadow-lg backdrop-blur-xl">

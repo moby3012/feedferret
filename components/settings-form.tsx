@@ -33,6 +33,9 @@ import {
   Sparkles,
   CheckCircle2,
   XCircle,
+  Rss,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -395,6 +398,9 @@ export function SettingsForm() {
               className="h-7 w-12"
             />
           </PrefRow>
+
+          {/* Sync with external readers */}
+          <SyncTutorialSection />
 
           {/* ── Account & Security ── */}
 
@@ -1552,6 +1558,195 @@ function AiSummarySection() {
           )}
         </div>
       </div>
+    </section>
+  );
+}
+
+type SyncClient = {
+  name: string;
+  platforms: string;
+  url: string;
+  api: "greader" | "opml";
+  serverField: string;
+  notes?: string;
+};
+
+const SYNC_CLIENTS: SyncClient[] = [
+  {
+    name: "Reeder 5 / Classic",
+    platforms: "macOS, iOS, iPadOS",
+    url: "https://reederapp.com/",
+    api: "greader",
+    serverField: "FreshRSS / FeedHQ",
+    notes: "Add account → FreshRSS → API URL = your FeedFerret base URL + /api/greader.",
+  },
+  {
+    name: "NetNewsWire",
+    platforms: "macOS, iOS",
+    url: "https://netnewswire.com/",
+    api: "greader",
+    serverField: "FreshRSS",
+    notes: "Accounts → Add → FreshRSS, then point the API URL at /api/greader.",
+  },
+  {
+    name: "ReadKit",
+    platforms: "macOS, iOS",
+    url: "https://readkit.app/",
+    api: "greader",
+    serverField: "Fever / FreshRSS",
+    notes: "Use the FreshRSS option; the Fever variant is not yet exposed.",
+  },
+  {
+    name: "Fluent Reader",
+    platforms: "Windows, macOS, Linux",
+    url: "https://hyliu.me/fluent-reader/",
+    api: "greader",
+    serverField: "FreshRSS",
+    notes: "Add a FreshRSS-style service inside Fluent Reader’s service settings.",
+  },
+  {
+    name: "FeedMe",
+    platforms: "Android",
+    url: "https://play.google.com/store/apps/details?id=com.seazon.feedme",
+    api: "greader",
+    serverField: "Custom Google Reader API",
+    notes: "Use the “Google Reader API compatible” provider and your /api/greader URL.",
+  },
+  {
+    name: "News+",
+    platforms: "Android",
+    url: "https://noinnion.com/newsplus/",
+    api: "greader",
+    serverField: "GReader compatible",
+    notes: "Pick the GReader/FreshRSS plugin and point it at /api/greader.",
+  },
+  {
+    name: "Feedly",
+    platforms: "Web, iOS, Android",
+    url: "https://feedly.com/",
+    api: "opml",
+    serverField: "OPML import / export",
+    notes: "Feedly does not connect to self-hosted servers. Export OPML from Feedly and import it via FeedFerret → Manage feeds → Import/Export.",
+  },
+  {
+    name: "Inoreader",
+    platforms: "Web, iOS, Android",
+    url: "https://www.inoreader.com/",
+    api: "opml",
+    serverField: "OPML import / export",
+    notes: "Inoreader is a hosted reader and does not log into FeedFerret. Move feeds via OPML.",
+  },
+];
+
+function SyncTutorialSection() {
+  const [open, setOpen] = useState(false);
+  const [instanceUrl, setInstanceUrl] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setInstanceUrl(window.location.origin);
+  }, []);
+
+  const greaderUrl = `${instanceUrl || "https://your-feedferret"}/api/greader`;
+  const apiUrl = `${instanceUrl || "https://your-feedferret"}/api/v1`;
+
+  return (
+    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-start gap-4 text-left"
+      >
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Rss className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">Sync with external readers</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Connect Reeder, NetNewsWire, Fluent Reader and other RSS clients to this FeedFerret instance. Hosted services like Feedly need an OPML round-trip instead.
+          </p>
+        </div>
+        <span className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground">
+          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-6 space-y-6">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Google Reader API endpoint</p>
+              <p className="mt-1 break-all text-sm font-mono">{greaderUrl}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Username = your FeedFerret email. Password = your FeedFerret password (or an API token).
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">REST API base</p>
+              <p className="mt-1 break-all text-sm font-mono">{apiUrl}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Used by custom integrations. Authenticate with a bearer token from Profile → API tokens.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {SYNC_CLIENTS.map((client) => (
+              <div
+                key={client.name}
+                className="rounded-2xl border border-border/60 bg-background/60 p-4"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold">{client.name}</p>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        {client.platforms}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          client.api === "greader"
+                            ? "bg-emerald-500/10 text-emerald-500"
+                            : "bg-amber-500/10 text-amber-600",
+                        )}
+                      >
+                        {client.api === "greader" ? "Direct sync" : "OPML only"}
+                      </span>
+                    </div>
+                    {client.notes && (
+                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{client.notes}</p>
+                    )}
+                  </div>
+                  <a
+                    href={client.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border/60 bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted/60 transition-colors"
+                  >
+                    Open site
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                {client.api === "greader" && (
+                  <p className="mt-3 text-[11px] text-muted-foreground">
+                    In the client, choose <strong>{client.serverField}</strong> and paste <code className="rounded bg-background/80 px-1 font-mono">{greaderUrl}</code> as the server URL.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-muted-foreground leading-relaxed">
+            <p className="font-medium text-amber-600 dark:text-amber-400 mb-1">A note on two-factor authentication</p>
+            <p>
+              External clients can&apos;t prompt for a TOTP code. If you have 2FA on, generate a dedicated API token under
+              Profile → API tokens and use that in place of your password.
+            </p>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
