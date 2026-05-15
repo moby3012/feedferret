@@ -383,6 +383,19 @@ export function SettingsForm() {
             />
           </PrefRow>
 
+          {/* RTL layout */}
+          <PrefRow
+            icon={AlignLeft}
+            title="Right-to-left layout"
+            description="Mirror the entire interface for Arabic, Hebrew, Persian, and other RTL scripts."
+          >
+            <Switch
+              checked={(prefs?.layoutDirection ?? "ltr") === "rtl"}
+              onCheckedChange={(checked) => update({ layoutDirection: checked ? "rtl" : "ltr" })}
+              className="h-7 w-12"
+            />
+          </PrefRow>
+
           {/* ── Account & Security ── */}
 
           {/* User Profile */}

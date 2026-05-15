@@ -58,6 +58,12 @@ export function ThemeColorApplier() {
       "--brand-secondary-foreground",
       getContrastColor(secondaryColor),
     );
+
+    // Persisted RTL/LTR preference
+    const dir = prefs.layoutDirection === "rtl" ? "rtl" : "ltr";
+    if (root.getAttribute("dir") !== dir) {
+      root.setAttribute("dir", dir);
+    }
   }, [prefs]);
 
   return null;

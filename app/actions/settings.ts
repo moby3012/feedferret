@@ -40,6 +40,7 @@ export async function getReadingPreferences() {
       secondaryColor: true,
       hideDuplicates: true,
       markReadOnScroll: true,
+      layoutDirection: true,
     },
   });
   return {
@@ -52,6 +53,7 @@ export async function getReadingPreferences() {
     secondaryColor: user?.secondaryColor ?? "#F0963C",
     hideDuplicates: user?.hideDuplicates ?? true,
     markReadOnScroll: user?.markReadOnScroll ?? false,
+    layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
   };
 }
 
@@ -67,6 +69,7 @@ export async function updateGlobalSettings(data: {
   secondaryColor?: string;
   hideDuplicates?: boolean;
   markReadOnScroll?: boolean;
+  layoutDirection?: "ltr" | "rtl";
 }) {
   const session = await requireUser();
 

@@ -56,6 +56,7 @@ model User {
   pushLastSentAt          DateTime?
   hideDuplicates          Boolean   @default(true)
   markReadOnScroll        Boolean   @default(false)
+  layoutDirection         String    @default("ltr")     // "ltr" | "rtl"
   aiProvider              String?                       // "openai" | "anthropic" | "ollama" | "gemini" | "openrouter"
   aiApiKey                String?                       // encrypted at rest
   aiModel                 String?
