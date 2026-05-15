@@ -262,3 +262,35 @@ export async function sendTestEmail(config: Record<string, unknown>) {
     return { success: false, error: error?.message || "Unknown mail error" };
   }
 }
+
+export async function getPushDiagnostics() {
+  await checkAdmin();
+  const publicKey = process.env.WEB_PUSH_VAPID_PUBLIC_KEY || "";
+  const privateKeyConfigured = Boolean(process.env.WEB_PUSH_VAPID_PRIVATE_KEY);
+  const contact = process.env.WEB_PUSH_CONTACT || "";
+  const configured = Boolean(publicKey && privateKeyConfigured && contact);
+
+  const [activeSubscriptions, totalUsers] = await Promise.all([
+    db.pushSubscription.count({ where: { disabledAt: null } }),
+    db.user.count({}),
+  ]);
+
+  return {
+    configured,
+    publicKey: publicKey ? `${publicKey.slice(0, 10)}…${publicKey.slice(-6)}` : "",
+    contact,
+    privateKeyConfigured,
+    activeSubscriptions,
+    totalUsers,
+  };
+}
+
+export async function generateVapidKeyPair() {
+  await checkAdmin();
+  const webpush = (await import("web-push")).default;
+  const keys = webpush.generateVAPIDKeys();
+  return {
+    publicKey: keys.publicKey,
+    privateKey: keys.privateKey,
+  };
+}

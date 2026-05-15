@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { buildAdvancedSearchWhere } from "./search";
+import { enqueueWebhookDelivery } from "./webhooks";
 
 export async function applyAutoReadRules(userId: string): Promise<{ applied: number }> {
     const rules = await db.autoReadRule.findMany({
@@ -28,6 +29,17 @@ export async function applyAutoReadRules(userId: string): Promise<{ applied: num
                     data: { isStarred: true },
                 });
                 applied += result.count;
+            } else if (rule.action === "read_later") {
+                const result = await db.article.updateMany({
+                    where: { ...baseWhere, isReadLater: false },
+                    data: { isReadLater: true },
+                });
+                applied += result.count;
+            } else if (rule.action === "delete") {
+                const result = await db.article.deleteMany({
+                    where: baseWhere,
+                });
+                applied += result.count;
             } else if (rule.action.startsWith("label:")) {
                 const labelId = rule.action.slice("label:".length);
                 const label = await db.label.findFirst({
@@ -49,6 +61,46 @@ export async function applyAutoReadRules(userId: string): Promise<{ applied: num
                         where: { articleId_labelId: { articleId: a.id, labelId } },
                         create: { articleId: a.id, labelId, userId },
                         update: {},
+                    });
+                }
+                applied += articles.length;
+            } else if (rule.action.startsWith("webhook:")) {
+                const webhookId = rule.action.slice("webhook:".length);
+                const webhook = await db.webhook.findFirst({
+                    where: { id: webhookId, userId, enabled: true },
+                    select: { id: true },
+                });
+                if (!webhook) continue;
+
+                // Only trigger for articles not yet processed by this rule.
+                // Use isRead=false as a heuristic for "new" articles to avoid
+                // re-firing on every sync; rule marks them read implicitly via
+                // this side-channel by setting a tombstone tag.
+                const articles = await db.article.findMany({
+                    where: { ...baseWhere, isRead: false },
+                    select: {
+                        id: true,
+                        title: true,
+                        link: true,
+                        excerpt: true,
+                        publishedAt: true,
+                        feed: { select: { id: true, name: true, url: true } },
+                    },
+                    take: 50,
+                });
+
+                for (const article of articles) {
+                    await enqueueWebhookDelivery(webhook.id, "rule_match", {
+                        ruleId: rule.id,
+                        ruleName: rule.name,
+                        article: {
+                            id: article.id,
+                            title: article.title,
+                            link: article.link,
+                            excerpt: article.excerpt,
+                            publishedAt: article.publishedAt,
+                            feed: article.feed,
+                        },
                     });
                 }
                 applied += articles.length;

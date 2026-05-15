@@ -19,7 +19,35 @@ export function verifyWebhookSignature(secret: string, body: string, signature: 
 const RETRY_DELAYS_MS = [0, 5 * 60_000, 30 * 60_000, 2 * 3_600_000, 8 * 3_600_000];
 const MAX_ATTEMPTS = RETRY_DELAYS_MS.length;
 
-export type WebhookEvent = "new_article" | "keyword_match" | "feed_error";
+export type WebhookEvent = "new_article" | "keyword_match" | "feed_error" | "rule_match";
+
+export async function enqueueWebhookDelivery(
+  webhookId: string,
+  event: WebhookEvent,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const webhook = await db.webhook.findUnique({
+    where: { id: webhookId },
+    select: { id: true, enabled: true },
+  });
+  if (!webhook?.enabled) return;
+
+  const payload = JSON.stringify({
+    event,
+    timestamp: new Date().toISOString(),
+    data,
+  });
+
+  await db.webhookDelivery.create({
+    data: {
+      webhookId: webhook.id,
+      event,
+      payload,
+      status: "pending",
+      nextRetryAt: new Date(),
+    },
+  });
+}
 
 export async function dispatchWebhookEvent(
   userId: string,

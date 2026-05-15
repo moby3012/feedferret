@@ -32,7 +32,11 @@ export async function GET() {
     }
   })();
   const mailConfigured = Boolean(settings?.mailServiceEnabled && hasMailCredentials);
-  const pushConfigured = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+  const pushConfigured = Boolean(
+    process.env.WEB_PUSH_VAPID_PUBLIC_KEY &&
+      process.env.WEB_PUSH_VAPID_PRIVATE_KEY &&
+      process.env.WEB_PUSH_CONTACT,
+  );
 
   return NextResponse.json({
     instanceName: settings?.instanceName || "FeedFerret",

@@ -37,6 +37,11 @@ import {
   ArrowDown,
   Copy,
   Compass,
+  Bell,
+  KeyRound,
+  ClipboardCopy,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +58,8 @@ import {
   getGlobalSettings,
   updateGlobalSettings,
   sendTestEmail,
+  getPushDiagnostics,
+  generateVapidKeyPair,
 } from "@/app/actions/admin";
 import { toast } from "sonner";
 import {
@@ -309,6 +316,7 @@ export function ServerManagementDialog({
     { value: "users", label: "Users", icon: <Users className="w-4 h-4" /> },
     { value: "registrations", label: "Access", icon: <ShieldCheck className="w-4 h-4" /> },
     { value: "email", label: "Email", icon: <Mail className="w-4 h-4" /> },
+    { value: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
     { value: "instance", label: "Instance", icon: <Globe className="w-4 h-4" /> },
     { value: "starter-packs", label: "Starter Packs", icon: <PackagePlus className="w-4 h-4" /> },
     { value: "sync", label: "Sync", icon: <Settings2 className="w-4 h-4" /> },
@@ -551,6 +559,15 @@ export function ServerManagementDialog({
                           </div>
                         </div>
                       )}
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+
+                {/* ── NOTIFICATIONS ── */}
+                <TabsContent value="notifications" className="h-full mt-0 focus-visible:outline-none">
+                  <ScrollArea className="h-full">
+                    <div className="px-6 py-6 sm:px-8 max-w-2xl">
+                      <NotificationsAdminPanel />
                     </div>
                   </ScrollArea>
                 </TabsContent>
@@ -1162,5 +1179,162 @@ function DiscoveryCatalogTab() {
         </div>
       </div>
     </ScrollArea>
+  );
+}
+
+function NotificationsAdminPanel() {
+  const [diag, setDiag] = useState<{
+    configured: boolean;
+    publicKey: string;
+    contact: string;
+    privateKeyConfigured: boolean;
+    activeSubscriptions: number;
+    totalUsers: number;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generated, setGenerated] = useState<{ publicKey: string; privateKey: string } | null>(null);
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPushDiagnostics()
+      .then((data) => {
+        if (!cancelled) setDiag(data);
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) toast.error("Failed to load push diagnostics");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const keys = await generateVapidKeyPair();
+      setGenerated(keys);
+      toast.success("Generated new VAPID key pair");
+    } catch (error: any) {
+      toast.error(error?.message || "Could not generate keys");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const copy = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`Copied ${label}`);
+    } catch {
+      toast.error(`Could not copy ${label}`);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-semibold tracking-[-0.02em]">Push notifications</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Configure Web Push (VAPID) credentials so users on this instance can receive browser notifications
+          and PWA badge updates for new articles.
+        </p>
+      </div>
+
+      <div className="rounded-3xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <div className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
+            diag?.configured ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-600",
+          )}>
+            {diag?.configured ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-semibold">
+              {loading ? "Checking…" : diag?.configured ? "Push notifications are configured" : "Not configured yet"}
+            </div>
+            {!loading && diag && (
+              <div className="mt-1 text-xs text-muted-foreground space-y-0.5">
+                <p>Public key: <code className="rounded bg-background/60 px-1">{diag.publicKey || "—"}</code></p>
+                <p>Private key: {diag.privateKeyConfigured ? "set" : "missing"}</p>
+                <p>Contact: <code className="rounded bg-background/60 px-1">{diag.contact || "—"}</code></p>
+                <p>{diag.activeSubscriptions} active subscription{diag.activeSubscriptions === 1 ? "" : "s"} across {diag.totalUsers} user{diag.totalUsers === 1 ? "" : "s"}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <KeyRound className="w-5 h-5 text-muted-foreground mt-0.5" />
+          <div className="flex-1 space-y-2">
+            <h4 className="text-sm font-semibold">Set up VAPID credentials</h4>
+            <p className="text-xs text-muted-foreground">
+              Generate a key pair and add the values to your environment, then restart the server.
+            </p>
+            <ol className="list-decimal list-inside text-xs text-muted-foreground space-y-1 mt-2">
+              <li>Click <strong className="text-foreground/80">Generate keys</strong> below.</li>
+              <li>Copy the keys and your contact email into your environment file:
+                <pre className="mt-1 rounded-xl bg-background/60 border border-border/50 p-2 text-[11px] font-mono whitespace-pre overflow-x-auto">{`WEB_PUSH_VAPID_PUBLIC_KEY=…
+WEB_PUSH_VAPID_PRIVATE_KEY=…
+WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
+              </li>
+              <li>Restart the FeedFerret service.</li>
+              <li>Each user opts in from Settings → Browser notifications.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button type="button" className="rounded-2xl" onClick={handleGenerate} disabled={generating}>
+            {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <KeyRound className="w-4 h-4 mr-2" />}
+            Generate keys
+          </Button>
+        </div>
+
+        {generated && (
+          <div className="rounded-2xl border border-border/60 bg-background/60 p-4 space-y-3">
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Public key</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">
+                  {generated.publicKey}
+                </code>
+                <Button type="button" size="icon" variant="outline" className="rounded-xl" onClick={() => copy("public key", generated.publicKey)}>
+                  <ClipboardCopy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Private key (keep secret)</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">
+                  {generated.privateKey}
+                </code>
+                <Button type="button" size="icon" variant="outline" className="rounded-xl" onClick={() => copy("private key", generated.privateKey)}>
+                  <ClipboardCopy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              These keys are generated on-the-fly and not stored. Paste them into your environment before closing this view.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-3xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-2">
+        <h4 className="text-sm font-semibold">PWA app badge</h4>
+        <p className="text-xs text-muted-foreground">
+          When push is configured, the installed PWA shows the unread count on its app icon (Android, iOS 16.4+, supported desktops).
+          The badge value mirrors the user&apos;s current unread feed total — no extra configuration required.
+        </p>
+      </div>
+    </div>
   );
 }

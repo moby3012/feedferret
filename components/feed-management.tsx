@@ -14,6 +14,7 @@ import {
   useImportOpml,
   useExportOpml,
   useLabels,
+  useWebhooks,
   useCreateLabel,
   useDeleteLabel,
   useSavedSearches,
@@ -390,6 +391,7 @@ export function FeedManagement({
 
   const { data: categories = [] } = useCategories();
   const { data: labels = [] } = useLabels();
+  const { data: webhooks = [] } = useWebhooks();
   const { data: savedSearches = [] } = useSavedSearches();
 
   useEffect(() => {
@@ -1252,6 +1254,18 @@ export function FeedManagement({
                           <SelectContent>
                             <SelectItem value="mark_read">Mark as read</SelectItem>
                             <SelectItem value="star">Star article</SelectItem>
+                            <SelectItem value="read_later">Save to Read Later</SelectItem>
+                            <SelectItem value="delete">Delete article</SelectItem>
+                            {labels.length > 0 && labels.map((label: any) => (
+                              <SelectItem key={`label-${label.id}`} value={`label:${label.id}`}>
+                                Attach label · {label.name}
+                              </SelectItem>
+                            ))}
+                            {(webhooks as any[]).filter((w) => w.enabled).map((wh: any) => (
+                              <SelectItem key={`webhook-${wh.id}`} value={`webhook:${wh.id}`}>
+                                Trigger webhook · {wh.name}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1359,11 +1373,24 @@ export function FeedManagement({
                             <p className="text-xs text-muted-foreground font-mono truncate">{rule.query}</p>
                           </div>
                           <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                            {rule.action === "mark_read"
-                              ? "mark read"
-                              : rule.action === "star"
-                                ? "star"
-                                : `label`}
+                            {(() => {
+                              const action = String(rule.action || "");
+                              if (action === "mark_read") return "mark read";
+                              if (action === "star") return "star";
+                              if (action === "read_later") return "read later";
+                              if (action === "delete") return "delete";
+                              if (action.startsWith("label:")) {
+                                const id = action.slice("label:".length);
+                                const label = (labels as any[]).find((l) => l.id === id);
+                                return label ? `label · ${label.name}` : "label";
+                              }
+                              if (action.startsWith("webhook:")) {
+                                const id = action.slice("webhook:".length);
+                                const wh = (webhooks as any[]).find((w) => w.id === id);
+                                return wh ? `webhook · ${wh.name}` : "webhook";
+                              }
+                              return action || "—";
+                            })()}
                           </span>
                           <Button
                             size="icon"
