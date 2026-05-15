@@ -68,6 +68,8 @@ interface ArticleListProps {
   isRefreshing?: boolean;
   onPullToRefresh?: () => void;
   filterKey?: string;
+  onOverscrollPastEnd?: () => void;
+  onOverscrollPastTop?: () => void;
 }
 
 export function ArticleList({
@@ -85,6 +87,8 @@ export function ArticleList({
   isRefreshing = false,
   onPullToRefresh,
   filterKey,
+  onOverscrollPastEnd,
+  onOverscrollPastTop,
 }: ArticleListProps) {
   const [visibleCount, setVisibleCount] = useState(pageSize ?? 30);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -185,6 +189,73 @@ export function ArticleList({
   const hasMore = visibleCount < articles.length;
   const showPullIndicator = enablePullToRefresh && (pullDistance > 0 || pullTriggered);
   const pullReady = pullDistance >= 72;
+
+  // Overscroll-past-end / past-top → navigate feeds (#11)
+  useEffect(() => {
+    if (!scrollRoot || (!onOverscrollPastEnd && !onOverscrollPastTop)) return;
+
+    let accum = 0;
+    let lastFire = 0;
+    const COOLDOWN = 1200;
+    const THRESHOLD = 280;
+
+    const fire = (dir: 1 | -1) => {
+      const now = Date.now();
+      if (now - lastFire < COOLDOWN) return;
+      lastFire = now;
+      accum = 0;
+      if (dir === 1) onOverscrollPastEnd?.();
+      else onOverscrollPastTop?.();
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRoot;
+      const atBottom = scrollHeight - (scrollTop + clientHeight) < 8 && scrollHeight > clientHeight + 8;
+      const atTop = scrollTop < 4;
+      if (atBottom && e.deltaY > 0) {
+        accum += e.deltaY;
+        if (accum > THRESHOLD) fire(1);
+      } else if (atTop && e.deltaY < 0) {
+        accum += Math.abs(e.deltaY);
+        if (accum > THRESHOLD) fire(-1);
+      } else {
+        accum = 0;
+      }
+    };
+
+    let touchStartY = 0;
+    let touchAccum = 0;
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      touchStartY = e.touches[0].clientY;
+      touchAccum = 0;
+    };
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const { scrollTop, scrollHeight, clientHeight } = scrollRoot;
+      const atBottom = scrollHeight - (scrollTop + clientHeight) < 8 && scrollHeight > clientHeight + 8;
+      const atTop = scrollTop < 4;
+      const dy = touchStartY - e.touches[0].clientY;
+      if (atBottom && dy > 0) {
+        touchAccum = dy;
+        if (touchAccum > 120) fire(1);
+      } else if (atTop && dy < 0) {
+        touchAccum = Math.abs(dy);
+        if (touchAccum > 120) fire(-1);
+      } else {
+        touchAccum = 0;
+      }
+    };
+
+    scrollRoot.addEventListener("wheel", handleWheel, { passive: true });
+    scrollRoot.addEventListener("touchstart", handleTouchStart, { passive: true });
+    scrollRoot.addEventListener("touchmove", handleTouchMove, { passive: true });
+    return () => {
+      scrollRoot.removeEventListener("wheel", handleWheel);
+      scrollRoot.removeEventListener("touchstart", handleTouchStart);
+      scrollRoot.removeEventListener("touchmove", handleTouchMove);
+    };
+  }, [scrollRoot, onOverscrollPastEnd, onOverscrollPastTop]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -302,22 +373,77 @@ function ArticlePreview({
 }) {
   const articleRef = useRef<HTMLElement>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swipeActive, setSwipeActive] = useState(false);
+
+  const SWIPE_THRESHOLD = 80;
+  const SWIPE_MAX = 160;
 
   const handleSwipeStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
     swipeStartRef.current = { x: t.clientX, y: t.clientY };
+    setSwipeActive(false);
+  };
+
+  const handleSwipeMove = (e: React.TouchEvent) => {
+    if (!swipeStartRef.current) return;
+    const t = e.touches[0];
+    const dx = t.clientX - swipeStartRef.current.x;
+    const dy = t.clientY - swipeStartRef.current.y;
+    if (!swipeActive) {
+      // Lock direction: if vertical dominates, abandon swipe
+      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
+        swipeStartRef.current = null;
+        setSwipeOffset(0);
+        return;
+      }
+      if (Math.abs(dx) > 8) setSwipeActive(true);
+    }
+    const clamped = Math.max(-SWIPE_MAX, Math.min(SWIPE_MAX, dx));
+    setSwipeOffset(clamped);
   };
 
   const handleSwipeEnd = (e: React.TouchEvent) => {
-    if (!swipeStartRef.current) return;
+    if (!swipeStartRef.current) {
+      setSwipeOffset(0);
+      setSwipeActive(false);
+      return;
+    }
     const t = e.changedTouches[0];
     const dx = t.clientX - swipeStartRef.current.x;
     const dy = t.clientY - swipeStartRef.current.y;
     swipeStartRef.current = null;
-    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.75) return;
+    setSwipeActive(false);
+    setSwipeOffset(0);
+    if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dy) > Math.abs(dx) * 0.75) return;
     if (dx > 0) onToggleRead?.(article.id);
     else onToggleStar?.(article.id);
   };
+
+  const swipeReady = Math.abs(swipeOffset) >= SWIPE_THRESHOLD;
+  const swipeRevealDir: "read" | "star" | null = swipeOffset > 12 ? "read" : swipeOffset < -12 ? "star" : null;
+  const swipeStyle: React.CSSProperties = {
+    transform: swipeOffset !== 0 ? `translateX(${swipeOffset}px)` : undefined,
+    transition: swipeActive ? "none" : "transform 220ms cubic-bezier(0.16, 1, 0.3, 1)",
+    touchAction: "pan-y",
+  };
+
+  const swipeBackdrop = swipeRevealDir ? (
+    <div
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none absolute inset-0 flex items-center rounded-2xl px-5",
+        swipeRevealDir === "read" ? "justify-start bg-emerald-500/15 text-emerald-500" : "justify-end bg-amber-500/15 text-amber-500",
+      )}
+      style={{ opacity: Math.min(1, Math.abs(swipeOffset) / SWIPE_THRESHOLD) }}
+    >
+      {swipeRevealDir === "read" ? (
+        <CheckCircle2 className={cn("w-6 h-6 transition-transform", swipeReady && "scale-125")} />
+      ) : (
+        <Star className={cn("w-6 h-6 transition-transform", swipeReady && "scale-125 fill-amber-500")} />
+      )}
+    </div>
+  ) : null;
 
   useEffect(() => {
     if (!markReadOnScroll || !onMarkRead || article.isRead) return;
@@ -342,13 +468,17 @@ function ArticlePreview({
   }, [article.id, article.isRead, markReadOnScroll, onMarkRead, scrollRoot]);
   if (viewMode === "minimal") {
     return (
+      <div className="relative">
+        {swipeBackdrop}
       <article
         ref={articleRef}
         onClick={onClick}
         onTouchStart={handleSwipeStart}
+        onTouchMove={handleSwipeMove}
         onTouchEnd={handleSwipeEnd}
+        style={swipeStyle}
         className={cn(
-          "px-3 py-2.5 cursor-pointer rounded-2xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden",
+          "px-3 py-2.5 cursor-pointer rounded-2xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden relative",
           "border-l-4",
           isSelected
             ? "bg-accent/10 ring-1 ring-accent/20"
@@ -380,16 +510,21 @@ function ArticlePreview({
           <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent")} />
         </button>
       </article>
+      </div>
     );
   }
 
   if (viewMode === "magazine") {
     return (
+      <div className="relative">
+        {swipeBackdrop}
       <article
         ref={articleRef}
         onClick={onClick}
         onTouchStart={handleSwipeStart}
+        onTouchMove={handleSwipeMove}
         onTouchEnd={handleSwipeEnd}
+        style={swipeStyle}
         className={cn(
           "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full",
           isSelected && "ring-2 ring-brand border-brand",
@@ -454,16 +589,21 @@ function ArticlePreview({
           </div>
         </div>
       </article>
+      </div>
     );
   }
 
   // Classic View (Default)
   return (
+    <div className="relative">
+      {swipeBackdrop}
     <article
       ref={articleRef}
       onClick={onClick}
       onTouchStart={handleSwipeStart}
+      onTouchMove={handleSwipeMove}
       onTouchEnd={handleSwipeEnd}
+      style={swipeStyle}
       className={cn(
         "p-3 sm:p-3.5 cursor-pointer rounded-2xl sm:rounded-3xl group border min-w-0 max-w-full overflow-hidden",
         "transition-[opacity,background-color,border-color,box-shadow,transform] duration-200 ease-out",
@@ -613,5 +753,6 @@ function ArticlePreview({
         </div>
       </div>
     </article>
+    </div>
   );
 }

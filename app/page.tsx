@@ -423,6 +423,30 @@ export default function RSSReaderPage() {
     );
   }, [feeds, markAllAsRead, selectedFeed, selectedCategory]);
 
+  const navigateFeed = useCallback((direction: 1 | -1) => {
+    const feedsList = feeds as any[];
+    if (feedsList.length === 0) return;
+    if (!selectedFeed) {
+      const target = direction === 1 ? feedsList[0] : feedsList[feedsList.length - 1];
+      if (target) {
+        setSelectedFeed(target.id);
+        setSelectedCategory("All");
+        setSelectedArticleId(null);
+        setSelectedArticleSnapshot(null);
+      }
+      return;
+    }
+    const idx = feedsList.findIndex((f) => f.id === selectedFeed);
+    if (idx === -1) return;
+    const next = feedsList[(idx + direction + feedsList.length) % feedsList.length];
+    if (next && next.id !== selectedFeed) {
+      setSelectedFeed(next.id);
+      setSelectedCategory("All");
+      setSelectedArticleId(null);
+      setSelectedArticleSnapshot(null);
+    }
+  }, [feeds, selectedFeed]);
+
   const handleToggleSort = useCallback(() => {
     setSortOrder((prev) => {
       const next = prev === "newest" ? "oldest" : "newest";
@@ -691,6 +715,8 @@ export default function RSSReaderPage() {
               onShowShortcuts={() => setShortcutsOpen(true)}
               sortOrder={sortOrder}
               onToggleSort={handleToggleSort}
+              onSwipeNextFeed={() => navigateFeed(1)}
+              onSwipePreviousFeed={() => navigateFeed(-1)}
             />
             {isOffline && hasOfflineSnapshot && (
               <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
@@ -711,6 +737,8 @@ export default function RSSReaderPage() {
                 const article = displayArticles.find((a: any) => a.id === articleId);
                 if (article) markArticleRead(article);
               }}
+              onOverscrollPastEnd={() => navigateFeed(1)}
+              onOverscrollPastTop={() => navigateFeed(-1)}
             />
           </div>
         </ResizablePanel>
@@ -767,6 +795,8 @@ export default function RSSReaderPage() {
           onShowShortcuts={() => setShortcutsOpen(true)}
           sortOrder={sortOrder}
           onToggleSort={handleToggleSort}
+          onSwipeNextFeed={() => navigateFeed(1)}
+          onSwipePreviousFeed={() => navigateFeed(-1)}
         />
         {isOffline && hasOfflineSnapshot && (
           <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
@@ -790,6 +820,8 @@ export default function RSSReaderPage() {
           enablePullToRefresh
           isRefreshing={articlesLoading || refresh.isPending}
           onPullToRefresh={handleRefresh}
+          onOverscrollPastEnd={() => navigateFeed(1)}
+          onOverscrollPastTop={() => navigateFeed(-1)}
         />
         <MobileBottomControls
           unreadOnly={unreadOnly}

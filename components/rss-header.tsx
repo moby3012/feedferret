@@ -23,7 +23,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 export type ViewMode = "list" | "magazine" | "minimal";
 
@@ -46,6 +46,8 @@ interface RssHeaderProps {
   onShowShortcuts?: () => void;
   sortOrder?: "newest" | "oldest";
   onToggleSort?: () => void;
+  onSwipeNextFeed?: () => void;
+  onSwipePreviousFeed?: () => void;
 }
 
 export function RssHeader({
@@ -67,15 +69,37 @@ export function RssHeader({
   onShowShortcuts,
   sortOrder = "newest",
   onToggleSort,
+  onSwipeNextFeed,
+  onSwipePreviousFeed,
 }: RssHeaderProps) {
   const activeViewMode: ViewMode =
     viewMode === "minimal" || viewMode === "magazine" ? viewMode : "list";
 
   const displayCount = unreadCount ?? articleCount;
 
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const handleTitleSwipeStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    swipeStart.current = { x: t.clientX, y: t.clientY };
+  };
+  const handleTitleSwipeEnd = (e: React.TouchEvent) => {
+    if (!swipeStart.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipeStart.current.x;
+    const dy = t.clientY - swipeStart.current.y;
+    swipeStart.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+    if (dx < 0) onSwipeNextFeed?.();
+    else onSwipePreviousFeed?.();
+  };
+
   return (
     <header className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-border/60 bg-card/75 backdrop-blur-2xl animate-fade-in relative z-20">
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div
+        className="flex items-center gap-3 min-w-0 flex-1"
+        onTouchStart={handleTitleSwipeStart}
+        onTouchEnd={handleTitleSwipeEnd}
+      >
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-foreground tracking-[-0.02em] truncate">
             {title}

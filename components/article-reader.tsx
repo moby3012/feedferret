@@ -135,6 +135,75 @@ export function ArticleReader({
     return () => window.cancelAnimationFrame(animationFrame);
   }, [article?.id]);
 
+  // Overscroll past top → previous article, past bottom → next article (#14)
+  useEffect(() => {
+    if (!article?.id) return;
+    const viewport = rootRef.current?.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (!viewport) return;
+
+    let accum = 0;
+    let lastFire = 0;
+    const COOLDOWN = 1200;
+    const THRESHOLD = 280;
+
+    const fire = (dir: 1 | -1) => {
+      const now = Date.now();
+      if (now - lastFire < COOLDOWN) return;
+      lastFire = now;
+      accum = 0;
+      if (dir === 1 && hasNextArticle) onNextArticle?.();
+      else if (dir === -1 && hasPreviousArticle) onPreviousArticle?.();
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      const { scrollTop, scrollHeight, clientHeight } = viewport;
+      const atBottom = scrollHeight - (scrollTop + clientHeight) < 8 && scrollHeight > clientHeight + 8;
+      const atTop = scrollTop < 4;
+      if (atBottom && e.deltaY > 0) {
+        accum += e.deltaY;
+        if (accum > THRESHOLD) fire(1);
+      } else if (atTop && e.deltaY < 0) {
+        accum += Math.abs(e.deltaY);
+        if (accum > THRESHOLD) fire(-1);
+      } else {
+        accum = 0;
+      }
+    };
+
+    let touchStartY = 0;
+    let touchAccum = 0;
+    const handleEdgeTouchStart = (e: globalThis.TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      touchStartY = e.touches[0].clientY;
+      touchAccum = 0;
+    };
+    const handleEdgeTouchMove = (e: globalThis.TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const { scrollTop, scrollHeight, clientHeight } = viewport;
+      const atBottom = scrollHeight - (scrollTop + clientHeight) < 8 && scrollHeight > clientHeight + 8;
+      const atTop = scrollTop < 4;
+      const dy = touchStartY - e.touches[0].clientY;
+      if (atBottom && dy > 0) {
+        touchAccum = dy;
+        if (touchAccum > 140) fire(1);
+      } else if (atTop && dy < 0) {
+        touchAccum = Math.abs(dy);
+        if (touchAccum > 140) fire(-1);
+      }
+    };
+
+    viewport.addEventListener("wheel", handleWheel, { passive: true });
+    viewport.addEventListener("touchstart", handleEdgeTouchStart, { passive: true });
+    viewport.addEventListener("touchmove", handleEdgeTouchMove, { passive: true });
+    return () => {
+      viewport.removeEventListener("wheel", handleWheel);
+      viewport.removeEventListener("touchstart", handleEdgeTouchStart);
+      viewport.removeEventListener("touchmove", handleEdgeTouchMove);
+    };
+  }, [article?.id, hasNextArticle, hasPreviousArticle, onNextArticle, onPreviousArticle]);
+
   if (!article) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background animate-fade-in">
