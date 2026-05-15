@@ -870,36 +870,62 @@ export default function RSSReaderPage() {
           <DialogHeader className="sr-only">
             <DialogTitle>Search articles</DialogTitle>
           </DialogHeader>
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
-            <SearchIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-            <Input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search… author:, intitle:, is:unread, label:"
-              className="border-0 bg-transparent text-sm focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto py-0"
-              autoFocus
-            />
-            <button
-              type="button"
-              onClick={() => {
-                if (searchQuery) {
-                  setSearchQuery("");
-                } else {
-                  setSearchOpen(false);
-                }
-              }}
-              aria-label={searchQuery ? "Clear search" : "Close search"}
-              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-            >
-              <XIcon className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="px-4 py-3 text-xs text-muted-foreground">
-            {searchQuery.trim()
-              ? `${filteredArticles.length} matches across all feeds (${filteredArticles.filter((a: any) => !a.isRead).length} unread)`
-              : "Type to search across all articles globally"}
-          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (searchQuery.trim()) setSearchOpen(false);
+            }}
+          >
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
+              <SearchIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+              <Input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search… author:, intitle:, is:unread, label:"
+                className="border-0 bg-transparent text-sm focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto py-0"
+                autoFocus
+                enterKeyHint="search"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (searchQuery) {
+                    setSearchQuery("");
+                  } else {
+                    setSearchOpen(false);
+                  }
+                }}
+                aria-label={searchQuery ? "Clear search" : "Close search"}
+                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              >
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-4 py-3 text-xs text-muted-foreground">
+              {searchQuery.trim()
+                ? `${filteredArticles.length} matches across all feeds (${filteredArticles.filter((a: any) => !a.isRead).length} unread)`
+                : "Type to search across all articles globally"}
+            </div>
+            <div className="flex flex-col gap-2 px-4 pb-4 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setSearchOpen(false)}
+                className="order-2 sm:order-1 rounded-xl border border-border/60 bg-background/60 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!searchQuery.trim()}
+                className="order-1 sm:order-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98] transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {searchQuery.trim()
+                  ? `Show ${filteredArticles.length} result${filteredArticles.length === 1 ? "" : "s"}`
+                  : "Enter a query"}
+              </button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 

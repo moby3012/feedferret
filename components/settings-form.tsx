@@ -714,9 +714,14 @@ function PushNotificationSection() {
                 </label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {feeds.map((feed: any) => (
-                    <label key={feed.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <label
+                      key={feed.id}
+                      className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"
+                      title={feed.name}
+                    >
                       <input
                         type="checkbox"
+                        className="shrink-0"
                         checked={feedIds.size === 0 || feedIds.has(feed.id)}
                         onChange={(event) => {
                           const next = new Set(feedIds);
@@ -726,7 +731,7 @@ function PushNotificationSection() {
                           updateSettings({ pushFeedIds: next.size === feeds.length ? [] : Array.from(next) });
                         }}
                       />
-                      <span className="truncate">{feed.name}</span>
+                      <span className="min-w-0 flex-1 truncate">{feed.name}</span>
                     </label>
                   ))}
                 </div>
@@ -1078,15 +1083,16 @@ function DigestSection() {
                             : [...digest.digestFeedIds, feed.id];
                           update({ digestFeedIds: next });
                         }}
+                        title={feed.name}
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-medium transition-all",
+                          "inline-flex max-w-[14rem] items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-medium transition-all",
                           selected
                             ? "bg-accent text-accent-foreground"
                             : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
                         )}
                       >
-                        {feed.icon && <span>{feed.icon}</span>}
-                        {feed.name}
+                        {feed.icon && <span className="shrink-0">{feed.icon}</span>}
+                        <span className="truncate">{feed.name}</span>
                       </button>
                     );
                   })}

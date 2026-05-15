@@ -705,7 +705,7 @@ export function RssSidebar({
                       <p className="text-sm font-semibold">Notifications</p>
                       {unreadNotifications > 0 && (
                         <button
-                          className="text-xs text-primary hover:underline"
+                          className="hidden sm:inline text-xs text-primary hover:underline"
                           onClick={() => markAllNotificationsRead.mutate()}
                         >
                           Mark all read
@@ -743,6 +743,18 @@ export function RssSidebar({
                           </span>
                         </DropdownMenuItem>
                       ))
+                    )}
+                    {unreadNotifications > 0 && (
+                      <>
+                        <DropdownMenuSeparator className="sm:hidden" />
+                        <button
+                          type="button"
+                          className="sm:hidden mt-1 w-full rounded-xl bg-primary/10 px-3 py-3 text-sm font-semibold text-primary active:scale-[0.98] transition-transform"
+                          onClick={() => markAllNotificationsRead.mutate()}
+                        >
+                          Mark all as read
+                        </button>
+                      </>
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>

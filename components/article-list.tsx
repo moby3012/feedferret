@@ -223,37 +223,12 @@ export function ArticleList({
       }
     };
 
-    let touchStartY = 0;
-    let touchAccum = 0;
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      touchStartY = e.touches[0].clientY;
-      touchAccum = 0;
-    };
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      const { scrollTop, scrollHeight, clientHeight } = scrollRoot;
-      const atBottom = scrollHeight - (scrollTop + clientHeight) < 8 && scrollHeight > clientHeight + 8;
-      const atTop = scrollTop < 4;
-      const dy = touchStartY - e.touches[0].clientY;
-      if (atBottom && dy > 0) {
-        touchAccum = dy;
-        if (touchAccum > 120) fire(1);
-      } else if (atTop && dy < 0) {
-        touchAccum = Math.abs(dy);
-        if (touchAccum > 120) fire(-1);
-      } else {
-        touchAccum = 0;
-      }
-    };
-
+    // Wheel only on the feed list. Touch overscroll removed because vertical
+    // swipe at the top collides with pull-to-refresh (#5). Mobile users
+    // switch feeds via the sidebar or the header-area swipe gesture.
     scrollRoot.addEventListener("wheel", handleWheel, { passive: true });
-    scrollRoot.addEventListener("touchstart", handleTouchStart, { passive: true });
-    scrollRoot.addEventListener("touchmove", handleTouchMove, { passive: true });
     return () => {
       scrollRoot.removeEventListener("wheel", handleWheel);
-      scrollRoot.removeEventListener("touchstart", handleTouchStart);
-      scrollRoot.removeEventListener("touchmove", handleTouchMove);
     };
   }, [scrollRoot, onOverscrollPastEnd, onOverscrollPastTop]);
 
