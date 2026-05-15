@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { sendPushToUser } from "@/lib/push";
-import { dispatchWebhookEvent } from "@/lib/webhooks";
 import { sendSystemEmail } from "@/lib/mail";
 
 function parseActions(value: string | null | undefined) {
@@ -99,23 +98,6 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
           text,
         }).catch((e) => console.warn("[keyword-alerts] email failed:", e));
       }
-    }
-
-    // Webhook: keyword_match event per matching article
-    for (const article of matches) {
-      dispatchWebhookEvent(userId, "keyword_match", {
-        alertId: alert.id,
-        alertName: alert.name,
-        query: alert.query,
-        article: {
-          id: article.id,
-          title: article.title,
-          link: article.link,
-          feedId: article.feed.id,
-          feedName: article.feed.name,
-          publishedAt: article.publishedAt,
-        },
-      }, article.feed.id).catch(() => {});
     }
 
     await db.keywordAlert.update({

@@ -1,7 +1,6 @@
 import { syncAllFeeds } from "./rss-sync";
 import { runDigestScheduler } from "./digest-scheduler";
 import { flushDueNotifications } from "./notifications";
-import { retryWebhookDeliveries } from "./webhooks";
 
 type SchedulerState = {
     timer: NodeJS.Timeout | null;
@@ -44,9 +43,6 @@ async function tick() {
         );
         void flushDueNotifications().catch((e) =>
             console.error("[push-notifications] flush failed:", e),
-        );
-        void retryWebhookDeliveries().catch((e) =>
-            console.error("[webhooks] retry failed:", e),
         );
     } catch (error) {
         state.lastError = String(error);

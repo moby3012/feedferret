@@ -29,7 +29,6 @@ model User {
   notifications Notification[]
   gReaderPreferences GReaderPreference[]
   pushSubscriptions PushSubscription[]
-  webhooks          Webhook[]
   defaultUpdateFrequency Int @default(60)
   defaultRetentionDays Int @default(90)
   openOriginalByDefault Boolean @default(false)
@@ -100,6 +99,9 @@ model AutoReadRule {
   // or "feed_error" (a feed sync fails). Feed-error rules limit actions to
   // notifications and webhooks.
   trigger         String   @default("article")
+  // Inline webhook configurations referenced from actions list as
+  // "webhook_call:<index>". JSON array of WebhookConfig records.
+  webhookConfigs  String?
   enabled         Boolean  @default(true)
   order           Int      @default(0)
   lastTriggeredAt DateTime?
@@ -378,40 +380,6 @@ model GlobalSettings {
   onboardingCompleted Boolean @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
-}
-
-model Webhook {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  url         String
-  secret      String
-  enabled     Boolean  @default(true)
-  events      String   @default("[\"new_article\"]")
-  feedFilter  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deliveries  WebhookDelivery[]
-  @@index([userId, enabled])
-}
-
-model WebhookDelivery {
-  id          String   @id @default(cuid())
-  webhookId   String
-  webhook     Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
-  event       String
-  payload     String
-  status      String   @default("pending")
-  statusCode  Int?
-  error       String?
-  attempts    Int      @default(0)
-  nextRetryAt DateTime?
-  deliveredAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  @@index([webhookId, createdAt])
-  @@index([status, nextRetryAt])
 }
 
 model DiscoveryCatalogFeed {

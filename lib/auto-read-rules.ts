@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { buildAdvancedSearchWhere } from "./search";
-import { enqueueWebhookDelivery } from "./webhooks";
+import { executeWebhookCall, getWebhookConfig } from "./webhooks";
 import { sendPushToUser } from "./push";
 import { sendSystemEmail } from "./mail";
 
@@ -161,28 +161,32 @@ async function applySingleAction(
         return result.count;
     }
 
-    if (action.startsWith("webhook:")) {
-        const webhookId = action.slice("webhook:".length);
-        const webhook = await db.webhook.findFirst({
-            where: { id: webhookId, userId, enabled: true },
-            select: { id: true },
-        });
-        if (!webhook) return 0;
+    if (action.startsWith("webhook_call:")) {
+        const indexStr = action.slice("webhook_call:".length);
+        const idx = Number.parseInt(indexStr, 10);
+        if (!Number.isFinite(idx) || idx < 0) return 0;
+        const config = getWebhookConfig({ webhookConfigs: (rule as any).webhookConfigs ?? null }, idx);
+        if (!config) return 0;
+        let fired = 0;
+        const now = new Date();
         for (const article of matches) {
-            await enqueueWebhookDelivery(webhook.id, "rule_match", {
-                ruleId: rule.id,
-                ruleName: rule.name,
-                article: {
-                    id: article.id,
-                    title: article.title,
-                    link: article.link,
-                    excerpt: article.excerpt,
-                    publishedAt: article.publishedAt,
-                    feed: article.feed,
-                },
+            const result = await executeWebhookCall(config, {
+                event: "rule_match",
+                timestamp: now.toISOString(),
+                rule_id: rule.id,
+                rule_name: rule.name,
+                article_id: article.id,
+                article_title: article.title,
+                article_link: article.link,
+                article_excerpt: article.excerpt ?? "",
+                published_at: article.publishedAt.toISOString(),
+                feed_id: article.feed.id,
+                feed_name: article.feed.name,
             });
+            if (result.ok) fired += 1;
+            else console.warn(`[auto-read-rules] webhook ${config.url} failed (${result.status ?? "no-response"}): ${result.error}`);
         }
-        return matches.length;
+        return fired;
     }
 
     if (action === "notify_inapp") {
@@ -387,25 +391,24 @@ export async function applyFeedErrorRules(
                         console.warn("[auto-read-rules] email failed:", e);
                     }
                 }
-            } else if (action.startsWith("webhook:")) {
-                const webhookId = action.slice("webhook:".length);
-                const webhook = await db.webhook.findFirst({
-                    where: { id: webhookId, userId, enabled: true },
-                    select: { id: true },
+            } else if (action.startsWith("webhook_call:")) {
+                const indexStr = action.slice("webhook_call:".length);
+                const idx = Number.parseInt(indexStr, 10);
+                if (!Number.isFinite(idx) || idx < 0) continue;
+                const config = getWebhookConfig({ webhookConfigs: rule.webhookConfigs }, idx);
+                if (!config) continue;
+                const result = await executeWebhookCall(config, {
+                    event: "feed_error",
+                    timestamp: now.toISOString(),
+                    rule_id: rule.id,
+                    rule_name: rule.name,
+                    feed_id: payload.feedId,
+                    feed_name: payload.feedName,
+                    feed_url: payload.feedUrl,
+                    error: payload.error,
                 });
-                if (webhook) {
-                    await enqueueWebhookDelivery(webhook.id, "feed_error", {
-                        ruleId: rule.id,
-                        ruleName: rule.name,
-                        feed: {
-                            id: payload.feedId,
-                            name: payload.feedName,
-                            url: payload.feedUrl,
-                        },
-                        error: payload.error,
-                    });
-                    ruleFired = true;
-                }
+                if (result.ok) ruleFired = true;
+                else console.warn(`[auto-read-rules] webhook ${config.url} failed (${result.status ?? "no-response"}): ${result.error}`);
             }
             // Other action types are ignored for feed_error triggers.
         }

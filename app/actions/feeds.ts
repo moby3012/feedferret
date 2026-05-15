@@ -1079,7 +1079,54 @@ const FEED_ERROR_ACTION_WHITELIST = new Set(["notify_inapp", "notify_push", "not
 
 function filterActionsForTrigger(trigger: "article" | "feed_error", actions: string[]): string[] {
     if (trigger !== "feed_error") return actions;
-    return actions.filter((a) => FEED_ERROR_ACTION_WHITELIST.has(a) || a.startsWith("webhook:"));
+    return actions.filter((a) => FEED_ERROR_ACTION_WHITELIST.has(a) || a.startsWith("webhook_call:"));
+}
+
+type IncomingWebhookConfig = {
+    url?: unknown;
+    method?: unknown;
+    headers?: unknown;
+    bodyTemplate?: unknown;
+    secret?: unknown;
+};
+
+function sanitizeWebhookConfigs(input: unknown): { configs: { url: string; method: string; headers?: Record<string, string>; bodyTemplate?: string; secret?: string }[]; valid: boolean } {
+    if (!Array.isArray(input)) return { configs: [], valid: true };
+    const out: { url: string; method: string; headers?: Record<string, string>; bodyTemplate?: string; secret?: string }[] = [];
+    for (const raw of input as IncomingWebhookConfig[]) {
+        if (!raw || typeof raw !== "object") continue;
+        const url = typeof raw.url === "string" ? raw.url.trim() : "";
+        if (!url) return { configs: [], valid: false };
+        try {
+            const parsed = new URL(url);
+            if (!["http:", "https:"].includes(parsed.protocol)) return { configs: [], valid: false };
+        } catch {
+            return { configs: [], valid: false };
+        }
+        const method = typeof raw.method === "string" && ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(raw.method.toUpperCase())
+            ? raw.method.toUpperCase()
+            : "POST";
+        const headers = raw.headers && typeof raw.headers === "object" && !Array.isArray(raw.headers)
+            ? Object.fromEntries(
+                Object.entries(raw.headers as Record<string, unknown>)
+                    .filter(([k, v]) => typeof k === "string" && typeof v === "string")
+                    .map(([k, v]) => [k.slice(0, 200), String(v).slice(0, 1000)]),
+            )
+            : undefined;
+        const bodyTemplate = typeof raw.bodyTemplate === "string" ? raw.bodyTemplate : undefined;
+        const secret = typeof raw.secret === "string" && raw.secret ? raw.secret : undefined;
+        out.push({ url, method, headers, bodyTemplate, secret });
+    }
+    return { configs: out, valid: true };
+}
+
+function actionsReferenceConfigs(actions: string[], configCount: number): boolean {
+    for (const a of actions) {
+        if (!a.startsWith("webhook_call:")) continue;
+        const idx = Number.parseInt(a.slice("webhook_call:".length), 10);
+        if (!Number.isFinite(idx) || idx < 0 || idx >= configCount) return false;
+    }
+    return true;
 }
 
 export async function createAutoReadRule(data: {
@@ -1089,6 +1136,7 @@ export async function createAutoReadRule(data: {
     actions?: string[];
     scope?: string | null;
     trigger?: string;
+    webhookConfigs?: unknown;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -1102,15 +1150,22 @@ export async function createAutoReadRule(data: {
     if (list.length === 0) throw new Error("At least one supported action is required");
     const { primary, serialized } = normalizeRuleActions(list);
 
+    const { configs, valid } = sanitizeWebhookConfigs(data.webhookConfigs);
+    if (!valid) throw new Error("Each webhook action needs a valid http(s) URL");
+    if (!actionsReferenceConfigs(list, configs.length)) {
+        throw new Error("Webhook action references a missing configuration");
+    }
+
     const rule = await db.autoReadRule.create({
         data: {
             userId: session.user.id,
             name: data.name.trim(),
-            query: data.query.trim() || (trigger === "feed_error" ? "" : ""),
+            query: data.query.trim(),
             action: primary,
             actions: serialized,
             scope: data.scope?.trim() || null,
             trigger,
+            webhookConfigs: configs.length ? JSON.stringify(configs) : null,
         },
     });
     revalidatePath("/");
@@ -1128,6 +1183,7 @@ export async function updateAutoReadRule(
         enabled: boolean;
         order: number;
         trigger: string;
+        webhookConfigs: unknown;
     }>,
 ) {
     const session = await auth();
@@ -1148,13 +1204,28 @@ export async function updateAutoReadRule(
     if (data.enabled !== undefined) patch.enabled = !!data.enabled;
     if (data.order !== undefined) patch.order = Number(data.order) || 0;
     if (data.trigger !== undefined) patch.trigger = trigger;
+
+    let nextActions: string[] | null = null;
     if (data.actions !== undefined) {
-        const filtered = filterActionsForTrigger(trigger, data.actions);
-        const { primary, serialized } = normalizeRuleActions(filtered);
+        nextActions = filterActionsForTrigger(trigger, data.actions);
+        const { primary, serialized } = normalizeRuleActions(nextActions);
         patch.actions = serialized;
         patch.action = primary;
     } else if (data.action !== undefined) {
         patch.action = String(data.action).trim();
+    }
+
+    if (data.webhookConfigs !== undefined) {
+        const { configs, valid } = sanitizeWebhookConfigs(data.webhookConfigs);
+        if (!valid) throw new Error("Each webhook action needs a valid http(s) URL");
+        const actionsForCheck = nextActions ?? (() => {
+            // Compare against existing actions if caller didn't send a new list.
+            return [] as string[];
+        })();
+        if (!actionsReferenceConfigs(actionsForCheck, configs.length) && nextActions) {
+            throw new Error("Webhook action references a missing configuration");
+        }
+        patch.webhookConfigs = configs.length ? JSON.stringify(configs) : null;
     }
 
     const rule = await db.autoReadRule.update({

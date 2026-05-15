@@ -7,7 +7,6 @@ import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { computeContentHash } from "./content-hash";
-import { dispatchWebhookEvent } from "./webhooks";
 import { decryptIfValue } from "./crypto";
 import type { AiConfig } from "./ai-summary";
 
@@ -152,21 +151,6 @@ export async function syncFeed(userId: string, feedId: string) {
                 console.error("[rss-sync] push notification queue failed:", e),
             );
             // Webhook: new_article events (one per created article, non-blocking)
-            const newArticles = await db.article.findMany({
-                where: { id: { in: createdArticleIds }, isDuplicate: false },
-                select: { id: true, title: true, link: true, excerpt: true, publishedAt: true, feed: { select: { name: true } } },
-            });
-            for (const a of newArticles) {
-                dispatchWebhookEvent(userId, "new_article", {
-                    id: a.id,
-                    title: a.title,
-                    link: a.link,
-                    feedId: feed.id,
-                    feedName: a.feed.name,
-                    publishedAt: a.publishedAt.toISOString(),
-                    excerpt: a.excerpt ?? "",
-                }, feed.id).catch((e) => console.error("[webhooks] dispatch failed:", e));
-            }
         }
 
         return { success: true, count: articles.length, createdArticleIds };
@@ -181,12 +165,6 @@ export async function syncFeed(userId: string, feedId: string) {
             },
         });
         const errorMessage = String(error).slice(0, 500);
-        dispatchWebhookEvent(userId, "feed_error", {
-            feedId: feed.id,
-            feedName: feed.name,
-            feedUrl: feed.url,
-            error: errorMessage,
-        }, feed.id).catch(() => {});
         // Fire matching feed_error rules (in-app/push/email/webhook actions)
         import("@/lib/auto-read-rules")
             .then(({ applyFeedErrorRules }) =>

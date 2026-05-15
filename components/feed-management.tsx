@@ -14,7 +14,6 @@ import {
   useImportOpml,
   useExportOpml,
   useLabels,
-  useWebhooks,
   useMigrateKeywordAlertsToRules,
   useCreateLabel,
   useDeleteLabel,
@@ -87,7 +86,6 @@ import {
   ArrowUp,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
-import { WebhookSection } from "@/components/webhook-management";
 import { toast } from "sonner";
 import {
   Select,
@@ -118,12 +116,16 @@ import { cn } from "@/lib/utils";
 
 type ActionCatalogItem = { value: string; label: string; group: "article" | "labels" | "notify" | "webhook"; };
 
+// Sentinel value used by the picker — actual rule actions become
+// "webhook_call:<n>" once the user fills in a URL.
+const ADD_WEBHOOK_TOKEN = "__add_webhook__";
+
 function catalogForTrigger(catalog: ActionCatalogItem[], trigger: "article" | "feed_error"): ActionCatalogItem[] {
   if (trigger !== "feed_error") return catalog;
   return catalog.filter((item) => item.group === "notify" || item.group === "webhook");
 }
 
-function buildActionCatalog(labels: any[], webhooks: any[]): ActionCatalogItem[] {
+function buildActionCatalog(labels: any[]): ActionCatalogItem[] {
   const catalog: ActionCatalogItem[] = [
     { value: "mark_read", label: "Mark as read", group: "article" },
     { value: "mark_unread", label: "Mark as unread", group: "article" },
@@ -138,13 +140,11 @@ function buildActionCatalog(labels: any[], webhooks: any[]): ActionCatalogItem[]
     { value: "notify_inapp", label: "In-app notification", group: "notify" },
     { value: "notify_push", label: "Push notification", group: "notify" },
     { value: "notify_email", label: "Email notification", group: "notify" },
+    { value: ADD_WEBHOOK_TOKEN, label: "Trigger a webhook…", group: "webhook" },
   ];
   for (const label of labels as any[]) {
     catalog.push({ value: `label:${label.id}`, label: `Attach label · ${label.name}`, group: "labels" });
     catalog.push({ value: `remove_label:${label.id}`, label: `Remove label · ${label.name}`, group: "labels" });
-  }
-  for (const wh of webhooks as any[]) {
-    if (wh.enabled) catalog.push({ value: `webhook:${wh.id}`, label: `Trigger webhook · ${wh.name}`, group: "webhook" });
   }
   return catalog;
 }
@@ -154,61 +154,161 @@ function actionLabel(value: string, catalog: ActionCatalogItem[]): string {
   if (hit) return hit.label;
   if (value.startsWith("label:")) return "label (deleted)";
   if (value.startsWith("remove_label:")) return "remove label (deleted)";
-  if (value.startsWith("webhook:")) return "webhook (disabled)";
+  if (value.startsWith("webhook_call:")) return "webhook";
   return value;
+}
+
+export type WebhookConfigUi = {
+  url: string;
+  method: "POST" | "GET" | "PUT" | "PATCH" | "DELETE";
+  headers?: Record<string, string>;
+  bodyTemplate?: string;
+  secret?: string;
+};
+
+/**
+ * Repack the actions list so every `webhook_call:<idx>` references a
+ * contiguous index into webhookConfigs starting at 0. Returns the rewritten
+ * actions and the matching configs in the same order they're referenced.
+ */
+function repackWebhooks(
+  actions: string[],
+  configs: WebhookConfigUi[],
+): { actions: string[]; webhookConfigs: WebhookConfigUi[] } {
+  const seenIndexToNew = new Map<number, number>();
+  const nextConfigs: WebhookConfigUi[] = [];
+  const nextActions = actions.map((a) => {
+    if (!a.startsWith("webhook_call:")) return a;
+    const oldIdx = Number.parseInt(a.slice("webhook_call:".length), 10);
+    if (!Number.isFinite(oldIdx)) return a;
+    if (!seenIndexToNew.has(oldIdx)) {
+      const cfg = configs[oldIdx];
+      if (!cfg) return a;
+      const newIdx = nextConfigs.length;
+      nextConfigs.push(cfg);
+      seenIndexToNew.set(oldIdx, newIdx);
+    }
+    return `webhook_call:${seenIndexToNew.get(oldIdx)}`;
+  });
+  return { actions: nextActions, webhookConfigs: nextConfigs };
 }
 
 function ActionListEditor({
   value,
+  webhookConfigs,
   onChange,
   catalog,
 }: {
   value: string[];
-  onChange: (next: string[]) => void;
+  webhookConfigs: WebhookConfigUi[];
+  onChange: (next: { actions: string[]; webhookConfigs: WebhookConfigUi[] }) => void;
   catalog: ActionCatalogItem[];
 }) {
-  const available = catalog.filter((item) => !value.includes(item.value));
+  const reorderable = (mover: (arr: string[]) => string[]) => {
+    const next = mover(value);
+    onChange(repackWebhooks(next, webhookConfigs));
+  };
+
+  const removeAt = (idx: number) => {
+    const next = value.filter((_, i) => i !== idx);
+    onChange(repackWebhooks(next, webhookConfigs));
+  };
+
+  const addAction = (val: string) => {
+    if (!val) return;
+    if (val === ADD_WEBHOOK_TOKEN) {
+      const newIdx = webhookConfigs.length;
+      onChange({
+        actions: [...value, `webhook_call:${newIdx}`],
+        webhookConfigs: [
+          ...webhookConfigs,
+          { url: "", method: "POST" },
+        ],
+      });
+      return;
+    }
+    onChange({
+      actions: [...value, val],
+      webhookConfigs,
+    });
+  };
+
+  const updateWebhookConfig = (actionIdx: number, patch: Partial<WebhookConfigUi>) => {
+    const action = value[actionIdx];
+    if (!action.startsWith("webhook_call:")) return;
+    const configIdx = Number.parseInt(action.slice("webhook_call:".length), 10);
+    if (!Number.isFinite(configIdx)) return;
+    const nextConfigs = webhookConfigs.map((cfg, i) =>
+      i === configIdx ? { ...cfg, ...patch } : cfg,
+    );
+    onChange({ actions: value, webhookConfigs: nextConfigs });
+  };
+
+  const available = catalog.filter(
+    (item) => item.value === ADD_WEBHOOK_TOKEN || !value.includes(item.value),
+  );
+
   return (
     <div className="space-y-2">
       {value.length === 0 && (
         <p className="text-xs text-muted-foreground italic">Add at least one action below.</p>
       )}
-      {value.map((action, idx) => (
-        <div key={`${action}-${idx}`} className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/60 px-3 py-2">
-          <span className="text-xs text-muted-foreground tabular-nums shrink-0">{idx + 1}.</span>
-          <span className="flex-1 truncate text-sm">{actionLabel(action, catalog)}</span>
-          <button
-            type="button"
-            disabled={idx === 0}
-            onClick={() => {
-              const next = [...value];
-              [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-              onChange(next);
-            }}
-            className="rounded-lg p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
-            aria-label="Move up"
-          >▲</button>
-          <button
-            type="button"
-            disabled={idx === value.length - 1}
-            onClick={() => {
-              const next = [...value];
-              [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-              onChange(next);
-            }}
-            className="rounded-lg p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
-            aria-label="Move down"
-          >▼</button>
-          <button
-            type="button"
-            onClick={() => onChange(value.filter((_, i) => i !== idx))}
-            className="rounded-lg p-1 text-destructive/70 hover:text-destructive"
-            aria-label="Remove action"
-          >×</button>
-        </div>
-      ))}
+      {value.map((action, idx) => {
+        const isWebhook = action.startsWith("webhook_call:");
+        const configIdx = isWebhook ? Number.parseInt(action.slice("webhook_call:".length), 10) : -1;
+        const config = isWebhook && Number.isFinite(configIdx) ? webhookConfigs[configIdx] : undefined;
+
+        return (
+          <div
+            key={`${action}-${idx}`}
+            className="rounded-xl border border-border/50 bg-background/60 px-3 py-2 space-y-2"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums shrink-0">{idx + 1}.</span>
+              <span className="flex-1 truncate text-sm font-medium">
+                {isWebhook ? "Trigger a webhook" : actionLabel(action, catalog)}
+              </span>
+              <button
+                type="button"
+                disabled={idx === 0}
+                onClick={() => reorderable((arr) => {
+                  const next = [...arr];
+                  [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                  return next;
+                })}
+                className="rounded-lg p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                aria-label="Move up"
+              >▲</button>
+              <button
+                type="button"
+                disabled={idx === value.length - 1}
+                onClick={() => reorderable((arr) => {
+                  const next = [...arr];
+                  [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                  return next;
+                })}
+                className="rounded-lg p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                aria-label="Move down"
+              >▼</button>
+              <button
+                type="button"
+                onClick={() => removeAt(idx)}
+                className="rounded-lg p-1 text-destructive/70 hover:text-destructive"
+                aria-label="Remove action"
+              >×</button>
+            </div>
+
+            {isWebhook && config && (
+              <WebhookActionConfig
+                value={config}
+                onChange={(patch) => updateWebhookConfig(idx, patch)}
+              />
+            )}
+          </div>
+        );
+      })}
       {available.length > 0 && (
-        <Select value="" onValueChange={(val) => { if (val) onChange([...value, val]); }}>
+        <Select value="" onValueChange={addAction}>
           <SelectTrigger className="rounded-xl h-10">
             <SelectValue placeholder={value.length === 0 ? "Add first action…" : "Add another action…"} />
           </SelectTrigger>
@@ -218,6 +318,109 @@ function ActionListEditor({
             ))}
           </SelectContent>
         </Select>
+      )}
+    </div>
+  );
+}
+
+const WEBHOOK_VARIABLES: { token: string; description: string }[] = [
+  { token: "{{event}}", description: "rule_match or feed_error" },
+  { token: "{{rule_name}}", description: "rule name" },
+  { token: "{{timestamp}}", description: "ISO firing time" },
+  { token: "{{article_title}}", description: "article title (article trigger)" },
+  { token: "{{article_link}}", description: "article URL" },
+  { token: "{{article_excerpt}}", description: "article summary" },
+  { token: "{{feed_name}}", description: "originating feed" },
+  { token: "{{feed_url}}", description: "feed URL (feed_error trigger)" },
+  { token: "{{error}}", description: "error message (feed_error trigger)" },
+];
+
+function WebhookActionConfig({
+  value,
+  onChange,
+}: {
+  value: WebhookConfigUi;
+  onChange: (patch: Partial<WebhookConfigUi>) => void;
+}) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  return (
+    <div className="space-y-2 pt-1 border-t border-border/50">
+      <div className="grid gap-2 sm:grid-cols-[100px_1fr]">
+        <Select
+          value={value.method}
+          onValueChange={(method) => onChange({ method: method as WebhookConfigUi["method"] })}
+        >
+          <SelectTrigger className="rounded-xl h-9 text-xs font-mono">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="POST">POST</SelectItem>
+            <SelectItem value="PUT">PUT</SelectItem>
+            <SelectItem value="PATCH">PATCH</SelectItem>
+            <SelectItem value="GET">GET</SelectItem>
+            <SelectItem value="DELETE">DELETE</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input
+          type="url"
+          placeholder="https://example.com/hook/{{feed_name}}"
+          value={value.url}
+          onChange={(e) => onChange({ url: e.target.value })}
+          className="rounded-xl h-9 text-xs font-mono"
+        />
+      </div>
+
+      <button
+        type="button"
+        className="text-[11px] text-muted-foreground hover:text-foreground"
+        onClick={() => setShowAdvanced((v) => !v)}
+      >
+        {showAdvanced ? "Hide advanced" : "Advanced (body, secret, variables)"}
+      </button>
+
+      {showAdvanced && (
+        <div className="space-y-2 pt-1">
+          <div className="space-y-1">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Body template</label>
+            <textarea
+              rows={4}
+              placeholder={`{\n  "title": "{{article_title}}",\n  "link": "{{article_link}}"\n}`}
+              value={value.bodyTemplate ?? ""}
+              onChange={(e) => onChange({ bodyTemplate: e.target.value })}
+              className="w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-xs font-mono"
+              disabled={value.method === "GET"}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Leave empty for the default JSON payload. Method GET skips the body.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              HMAC secret (optional)
+            </label>
+            <Input
+              type="password"
+              placeholder="Used to sign the body via X-FeedFerret-Signature"
+              value={value.secret ?? ""}
+              onChange={(e) => onChange({ secret: e.target.value })}
+              className="rounded-xl h-9 text-xs"
+            />
+          </div>
+
+          <div className="rounded-xl border border-border/50 bg-muted/30 p-2 text-[10px] leading-relaxed">
+            <p className="font-medium mb-1 uppercase tracking-wider text-muted-foreground">Variables</p>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-0.5">
+              {WEBHOOK_VARIABLES.map((v) => (
+                <li key={v.token}>
+                  <code className="bg-background/80 rounded px-1 font-mono">{v.token}</code>{" "}
+                  <span className="text-muted-foreground">— {v.description}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -484,6 +687,7 @@ export function FeedManagement({
   const [newRuleActions, setNewRuleActions] = useState<string[]>(["mark_read"]);
   const [newRuleScope, setNewRuleScope] = useState<string>("all");
   const [newRuleTrigger, setNewRuleTrigger] = useState<"article" | "feed_error">("article");
+  const [newRuleWebhooks, setNewRuleWebhooks] = useState<WebhookConfigUi[]>([]);
   const [rulePreview, setRulePreview] = useState<any[] | null>(null);
   const [showAddRule, setShowAddRule] = useState(false);
   const [showRuleTutorial, setShowRuleTutorial] = useState(false);
@@ -493,6 +697,7 @@ export function FeedManagement({
   const [editRuleActions, setEditRuleActions] = useState<string[]>([]);
   const [editRuleScope, setEditRuleScope] = useState<string>("all");
   const [editRuleTrigger, setEditRuleTrigger] = useState<"article" | "feed_error">("article");
+  const [editRuleWebhooks, setEditRuleWebhooks] = useState<WebhookConfigUi[]>([]);
   const [newAlertName, setNewAlertName] = useState("");
   const [newAlertQuery, setNewAlertQuery] = useState("");
   const [newAlertScope, setNewAlertScope] = useState("all");
@@ -513,7 +718,7 @@ export function FeedManagement({
 
   const { data: categories = [] } = useCategories();
   const { data: labels = [] } = useLabels();
-  const { data: webhooks = [] } = useWebhooks();
+  // webhook actions are now configured inline per rule (see ActionListEditor)
   const { data: savedSearches = [] } = useSavedSearches();
 
   useEffect(() => {
@@ -1362,14 +1567,21 @@ export function FeedManagement({
                             onValueChange={(value) => {
                               const t = value === "feed_error" ? "feed_error" : "article";
                               setNewRuleTrigger(t);
-                              const filtered = catalogForTrigger(buildActionCatalog(labels, webhooks), t);
+                              const filtered = catalogForTrigger(buildActionCatalog(labels), t);
                               const allowed = new Set(filtered.map((i) => i.value));
-                              setNewRuleActions((prev) => {
-                                const next = prev.filter((a) => allowed.has(a) || a.startsWith("webhook:"));
-                                if (next.length === 0 && t === "feed_error") return ["notify_inapp"];
-                                if (next.length === 0) return ["mark_read"];
-                                return next;
-                              });
+                              const survived = newRuleActions.filter(
+                                (a) => allowed.has(a) || a.startsWith("webhook_call:"),
+                              );
+                              const finalActions =
+                                survived.length === 0
+                                  ? t === "feed_error"
+                                    ? ["notify_inapp"]
+                                    : ["mark_read"]
+                                  : survived;
+                              const packed = repackWebhooks(finalActions, newRuleWebhooks);
+                              setNewRuleActions(packed.actions);
+                              setNewRuleWebhooks(packed.webhookConfigs);
+                              setNewRuleAction(packed.actions[0] || "mark_read");
                             }}
                           >
                             <SelectTrigger className="rounded-xl h-10">
@@ -1435,11 +1647,13 @@ export function FeedManagement({
                           </label>
                           <ActionListEditor
                             value={newRuleActions}
-                            onChange={(next) => {
-                              setNewRuleActions(next);
-                              setNewRuleAction(next[0] || "mark_read");
+                            webhookConfigs={newRuleWebhooks}
+                            onChange={({ actions, webhookConfigs }) => {
+                              setNewRuleActions(actions);
+                              setNewRuleWebhooks(webhookConfigs);
+                              setNewRuleAction(actions[0] || "mark_read");
                             }}
-                            catalog={catalogForTrigger(buildActionCatalog(labels, webhooks), newRuleTrigger)}
+                            catalog={catalogForTrigger(buildActionCatalog(labels), newRuleTrigger)}
                           />
                         </div>
                       </div>
@@ -1479,6 +1693,7 @@ export function FeedManagement({
                             setNewRuleActions(["mark_read"]);
                             setNewRuleScope("all");
                             setNewRuleTrigger("article");
+                            setNewRuleWebhooks([]);
                             setRulePreview(null);
                           }}
                         >
@@ -1501,6 +1716,7 @@ export function FeedManagement({
                                 actions: newRuleActions,
                                 scope: newRuleScope === "all" ? null : newRuleScope,
                                 trigger: newRuleTrigger,
+                                webhookConfigs: newRuleWebhooks,
                               },
                               {
                                 onSuccess: () => {
@@ -1511,6 +1727,7 @@ export function FeedManagement({
                                   setNewRuleActions(["mark_read"]);
                                   setNewRuleScope("all");
                                   setNewRuleTrigger("article");
+                                  setNewRuleWebhooks([]);
                                   setRulePreview(null);
                                 },
                               },
@@ -1551,7 +1768,7 @@ export function FeedManagement({
                   ) : (
                     <div className="space-y-2">
                       {autoReadRules.map((rule: any) => {
-                        const catalog = buildActionCatalog(labels, webhooks);
+                        const catalog = buildActionCatalog(labels);
                         const ruleActions: string[] = (() => {
                           if (rule.actions) {
                             try {
@@ -1650,6 +1867,22 @@ export function FeedManagement({
                                     setEditRuleActions(ruleActions.length ? ruleActions : ["mark_read"]);
                                     setEditRuleScope(rule.scope || "all");
                                     setEditRuleTrigger((rule.trigger === "feed_error" ? "feed_error" : "article"));
+                                    let parsed: WebhookConfigUi[] = [];
+                                    try {
+                                      const raw = JSON.parse(rule.webhookConfigs || "[]");
+                                      if (Array.isArray(raw)) {
+                                        parsed = raw
+                                          .filter((c) => c && typeof c.url === "string")
+                                          .map((c) => ({
+                                            url: String(c.url || ""),
+                                            method: ["POST", "GET", "PUT", "PATCH", "DELETE"].includes(c.method) ? c.method : "POST",
+                                            headers: c.headers ?? undefined,
+                                            bodyTemplate: typeof c.bodyTemplate === "string" ? c.bodyTemplate : undefined,
+                                            secret: typeof c.secret === "string" ? c.secret : undefined,
+                                          }));
+                                      }
+                                    } catch {}
+                                    setEditRuleWebhooks(parsed);
                                   }}
                                   title={isEditing ? "Close editor" : "Edit rule"}
                                 >
@@ -1689,12 +1922,18 @@ export function FeedManagement({
                                       setEditRuleTrigger(t);
                                       const filtered = catalogForTrigger(catalog, t);
                                       const allowed = new Set(filtered.map((i) => i.value));
-                                      setEditRuleActions((prev) => {
-                                        const next = prev.filter((a) => allowed.has(a) || a.startsWith("webhook:"));
-                                        if (next.length === 0 && t === "feed_error") return ["notify_inapp"];
-                                        if (next.length === 0) return ["mark_read"];
-                                        return next;
-                                      });
+                                      const survived = editRuleActions.filter(
+                                        (a) => allowed.has(a) || a.startsWith("webhook_call:"),
+                                      );
+                                      const finalActions =
+                                        survived.length === 0
+                                          ? t === "feed_error"
+                                            ? ["notify_inapp"]
+                                            : ["mark_read"]
+                                          : survived;
+                                      const packed = repackWebhooks(finalActions, editRuleWebhooks);
+                                      setEditRuleActions(packed.actions);
+                                      setEditRuleWebhooks(packed.webhookConfigs);
                                     }}
                                   >
                                     <SelectTrigger className="rounded-xl h-10">
@@ -1740,7 +1979,11 @@ export function FeedManagement({
                                   </label>
                                   <ActionListEditor
                                     value={editRuleActions}
-                                    onChange={setEditRuleActions}
+                                    webhookConfigs={editRuleWebhooks}
+                                    onChange={({ actions, webhookConfigs }) => {
+                                      setEditRuleActions(actions);
+                                      setEditRuleWebhooks(webhookConfigs);
+                                    }}
                                     catalog={catalogForTrigger(catalog, editRuleTrigger)}
                                   />
                                 </div>
@@ -1772,6 +2015,7 @@ export function FeedManagement({
                                             actions: editRuleActions,
                                             scope: editRuleScope === "all" ? null : editRuleScope,
                                             trigger: editRuleTrigger,
+                                            webhookConfigs: editRuleWebhooks,
                                           },
                                         },
                                         { onSuccess: () => setEditingRuleId(null) },
@@ -1789,9 +2033,6 @@ export function FeedManagement({
                     </div>
                   )}
 
-                  <div className="pt-4 border-t border-border/40">
-                    <WebhookSection />
-                  </div>
                 </div>
               </ScrollArea>
             </TabsContent>

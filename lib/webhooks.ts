@@ -1,5 +1,18 @@
 import { createHmac, randomBytes } from "crypto";
-import { db } from "./db";
+
+export type WebhookConfig = {
+  url: string;
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  headers?: Record<string, string>;
+  bodyTemplate?: string;
+  secret?: string;
+};
+
+export type WebhookExecutionResult = {
+  ok: boolean;
+  status: number | null;
+  error: string | null;
+};
 
 export function generateWebhookSecret(): string {
   return randomBytes(32).toString("hex");
@@ -14,134 +27,104 @@ export function verifyWebhookSignature(secret: string, body: string, signature: 
   return signature === expected;
 }
 
-// Bounded exponential backoff: attempt index → delay ms before next retry
-// Index 0 = first attempt (immediate), index 1 = after first failure, etc.
-const RETRY_DELAYS_MS = [0, 5 * 60_000, 30 * 60_000, 2 * 3_600_000, 8 * 3_600_000];
-const MAX_ATTEMPTS = RETRY_DELAYS_MS.length;
-
-export type WebhookEvent = "new_article" | "keyword_match" | "feed_error" | "rule_match";
-
-export async function enqueueWebhookDelivery(
-  webhookId: string,
-  event: WebhookEvent,
-  data: Record<string, unknown>,
-): Promise<void> {
-  const webhook = await db.webhook.findUnique({
-    where: { id: webhookId },
-    select: { id: true, enabled: true },
-  });
-  if (!webhook?.enabled) return;
-
-  const payload = JSON.stringify({
-    event,
-    timestamp: new Date().toISOString(),
-    data,
-  });
-
-  await db.webhookDelivery.create({
-    data: {
-      webhookId: webhook.id,
-      event,
-      payload,
-      status: "pending",
-      nextRetryAt: new Date(),
-    },
+/**
+ * Substitute `{{var}}` placeholders in a template.
+ * Unknown keys are left as the literal string `{{key}}` so the user can
+ * spot typos in the request log instead of getting an empty value.
+ */
+export function interpolate(template: string, vars: Record<string, unknown>): string {
+  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (full, key: string) => {
+    if (Object.prototype.hasOwnProperty.call(vars, key)) {
+      const value = (vars as Record<string, unknown>)[key];
+      if (value == null) return "";
+      return typeof value === "string" ? value : JSON.stringify(value);
+    }
+    return full;
   });
 }
 
-export async function dispatchWebhookEvent(
-  userId: string,
-  event: WebhookEvent,
-  data: Record<string, unknown>,
-  feedId?: string,
-): Promise<void> {
-  const webhooks = await db.webhook.findMany({
-    where: { userId, enabled: true },
-  });
-  if (webhooks.length === 0) return;
-
-  const payload = JSON.stringify({
-    event,
-    timestamp: new Date().toISOString(),
-    data,
-  });
-
-  for (const webhook of webhooks) {
-    const events: string[] = JSON.parse(webhook.events);
-    if (!events.includes(event)) continue;
-
-    if (feedId && webhook.feedFilter) {
-      const allowed: string[] = JSON.parse(webhook.feedFilter);
-      if (!allowed.includes(feedId)) continue;
-    }
-
-    await db.webhookDelivery.create({
-      data: {
-        webhookId: webhook.id,
-        event,
-        payload,
-        status: "pending",
-        nextRetryAt: new Date(),
-      },
-    });
+function parseConfigs(raw: string | null | undefined): WebhookConfig[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof item === "object" && typeof item.url === "string")
+      .map((item) => ({
+        url: String(item.url),
+        method: item.method && ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(item.method)
+          ? item.method
+          : "POST",
+        headers: item.headers && typeof item.headers === "object" ? item.headers : undefined,
+        bodyTemplate: typeof item.bodyTemplate === "string" ? item.bodyTemplate : undefined,
+        secret: typeof item.secret === "string" && item.secret ? item.secret : undefined,
+      }));
+  } catch {
+    return [];
   }
 }
 
-export async function retryWebhookDeliveries(): Promise<void> {
-  const due = await db.webhookDelivery.findMany({
-    where: { status: "pending", nextRetryAt: { lte: new Date() } },
-    include: { webhook: { select: { url: true, secret: true } } },
-    orderBy: { nextRetryAt: "asc" },
-    take: 50,
-  });
-
-  await Promise.allSettled(due.map(attemptDelivery));
+export function getWebhookConfig(
+  rule: { webhookConfigs?: string | null },
+  index: number,
+): WebhookConfig | null {
+  const configs = parseConfigs(rule.webhookConfigs);
+  return configs[index] ?? null;
 }
 
-async function attemptDelivery(delivery: {
-  id: string;
-  payload: string;
-  attempts: number;
-  webhook: { url: string; secret: string };
-}): Promise<void> {
-  const attemptNum = delivery.attempts + 1;
-  const body = delivery.payload;
-  const sig = signPayload(delivery.webhook.secret, body);
-  let statusCode: number | null = null;
-  let error: string | null = null;
-  let success = false;
+const DEFAULT_BODY = JSON.stringify({
+  event: "{{event}}",
+  rule: "{{rule_name}}",
+  timestamp: "{{timestamp}}",
+  article: {
+    id: "{{article_id}}",
+    title: "{{article_title}}",
+    link: "{{article_link}}",
+    feed: "{{feed_name}}",
+  },
+});
+
+/**
+ * Fire a single inline webhook synchronously. Returns success/failure but
+ * never throws — the caller decides whether to retry. Fire-and-forget so a
+ * misconfigured URL never blocks the rest of the rule pipeline for too long.
+ */
+export async function executeWebhookCall(
+  config: WebhookConfig,
+  vars: Record<string, unknown>,
+): Promise<WebhookExecutionResult> {
+  const url = interpolate(config.url, vars);
+  const method = (config.method ?? "POST").toUpperCase();
+  const supportsBody = method !== "GET" && method !== "HEAD";
+  const bodyTemplate = config.bodyTemplate ?? (supportsBody ? DEFAULT_BODY : "");
+  const body = supportsBody ? interpolate(bodyTemplate, vars) : undefined;
+
+  const headers: Record<string, string> = {
+    "User-Agent": "FeedFerret-Rules/1.0",
+    ...(supportsBody ? { "Content-Type": "application/json" } : {}),
+    ...(config.headers ?? {}),
+  };
+  if (config.secret && body) {
+    headers["X-FeedFerret-Signature"] = signPayload(config.secret, body);
+  }
 
   try {
-    const res = await fetch(delivery.webhook.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-FeedFerret-Signature": sig,
-        "X-FeedFerret-Event": (JSON.parse(body) as { event: string }).event,
-        "User-Agent": "FeedFerret-Webhooks/1.0",
-      },
+    const res = await fetch(url, {
+      method,
+      headers,
       body,
       signal: AbortSignal.timeout(10_000),
     });
-    statusCode = res.status;
-    success = res.ok;
-    if (!success) error = `HTTP ${res.status}`;
+    return {
+      ok: res.ok,
+      status: res.status,
+      error: res.ok ? null : `HTTP ${res.status}`,
+    };
   } catch (err) {
-    error = String(err).slice(0, 500);
+    return {
+      ok: false,
+      status: null,
+      error: String(err).slice(0, 500),
+    };
   }
-
-  const nextDelay = RETRY_DELAYS_MS[attemptNum];
-  const exhausted = attemptNum >= MAX_ATTEMPTS || nextDelay == null;
-
-  await db.webhookDelivery.update({
-    where: { id: delivery.id },
-    data: {
-      attempts: attemptNum,
-      status: success ? "success" : exhausted ? "failed" : "pending",
-      statusCode,
-      error,
-      deliveredAt: success ? new Date() : undefined,
-      nextRetryAt: !success && !exhausted ? new Date(Date.now() + nextDelay!) : null,
-    },
-  });
 }
