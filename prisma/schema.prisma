@@ -96,6 +96,10 @@ model AutoReadRule {
   actions         String?
   // Optional scope: "all" | "feed:<id>" | "category:<id>"
   scope           String?
+  // What fires this rule: "article" (default — query matches new/existing articles)
+  // or "feed_error" (a feed sync fails). Feed-error rules limit actions to
+  // notifications and webhooks.
+  trigger         String   @default("article")
   enabled         Boolean  @default(true)
   order           Int      @default(0)
   lastTriggeredAt DateTime?
@@ -103,6 +107,7 @@ model AutoReadRule {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   @@index([userId, enabled, order])
+  @@index([userId, trigger, enabled])
 }
 
 model KeywordAlert {

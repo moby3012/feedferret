@@ -1071,30 +1071,46 @@ function normalizeRuleActions(actions?: string[] | null): { primary: string; ser
     };
 }
 
+function normalizeTrigger(value?: string | null): "article" | "feed_error" {
+    return value === "feed_error" ? "feed_error" : "article";
+}
+
+const FEED_ERROR_ACTION_WHITELIST = new Set(["notify_inapp", "notify_push", "notify_email"]);
+
+function filterActionsForTrigger(trigger: "article" | "feed_error", actions: string[]): string[] {
+    if (trigger !== "feed_error") return actions;
+    return actions.filter((a) => FEED_ERROR_ACTION_WHITELIST.has(a) || a.startsWith("webhook:"));
+}
+
 export async function createAutoReadRule(data: {
     name: string;
     query: string;
     action?: string;
     actions?: string[];
     scope?: string | null;
+    trigger?: string;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
-    if (!data.name.trim() || !data.query.trim()) {
-        throw new Error("Name and query are required");
+    if (!data.name.trim()) throw new Error("Name is required");
+    const trigger = normalizeTrigger(data.trigger);
+    if (trigger === "article" && !data.query.trim()) {
+        throw new Error("Query is required for article-based rules");
     }
-    const list = data.actions && data.actions.length > 0 ? data.actions : (data.action ? [data.action] : []);
-    if (list.length === 0) throw new Error("At least one action is required");
+    const rawList = data.actions && data.actions.length > 0 ? data.actions : (data.action ? [data.action] : []);
+    const list = filterActionsForTrigger(trigger, rawList);
+    if (list.length === 0) throw new Error("At least one supported action is required");
     const { primary, serialized } = normalizeRuleActions(list);
 
     const rule = await db.autoReadRule.create({
         data: {
             userId: session.user.id,
             name: data.name.trim(),
-            query: data.query.trim(),
+            query: data.query.trim() || (trigger === "feed_error" ? "" : ""),
             action: primary,
             actions: serialized,
             scope: data.scope?.trim() || null,
+            trigger,
         },
     });
     revalidatePath("/");
@@ -1111,10 +1127,19 @@ export async function updateAutoReadRule(
         scope: string | null;
         enabled: boolean;
         order: number;
+        trigger: string;
     }>,
 ) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const existing = await db.autoReadRule.findFirst({
+        where: { id: ruleId, userId: session.user.id },
+        select: { trigger: true },
+    });
+    if (!existing) throw new Error("Rule not found");
+
+    const trigger = data.trigger !== undefined ? normalizeTrigger(data.trigger) : normalizeTrigger(existing.trigger);
 
     const patch: Record<string, unknown> = {};
     if (data.name !== undefined) patch.name = String(data.name).trim();
@@ -1122,8 +1147,10 @@ export async function updateAutoReadRule(
     if (data.scope !== undefined) patch.scope = data.scope ? String(data.scope).trim() : null;
     if (data.enabled !== undefined) patch.enabled = !!data.enabled;
     if (data.order !== undefined) patch.order = Number(data.order) || 0;
+    if (data.trigger !== undefined) patch.trigger = trigger;
     if (data.actions !== undefined) {
-        const { primary, serialized } = normalizeRuleActions(data.actions);
+        const filtered = filterActionsForTrigger(trigger, data.actions);
+        const { primary, serialized } = normalizeRuleActions(filtered);
         patch.actions = serialized;
         patch.action = primary;
     } else if (data.action !== undefined) {

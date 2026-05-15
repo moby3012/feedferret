@@ -180,12 +180,24 @@ export async function syncFeed(userId: string, feedId: string) {
                 lastError: String(error).slice(0, 1000),
             },
         });
+        const errorMessage = String(error).slice(0, 500);
         dispatchWebhookEvent(userId, "feed_error", {
             feedId: feed.id,
             feedName: feed.name,
             feedUrl: feed.url,
-            error: String(error).slice(0, 500),
+            error: errorMessage,
         }, feed.id).catch(() => {});
+        // Fire matching feed_error rules (in-app/push/email/webhook actions)
+        import("@/lib/auto-read-rules")
+            .then(({ applyFeedErrorRules }) =>
+                applyFeedErrorRules(userId, {
+                    feedId: feed.id,
+                    feedName: feed.name,
+                    feedUrl: feed.url,
+                    error: errorMessage,
+                }),
+            )
+            .catch((e) => console.warn("[rss-sync] feed_error rules failed:", e));
         return { success: false, error: String(error) };
     }
 }

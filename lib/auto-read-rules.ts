@@ -249,7 +249,7 @@ export async function applyAutoReadRules(
     options: { onlyArticleIds?: string[] } = {},
 ): Promise<{ applied: number }> {
     const rules = await db.autoReadRule.findMany({
-        where: { userId, enabled: true },
+        where: { userId, enabled: true, trigger: "article" },
         orderBy: { order: "asc" },
     });
 
@@ -310,6 +310,116 @@ export async function applyAutoReadRules(
     }
 
     return { applied };
+}
+
+export async function applyFeedErrorRules(
+    userId: string,
+    payload: { feedId: string; feedName: string; feedUrl: string; error: string },
+): Promise<{ fired: number }> {
+    const rules = await db.autoReadRule.findMany({
+        where: { userId, enabled: true, trigger: "feed_error" },
+        orderBy: { order: "asc" },
+    });
+    if (rules.length === 0) return { fired: 0 };
+
+    let fired = 0;
+    const now = new Date();
+
+    for (const rule of rules) {
+        // Scope filter: "all" matches every error, "feed:<id>" only that feed,
+        // "category:<id>" only feeds inside that category.
+        const scope = rule.scope ?? null;
+        if (scope && scope !== "all") {
+            if (scope.startsWith("feed:") && scope.slice(5) !== payload.feedId) continue;
+            if (scope.startsWith("category:")) {
+                const categoryId = scope.slice("category:".length);
+                const feed = await db.feed.findUnique({
+                    where: { id: payload.feedId },
+                    select: { categoryId: true },
+                });
+                if (feed?.categoryId !== categoryId) continue;
+            }
+        }
+
+        const actions = parseRuleActions(rule);
+        const cache: { userEmail?: string | null } = {};
+        let ruleFired = false;
+
+        for (const action of actions) {
+            if (action === "notify_inapp") {
+                await db.notification.create({
+                    data: {
+                        userId,
+                        type: "feed_error",
+                        title: rule.name,
+                        body: `${payload.feedName}: ${payload.error.slice(0, 280)}`,
+                        feedId: payload.feedId,
+                        ruleId: rule.id,
+                        createdAt: now,
+                    },
+                });
+                ruleFired = true;
+            } else if (action === "notify_push") {
+                await sendPushToUser(userId, {
+                    title: `Feed error: ${rule.name}`,
+                    body: `${payload.feedName} — ${payload.error.slice(0, 140)}`,
+                    feedId: payload.feedId,
+                    tag: `rule:${rule.id}`,
+                }).catch((error) => console.warn("[auto-read-rules] push failed", error));
+                ruleFired = true;
+            } else if (action === "notify_email") {
+                if (cache.userEmail === undefined) {
+                    const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
+                    cache.userEmail = user?.email ?? null;
+                }
+                if (cache.userEmail) {
+                    const html = `<p>Rule <strong>${rule.name}</strong> matched a feed error:</p><p><strong>${payload.feedName}</strong> (<code>${payload.feedUrl}</code>)</p><pre>${payload.error}</pre>`;
+                    const text = `Rule "${rule.name}" fired — feed error.\n${payload.feedName} (${payload.feedUrl})\n\n${payload.error}`;
+                    try {
+                        await sendSystemEmail({
+                            to: cache.userEmail,
+                            subject: `Feed error: ${payload.feedName}`,
+                            html,
+                            text,
+                        });
+                        ruleFired = true;
+                    } catch (e) {
+                        console.warn("[auto-read-rules] email failed:", e);
+                    }
+                }
+            } else if (action.startsWith("webhook:")) {
+                const webhookId = action.slice("webhook:".length);
+                const webhook = await db.webhook.findFirst({
+                    where: { id: webhookId, userId, enabled: true },
+                    select: { id: true },
+                });
+                if (webhook) {
+                    await enqueueWebhookDelivery(webhook.id, "feed_error", {
+                        ruleId: rule.id,
+                        ruleName: rule.name,
+                        feed: {
+                            id: payload.feedId,
+                            name: payload.feedName,
+                            url: payload.feedUrl,
+                        },
+                        error: payload.error,
+                    });
+                    ruleFired = true;
+                }
+            }
+            // Other action types are ignored for feed_error triggers.
+        }
+
+        if (ruleFired) {
+            fired += 1;
+            await db.autoReadRule.update({
+                where: { id: rule.id },
+                data: { lastTriggeredAt: now },
+            });
+        }
+    }
+
+    return { fired };
 }
 
 export async function previewAutoReadRuleMatches(

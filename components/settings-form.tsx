@@ -59,7 +59,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection } from "@/hooks/use-rss-data";
 import { useInstance } from "@/hooks/use-instance";
-import { WebhookSection } from "@/components/webhook-management";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -449,8 +448,8 @@ export function SettingsForm() {
           {/* AI Summaries */}
           <AiSummarySection />
 
-          {/* Outbound Webhooks */}
-          <WebhookSection />
+          {/* Outbound webhooks live alongside Rules & Alerts now —
+              see Manage feeds → Rules & Alerts. */}
 
           {/* ── Device & Misc ── */}
 

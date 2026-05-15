@@ -458,6 +458,7 @@ export function useCreateAutoReadRule() {
             action?: string;
             actions?: string[];
             scope?: string | null;
+            trigger?: string;
         }) => createAutoReadRule(data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
@@ -485,6 +486,7 @@ export function useUpdateAutoReadRule() {
                 scope: string | null;
                 enabled: boolean;
                 order: number;
+                trigger: string;
             }>
         }) => updateAutoReadRule(ruleId, data),
         onSuccess: () => {

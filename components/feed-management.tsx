@@ -87,6 +87,7 @@ import {
   ArrowUp,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
+import { WebhookSection } from "@/components/webhook-management";
 import { toast } from "sonner";
 import {
   Select,
@@ -116,6 +117,11 @@ import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { cn } from "@/lib/utils";
 
 type ActionCatalogItem = { value: string; label: string; group: "article" | "labels" | "notify" | "webhook"; };
+
+function catalogForTrigger(catalog: ActionCatalogItem[], trigger: "article" | "feed_error"): ActionCatalogItem[] {
+  if (trigger !== "feed_error") return catalog;
+  return catalog.filter((item) => item.group === "notify" || item.group === "webhook");
+}
 
 function buildActionCatalog(labels: any[], webhooks: any[]): ActionCatalogItem[] {
   const catalog: ActionCatalogItem[] = [
@@ -477,6 +483,7 @@ export function FeedManagement({
   const [newRuleAction, setNewRuleAction] = useState("mark_read");
   const [newRuleActions, setNewRuleActions] = useState<string[]>(["mark_read"]);
   const [newRuleScope, setNewRuleScope] = useState<string>("all");
+  const [newRuleTrigger, setNewRuleTrigger] = useState<"article" | "feed_error">("article");
   const [rulePreview, setRulePreview] = useState<any[] | null>(null);
   const [showAddRule, setShowAddRule] = useState(false);
   const [showRuleTutorial, setShowRuleTutorial] = useState(false);
@@ -485,6 +492,7 @@ export function FeedManagement({
   const [editRuleQuery, setEditRuleQuery] = useState("");
   const [editRuleActions, setEditRuleActions] = useState<string[]>([]);
   const [editRuleScope, setEditRuleScope] = useState<string>("all");
+  const [editRuleTrigger, setEditRuleTrigger] = useState<"article" | "feed_error">("article");
   const [newAlertName, setNewAlertName] = useState("");
   const [newAlertQuery, setNewAlertQuery] = useState("");
   const [newAlertScope, setNewAlertScope] = useState("all");
@@ -1347,32 +1355,60 @@ export function FeedManagement({
                           onChange={(e) => setNewRuleName(e.target.value)}
                           className="rounded-xl h-10"
                         />
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <Input
-                            placeholder='Query, e.g. feed:TechCrunch is:unread'
-                            value={newRuleQuery}
-                            onChange={(e) => {
-                              setNewRuleQuery(e.target.value);
-                              setRulePreview(null);
+                        <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
+                          <label className="text-xs font-medium text-muted-foreground self-center">Trigger</label>
+                          <Select
+                            value={newRuleTrigger}
+                            onValueChange={(value) => {
+                              const t = value === "feed_error" ? "feed_error" : "article";
+                              setNewRuleTrigger(t);
+                              const filtered = catalogForTrigger(buildActionCatalog(labels, webhooks), t);
+                              const allowed = new Set(filtered.map((i) => i.value));
+                              setNewRuleActions((prev) => {
+                                const next = prev.filter((a) => allowed.has(a) || a.startsWith("webhook:"));
+                                if (next.length === 0 && t === "feed_error") return ["notify_inapp"];
+                                if (next.length === 0) return ["mark_read"];
+                                return next;
+                              });
                             }}
-                            className="rounded-xl h-10 flex-1"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="rounded-xl shrink-0 gap-1.5"
-                            disabled={!newRuleQuery.trim() || previewAutoReadRule.isPending}
-                            onClick={() =>
-                              previewAutoReadRule.mutate(
-                                { query: newRuleQuery, scope: newRuleScope === "all" ? null : newRuleScope },
-                                { onSuccess: (data) => setRulePreview(data) },
-                              )
-                            }
                           >
-                            <Eye className="w-3.5 h-3.5" />
-                            Preview
-                          </Button>
+                            <SelectTrigger className="rounded-xl h-10">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="article">An article matches the query</SelectItem>
+                              <SelectItem value="feed_error">A feed fails to sync</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
+                        {newRuleTrigger === "article" && (
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <Input
+                              placeholder='Query, e.g. feed:TechCrunch is:unread'
+                              value={newRuleQuery}
+                              onChange={(e) => {
+                                setNewRuleQuery(e.target.value);
+                                setRulePreview(null);
+                              }}
+                              className="rounded-xl h-10 flex-1"
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-xl shrink-0 gap-1.5"
+                              disabled={!newRuleQuery.trim() || previewAutoReadRule.isPending}
+                              onClick={() =>
+                                previewAutoReadRule.mutate(
+                                  { query: newRuleQuery, scope: newRuleScope === "all" ? null : newRuleScope },
+                                  { onSuccess: (data) => setRulePreview(data) },
+                                )
+                              }
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              Preview
+                            </Button>
+                          </div>
+                        )}
                         <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
                           <label className="text-xs font-medium text-muted-foreground self-center">Scope</label>
                           <Select value={newRuleScope} onValueChange={setNewRuleScope}>
@@ -1380,7 +1416,7 @@ export function FeedManagement({
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="all">All articles</SelectItem>
+                              <SelectItem value="all">{newRuleTrigger === "feed_error" ? "Any feed" : "All articles"}</SelectItem>
                               {feeds.map((feed: any) => (
                                 <SelectItem key={`scope-feed-${feed.id}`} value={`feed:${feed.id}`}>Feed · {feed.name}</SelectItem>
                               ))}
@@ -1391,14 +1427,19 @@ export function FeedManagement({
                           </Select>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-muted-foreground">Actions (run in order)</label>
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Actions (run in order)
+                            {newRuleTrigger === "feed_error" && (
+                              <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-500">notifications &amp; webhooks only</span>
+                            )}
+                          </label>
                           <ActionListEditor
                             value={newRuleActions}
                             onChange={(next) => {
                               setNewRuleActions(next);
                               setNewRuleAction(next[0] || "mark_read");
                             }}
-                            catalog={buildActionCatalog(labels, webhooks)}
+                            catalog={catalogForTrigger(buildActionCatalog(labels, webhooks), newRuleTrigger)}
                           />
                         </div>
                       </div>
@@ -1437,6 +1478,7 @@ export function FeedManagement({
                             setNewRuleAction("mark_read");
                             setNewRuleActions(["mark_read"]);
                             setNewRuleScope("all");
+                            setNewRuleTrigger("article");
                             setRulePreview(null);
                           }}
                         >
@@ -1447,7 +1489,7 @@ export function FeedManagement({
                           className="rounded-xl"
                           disabled={
                             !newRuleName.trim() ||
-                            !newRuleQuery.trim() ||
+                            (newRuleTrigger === "article" && !newRuleQuery.trim()) ||
                             newRuleActions.length === 0 ||
                             createAutoReadRule.isPending
                           }
@@ -1458,6 +1500,7 @@ export function FeedManagement({
                                 query: newRuleQuery.trim(),
                                 actions: newRuleActions,
                                 scope: newRuleScope === "all" ? null : newRuleScope,
+                                trigger: newRuleTrigger,
                               },
                               {
                                 onSuccess: () => {
@@ -1467,6 +1510,7 @@ export function FeedManagement({
                                   setNewRuleAction("mark_read");
                                   setNewRuleActions(["mark_read"]);
                                   setNewRuleScope("all");
+                                  setNewRuleTrigger("article");
                                   setRulePreview(null);
                                 },
                               },
@@ -1561,6 +1605,16 @@ export function FeedManagement({
                                 <p className="font-medium text-sm truncate">{rule.name}</p>
                                 <p className="text-xs text-muted-foreground font-mono truncate">{rule.query}</p>
                                 <div className="mt-1.5 flex flex-wrap gap-1">
+                                  <span
+                                    className={cn(
+                                      "text-[10px] px-1.5 py-0.5 rounded-full",
+                                      rule.trigger === "feed_error"
+                                        ? "bg-amber-500/10 text-amber-600"
+                                        : "bg-primary/10 text-primary",
+                                    )}
+                                  >
+                                    {rule.trigger === "feed_error" ? "on feed error" : "on article match"}
+                                  </span>
                                   {scopeLabel && (
                                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">
                                       {scopeLabel}
@@ -1595,6 +1649,7 @@ export function FeedManagement({
                                     setEditRuleQuery(rule.query);
                                     setEditRuleActions(ruleActions.length ? ruleActions : ["mark_read"]);
                                     setEditRuleScope(rule.scope || "all");
+                                    setEditRuleTrigger((rule.trigger === "feed_error" ? "feed_error" : "article"));
                                   }}
                                   title={isEditing ? "Close editor" : "Edit rule"}
                                 >
@@ -1625,12 +1680,40 @@ export function FeedManagement({
                                   onChange={(e) => setEditRuleName(e.target.value)}
                                   className="rounded-xl h-10"
                                 />
-                                <Input
-                                  placeholder="Query"
-                                  value={editRuleQuery}
-                                  onChange={(e) => setEditRuleQuery(e.target.value)}
-                                  className="rounded-xl h-10"
-                                />
+                                <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
+                                  <label className="text-xs font-medium text-muted-foreground self-center">Trigger</label>
+                                  <Select
+                                    value={editRuleTrigger}
+                                    onValueChange={(value) => {
+                                      const t = value === "feed_error" ? "feed_error" : "article";
+                                      setEditRuleTrigger(t);
+                                      const filtered = catalogForTrigger(catalog, t);
+                                      const allowed = new Set(filtered.map((i) => i.value));
+                                      setEditRuleActions((prev) => {
+                                        const next = prev.filter((a) => allowed.has(a) || a.startsWith("webhook:"));
+                                        if (next.length === 0 && t === "feed_error") return ["notify_inapp"];
+                                        if (next.length === 0) return ["mark_read"];
+                                        return next;
+                                      });
+                                    }}
+                                  >
+                                    <SelectTrigger className="rounded-xl h-10">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="article">An article matches the query</SelectItem>
+                                      <SelectItem value="feed_error">A feed fails to sync</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                {editRuleTrigger === "article" && (
+                                  <Input
+                                    placeholder="Query"
+                                    value={editRuleQuery}
+                                    onChange={(e) => setEditRuleQuery(e.target.value)}
+                                    className="rounded-xl h-10"
+                                  />
+                                )}
                                 <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
                                   <label className="text-xs font-medium text-muted-foreground self-center">Scope</label>
                                   <Select value={editRuleScope} onValueChange={setEditRuleScope}>
@@ -1638,7 +1721,7 @@ export function FeedManagement({
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="all">All articles</SelectItem>
+                                      <SelectItem value="all">{editRuleTrigger === "feed_error" ? "Any feed" : "All articles"}</SelectItem>
                                       {feeds.map((feed: any) => (
                                         <SelectItem key={`edit-scope-feed-${feed.id}`} value={`feed:${feed.id}`}>Feed · {feed.name}</SelectItem>
                                       ))}
@@ -1649,11 +1732,16 @@ export function FeedManagement({
                                   </Select>
                                 </div>
                                 <div className="space-y-1.5">
-                                  <label className="text-xs font-medium text-muted-foreground">Actions (run in order)</label>
+                                  <label className="text-xs font-medium text-muted-foreground">
+                                    Actions (run in order)
+                                    {editRuleTrigger === "feed_error" && (
+                                      <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-500">notifications &amp; webhooks only</span>
+                                    )}
+                                  </label>
                                   <ActionListEditor
                                     value={editRuleActions}
                                     onChange={setEditRuleActions}
-                                    catalog={catalog}
+                                    catalog={catalogForTrigger(catalog, editRuleTrigger)}
                                   />
                                 </div>
                                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -1668,7 +1756,12 @@ export function FeedManagement({
                                   <Button
                                     size="sm"
                                     className="rounded-xl"
-                                    disabled={!editRuleName.trim() || !editRuleQuery.trim() || editRuleActions.length === 0 || updateAutoReadRule.isPending}
+                                    disabled={
+                                      !editRuleName.trim() ||
+                                      (editRuleTrigger === "article" && !editRuleQuery.trim()) ||
+                                      editRuleActions.length === 0 ||
+                                      updateAutoReadRule.isPending
+                                    }
                                     onClick={() =>
                                       updateAutoReadRule.mutate(
                                         {
@@ -1678,6 +1771,7 @@ export function FeedManagement({
                                             query: editRuleQuery.trim(),
                                             actions: editRuleActions,
                                             scope: editRuleScope === "all" ? null : editRuleScope,
+                                            trigger: editRuleTrigger,
                                           },
                                         },
                                         { onSuccess: () => setEditingRuleId(null) },
@@ -1694,6 +1788,10 @@ export function FeedManagement({
                       })}
                     </div>
                   )}
+
+                  <div className="pt-4 border-t border-border/40">
+                    <WebhookSection />
+                  </div>
                 </div>
               </ScrollArea>
             </TabsContent>
