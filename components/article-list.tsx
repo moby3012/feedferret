@@ -68,6 +68,7 @@ interface ArticleListProps {
   isRefreshing?: boolean;
   onPullToRefresh?: () => void;
   filterKey?: string;
+  transitionStyle?: "fade" | "flip" | "filter";
   onOverscrollPastEnd?: () => void;
   onOverscrollPastTop?: () => void;
 }
@@ -87,9 +88,16 @@ export function ArticleList({
   isRefreshing = false,
   onPullToRefresh,
   filterKey,
+  transitionStyle = "fade",
   onOverscrollPastEnd,
   onOverscrollPastTop,
 }: ArticleListProps) {
+  const transitionClass =
+    transitionStyle === "flip"
+      ? "animate-feed-flip"
+      : transitionStyle === "filter"
+        ? "animate-filter-swap"
+        : "animate-fade-in";
   const [visibleCount, setVisibleCount] = useState(pageSize ?? 30);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -250,7 +258,7 @@ export function ArticleList({
 
   if (articles.length === 0) {
     return (
-      <div key={filterKey ?? "empty"} className="flex-1 flex items-center justify-center p-8 animate-fade-in">
+      <div key={filterKey ?? "empty"} className={cn("flex-1 flex items-center justify-center p-8", transitionClass)}>
         <div className="text-center">
           <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-5">
             <Circle className="w-10 h-10 text-muted-foreground" />
@@ -267,7 +275,7 @@ export function ArticleList({
   }
 
   return (
-    <ScrollArea key={filterKey ?? "default"} className="flex-1 overflow-hidden min-h-0 animate-fade-in">
+    <ScrollArea key={filterKey ?? "default"} className={cn("flex-1 overflow-hidden min-h-0", transitionClass)}>
       {showPullIndicator && (
         <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
           <div className="flex items-center gap-2 rounded-full border border-border/70 bg-background/95 px-4 py-2 text-xs font-medium text-muted-foreground shadow-lg backdrop-blur-xl">

@@ -80,6 +80,7 @@ export default function RSSReaderPage() {
   const [sortOrderInitialized, setSortOrderInitialized] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(true);
+  const [transitionStyle, setTransitionStyle] = useState<"fade" | "flip" | "filter">("fade");
   const [searchQuery, setSearchQuery] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -408,6 +409,7 @@ export default function RSSReaderPage() {
           const nextFeed = ordered.find((f) => (f._count?.articles ?? 0) > 0);
           setSelectedArticleId(null);
           setSelectedArticleSnapshot(null);
+          setTransitionStyle("flip");
           if (nextFeed) {
             setSelectedFeed(nextFeed.id);
             setSelectedCategory("All");
@@ -422,6 +424,18 @@ export default function RSSReaderPage() {
       },
     );
   }, [feeds, markAllAsRead, selectedFeed, selectedCategory]);
+
+  const toggleUnreadOnly = useCallback(() => {
+    setTransitionStyle("filter");
+    setUnreadOnly((prev) => !prev);
+  }, []);
+
+  // Decay the transition style back to fade after the keyframe finishes
+  useEffect(() => {
+    if (transitionStyle === "fade") return;
+    const id = window.setTimeout(() => setTransitionStyle("fade"), 360);
+    return () => window.clearTimeout(id);
+  }, [transitionStyle, unreadOnly, selectedFeed, selectedCategory]);
 
   const navigateFeed = useCallback((direction: 1 | -1) => {
     const feedsList = feeds as any[];
@@ -706,7 +720,7 @@ export default function RSSReaderPage() {
               onRefresh={handleRefresh}
               isRefreshing={articlesLoading || refresh.isPending}
               unreadOnly={unreadOnly}
-              onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
+              onToggleUnreadOnly={toggleUnreadOnly}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               onMarkAllRead={handleMarkAllRead}
@@ -733,6 +747,7 @@ export default function RSSReaderPage() {
               viewMode={viewMode}
               markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
               filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
+              transitionStyle={transitionStyle}
               onMarkRead={(articleId) => {
                 const article = displayArticles.find((a: any) => a.id === articleId);
                 if (article) markArticleRead(article);
@@ -786,7 +801,7 @@ export default function RSSReaderPage() {
           onRefresh={handleRefresh}
           isRefreshing={articlesLoading || refresh.isPending}
           unreadOnly={unreadOnly}
-          onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
+          onToggleUnreadOnly={toggleUnreadOnly}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           onMarkAllRead={handleMarkAllRead}
@@ -825,7 +840,7 @@ export default function RSSReaderPage() {
         />
         <MobileBottomControls
           unreadOnly={unreadOnly}
-          onToggleUnreadOnly={() => setUnreadOnly(!unreadOnly)}
+          onToggleUnreadOnly={toggleUnreadOnly}
           onToggleSidebar={() => setSidebarOpen(true)}
           onRefresh={handleRefresh}
           isRefreshing={articlesLoading || refresh.isPending}
@@ -876,14 +891,14 @@ export default function RSSReaderPage() {
               if (searchQuery.trim()) setSearchOpen(false);
             }}
           >
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
-              <SearchIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div className="flex items-center gap-3 px-5 pt-5 pb-3 border-b border-border/50">
+              <SearchIcon className="w-5 h-5 text-muted-foreground shrink-0" />
               <Input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search… author:, intitle:, is:unread, label:"
-                className="border-0 bg-transparent text-sm focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto py-0"
+                placeholder="Enter search term — try author:, intitle:, is:unread, label:"
+                className="border-0 bg-transparent text-base sm:text-lg font-medium focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-12 py-0 placeholder:text-muted-foreground/70"
                 autoFocus
                 enterKeyHint="search"
               />
@@ -897,15 +912,15 @@ export default function RSSReaderPage() {
                   }
                 }}
                 aria-label={searchQuery ? "Clear search" : "Close search"}
-                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
               >
-                <XIcon className="w-4 h-4" />
+                <XIcon className="w-5 h-5" />
               </button>
             </div>
-            <div className="px-4 py-3 text-xs text-muted-foreground">
+            <div className="px-5 py-3 text-xs text-muted-foreground">
               {searchQuery.trim()
                 ? `${filteredArticles.length} matches across all feeds (${filteredArticles.filter((a: any) => !a.isRead).length} unread)`
-                : "Type to search across all articles globally"}
+                : "Search runs globally across every feed. Tip: combine operators like intitle:AI is:unread."}
             </div>
             <div className="flex flex-col gap-2 px-4 pb-4 sm:flex-row sm:justify-end">
               <button
@@ -922,7 +937,7 @@ export default function RSSReaderPage() {
               >
                 {searchQuery.trim()
                   ? `Show ${filteredArticles.length} result${filteredArticles.length === 1 ? "" : "s"}`
-                  : "Enter a query"}
+                  : "Enter search term"}
               </button>
             </div>
           </form>

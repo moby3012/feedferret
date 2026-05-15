@@ -694,7 +694,7 @@ export function RssSidebar({
                     >
                       <Bell className="w-4 h-4" />
                       {unreadNotifications > 0 && (
-                        <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-destructive px-1 text-[10px] font-bold leading-4 text-destructive-foreground">
+                        <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-destructive px-1 text-[10px] font-bold leading-none text-destructive-foreground shadow-sm">
                           {unreadNotifications > 9 ? "9+" : unreadNotifications}
                         </span>
                       )}
