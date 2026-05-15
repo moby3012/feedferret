@@ -44,7 +44,7 @@ function toUiArticle(a: any) {
   return {
     ...a,
     feedName: a.feed.name,
-    feedIcon: a.feed.icon || "📰",
+    feedIcon: a.feed.icon || "",
     publishedAtRaw: publishedAt.getTime(),
     publishedAt: publishedAt.toISOString(),
     readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
@@ -88,9 +88,10 @@ export default function RSSReaderPage() {
   const isAuthenticated = status === "authenticated";
 
   const { data: feeds = [], isLoading: feedsLoading } = useFeeds(isAuthenticated);
+  const isSearchActive = Boolean(searchQuery.trim());
   const { data: rawArticles = [], isLoading: articlesLoading } = useArticles(
-    selectedFeed,
-    selectedCategory,
+    isSearchActive ? null : selectedFeed,
+    isSearchActive ? "All Articles" : selectedCategory,
     searchQuery || undefined,
     isAuthenticated,
   );
@@ -238,7 +239,8 @@ export default function RSSReaderPage() {
     // 1. Not yet read, OR
     // 2. Read in this session (clicked but still visible), OR
     // 3. Already in readInSession (persist visibility after server update)
-    if (unreadOnly) {
+    // Global search bypasses unreadOnly so all matches show.
+    if (unreadOnly && !isSearchActive) {
       list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
     }
 
@@ -246,7 +248,7 @@ export default function RSSReaderPage() {
     return list.sort((a: any, b: any) =>
       sortOrder === "oldest" ? a.publishedAtRaw - b.publishedAtRaw : b.publishedAtRaw - a.publishedAtRaw,
     );
-  }, [displayArticles, unreadOnly, readInSession, sortOrder]);
+  }, [displayArticles, unreadOnly, readInSession, sortOrder, isSearchActive]);
 
   const selectedArticleIndex = useMemo(
     () => filteredArticles.findIndex((article: any) => article.id === selectedArticleId),
@@ -823,7 +825,10 @@ export default function RSSReaderPage() {
 
       {/* Search modal */}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="sm:max-w-xl rounded-2xl border-border/60 bg-card/95 backdrop-blur-2xl shadow-2xl p-0 gap-0 overflow-hidden">
+        <DialogContent
+          showCloseButton={false}
+          className="sm:max-w-xl rounded-2xl border-border/60 bg-card/95 backdrop-blur-2xl shadow-2xl p-0 gap-0 overflow-hidden"
+        >
           <DialogHeader className="sr-only">
             <DialogTitle>Search articles</DialogTitle>
           </DialogHeader>
@@ -837,19 +842,25 @@ export default function RSSReaderPage() {
               className="border-0 bg-transparent text-sm focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto py-0"
               autoFocus
             />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-              >
-                <XIcon className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (searchQuery) {
+                  setSearchQuery("");
+                } else {
+                  setSearchOpen(false);
+                }
+              }}
+              aria-label={searchQuery ? "Clear search" : "Close search"}
+              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            >
+              <XIcon className="w-4 h-4" />
+            </button>
           </div>
           <div className="px-4 py-3 text-xs text-muted-foreground">
             {searchQuery.trim()
-              ? `${filteredArticles.filter((a: any) => !a.isRead).length} unread · ${filteredArticles.length} total matches`
-              : "Type to search across all articles in the current view"}
+              ? `${filteredArticles.length} matches across all feeds (${filteredArticles.filter((a: any) => !a.isRead).length} unread)`
+              : "Type to search across all articles globally"}
           </div>
         </DialogContent>
       </Dialog>

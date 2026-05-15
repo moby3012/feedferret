@@ -16,23 +16,41 @@ function formatDate(dateStr: string) {
   return `${day}.${month} - ${hours}:${minutes}`;
 }
 
-function FeedFavicon({ icon, name, size = 16 }: { icon: string; name?: string; size?: number }) {
-  const isUrl = icon.startsWith("http") || icon.startsWith("/");
-  if (isUrl) {
+function FeedFavicon({ icon, name, size = 16, articleLink }: { icon?: string; name?: string; size?: number; articleLink?: string }) {
+  const [failed, setFailed] = useState(false);
+  const isUrl = icon ? (icon.startsWith("http") || icon.startsWith("/")) : false;
+  let src: string | null = null;
+  if (isUrl && icon) {
+    src = icon;
+  } else if (articleLink) {
+    try {
+      const domain = new URL(articleLink).hostname;
+      src = `https://www.google.com/s2/favicons?domain=${domain}&sz=${Math.max(32, size * 2)}`;
+    } catch {}
+  }
+  if (src && !failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={icon}
+        src={src}
         alt={name ?? ""}
         width={size}
         height={size}
         className="rounded-sm object-contain shrink-0"
         style={{ width: size, height: size }}
-        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        onError={() => setFailed(true)}
       />
     );
   }
-  return <span style={{ fontSize: size, lineHeight: 1 }} className="shrink-0">{icon}</span>;
+  return (
+    <span
+      aria-hidden="true"
+      style={{ width: size, height: size, fontSize: Math.max(8, size * 0.55), lineHeight: `${size}px` }}
+      className="shrink-0 inline-flex items-center justify-center rounded-sm bg-muted text-muted-foreground font-semibold uppercase"
+    >
+      {(name ?? "?").trim().charAt(0)}
+    </span>
+  );
 }
 
 interface ArticleListProps {
@@ -336,7 +354,7 @@ function ArticlePreview({
           !article.isRead ? "border-brand" : "border-transparent",
         )}
       >
-        <FeedFavicon icon={article.feedIcon} name={article.feedName} size={14} />
+        <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={14} />
         {!article.isRead && <CircleDot className="w-3 h-3 text-brand shrink-0" />}
         <h3 className={cn("flex-1 text-sm truncate", !article.isRead && "font-semibold")}>{article.title}</h3>
         <span className="text-[10px] text-muted-foreground whitespace-nowrap">
@@ -346,7 +364,7 @@ function ArticlePreview({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
-          className={cn("rounded-md p-1 transition-colors shrink-0", article.isStarred ? "text-amber-500" : "text-muted-foreground/40 hover:text-amber-500")}
+          className={cn("rounded-md p-1 transition-colors shrink-0", article.isStarred ? "text-amber-500" : "text-muted-foreground hover:text-amber-500")}
           aria-label={article.isStarred ? "Remove star" : "Star"}
         >
           <Star className={cn("w-3.5 h-3.5", article.isStarred && "fill-amber-500")} />
@@ -354,7 +372,7 @@ function ArticlePreview({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
-          className={cn("rounded-md p-1 transition-colors shrink-0", article.isReadLater ? "text-accent" : "text-muted-foreground/40 hover:text-accent")}
+          className={cn("rounded-md p-1 transition-colors shrink-0", article.isReadLater ? "text-accent" : "text-muted-foreground hover:text-accent")}
           aria-label={article.isReadLater ? "Remove from Read Later" : "Read Later"}
         >
           <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent")} />
@@ -386,7 +404,7 @@ function ArticlePreview({
               className="object-cover transition-transform duration-700 hover:scale-110"
             />
             <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-white text-[10px] font-bold">
-              <FeedFavicon icon={article.feedIcon} name={article.feedName} size={12} />
+              <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={12} />
               {article.feedName}
             </div>
           </div>
@@ -394,7 +412,7 @@ function ArticlePreview({
         {!article.imageUrl && (
           <div className="px-4 pt-3">
             <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-black/10 dark:bg-white/10 rounded-lg text-[10px] font-bold">
-              <FeedFavicon icon={article.feedIcon} name={article.feedName} size={12} />
+              <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={12} />
               {article.feedName}
             </span>
           </div>
@@ -416,7 +434,7 @@ function ArticlePreview({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
-                className={cn("rounded-md p-1 transition-colors", article.isStarred ? "text-amber-500 hover:bg-amber-500/10" : "text-muted-foreground/50 hover:text-amber-500 hover:bg-amber-500/10")}
+                className={cn("rounded-md p-1 transition-colors", article.isStarred ? "text-amber-500 hover:bg-amber-500/10" : "text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10")}
                 aria-label={article.isStarred ? "Remove star" : "Star"}
               >
                 <Star className={cn("w-3.5 h-3.5", article.isStarred && "fill-amber-500")} />
@@ -424,7 +442,7 @@ function ArticlePreview({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
-                className={cn("rounded-md p-1 transition-colors", article.isReadLater ? "text-accent" : "text-muted-foreground/50 hover:text-accent hover:bg-accent/10")}
+                className={cn("rounded-md p-1 transition-colors", article.isReadLater ? "text-accent" : "text-muted-foreground hover:text-accent hover:bg-accent/10")}
                 aria-label={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
                 title={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
               >
@@ -472,7 +490,7 @@ function ArticlePreview({
 
         <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
           <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
-            <FeedFavicon icon={article.feedIcon} name={article.feedName} size={16} />
+            <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={16} />
             <span className="text-sm font-medium text-muted-foreground truncate">
               {article.feedName}
             </span>
@@ -558,7 +576,7 @@ function ArticlePreview({
             <span className="font-medium truncate max-w-[100px]">
               {article.author}
             </span>
-            <div className="ml-auto flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <div className="ml-auto flex items-center gap-1 opacity-100 transition-opacity">
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleRead?.(article.id); }}
