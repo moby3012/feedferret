@@ -9,8 +9,6 @@ import {
   PanelLeft,
   RefreshCw,
   Search,
-  SortAsc,
-  SortDesc,
   X,
 } from "lucide-react";
 
@@ -22,8 +20,6 @@ interface MobileBottomControlsProps {
   isRefreshing?: boolean;
   searchQuery: string;
   onSearchChange: (query: string) => void;
-  sortOrder: "newest" | "oldest";
-  onToggleSort?: () => void;
   onMarkAllRead?: () => void;
   isMarkingAllRead?: boolean;
 }
@@ -39,8 +35,6 @@ export function MobileBottomControls({
   isRefreshing,
   searchQuery,
   onSearchChange,
-  sortOrder,
-  onToggleSort,
   onMarkAllRead,
   isMarkingAllRead,
 }: MobileBottomControlsProps) {
@@ -113,17 +107,6 @@ export function MobileBottomControls({
         >
           <span className={cn("h-2 w-2 rounded-full", unreadOnly ? "bg-accent-foreground" : "bg-muted-foreground")} />
           {unreadOnly ? "Unread" : "All"}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className={mobileButtonClass}
-          onClick={() => onToggleSort?.()}
-          aria-label={sortOrder === "oldest" ? "Sort oldest first" : "Sort newest first"}
-          title={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
-        >
-          {sortOrder === "oldest" ? <SortAsc className="h-5 w-5" /> : <SortDesc className="h-5 w-5" />}
         </Button>
         <Button
           type="button"

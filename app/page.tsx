@@ -400,17 +400,23 @@ export default function RSSReaderPage() {
         onSuccess: () => {
           if (!selectedFeed) return;
           const currentIdx = feedsList.findIndex((f) => f.id === selectedFeed);
+          if (currentIdx === -1) return;
           const ordered = [
             ...feedsList.slice(currentIdx + 1),
             ...feedsList.slice(0, currentIdx),
           ];
           const nextFeed = ordered.find((f) => (f._count?.articles ?? 0) > 0);
+          setSelectedArticleId(null);
+          setSelectedArticleSnapshot(null);
           if (nextFeed) {
             setSelectedFeed(nextFeed.id);
             setSelectedCategory("All");
             setUnreadOnly(true);
-            setSelectedArticleId(null);
-            setSelectedArticleSnapshot(null);
+          } else {
+            // No more unread anywhere — fall back to the global Unread view
+            setSelectedFeed(null);
+            setSelectedCategory("All Articles");
+            setUnreadOnly(true);
           }
         },
       },
@@ -700,6 +706,7 @@ export default function RSSReaderPage() {
               onToggleReadLater={handleToggleReadLater}
               viewMode={viewMode}
               markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
+              filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
               onMarkRead={(articleId) => {
                 const article = displayArticles.find((a: any) => a.id === articleId);
                 if (article) markArticleRead(article);
@@ -775,6 +782,7 @@ export default function RSSReaderPage() {
           onToggleReadLater={handleToggleReadLater}
           viewMode={viewMode}
           markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
+          filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
           onMarkRead={(articleId) => {
             const article = displayArticles.find((a: any) => a.id === articleId);
             if (article) markArticleRead(article);
@@ -791,8 +799,6 @@ export default function RSSReaderPage() {
           isRefreshing={articlesLoading || refresh.isPending}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          sortOrder={sortOrder}
-          onToggleSort={handleToggleSort}
           onMarkAllRead={handleMarkAllRead}
           isMarkingAllRead={markAllAsRead.isPending}
         />
