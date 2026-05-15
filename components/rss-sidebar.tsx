@@ -60,6 +60,7 @@ import {
   useUpdateFeedOrder,
   useUpdateCategoryOrder,
   useStarredCount,
+  useSpoilerCount,
   useReadLaterCount,
   useLabels,
   useSavedSearches,
@@ -103,6 +104,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { DEFAULT_STARTER_PACKS, starterPackToOpml, type StarterPack } from "@/lib/starter-packs";
+import { SpoilerIcon } from "@/components/icons/spoiler-icon";
 
 interface RssSidebarProps {
   feeds: FeedSource[];
@@ -147,6 +149,7 @@ export function RssSidebar({
   const updateCategoryOrder = useUpdateCategoryOrder();
   const { data: starredCount = 0 } = useStarredCount();
   const { data: readLaterCount = 0 } = useReadLaterCount();
+  const { data: spoilerCount = 0 } = useSpoilerCount();
   const { data: labels = [] } = useLabels();
   const { data: savedSearches = [] } = useSavedSearches();
   const refreshFeed = useRefreshFeed();
@@ -303,6 +306,9 @@ export function RssSidebar({
     { id: "all", icon: Home, label: "All Articles", count: totalUnread },
     ...(starredCount > 0 ? [{ id: "starred", icon: Star, label: "Starred", count: starredCount }] : []),
     ...(readLaterCount > 0 ? [{ id: "readlater", icon: Bookmark, label: "Read Later", count: readLaterCount }] : []),
+    ...(spoilerCount > 0
+      ? [{ id: "spoiler", icon: SpoilerIcon as any, label: "Spoiler", count: spoilerCount }]
+      : []),
   ];
 
   const { data: session } = useSession();

@@ -110,6 +110,26 @@ async function applySingleAction(
         return ids.length;
     }
 
+    if (action === "mark_spoiler") {
+        const ids = matches.map((a) => a.id);
+        if (ids.length === 0) return 0;
+        await db.article.updateMany({
+            where: { id: { in: ids }, isSpoiler: false },
+            data: { isSpoiler: true, spoilerAt: new Date() },
+        });
+        return ids.length;
+    }
+
+    if (action === "remove_spoiler") {
+        const ids = matches.map((a) => a.id);
+        if (ids.length === 0) return 0;
+        await db.article.updateMany({
+            where: { id: { in: ids }, isSpoiler: true },
+            data: { isSpoiler: false, spoilerAt: null },
+        });
+        return ids.length;
+    }
+
     if (action.startsWith("label:")) {
         const labelId = action.slice("label:".length);
         const label = await db.label.findFirst({ where: { id: labelId, userId } });

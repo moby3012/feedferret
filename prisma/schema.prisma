@@ -276,6 +276,8 @@ model Article {
   isStarred   Boolean  @default(false)
   isReadLater Boolean  @default(false)
   readLaterSavedAt DateTime?
+  isSpoiler   Boolean  @default(false)
+  spoilerAt   DateTime?
   notifications Notification[]
   feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -289,6 +291,7 @@ model Article {
   @@index([userId, isRead, publishedAt])
   @@index([userId, isStarred, publishedAt])
   @@index([userId, isReadLater, readLaterSavedAt])
+  @@index([userId, isSpoiler, publishedAt])
   @@index([userId, readAt])
   @@index([feedId, publishedAt])
 }

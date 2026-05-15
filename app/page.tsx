@@ -29,6 +29,7 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Search as SearchIcon, X as XIcon } from "lucide-react";
+import { SpoilerIcon } from "@/components/icons/spoiler-icon";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -148,6 +149,47 @@ export default function RSSReaderPage() {
     setSessionReadArticles([]);
     setSelectedArticleSnapshot(null);
   }, [selectedFeed, selectedCategory]);
+
+  // Spoiler feed needs an explicit "reveal" each time the user enters it so
+  // they never see spoilers without a deliberate click.
+  const [spoilerRevealed, setSpoilerRevealed] = useState(false);
+  const isSpoilerCategory = selectedCategory === "Spoiler" && !selectedFeed;
+  useEffect(() => {
+    if (!isSpoilerCategory) setSpoilerRevealed(false);
+  }, [isSpoilerCategory, selectedCategory, selectedFeed]);
+
+  const spoilerGate = (
+    <div className="flex-1 flex items-center justify-center p-8 animate-fade-in">
+      <div className="max-w-md text-center space-y-5">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500">
+          <SpoilerIcon className="h-8 w-8" />
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-xl font-semibold tracking-tight">Spoiler content ahead</h3>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            These articles have been flagged by your rules as spoilers and are kept out of every
+            other view on purpose. Reveal only when you&apos;re ready to see them.
+          </p>
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSpoilerRevealed(true)}
+            className="rounded-2xl bg-amber-500 px-6 py-3 text-sm font-semibold text-amber-50 shadow-sm hover:bg-amber-600 active:scale-[0.98] transition-all"
+          >
+            Reveal spoilers
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedCategory("All"); setSelectedFeed(null); }}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Take me back
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   useEffect(() => {
     if (deepLinkAppliedRef.current || status !== "authenticated") return;
@@ -737,26 +779,28 @@ export default function RSSReaderPage() {
                 Offline mode: showing cached articles from this device.
               </div>
             )}
-            <ArticleList
-              articles={filteredArticles}
-              selectedArticle={selectedArticle}
-              onSelectArticle={handleSelectArticle}
-              onToggleRead={handleToggleRead}
-              onToggleStar={handleToggleStar}
-              onToggleReadLater={handleToggleReadLater}
-              viewMode={viewMode}
-              markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
-              filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
-              transitionStyle={transitionStyle}
-              onMarkRead={(articleId) => {
-                const article = displayArticles.find((a: any) => a.id === articleId);
-                if (article) markArticleRead(article);
-              }}
-              onOverscrollPastEnd={() => navigateFeed(1)}
-              onOverscrollPastTop={() => navigateFeed(-1)}
-              onSwipeNextFeed={() => navigateFeed(1)}
-              onSwipePreviousFeed={() => navigateFeed(-1)}
-            />
+            {isSpoilerCategory && !spoilerRevealed ? spoilerGate : (
+              <ArticleList
+                articles={filteredArticles}
+                selectedArticle={selectedArticle}
+                onSelectArticle={handleSelectArticle}
+                onToggleRead={handleToggleRead}
+                onToggleStar={handleToggleStar}
+                onToggleReadLater={handleToggleReadLater}
+                viewMode={viewMode}
+                markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
+                filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
+                transitionStyle={transitionStyle}
+                onMarkRead={(articleId) => {
+                  const article = displayArticles.find((a: any) => a.id === articleId);
+                  if (article) markArticleRead(article);
+                }}
+                onOverscrollPastEnd={() => navigateFeed(1)}
+                onOverscrollPastTop={() => navigateFeed(-1)}
+                onSwipeNextFeed={() => navigateFeed(1)}
+                onSwipePreviousFeed={() => navigateFeed(-1)}
+              />
+            )}
           </div>
         </ResizablePanel>
 
@@ -820,28 +864,31 @@ export default function RSSReaderPage() {
             Offline mode: showing cached articles from this device.
           </div>
         )}
-        <ArticleList
-          articles={filteredArticles}
-          selectedArticle={selectedArticle}
-          onSelectArticle={handleSelectArticle}
-          onToggleRead={handleToggleRead}
-          onToggleStar={handleToggleStar}
-          onToggleReadLater={handleToggleReadLater}
-          viewMode={viewMode}
-          markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
-          filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
-          onMarkRead={(articleId) => {
-            const article = displayArticles.find((a: any) => a.id === articleId);
-            if (article) markArticleRead(article);
-          }}
-          enablePullToRefresh
-          isRefreshing={articlesLoading || refresh.isPending}
-          onPullToRefresh={handleRefresh}
-          onOverscrollPastEnd={() => navigateFeed(1)}
-          onOverscrollPastTop={() => navigateFeed(-1)}
-          onSwipeNextFeed={() => navigateFeed(1)}
-          onSwipePreviousFeed={() => navigateFeed(-1)}
-        />
+        {isSpoilerCategory && !spoilerRevealed ? spoilerGate : (
+          <ArticleList
+            articles={filteredArticles}
+            selectedArticle={selectedArticle}
+            onSelectArticle={handleSelectArticle}
+            onToggleRead={handleToggleRead}
+            onToggleStar={handleToggleStar}
+            onToggleReadLater={handleToggleReadLater}
+            viewMode={viewMode}
+            markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
+            filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
+            transitionStyle={transitionStyle}
+            onMarkRead={(articleId) => {
+              const article = displayArticles.find((a: any) => a.id === articleId);
+              if (article) markArticleRead(article);
+            }}
+            enablePullToRefresh
+            isRefreshing={articlesLoading || refresh.isPending}
+            onPullToRefresh={handleRefresh}
+            onOverscrollPastEnd={() => navigateFeed(1)}
+            onOverscrollPastTop={() => navigateFeed(-1)}
+            onSwipeNextFeed={() => navigateFeed(1)}
+            onSwipePreviousFeed={() => navigateFeed(-1)}
+          />
+        )}
         <MobileBottomControls
           unreadOnly={unreadOnly}
           onToggleUnreadOnly={toggleUnreadOnly}

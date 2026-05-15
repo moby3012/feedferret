@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection } from "@/app/actions/settings"
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, rotateWebhookSecret, getWebhookDeliveries, sendTestWebhook } from "@/app/actions/webhooks"
 import { toast } from "sonner"
@@ -38,6 +38,13 @@ export function useReadLaterCount() {
     return useQuery({
         queryKey: ["articles", "read-later-count"],
         queryFn: () => getReadLaterCount(),
+    })
+}
+
+export function useSpoilerCount() {
+    return useQuery({
+        queryKey: ["articles", "spoiler-count"],
+        queryFn: () => getSpoilerCount(),
     })
 }
 

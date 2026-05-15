@@ -54,7 +54,7 @@ export async function getFeeds() {
             _count: {
                 select: {
                     articles: {
-                        where: { isRead: false },
+                        where: { isRead: false, isSpoiler: false },
                     },
                 },
             },
@@ -96,6 +96,15 @@ export async function getReadLaterCount() {
 
     return await db.article.count({
         where: { userId: session.user.id, isReadLater: true },
+    });
+}
+
+export async function getSpoilerCount() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    return await db.article.count({
+        where: { userId: session.user.id, isSpoiler: true },
     });
 }
 
@@ -630,6 +639,7 @@ export async function getArticles(feedId?: string | null, category?: string, sea
     }
 
     let orderBy: any = { publishedAt: "desc" };
+    let isSpoilerCategory = false;
 
     if (feedId) {
         where.feedId = feedId;
@@ -638,6 +648,10 @@ export async function getArticles(feedId?: string | null, category?: string, sea
             where.isStarred = true;
         } else if (category === "Read Later") {
             where.isReadLater = true;
+        } else if (category === "Spoiler") {
+            isSpoilerCategory = true;
+            where.isSpoiler = true;
+            orderBy = { spoilerAt: "desc" };
         } else if (category === "Recently Read") {
             where.isRead = true;
             where.readAt = { not: null };
@@ -666,6 +680,12 @@ export async function getArticles(feedId?: string | null, category?: string, sea
                 },
             };
         }
+    }
+
+    // Spoiler flag is opt-in: filter spoilers out of every view that is not the
+    // dedicated Spoiler category so users do not accidentally read them.
+    if (!isSpoilerCategory && where.isSpoiler !== true) {
+        where.AND = [...(where.AND || []), { isSpoiler: false }];
     }
 
     return await db.article.findMany({

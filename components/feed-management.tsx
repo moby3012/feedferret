@@ -124,6 +124,8 @@ function buildActionCatalog(labels: any[], webhooks: any[]): ActionCatalogItem[]
     { value: "read_later", label: "Save to Read Later", group: "article" },
     { value: "remove_read_later", label: "Remove from Read Later", group: "article" },
     { value: "delete", label: "Delete article", group: "article" },
+    { value: "mark_spoiler", label: "Mark as Spoiler", group: "article" },
+    { value: "remove_spoiler", label: "Remove Spoiler flag", group: "article" },
     { value: "clear_labels", label: "Remove all labels", group: "labels" },
     { value: "notify_inapp", label: "In-app notification", group: "notify" },
     { value: "notify_push", label: "Push notification", group: "notify" },
