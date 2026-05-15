@@ -9,11 +9,38 @@ export async function GET() {
     select: {
       instanceName: true,
       instanceIconDataUrl: true,
+      mailServiceEnabled: true,
+      smtpHost: true,
+      mailProvider: true,
+      sendgridApiKey: true,
+      resendApiKey: true,
+      mailgunApiKey: true,
+      postmarkServerToken: true,
     },
   });
+
+  const mailProvider = settings?.mailProvider || "smtp";
+  const hasMailCredentials = (() => {
+    if (!settings) return false;
+    switch (mailProvider) {
+      case "sendgrid": return Boolean(settings.sendgridApiKey);
+      case "resend": return Boolean(settings.resendApiKey);
+      case "mailgun": return Boolean(settings.mailgunApiKey);
+      case "postmark": return Boolean(settings.postmarkServerToken);
+      case "smtp":
+      default: return Boolean(settings.smtpHost);
+    }
+  })();
+  const mailConfigured = Boolean(settings?.mailServiceEnabled && hasMailCredentials);
+  const pushConfigured = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
 
   return NextResponse.json({
     instanceName: settings?.instanceName || "FeedFerret",
     instanceIconDataUrl: settings?.instanceIconDataUrl || null,
+    capabilities: {
+      mail: mailConfigured,
+      push: pushConfigured,
+      magicLink: mailConfigured,
+    },
   });
 }

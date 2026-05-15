@@ -1148,23 +1148,64 @@ export function FeedManagement({
                       <Info className="w-4 h-4 shrink-0" />
                       How rules work
                     </div>
-                    <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+                    <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
                       <p>Rules run after each sync and apply actions to all matching articles. Use the same query syntax as search.</p>
-                      <div className="space-y-1.5 font-mono">
-                        <div className="flex flex-col gap-0.5">
-                          <code className="text-foreground/80">feed:Hacker&#8203;News is:unread</code>
-                          <span className="font-sans">→ target unread articles from a specific feed</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <code className="text-foreground/80">intitle:AI OR intitle:LLM</code>
-                          <span className="font-sans">→ star all AI-related headlines (use OR to combine)</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <code className="text-foreground/80">category:News author:Reuters</code>
-                          <span className="font-sans">→ auto-read wire news from Reuters</span>
+
+                      <div>
+                        <p className="font-medium text-foreground/80 mb-1.5">Examples</p>
+                        <div className="space-y-1.5 font-mono">
+                          <div className="flex flex-col gap-0.5">
+                            <code className="text-foreground/80">feed:&quot;Hacker News&quot; is:unread</code>
+                            <span className="font-sans">→ target unread articles from a specific feed (quote multi-word values)</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <code className="text-foreground/80">intitle:AI intitle:LLM</code>
+                            <span className="font-sans">→ matches headlines containing both AI and LLM</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <code className="text-foreground/80">category:News author:Reuters</code>
+                            <span className="font-sans">→ wire news from Reuters in the News category</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <code className="text-foreground/80">intitle:sponsored OR intitle:&quot;press release&quot;</code>
+                            <span className="font-sans">→ auto-read promotional posts</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <code className="text-foreground/80">after:7d -is:starred</code>
+                            <span className="font-sans">→ recent articles you haven&apos;t starred</span>
+                          </div>
                         </div>
                       </div>
-                      <p><strong className="text-foreground/70">Wildcards:</strong> use <code className="bg-background/60 px-1 rounded">*</code> inside a term — <code className="bg-background/60 px-1 rounded">intitle:invest*</code> matches "investment", "investor", etc. Prefix with <code className="bg-background/60 px-1 rounded">-</code> to exclude — <code className="bg-background/60 px-1 rounded">-intitle:sponsored</code>.</p>
+
+                      <div>
+                        <p className="font-medium text-foreground/80 mb-1.5">Available operators</p>
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 list-none">
+                          <li><code className="bg-background/60 px-1 rounded">intitle:</code> / <code className="bg-background/60 px-1 rounded">title:</code> — match in title</li>
+                          <li><code className="bg-background/60 px-1 rounded">intext:</code> / <code className="bg-background/60 px-1 rounded">content:</code> — body / excerpt</li>
+                          <li><code className="bg-background/60 px-1 rounded">author:</code> / <code className="bg-background/60 px-1 rounded">by:</code> — author</li>
+                          <li><code className="bg-background/60 px-1 rounded">inurl:</code> / <code className="bg-background/60 px-1 rounded">link:</code> — article URL</li>
+                          <li><code className="bg-background/60 px-1 rounded">feed:</code> / <code className="bg-background/60 px-1 rounded">f:</code> — feed name, id or url</li>
+                          <li><code className="bg-background/60 px-1 rounded">category:</code> / <code className="bg-background/60 px-1 rounded">cat:</code> — category</li>
+                          <li><code className="bg-background/60 px-1 rounded">label:</code> / <code className="bg-background/60 px-1 rounded">tag:</code> or <code className="bg-background/60 px-1 rounded">#name</code></li>
+                          <li><code className="bg-background/60 px-1 rounded">is:unread</code> · <code className="bg-background/60 px-1 rounded">is:read</code></li>
+                          <li><code className="bg-background/60 px-1 rounded">is:starred</code> · <code className="bg-background/60 px-1 rounded">is:unstarred</code></li>
+                          <li><code className="bg-background/60 px-1 rounded">is:readlater</code></li>
+                          <li><code className="bg-background/60 px-1 rounded">after:</code> / <code className="bg-background/60 px-1 rounded">since:</code></li>
+                          <li><code className="bg-background/60 px-1 rounded">before:</code> / <code className="bg-background/60 px-1 rounded">until:</code></li>
+                          <li><code className="bg-background/60 px-1 rounded">date:</code> / <code className="bg-background/60 px-1 rounded">pubdate:</code></li>
+                        </ul>
+                      </div>
+
+                      <div className="space-y-1">
+                        <p><strong className="text-foreground/70">Modifiers</strong></p>
+                        <ul className="space-y-0.5">
+                          <li>– Multiple terms = AND. Use <code className="bg-background/60 px-1 rounded">OR</code> (uppercase) to allow either.</li>
+                          <li>– Prefix <code className="bg-background/60 px-1 rounded">-</code> or <code className="bg-background/60 px-1 rounded">!</code> to exclude — <code className="bg-background/60 px-1 rounded">-intitle:sponsored</code>.</li>
+                          <li>– Quote multi-word values: <code className="bg-background/60 px-1 rounded">feed:&quot;The Verge&quot;</code>.</li>
+                          <li>– Dates accept ISO (<code className="bg-background/60 px-1 rounded">2026-01-15</code>) or relative (<code className="bg-background/60 px-1 rounded">7d</code>, <code className="bg-background/60 px-1 rounded">2w</code>, <code className="bg-background/60 px-1 rounded">3m</code>, <code className="bg-background/60 px-1 rounded">1y</code>).</li>
+                          <li>– Plain words (no <code className="bg-background/60 px-1 rounded">key:</code>) search across title, content, author, url and labels.</li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
 
@@ -1370,23 +1411,59 @@ export function FeedManagement({
                       <Info className="w-4 h-4 shrink-0" />
                       How alerts work
                     </div>
-                    <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-                      <p>Alerts fire whenever a newly synced article matches your query. You'll see a notification badge in the app. Scope can be limited to a specific feed or category.</p>
-                      <div className="space-y-1.5 font-mono">
-                        <div className="flex flex-col gap-0.5">
-                          <code className="text-foreground/80">intitle:security breach</code>
-                          <span className="font-sans">→ alert on any headline containing both words</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <code className="text-foreground/80">author:Jane OR author:John</code>
-                          <span className="font-sans">→ alert when specific authors publish</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <code className="text-foreground/80">intitle:recall* category:Tech</code>
-                          <span className="font-sans">→ wildcard + category scope together</span>
+                    <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
+                      <p>Alerts fire whenever a newly synced article matches your query. You&apos;ll see a notification badge in the app. Scope can be limited to a specific feed or category.</p>
+
+                      <div>
+                        <p className="font-medium text-foreground/80 mb-1.5">Examples</p>
+                        <div className="space-y-1.5 font-mono">
+                          <div className="flex flex-col gap-0.5">
+                            <code className="text-foreground/80">intitle:security intitle:breach</code>
+                            <span className="font-sans">→ alert on headlines containing both words</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <code className="text-foreground/80">author:Jane OR author:John</code>
+                            <span className="font-sans">→ alert when specific authors publish</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <code className="text-foreground/80">intitle:recall category:Tech</code>
+                            <span className="font-sans">→ category-scoped keyword alert</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <code className="text-foreground/80">#watchlist intitle:earnings</code>
+                            <span className="font-sans">→ articles tagged #watchlist about earnings</span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <code className="text-foreground/80">feed:&quot;The Verge&quot; -intitle:sponsored</code>
+                            <span className="font-sans">→ feed-scoped, excluding promotional posts</span>
+                          </div>
                         </div>
                       </div>
-                      <p><strong className="text-foreground/70">Wildcards:</strong> <code className="bg-background/60 px-1 rounded">*</code> matches any suffix — <code className="bg-background/60 px-1 rounded">crypto*</code> catches "crypto", "cryptocurrency", "cryptography". Combine terms with <code className="bg-background/60 px-1 rounded">OR</code>; prefix with <code className="bg-background/60 px-1 rounded">-</code> to exclude.</p>
+
+                      <div>
+                        <p className="font-medium text-foreground/80 mb-1.5">Available operators</p>
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 list-none">
+                          <li><code className="bg-background/60 px-1 rounded">intitle:</code> / <code className="bg-background/60 px-1 rounded">title:</code> — match in title</li>
+                          <li><code className="bg-background/60 px-1 rounded">intext:</code> / <code className="bg-background/60 px-1 rounded">content:</code> — body / excerpt</li>
+                          <li><code className="bg-background/60 px-1 rounded">author:</code> / <code className="bg-background/60 px-1 rounded">by:</code> — author</li>
+                          <li><code className="bg-background/60 px-1 rounded">inurl:</code> / <code className="bg-background/60 px-1 rounded">link:</code> — article URL</li>
+                          <li><code className="bg-background/60 px-1 rounded">feed:</code> / <code className="bg-background/60 px-1 rounded">f:</code> — feed</li>
+                          <li><code className="bg-background/60 px-1 rounded">category:</code> / <code className="bg-background/60 px-1 rounded">cat:</code> — category</li>
+                          <li><code className="bg-background/60 px-1 rounded">label:</code> / <code className="bg-background/60 px-1 rounded">#name</code> — label</li>
+                          <li><code className="bg-background/60 px-1 rounded">after:</code> / <code className="bg-background/60 px-1 rounded">before:</code> — date filters</li>
+                        </ul>
+                      </div>
+
+                      <div className="space-y-1">
+                        <p><strong className="text-foreground/70">Modifiers</strong></p>
+                        <ul className="space-y-0.5">
+                          <li>– Multiple terms = AND. Use <code className="bg-background/60 px-1 rounded">OR</code> (uppercase) to allow either match.</li>
+                          <li>– Prefix <code className="bg-background/60 px-1 rounded">-</code> or <code className="bg-background/60 px-1 rounded">!</code> to exclude: <code className="bg-background/60 px-1 rounded">-intitle:sponsored</code>.</li>
+                          <li>– Quote multi-word values: <code className="bg-background/60 px-1 rounded">intitle:&quot;data breach&quot;</code>.</li>
+                          <li>– Plain words search across title, content, author, url and labels.</li>
+                          <li>– Tip: keep alert queries narrow — they fire on every new match.</li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
 

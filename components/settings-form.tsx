@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection } from "@/hooks/use-rss-data";
+import { useInstance } from "@/hooks/use-instance";
 import { WebhookSection } from "@/components/webhook-management";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -919,10 +920,13 @@ const DAYS = [
 function DigestSection() {
   const { data: digest } = useDigestSettings();
   const { data: feedsData } = useFeeds();
+  const { data: instance, loading: instanceLoading } = useInstance();
   const updateDigest = useUpdateDigestSettings();
   const sendTest = useSendTestDigest();
 
   if (!digest) return null;
+  // Hide entirely if instance has no mail configured (#5)
+  if (!instanceLoading && instance && !instance.capabilities.mail) return null;
 
   const feeds = feedsData ?? [];
 
