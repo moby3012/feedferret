@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection } from "@/app/actions/settings"
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, rotateWebhookSecret, getWebhookDeliveries, sendTestWebhook } from "@/app/actions/webhooks"
 import { toast } from "sonner"
@@ -445,8 +445,13 @@ export function useAutoReadRules() {
 export function useCreateAutoReadRule() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: (data: { name: string; query: string; action: string }) =>
-            createAutoReadRule(data),
+        mutationFn: (data: {
+            name: string;
+            query: string;
+            action?: string;
+            actions?: string[];
+            scope?: string | null;
+        }) => createAutoReadRule(data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
             toast.success("Rule created")
@@ -465,7 +470,15 @@ export function useUpdateAutoReadRule() {
             data,
         }: {
             ruleId: string
-            data: Partial<{ name: string; query: string; action: string; enabled: boolean; order: number }>
+            data: Partial<{
+                name: string;
+                query: string;
+                action: string;
+                actions: string[];
+                scope: string | null;
+                enabled: boolean;
+                order: number;
+            }>
         }) => updateAutoReadRule(ruleId, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
@@ -504,8 +517,23 @@ export function useApplyAutoReadRulesNow() {
 
 export function usePreviewAutoReadRule() {
     return useMutation({
-        mutationFn: ({ query, limit }: { query: string; limit?: number }) =>
-            previewAutoReadRule(query, limit),
+        mutationFn: ({ query, scope, limit }: { query: string; scope?: string | null; limit?: number }) =>
+            previewAutoReadRule(query, scope ?? null, limit),
+    })
+}
+
+export function useMigrateKeywordAlertsToRules() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: () => migrateKeywordAlertsToRules(),
+        onSuccess: (result) => {
+            queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
+            queryClient.invalidateQueries({ queryKey: ["keyword-alerts"] })
+            toast.success(`Migrated ${result.migrated} alert${result.migrated === 1 ? "" : "s"} to rules`)
+        },
+        onError: (error) => {
+            toast.error(error instanceof Error ? error.message : "Migration failed")
+        },
     })
 }
 

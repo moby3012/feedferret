@@ -84,16 +84,23 @@ model PushSubscription {
 }
 
 model AutoReadRule {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  query     String
-  action    String   // "mark_read" | "star" | "label:<labelId>"
-  enabled   Boolean  @default(true)
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  query           String
+  action          String   // legacy single-action: "mark_read" | "star" | "label:<labelId>"
+  // New multi-action list (JSON array of action ids). When present, takes
+  // precedence over `action`. Example: ["mark_read","label:abc","notify_inapp"]
+  actions         String?
+  // Optional scope: "all" | "feed:<id>" | "category:<id>"
+  scope           String?
+  enabled         Boolean  @default(true)
+  order           Int      @default(0)
+  lastTriggeredAt DateTime?
+  notifications   Notification[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
   @@index([userId, enabled, order])
 }
 
@@ -119,7 +126,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // "keyword_alert" | "feed_error" | "digest_sent"
+  type      String   // "keyword_alert" | "rule_match" | "feed_error" | "digest_sent"
   title     String
   body      String
   articleId String?
@@ -127,12 +134,15 @@ model Notification {
   feedId    String?
   alertId   String?
   alert     KeywordAlert? @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  ruleId    String?
+  rule      AutoReadRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@index([userId, isRead, createdAt])
   @@index([articleId])
   @@index([alertId])
+  @@index([ruleId])
 }
 
 model GReaderPreference {

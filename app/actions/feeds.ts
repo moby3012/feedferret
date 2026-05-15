@@ -1042,22 +1042,39 @@ export async function getAutoReadRules() {
     });
 }
 
+function normalizeRuleActions(actions?: string[] | null): { primary: string; serialized: string | null } {
+    const cleaned = (actions || []).map((a) => String(a).trim()).filter(Boolean);
+    if (cleaned.length === 0) return { primary: "mark_read", serialized: null };
+    return {
+        primary: cleaned[0],
+        serialized: JSON.stringify(cleaned),
+    };
+}
+
 export async function createAutoReadRule(data: {
     name: string;
     query: string;
-    action: string;
+    action?: string;
+    actions?: string[];
+    scope?: string | null;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
-    if (!data.name.trim() || !data.query.trim() || !data.action.trim()) {
-        throw new Error("Name, query and action are required");
+    if (!data.name.trim() || !data.query.trim()) {
+        throw new Error("Name and query are required");
     }
+    const list = data.actions && data.actions.length > 0 ? data.actions : (data.action ? [data.action] : []);
+    if (list.length === 0) throw new Error("At least one action is required");
+    const { primary, serialized } = normalizeRuleActions(list);
+
     const rule = await db.autoReadRule.create({
         data: {
             userId: session.user.id,
             name: data.name.trim(),
             query: data.query.trim(),
-            action: data.action.trim(),
+            action: primary,
+            actions: serialized,
+            scope: data.scope?.trim() || null,
         },
     });
     revalidatePath("/");
@@ -1066,13 +1083,36 @@ export async function createAutoReadRule(data: {
 
 export async function updateAutoReadRule(
     ruleId: string,
-    data: Partial<{ name: string; query: string; action: string; enabled: boolean; order: number }>,
+    data: Partial<{
+        name: string;
+        query: string;
+        action: string;
+        actions: string[];
+        scope: string | null;
+        enabled: boolean;
+        order: number;
+    }>,
 ) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const patch: Record<string, unknown> = {};
+    if (data.name !== undefined) patch.name = String(data.name).trim();
+    if (data.query !== undefined) patch.query = String(data.query).trim();
+    if (data.scope !== undefined) patch.scope = data.scope ? String(data.scope).trim() : null;
+    if (data.enabled !== undefined) patch.enabled = !!data.enabled;
+    if (data.order !== undefined) patch.order = Number(data.order) || 0;
+    if (data.actions !== undefined) {
+        const { primary, serialized } = normalizeRuleActions(data.actions);
+        patch.actions = serialized;
+        patch.action = primary;
+    } else if (data.action !== undefined) {
+        patch.action = String(data.action).trim();
+    }
+
     const rule = await db.autoReadRule.update({
         where: { id: ruleId, userId: session.user.id },
-        data,
+        data: patch,
     });
     revalidatePath("/");
     return rule;
@@ -1096,11 +1136,52 @@ export async function applyAutoReadRulesNow() {
     return result;
 }
 
-export async function previewAutoReadRule(query: string, limit = 10) {
+export async function previewAutoReadRule(query: string, scope: string | null = null, limit = 10) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
     const { previewAutoReadRuleMatches } = await import("@/lib/auto-read-rules");
-    return previewAutoReadRuleMatches(session.user.id, query, limit);
+    return previewAutoReadRuleMatches(session.user.id, query, scope, limit);
+}
+
+export async function migrateKeywordAlertsToRules() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const userId = session.user.id;
+
+    const alerts = await db.keywordAlert.findMany({
+        where: { userId },
+        orderBy: { createdAt: "asc" },
+    });
+    if (alerts.length === 0) return { migrated: 0 };
+
+    let migrated = 0;
+    for (const alert of alerts) {
+        let alertActions: string[] = ["notify_inapp"];
+        try {
+            const parsed = JSON.parse(alert.actions);
+            if (Array.isArray(parsed)) {
+                alertActions = parsed.filter((x: unknown) => typeof x === "string");
+            }
+        } catch {}
+        if (alertActions.length === 0) alertActions = ["notify_inapp"];
+
+        await db.autoReadRule.create({
+            data: {
+                userId,
+                name: alert.name,
+                query: alert.query,
+                action: alertActions[0],
+                actions: JSON.stringify(alertActions),
+                scope: alert.scope === "all" ? null : alert.scope,
+                enabled: alert.enabled,
+                lastTriggeredAt: alert.lastTriggeredAt,
+            },
+        });
+        await db.keywordAlert.delete({ where: { id: alert.id } });
+        migrated += 1;
+    }
+    revalidatePath("/");
+    return { migrated };
 }
 
 // ─── Keyword Alerts + Notifications ────────────────────────────────────────

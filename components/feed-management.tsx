@@ -15,6 +15,7 @@ import {
   useExportOpml,
   useLabels,
   useWebhooks,
+  useMigrateKeywordAlertsToRules,
   useCreateLabel,
   useDeleteLabel,
   useSavedSearches,
@@ -111,6 +112,106 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { cn } from "@/lib/utils";
+
+type ActionCatalogItem = { value: string; label: string; group: "article" | "labels" | "notify" | "webhook"; };
+
+function buildActionCatalog(labels: any[], webhooks: any[]): ActionCatalogItem[] {
+  const catalog: ActionCatalogItem[] = [
+    { value: "mark_read", label: "Mark as read", group: "article" },
+    { value: "mark_unread", label: "Mark as unread", group: "article" },
+    { value: "star", label: "Star article", group: "article" },
+    { value: "unstar", label: "Unstar article", group: "article" },
+    { value: "read_later", label: "Save to Read Later", group: "article" },
+    { value: "remove_read_later", label: "Remove from Read Later", group: "article" },
+    { value: "delete", label: "Delete article", group: "article" },
+    { value: "clear_labels", label: "Remove all labels", group: "labels" },
+    { value: "notify_inapp", label: "In-app notification", group: "notify" },
+    { value: "notify_push", label: "Push notification", group: "notify" },
+    { value: "notify_email", label: "Email notification", group: "notify" },
+  ];
+  for (const label of labels as any[]) {
+    catalog.push({ value: `label:${label.id}`, label: `Attach label · ${label.name}`, group: "labels" });
+    catalog.push({ value: `remove_label:${label.id}`, label: `Remove label · ${label.name}`, group: "labels" });
+  }
+  for (const wh of webhooks as any[]) {
+    if (wh.enabled) catalog.push({ value: `webhook:${wh.id}`, label: `Trigger webhook · ${wh.name}`, group: "webhook" });
+  }
+  return catalog;
+}
+
+function actionLabel(value: string, catalog: ActionCatalogItem[]): string {
+  const hit = catalog.find((item) => item.value === value);
+  if (hit) return hit.label;
+  if (value.startsWith("label:")) return "label (deleted)";
+  if (value.startsWith("remove_label:")) return "remove label (deleted)";
+  if (value.startsWith("webhook:")) return "webhook (disabled)";
+  return value;
+}
+
+function ActionListEditor({
+  value,
+  onChange,
+  catalog,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  catalog: ActionCatalogItem[];
+}) {
+  const available = catalog.filter((item) => !value.includes(item.value));
+  return (
+    <div className="space-y-2">
+      {value.length === 0 && (
+        <p className="text-xs text-muted-foreground italic">Add at least one action below.</p>
+      )}
+      {value.map((action, idx) => (
+        <div key={`${action}-${idx}`} className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/60 px-3 py-2">
+          <span className="text-xs text-muted-foreground tabular-nums shrink-0">{idx + 1}.</span>
+          <span className="flex-1 truncate text-sm">{actionLabel(action, catalog)}</span>
+          <button
+            type="button"
+            disabled={idx === 0}
+            onClick={() => {
+              const next = [...value];
+              [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+              onChange(next);
+            }}
+            className="rounded-lg p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+            aria-label="Move up"
+          >▲</button>
+          <button
+            type="button"
+            disabled={idx === value.length - 1}
+            onClick={() => {
+              const next = [...value];
+              [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+              onChange(next);
+            }}
+            className="rounded-lg p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+            aria-label="Move down"
+          >▼</button>
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((_, i) => i !== idx))}
+            className="rounded-lg p-1 text-destructive/70 hover:text-destructive"
+            aria-label="Remove action"
+          >×</button>
+        </div>
+      ))}
+      {available.length > 0 && (
+        <Select value="" onValueChange={(val) => { if (val) onChange([...value, val]); }}>
+          <SelectTrigger className="rounded-xl h-10">
+            <SelectValue placeholder={value.length === 0 ? "Add first action…" : "Add another action…"} />
+          </SelectTrigger>
+          <SelectContent>
+            {available.map((item) => (
+              <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+  );
+}
 
 function SortableCategoryItem({
   cat,
@@ -319,6 +420,7 @@ export function FeedManagement({
   const applyAutoReadRulesNow = useApplyAutoReadRulesNow();
   const previewAutoReadRule = usePreviewAutoReadRule();
   const { data: keywordAlerts = [] } = useKeywordAlerts();
+  const migrateAlertsToRules = useMigrateKeywordAlertsToRules();
   const createKeywordAlert = useCreateKeywordAlert();
   const updateKeywordAlert = useUpdateKeywordAlert();
   const deleteKeywordAlert = useDeleteKeywordAlert();
@@ -369,8 +471,16 @@ export function FeedManagement({
   const [newRuleName, setNewRuleName] = useState("");
   const [newRuleQuery, setNewRuleQuery] = useState("");
   const [newRuleAction, setNewRuleAction] = useState("mark_read");
+  const [newRuleActions, setNewRuleActions] = useState<string[]>(["mark_read"]);
+  const [newRuleScope, setNewRuleScope] = useState<string>("all");
   const [rulePreview, setRulePreview] = useState<any[] | null>(null);
   const [showAddRule, setShowAddRule] = useState(false);
+  const [showRuleTutorial, setShowRuleTutorial] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editRuleName, setEditRuleName] = useState("");
+  const [editRuleQuery, setEditRuleQuery] = useState("");
+  const [editRuleActions, setEditRuleActions] = useState<string[]>([]);
+  const [editRuleScope, setEditRuleScope] = useState<string>("all");
   const [newAlertName, setNewAlertName] = useState("");
   const [newAlertQuery, setNewAlertQuery] = useState("");
   const [newAlertScope, setNewAlertScope] = useState("all");
@@ -540,8 +650,7 @@ export function FeedManagement({
     { value: "opml", label: "Import/Export" },
     { value: "labels", label: "Labels & Searches" },
     { value: "health", label: "Health" },
-    { value: "rules", label: "Rules" },
-    { value: "alerts", label: "Alerts" },
+    { value: "rules", label: "Rules & Alerts" },
   ];
 
   const shellProps = { title: "Manage Feeds", description: "Organize your feeds, categories, and data.", activeTab, onTabChange: setActiveTab, tabs: shellTabs };
@@ -1118,9 +1227,9 @@ export function FeedManagement({
                 <div className="space-y-6 py-4 pb-8">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="text-lg font-semibold tracking-tight">Auto-mark rules</h3>
+                      <h3 className="text-lg font-semibold tracking-tight">Rules & Alerts</h3>
                       <p className="text-sm text-muted-foreground mt-0.5">
-                        Automatically mark, star, or label articles matching a search query on each sync.
+                        Pattern-match articles and run one or more actions — mark read, label, notify, webhook, and more.
                       </p>
                     </div>
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -1146,12 +1255,23 @@ export function FeedManagement({
                   </div>
 
                   <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-blue-400">
-                      <Info className="w-4 h-4 shrink-0" />
-                      How rules work
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowRuleTutorial((v) => !v)}
+                      className="flex w-full items-center justify-between gap-2 text-sm font-medium text-blue-400 active:scale-[0.99] transition-transform"
+                      aria-expanded={showRuleTutorial}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Info className="w-4 h-4 shrink-0" />
+                        How rules &amp; alerts work
+                      </span>
+                      <span className="text-xs text-blue-300/70">
+                        {showRuleTutorial ? "Hide" : "Show"}
+                      </span>
+                    </button>
+                    {showRuleTutorial && (
                     <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
-                      <p>Rules run after each sync and apply actions to all matching articles. Use the same query syntax as search.</p>
+                      <p>Rules run after each sync and apply one or more actions to matching articles. Use the same query syntax as search.</p>
 
                       <div>
                         <p className="font-medium text-foreground/80 mb-1.5">Examples</p>
@@ -1209,6 +1329,7 @@ export function FeedManagement({
                         </ul>
                       </div>
                     </div>
+                    )}
                   </div>
 
                   {showAddRule && (
@@ -1238,7 +1359,7 @@ export function FeedManagement({
                             disabled={!newRuleQuery.trim() || previewAutoReadRule.isPending}
                             onClick={() =>
                               previewAutoReadRule.mutate(
-                                { query: newRuleQuery },
+                                { query: newRuleQuery, scope: newRuleScope === "all" ? null : newRuleScope },
                                 { onSuccess: (data) => setRulePreview(data) },
                               )
                             }
@@ -1247,27 +1368,34 @@ export function FeedManagement({
                             Preview
                           </Button>
                         </div>
-                        <Select value={newRuleAction} onValueChange={setNewRuleAction}>
-                          <SelectTrigger className="rounded-xl h-10">
-                            <SelectValue placeholder="Action" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="mark_read">Mark as read</SelectItem>
-                            <SelectItem value="star">Star article</SelectItem>
-                            <SelectItem value="read_later">Save to Read Later</SelectItem>
-                            <SelectItem value="delete">Delete article</SelectItem>
-                            {labels.length > 0 && labels.map((label: any) => (
-                              <SelectItem key={`label-${label.id}`} value={`label:${label.id}`}>
-                                Attach label · {label.name}
-                              </SelectItem>
-                            ))}
-                            {(webhooks as any[]).filter((w) => w.enabled).map((wh: any) => (
-                              <SelectItem key={`webhook-${wh.id}`} value={`webhook:${wh.id}`}>
-                                Trigger webhook · {wh.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
+                          <label className="text-xs font-medium text-muted-foreground self-center">Scope</label>
+                          <Select value={newRuleScope} onValueChange={setNewRuleScope}>
+                            <SelectTrigger className="rounded-xl h-10">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All articles</SelectItem>
+                              {feeds.map((feed: any) => (
+                                <SelectItem key={`scope-feed-${feed.id}`} value={`feed:${feed.id}`}>Feed · {feed.name}</SelectItem>
+                              ))}
+                              {(categories as any[]).map((c: any) => (
+                                <SelectItem key={`scope-cat-${c.id}`} value={`category:${c.id}`}>Category · {c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">Actions (run in order)</label>
+                          <ActionListEditor
+                            value={newRuleActions}
+                            onChange={(next) => {
+                              setNewRuleActions(next);
+                              setNewRuleAction(next[0] || "mark_read");
+                            }}
+                            catalog={buildActionCatalog(labels, webhooks)}
+                          />
+                        </div>
                       </div>
 
                       {rulePreview !== null && (
@@ -1302,6 +1430,8 @@ export function FeedManagement({
                             setNewRuleName("");
                             setNewRuleQuery("");
                             setNewRuleAction("mark_read");
+                            setNewRuleActions(["mark_read"]);
+                            setNewRuleScope("all");
                             setRulePreview(null);
                           }}
                         >
@@ -1313,6 +1443,7 @@ export function FeedManagement({
                           disabled={
                             !newRuleName.trim() ||
                             !newRuleQuery.trim() ||
+                            newRuleActions.length === 0 ||
                             createAutoReadRule.isPending
                           }
                           onClick={() =>
@@ -1320,7 +1451,8 @@ export function FeedManagement({
                               {
                                 name: newRuleName.trim(),
                                 query: newRuleQuery.trim(),
-                                action: newRuleAction,
+                                actions: newRuleActions,
+                                scope: newRuleScope === "all" ? null : newRuleScope,
                               },
                               {
                                 onSuccess: () => {
@@ -1328,6 +1460,8 @@ export function FeedManagement({
                                   setNewRuleName("");
                                   setNewRuleQuery("");
                                   setNewRuleAction("mark_read");
+                                  setNewRuleActions(["mark_read"]);
+                                  setNewRuleScope("all");
                                   setRulePreview(null);
                                 },
                               },
@@ -1340,74 +1474,219 @@ export function FeedManagement({
                     </div>
                   )}
 
+                  {keywordAlerts.length > 0 && (
+                    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                          {keywordAlerts.length} legacy keyword alert{keywordAlerts.length === 1 ? "" : "s"} found
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Alerts and rules have been merged. Convert your alerts into rules to manage them here.
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="rounded-xl shrink-0"
+                        disabled={migrateAlertsToRules.isPending}
+                        onClick={() => migrateAlertsToRules.mutate()}
+                      >
+                        {migrateAlertsToRules.isPending ? "Migrating…" : "Migrate to rules"}
+                      </Button>
+                    </div>
+                  )}
+
                   {autoReadRules.length === 0 && !showAddRule ? (
                     <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center">
                       <p className="text-muted-foreground text-sm">No rules yet. Rules run automatically after each sync.</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {autoReadRules.map((rule: any) => (
-                        <div
-                          key={rule.id}
-                          className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3 sm:flex-row sm:items-center"
-                        >
-                          <button
-                            onClick={() =>
-                              updateAutoReadRule.mutate({
-                                ruleId: rule.id,
-                                data: { enabled: !rule.enabled },
-                              })
-                            }
-                            className={cn(
-                              "shrink-0 rounded-lg p-1.5 transition-colors",
-                              rule.enabled
-                                ? "text-primary bg-primary/10"
-                                : "text-muted-foreground/50 bg-muted",
+                      {autoReadRules.map((rule: any) => {
+                        const catalog = buildActionCatalog(labels, webhooks);
+                        const ruleActions: string[] = (() => {
+                          if (rule.actions) {
+                            try {
+                              const parsed = JSON.parse(rule.actions);
+                              if (Array.isArray(parsed)) return parsed.filter((x: any) => typeof x === "string");
+                            } catch {}
+                          }
+                          return rule.action ? [rule.action] : [];
+                        })();
+                        const scopeLabel = (() => {
+                          const s = rule.scope as string | null | undefined;
+                          if (!s || s === "all") return null;
+                          if (s.startsWith("feed:")) {
+                            const fid = s.slice("feed:".length);
+                            const f = (feeds as any[]).find((x) => x.id === fid);
+                            return `Feed · ${f?.name ?? "?"}`;
+                          }
+                          if (s.startsWith("category:")) {
+                            const cid = s.slice("category:".length);
+                            const c = (categories as any[]).find((x) => x.id === cid);
+                            return `Category · ${c?.name ?? "?"}`;
+                          }
+                          return s;
+                        })();
+                        const isEditing = editingRuleId === rule.id;
+
+                        return (
+                          <div
+                            key={rule.id}
+                            className="rounded-2xl border border-border/60 bg-card px-4 py-3 space-y-3"
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                              <button
+                                onClick={() =>
+                                  updateAutoReadRule.mutate({
+                                    ruleId: rule.id,
+                                    data: { enabled: !rule.enabled },
+                                  })
+                                }
+                                className={cn(
+                                  "shrink-0 rounded-lg p-1.5 transition-colors",
+                                  rule.enabled
+                                    ? "text-primary bg-primary/10"
+                                    : "text-muted-foreground/50 bg-muted",
+                                )}
+                                title={rule.enabled ? "Disable rule" : "Enable rule"}
+                              >
+                                <Power className="w-3.5 h-3.5" />
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{rule.name}</p>
+                                <p className="text-xs text-muted-foreground font-mono truncate">{rule.query}</p>
+                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                  {scopeLabel && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">
+                                      {scopeLabel}
+                                    </span>
+                                  )}
+                                  {ruleActions.length === 0 ? (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">—</span>
+                                  ) : (
+                                    ruleActions.map((a, idx) => (
+                                      <span
+                                        key={`${rule.id}-act-${idx}-${a}`}
+                                        className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground"
+                                      >
+                                        {idx + 1}. {actionLabel(a, catalog)}
+                                      </span>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="w-7 h-7 rounded-lg text-muted-foreground hover:text-foreground"
+                                  onClick={() => {
+                                    if (isEditing) {
+                                      setEditingRuleId(null);
+                                      return;
+                                    }
+                                    setEditingRuleId(rule.id);
+                                    setEditRuleName(rule.name);
+                                    setEditRuleQuery(rule.query);
+                                    setEditRuleActions(ruleActions.length ? ruleActions : ["mark_read"]);
+                                    setEditRuleScope(rule.scope || "all");
+                                  }}
+                                  title={isEditing ? "Close editor" : "Edit rule"}
+                                >
+                                  {isEditing ? <X className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="w-7 h-7 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() =>
+                                    setPendingDelete({
+                                      type: "auto-read-rule",
+                                      id: rule.id,
+                                      name: rule.name,
+                                    })
+                                  }
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            {isEditing && (
+                              <div className="space-y-3 pt-2 border-t border-border/60">
+                                <Input
+                                  placeholder="Rule name"
+                                  value={editRuleName}
+                                  onChange={(e) => setEditRuleName(e.target.value)}
+                                  className="rounded-xl h-10"
+                                />
+                                <Input
+                                  placeholder="Query"
+                                  value={editRuleQuery}
+                                  onChange={(e) => setEditRuleQuery(e.target.value)}
+                                  className="rounded-xl h-10"
+                                />
+                                <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
+                                  <label className="text-xs font-medium text-muted-foreground self-center">Scope</label>
+                                  <Select value={editRuleScope} onValueChange={setEditRuleScope}>
+                                    <SelectTrigger className="rounded-xl h-10">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="all">All articles</SelectItem>
+                                      {feeds.map((feed: any) => (
+                                        <SelectItem key={`edit-scope-feed-${feed.id}`} value={`feed:${feed.id}`}>Feed · {feed.name}</SelectItem>
+                                      ))}
+                                      {(categories as any[]).map((c: any) => (
+                                        <SelectItem key={`edit-scope-cat-${c.id}`} value={`category:${c.id}`}>Category · {c.name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <label className="text-xs font-medium text-muted-foreground">Actions (run in order)</label>
+                                  <ActionListEditor
+                                    value={editRuleActions}
+                                    onChange={setEditRuleActions}
+                                    catalog={catalog}
+                                  />
+                                </div>
+                                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="rounded-xl"
+                                    onClick={() => setEditingRuleId(null)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="rounded-xl"
+                                    disabled={!editRuleName.trim() || !editRuleQuery.trim() || editRuleActions.length === 0 || updateAutoReadRule.isPending}
+                                    onClick={() =>
+                                      updateAutoReadRule.mutate(
+                                        {
+                                          ruleId: rule.id,
+                                          data: {
+                                            name: editRuleName.trim(),
+                                            query: editRuleQuery.trim(),
+                                            actions: editRuleActions,
+                                            scope: editRuleScope === "all" ? null : editRuleScope,
+                                          },
+                                        },
+                                        { onSuccess: () => setEditingRuleId(null) },
+                                      )
+                                    }
+                                  >
+                                    Save changes
+                                  </Button>
+                                </div>
+                              </div>
                             )}
-                            title={rule.enabled ? "Disable rule" : "Enable rule"}
-                          >
-                            <Power className="w-3.5 h-3.5" />
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{rule.name}</p>
-                            <p className="text-xs text-muted-foreground font-mono truncate">{rule.query}</p>
                           </div>
-                          <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                            {(() => {
-                              const action = String(rule.action || "");
-                              if (action === "mark_read") return "mark read";
-                              if (action === "star") return "star";
-                              if (action === "read_later") return "read later";
-                              if (action === "delete") return "delete";
-                              if (action.startsWith("label:")) {
-                                const id = action.slice("label:".length);
-                                const label = (labels as any[]).find((l) => l.id === id);
-                                return label ? `label · ${label.name}` : "label";
-                              }
-                              if (action.startsWith("webhook:")) {
-                                const id = action.slice("webhook:".length);
-                                const wh = (webhooks as any[]).find((w) => w.id === id);
-                                return wh ? `webhook · ${wh.name}` : "webhook";
-                              }
-                              return action || "—";
-                            })()}
-                          </span>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="w-7 h-7 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10"
-                            onClick={() =>
-                              setPendingDelete({
-                                type: "auto-read-rule",
-                                id: rule.id,
-                                name: rule.name,
-                              })
-                            }
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
