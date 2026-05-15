@@ -11,6 +11,11 @@ export function useFeeds(enabled = true) {
         queryKey: ["feeds"],
         queryFn: () => getFeeds(),
         enabled,
+        // Keep sidebar unread badges live: refetch in background every 60s
+        // and whenever the tab regains focus (React Query default).
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
+        staleTime: 15_000,
     })
 }
 
@@ -75,8 +80,21 @@ export function useToggleRead() {
             toggleArticleRead(articleId, isRead),
         onMutate: async ({ articleId, isRead }) => {
             await queryClient.cancelQueries({ queryKey: ["articles"] })
+            await queryClient.cancelQueries({ queryKey: ["feeds"] })
             const snapshots = queryClient.getQueriesData({ queryKey: ["articles"] })
+            const feedsSnapshot = queryClient.getQueryData<any[]>(["feeds"])
             const readAt = isRead ? new Date() : null
+
+            // Find the article in any cached list to know which feed to update
+            let affectedFeedId: string | undefined
+            for (const [, old] of snapshots) {
+                if (!Array.isArray(old)) continue
+                const hit = old.find((a: any) => a.id === articleId)
+                if (hit) {
+                    affectedFeedId = hit.feedId ?? hit.feed?.id
+                    break
+                }
+            }
 
             snapshots.forEach(([queryKey, old]) => {
                 if (!Array.isArray(old)) return
@@ -85,12 +103,26 @@ export function useToggleRead() {
                 ))
             })
 
-            return { snapshots }
+            // Optimistically adjust the feed's unread count so sidebar badge updates immediately (#19)
+            if (affectedFeedId && Array.isArray(feedsSnapshot)) {
+                queryClient.setQueryData(["feeds"], feedsSnapshot.map((f: any) => {
+                    if (f.id !== affectedFeedId) return f
+                    const current = f._count?.articles ?? 0
+                    const delta = isRead ? -1 : 1
+                    const next = Math.max(0, current + delta)
+                    return { ...f, _count: { ...(f._count || {}), articles: next } }
+                }))
+            }
+
+            return { snapshots, feedsSnapshot }
         },
         onError: (_error, _variables, context) => {
             context?.snapshots?.forEach(([queryKey, data]) => {
                 queryClient.setQueryData(queryKey, data)
             })
+            if (context?.feedsSnapshot) {
+                queryClient.setQueryData(["feeds"], context.feedsSnapshot)
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
@@ -308,6 +340,31 @@ export function useMarkAllAsRead() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (scope?: { feedId?: string | null; category?: string | null }) => markAllAsRead(scope),
+        onMutate: async (scope) => {
+            await queryClient.cancelQueries({ queryKey: ["feeds"] })
+            const feedsSnapshot = queryClient.getQueryData<any[]>(["feeds"])
+            if (!Array.isArray(feedsSnapshot)) return { feedsSnapshot }
+            // Optimistic: zero unread on the affected feed(s) so badge updates instantly (#19)
+            const next = feedsSnapshot.map((f: any) => {
+                if (scope?.feedId) {
+                    if (f.id !== scope.feedId) return f
+                    return { ...f, _count: { ...(f._count || {}), articles: 0 } }
+                }
+                if (!scope?.feedId && !scope?.category) {
+                    return { ...f, _count: { ...(f._count || {}), articles: 0 } }
+                }
+                // Category-scoped: cannot reliably know which feeds belong without the
+                // category map here, so fall back to invalidation in onSuccess.
+                return f
+            })
+            queryClient.setQueryData(["feeds"], next)
+            return { feedsSnapshot }
+        },
+        onError: (_error, _variables, context) => {
+            if (context?.feedsSnapshot) {
+                queryClient.setQueryData(["feeds"], context.feedsSnapshot)
+            }
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["articles"] })
             queryClient.invalidateQueries({ queryKey: ["feeds"] })

@@ -21,9 +21,11 @@ import {
   Github,
   Chrome,
   Shield,
+  Wand2,
 } from "lucide-react";
 import { hasUsers, getAuthProviders } from "../actions/onboarding";
 import { Separator } from "@/components/ui/separator";
+import { useInstance } from "@/hooks/use-instance";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -39,6 +41,10 @@ export default function LoginPage() {
     authelia: boolean;
     autheliaLabel: string;
   }>({ google: false, github: false, authelia: false, autheliaLabel: "Authelia" });
+  const [magicLinkSending, setMagicLinkSending] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const { data: instance } = useInstance();
+  const magicLinkAvailable = Boolean(instance?.capabilities.magicLink);
   const router = useRouter();
   const { status } = useSession();
 
@@ -110,6 +116,35 @@ export default function LoginPage() {
 
   const handleOAuthSignIn = (provider: string) => {
     signIn(provider, { callbackUrl: "/" });
+  };
+
+  const handleMagicLink = async () => {
+    if (!email.trim()) {
+      setError("Enter your email address first");
+      setErrorIsWarning(false);
+      return;
+    }
+    setError("");
+    setErrorIsWarning(false);
+    setMagicLinkSending(true);
+    try {
+      const result = await signIn("nodemailer", {
+        email: email.trim(),
+        redirect: false,
+        callbackUrl: "/",
+      });
+      if (result?.error) {
+        setError("Could not send magic link — check your email and try again");
+      } else {
+        setMagicLinkSent(true);
+        setError("Sign-in link sent — check your inbox");
+        setErrorIsWarning(true);
+      }
+    } catch {
+      setError("Could not send magic link");
+    } finally {
+      setMagicLinkSending(false);
+    }
   };
 
   if (status === "loading") return null;
@@ -221,6 +256,33 @@ export default function LoginPage() {
                   "Continue with Email"
                 )}
               </Button>
+
+              {magicLinkAvailable && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={magicLinkSending || magicLinkSent}
+                  onClick={handleMagicLink}
+                  className="w-full h-11 bg-white/5 border-white/10 hover:bg-white/10 text-white font-medium text-sm rounded-lg transition-all"
+                >
+                  {magicLinkSending ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      Sending link…
+                    </span>
+                  ) : magicLinkSent ? (
+                    <span className="flex items-center gap-2">
+                      <Mail className="w-4 h-4" />
+                      Check your inbox
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <Wand2 className="w-4 h-4" />
+                      Send me a magic link
+                    </span>
+                  )}
+                </Button>
+              )}
             </form>
 
             {hasOAuth && (
