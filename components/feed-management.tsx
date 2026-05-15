@@ -83,6 +83,8 @@ import {
   Pencil,
   ChevronRight,
   Info,
+  Compass,
+  ArrowUp,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
 import { toast } from "sonner";
@@ -1076,14 +1078,15 @@ export function FeedManagement({
             >
               <ScrollArea className="h-full px-6 sm:px-8">
               <div className="space-y-6 py-4 pb-8">
+                <MigrationWizard onUpload={handleImport} isImporting={importOpml.isPending} />
+
                 <div className="space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm">
                   <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em] text-primary">
                     <Upload className="w-6 h-6" />
-                    Import subscriptions
+                    Generic OPML import
                   </div>
                   <p className="text-muted-foreground">
-                    Upload an OPML file to import all your feeds and categories
-                    from another RSS reader.
+                    Already have an OPML file? Drop it here. The wizard above also accepts the same file.
                   </p>
                   {lastImportReport && (
                     <div className="rounded-2xl border border-border/60 bg-background/70 p-4 text-sm space-y-2">
@@ -2215,5 +2218,249 @@ export function FeedManagement({
     <SettingsPageShell {...shellProps} backHref="/">{body}</SettingsPageShell>
   ) : (
     <SettingsModalShell {...shellProps} open={open} onOpenChange={onOpenChange}>{body}</SettingsModalShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Migration wizard
+
+type MigrationSource = {
+  id: string;
+  name: string;
+  steps: string[];
+  endpointHint?: string;
+  docsUrl?: string;
+};
+
+const MIGRATION_SOURCES: MigrationSource[] = [
+  {
+    id: "feedly",
+    name: "Feedly",
+    docsUrl: "https://feedly.com/i/opml",
+    steps: [
+      "Sign in to feedly.com on the web.",
+      "Open https://feedly.com/i/opml to download feedly.opml directly.",
+      "Or: ☰ Menu → Organize Sources → Export OPML.",
+      "Pick the downloaded .opml file in the next step.",
+    ],
+  },
+  {
+    id: "inoreader",
+    name: "Inoreader",
+    docsUrl: "https://www.inoreader.com/preferences",
+    steps: [
+      "Open Inoreader → Preferences (gear icon) → Import / Export.",
+      "Click \"Export your subscriptions as OPML file\" and save it.",
+      "Pick that .opml file in the next step.",
+    ],
+  },
+  {
+    id: "freshrss",
+    name: "FreshRSS",
+    endpointHint: "https://your-freshrss.example.com/i/?c=importExport",
+    steps: [
+      "Open your FreshRSS instance → ⚙ → Import / Export.",
+      "Click \"Export\" and choose OPML (subscriptions only).",
+      "Optionally: append `?c=importExport&a=opmlExport` directly to your FreshRSS URL.",
+      "Upload the downloaded .opml file below.",
+    ],
+  },
+  {
+    id: "newsblur",
+    name: "NewsBlur",
+    docsUrl: "https://www.newsblur.com/?next=/import",
+    steps: [
+      "Sign in to newsblur.com.",
+      "Settings (gear) → Account → Manage → Export OPML.",
+      "Upload the downloaded file in the next step.",
+    ],
+  },
+  {
+    id: "the-old-reader",
+    name: "The Old Reader",
+    docsUrl: "https://theoldreader.com/profile/settings",
+    steps: [
+      "Open The Old Reader → Settings → Import/Export.",
+      "Click \"Download subscriptions as OPML\".",
+      "Upload the file in the next step.",
+    ],
+  },
+  {
+    id: "reeder",
+    name: "Reeder",
+    steps: [
+      "Open Reeder → Preferences → Accounts (or Manage Subscriptions).",
+      "Use \"Share OPML…\" or \"Export OPML…\" depending on your version.",
+      "Send the .opml to this device, then upload it below.",
+    ],
+  },
+  {
+    id: "netnewswire",
+    name: "NetNewsWire",
+    steps: [
+      "Open NetNewsWire → File → Export Subscriptions… (or the menu equivalent on iOS).",
+      "Save the .opml file.",
+      "Upload it in the next step.",
+    ],
+  },
+  {
+    id: "google-reader",
+    name: "Other Google Reader-style readers",
+    steps: [
+      "Find the OPML/Subscriptions export option in your reader. Most Google Reader-compatible apps support it.",
+      "Tiny Tiny RSS: Preferences → Feeds → OPML → Export OPML.",
+      "Miniflux: Settings → Integrations → Export feeds as OPML.",
+      "Upload the resulting .opml in the next step.",
+    ],
+  },
+  {
+    id: "generic",
+    name: "Other / I already have an OPML file",
+    steps: [
+      "If your reader can export OPML, drop the file in the next step.",
+      "Most readers list this option under Settings → Import/Export, Subscriptions, or Account.",
+    ],
+  },
+];
+
+function MigrationWizard({
+  onUpload,
+  isImporting,
+}: {
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isImporting: boolean;
+}) {
+  const [step, setStep] = useState<"source" | "instructions" | "upload">("source");
+  const [selected, setSelected] = useState<MigrationSource | null>(null);
+
+  return (
+    <div className="space-y-4 rounded-3xl border border-primary/20 bg-primary/[0.04] p-7 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em] text-primary">
+          <Compass className="w-6 h-6" />
+          Migration wizard
+        </div>
+        <ol className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          {(["source", "instructions", "upload"] as const).map((s, i) => (
+            <li key={s} className="flex items-center gap-1">
+              <span
+                className={cn(
+                  "inline-flex h-5 w-5 items-center justify-center rounded-full border",
+                  s === step
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : step === "upload" || (step === "instructions" && i < 2)
+                      ? "border-primary/60 text-primary"
+                      : "border-border text-muted-foreground",
+                )}
+              >
+                {i + 1}
+              </span>
+              <span className="hidden sm:inline">{s === "source" ? "Source" : s === "instructions" ? "Export" : "Upload"}</span>
+              {i < 2 && <span className="text-muted-foreground/50">›</span>}
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      {step === "source" && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Pick the reader you&apos;re moving from. We&apos;ll walk you through the export, then import the file.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {MIGRATION_SOURCES.map((src) => (
+              <button
+                key={src.id}
+                type="button"
+                onClick={() => {
+                  setSelected(src);
+                  setStep("instructions");
+                }}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/70 px-4 py-3 text-left text-sm font-medium hover:border-primary/40 hover:bg-primary/5 transition-colors active:scale-[0.99]"
+              >
+                <span>{src.name}</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {step === "instructions" && selected && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">{selected.name} → FeedFerret</p>
+            <button
+              type="button"
+              onClick={() => setStep("source")}
+              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+            >
+              <ArrowUp className="h-3 w-3 rotate-[-90deg]" /> Change source
+            </button>
+          </div>
+          <ol className="space-y-2 text-sm text-muted-foreground leading-relaxed list-decimal list-inside">
+            {selected.steps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
+          {selected.endpointHint && (
+            <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2 text-xs font-mono break-all">
+              {selected.endpointHint}
+            </div>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            {selected.docsUrl && (
+              <a
+                href={selected.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="order-2 sm:order-1 inline-flex items-center justify-center gap-1.5 rounded-2xl border border-border/60 bg-background px-4 py-2 text-sm font-medium hover:bg-muted/60 transition-colors"
+              >
+                Open source <ChevronRight className="h-3.5 w-3.5" />
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => setStep("upload")}
+              className="order-1 sm:order-2 rounded-2xl bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 active:scale-[0.98] transition-all"
+            >
+              I have the file →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === "upload" && selected && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">Upload your {selected.name} OPML</p>
+            <button
+              type="button"
+              onClick={() => setStep("instructions")}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              ← Back to instructions
+            </button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            FeedFerret accepts any standard OPML file. Imported feeds keep their categories and aren&apos;t duplicated if you&apos;ve already added them.
+          </p>
+          <Label htmlFor="migration-opml-upload" className="block">
+            <div className="inline-flex h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-95">
+              <Upload className="w-4 h-4" />
+              {isImporting ? "Importing…" : "Choose OPML file"}
+            </div>
+            <Input
+              id="migration-opml-upload"
+              type="file"
+              accept=".xml,.opml"
+              className="hidden"
+              disabled={isImporting}
+              onChange={onUpload}
+            />
+          </Label>
+        </div>
+      )}
+    </div>
   );
 }
