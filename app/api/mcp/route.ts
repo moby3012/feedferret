@@ -7,6 +7,7 @@ import { apiError, clampInt, readJson, requireApiUser, type ApiUser } from "@/li
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
+import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 
 function rpc(id: unknown, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result });
@@ -137,6 +138,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const rlResult = checkRateLimit(getClientIdentifier(request), RATE_LIMITS.mcp);
+  if (!rlResult.success) return rateLimitResponse(rlResult);
+
   const body = await readJson<any>(request);
   if (!body || body.jsonrpc !== "2.0" || typeof body.method !== "string") return rpcError(body?.id, -32600, "Invalid JSON-RPC request");
 

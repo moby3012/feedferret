@@ -1,10 +1,14 @@
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { validateInternalApiKey } from "@/lib/internal-auth";
+import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const rlResult = checkRateLimit(getClientIdentifier(request), RATE_LIMITS.internalApi);
+  if (!rlResult.success) return rateLimitResponse(rlResult);
+
   if (!validateInternalApiKey(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

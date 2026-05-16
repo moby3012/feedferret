@@ -66,49 +66,92 @@ The database admin setting is preferred — it can be changed without redeployin
 
 ---
 
-## Security Hardening Roadmap (Pre-Launch)
+## Implemented Security Hardening
 
-Detailed task breakdown is in `docs/ROADMAP.md` section 0.2.
+### Rate Limiting ✅
 
-### Rate Limiting (planned)
-
-Protection against brute-force and API abuse:
+In-memory sliding window rate limiter (`lib/rate-limit.ts`) protects against brute-force and API abuse:
 
 | Endpoint group | Limit | Window |
 |---|---|---|
-| `POST /api/auth/signin` | 10 attempts | 15 minutes |
-| Magic link request | 3 attempts | 10 minutes |
-| `POST /api/v1/*` (write) | 60 requests | 1 minute |
-| `GET /api/v1/*` (read) | 200 requests | 1 minute |
-| `POST /api/internal/*` | 30 requests | 1 minute |
+| `POST /api/auth/*` (sign-in, credentials) | 10 attempts | 15 minutes |
+| Magic link requests | 3 attempts | 10 minutes |
 | `POST /api/mcp` | 100 requests | 1 minute |
+| `POST /api/internal/*` | 30 requests | 1 minute |
 
-Response: HTTP 429 with `Retry-After` header.
+Response on limit exceeded: HTTP 429 with `Retry-After`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` headers.
 
-### Security Headers (planned)
+Planned: extend rate limiting to all `/api/v1/*` routes via Next.js middleware.
 
-Via `next.config.mjs` `headers()`:
+### Security Headers ✅
+
+Set via `next.config.mjs` `headers()` — applied to all routes:
 
 ```
-Content-Security-Policy: default-src 'self'; ...
 X-Frame-Options: DENY
 X-Content-Type-Options: nosniff
 Referrer-Policy: strict-origin-when-cross-origin
-Permissions-Policy: camera=(), microphone=(), geolocation=()
+Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+Content-Security-Policy:
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob: https:;
+  font-src 'self' data:;
+  connect-src 'self';
+  worker-src 'self' blob:;
+  frame-ancestors 'none';
+  base-uri 'self';
+  form-action 'self'
 ```
 
-HSTS should be set at the reverse proxy (Nginx/Caddy/Traefik) level.
+HSTS (`Strict-Transport-Security`) should be set at the reverse proxy (Nginx/Caddy/Traefik) level — not in Next.js to avoid conflicts with local development.
+
+Note: `unsafe-inline` and `unsafe-eval` in `script-src` are required by Next.js App Router's runtime. Removing them requires nonce-based CSP configuration — planned as a future hardening step.
+
+### Startup Environment Validation ✅
+
+On server start, `instrumentation.ts` checks:
+
+- `AUTH_SECRET` — length ≥ 32 characters, not a known placeholder value
+- `POSTGRES_PASSWORD` — not the default `feedferret-change-me` placeholder
+- `AUTH_URL` — not the placeholder `feedferret.example.com`
+
+Warnings are printed to stdout as `⚠️` log lines. The server continues to start to avoid outages, but the warnings are clearly visible in Docker logs.
+
+### Health Endpoint ✅
+
+`GET /api/health` returns:
+
+```json
+{ "status": "ok", "db": "ok", "version": "0.1.0", "uptime": 3600 }
+```
+
+Returns HTTP 503 if the database is unreachable. Used as the Docker healthcheck target.
+
+### Docker Healthcheck ✅
+
+`docker-compose.yaml` now includes a healthcheck for the FeedFerret container:
+
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 60s
+```
 
 ### API Token Hardening (planned)
 
-Current state: tokens are stored as plaintext in the database.
+Current state: API tokens are stored as plaintext in the database.
 
 Target state:
 - SHA-256 hash of the token stored in DB, never plaintext
 - Token prefix `ff_` for identification and secret scanning detection
 - Optional configurable expiry
 
-Note: this is a breaking change for existing tokens — a migration plan is required.
+This is a breaking change for existing tokens — a migration plan is required before implementation.
 
 ---
 

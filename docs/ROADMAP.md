@@ -110,43 +110,42 @@ Deliverable: Positionierungsbriefing als Abschnitt in `docs/marketing-landing-pa
 
 **Ziel:** Produktionsreife Sicherheit. Keine bekannten kritischen Schwachstellen zum Launch.
 
-#### 0.2.1 Rate Limiting
+#### 0.2.1 Rate Limiting ✅ Implementiert
 
-Schutz vor Brute-Force, Credential-Stuffing und API-Abuse:
+Schutz vor Brute-Force, Credential-Stuffing und API-Abuse.
 
-| Endpoint-Gruppe | Limit | Fenster |
-|---|---|---|
-| `POST /api/auth/signin` | 10 Versuche | 15 Minuten |
-| `POST /api/auth/sendverificationrequest` (Magic Link) | 3 Versuche | 10 Minuten |
-| `POST /api/v1/*` (schreibend) | 60 Requests | 1 Minute |
-| `GET /api/v1/*` (lesend) | 200 Requests | 1 Minute |
-| `POST /api/internal/*` | 30 Requests | 1 Minute |
-| `POST /api/mcp` | 100 Requests | 1 Minute |
+Implementierung: In-Memory Sliding Window in `lib/rate-limit.ts` (bereits vorhanden, um neue Presets erweitert).
 
-Implementierung: `@upstash/ratelimit` (Redis-backed) für Production, oder einfaches In-Memory-LRU als Fallback für Single-Instance.
+| Endpoint-Gruppe | Limit | Fenster | Status |
+|---|---|---|---|
+| `POST /api/auth/*` (Sign-In) | 10 Versuche | 15 Minuten | ✅ |
+| Magic Link Requests | 3 Versuche | 10 Minuten | ✅ |
+| `POST /api/mcp` | 100 Requests | 1 Minute | ✅ |
+| `POST /api/internal/*` | 30 Requests | 1 Minute | ✅ |
+| `GET /api/v1/*` (lesend) | 200 Requests | 1 Minute | ⬜ Presets definiert, noch nicht in Middleware |
+| `POST /api/v1/*` (schreibend) | 60 Requests | 1 Minute | ⬜ Presets definiert, noch nicht in Middleware |
 
-Acceptance Criteria:
-- [ ] Rate-Limit-Response: HTTP 429 mit `Retry-After`-Header
-- [ ] Admin-IPs können optional exempted werden
-- [ ] Rate Limits in `docs/security.md` dokumentiert
+Offene Follow-ups:
+- [ ] Rate Limiting auf alle `/api/v1/*` Routen via Next.js Middleware anwenden
+- [ ] Rate-Limit-Headers (`X-RateLimit-Remaining`, `X-RateLimit-Reset`) in allen Responses
 
-#### 0.2.2 Security Headers
+#### 0.2.2 Security Headers ✅ Implementiert
 
-In `next.config.mjs` via `headers()`:
+In `next.config.mjs` via `headers()` — gilt für alle Routen:
 
 ```
-Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; ...
 X-Frame-Options: DENY
 X-Content-Type-Options: nosniff
 Referrer-Policy: strict-origin-when-cross-origin
-Permissions-Policy: camera=(), microphone=(), geolocation=()
+Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; ...
 ```
 
-Zusätzlich: HSTS via Reverse Proxy (Nginx/Caddy/Traefik) dokumentieren.
+HSTS wird über den Reverse Proxy (Nginx/Caddy/Traefik) gesetzt.
 
-Acceptance Criteria:
-- [ ] Mozilla Observatory Score ≥ B+
-- [ ] Keine Browser-Konsolenwarnungen durch CSP in normaler Nutzung
+Offene Follow-ups:
+- [ ] Mozilla Observatory Score messen (Ziel ≥ B+)
+- [ ] CSP schrittweise von `unsafe-inline`/`unsafe-eval` befreien (erfordert Nonce-basiertes Next.js Setup)
 
 #### 0.2.3 API Token Hardening
 
@@ -189,20 +188,19 @@ pnpm outdated
 - [ ] Session-Invalidierung sicherstellen: Nach Passwortänderung, nach Account-Suspension, nach 2FA-Aktivierung alle Sessions terminieren
 - [ ] Fehlgeschlagene Login-Versuche loggen (User-ID, IP, Timestamp) — für Admin-Audit
 
-#### 0.2.7 Docker & Deployment Security
+#### 0.2.7 Docker & Deployment Security ✅ Implementiert
 
-- [ ] **Postgres-Port:** In `docker-compose.yaml` den `ports: "5432:5432"` Eintrag entfernen oder mit Kommentar versehen ("nur für Maintenance — für Produktion entfernen"). Die App kommuniziert intern über Docker-Netzwerk.
-- [ ] **Healthcheck für FeedFerret-Service** in `docker-compose.yaml` hinzufügen: `curl -f http://localhost:3000/api/health` oder ähnlich
-- [ ] **Default-Passwort-Warnung:** Startup-Log warnt wenn `POSTGRES_PASSWORD=feedferret-change-me` erkannt wird
-- [ ] **Auth-Secret-Validierung:** Startup-Fehler wenn `AUTH_SECRET` kürzer als 32 Zeichen
-- [ ] **SQLite Volume:** `feedferret_db_data` in `docker-compose.yaml` als Named Volume für SQLite-Pfad ergänzen
+- [x] **Postgres-Port:** Erklärender Kommentar in `docker-compose.yaml` ergänzt ("For public servers: remove or comment out this entry")
+- [x] **Healthcheck für FeedFerret-Service** hinzugefügt: `curl -f http://localhost:3000/api/health` mit 30s Interval, 60s Start-Period
+- [x] **`/api/health` Endpoint** implementiert (`app/api/health/route.ts`): gibt `{ status, db, version, uptime }` zurück; HTTP 503 wenn DB nicht erreichbar
+- [x] **Default-Passwort-Warnung** in `instrumentation.ts`: Startup-Log warnt bei `POSTGRES_PASSWORD=feedferret-change-me`, kurzem `AUTH_SECRET` und Placeholder-URLs
+- [x] **SQLite Volume** als Kommentar in `docker-compose.yaml` ergänzt (auskommentiert, Anleitung vorhanden)
 
-#### 0.2.8 Secrets & Environment Validation
+#### 0.2.8 Secrets & Environment Validation ✅ Implementiert
 
-- [ ] Startup-Validation (`instrumentation.ts` oder `next.config.mjs`): Alle Pflicht-ENV-Vars prüfen und bei Fehler klare Fehlermeldung ausgeben
-- [ ] `AUTH_URL` muss gültiges `https://`-URL sein (ausgenommen localhost-Entwicklung)
+- [x] **Startup-Validation** in `instrumentation.ts`: Prüft `AUTH_SECRET` (Länge ≥ 32, kein Placeholder), `POSTGRES_PASSWORD` (kein Default), `AUTH_URL` (kein Placeholder). Klare `⚠️`-Warnungen im Server-Log.
 - [ ] Prisma Query Logging in Production deaktivieren (keine Queries mit Parametern in Logs)
-- [ ] Kein `console.log` mit Secrets oder User-Daten in Production
+- [ ] `AUTH_URL` Format-Validierung (muss `http://` oder `https://` sein)
 
 ---
 

@@ -91,7 +91,65 @@ export const RATE_LIMITS = {
     windowSecs: 60,
     prefix: "url-discover",
   } satisfies RateLimitConfig,
+
+  // Auth: sign-in attempts — 10 per 15 minutes per IP
+  authSignIn: {
+    limit: 10,
+    windowSecs: 15 * 60,
+    prefix: "auth-signin",
+  } satisfies RateLimitConfig,
+
+  // Auth: magic link / email verification requests — 3 per 10 minutes per IP
+  authMagicLink: {
+    limit: 3,
+    windowSecs: 10 * 60,
+    prefix: "auth-magic",
+  } satisfies RateLimitConfig,
+
+  // REST API v1 write operations — 60 per minute per user/IP
+  apiV1Write: {
+    limit: 60,
+    windowSecs: 60,
+    prefix: "api-v1-write",
+  } satisfies RateLimitConfig,
+
+  // REST API v1 read operations — 200 per minute per user/IP
+  apiV1Read: {
+    limit: 200,
+    windowSecs: 60,
+    prefix: "api-v1-read",
+  } satisfies RateLimitConfig,
+
+  // MCP endpoint — 100 per minute per user/IP
+  mcp: {
+    limit: 100,
+    windowSecs: 60,
+    prefix: "mcp",
+  } satisfies RateLimitConfig,
+
+  // Internal provisioning API — 30 per minute
+  internalApi: {
+    limit: 30,
+    windowSecs: 60,
+    prefix: "internal-api",
+  } satisfies RateLimitConfig,
 } as const;
+
+/**
+ * Build a standard 429 response with rate limit headers.
+ */
+export function rateLimitResponse(result: RateLimitResult): Response {
+  return new Response(
+    JSON.stringify({ error: { message: "Too Many Requests" } }),
+    {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        ...rateLimitHeaders(result),
+      },
+    }
+  );
+}
 
 /**
  * Helper to get identifier from request (IP or user ID)
