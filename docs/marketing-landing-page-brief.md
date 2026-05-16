@@ -1,758 +1,566 @@
-# FeedFerret Marketing Landing Page Brief
+# FeedFerret — Marketing & SaaS Landing Page Brief
 
-This document is a comprehensive source of truth for the current FeedFerret product surface. It is intended as the foundation for a future marketing landing page, homepage rewrite, launch page, product hunt page, press page, or feature comparison page.
-
----
-
-## 1. Product Summary
-
-**FeedFerret** is a self-hostable, multi-user RSS reader designed for people who want control, speed, privacy, and a polished reading experience.
-
-It combines:
-
-- a modern reading UI
-- strong self-hosting support
-- multi-user account isolation
-- automation and filtering tools
-- mobile-friendly reading flows
-- installable PWA support
-- email digests and flexible mail delivery
-- compatibility with external RSS clients via Google Reader API
-
-FeedFerret is built for personal use, family servers, teams, and advanced self-hosters who want more control than mainstream feed readers provide.
+> Zuletzt aktualisiert: 2026-05-16  
+> Zweck: Vorlage für die SaaS Landing Page, ProductHunt-Launch, Vergleichsseiten und Pressematerial.
 
 ---
 
-## 2. Core Positioning
+## 1. Produkt-Zusammenfassung
 
-### Main value proposition
+**FeedFerret** ist ein selbst hostbarer, Mehr-Benutzer-fähiger RSS-Reader für Menschen, die Kontrolle, Geschwindigkeit, Datenschutz und ein poliertes Lese-Erlebnis wollen.
 
-FeedFerret helps users **collect, filter, organize, and read RSS feeds in a fast and pleasant interface** while keeping ownership of their data and deployment.
+Er kombiniert:
+- ein modernes Lese-Interface
+- starke Self-Hosting-Unterstützung mit Docker
+- strikte Mehr-Benutzer-Datenisolierung
+- Automatisierungs- und Filter-Werkzeuge
+- mobiloptimierte Leseoberfläche mit Gesten
+- installierbare PWA-Unterstützung
+- E-Mail-Digests und flexible Mail-Infrastruktur
+- KI-gestützte Artikel-Zusammenfassungen (BYOK)
+- Kompatibilität mit nativen RSS-Clients via Google Reader API
+- REST API + MCP-Endpoint für Automatisierungen und AI-Agenten
+- Ausgehende Webhooks für n8n, Zapier und eigene Systeme
+- Keyword-Alerts mit Push-, E-Mail- und Webhook-Delivery
 
-### Ideal audience
-
-- self-hosters
-- RSS power users
-- privacy-conscious readers
-- researchers and analysts
-- people replacing services like Feedly, Inoreader, or self-hosted Scout Studio setups
-- users who want a modern mobile-friendly reader UI
-- users who want Reeder-style ergonomics with self-hosting flexibility
-
-### Key differentiators
-
-- self-hosted and multi-user from the start
-- modern UI instead of a legacy admin-style feed reader
-- mobile UX optimized for thumb reach and gestures
-- advanced saved search and search sharing support
-- labels, rules, retention, full-text extraction, and feed health tooling
-- native-client compatibility through Google Reader API
-- optional local 2FA and optional Authelia SSO
-- flexible mail delivery including SMTP and API-based providers
+FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte und Power-User, die mehr Kontrolle wollen als kommerzielle Feed-Reader bieten.
 
 ---
 
-## 3. High-Level Feature Overview
+## 2. Positionierung & Differenzierung
 
-### Reading experience
+### Hauptwert-Proposition
 
-- clean article reading interface
-- multiple article list layouts
-- dynamic theming
-- dark mode
-- mobile-optimized reading controls
-- gesture-based article navigation on mobile
-- bottom thumb controls on mobile
-- read/unread, starred, and read-later actions
-- automatic mark-as-read timing controls
-- optional open-original behavior
+> FeedFerret gibt dir die Kontrolle über deinen Informationsfluss zurück — mit einem Lese-Erlebnis das sich modern anfühlt, nicht wie eine Datenbank-Verwaltung.
 
-### Organization
+### Zielgruppe (priorisiert)
 
-- feeds
-- categories
-- nested categories
-- labels
-- saved searches
-- shared saved searches
-- starred articles
-- read-later articles
+1. **Self-Hosters & Homelab-Enthusiasten** — wollen eigene Infrastruktur, kein SaaS-Abo
+2. **RSS Power-User** — wollen erweiterte Suche, Labels, Rules, Webhooks, API
+3. **Datenschutzbewusste Nutzer** — wollen ihre Lesegewohnheiten nicht bei Feedly/Google
+4. **Researcher & Analysten** — wollen Feeds aggregieren, filtern, exportieren, automatisieren
+5. **Teams & kleine Organisationen** — ein Server für alle, Mehr-Benutzer mit Isolation
+6. **Feedly/Inoreader Migranten** — wollen weg von SaaS, suchen modernen Self-Hosting-Ersatz
 
-### Automation and power-user tools
+### Kern-Differenziatoren
 
-- auto-mark-as-read rules
-- rule previews
-- retention policies
-- feed extraction previews
-- feed health dashboard
-- keyboard shortcuts
-- selective OPML export
-- user data export
-
-### Sync and integrations
-
-- background feed sync
-- external sync endpoint
-- Google Reader API compatibility
-- OAuth login options
-- Authelia OIDC login
-- email digests
-- flexible email providers
-
-### Self-hosting and admin
-
-- multi-user support
-- admin server management UI
-- registration control
-- server-wide mail settings
-- self-hosting docs
-- SQLite-based default deployment
-- Docker-friendly deployment path
+| Differenziator | Warum wichtig |
+|---|---|
+| **Self-Hosted + Multi-User** | Feedly/Inoreader sind SaaS. Miniflux/TinyTinyRSS haben ältere UX. |
+| **Modernes Mobile UX** | Bottom Navigation, Swipe-Gesten, Thumb-Reach — wie Reeder/Pocket Casts |
+| **Power-User-Tiefe ohne UX-Chaos** | Rules, Labels, Advanced Search, Alerts, API — aber trotzdem intuitiv bedienbar |
+| **KI optional und privat** | BYOK: OpenAI, Anthropic, Gemini, Ollama — kein Lock-in, Schlüssel verschlüsselt |
+| **Native Client Kompatibilität** | Google Reader API → Reeder, NetNewsWire, FeedMe, ReadKit |
+| **Automation-First** | Webhooks (HMAC), REST API v1, MCP für AI-Agenten, n8n-Beispiele |
+| **Flexible Auth** | Local, OAuth (Google/GitHub), Authelia OIDC, optionales TOTP 2FA |
+| **Setup in 5 Minuten** | `docker compose up` → Setup-Wizard → fertig |
 
 ---
 
-## 4. Detailed Feature Inventory
+## 3. Feature-Inventar (vollständig)
 
-### 4.1 Multi-user architecture
+### 3.1 Lese-Erlebnis
 
-FeedFerret supports multiple accounts on one installation.
+- Sauberes Artikel-Reader-Interface
+- Mehrere Artikel-Listen-Layouts
+- Dynamisches Theming (Accent- und Sekundärfarbe via Color Picker)
+- Dark Mode + System-Theme-Präferenz
+- Konfigurierbare Reader-Breite
+- Automatisches Mark-as-Read nach konfigurierbarer Verzögerung
+- "Open Original" standardmäßig konfigurierbar
+- Standardmäßige Sortierreihenfolge (Neuste / Älteste / Zuletzt gelesen)
 
-Included:
+### 3.2 Mobile UX
 
-- isolated per-user feeds, categories, labels, searches, and articles
-- admin and user roles
-- registration control
-- account-based settings
-- per-user reading preferences
+- Mobile Bottom Navigation für Daumen-Erreichbarkeit
+- Bottom Drawer statt Sidebar auf Mobilgeräten
+- Swipe-Gesten für Artikel-Navigation (nächster/vorheriger Artikel)
+- Swipe für schnelles Read/Star
+- Scroll-to-Top-Button im Reader
+- Safe-Area-Handling für moderne iPhones/Android
+- Reduzierter visueller Lärm im mobilen Header
+- Mobile Reader Bottom Controls
 
-Marketing angle:
+### 3.3 PWA
 
-> Run one private RSS service for yourself, your family, or your team.
+- Installierbar auf iPhone, Android, Desktop (Chrome/Edge)
+- Add-to-Home-Screen Anleitung beim ersten Besuch
+- App-Icon-Badges (best-effort, Browser-Support variiert)
+- Offline-Fallback für gecachte Artikel
+- Service Worker mit Stale-While-Revalidate
+- App Shortcuts (Unread, Starred, Read Later, Settings)
+- Deep-Link-Handling für Shortcuts und Notification-Links
+- Manifest Screenshots für Install-Prompts
 
----
+### 3.4 Feeds & Kategorien
 
-### 4.2 Authentication options
+- Feed hinzufügen, bearbeiten, löschen
+- Kategorien (hierarchisch)
+- Kategorien-Verwaltung
+- Reihenfolge von Feeds und Kategorien
+- Manueller Refresh (global oder pro Feed)
+- **Feed Discovery:** gleiche Domain crawlen, kuratierte Starter Packs
 
-FeedFerret now supports multiple authentication paths.
+**Erweiterte Feed-Optionen:**
+- HTTP Basic Auth pro Feed
+- Custom User-Agent
+- Request Timeout
+- SSL-Verifikation konfigurierbar
+- Content-Größen-Limit
+- Update-Frequenz pro Feed überschreiben
 
-#### Local authentication
+### 3.5 Suche & Saved Searches
 
-- email and password login
-- registration flow
-- initial setup flow for first account
+**Erweiterte Suchsyntax:**
 
-#### Magic link email authentication
+| Token | Beschreibung |
+|---|---|
+| Freitext | Titel, Content, Autor, URL, Feed, Labels |
+| `is:unread / is:starred / is:readlater` | Statusfilter |
+| `feed:name / category:name / label:name` | Scope-Filter |
+| `after:7d / before:2026-01-01` | Datumsfilter |
+| `intitle: / intext: / author:` | Feldfilter |
+| `-term / !term` | Negation |
 
-- email sign-in via Auth.js email flow
-- mail delivery controlled by server mail settings
+- Saved Searches mit Quick-Access
+- **Saved Search Sharing:** Öffentliche HTML-Seite + RSS-Feed via geheimem Token
+- Teilen aktivieren/deaktivieren pro Suche (Token wird sofort invalidiert)
 
-#### OAuth providers
+### 3.6 Labels, Starred, Read Later
 
+- Labels erstellen, bearbeiten, löschen
+- Farbcodierte Labels
+- Labels Artikeln zuweisen (auch per Auto-Rule)
+- Starred-Workflow
+- Read-Later-Workflow
+- Unread/Read State Tracking
+
+### 3.7 Auto-Rules & Automatisierung
+
+**Auto-Mark-as-Read Rules:**
+- Rule erstellen, bearbeiten, löschen, sortieren
+- Query-basiertes Matching (gleiche Syntax wie Suche)
+- Aktionen: Als gelesen markieren, Stern setzen, Label zuweisen
+- Preview vor Aktivierung (welche Artikel würden matchen?)
+- "Jetzt anwenden" Button
+- Läuft automatisch nach jedem Sync
+
+**Keyword Alerts:**
+- Alerts für gespeicherte Queries
+- Scope: alle Feeds, ein Feed oder eine Kategorie
+- Delivery-Kanäle: In-App Bell, Browser Push, E-Mail, Outbound Webhook
+- Alert-History mit Read/Unread-Status
+- Match-Count-Badge pro Alert
+
+### 3.8 KI-Zusammenfassungen (BYOK)
+
+- Unterstützte Provider: OpenAI, Anthropic, Google Gemini, OpenRouter, Ollama
+- Default-Modelle: gpt-4o-mini, claude-haiku-4-5, gemini-1.5-flash, llama3
+- On-Demand-Zusammenfassung per Button im Reader
+- Auto-Zusammenfassung beim Sync (optional, mit Limit)
+- API-Schlüssel verschlüsselt gespeichert (AES-256-GCM)
+- Sprache der Zusammenfassung konfigurierbar
+- Zusammenfassungen in E-Mail-Digests
+
+### 3.9 Volltext-Extraktion (Scout Studio)
+
+- Per-Feed CSS-Selector für Artikel-Body
+- Remove-Selectors (Werbung, Navbars, etc.)
+- Extractions-Vorschau mit gerankten Kandidaten
+- Auto-Fetch beim Sync
+- Scout Studio Advanced Tab: XPath, JSON, HTTP-Optionen, Unicity, Filter
+- Scout Studio Extended OPML Import/Export (`ffx:*`-Namespace)
+
+### 3.10 Retention Policies & Feed Health
+
+- Retention-Fenster pro Feed
+- Dry-Run-Vorschau (welche Artikel würden gelöscht?)
+- Geschützte Artikel: Starred + Labeled werden nie gelöscht
+- Minimum Article Count pro Feed
+- Health Dashboard: Artikelzahl, Unread-Count, Letzter Sync, Ø Artikel/Tag, Error Rate
+
+### 3.11 Outbound Webhooks
+
+- Webhook-Endpoints konfigurieren mit Secret
+- Events: `new_article`, `keyword_match`, `feed_error`, `test`
+- HMAC-SHA256-Signierung (Format identisch zu GitHub Webhooks)
+- Retry-Strategie: 5 Versuche mit exponential Backoff (0, 5min, 30min, 2h, 8h)
+- Feed-Filter: Webhooks nur für bestimmte Feeds
+- Delivery-Log pro Webhook
+
+### 3.12 Duplicate Detection
+
+- Cross-Feed-Deduplizierung via SHA-256 URL-Hash
+- URL-Normalisierung: HTTPS, www-Strip, Tracking-Parameter entfernen (`utm_*`, etc.)
+- User-Setting: Duplikate anzeigen oder ausblenden
+- Badge-UI für Duplikat-Count
+
+### 3.13 Browser Push Notifications
+
+- Web Push API mit VAPID
+- Per-Gerät aktivieren/deaktivieren
+- Benachrichtigungs-Frequenz: sofort / stündlich / täglich / aus
+- Feed-Filter: Nur Push für bestimmte Feeds
+- Privacy Toggle: Generische vs. Titel-enthaltende Payloads
+- Badge-Updates (App-Icon-Zähler) via Service Worker
+
+### 3.14 E-Mail-Digests
+
+- Aktivieren/Deaktivieren pro User
+- Frequenz, Wochentag und Uhrzeit konfigurierbar
+- Scope-Filter: Alle Feeds, bestimmte Feeds/Kategorien
+- Test-Digest senden
+- Abmelde-Links in Digest-Mails
+- KI-Zusammenfassungen in Digests (wenn aktiviert)
+
+### 3.15 Flexible E-Mail-Delivery
+
+| Provider | Konfiguration |
+|---|---|
+| SMTP | Admin UI oder ENV |
+| Resend | `RESEND_API_KEY` |
+| Postmark | `POSTMARK_SERVER_TOKEN` |
+| Mailgun | `MAILGUN_API_KEY` + Domain |
+| SendGrid | `SENDGRID_API_KEY` |
+
+- Provider-Auswahl im Admin UI
+- Credentials verschlüsselt gespeichert
+- Test-Mail aus Admin UI
+
+### 3.16 REST API v1 + MCP + Google Reader API
+
+**REST API v1 (`/api/v1/*`):**
+- Artikel: Suchen, lesen, Status ändern, Bulk-Mark-as-Read
+- Feeds: Listen, hinzufügen, bearbeiten, löschen, synchronisieren
+- Kategorien: Listen, erstellen, bearbeiten, löschen
+- Labels: Listen, erstellen, bearbeiten, löschen
+- Saved Searches: Listen, erstellen, bearbeiten, löschen, teilen
+- OPML: Exportieren, importieren
+- Sync: Alle Feeds synchronisieren
+- OpenAPI Schema unter `/api/v1/openapi.json`
+
+**MCP Endpoint (`/api/mcp`):**
+- JSON-RPC 2.0 über HTTP (Streamable HTTP)
+- Tools: `search_articles`, `get_article`, `update_article_state`, `list_feeds`, `add_feed`, `sync_feeds`, `list_categories`, `list_labels`, `create_label`, `mark_all_read`
+- Für AI-Agenten, Claude, GPT, LangChain etc.
+
+**Google Reader API:**
+- Kompatibel mit Reeder, NetNewsWire, FeedMe, ReadKit
+- Cursor-basierte Paginierung
+- Streams, Tags, Subscriptions, Preferences
+- Docs: `docs/google-reader-api.md`
+
+### 3.17 Import & Export
+
+- OPML-Import mit Duplikat-Erkennung
+- Selektiver OPML-Export (nach Kategorie/Feed)
+- Scout Studio Extended OPML Import/Export
+- Vollständiger JSON-Daten-Export
+- Keyboard Shortcuts für schnellen Import-Workflow
+
+### 3.18 Keyboard Shortcuts
+
+| Shortcut | Aktion |
+|---|---|
+| `/` | Suche öffnen |
+| `Esc` | Suche/Dialog schließen |
+| `j` / `k` | Nächster / Vorheriger Artikel |
+| `n` / `p` | Nächster / Vorheriger ungelesener Artikel |
+| `s` | Stern setzen/entfernen |
+| `m` | Gelesen/Ungelesen togglen |
+| `o` | Original-URL öffnen |
+| `r` | Feeds aktualisieren |
+| `Shift+S` | Aktuelle Suche speichern |
+| `Shift+A` | Alle als gelesen markieren |
+| `?` | Shortcut-Hilfe anzeigen |
+
+### 3.19 Hintergrund-Sync
+
+- In-Process-Scheduler (kein externer Cron nötig)
+- Konfigurierbares Sync-Intervall
+- Per-Feed Update-Frequenz
+- Externer Sync-API-Endpoint (`GET /api/sync`)
+- Status-Endpoint (`GET /api/sync/status`)
+- Admin UI: Sync-Interval und Status
+
+### 3.20 Admin-Funktionen
+
+- Benutzerverwaltung (Roles, Suspend/Reactivate, Löschen)
+- Registrierungen global ein-/ausschalten
+- E-Mail-Provider und Mail-Service konfigurieren
+- Instanz-Branding (Name, Icon/Logo)
+- Admin-anpassbare Starter Packs (erstellen, bearbeiten, importieren, exportieren)
+- SSRF-Einstellungen (Trusted Internal Feeds)
+- SaaS Provisioning API (`/api/internal/*`)
+
+### 3.21 Auth & Sicherheit
+
+- Lokale E-Mail/Passwort-Accounts
+- Magic Link (Passwortlos via E-Mail)
 - Google OAuth
 - GitHub OAuth
-- optional Authelia OIDC login
+- Authelia OIDC (für Homelab SSO)
+- Optionales TOTP 2FA (für lokale Accounts)
+- Verschlüsselte API-Credentials (AES-256-GCM)
+- SSRF-Schutz für server-seitige Fetches
+- Content-Sanitization (DOMPurify)
+- GDPR: Self-Service Account-Deletion (vollständiger Cascade)
 
-#### Optional 2FA
+### 3.22 Self-Hosting & Deployment
 
-- optional TOTP-based authenticator app support
-- enabled per user
-- setup from user settings
-- 6-digit verification code flow
-- supports apps like Authy, Aegis, Google Authenticator, 1Password, etc.
-
-#### Self-hosting identity support
-
-- optional Authelia login for users who want centralized auth
-- good fit for private homelabs and internal deployments
-
-Marketing angle:
-
-> Sign in your way: local accounts, magic links, OAuth, or Authelia SSO.
+- Docker Compose mit PostgreSQL (Standard) oder SQLite
+- Coolify-kompatibel (Docker Compose Deployment Type)
+- Admin Onboarding Wizard (5-Schritt Setup)
+- Automatische DB-Migrations via `prisma db push` beim Start
+- Background Sync ohne externen Cron
+- SQLite für minimale Infrastruktur, PostgreSQL für Produktion
 
 ---
 
-### 4.3 Reading interface
+## 4. Landing Page Architektur
 
-FeedFerret provides a modern reader-style experience instead of a plain database table UI.
+### Empfohlene Sektionsreihenfolge
 
-Included:
-
-- article list and article reader
-- read/unread state management
-- starring
-- read-later saving
-- article metadata display
-- author, feed, and date context
-- external link opening
-- automatic reader scroll reset when navigating articles
-
-User settings include:
-
-- open original by default
-- mark as read timing
-- default list layout
-- reader width
-- default sort order
-- accent colors
-
-Marketing angle:
-
-> Built for actual reading, not just feed storage.
-
----
-
-### 4.4 Mobile UX refactor
-
-The mobile experience has been significantly improved and is now one of the product's strongest UX points.
-
-Included:
-
-- mobile bottom navigation for thumb reach
-- bottom drawer instead of relying on a left sidebar
-- mobile reader bottom controls
-- swipe gestures for next/previous navigation
-- scroll-to-top button in the mobile reader
-- better safe-area handling
-- reduced visual clutter in mobile header areas
-- layout fixes to avoid broken split-screen mobile states
-- feed navigation fixes from mobile drawer and article context
-
-Inspirational direction:
-
-- Reeder-style ergonomics
-- gesture-enhanced reading
-- one-handed reading flow
-
-Marketing angle:
-
-> A self-hosted RSS reader that actually feels good on a phone.
-
----
-
-### 4.5 PWA support
-
-FeedFerret can be installed as a Progressive Web App.
-
-Included:
-
-- manifest support
-- installable app behavior
-- add-to-home-screen guidance
-- first-visit mobile install prompt
-- settings shortcut to reopen install instructions
-- offline fallback page
-- lightweight service worker registration
-- app badge support where supported by the browser
-- mobile-home-screen-friendly experience
-
-Marketing angle:
-
-> Install FeedFerret like an app on your phone or tablet.
-
----
-
-### 4.6 Feeds and categories
-
-Core RSS management features include:
-
-- add feeds
-- delete feeds
-- edit feeds
-- category assignment
-- nested categories
-- category management
-- per-feed ordering
-- category ordering
-- feed refresh controls
-- global refresh
-
-Feed-specific advanced options include:
-
-- authentication for protected feeds
-- custom user-agent
-- request timeout
-- SSL verification control
-- content size limits
-- update frequency overrides
-
-Marketing angle:
-
-> Organize hundreds of feeds without chaos.
-
----
-
-### 4.7 Search and saved searches
-
-Search is a major part of the product surface.
-
-Included:
-
-- advanced query syntax
-- filters by feed
-- filters by category
-- `is:starred`
-- `is:unread`
-- label filters
-- date filters
-- saved searches
-
-#### Saved search sharing
-
-Recently added:
-
-- share a saved search via secret token link
-- public read-only HTML page for shared search results
-- RSS output for shared search results
-- enable/disable sharing per saved search
-- invalidation of old links when sharing is turned off
-
-Marketing angle:
-
-> Turn your search into a living feed — and even share it.
-
----
-
-### 4.8 Labels, starred, and read later
-
-Users can organize articles beyond folders.
-
-Included:
-
-- label creation
-- label editing
-- label deletion
-- assign labels to articles
-- color-coded label workflows
-- starred article workflow
-- read-later workflow
-- unread and read state tracking
-
-Marketing angle:
-
-> Use categories for structure, labels for meaning, and saved searches for intelligence.
-
----
-
-### 4.9 Auto rules and automation
-
-FeedFerret includes automation features for serious readers.
-
-#### Auto-mark-as-read rules
-
-Included:
-
-- rule creation
-- rule editing
-- rule deletion
-- query-based matching
-- rule ordering
-- rule previewing before activation
-- actions like mark-read, star, or apply label
-- apply rules now action
-
-Marketing angle:
-
-> Let low-value noise disappear automatically.
-
----
-
-### 4.10 Full-text extraction
-
-FeedFerret supports per-feed extraction enhancements for truncated or partial feeds.
-
-Included:
-
-- per-feed CSS selector configuration
-- full-text fetching support
-- extraction preview tooling
-- better long-form reading from incomplete feeds
-
-Marketing angle:
-
-> Upgrade thin feeds into a real reading experience.
-
----
-
-### 4.11 Retention policies
-
-FeedFerret includes built-in cleanup controls to keep databases manageable.
-
-Included:
-
-- retention windows
-- dry-run preview
-- article cleanup
-- preservation logic for important content
-- minimum retained article count behavior
-- protection for starred and labeled content
-
-Marketing angle:
-
-> Keep your archive under control without losing what matters.
-
----
-
-### 4.12 Feed health dashboard
-
-FeedFerret includes visibility into the health of a feed collection.
-
-Included:
-
-- article count
-- unread count
-- last sync visibility
-- average articles per day
-- error rate visibility
-- feed health reporting
-
-Marketing angle:
-
-> Know which feeds are active, stale, noisy, or failing.
-
----
-
-### 4.13 Import and export
-
-Included:
-
-- OPML import
-- duplicate detection during import
-- selective OPML export
-- full user data export in JSON
-
-Marketing angle:
-
-> Bring your existing RSS setup with you — and keep your data portable.
-
----
-
-### 4.14 Keyboard shortcuts and desktop power use
-
-FeedFerret supports keyboard-first workflows.
-
-Included shortcuts:
-
-- `/` open search
-- `Esc` close overlays/search
-- `j` / `k` next / previous article
-- `n` / `p` next / previous unread
-- `s` toggle star
-- `m` toggle read/unread
-- `o` open original link
-- `r` refresh feeds
-- `Shift+S` save search
-- `Shift+A` mark all as read
-- `?` open shortcut help
-
-Marketing angle:
-
-> Fast enough for inbox-style reading and research workflows.
-
----
-
-### 4.15 Email digests
-
-FeedFerret supports periodic article digests by email.
-
-Included:
-
-- digest enable/disable per user
-- frequency options
-- day-of-week controls
-- hour controls
-- scope filters
-- feed filters
-- test digest sending
-- unsubscribe links
-
-Marketing angle:
-
-> Let your reading list come to you.
-
----
-
-### 4.16 Flexible email delivery
-
-FeedFerret supports multiple mail delivery backends.
-
-Included:
-
-- SMTP configuration via admin UI
-- Resend support via environment configuration
-- Postmark support via environment configuration
-- Mailgun support via environment configuration
-- SendGrid support via environment configuration
-- provider selection in server settings
-- provider visibility only when environment variables are configured
-- test email action from server management
-
-Used for:
-
-- sign-in emails
-- digest emails
-- transactional emails
-
-Marketing angle:
-
-> Use the mail stack that already fits your infrastructure.
-
----
-
-### 4.17 Google Reader API compatibility
-
-A major compatibility feature is the expanded Google Reader style API support.
-
-Included support now covers endpoints and workflows such as:
-
-- stream contents
-- stream item contents
-- stream item ids
-- subscription list
-- subscription edit
-- quick add subscription
-- tag list
-- edit tag
-- mark all as read
-- preference list
-- stream preferences
-- unread counts
-- token endpoint
-- user info
-
-Supported concepts include:
-
-- reading list
-- feed streams
-- label streams
-- read/unread state
-- starred state
-- label add/remove
-
-Practical outcome:
-
-- works better with native client ecosystems
-- designed for apps like Reeder, NetNewsWire, FeedMe, ReadKit, and similar clients
-
-Important note:
-
-- password-based Google Reader auth is intentionally blocked for accounts using local 2FA, because those flows do not support a second-factor challenge
-
-Marketing angle:
-
-> Use FeedFerret as your server backend while keeping your favorite reader client.
-
----
-
-### 4.18 Background sync
-
-FeedFerret includes built-in feed refresh scheduling.
-
-Included:
-
-- in-process background scheduler
-- configurable sync interval
-- per-feed cadence support
-- external sync API option
-- status endpoint
-- optional secret for sync endpoint protection
-
-Marketing angle:
-
-> Keep your feeds fresh without extra infrastructure.
-
----
-
-### 4.19 Admin controls
-
-FeedFerret includes a dedicated server management surface.
-
-Included:
-
-- user management
-- role management
-- account deletion
-- registration enable/disable
-- mail service enable/disable
-- mail provider selection
-- SMTP settings management
-- test email action
-
-Marketing angle:
-
-> Simple enough for personal hosting, structured enough for shared deployments.
-
----
-
-## 5. Design and UX Themes for Marketing
-
-The landing page should communicate these themes clearly:
-
-### Theme 1: Private control
-
-- your feeds
-- your server
-- your users
-- your data
-
-### Theme 2: Modern reading experience
-
-- beautiful reader
-- mobile-friendly
-- thumb-first controls
-- dark mode and polish
-
-### Theme 3: Power-user depth
-
-- rules
-- labels
-- saved searches
-- shared search feeds
-- keyboard shortcuts
-- health dashboards
-- retention controls
-
-### Theme 4: Self-hosting without pain
-
-- SQLite default simplicity
-- Docker deployment path
-- Authelia support
-- flexible mail providers
-- admin UI instead of manual config only
-
-### Theme 5: Works with your ecosystem
-
-- PWA install support
-- Google Reader API compatibility
-- native RSS client support
-- external mail providers
-- SSO support
-
----
-
-## 6. Strong Feature Buckets for Landing Page Sections
-
-Suggested top-level landing page sections:
-
+```
 1. Hero
-2. Social proof / product promise
-3. Reading experience
-4. Mobile and PWA experience
-5. Organize everything
-6. Power-user automation
-7. Native client compatibility
-8. Self-hosting and admin controls
-9. Authentication and security
-10. Deployment and docs
-11. CTA
+2. Proof / Trust Signals
+3. Reading Experience
+4. Mobile & PWA
+5. Organization (Feeds, Categories, Labels)
+6. Power-User (Rules, Alerts, Search, API, Webhooks, KI)
+7. Native Client Compatibility
+8. Self-Hosting & Admin
+9. Authentication & Security
+10. Pricing
+11. FAQ
+12. CTA
+```
 
----
+### Sektion 1: Hero
 
-## 7. Possible Marketing Copy Angles
+**Headline-Varianten (zum Testen):**
+- "The self-hosted RSS reader that finally feels modern."
+- "Own your feeds. Enjoy reading again."
+- "A beautiful RSS reader for self-hosters and power users."
+- "Your personal reading command center."
 
-### Headline directions
+**Subheadline:**
+> Read, filter, organize, and automate your RSS feeds — on your own server, in a polished interface built for both desktop and mobile.
 
-- The self-hosted RSS reader that finally feels modern.
-- Own your feeds. Enjoy your reading again.
-- A beautiful RSS reader for self-hosters and power users.
-- Your personal reading command center.
-- Reeder-like reading ergonomics, self-hosted control.
+**CTA-Buttons:**
+- Primary: "Deploy with Docker" → `#deploy`
+- Secondary: "See the features" → `#features`
 
-### Supporting subheadline directions
+**Hero Asset:** Desktop-Screenshot mit Reader + Feed-Liste (3-Spalten-Layout, Dark Mode)
 
-- Read, filter, organize, and automate your feeds with a polished multi-user interface.
-- FeedFerret combines modern UX, mobile-first reading, automation, and self-hosting flexibility.
-- From saved searches to Google Reader API support, FeedFerret gives serious readers the tools they actually need.
+### Sektion 2: Trust Signals
 
----
+- GitHub Stars
+- Docker Pulls
+- "Used by X self-hosters" (wenn verfügbar)
+- Frühe Nutzer-Quotes / Testimonials
+- "Open Source, MIT License"
+- Kompatible App-Icons: Reeder, NetNewsWire, n8n, etc.
 
-## 8. Most Marketable Newly Added Features
+### Sektion 3: Reading Experience
 
-These additions are especially strong for launch messaging because they significantly extend the product beyond a basic RSS reader:
+**Headline:** "Built for actual reading, not just feed storage."
 
-- Mobile UX refactor with bottom controls and gestures
-- PWA install flow and app-like mobile experience
-- Saved search sharing with public pages and RSS outputs
-- Expanded Google Reader API compatibility
+Content:
+- Screenshot: Article Reader (Desktop, Light Mode)
+- Screenshot: Article Reader (Mobile, Dark Mode)
+- Feature-Bullets: Multiple Layouts, Reader Width, Mark-as-Read Timing, Dark Mode, Keyboard Navigation
+
+### Sektion 4: Mobile & PWA
+
+**Headline:** "A self-hosted RSS reader that actually feels good on a phone."
+
+Content:
+- iPhone Screenshot: Bottom Navigation + Reader
+- Android Screenshot: Feed-Liste
+- Feature-Bullets: Swipe-Gesten, PWA Install, Offline-Fallback, One-Handed Reading
+
+### Sektion 5: Organize Everything
+
+**Headline:** "Use categories for structure, labels for meaning, saved searches for intelligence."
+
+Content:
+- Screenshot: Sidebar mit Kategorien + Labels
+- Screenshot: Saved Search Sharing
+- Feature-Grid: Feeds, Categories, Labels, Saved Searches, Shared Searches
+
+### Sektion 6: Power-User Features
+
+**Headline:** "From inbox-style reading to research automation."
+
+Feature-Cards (je mit Icon + kurzer Beschreibung):
+- **Smart Rules:** Auto-mark, star, label — with preview before enabling
+- **Keyword Alerts:** Notify via push, email, or webhook when articles match
+- **Advanced Search:** 15+ search tokens, save and share as RSS
+- **REST API + MCP:** Automate via n8n, connect AI agents
+- **Outbound Webhooks:** HMAC-signed, with retry logic
+- **AI Summaries:** BYOK — OpenAI, Anthropic, Gemini, Ollama
+- **Full-Text Extraction:** Per-feed CSS selectors for truncated feeds
+- **Feed Health:** Stats, error rates, retention policies
+
+### Sektion 7: Native Client Compatibility
+
+**Headline:** "Use FeedFerret as your server backend while keeping your favorite RSS client."
+
+Content:
+- App-Icons: Reeder, NetNewsWire, FeedMe, ReadKit
+- "Google Reader API compatible"
+- Code-Snippet: Base URL konfigurieren
+
+### Sektion 8: Self-Hosting & Admin
+
+**Headline:** "Simple enough for a homelab, structured enough for a team."
+
+```bash
+git clone ... && cd feedferret
+cp .env.example .env
+docker compose up -d --build
+```
+
+Feature-Bullets:
+- PostgreSQL oder SQLite
+- Coolify-kompatibel
+- Multi-User mit Admin-UI
+- Instanz-Branding, Starter Packs, Benutzerverwaltung
+- Keine externen Dienste erforderlich
+
+### Sektion 9: Auth & Security
+
+**Headline:** "Sign in your way. Keep your data private."
+
+- Login-Optionen-Grid: Password, Magic Link, Google, GitHub, Authelia OIDC
 - Optional TOTP 2FA
-- Optional Authelia OIDC login
-- Flexible email providers: SMTP, Resend, Postmark, Mailgun, SendGrid
+- "Your data stays on your server"
+- GDPR: Vollständige Account-Löschung
+- AES-256-GCM verschlüsselte API-Credentials
+- SSRF-Schutz für Feed-Fetching
 
-These should likely be highlighted as “recently added” or “what makes FeedFerret different.”
+### Sektion 10: Preise
 
----
+**Self-Hosted (Kostenlos, MIT License):**
+- Alle Features
+- Unbegrenzte Nutzer
+- PostgreSQL oder SQLite
+- Community-Support via GitHub Issues
 
-## 9. Deployment and Self-Hosting Positioning
+**SaaS — Personal:** (Preis TBD nach Wettbewerbsanalyse)
+- Managed Hosting
+- Automatische Updates
+- E-Mail-Support
+- TBD Features
 
-FeedFerret should be positioned as:
+**SaaS — Team:** (Preis TBD)
+- Mehrere Nutzer (TBD)
+- Priority-Support
+- TBD Features
 
-- simple enough for an individual homelab
-- strong enough for multi-user use
-- modern enough to replace older self-hosted readers
-- extensible enough for advanced workflows
+> Pricing empfiehlt sich erst nach Wettbewerbsanalyse (Roadmap 0.1.3) festzulegen.
 
-Key points to mention:
+### Sektion 11: FAQ
 
-- SQLite out of the box
-- Docker-friendly deployment
-- mail provider flexibility
-- Authelia compatibility
-- admin controls in UI
-- docs for self-hosters
+Top-5-Fragen (Entwurf):
+1. Was ist der Unterschied zwischen Self-Hosted und dem SaaS-Angebot?
+2. Kann ich meine Feedly/Inoreader-Abonnements importieren?
+3. Welche nativen RSS-Apps sind kompatibel?
+4. Wie werden meine Daten gesichert?
+5. Brauche ich technisches Wissen für den Self-Hosted-Betrieb?
 
----
+### Sektion 12: CTA
 
-## 10. Security and Privacy Positioning
-
-Important messaging points:
-
-- self-hosted deployment
-- per-user isolation
-- optional 2FA
-- optional SSO via Authelia
-- registration controls
-- no dependency on a hosted SaaS account to use the product
-
----
-
-## 11. Recommended Landing Page CTA Ideas
-
-- Start self-hosting FeedFerret
-- Install FeedFerret on your server
-- Explore the feature set
-- Use FeedFerret with your favorite RSS client
-- Read smarter, host it yourself
+- "Deploy FeedFerret" → GitHub Repo
+- "Try the SaaS version" → Signup
+- "Read the Docs" → Dokumentation
 
 ---
 
-## 12. Short Product Description Variants
+## 5. Marketing-Copy Entwürfe
 
-### Short version
+### Kurzbeschreibungen
 
-FeedFerret is a modern self-hosted RSS reader with multi-user support, mobile-first reading UX, automation, saved searches, PWA support, and Google Reader API compatibility.
+**1 Satz:**
+> FeedFerret ist ein selbst hostbarer RSS-Reader mit moderner UX, Mehr-Benutzer-Unterstützung, mobilen Gesten und Power-User-Werkzeugen.
 
-### Medium version
+**2-3 Sätze:**
+> FeedFerret ist ein polierter, selbst hostbarer RSS-Reader für Nutzer, die Datenschutz, Kontrolle und ein besseres Leseerlebnis wollen. Er kombiniert mobiles Design, Labels, Saved Searches, Automatisierungs-Rules, E-Mail-Digests, flexible Auth und native Client-Kompatibilität in einer modernen App. Auf deinem Server. Für deine Daten.
 
-FeedFerret is a polished, self-hostable RSS reader built for people who want privacy, control, and a better reading experience. It combines mobile-friendly design, labels, saved searches, automation rules, email digests, flexible authentication, and native-client compatibility in one modern app.
+**Ausführlich (ProductHunt / Press):**
+> FeedFerret ist eine Self-Hosted RSS-Plattform für ernsthafte Leser. Sammle und organisiere Feeds, filtere automatisch Rauschen heraus, speichere und teile leistungsstarke Suchen, lies komfortabel auf Desktop und Mobile, installiere die App als PWA, verbinde native RSS-Clients via Google Reader API, und verwalte Auth via lokale Accounts, 2FA, OAuth oder Authelia. Gebaut um leistungsstark zu sein ohne veraltet zu wirken.
 
-### Long version
+### ProductHunt-Tagline (Entwurf)
 
-FeedFerret is a self-hosted RSS platform for serious readers. It helps you collect and organize feeds, automate low-value noise away, save and share powerful searches, read comfortably on desktop and mobile, install the app as a PWA, connect external RSS clients through Google Reader API compatibility, and manage authentication through local accounts, 2FA, OAuth, or Authelia. It is designed to be powerful without feeling dated.
+> The self-hosted RSS reader that finally feels modern
+
+### Vergleichs-Positionierung
+
+| vs. Feedly | FeedFerret ist self-hosted, keine Daten auf fremden Servern, kein SaaS-Abo |
+| vs. Inoreader | Gleiche Power-Features, aber vollständig unter deiner Kontrolle |
+| vs. Miniflux | Modernere UX, Mobile-First, KI-Integration, Google Reader API |
+| vs. FreshRSS | Schöneres Interface, bessere Mobile UX, API, Webhooks, KI |
 
 ---
 
-## 13. Current State Summary
+## 6. Neue Features seit letztem Update (Mai 2026)
 
-FeedFerret is no longer just a basic self-hosted RSS reader.
+Diese Features sind besonders stark für Launch-Messaging:
 
-It currently combines:
+| Feature | Botschaft |
+|---|---|
+| **KI-Zusammenfassungen (BYOK)** | Deine KI, dein Schlüssel — OpenAI, Anthropic, Gemini, Ollama |
+| **Outbound Webhooks** | Sofort-Benachrichtigung bei neuen Artikeln → n8n, Zapier, eigene Systeme |
+| **Keyword Alerts (vollständig)** | Push + E-Mail + Webhook wenn Artikel deiner Query matchen |
+| **Duplicate Detection** | Gleiche Geschichte aus 5 Feeds? Nur einmal zeigen |
+| **Feed Discovery** | Gibt es RSS? FeedFerret findet es. Oder starte mit kurierten Packs |
+| **Admin Starter Packs** | Vorkonfigurierte Feed-Sammlungen für neue Nutzer anpassen |
+| **MCP Endpoint** | AI-Agenten (Claude, GPT, LangChain) direkt in den Reader integrieren |
+| **REST API v1 vollständig** | Alle Kern-Daten via API — für Automationen, Dashboards, Apps |
 
-- strong reading UX
-- serious mobile improvements
-- installable PWA behavior
-- self-hosting flexibility
-- automation and search depth
-- external client compatibility
-- modern authentication options
-- flexible server-side email infrastructure
+---
 
-This makes it suitable to market as a **modern self-hosted reading platform**, not just a feed list.
+## 7. Screenshot-Anforderungen
+
+Benötigte Assets für Launch:
+
+| Asset | Spezifikation | Priorität |
+|---|---|---|
+| Hero Screenshot Desktop | 1440×900, Light + Dark | Kritisch |
+| Reader Desktop | 1440×900, Light + Dark | Kritisch |
+| Mobile Reader iPhone | 393×852 (iPhone 15 Pro), Light + Dark | Kritisch |
+| Mobile Feed-Liste | 393×852, Light + Dark | Hoch |
+| OG Image | 1200×630, Logo + Tagline | Kritisch |
+| ProductHunt Gallery | 5 Bilder à 1270×952 | Hoch |
+| Favicon Set | bereits vorhanden ✓ | — |
+| Apple Touch Icon | bereits vorhanden ✓ | — |
+
+---
+
+## 8. SEO-Zielseiten
+
+Empfohlene Seiten für organische Reichweite:
+
+- `/` — Haupt-Landing Page
+- `/self-hosting` — Self-Hosting Guide
+- `/compare/feedly` — FeedFerret vs. Feedly
+- `/compare/inoreader` — FeedFerret vs. Inoreader
+- `/compare/miniflux` — FeedFerret vs. Miniflux
+- `/blog/rss-reader-2026` — "Best Self-Hosted RSS Readers 2026"
+- `/docs` — Dokumentations-Hub
+- `/changelog` — Release Notes
+
+---
+
+## 9. Launch-Kanäle (Empfehlung)
+
+| Kanal | Timing | Format |
+|---|---|---|
+| GitHub Release | Launch-Tag | Changelog + Screenshots |
+| ProductHunt | Launch-Tag | Launch mit Gallery + Demo-GIF |
+| Hacker News (Show HN) | Launch-Tag oder +1 Tag | Kurzer Pitch + Tech-Stack |
+| Reddit r/selfhosted | Launch-Woche | Screenshot-Post |
+| Reddit r/rss | Launch-Woche | Feature-Fokus |
+| Twitter/X | Laufend | Screenshots, Quick-Tips |
+| Mastodon / Fediverse | Laufend | Self-Hosting Community |
