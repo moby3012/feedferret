@@ -693,7 +693,11 @@ export default function RSSReaderPage() {
   }
 
   return (
-    <div className="fixed inset-0 flex bg-background overflow-hidden selection:bg-accent/20 app-chrome">
+    <div id="main-content" role="main" className="fixed inset-0 flex bg-background overflow-hidden selection:bg-accent/20 app-chrome">
+      {/* A-2.1: Live region announces article count changes to screen readers */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {unreadCount} unread {unreadCount === 1 ? "article" : "articles"}
+      </div>
       {/* Desktop Sidebar */}
       {!isMobileLayout && (
       <div className="shrink-0 w-80 overflow-hidden">
@@ -767,7 +771,7 @@ export default function RSSReaderPage() {
           maxSize={55}
           className="min-w-[360px]"
         >
-          <div className="relative z-10 flex h-full flex-col border-r border-border/60 bg-card/70 backdrop-blur-2xl">
+          <div role="region" aria-label="Article list" className="relative z-10 flex h-full flex-col border-r border-border/60 bg-card/70 backdrop-blur-2xl">
             <RssHeader
               title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
               articleCount={filteredArticles.length}
@@ -827,7 +831,7 @@ export default function RSSReaderPage() {
         />
 
         <ResizablePanel defaultSize={64} minSize={45}>
-          <div className="flex h-full bg-background">
+          <div role="region" aria-label="Article reader" className="flex h-full bg-background">
             <ArticleReader
               article={selectedArticle}
               onToggleStar={handleToggleStar}
@@ -853,7 +857,7 @@ export default function RSSReaderPage() {
 
       {/* Mobile Article List Panel */}
       {isMobileLayout && !selectedArticle && (
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-2xl transition-all duration-300 ease-out">
+      <div role="region" aria-label="Article list" className="relative z-10 flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-2xl transition-all duration-300 ease-out">
         <RssHeader
           title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
           articleCount={filteredArticles.length}
@@ -923,7 +927,7 @@ export default function RSSReaderPage() {
 
       {/* Mobile Article Reader Panel */}
       {isMobileLayout && (selectedArticle || isClosingReader) && (
-      <div className={`fixed inset-0 z-50 flex bg-background ${isClosingReader ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
+      <div role="region" aria-label="Article reader" className={`fixed inset-0 z-50 flex bg-background ${isClosingReader ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
         <ArticleReader
           article={selectedArticle}
           onToggleStar={handleToggleStar}

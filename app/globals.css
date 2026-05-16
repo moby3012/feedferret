@@ -234,12 +234,41 @@
   50% { opacity: 0.7; }
 }
 
-.animate-fade-in {
-  animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
+/* A-1.1: All animations only run when the user has not requested reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  .animate-fade-in {
+    animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-feed-flip {
+    animation: feed-flip-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-filter-swap {
+    animation: filter-swap 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-pulse-gentle {
+    animation: pulse-gentle 2s ease-in-out infinite;
+  }
+
+  /* Staggered animation delays */
+  .animation-delay-100 { animation-delay: 100ms; animation-fill-mode: backwards; }
+  .animation-delay-200 { animation-delay: 200ms; animation-fill-mode: backwards; }
+  .animation-delay-300 { animation-delay: 300ms; animation-fill-mode: backwards; }
+  .animation-delay-400 { animation-delay: 400ms; animation-fill-mode: backwards; }
 }
 
 @keyframes feed-flip-in {
@@ -251,10 +280,6 @@
     opacity: 1;
     transform: translateX(0) scale(1);
   }
-}
-
-.animate-feed-flip {
-  animation: feed-flip-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes filter-swap {
@@ -271,28 +296,6 @@
     transform: translateY(0) scale(1);
   }
 }
-
-.animate-filter-swap {
-  animation: filter-swap 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.animate-scale-in {
-  animation: scale-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.animate-slide-in-right {
-  animation: slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.animate-pulse-gentle {
-  animation: pulse-gentle 2s ease-in-out infinite;
-}
-
-/* Staggered animation delays */
-.animation-delay-100 { animation-delay: 100ms; animation-fill-mode: backwards; }
-.animation-delay-200 { animation-delay: 200ms; animation-fill-mode: backwards; }
-.animation-delay-300 { animation-delay: 300ms; animation-fill-mode: backwards; }
-.animation-delay-400 { animation-delay: 400ms; animation-fill-mode: backwards; }
 
 @layer base {
   * {

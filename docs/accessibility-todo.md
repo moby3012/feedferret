@@ -9,11 +9,11 @@ Detaillierte Sprint-Planung steht in `docs/ROADMAP.md` Abschnitt 0.3.
 
 | Sprint | Inhalt | Status |
 |---|---|---|
-| A-1 Quick Wins | Motion, Skip Link, ARIA Landmarks, Icon Labels | ⬜ Offen |
-| A-2 Screen Reader | Live Regions, Focus Management, Semantik | ⬜ Offen |
-| A-3 Keyboard Navigation | Feed-Liste, Dialoge, DnD, Roving Tabindex | ⬜ Offen |
-| A-4 Visuals & Kontrast | Kontrast-Audit, Zoom, Font-Slider | ⬜ Offen |
-| A-5 Tooling & Prozess | eslint-jsx-a11y, Playwright axe, /accessibility Seite | ⬜ Offen |
+| A-1 Quick Wins | Motion, Skip Link, ARIA Landmarks, Icon Labels | ✅ Implementiert |
+| A-2 Screen Reader | Live Regions, Focus Management, Semantik | ✅ Implementiert |
+| A-3 Keyboard Navigation | Feed-Karten Tastatur, Artikel-Actions | ✅ Implementiert |
+| A-4 Visuals & Kontrast | Kontrast-Audit, Zoom, Font-Slider | ⬜ Offen (post-launch) |
+| A-5 Tooling & Prozess | eslint-jsx-a11y ✅, /accessibility-Seite ✅, Playwright axe ⬜ | 🟡 Teilweise |
 
 ---
 

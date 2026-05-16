@@ -426,7 +426,7 @@ export function RssSidebar({
   }
 
   return (
-    <aside className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-r border-sidebar-border/70 flex flex-col overflow-hidden">
+    <aside role="navigation" aria-label="Feed navigation" className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-r border-sidebar-border/70 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">
@@ -451,7 +451,11 @@ export function RssSidebar({
               <h1 className="text-xl font-semibold text-sidebar-foreground tracking-[-0.03em]">
                 {branding.instanceName}
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p
+                className="text-sm text-muted-foreground"
+                aria-live="polite"
+                aria-label={`${totalUnread} unread articles`}
+              >
                 {totalUnread} unread
               </p>
             </div>
@@ -461,6 +465,7 @@ export function RssSidebar({
             size="icon"
             className="w-8 h-8 rounded-xl shrink-0"
             onClick={() => window.dispatchEvent(new Event('focus-search'))}
+            aria-label="Search articles"
           >
             <Search className="w-4 h-4" />
           </Button>
@@ -583,6 +588,7 @@ export function RssSidebar({
                 size="icon"
                 className="w-8 h-8 rounded-xl"
                 onClick={() => setIsAddFeedOpen(true)}
+                aria-label="Add feed"
               >
                 <Plus className="w-5 h-5" />
               </Button>
