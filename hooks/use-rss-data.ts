@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection } from "@/app/actions/settings"
 import { toast } from "sonner"
 
@@ -459,6 +459,7 @@ export function useCreateAutoReadRule() {
             scope?: string | null;
             trigger?: string;
             webhookConfigs?: unknown;
+            removeSpoilerOnDelete?: boolean;
         }) => createAutoReadRule(data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
@@ -488,6 +489,7 @@ export function useUpdateAutoReadRule() {
                 order: number;
                 trigger: string;
                 webhookConfigs: unknown;
+                removeSpoilerOnDelete: boolean;
             }>
         }) => updateAutoReadRule(ruleId, data),
         onSuccess: () => {
@@ -505,7 +507,52 @@ export function useDeleteAutoReadRule() {
         mutationFn: (ruleId: string) => deleteAutoReadRule(ruleId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+            queryClient.invalidateQueries({ queryKey: ["articles", "spoiler-count"] })
             toast.success("Rule deleted")
+        },
+    })
+}
+
+export function useReleaseArticleSpoiler() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (articleId: string) => releaseArticleSpoiler(articleId),
+        onMutate: async (articleId) => {
+            await queryClient.cancelQueries({ queryKey: ["articles"] })
+            const snapshots = queryClient.getQueriesData({ queryKey: ["articles"] })
+            snapshots.forEach(([queryKey, old]) => {
+                if (!Array.isArray(old)) return
+                queryClient.setQueryData(queryKey, old.filter((a: any) => a.id !== articleId))
+            })
+            const prev = queryClient.getQueryData<number>(["articles", "spoiler-count"])
+            if (typeof prev === "number") {
+                queryClient.setQueryData(["articles", "spoiler-count"], Math.max(0, prev - 1))
+            }
+            return { snapshots, prev }
+        },
+        onError: (_err, _id, ctx) => {
+            ctx?.snapshots?.forEach(([queryKey, data]) => queryClient.setQueryData(queryKey, data))
+            if (ctx?.prev !== undefined) queryClient.setQueryData(["articles", "spoiler-count"], ctx.prev)
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+            queryClient.invalidateQueries({ queryKey: ["articles", "spoiler-count"] })
+        },
+    })
+}
+
+export function useReleaseAllSpoilers() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: () => releaseAllSpoilers(),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+            queryClient.invalidateQueries({ queryKey: ["articles", "spoiler-count"] })
+            toast.success("All spoiler flags released")
+        },
+        onError: () => {
+            toast.error("Failed to release spoilers")
         },
     })
 }

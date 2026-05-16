@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { TabsContent } from "@/components/ui/tabs";
 import { SettingsModalShell, SettingsPageShell } from "@/components/settings-shell";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -688,6 +689,7 @@ export function FeedManagement({
   const [newRuleScope, setNewRuleScope] = useState<string>("all");
   const [newRuleTrigger, setNewRuleTrigger] = useState<"article" | "feed_error">("article");
   const [newRuleWebhooks, setNewRuleWebhooks] = useState<WebhookConfigUi[]>([]);
+  const [newRuleRemoveSpoilerOnDelete, setNewRuleRemoveSpoilerOnDelete] = useState(false);
   const [rulePreview, setRulePreview] = useState<any[] | null>(null);
   const [showAddRule, setShowAddRule] = useState(false);
   const [showRuleTutorial, setShowRuleTutorial] = useState(false);
@@ -698,6 +700,7 @@ export function FeedManagement({
   const [editRuleScope, setEditRuleScope] = useState<string>("all");
   const [editRuleTrigger, setEditRuleTrigger] = useState<"article" | "feed_error">("article");
   const [editRuleWebhooks, setEditRuleWebhooks] = useState<WebhookConfigUi[]>([]);
+  const [editRuleRemoveSpoilerOnDelete, setEditRuleRemoveSpoilerOnDelete] = useState(false);
   const [newAlertName, setNewAlertName] = useState("");
   const [newAlertQuery, setNewAlertQuery] = useState("");
   const [newAlertScope, setNewAlertScope] = useState("all");
@@ -1655,6 +1658,15 @@ export function FeedManagement({
                             }}
                             catalog={catalogForTrigger(buildActionCatalog(labels), newRuleTrigger)}
                           />
+                          {newRuleActions.includes("mark_spoiler") && (
+                            <label className="flex items-center gap-2 cursor-pointer select-none mt-1">
+                              <Checkbox
+                                checked={newRuleRemoveSpoilerOnDelete}
+                                onCheckedChange={(v) => setNewRuleRemoveSpoilerOnDelete(!!v)}
+                              />
+                              <span className="text-xs text-muted-foreground">Remove spoiler flag from all flagged articles when this rule is deleted</span>
+                            </label>
+                          )}
                         </div>
                       </div>
 
@@ -1717,6 +1729,7 @@ export function FeedManagement({
                                 scope: newRuleScope === "all" ? null : newRuleScope,
                                 trigger: newRuleTrigger,
                                 webhookConfigs: newRuleWebhooks,
+                                removeSpoilerOnDelete: newRuleRemoveSpoilerOnDelete,
                               },
                               {
                                 onSuccess: () => {
@@ -1728,6 +1741,7 @@ export function FeedManagement({
                                   setNewRuleScope("all");
                                   setNewRuleTrigger("article");
                                   setNewRuleWebhooks([]);
+                                  setNewRuleRemoveSpoilerOnDelete(false);
                                   setRulePreview(null);
                                 },
                               },
@@ -1883,6 +1897,7 @@ export function FeedManagement({
                                       }
                                     } catch {}
                                     setEditRuleWebhooks(parsed);
+                                    setEditRuleRemoveSpoilerOnDelete(rule.removeSpoilerOnDelete || false);
                                   }}
                                   title={isEditing ? "Close editor" : "Edit rule"}
                                 >
@@ -1986,6 +2001,15 @@ export function FeedManagement({
                                     }}
                                     catalog={catalogForTrigger(catalog, editRuleTrigger)}
                                   />
+                                  {editRuleActions.includes("mark_spoiler") && (
+                                    <label className="flex items-center gap-2 cursor-pointer select-none mt-1">
+                                      <Checkbox
+                                        checked={editRuleRemoveSpoilerOnDelete}
+                                        onCheckedChange={(v) => setEditRuleRemoveSpoilerOnDelete(!!v)}
+                                      />
+                                      <span className="text-xs text-muted-foreground">Remove spoiler flag from all flagged articles when this rule is deleted</span>
+                                    </label>
+                                  )}
                                 </div>
                                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                                   <Button
@@ -2016,6 +2040,7 @@ export function FeedManagement({
                                             scope: editRuleScope === "all" ? null : editRuleScope,
                                             trigger: editRuleTrigger,
                                             webhookConfigs: editRuleWebhooks,
+                                            removeSpoilerOnDelete: editRuleRemoveSpoilerOnDelete,
                                           },
                                         },
                                         { onSuccess: () => setEditingRuleId(null) },

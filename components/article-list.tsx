@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
-import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers, RefreshCw } from "lucide-react";
+import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers, RefreshCw, ShieldOff } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useState, useRef, useEffect } from "react";
 
@@ -60,6 +60,7 @@ interface ArticleListProps {
   onToggleRead?: (articleId: string) => void;
   onToggleStar?: (articleId: string) => void;
   onToggleReadLater?: (articleId: string) => void;
+  onReleaseSpoiler?: (articleId: string) => void;
   viewMode?: "list" | "grid" | "magazine" | "minimal";
   pageSize?: number;
   markReadOnScroll?: boolean;
@@ -82,6 +83,7 @@ export function ArticleList({
   onToggleRead,
   onToggleStar,
   onToggleReadLater,
+  onReleaseSpoiler,
   viewMode = "list",
   pageSize,
   markReadOnScroll = false,
@@ -347,6 +349,7 @@ export function ArticleList({
             onToggleRead={onToggleRead}
             onToggleStar={onToggleStar}
             onToggleReadLater={onToggleReadLater}
+            onReleaseSpoiler={onReleaseSpoiler}
             index={index}
             viewMode={viewMode}
             markReadOnScroll={markReadOnScroll}
@@ -372,6 +375,7 @@ function ArticlePreview({
   onToggleRead,
   onToggleStar,
   onToggleReadLater,
+  onReleaseSpoiler,
   index,
   viewMode,
   markReadOnScroll,
@@ -384,6 +388,7 @@ function ArticlePreview({
   onToggleRead?: (articleId: string) => void;
   onToggleStar?: (articleId: string) => void;
   onToggleReadLater?: (articleId: string) => void;
+  onReleaseSpoiler?: (articleId: string) => void;
   index: number;
   viewMode: string;
   markReadOnScroll?: boolean;
@@ -604,6 +609,17 @@ function ArticlePreview({
               >
                 <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent")} />
               </button>
+              {onReleaseSpoiler && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onReleaseSpoiler(article.id); }}
+                  className="rounded-md p-1 transition-colors text-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
+                  aria-label="Release spoiler flag"
+                  title="Release spoiler flag"
+                >
+                  <ShieldOff className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -767,6 +783,17 @@ function ArticlePreview({
               >
                 <Bookmark className={cn("w-4 h-4", article.isReadLater && "fill-accent")} />
               </button>
+              {onReleaseSpoiler && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onReleaseSpoiler(article.id); }}
+                  className="rounded-lg p-1.5 transition-colors text-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
+                  aria-label="Release spoiler flag"
+                  title="Release spoiler flag"
+                >
+                  <ShieldOff className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
