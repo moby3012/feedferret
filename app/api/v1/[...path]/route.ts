@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { apiError, clampInt, parseBool, readJson, requireApiUser, type ApiUser } from "@/lib/api-auth";
+import { checkRateLimit, getClientIdentifier, rateLimitHeaders, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
@@ -444,62 +445,71 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
 
+  // Rate limiting: reads 200/min, writes 60/min (per user)
+  const isWriteMethod = method === "POST" || method === "PATCH" || method === "PUT" || method === "DELETE";
+  const rlConfig = isWriteMethod ? RATE_LIMITS.apiV1Write : RATE_LIMITS.apiV1Read;
+  const rlResult = checkRateLimit(getClientIdentifier(request, user.id), rlConfig);
+  if (!rlResult.success) return rateLimitResponse(rlResult);
+  const rlHeaders = rateLimitHeaders(rlResult);
+
+  // Wraps a Response with X-RateLimit-* headers
+  const withRl = (res: Response) => {
+    Object.entries(rlHeaders).forEach(([k, v]) => res.headers.set(k, v as string));
+    return res;
+  };
+
+  let res: Response;
   try {
-    if (method === "GET" && path[0] === "me" && path.length === 1) return NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role });
-
-    if (path[0] === "articles") {
-      if (method === "GET" && path.length === 1) return listArticles(user, request);
-      if (method === "POST" && path[1] === "mark-all-read") return markAllRead(user, request);
-      if (method === "GET" && path.length === 2) return getArticle(user, path[1]);
-      if (method === "PATCH" && path.length === 2) return patchArticle(user, path[1], request);
-    }
-
-    if (path[0] === "feeds") {
-      if (method === "GET" && path.length === 1) return listFeeds(user);
-      if (method === "POST" && path.length === 1) return createFeed(user, request);
-      if (method === "GET" && path.length === 2) return getFeed(user, path[1]);
-      if (method === "PATCH" && path.length === 2) return patchFeed(user, path[1], request);
-      if (method === "DELETE" && path.length === 2) return deleteFeed(user, path[1]);
-      if (method === "POST" && path.length === 3 && path[2] === "sync") return syncOneFeed(user, path[1]);
-    }
-
-    if (path[0] === "categories") {
-      if (method === "GET" && path.length === 1) return listCategories(user);
-      if (method === "POST" && path.length === 1) return createCategory(user, request);
-      if (method === "PATCH" && path.length === 2) return patchCategory(user, path[1], request);
-      if (method === "DELETE" && path.length === 2) return deleteCategory(user, path[1]);
-    }
-
-    if (path[0] === "labels") {
-      if (method === "GET" && path.length === 1) return listLabels(user);
-      if (method === "POST" && path.length === 1) return createLabel(user, request);
-      if (method === "PATCH" && path.length === 2) return patchLabel(user, path[1], request);
-      if (method === "DELETE" && path.length === 2) return deleteLabel(user, path[1]);
-    }
-
-    if (path[0] === "saved-searches") {
-      if (method === "GET" && path.length === 1) return listSavedSearches(user);
-      if (method === "POST" && path.length === 1) return createSavedSearch(user, request);
-      if (method === "PATCH" && path.length === 2) return patchSavedSearch(user, path[1], request);
-      if (method === "DELETE" && path.length === 2) return deleteSavedSearch(user, path[1]);
-      if (method === "POST" && path.length === 3 && path[2] === "share") return setSavedSearchShare(user, path[1], request);
-    }
-
-    if (path[0] === "opml" && path.length === 1) {
-      if (method === "GET") return exportOpml(user);
-      if (method === "POST") return importOpml(user, request);
-    }
-
-    if (path[0] === "sync" && path.length === 1 && method === "POST") {
+    if (method === "GET" && path[0] === "me" && path.length === 1) res = NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+    else if (path[0] === "articles") {
+      if (method === "GET" && path.length === 1) res = await listArticles(user, request);
+      else if (method === "POST" && path[1] === "mark-all-read") res = await markAllRead(user, request);
+      else if (method === "GET" && path.length === 2) res = await getArticle(user, path[1]);
+      else if (method === "PATCH" && path.length === 2) res = await patchArticle(user, path[1], request);
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "feeds") {
+      if (method === "GET" && path.length === 1) res = await listFeeds(user);
+      else if (method === "POST" && path.length === 1) res = await createFeed(user, request);
+      else if (method === "GET" && path.length === 2) res = await getFeed(user, path[1]);
+      else if (method === "PATCH" && path.length === 2) res = await patchFeed(user, path[1], request);
+      else if (method === "DELETE" && path.length === 2) res = await deleteFeed(user, path[1]);
+      else if (method === "POST" && path.length === 3 && path[2] === "sync") res = await syncOneFeed(user, path[1]);
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "categories") {
+      if (method === "GET" && path.length === 1) res = await listCategories(user);
+      else if (method === "POST" && path.length === 1) res = await createCategory(user, request);
+      else if (method === "PATCH" && path.length === 2) res = await patchCategory(user, path[1], request);
+      else if (method === "DELETE" && path.length === 2) res = await deleteCategory(user, path[1]);
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "labels") {
+      if (method === "GET" && path.length === 1) res = await listLabels(user);
+      else if (method === "POST" && path.length === 1) res = await createLabel(user, request);
+      else if (method === "PATCH" && path.length === 2) res = await patchLabel(user, path[1], request);
+      else if (method === "DELETE" && path.length === 2) res = await deleteLabel(user, path[1]);
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "saved-searches") {
+      if (method === "GET" && path.length === 1) res = await listSavedSearches(user);
+      else if (method === "POST" && path.length === 1) res = await createSavedSearch(user, request);
+      else if (method === "PATCH" && path.length === 2) res = await patchSavedSearch(user, path[1], request);
+      else if (method === "DELETE" && path.length === 2) res = await deleteSavedSearch(user, path[1]);
+      else if (method === "POST" && path.length === 3 && path[2] === "share") res = await setSavedSearchShare(user, path[1], request);
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "opml" && path.length === 1) {
+      if (method === "GET") res = await exportOpml(user);
+      else if (method === "POST") res = await importOpml(user, request);
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "sync" && path.length === 1 && method === "POST") {
       const results = await syncUserFeeds(user.id);
-      return NextResponse.json({ success: true, synced: results.filter((r) => r.success && !r.skipped).length, total: results.length, results });
+      res = NextResponse.json({ success: true, synced: results.filter((r) => r.success && !r.skipped).length, total: results.length, results });
+    } else {
+      res = apiError("Not found", 404);
     }
   } catch (error) {
     console.error("[api/v1]", error);
-    return apiError(error instanceof Error ? error.message : String(error), 500);
+    res = apiError(error instanceof Error ? error.message : String(error), 500);
   }
 
-  return apiError("Not found", 404);
+  return withRl(res);
 }
 
 export const GET = handle;
