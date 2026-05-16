@@ -9,6 +9,7 @@ export async function GET() {
     select: {
       instanceName: true,
       instanceIconDataUrl: true,
+      registrationsEnabled: true,
       mailServiceEnabled: true,
       smtpHost: true,
       mailProvider: true,
@@ -41,6 +42,7 @@ export async function GET() {
   return NextResponse.json({
     instanceName: settings?.instanceName || "FeedFerret",
     instanceIconDataUrl: settings?.instanceIconDataUrl || null,
+    registrationsEnabled: settings?.registrationsEnabled ?? true,
     capabilities: {
       mail: mailConfigured,
       push: pushConfigured,

@@ -45,6 +45,7 @@ export default function LoginPage() {
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const { data: instance } = useInstance();
   const magicLinkAvailable = Boolean(instance?.capabilities.magicLink);
+  const registrationsEnabled = instance?.registrationsEnabled ?? true;
   const router = useRouter();
   const { status } = useSession();
 
@@ -334,15 +335,21 @@ export default function LoginPage() {
             )}
           </CardContent>
           <CardFooter className="flex flex-col space-y-4 border-t border-white/5 pt-6 pb-8 bg-white/[0.02]">
-            <div className="text-zinc-500 text-xs font-medium text-center w-full">
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/register"
-                className="text-white hover:underline transition-all"
-              >
-                Create one
-              </Link>
-            </div>
+            {registrationsEnabled ? (
+              <div className="text-zinc-500 text-xs font-medium text-center w-full">
+                Don&apos;t have an account?{" "}
+                <Link
+                  href="/register"
+                  className="text-white hover:underline transition-all"
+                >
+                  Create one
+                </Link>
+              </div>
+            ) : (
+              <div className="text-zinc-600 text-xs font-medium text-center w-full">
+                Registrations are currently disabled on this instance.
+              </div>
+            )}
           </CardFooter>
         </Card>
 

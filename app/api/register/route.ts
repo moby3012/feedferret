@@ -5,7 +5,6 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-    console.log("Registration attempt. UID:", process.getuid?.());
     try {
         const { name, email, password } = await req.json();
 
@@ -13,6 +12,19 @@ export async function POST(req: Request) {
             return NextResponse.json(
                 { message: "Missing required fields" },
                 { status: 400 }
+            );
+        }
+
+        const settings = await db.globalSettings.findUnique({
+            where: { id: "global" },
+            select: { registrationsEnabled: true },
+        });
+        const userCount = await db.user.count();
+        // Always allow the very first user (admin bootstrap). After that, respect the setting.
+        if (userCount > 0 && !(settings?.registrationsEnabled ?? true)) {
+            return NextResponse.json(
+                { message: "Registrations are currently disabled on this instance" },
+                { status: 403 }
             );
         }
 
@@ -28,7 +40,6 @@ export async function POST(req: Request) {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const userCount = await db.user.count();
         const role = userCount === 0 ? "ADMIN" : "USER";
 
         const user = await db.user.create({

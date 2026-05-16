@@ -11,12 +11,14 @@ export type InstanceCapabilities = {
 export type InstanceInfo = {
   instanceName: string;
   instanceIconDataUrl: string | null;
+  registrationsEnabled: boolean;
   capabilities: InstanceCapabilities;
 };
 
 const DEFAULT: InstanceInfo = {
   instanceName: "FeedFerret",
   instanceIconDataUrl: null,
+  registrationsEnabled: true,
   capabilities: { mail: false, push: false, magicLink: false },
 };
 
@@ -32,6 +34,7 @@ function fetchInstance(): Promise<InstanceInfo> {
       const value: InstanceInfo = {
         instanceName: data?.instanceName || DEFAULT.instanceName,
         instanceIconDataUrl: data?.instanceIconDataUrl || null,
+        registrationsEnabled: data?.registrationsEnabled ?? true,
         capabilities: {
           mail: Boolean(data?.capabilities?.mail),
           push: Boolean(data?.capabilities?.push),

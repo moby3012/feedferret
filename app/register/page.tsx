@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
   ArrowRight,
   ShieldCheck,
 } from "lucide-react";
+import { useInstance } from "@/hooks/use-instance";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -31,6 +32,17 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { data: instance, loading: instanceLoading } = useInstance();
+
+  useEffect(() => {
+    if (!instanceLoading && instance && !instance.registrationsEnabled) {
+      router.replace("/login");
+    }
+  }, [instance, instanceLoading, router]);
+
+  if (instanceLoading || (instance && !instance.registrationsEnabled)) {
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
