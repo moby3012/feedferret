@@ -648,7 +648,187 @@ Alle drei Services teilen eine gemeinsame Abstraktion:
 | Batch API Endpoints (`POST /api/v1/articles/batch`) | Mittel | REST API v1 ✓ |
 | API Token Scopes (read/write/admin statt globalem Token) | Mittel | Token-Hashing (0.2.3) |
 | Offline-First Mutations (Read/Star ohne Netz) | Hoch | Service Worker ✓ |
-| RTL-Vollständigkeit (Arabisch, Hebräisch, Persisch) | Mittel | Bestehende RTL-Basis ✓ |
-| Internationalisierung (i18n) mit next-intl | Hoch | — |
 | Team-Shares / Kollaboration | Sehr hoch | — |
 | Native iOS/Android App (Capacitor oder React Native) | Sehr hoch | PWA-Basis ✓ |
+| Theming & Layout Customization | Mittel–Hoch | → Abschnitt 2.7 |
+| Multilingual / i18n | Hoch | → Abschnitt 2.8 |
+
+---
+
+### 2.7 Theming & Layout Customization
+
+**Motivation:** Nutzer, die FeedFerret täglich stundenlang nutzen, wollen eine Oberfläche die sich wirklich nach ihnen anfühlt — nicht nur Dark Mode und eine Akzentfarbe. Theming ist auch ein starkes Differenzierungsmerkmal gegenüber Miniflux und FreshRSS, die kaum Anpassungsoptionen bieten.
+
+**Aktueller Stand:** Accent Color Picker ✓, Secondary Color Picker ✓, Dark/Light Mode Toggle ✓, Reader Width ✓, CSS Custom Properties-Grundlage ✓
+
+---
+
+#### 2.7.1 Theme System — Architektur (Fundament)
+
+Ziel: Alle visuellen Tokens zentral steuerbar machen, bevor weitere Features drauf aufbauen.
+
+- [ ] **CSS Custom Properties inventarisieren:** Alle bestehenden `--color-*`, `--radius`, `--font-*` Tokens in `globals.css` dokumentieren und konsolidieren
+- [ ] **Token-Hierarchie definieren:** Semantische Tokens (`--sidebar-bg`, `--reader-bg`, `--article-border`) statt nur Primitive Tokens; so können Theme-Presets semantisch korrekt angewendet werden
+- [ ] **Theme-Shape definieren:** TypeScript-Interface `FeedFerretTheme { colors: {...}, radius: string, fontFamily: {...} }` für konsistente Validierung und Serialisierung
+- [ ] **`theme-color-applier.tsx` erweitern:** Aktuell nur Accent/Secondary — vollständige Theme-Anwendung einbauen
+- [ ] **Theme-Persistenz:** `User.themeJson` als JSON-Blob in DB speichern (statt einzelner Felder pro Farbe)
+- [ ] **Rückwärtskompatibilität:** Bestehende Accent/Secondary-Felder in neues Schema migrieren; keine Breaking Change für bestehende Nutzer
+
+#### 2.7.2 Theme-Presets
+
+Built-in Themes als Ausgangspunkt und schnelle Option:
+
+| Preset | Charakteristik |
+|---|---|
+| **Default Light** | Aktuelles Light Theme ✓ |
+| **Default Dark** | Aktuelles Dark Theme ✓ |
+| **OLED Black** | Reines #000000 Schwarz für OLED-Displays, maximale Akku-Schonung |
+| **Solarized Light** | Klassisches Low-Contrast-Theme (Ethan Schoonover Palette) |
+| **Solarized Dark** | Solarized Dark Variante |
+| **Catppuccin Mocha** | Beliebtes Community-Theme, warm-dunkle Pastell-Töne |
+| **Catppuccin Latte** | Catppuccin Light-Variante |
+| **Gruvbox Dark** | Retro-warm, stark in der Terminal/Vim-Community |
+| **High Contrast Dark** | WCAG AAA Kontrast für Sehbeeinträchtigungen |
+
+Implementierung:
+- [ ] Preset-Definitionen als TypeScript-Konstanten in `lib/themes.ts`
+- [ ] Preset-Picker in Settings → Appearance (Gallery-View mit Mini-Vorschau)
+- [ ] Preset als Ausgangspunkt laden + dann einzeln anpassen
+
+#### 2.7.3 Farb-Customization (Advanced)
+
+Über die bestehenden zwei Color Picker hinaus:
+
+- [ ] **Sidebar:** Hintergrund, Text, aktive Zeile, Hover-Effekt
+- [ ] **Article List Panel:** Hintergrund, Artikel-Karten-Hintergrund, Border, gelesen/ungelesen Unterschied
+- [ ] **Reader:** Hintergrund, Text-Farbe, Link-Farbe
+- [ ] **Header/Topbar:** Hintergrund
+- [ ] **Border Radius:** Global konfigurierbar (0 = eckig, bis 12px = sehr rund)
+- [ ] **HSL-Sliders** für Feinabstimmung (Hue, Saturation, Lightness) statt nur Hex Color Picker
+- [ ] **Live-Vorschau** während Anpassung (ohne Speichern)
+- [ ] **Kontrast-Warnung:** Echtzeit-Feedback wenn Kontrast < WCAG AA (4.5:1)
+
+#### 2.7.4 Reader Typografie
+
+Für optimalen Lese-Komfort ist Typografie entscheidend:
+
+- [ ] **Schriftfamilie für Reader:**
+  - System Default (sans-serif)
+  - Serif (Georgia, Lora, Merriweather)
+  - Monospace (für Tech-Inhalte)
+  - OpenDyslexic (Barrierefreiheit)
+  - Atkinson Hyperlegible (Barrierefreiheit)
+  - Custom Google Font URL (advanced)
+- [ ] **Schriftgröße:** Slider 14px → 24px (bestehende Accessibility-Aufgabe — hier integrieren)
+- [ ] **Zeilenhöhe:** 1.4 / 1.6 / 1.8 / 2.0
+- [ ] **Maximale Zeilenbreite (Measure):** 60ch / 70ch / 80ch / unbegrenzt
+- [ ] **Buchstabenabstand (Letter Spacing):** Normal / Weit (für Legasthenie-Unterstützung)
+- [ ] **Fließtext-Ausrichtung:** Links / Blocksatz
+- [ ] Alle Einstellungen via CSS Custom Properties auf `[data-reader]`-Container anwenden — kein Chrome beeinflusst
+
+#### 2.7.5 Layout-Optionen
+
+- [ ] **Informationsdichte:** Comfortable / Compact / Cozy — skaliert Padding, Schriftgröße und Zeilenhöhe der Artikel-Liste
+- [ ] **Artikel-Listen-Layout** (per View):
+  - **List:** Aktuelle Standardansicht (Titel + Excerpt + Meta)
+  - **Compact:** Nur Titel + Feed + Datum, maximale Dichte
+  - **Magazine:** Thumbnail prominent, breitere Karten
+  - **Cards:** Kachelansicht mit Bild oben (für bild-reiche Feeds)
+- [ ] **Sidebar-Breite:** Konfigurierbar per Drag oder Preset (Schmal / Normal / Breit)
+- [ ] **Zweispalten-Modus auf Tablet:** Sidebar + Artikelliste nebeneinander (ohne Reader), Reader springt auf volle Breite
+- [ ] **Fokus-Modus / Zen Reading:** Sidebar und Artikel-Liste ausblenden, nur Reader, per Shortcut `z` oder `f` aufrufbar
+
+#### 2.7.6 Kategorie-Farbkodierung
+
+- [ ] Optionale Custom-Farbe pro Kategorie (farbiger Sidebar-Indikator)
+- [ ] Farbe beeinflusst Artikel-Listen-Header-Farbe wenn Kategorie gefiltert
+- [ ] Kein Pflichtfeld — Default ist Accent-Color
+
+#### 2.7.7 Theme-Export & -Import
+
+- [ ] **Export:** Theme als JSON-Datei herunterladen (`feedferret-theme-my-theme.json`)
+- [ ] **Import:** JSON-Datei hochladen, Vorschau vor Anwenden
+- [ ] **Shareable URL:** Theme als Base64-encoded URL-Parameter (`/settings?theme=eyJ...`)
+- [ ] **Admin-Default-Theme:** Admins können ein Theme als Instance-Default setzen (neue Nutzer starten damit)
+- [ ] **Community-Theme-Gallery** (langfristig): Öffentliche Sammlung von Community-Themes auf einem separaten Hub
+
+---
+
+### 2.8 Multilingual / i18n
+
+**Motivation:** FeedFerret hat eine klare internationale Community (Self-Hosters sind global). Deutsch liegt nahe da die Entwicklung auf Deutsch stattfindet. RTL-Support ist bereits angelegt. Mit i18n wird FeedFerret für nicht-englischsprachige Nutzer deutlich zugänglicher.
+
+**Strategische Entscheidungen vorab:**
+
+| Frage | Empfehlung |
+|---|---|
+| Library | `next-intl` — beste Next.js App Router Integration, SSR-freundlich |
+| URL-Strategie | Cookie/Header-basiert ohne URL-Prefix — keine Breaking URLs |
+| Erste Sprache | Deutsch (Nähe zum Dev-Team, schnelles Review möglich) |
+| Zweite Sprache | Französisch oder Arabisch (RTL-Test) |
+| Translations-Workflow | GitHub-basiert als Einstieg, dann Weblate für Community |
+
+---
+
+#### 2.8.1 i18n-Fundament (Architektur)
+
+- [ ] **`next-intl` installieren und konfigurieren:** `pnpm add next-intl`
+- [ ] **Middleware einrichten:** Locale-Detection via `Accept-Language`-Header und User-Setting; Cookie als Override
+- [ ] **Message-Datei-Struktur:** `messages/en.json` als Source of Truth, alle anderen Sprachen davon ableiten
+- [ ] **Namespace-Konvention:** Hierarchisch nach Feature (`sidebar.*`, `reader.*`, `settings.*`, `admin.*`, `auth.*`, `errors.*`)
+- [ ] **Pluralisierung:** ICU Message Format für korrekte Plural-Formen (en: "1 article / 2 articles", de: "1 Artikel / 2 Artikel")
+- [ ] **Interpolation:** Variablen (`{count}`, `{feedName}`, `{date}`) in allen Strings von Beginn an einplanen
+- [ ] **Datum/Uhrzeit:** Alle `new Date().toLocaleDateString()` durch `next-intl` `useFormatter()` ersetzen — korrekte Lokalisierung automatisch
+- [ ] **RTL-Konfiguration:** Locale-basiertes `dir`-Attribut auf `<html>`-Element via `next-intl`
+
+#### 2.8.2 String-Extraktion (größter Aufwand)
+
+- [ ] **Vollständiges String-Inventar:** Alle UI-Strings in allen `.tsx`-Komponenten und Server Actions erfassen
+- [ ] **Schätzung:** ~500–800 einzelne Strings; Tool wie `i18next-parser` oder manueller Sweep
+- [ ] **`messages/en.json` erstellen:** Erste vollständige Englisch-Datei als Basis
+- [ ] **Codebase migrieren:** `"Add Feed"` → `t('sidebar.addFeed')` in allen Komponenten — großer Refactor, sollte in einem Zug passieren
+- [ ] **Error Messages:** Alle Fehlertexte aus Server Actions in i18n überführen (komplexer: Server-Side-Context nötig)
+- [ ] **Dynamische Strings:** Strings die Variablen enthalten (`"${count} unread articles"`) korrekt als ICU migrieren
+
+#### 2.8.3 Deutsche Übersetzung (erste vollständige Sprache)
+
+- [ ] **`messages/de.json` erstellen:** Vollständige Übersetzung aller ~500–800 Strings
+- [ ] **Qualitätssicherung:** Native-Speaker-Review (gesamtes UI durchklicken)
+- [ ] **Fallthroughs prüfen:** Kein englischer String darf in der deutschen UI erscheinen
+- [ ] **Sprachspezifika:** Grammatikalisch korrekte Pluralisierung, Groß-/Kleinschreibung (de: "Artikel", "Feed", "Einstellungen")
+- [ ] **User-Setting:** `User.uiLanguage` Feld in Schema + Sprachauswahl in Settings → Appearance
+
+#### 2.8.4 RTL-Support abschließen
+
+Das RTL-Toggle (`User.layoutDirection`) ist bereits vorhanden — fehlende Teile:
+
+- [ ] **Icon-Audit:** Alle `lucide-react` Icons auf Richtungsabhängigkeit prüfen: Chevrons, Back-Arrows, Swipe-Progress-Indikatoren, Wand-Icons → `rtl:scale-x-[-1]` anwenden
+- [ ] **Logische CSS-Properties:** Alle `ml-`, `mr-`, `left-`, `right-`, `pl-`, `pr-` in Komponenten durch `ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-` ersetzen
+- [ ] **Swipe-Gesten unter RTL:** Aktuell fest kodiert (links = star, rechts = read) → unter RTL umkehren basierend auf `document.documentElement.dir`
+- [ ] **Erste RTL-Sprache:** Arabisch (`ar`) oder Hebräisch (`he`) als Test-Locale einrichten
+- [ ] **Bidirektionaler Content:** Arabische UI mit englischen Feed-Titeln muss korrekt gerendert werden (LTR innerhalb RTL-Container)
+
+#### 2.8.5 Community-Translations-Workflow
+
+- [ ] **Beitragsleitfaden:** `docs/contributing-translations.md` — wie man eine neue Sprache hinzufügt
+- [ ] **GitHub-Workflow als Einstieg:** PRs mit `messages/[locale].json` direkt auf GitHub
+- [ ] **Weblate-Integration (wenn Community wächst):** Hosted Weblate oder Selfhosted für einfachere Community-Beiträge ohne Git-Kenntnisse
+- [ ] **Translation-Vollständigkeits-Badge:** Automatisch berechnen wie viel % einer Sprache übersetzt ist
+- [ ] **Fallback-Strategie:** Fehlende Übersetzungen fallen auf Englisch zurück (kein leerer String)
+- [ ] **Prioritäten für Community:** Deutsch ✓ (Dev-Team), Französisch, Spanisch, Japanisch, Chinesisch (vereinfacht), Arabisch, Niederländisch
+
+#### 2.8.6 Sprach-Settings & Admin
+
+- [ ] **User-Setting:** Bevorzugte UI-Sprache (überschreibt Browser-Locale)
+- [ ] **Admin-Default:** Instance-weite Default-Sprache für neue Nutzer (in Server Management)
+- [ ] **Sprachauswahl-UI:** Dropdown in Settings → Appearance mit Sprachnamen in ihrer eigenen Sprache ("Deutsch", "Français", "العربية")
+- [ ] **Kein Auto-Redirect:** Sprache wird ohne URL-Änderung gesetzt (Cookie + DB-Wert)
+- [ ] **E-Mail-Templates:** Digest-E-Mails und transaktionale Mails in der User-Sprache senden (Templates pro Locale)
+
+#### 2.8.7 Artikel-Sprach-Erkennung (optional, längerfristig)
+
+- [ ] **Sprach-Metadaten aus Feed nutzen:** `<language>` in RSS, `xml:lang` in Atom
+- [ ] **Fallback:** Sprach-Detection via `franc` oder `langdetect` für Feeds ohne Metadaten
+- [ ] **Artikel-Sprache speichern:** `Article.language` Feld
+- [ ] **Filter nach Sprache:** "Nur Artikel auf Deutsch anzeigen" als Suchsyntax `lang:de`
+- [ ] **TTS-Sprache automatisch wählen** basierend auf Artikel-Sprache (Integration mit 2.2)
