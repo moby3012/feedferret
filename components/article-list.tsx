@@ -497,12 +497,17 @@ function ArticlePreview({
       <article
         ref={articleRef}
         onClick={onClick}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
         onTouchStart={handleSwipeStart}
         onTouchMove={handleSwipeMove}
         onTouchEnd={handleSwipeEnd}
         style={swipeStyle}
+        tabIndex={0}
+        role="button"
+        aria-label={`${article.isRead ? "" : "Unread: "}${article.title} — ${article.feedName}`}
+        aria-pressed={isSelected}
         className={cn(
-          "px-3 py-2.5 cursor-pointer rounded-2xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden relative",
+          "px-3 py-2.5 cursor-pointer rounded-2xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden relative focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "border-l-4",
           isSelected
             ? "bg-accent/10 ring-1 ring-accent/20"
@@ -545,12 +550,17 @@ function ArticlePreview({
       <article
         ref={articleRef}
         onClick={onClick}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
         onTouchStart={handleSwipeStart}
         onTouchMove={handleSwipeMove}
         onTouchEnd={handleSwipeEnd}
         style={swipeStyle}
+        tabIndex={0}
+        role="button"
+        aria-label={`${article.isRead ? "" : "Unread: "}${article.title} — ${article.feedName}`}
+        aria-pressed={isSelected}
         className={cn(
-          "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full",
+          "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           isSelected && "ring-2 ring-brand border-brand",
           !article.isRead && "ring-1 ring-brand/20",
         )}
@@ -635,14 +645,19 @@ function ArticlePreview({
     <article
       ref={articleRef}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
       onTouchStart={handleSwipeStart}
       onTouchMove={handleSwipeMove}
       onTouchEnd={handleSwipeEnd}
       style={swipeStyle}
+      tabIndex={0}
+      role="button"
+      aria-label={`${article.isRead ? "" : "Unread: "}${article.title} — ${article.feedName}`}
+      aria-pressed={isSelected}
       className={cn(
         "p-3 sm:p-3.5 cursor-pointer rounded-2xl sm:rounded-3xl group border min-w-0 max-w-full overflow-hidden",
         "transition-[opacity,background-color,border-color,box-shadow,transform] duration-200 ease-out",
-        "active:scale-[0.995]",
+        "active:scale-[0.995] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isSelected
           ? "bg-accent/10 border-accent/25 shadow-lg shadow-accent/5"
           : "border-transparent hover:border-border/70 hover:bg-card/80 hover:shadow-sm",

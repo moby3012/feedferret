@@ -279,6 +279,7 @@ export function ArticleReader({
               size="icon"
               className="w-10 h-10 rounded-xl hover:bg-muted transition-all duration-200 hover:scale-105 active:scale-95"
               onClick={onBack}
+              aria-label="Back to article list"
             >
               <ChevronLeft className="w-5 h-5" />
             </Button>
@@ -303,6 +304,8 @@ export function ArticleReader({
             size="icon"
             className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => onToggleStar(article.id)}
+            aria-label={article.isStarred ? "Remove star" : "Star article"}
+            aria-pressed={article.isStarred}
             title={article.isStarred ? "Remove star (s)" : "Star (s)"}
           >
             <Star
@@ -322,6 +325,8 @@ export function ArticleReader({
               article.isReadLater && "bg-accent/10",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
+            aria-label={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
+            aria-pressed={article.isReadLater}
             title={article.isReadLater ? "Remove from Read Later (l)" : "Save to Read Later (l)"}
           >
             <Bookmark
@@ -338,6 +343,8 @@ export function ArticleReader({
             size="icon"
             className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => onToggleRead?.(article.id)}
+            aria-label={article.isRead ? "Mark as unread" : "Mark as read"}
+            aria-pressed={article.isRead}
             title={article.isRead ? "Mark as unread (m)" : "Mark as read (m)"}
           >
             {article.isRead ? (
@@ -351,6 +358,7 @@ export function ArticleReader({
             size="icon"
             className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={shareArticle}
+            aria-label="Share article"
             title="Share"
           >
             <Share2 className="w-5 h-5 text-muted-foreground" />
@@ -361,6 +369,7 @@ export function ArticleReader({
             className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={openOriginal}
             disabled={!article.link}
+            aria-label="Open original article"
             title="Open original (o)"
           >
             <ExternalLink className="w-5 h-5 text-muted-foreground" />
@@ -371,6 +380,7 @@ export function ArticleReader({
             className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={copyLink}
             disabled={!article.link}
+            aria-label="Copy article link"
             title="Copy link"
           >
             <Copy className="w-5 h-5 text-muted-foreground" />
@@ -381,6 +391,7 @@ export function ArticleReader({
                 variant="ghost"
                 size="icon"
                 className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                aria-label="Manage labels"
                 title="Labels"
               >
                 <Tag className="w-5 h-5 text-muted-foreground" />
@@ -429,19 +440,19 @@ export function ArticleReader({
 
       {/* Article Content */}
       <ScrollArea className="flex-1 overflow-hidden min-h-0">
-        <article className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-28 sm:px-8 sm:py-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
+        <article aria-labelledby="article-title" className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-28 sm:px-8 sm:py-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">
-            <h1 className="text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.035em] break-words [overflow-wrap:anywhere]">
+            <h1 id="article-title" className="text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.035em] break-words [overflow-wrap:anywhere]">
               {article.title}
             </h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">
+              <address className="not-italic font-medium text-foreground" rel="author">
                 {article.author}
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-              <span>{new Date(article.publishedAt).toLocaleDateString()}</span>
-              <span className="text-muted-foreground/40">·</span>
+              </address>
+              <span aria-hidden="true" className="text-muted-foreground/40">·</span>
+              <time dateTime={article.publishedAt}>{new Date(article.publishedAt).toLocaleDateString()}</time>
+              <span aria-hidden="true" className="text-muted-foreground/40">·</span>
               <span>{article.readTime}</span>
             </div>
             {!!article.labels?.length && (
@@ -550,6 +561,7 @@ export function ArticleReader({
             <button
               type="button"
               onClick={() => onOpenFeed?.(article.feedId)}
+              aria-label={`View all articles from ${article.feedName}`}
               className="flex w-full items-center gap-4 rounded-3xl p-2 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
             >
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center shadow-lg overflow-hidden">

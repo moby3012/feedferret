@@ -117,6 +117,7 @@ export function RssHeader({
           size="icon"
           className="w-10 h-10 rounded-xl transition-all duration-200 active:scale-95 text-muted-foreground"
           onClick={() => onToggleSort?.()}
+          aria-label={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
           title={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
         >
           {sortOrder === "oldest" ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />}
@@ -130,6 +131,7 @@ export function RssHeader({
             const idx = modes.indexOf(activeViewMode);
             onViewModeChange(modes[(idx + 1) % modes.length]);
           }}
+          aria-label={`View mode: ${activeViewMode} (click to cycle)`}
           title={`View: ${activeViewMode} (click to cycle)`}
         >
           {activeViewMode === "minimal" && <AlignJustify className="w-4 h-4" />}
@@ -151,6 +153,8 @@ export function RssHeader({
               : "text-muted-foreground",
           )}
           onClick={onToggleUnreadOnly}
+          aria-pressed={unreadOnly}
+          aria-label={unreadOnly ? "Showing unread only — click to show all" : "Show unread only"}
           title={unreadOnly ? "Showing unread only (click to show all)" : "Show unread only"}
         >
           <Filter className="w-4 h-4" />
@@ -163,6 +167,8 @@ export function RssHeader({
           className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={onRefresh}
           disabled={isRefreshing}
+          aria-label={isRefreshing ? "Refreshing…" : "Refresh feeds"}
+          title="Refresh feeds"
         >
           <RefreshCw
             className={cn(
@@ -178,6 +184,7 @@ export function RssHeader({
           size="icon"
           className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={() => onToggleSort?.()}
+          aria-label={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
           title={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
         >
           {sortOrder === "oldest" ? (
@@ -194,6 +201,7 @@ export function RssHeader({
           className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={() => onMarkAllRead?.()}
           disabled={isMarkingAllRead}
+          aria-label="Mark all as read"
           title="Mark all as read"
         >
           <CheckCheck className={cn("w-4 h-4", isMarkingAllRead && "animate-pulse")} />
@@ -206,6 +214,7 @@ export function RssHeader({
             size="icon"
             className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
             onClick={onSaveSearch}
+            aria-label="Save search"
             title="Save search"
           >
             <BookmarkPlus className="w-4 h-4" />
@@ -222,6 +231,7 @@ export function RssHeader({
             const idx = modes.indexOf(activeViewMode);
             onViewModeChange(modes[(idx + 1) % modes.length]);
           }}
+          aria-label={`View mode: ${activeViewMode} (click to cycle)`}
           title={`View: ${activeViewMode} (click to cycle)`}
         >
           {activeViewMode === "minimal" && <AlignJustify className="w-4 h-4" />}
@@ -236,6 +246,7 @@ export function RssHeader({
               variant="ghost"
               size="icon"
               className="xl:hidden w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+              aria-label="More options"
               title="More options"
             >
               <MoreHorizontal className="w-4 h-4" />
