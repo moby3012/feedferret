@@ -115,7 +115,7 @@ async function applySingleAction(
         if (ids.length === 0) return 0;
         await db.article.updateMany({
             where: { id: { in: ids }, isSpoiler: false },
-            data: { isSpoiler: true, spoilerAt: new Date() },
+            data: { isSpoiler: true, spoilerAt: new Date(), spoilerRuleId: rule.id },
         });
         return ids.length;
     }

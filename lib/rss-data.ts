@@ -26,6 +26,7 @@ export interface Article {
   isStarred: boolean
   isReadLater: boolean
   readLaterSavedAt?: string | Date | null
+  isSpoiler?: boolean
   imageUrl?: string
   isDuplicate?: boolean
   duplicateOf?: string | null

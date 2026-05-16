@@ -105,6 +105,8 @@ model AutoReadRule {
   enabled         Boolean  @default(true)
   order           Int      @default(0)
   lastTriggeredAt DateTime?
+  // When true, deleting this rule clears the spoiler flag from all articles it flagged.
+  removeSpoilerOnDelete Boolean @default(false)
   notifications   Notification[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -283,8 +285,10 @@ model Article {
   isStarred   Boolean  @default(false)
   isReadLater Boolean  @default(false)
   readLaterSavedAt DateTime?
-  isSpoiler   Boolean  @default(false)
-  spoilerAt   DateTime?
+  isSpoiler     Boolean  @default(false)
+  spoilerAt     DateTime?
+  // Tracks which rule applied the spoiler flag so it can be cleared on rule deletion.
+  spoilerRuleId String?
   notifications Notification[]
   feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)

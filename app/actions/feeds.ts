@@ -1137,6 +1137,7 @@ export async function createAutoReadRule(data: {
     scope?: string | null;
     trigger?: string;
     webhookConfigs?: unknown;
+    removeSpoilerOnDelete?: boolean;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -1166,6 +1167,7 @@ export async function createAutoReadRule(data: {
             scope: data.scope?.trim() || null,
             trigger,
             webhookConfigs: configs.length ? JSON.stringify(configs) : null,
+            removeSpoilerOnDelete: !!data.removeSpoilerOnDelete,
         },
     });
     revalidatePath("/");
@@ -1184,6 +1186,7 @@ export async function updateAutoReadRule(
         order: number;
         trigger: string;
         webhookConfigs: unknown;
+        removeSpoilerOnDelete: boolean;
     }>,
 ) {
     const session = await auth();
@@ -1228,6 +1231,10 @@ export async function updateAutoReadRule(
         patch.webhookConfigs = configs.length ? JSON.stringify(configs) : null;
     }
 
+    if (data.removeSpoilerOnDelete !== undefined) {
+        patch.removeSpoilerOnDelete = !!data.removeSpoilerOnDelete;
+    }
+
     const rule = await db.autoReadRule.update({
         where: { id: ruleId, userId: session.user.id },
         data: patch,
@@ -1239,8 +1246,42 @@ export async function updateAutoReadRule(
 export async function deleteAutoReadRule(ruleId: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const rule = await db.autoReadRule.findFirst({
+        where: { id: ruleId, userId: session.user.id },
+        select: { removeSpoilerOnDelete: true },
+    });
+    if (!rule) throw new Error("Rule not found");
+
+    if (rule.removeSpoilerOnDelete) {
+        await db.article.updateMany({
+            where: { userId: session.user.id, spoilerRuleId: ruleId, isSpoiler: true },
+            data: { isSpoiler: false, spoilerAt: null, spoilerRuleId: null },
+        });
+    }
+
     await db.autoReadRule.delete({
         where: { id: ruleId, userId: session.user.id },
+    });
+    revalidatePath("/");
+}
+
+export async function releaseArticleSpoiler(articleId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    await db.article.updateMany({
+        where: { id: articleId, userId: session.user.id },
+        data: { isSpoiler: false, spoilerAt: null, spoilerRuleId: null },
+    });
+    revalidatePath("/");
+}
+
+export async function releaseAllSpoilers() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    await db.article.updateMany({
+        where: { userId: session.user.id, isSpoiler: true },
+        data: { isSpoiler: false, spoilerAt: null, spoilerRuleId: null },
     });
     revalidatePath("/");
 }

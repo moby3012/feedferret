@@ -24,6 +24,8 @@ import {
   useSetArticleLabels,
   useReadingPreferences,
   useUpdateGlobalSettings,
+  useReleaseArticleSpoiler,
+  useReleaseAllSpoilers,
 } from "@/hooks/use-rss-data";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -110,6 +112,8 @@ export default function RSSReaderPage() {
   const setArticleLabels = useSetArticleLabels();
   const { data: readingPrefs } = useReadingPreferences(isAuthenticated);
   const updateGlobalSettings = useUpdateGlobalSettings();
+  const releaseArticleSpoiler = useReleaseArticleSpoiler();
+  const releaseAllSpoilers = useReleaseAllSpoilers();
 
   const unreadBadgeCount = useUnreadBadgeCount(feeds);
   useAppBadge(unreadBadgeCount, status === "authenticated");
@@ -178,6 +182,18 @@ export default function RSSReaderPage() {
             className="rounded-2xl bg-amber-500 px-6 py-3 text-sm font-semibold text-amber-50 shadow-sm hover:bg-amber-600 active:scale-[0.98] transition-all"
           >
             Reveal spoilers
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              releaseAllSpoilers.mutate(undefined, {
+                onSuccess: () => { setSelectedCategory("All"); setSelectedFeed(null); },
+              });
+            }}
+            disabled={releaseAllSpoilers.isPending}
+            className="text-xs text-amber-600 hover:text-amber-700 disabled:opacity-50"
+          >
+            {releaseAllSpoilers.isPending ? "Clearing…" : "Clear all spoiler flags"}
           </button>
           <button
             type="button"
@@ -787,6 +803,7 @@ export default function RSSReaderPage() {
                 onToggleRead={handleToggleRead}
                 onToggleStar={handleToggleStar}
                 onToggleReadLater={handleToggleReadLater}
+                onReleaseSpoiler={isSpoilerCategory ? (articleId) => releaseArticleSpoiler.mutate(articleId) : undefined}
                 viewMode={viewMode}
                 markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
                 filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
@@ -872,6 +889,7 @@ export default function RSSReaderPage() {
             onToggleRead={handleToggleRead}
             onToggleStar={handleToggleStar}
             onToggleReadLater={handleToggleReadLater}
+            onReleaseSpoiler={isSpoilerCategory ? (articleId) => releaseArticleSpoiler.mutate(articleId) : undefined}
             viewMode={viewMode}
             markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
             filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
