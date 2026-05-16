@@ -61,6 +61,11 @@ $PRISMA_CMD db push --schema prisma/schema.generated.prisma --accept-data-loss -
 echo "✅ Database is ready."
 echo "🌟 Starting Next.js server..."
 
+# Bind to all interfaces so the Docker healthcheck (curl localhost:3000) works.
+# Docker sets HOSTNAME to the container ID by default; Next.js standalone picks
+# that up and would otherwise bind only to the container's IP, not 127.0.0.1.
+export HOSTNAME="0.0.0.0"
+
 # server.js is the entry point for Next.js standalone mode
 if [ -f "server.js" ]; then
     node server.js
