@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-16  
+> Zuletzt aktualisiert: 2026-05-17  
 > Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
 
 ---
@@ -250,10 +250,12 @@ pnpm outdated
 
 **Ziel:** Produktionsreifes Look & Feel. Keine groben Unebenheiten im UX-Flow.
 
-#### 0.4.1 Empty States (Aufwand: 1 Tag)
+#### 0.4.1 Empty States ✅ Implementiert (PR #37)
 
-- [ ] Konsistente Empty-State-Komponente (Icon + Headline + CTA) für: leere Feed-Liste, keine Artikel in View, keine Suchergebnisse, keine Labels, keine Alerts, keine Webhooks, keine Saved Searches
-- [ ] Jeder Empty State hat einen klaren nächsten Schritt ("Add your first feed", "Create a label", etc.)
+- [x] Konsistente Empty-State-Komponente (Icon + Headline + CTA) für: leere Feed-Liste, keine Artikel in View, keine Labels, keine Alerts, keine Rules, keine Saved Searches
+- [x] Jeder Empty State hat einen klaren nächsten Schritt ("Add your first feed", "Create a label", etc.)
+- [x] Server-Management Users-Suche ohne Treffer
+- [x] Shared Search Page
 
 #### 0.4.2 Loading States & Error Handling (Aufwand: 1–2 Tage)
 
@@ -270,17 +272,17 @@ pnpm outdated
 - [ ] Starter Pack Auswahl prominenter im Setup-Wizard (Schritt 3 oder 4)
 - [ ] Erste-Sync-Erlebnis: Animiertes Feedback während Feeds laden
 
-#### 0.4.4 Feed-Sync-Status-Verbesserungen (Aufwand: 0.5 Tage)
+#### 0.4.4 Feed-Sync-Status-Verbesserungen ✅ Implementiert (PR #37)
 
-- [ ] Visuelles Feedback im Header während globaler Sync läuft
-- [ ] Letzte Sync-Zeit global anzeigbar (z.B. Tooltip auf Refresh-Button)
-- [ ] Per-Feed Sync-Status-Indikator in Feed-Liste
+- [x] Visuelles Feedback im Header während globaler Sync läuft (isRefreshing → Spin)
+- [x] Letzte Sync-Zeit im Refresh-Button Tooltip ("Last synced HH:MM")
+- [x] Per-Feed Fehler-Indikator in Feed-Liste (AlertCircle wenn lastStatus = "error")
 
-#### 0.4.5 Notification UX (Aufwand: 0.5 Tage)
+#### 0.4.5 Notification UX ✅ Implementiert (PR #37)
 
-- [ ] Bell-Menu: "Alle als gelesen markieren" Button
-- [ ] Notification-Typen visuell unterscheiden (Alert Match vs. System)
-- [ ] Leere Notifications-Ansicht mit erklärenden Text ("Set up keyword alerts to get notified...")
+- [x] Bell-Menu: "Alle als gelesen markieren" Button (Desktop + Mobile)
+- [x] Notification-Typen visuell unterscheiden: keyword_alert → Bell, rule_match → Play, feed_error → AlertCircle, digest_sent → Mail
+- [x] Leere Notifications-Ansicht mit Hinweis auf Keyword Alerts
 
 #### 0.4.6 Dark Mode & Theming Audit (Aufwand: 1 Tag)
 
@@ -318,27 +320,18 @@ Aktuelle Beobachtungen und Aufgaben:
 - [ ] **Node.js 22-slim:** Prüfen ob aktuelle LTS, oder auf Node.js 22 LTS pinnen
 - [ ] **Build-Args Defaults:** `AUTH_SECRET` und `AUTH_URL` als ARG ohne Default (nicht mit leerem String) — verhindert versehentliche leere Werte
 
-#### 0.5.2 docker-compose.yaml Verbesserungen (Aufwand: 0.5 Tage)
+#### 0.5.2 docker-compose.yaml Verbesserungen ✅ Implementiert (PR #35 + PR #37)
 
-- [ ] **Postgres Port:** `ports: "${POSTGRES_PORT:-5432}:5432"` mit Kommentar "Remove for production — app uses internal network" oder als opt-in kommentieren
-- [ ] **FeedFerret Healthcheck hinzufügen:**
-  ```yaml
-  healthcheck:
-    test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
-    interval: 30s
-    timeout: 10s
-    retries: 3
-    start_period: 60s
-  ```
-- [ ] **SQLite Volume definieren:** `feedferret_db_data` als Named Volume hinzufügen (für SQLite-Only-Deployments)
-- [ ] **Explizites Netzwerk:** `networks: feedferret_net` für bessere Isolation definieren
+- [x] **Postgres Port:** `"${POSTGRES_PORT:-5432}:5432"` mit erklärendem Kommentar
+- [x] **FeedFerret Healthcheck:** `curl -f http://localhost:3000/api/health`, 30s Interval, 60s Start-Period
+- [x] **SQLite Volume** als Kommentar (opt-in)
+- [x] **Explizites Netzwerk:** `feedferret_net` Bridge-Netzwerk für Service-Isolation
 
-#### 0.5.3 `start.sh` Audit (Aufwand: 0.5 Tage)
+#### 0.5.3 `start.sh` Audit ✅ Implementiert (PR #37)
 
-- [ ] Startup-Script lesen und Fehler-Handling prüfen
-- [ ] Was passiert wenn `prisma db push` fehlschlägt? → App sollte nicht starten
-- [ ] Timestamps in Startup-Log-Meldungen
-- [ ] Exit-Codes korrekt setzen
+- [x] `set -e` stellt sicher dass Fehler (inkl. `prisma db push`) die App-Start verhindern
+- [x] Timestamps in allen Startup-Log-Meldungen via `log()` Helper
+- [x] Exit-Codes korrekt über `set -e` + explizite `exit 1`
 
 #### 0.5.4 `/api/health` Endpoint (Aufwand: 0.5 Tage)
 

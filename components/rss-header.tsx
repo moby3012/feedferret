@@ -23,7 +23,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type ViewMode = "list" | "magazine" | "minimal";
 
@@ -76,6 +76,17 @@ export function RssHeader({
     viewMode === "minimal" || viewMode === "magazine" ? viewMode : "list";
 
   const displayCount = unreadCount ?? articleCount;
+
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const prevIsRefreshing = useRef(false);
+  useEffect(() => {
+    if (prevIsRefreshing.current && !isRefreshing) setLastRefreshed(new Date());
+    prevIsRefreshing.current = !!isRefreshing;
+  }, [isRefreshing]);
+
+  const lastRefreshedLabel = lastRefreshed
+    ? `Last synced ${lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    : "Refresh feeds";
 
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const handleTitleSwipeStart = (e: React.TouchEvent) => {
@@ -167,8 +178,8 @@ export function RssHeader({
           className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={onRefresh}
           disabled={isRefreshing}
-          aria-label={isRefreshing ? "Refreshing…" : "Refresh feeds"}
-          title="Refresh feeds"
+          aria-label={isRefreshing ? "Refreshing…" : lastRefreshedLabel}
+          title={isRefreshing ? "Refreshing…" : lastRefreshedLabel}
         >
           <RefreshCw
             className={cn(

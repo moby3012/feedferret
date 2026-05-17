@@ -164,9 +164,9 @@ Testen ob die Keyboard-Sensoren von `@dnd-kit` korrekte Screen-Reader-Announceme
 Systematischer Test: jeden Dialog öffnen, Esc drücken. Betrifft:
 - Search Modal, Keyboard-Shortcut-Dialog, Feed Edit Dialog, Alert/Rule Editor, Delete-Confirmations, Server Management, Feed Management
 
-### A-3.5 Form Inputs mit Labels
+### A-3.5 Form Inputs mit Labels ✅ Implementiert (PR #37)
 
-Alle `<Input>` ohne sichtbares Label mit `<Label htmlFor>` versehen oder wrappen. Placeholder allein genügt nicht (WCAG 1.3.1). Betroffen vor allem in Settings und Rule-Editor.
+Alle `<Input>` und `<Select>` in Settings, Feed-Management und Setup mit `htmlFor`/`id`-Assoziierungen versehen. Betroffene Bereiche: Accent Colors, Push Frequency, 2FA, Digest Settings, AI Settings, Category Settings, Keyword Alerts, Auto-Read-Rules, Setup Wizard.
 
 ---
 

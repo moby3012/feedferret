@@ -56,8 +56,12 @@ export default async function SharedSearchPage({ params }: { params: Promise<{ t
             </article>
           ))}
           {articles.length === 0 && (
-            <div className="rounded-[1.5rem] border border-border/60 bg-card/80 p-8 text-center text-muted-foreground">
-              No matching articles right now.
+            <div className="rounded-[1.5rem] border border-border/60 bg-card/80 p-10 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
+                <Rss className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="font-medium text-foreground">No matching articles</p>
+              <p className="mt-1 text-sm text-muted-foreground">This search has no results yet. Check back after the next sync.</p>
             </div>
           )}
         </section>
