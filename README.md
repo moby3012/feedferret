@@ -44,7 +44,7 @@ FeedFerret is a versatile, self-hostable, and multi-user capable RSS reader buil
 ## 🚀 Quick Start
 
 ```bash
-git clone <your-repo-url> && cd feedferret
+git clone https://github.com/moby3012/feedferret.git && cd feedferret
 cp .env.example .env
 # Edit .env — at minimum set AUTH_SECRET and AUTH_URL
 docker compose up -d --build
@@ -172,7 +172,7 @@ Prerequisites: Node.js 20+, pnpm
 **Quickest path — SQLite (no Docker needed):**
 
 ```bash
-git clone <your-repo-url> && cd feedferret
+git clone https://github.com/moby3012/feedferret.git && cd feedferret
 cp .env.example .env
 # Edit .env: set DATABASE_PROVIDER=sqlite, DATABASE_URL=file:./prisma/dev.db, AUTH_SECRET, AUTH_URL
 pnpm install

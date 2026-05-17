@@ -65,11 +65,7 @@ COPY --chown=nextjs:nodejs scripts/prepare-prisma-schema.mjs ./scripts/prepare-p
 COPY --chown=nextjs:nodejs start.sh ./start.sh
 RUN chmod +x ./start.sh
 
-# Copy prisma CLI from the deps stage instead of a separate global install.
-# Keep the path in sync with the prisma devDependency version in package.json.
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/.bin/prisma /usr/local/bin/prisma
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+RUN npm install -g prisma@5.22.0
 
 RUN chown -R nextjs:nodejs /app && chmod -R 770 /app/data
 
