@@ -116,6 +116,7 @@ interface RssSidebarProps {
   onSelectFeed: (feedId: string | null) => void;
   onSelectCategory: (category: string) => void;
   isCollapsed?: boolean;
+  defaultOpenAddFeed?: boolean;
 }
 
 export function RssSidebar({
@@ -125,6 +126,7 @@ export function RssSidebar({
   onSelectFeed,
   onSelectCategory,
   isCollapsed = false,
+  defaultOpenAddFeed = false,
 }: RssSidebarProps) {
   const router = useRouter();
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
@@ -161,6 +163,10 @@ export function RssSidebar({
   const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
   const markNotificationRead = useMarkNotificationRead();
   const markAllNotificationsRead = useMarkAllNotificationsRead();
+
+  useEffect(() => {
+    if (defaultOpenAddFeed) setIsAddFeedOpen(true);
+  }, [defaultOpenAddFeed]);
 
   const loadStarterPacks = () => {
     fetch("/api/starter-packs")

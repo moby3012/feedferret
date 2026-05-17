@@ -264,12 +264,12 @@ pnpm outdated
 - [ ] Sync-Fehler-Feedback: Feed-Karten zeigen Fehler-Icon wenn letzter Sync fehlschlug
 - [ ] Netzwerkfehler im Article-Reader: Klarer Hinweis, nicht leere Seite
 
-#### 0.4.3 Onboarding-Flow Review (Aufwand: 1 Tag)
+#### 0.4.3 Onboarding-Flow Review ✅ Implementiert
 
-- [ ] Alle 5 Setup-Wizard-Schritte vollständig durchklicken und Bugs dokumentieren
-- [ ] Copy verbessern: prägnanter, weniger technisch
-- [ ] Post-Setup: Nutzer direkt in "Feed hinzufügen"-Flow leiten, nicht auf leere Home-Seite
-- [ ] Starter Pack Auswahl prominenter im Setup-Wizard (Schritt 3 oder 4)
+- [x] Alle 6 Setup-Wizard-Schritte vollständig implementiert (account → instance → email → security → starters → done)
+- [x] Copy verbessert: prägnanter, nutzerfreundlicher
+- [x] Post-Setup: Nutzer direkt in "Feed hinzufügen"-Flow geleitet (`/?addFeed=1`)
+- [x] Starter Pack Auswahl als eigener Schritt im Setup-Wizard (Schritt 5)
 - [ ] Erste-Sync-Erlebnis: Animiertes Feedback während Feeds laden
 
 #### 0.4.4 Feed-Sync-Status-Verbesserungen ✅ Implementiert (PR #37)
@@ -339,20 +339,20 @@ Aktuelle Beobachtungen und Aufgaben:
 - [ ] DB-Ping-Check einbauen
 - [ ] Für Docker-Healthcheck und Monitoring nutzbar
 
-#### 0.5.5 Coolify & Reverse Proxy Dokumentation (Aufwand: 1 Tag)
+#### 0.5.5 Coolify & Reverse Proxy Dokumentation ✅ Implementiert
 
 - [ ] Coolify-Guide in `README.md` auf Aktualität prüfen — alle dokumentierten Schritte durchführen
 - [ ] Häufige Probleme als Troubleshooting-Tabelle: AUTH_TRUST_HOST, Build Args, Passwort-Mismatch
-- [ ] **Neues Dokument:** `docs/reverse-proxy.md` mit Nginx, Caddy und Traefik Beispiel-Configs
-- [ ] HSTS, HTTP→HTTPS Redirect, WebSocket (falls relevant) dokumentieren
+- [x] **Neues Dokument:** `docs/reverse-proxy.md` mit Nginx, Caddy und Traefik Beispiel-Configs
+- [x] HSTS, HTTP→HTTPS Redirect, WebSocket dokumentiert
 
-#### 0.5.6 Self-Hosting Guide & Onboarding Doku (Aufwand: 1 Tag)
+#### 0.5.6 Self-Hosting Guide & Onboarding Doku ✅ Implementiert
 
-- [ ] **Neues Dokument:** `docs/self-hosting.md` — vollständiger Guide: Anforderungen, Installation, Konfiguration, Updates, Backup
+- [x] **Neues Dokument:** `docs/self-hosting.md` — vollständiger Guide: Anforderungen, Installation, Konfiguration, Updates, Backup
 - [ ] `.env.example` aufräumen: Pflichtfelder oben, optionale Felder mit Kommentaren gruppieren
 - [ ] README Quick-Start auf < 5 Minuten optimieren: Nur das Nötigste, Links für Details
-- [ ] Upgrade-Prozedur dokumentieren: `git pull && docker compose up -d --build`
-- [ ] Backup-Anleitung in Self-Hosting-Guide einbauen (existiert in `docs/database.md` — verlinken)
+- [x] Upgrade-Prozedur dokumentiert: `git pull && docker compose up -d --build`
+- [x] Backup-Anleitung in Self-Hosting-Guide eingebaut
 
 ---
 
