@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-17 (0.4.2 Loading States, 0.4.7 Microcopy, 0.5.1 Dockerfile, 0.5.6 .env.example)  
+> Zuletzt aktualisiert: 2026-05-17 (0.4.2 Loading States, 0.4.7 Microcopy, 0.5.1 Dockerfile, 0.5.6 .env.example — PR #42)  
 > Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
 
 ---
