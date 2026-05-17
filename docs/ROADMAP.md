@@ -1,7 +1,22 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-17 (0.4.2–0.4.8 UX-Polish, Sprint A-4 Font-Size, 0.5.1 Dockerfile)  
+> Zuletzt aktualisiert: 2026-05-17 (Full-Stack-Audit: Dependencies, Code-Quality, Doc-Sync, SEO-Basics)  
 > Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
+
+## Status-Übersicht (Stand 2026-05-17)
+
+| Bereich | Status | Offene Arbeit |
+|---|---|---|
+| 🛡️ Security & Hardening | ✅ Implementiert | CVE-Re-Audit (0.7.4), Observatory-Score messen |
+| ♿ Accessibility (WCAG 2.2 AA) | 🟡 A1–A3 ✅ / A4–A5 teilweise | Kontrast-Audit, Roving-Tabindex, Playwright-axe in CI |
+| 🎨 UI Polish & UX | ✅ Implementiert | Dark-Mode-Sweep, Landscape-Mode-Test |
+| 🐳 Docker & Deployment | ✅ Implementiert | Image-Größe messen, Coolify-Guide verifizieren |
+| 📣 Marketing & SEO | 🟡 SEO-Basics ✅ / Landing-Page offen | Wettbewerbsanalyse, Pricing, Screenshots |
+| 🔧 Maintenance & Dependencies | 🟡 Neue Findings | Siehe Abschnitt 0.7 (Audit 2026-05-17) |
+| 🧪 Test-Coverage | 🔴 Noch nicht vorhanden | E2E + Unit-Tests (0.7.6) |
+| 🚢 Launch-Operations | 🔴 Offen | Monitoring, Backup-Drill, Support-Kanal, Changelog |
+
+**Build-Status:** `pnpm run build` ✅ • `pnpm run lint` ✅ • `tsc --noEmit` ✅
 
 ---
 
@@ -412,6 +427,158 @@ Benötigte Screenshots (Light + Dark Mode):
 
 ---
 
+### 0.7 Maintenance, Dependencies & Code-Quality (Audit 2026-05-17)
+
+**Ziel:** Sichere und aktuelle Abhängigkeiten, sauberer Code, klares Refactor-Backlog für die Skalierung nach Launch.
+
+**Audit-Status:**
+- ✅ `pnpm run build` clean — alle Routen kompilieren, inkl. neuer `/robots.txt` und `/sitemap.xml`
+- ✅ `pnpm run lint` clean — keine ESLint- oder jsx-a11y-Warnungen
+- ✅ `npx tsc --noEmit` clean — TypeScript Strict ohne Fehler
+- ⚠️ 50+ Pakete mit Updates verfügbar (überwiegend Patch/Minor, einige Majors)
+- ⚠️ 2 CVEs in transitiven Abhängigkeiten — Overrides müssen im Lockfile durchgesetzt werden (siehe 0.7.4)
+- ⚠️ 6 Komponenten > 600 Zeilen, größte Datei mit 2 867 Zeilen — Refactor-Kandidaten
+- ⚠️ 51 verstreute `console.*`-Statements ohne zentralen Logger
+- ⚠️ 117 `any`-Vorkommen — schrittweise Typisierung sinnvoll
+
+---
+
+#### 0.7.1 Patch- & Minor-Dependency-Updates ✅ Quick Win (Aufwand: 0.5 Tage)
+
+Risikoarme Updates ohne Breaking Changes:
+
+| Gruppe | Beispiele | Update-Strategie |
+|---|---|---|
+| Radix-UI-Primitives (~20 Pakete) | `@radix-ui/react-dialog 1.1.4 → 1.1.15`, `react-tabs 1.1.2 → 1.1.13` | `pnpm up "@radix-ui/*"` |
+| React 19 Patches | `react 19.2.0 → 19.2.6`, `react-dom 19.2.0 → 19.2.6` | `pnpm up react react-dom` |
+| TanStack Query | `5.90.20 → 5.100.10` | Reguläres Update |
+| TailwindCSS v4 | `4.1.18 → 4.3.0`, `@tailwindcss/postcss` ebenso | Reguläres Update |
+| Utility-Packages | `tailwind-merge`, `cmdk`, `input-otp`, `embla-carousel-react`, `react-hook-form` | Reguläres Update |
+| `@types/react` | `19.2.10 → 19.2.14` | Dev-Dep, kein Risiko |
+
+- [ ] Batch-Update via `pnpm up` für oben genannte Gruppen
+- [ ] `pnpm run build && pnpm run lint && npx tsc --noEmit` nach Update grün?
+- [ ] Smoke-Test im Dev-Server: Login, Reader, Settings, Manage Feeds, Server Settings
+
+#### 0.7.2 Major-Dependency-Upgrades (Aufwand: 3–5 Tage, eigenständige PRs)
+
+Jede Major-Version erfordert separate Validierung. **Reihenfolge der Empfehlung:**
+
+| Priorität | Paket | Aktuell | Ziel | Risiko | Hinweise |
+|---|---|---|---|---|---|
+| **Hoch** | `@types/bcryptjs` | 3.0.0 | **Entfernen** | Keins | Paket ist deprecated, `bcryptjs` bringt eigene Typen mit |
+| **Hoch** | `eslint` + `eslint-config-next` | 8.57 / 14.2.35 | 9.x / 16.2.6 | Mittel | Flat-Config-Migration nötig (`eslint.config.js`); löst auch glob-CVE (siehe 0.7.4) |
+| **Hoch** | `next-auth` | 5.0.0-beta.31 | 5.0.0 stable | Mittel | Beta-zu-GA-Diff — JWT- und Session-Callback-Signaturen prüfen |
+| **Hoch** | `zod` | 3.25 | 4.4 | Mittel | API-Breaking Changes in `.parse()`, neue `z.coerce`-Semantik |
+| **Mittel** | `prisma` + `@prisma/client` | 5.22 | 6.x → 7.x | Hoch | Zweistufig: erst 6 (Migration-API-Änderungen), dann 7 (Engine-Änderungen) |
+| **Mittel** | `typescript` | 5.9 | 6.0 | Niedrig | Evtl. neue strict-Defaults — Build-Output prüfen |
+| **Mittel** | `sonner` | 1.7 | 2.0 | Niedrig | Toast-API-Diff, kosmetisch |
+| **Mittel** | `react-resizable-panels` | 2.1 | 4.11 | Mittel | UX-Regression-Test für 3-Spalten-Layout |
+| **Niedrig** | `lucide-react` | 0.454 | 1.16 | Niedrig | Icon-Renames möglich (z.B. Lucide v1 hat einige Rebrandings) |
+| **Niedrig** | `react-day-picker` | 9.8 | 10.0 | Niedrig | Calendar-API-Diff |
+| **Niedrig** | `@hookform/resolvers` | 3.10 | 5.2 | Niedrig | Schema-Adapter-API-Diff |
+| **Niedrig** | `undici` | 7 | 8 | Niedrig | Fetch-Edge-Cases |
+| **Niedrig** | `@types/nodemailer` | 7 | 8 | Niedrig | Reine Typen-Update |
+| **Niedrig** | `@types/node` | 22 | 25 | Niedrig | Node 22 LTS bleibt — Typen kompatibel |
+| **Niedrig** | `@types/jsdom` / `jsdom` | 27 / 27.4 | 28 / 29.1 | Niedrig | Reines Library-Update |
+
+- [ ] Pro Major-Paket eigener Branch + PR
+- [ ] Changelog-Diff in PR-Beschreibung dokumentieren
+- [ ] Build, Lint, Type-Check, Smoke-Test in jedem PR
+
+#### 0.7.3 Code-Qualität — Logger, Refactor, Typing (Aufwand: 3 Tage)
+
+**Zentraler Logger (`lib/logger.ts`):**
+- [ ] `info` / `warn` / `error` / `debug` Levels mit Env-basierter Schwelle (`LOG_LEVEL`)
+- [ ] Strukturierte JSON-Logs in Produktion, hübsche Ausgabe in Dev
+- [ ] **18 Dateien** mit zusammen **51** `console.log/error/warn`-Statements migrieren — Top-Sünder:
+  - `lib/rss-sync.ts` (9), `app/api/discovery/search/route.ts` (8), `lib/auto-read-rules.ts` (7), `lib/background-sync.ts` (6), `app/api/discovery/catalog/import/route.ts` (4)
+- [ ] `instrumentation.ts` Startup-Warnungen unverändert lassen (intentional, vor Logger-Init)
+
+**Komponenten-Refactor (sinnvoll vor Theme- und i18n-Arbeit aus Phase 2):**
+
+| Datei | Zeilen | Splitting-Plan |
+|---|---|---|
+| `components/feed-management.tsx` | **2 867** | Tabs aufteilen: `FeedsTab`, `CategoriesTab`, `LabelsTab`, `RulesTab`, `AlertsTab`, `SearchesTab` |
+| `components/settings-form.tsx` | **1 781** | Sektionen: `AppearanceSection`, `ReadingSection`, `NotificationsSection`, `AISection`, `IntegrationsSection` |
+| `components/server-management-dialog.tsx` | **1 473** | Tabs: `UsersTab`, `SettingsTab`, `EmailTab`, `AuditTab`, `BrandingTab`, `StarterPacksTab` |
+| `components/rss-sidebar.tsx` | **1 355** | `SidebarHeader`, `FeedList`, `CategoryTree`, `SidebarFooter` extrahieren |
+| `app/actions/feeds.ts` | **1 666** | Domain-Module: `feeds-crud.ts`, `feeds-sync.ts`, `opml.ts`, `categories.ts`, `articles-query.ts` |
+| `components/article-list.tsx` | **873** | View-Mode-Komponenten in Unterordner: `ListView`, `MagazineView`, `MinimalView` |
+| `components/article-reader.tsx` | **746** | `ReaderHeader`, `ReaderBody`, `ReaderActions` extrahieren |
+
+- [ ] Pro Refactor ein PR, keine funktionalen Änderungen mitliefern
+- [ ] Vorher/Nachher Bundle-Size-Diff dokumentieren
+
+**TypeScript-Strictness:**
+- [ ] **117** `: any` / `as any` Vorkommen schrittweise reduzieren (kein Big-Bang)
+- [ ] Top-Sünder: `feed-management.tsx` (38), `rss-sidebar.tsx` (22), `server-management-dialog.tsx` (13), `use-rss-data.ts` (9)
+- [ ] Bevorzugt korrekte Prisma-Typen aus `@prisma/client` verwenden (statt `any` auf API-Responses)
+- [ ] `next.config.mjs`: `typescript.ignoreBuildErrors` nicht aktivieren — bleibt false
+
+#### 0.7.4 CVE-Re-Audit & Override-Verfeinerung (Aufwand: 0.5 Tage)
+
+`pnpm audit` Befund am 2026-05-17:
+
+| Severity | Paket | Pfad | Status |
+|---|---|---|---|
+| **HIGH** | `glob 10.3.10` (CWE-78 Command Injection) | `eslint-config-next 14 → @next/eslint-plugin-next → glob` | `pnpm.overrides` setzt `^10.5.0`, greift aber im Lockfile nicht für diesen Pfad |
+| **MODERATE** | `postcss 8.4.31` (CWE-79 XSS via Unescaped `</style>`) | `next → postcss`, `next-auth → next → postcss` | `pnpm.overrides` setzt `^8.5.14`, greift aber transitive nicht durch |
+
+- [ ] `pnpm-lock.yaml` mit `pnpm install --no-frozen-lockfile` neu erzeugen, danach `pnpm audit` erneut prüfen
+- [ ] Falls weiterhin alte Versionen: Overrides als pfad-spezifische Pins ergänzen (`"<pkg>>old-dep": "^new-version"`)
+- [ ] Eskalation: 0.7.2 ESLint-9-Upgrade entfernt den `glob`-CVE-Pfad vollständig (eslint-config-next 16 zieht kein altes glob mehr)
+- [ ] Mozilla Observatory Score auf Produktions-Domain messen (Ziel: ≥ B+)
+- [ ] `npm audit signatures` für Supply-Chain-Integrität (npm 9+)
+
+#### 0.7.5 Build-Artefakte & Docker-Image-Größe (Aufwand: 0.5 Tage)
+
+- [ ] `docker image inspect feedferret:latest --format='{{.Size}}'` — aktuelle Größe dokumentieren
+- [ ] Ziel: < 400 MB. Bei Überschreitung:
+  - Source-Maps in Production weglassen (`productionBrowserSourceMaps: false`)
+  - `.next/cache` aus Runner-Stage prunen
+  - `pnpm prune --prod` nach Build (falls noch nötig)
+- [ ] CI (sobald vorhanden, 0.7.6): Image-Größe als Step-Output reporten, Warnung bei +20% Drift gegenüber `main`
+
+#### 0.7.6 Test-Coverage & CI (Pre-Launch Quality-Gate) (Aufwand: 2 Tage)
+
+**Aktueller Stand:** Kein automatisiertes Test-Setup. Lokale Validation nur über `pnpm run lint` + `pnpm run build`.
+
+**Empfohlene Minimum-Pyramide für Launch:**
+
+- [ ] **Playwright E2E** (kritische User-Journeys):
+  - Login + 2FA-Flow
+  - Onboarding-Wizard (6 Schritte)
+  - Feed hinzufügen → Sync → Artikel lesen
+  - OPML-Import + Export
+  - Saved Search erstellen + teilen
+  - Account löschen (GDPR)
+- [ ] **Vitest Unit-Tests** für reine Funktionen:
+  - `lib/search.ts` — Query-Parser, alle Token-Typen
+  - `lib/validation.ts` — Limit-Boundaries
+  - `lib/token.ts` — Hashing, Format-Check
+  - `lib/rate-limit.ts` — Sliding-Window-Verhalten
+  - `lib/feed-fetcher.ts` — URL-Normalisierung, SSRF-Blacklist
+- [ ] **GitHub Actions Workflow** (`.github/workflows/ci.yml`):
+  - `pnpm install --frozen-lockfile`
+  - `pnpm run lint`
+  - `npx tsc --noEmit`
+  - `pnpm run build`
+  - Optional: Tests + Image-Build mit `pnpm-lock` cache
+- [ ] Optional lokal: `.husky/pre-commit` mit `pnpm lint-staged`
+
+#### 0.7.7 Doc-Sync & Lifecycle (Aufwand: 0.5 Tage)
+
+- [ ] `docs/marketing-landing-page-brief.md`: SaaS-Pricing-Sektion entweder finalisieren (nach 0.1.3 Wettbewerbsanalyse) oder explizit als "v1 nach OSS-Launch" markieren — keine offenen "TBD"-Platzhalter
+- [ ] `docs/scout-studio.md`: GA-Features klar von "Future Extensions" trennen
+- [ ] `docs/accessibility-todo.md`: A-4 und A-5 Status auf den Stand der Implementierung bringen (Font-Size-Slider ist live)
+- [ ] `docs/mcp.md`: 11 MCP-Tools gegen `app/api/mcp/route.ts` cross-checken (Signaturen aktuell?)
+- [ ] `docs/api.md`: OpenAPI-Schema (`/api/v1/openapi.json`) gegen tatsächliche v1-Routen abgleichen
+- [ ] Terminologie: `Webhooks` vs. `Outbound Webhooks` einheitlich nutzen (Empfehlung: `Outbound Webhooks`, da auch `Incoming Webhooks` denkbar wären)
+- [ ] `CHANGELOG.md` aufsetzen (Keep-a-Changelog-Format) — bisher nur PR-Beschreibungen als Quelle
+
+---
+
 ## Phase 1: Launch
 
 ### Pre-Launch Checklist
@@ -442,12 +609,21 @@ Alle Punkte müssen abgeschlossen sein:
 - [ ] Landing Page live mit allen Sektionen (0.6.2)
 - [ ] Screenshots fertig (0.6.3)
 - [x] SEO-Basics aktiv (0.6.4) — PR #45
+- [ ] SaaS-Pricing finalisiert oder explizit auf "Post-OSS-Launch" verschoben (0.7.7)
+
+**Maintenance & Quality (neu — Audit 2026-05-17):**
+- [ ] Patch- & Minor-Updates eingespielt (0.7.1)
+- [ ] `pnpm audit` clean — Overrides für glob + postcss greifen im Lockfile (0.7.4)
+- [ ] Logger-Utility live, `console.*` aus Produktions-Pfaden entfernt (0.7.3)
+- [ ] Minimum E2E + Unit Test-Suite vorhanden (0.7.6)
+- [ ] CI-Pipeline aktiv (Lint + Type-Check + Build pro PR) (0.7.6)
 
 **Operations:**
 - [ ] Monitoring: Sentry oder Axiom für Error-Tracking konfiguriert
-- [ ] Backup-Strategie dokumentiert und einmal getestet
+- [ ] Backup-Strategie dokumentiert und einmal getestet (`pg_dump` Restore-Drill)
 - [ ] Support-Kanal definiert (GitHub Issues / Discord)
-- [ ] GitHub Releases mit Changelog-Template vorbereitet
+- [ ] `CHANGELOG.md` aufgesetzt + GitHub Releases mit Template (0.7.7)
+- [ ] Version-Bump-Strategie definiert (SemVer; aktuell `package.json` auf `0.1.0` — Empfehlung: vor Launch auf `0.9.0` setzen, Launch-Release als `1.0.0`)
 
 ---
 
