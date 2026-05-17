@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
 import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers, RefreshCw, ShieldOff } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import { useState, useRef, useEffect } from "react";
 
 function formatDate(dateStr: string) {
@@ -290,19 +291,15 @@ export function ArticleList({
         key={filterKey ?? "empty"}
         onTouchStart={handleBgSwipeStart}
         onTouchEnd={handleBgSwipeEnd}
-        className={cn("flex-1 flex items-center justify-center p-8", transitionClass)}
+        className={cn("flex-1 flex items-center justify-center p-4", transitionClass)}
       >
-        <div className="text-center">
-          <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-5">
-            <Circle className="w-10 h-10 text-muted-foreground" />
-          </div>
-          <h3 className="text-xl font-semibold text-foreground mb-2">
-            No articles
-          </h3>
-          <p className="text-base text-muted-foreground">
-            Add feeds to start reading
-          </p>
-        </div>
+        <Empty className="border-0">
+          <EmptyMedia variant="icon"><Circle className="size-6" /></EmptyMedia>
+          <EmptyContent>
+            <EmptyTitle>No articles</EmptyTitle>
+            <EmptyDescription>Add feeds to start reading, or adjust your filters.</EmptyDescription>
+          </EmptyContent>
+        </Empty>
       </div>
     );
   }

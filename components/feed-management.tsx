@@ -55,6 +55,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { TabsContent } from "@/components/ui/tabs";
 import { SettingsModalShell, SettingsPageShell } from "@/components/settings-shell";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import {
   Trash2,
   Download,
@@ -1004,7 +1005,13 @@ export function FeedManagement({
                     );
                   })}
                   {feeds.length === 0 && (
-                    <p className="py-10 text-center text-muted-foreground italic">No feeds yet.</p>
+                    <Empty className="my-4 border-0">
+                      <EmptyMedia variant="icon"><Rss className="size-5" /></EmptyMedia>
+                      <EmptyContent>
+                        <EmptyTitle>No feeds yet</EmptyTitle>
+                        <EmptyDescription>Add your first feed to start reading.</EmptyDescription>
+                      </EmptyContent>
+                    </Empty>
                   )}
                 </div>
               </ScrollArea>
@@ -1055,9 +1062,13 @@ export function FeedManagement({
                           />
                         ))}
                         {categories.length === 0 && (
-                          <p className="text-center py-10 text-muted-foreground italic">
-                            No categories yet. Create one above.
-                          </p>
+                          <Empty className="my-4 border-0">
+                            <EmptyMedia variant="icon"><Folder className="size-5" /></EmptyMedia>
+                            <EmptyContent>
+                              <EmptyTitle>No categories yet</EmptyTitle>
+                              <EmptyDescription>Create a category above to group your feeds.</EmptyDescription>
+                            </EmptyContent>
+                          </Empty>
                         )}
                       </div>
                     </SortableContext>
@@ -1117,7 +1128,13 @@ export function FeedManagement({
                         </div>
                       ))}
                       {labels.length === 0 && (
-                        <p className="py-10 text-center text-sm text-muted-foreground">No labels yet.</p>
+                        <Empty className="my-4 border-0">
+                          <EmptyMedia variant="icon"><Tag className="size-5" /></EmptyMedia>
+                          <EmptyContent>
+                            <EmptyTitle>No labels yet</EmptyTitle>
+                            <EmptyDescription>Labels help you organize and filter articles across feeds.</EmptyDescription>
+                          </EmptyContent>
+                        </Empty>
                       )}
                     </div>
                   </ScrollArea>
@@ -1204,9 +1221,13 @@ export function FeedManagement({
                         </div>
                       )})}
                       {savedSearches.length === 0 && (
-                        <p className="py-10 text-center text-sm text-muted-foreground">
-                          Use the article search menu to save a query.
-                        </p>
+                        <Empty className="my-4 border-0">
+                          <EmptyMedia variant="icon"><Bookmark className="size-5" /></EmptyMedia>
+                          <EmptyContent>
+                            <EmptyTitle>No saved searches</EmptyTitle>
+                            <EmptyDescription>Use the search bar to find articles, then save the query for quick access.</EmptyDescription>
+                          </EmptyContent>
+                        </Empty>
                       )}
                     </div>
                   </ScrollArea>
@@ -1776,9 +1797,13 @@ export function FeedManagement({
                   )}
 
                   {autoReadRules.length === 0 && !showAddRule ? (
-                    <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center">
-                      <p className="text-muted-foreground text-sm">No rules yet. Rules run automatically after each sync.</p>
-                    </div>
+                    <Empty>
+                      <EmptyMedia variant="icon"><Play className="size-5" /></EmptyMedia>
+                      <EmptyContent>
+                        <EmptyTitle>No rules yet</EmptyTitle>
+                        <EmptyDescription>Rules run automatically after each sync and can mark articles as read, starred, or apply labels.</EmptyDescription>
+                      </EmptyContent>
+                    </Empty>
                   ) : (
                     <div className="space-y-2">
                       {autoReadRules.map((rule: any) => {
@@ -2283,9 +2308,13 @@ export function FeedManagement({
                   )}
 
                   {keywordAlerts.length === 0 && !showAddAlert ? (
-                    <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center">
-                      <p className="text-muted-foreground text-sm">No alerts yet. Alerts run against newly synced articles.</p>
-                    </div>
+                    <Empty>
+                      <EmptyMedia variant="icon"><Bell className="size-5" /></EmptyMedia>
+                      <EmptyContent>
+                        <EmptyTitle>No keyword alerts</EmptyTitle>
+                        <EmptyDescription>Alerts scan newly synced articles and notify you via push, email, or webhook when keywords match.</EmptyDescription>
+                      </EmptyContent>
+                    </Empty>
                   ) : (
                     <div className="space-y-2">
                       {keywordAlerts.map((alert: any) => {

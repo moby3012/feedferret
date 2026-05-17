@@ -14,6 +14,7 @@ import {
 import { TabsContent } from "@/components/ui/tabs";
 import { SettingsModalShell, SettingsPageShell } from "@/components/settings-shell";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import {
   Users,
   Mail,
@@ -353,6 +354,15 @@ export function ServerManagementDialog({
                     </div>
                     <ScrollArea className="flex-1">
                       <div className="space-y-3 pb-8">
+                        {filteredUsers.length === 0 && (
+                          <Empty className="border-0">
+                            <EmptyMedia variant="icon"><Users className="size-5" /></EmptyMedia>
+                            <EmptyContent>
+                              <EmptyTitle>No users found</EmptyTitle>
+                              <EmptyDescription>Try a different search term.</EmptyDescription>
+                            </EmptyContent>
+                          </Empty>
+                        )}
                         {filteredUsers.map((user) => (
                           <div
                             key={user.id}

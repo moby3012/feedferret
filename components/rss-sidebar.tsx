@@ -28,6 +28,9 @@ import {
   Download,
   Rss,
   Trash2,
+  AlertCircle,
+  Play,
+  Mail,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -200,7 +203,7 @@ export function RssSidebar({
       }
     } catch {
       setDiscoveryMessage("Discovery failed. Try pasting a direct RSS/Atom feed URL.");
-      toast.error("Discovery failed");
+      toast.error("Discovery failed — try a direct RSS/Atom URL");
     } finally {
       setIsDiscovering(false);
     }
@@ -726,35 +729,51 @@ export function RssSidebar({
                     </div>
                     <DropdownMenuSeparator />
                     {notifications.length === 0 ? (
-                      <div className="px-2 py-8 text-center text-sm text-muted-foreground">
-                        No notifications yet.
+                      <div className="px-2 py-8 text-center">
+                        <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                          <Bell className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">No notifications</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Set up keyword alerts to get notified when topics you care about appear.</p>
                       </div>
                     ) : (
-                      (notifications as any[]).slice(0, 8).map((notification: any) => (
-                        <DropdownMenuItem
-                          key={notification.id}
-                          className="items-start gap-3 rounded-xl px-2 py-2"
-                          onClick={() => {
-                            if (!notification.isRead) markNotificationRead.mutate(notification.id);
-                            if (notification.articleId) {
-                              window.location.href = `/?article=${encodeURIComponent(notification.articleId)}`;
-                            }
-                          }}
-                        >
-                          <span
-                            className={cn(
-                              "mt-1 h-2 w-2 shrink-0 rounded-full",
-                              notification.isRead ? "bg-muted" : "bg-accent",
-                            )}
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">{notification.title}</span>
-                            <span className="line-clamp-2 text-xs text-muted-foreground">
-                              {notification.body}
+                      (notifications as any[]).slice(0, 8).map((notification: any) => {
+                        const typeIcon = notification.type === "feed_error"
+                          ? <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                          : notification.type === "rule_match"
+                          ? <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                          : notification.type === "digest_sent"
+                          ? <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                          : <Bell className="h-3.5 w-3.5 text-accent" />;
+                        return (
+                          <DropdownMenuItem
+                            key={notification.id}
+                            className="items-start gap-3 rounded-xl px-2 py-2"
+                            onClick={() => {
+                              if (!notification.isRead) markNotificationRead.mutate(notification.id);
+                              if (notification.articleId) {
+                                window.location.href = `/?article=${encodeURIComponent(notification.articleId)}`;
+                              }
+                            }}
+                          >
+                            <span className="mt-0.5 shrink-0 flex items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  "h-1.5 w-1.5 rounded-full shrink-0",
+                                  notification.isRead ? "bg-muted" : "bg-accent",
+                                )}
+                              />
+                              {typeIcon}
                             </span>
-                          </span>
-                        </DropdownMenuItem>
-                      ))
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium">{notification.title}</span>
+                              <span className="line-clamp-2 text-xs text-muted-foreground">
+                                {notification.body}
+                              </span>
+                            </span>
+                          </DropdownMenuItem>
+                        );
+                      })
                     )}
                     {unreadNotifications > 0 && (
                       <>
@@ -1125,6 +1144,11 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
         )}
       </div>
       <span className="flex-1 text-left truncate font-medium">{feed.name}</span>
+      {feed.lastStatus === "error" && (
+        <span title={feed.lastError || "Last sync failed"}>
+          <AlertCircle className={cn("h-3.5 w-3.5 shrink-0 text-destructive", isSelected && "text-primary-foreground/70")} />
+        </span>
+      )}
       {!hideUnreadBadge && feed.unreadCount > 0 && (
         <span
           className={cn(

@@ -1,3 +1,7 @@
+networks:
+  feedferret_net:
+    driver: bridge
+
 services:
   feedferret:
     build:
@@ -23,6 +27,8 @@ services:
       # - GOOGLE_CLIENT_SECRET=your-google-secret
       # - GITHUB_ID=your-github-id
       # - GITHUB_SECRET=your-github-secret
+    networks:
+      - feedferret_net
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,6 +52,8 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-feedferret}
       - POSTGRES_USER=${POSTGRES_USER:-feedferret}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-feedferret-change-me}
+    networks:
+      - feedferret_net
     volumes:
       - feedferret_postgres_data:/var/lib/postgresql/data
     healthcheck:

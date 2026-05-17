@@ -3,7 +3,9 @@
 # Fail on any error
 set -e
 
-echo "🚀 Starting FeedFerret deployment script..."
+log() { log "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+
+log "🚀 Starting FeedFerret deployment script..."
 
 # Create the data directory and ensure it exists
 mkdir -p /app/data
@@ -14,24 +16,24 @@ export DATABASE_URL="${DATABASE_URL:-postgresql://feedferret:feedferret-change-m
 # Use the globally installed prisma if available, otherwise fallback to npx
 PRISMA_CMD="prisma"
 if ! command -v prisma >/dev/null 2>&1; then
-    echo "⚠️ Global prisma not found, using npx..."
+    log "⚠️ Global prisma not found, using npx..."
     PRISMA_CMD="npx prisma"
 fi
 
-echo "📂 Current database provider: $DATABASE_PROVIDER"
+log "📂 Current database provider: $DATABASE_PROVIDER"
 if [ "$DATABASE_PROVIDER" = "postgresql" ] || [ "$DATABASE_PROVIDER" = "postgres" ]; then
-    DB_HOST_FOR_LOG=$(echo "$DATABASE_URL" | sed 's|.*@\([^:/]*\).*|\1|')
-    DB_NAME_FOR_LOG=$(echo "$DATABASE_URL" | sed 's|.*/\([^?]*\).*|\1|')
-    echo "📂 Current database target: ${DB_HOST_FOR_LOG}/${DB_NAME_FOR_LOG}"
+    DB_HOST_FOR_LOG=$(log "$DATABASE_URL" | sed 's|.*@\([^:/]*\).*|\1|')
+    DB_NAME_FOR_LOG=$(log "$DATABASE_URL" | sed 's|.*/\([^?]*\).*|\1|')
+    log "📂 Current database target: ${DB_HOST_FOR_LOG}/${DB_NAME_FOR_LOG}"
 else
-    echo "📂 Current database target: sqlite"
+    log "📂 Current database target: sqlite"
 fi
 
 # Wait for Postgres to be ready (no-op for SQLite)
 if [ "$DATABASE_PROVIDER" = "postgresql" ] || [ "$DATABASE_PROVIDER" = "postgres" ]; then
-    echo "⏳ Waiting for PostgreSQL to be ready..."
-    DB_HOST=$(echo "$DATABASE_URL" | sed 's|.*@\([^:/]*\).*|\1|')
-    DB_PORT=$(echo "$DATABASE_URL" | sed 's|.*:\([0-9][0-9]*\)/.*|\1|')
+    log "⏳ Waiting for PostgreSQL to be ready..."
+    DB_HOST=$(log "$DATABASE_URL" | sed 's|.*@\([^:/]*\).*|\1|')
+    DB_PORT=$(log "$DATABASE_URL" | sed 's|.*:\([0-9][0-9]*\)/.*|\1|')
     DB_PORT="${DB_PORT:-5432}"
     RETRIES=30
     until node -e "
@@ -42,24 +44,24 @@ s.on('error', () => { s.destroy(); process.exit(1); });
 " 2>/dev/null; do
         RETRIES=$((RETRIES - 1))
         if [ "$RETRIES" -le 0 ]; then
-            echo "❌ PostgreSQL not reachable at ${DB_HOST}:${DB_PORT} after 30 attempts. Check DATABASE_URL and Postgres service."
+            log "❌ PostgreSQL not reachable at ${DB_HOST}:${DB_PORT} after 30 attempts. Check DATABASE_URL and Postgres service."
             exit 1
         fi
-        echo "   ... retrying in 2s (${RETRIES} attempts left)"
+        log "   ... retrying in 2s (${RETRIES} attempts left)"
         sleep 2
     done
-    echo "✅ PostgreSQL is ready."
+    log "✅ PostgreSQL is ready."
 fi
 
-echo "🧬 Preparing Prisma schema..."
+log "🧬 Preparing Prisma schema..."
 node scripts/prepare-prisma-schema.mjs
-echo "🔄 Running database sync (db push)..."
+log "🔄 Running database sync (db push)..."
 
 # Sync schema with database
 $PRISMA_CMD db push --schema prisma/schema.generated.prisma --accept-data-loss --skip-generate
 
-echo "✅ Database is ready."
-echo "🌟 Starting Next.js server..."
+log "✅ Database is ready."
+log "🌟 Starting Next.js server..."
 
 # Bind to all interfaces so the Docker healthcheck (curl localhost:3000) works.
 # Docker sets HOSTNAME to the container ID by default; Next.js standalone picks
@@ -70,6 +72,6 @@ export HOSTNAME="0.0.0.0"
 if [ -f "server.js" ]; then
     node server.js
 else
-    echo "❌ Error: server.js not found! Standalone build might have failed."
+    log "❌ Error: server.js not found! Standalone build might have failed."
     exit 1
 fi
