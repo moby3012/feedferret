@@ -43,29 +43,38 @@ const config = {
         password: { label: "Password", type: "password" },
         otp: { label: "One-time code", type: "text" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await db.user.findUnique({
-          where: { email: credentials.email as string },
-        });
+        const email = credentials.email as string;
+        const ip = (req as any)?.headers?.get?.("x-forwarded-for")?.split(",")[0]?.trim()
+          ?? (req as any)?.headers?.get?.("x-real-ip")
+          ?? null;
+        const userAgent = (req as any)?.headers?.get?.("user-agent") ?? null;
 
-        if (!user?.password) return null;
+        const logAttempt = async (success: boolean, userId?: string, failReason?: string) => {
+          if (isBuild) return;
+          try {
+            await db.loginAttempt.create({ data: { email, userId, success, failReason, ip, userAgent } });
+          } catch { /* never crash auth on log failure */ }
+        };
 
-        const passwordsMatch = await bcrypt.compare(
-          credentials.password as string,
-          user.password,
-        );
+        const user = await db.user.findUnique({ where: { email } });
 
-        if (!passwordsMatch) return null;
+        if (!user?.password) { await logAttempt(false, undefined, "no_account"); return null; }
+
+        const passwordsMatch = await bcrypt.compare(credentials.password as string, user.password);
+        if (!passwordsMatch) { await logAttempt(false, user.id, "password"); return null; }
 
         if (user.twoFactorEnabled) {
           const otp = String(credentials.otp || "");
           if (!user.twoFactorSecret || !verifyTotpToken(user.twoFactorSecret, otp)) {
+            await logAttempt(false, user.id, "otp");
             return null;
           }
         }
 
+        await logAttempt(true, user.id);
         return user as any;
       },
     }),
@@ -115,11 +124,16 @@ const config = {
 
       if (user) {
         if (user.isActive === false) {
-          // Strip sub so session becomes unauthenticated on next check
+          const { sub: _sub, ...rest } = token;
+          return rest;
+        }
+        // Invalidate token if sessionVersion changed (password change, 2FA toggle)
+        if (typeof token.sv === "number" && token.sv !== user.sessionVersion) {
           const { sub: _sub, ...rest } = token;
           return rest;
         }
         token.role = user.role;
+        token.sv = user.sessionVersion;
       }
 
       return token;

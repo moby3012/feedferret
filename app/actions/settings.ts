@@ -141,7 +141,7 @@ export async function confirmTwoFactorSetup(code: string) {
 
   await db.user.update({
     where: { id: session.user.id },
-    data: { twoFactorEnabled: true },
+    data: { twoFactorEnabled: true, sessionVersion: { increment: 1 } },
   });
 
   revalidatePath("/settings");
@@ -168,6 +168,7 @@ export async function disableTwoFactor(code: string) {
     data: {
       twoFactorEnabled: false,
       twoFactorSecret: null,
+      sessionVersion: { increment: 1 },
     },
   });
 

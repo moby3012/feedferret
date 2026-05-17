@@ -17,8 +17,11 @@ model User {
   password      String?
   twoFactorEnabled Boolean @default(false)
   twoFactorSecret  String?
+  sessionVersion   Int     @default(0)
   accounts      Account[]
   sessions      Session[]
+  loginAttempts LoginAttempt[]
+  adminAuditLogs AdminAuditLog[] @relation("AuditActor")
   categories    Category[]
   feeds         Feed[]
   articles      Article[]
@@ -382,8 +385,39 @@ model GlobalSettings {
   allowInternalFeedUrls          Boolean @default(false)
   // Onboarding
   onboardingCompleted Boolean @default(false)
+  // Security
+  require2FAForAdmins Boolean @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+model LoginAttempt {
+  id         String   @id @default(cuid())
+  email      String
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  success    Boolean
+  failReason String?  // "password" | "otp" | "inactive"
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([createdAt])
+}
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  actorId     String
+  actor       User     @relation("AuditActor", fields: [actorId], references: [id], onDelete: Cascade)
+  action      String   // "user.role_change" | "user.suspend" | "user.unsuspend" | "user.delete" | "settings.update"
+  targetId    String?
+  targetEmail String?
+  metadata    String?  // JSON
+  createdAt   DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([createdAt])
 }
 
 model DiscoveryCatalogFeed {

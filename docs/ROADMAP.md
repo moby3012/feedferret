@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-17 (Docs-Review nach PR #39)  
+> Zuletzt aktualisiert: 2026-05-17 (0.2.6 Admin & Session Hardening implementiert)  
 > Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
 
 ---
@@ -35,6 +35,7 @@ Die folgenden Bereiche sind vollständig implementiert und dokumentiert:
 | SSRF-Schutz für Feed-Fetching | `docs/security.md` |
 | API Token Hardening (SHA-256, ff_-Prefix) | `docs/security.md` |
 | Input Validation (URL, OPML, Search, Labels) | `docs/security.md` |
+| Admin & Session Hardening (Audit-Log, 2FA-Pflicht, Session-Invalidierung, Login-Logging) | `docs/security.md` |
 | GDPR: Self-Service Account-Deletion | `docs/gdpr.md` |
 | Admin Onboarding Wizard (6-Schritte-Wizard + Starter Packs) | — |
 | Self-Hosting & Reverse Proxy Guide | `docs/self-hosting.md`, `docs/reverse-proxy.md` |
@@ -179,12 +180,13 @@ Offene Follow-ups:
 - [ ] Prisma 5.x → 6.x/7.x: Breaking-Change-Analyse ausstehend
 - [ ] next-auth beta.31 → stable 5.0.0: Kompatibilitätsprüfung ausstehend
 
-#### 0.2.6 Admin & Session Hardening
+#### 0.2.6 Admin & Session Hardening ✅ Implementiert
 
-- [ ] 2FA-Pflicht für Admin-Accounts als Server-Setting konfigurierbar machen
-- [ ] Audit-Log für Admin-Aktionen: User löschen, Rollen ändern, Settings ändern (als `AdminLog`-Tabelle oder strukturiertes Server-Log)
-- [ ] Session-Invalidierung sicherstellen: Nach Passwortänderung, nach Account-Suspension, nach 2FA-Aktivierung alle Sessions terminieren
-- [ ] Fehlgeschlagene Login-Versuche loggen (User-ID, IP, Timestamp) — für Admin-Audit
+- [x] 2FA-Pflicht für Admin-Accounts als Server-Setting konfigurierbar machen (`require2FAForAdmins` in GlobalSettings, geprüft in `checkAdmin()`)
+- [x] Audit-Log für Admin-Aktionen: User löschen, Rollen ändern, Settings ändern (`AdminAuditLog`-Tabelle, `logAdminAction()` Helper in `admin.ts`)
+- [x] Session-Invalidierung nach 2FA-Aktivierung/-Deaktivierung (JWT `sessionVersion`-Pattern — `token.sv` vs `user.sessionVersion`)
+- [x] Fehlgeschlagene Login-Versuche loggen (User-ID, IP, Timestamp) — `LoginAttempt`-Tabelle, befüllt in `authorize()`-Callback in `auth.ts`
+- [x] Admin-UI: Audit-Log-Tab in Server Management Dialog (Admin Actions + Login Attempts Tabellen)
 
 #### 0.2.7 Docker & Deployment Security ✅ Implementiert
 
@@ -423,6 +425,7 @@ Alle Punkte müssen abgeschlossen sein:
 - [x] API Token Hardening: SHA-256-Hashing, ff_-Prefix (0.2.3)
 - [x] Input Validation: URL/OPML/Längen-Limits (0.2.4)
 - [x] High/Moderate CVEs gepatcht via pnpm.overrides (0.2.5)
+- [x] Admin & Session Hardening: Audit-Log, 2FA-Pflicht, Session-Invalidierung (0.2.6)
 - [x] Docker Secrets-Warnung aktiv (0.2.7)
 
 **Quality:**

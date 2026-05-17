@@ -13,7 +13,42 @@ async function checkAdmin() {
   if (session?.user?.role !== "ADMIN") {
     throw new Error("Unauthorized: Admin access required");
   }
+  const settings = await db.globalSettings.findUnique({
+    where: { id: "global" },
+    select: { require2FAForAdmins: true },
+  });
+  if (settings?.require2FAForAdmins) {
+    const user = await db.user.findUnique({
+      where: { id: session.user.id! },
+      select: { twoFactorEnabled: true },
+    });
+    if (!user?.twoFactorEnabled) {
+      throw new Error(
+        "This instance requires admins to have 2FA enabled. Please enable it in Settings → Security.",
+      );
+    }
+  }
   return session;
+}
+
+async function logAdminAction(
+  actorId: string,
+  action: string,
+  options?: { targetId?: string; targetEmail?: string; metadata?: Record<string, unknown> },
+) {
+  try {
+    await db.adminAuditLog.create({
+      data: {
+        actorId,
+        action,
+        targetId: options?.targetId ?? null,
+        targetEmail: options?.targetEmail ?? null,
+        metadata: options?.metadata ? JSON.stringify(options.metadata) : null,
+      },
+    });
+  } catch (err) {
+    console.error("[audit]", err);
+  }
 }
 
 // Sensitive fields stored encrypted in the DB
@@ -31,6 +66,7 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
   const next: Record<string, unknown> = {};
 
   if (typeof data.registrationsEnabled === "boolean") next.registrationsEnabled = data.registrationsEnabled;
+  if (typeof data.require2FAForAdmins === "boolean") next.require2FAForAdmins = data.require2FAForAdmins;
   if (typeof data.mailServiceEnabled === "boolean") next.mailServiceEnabled = data.mailServiceEnabled;
   if (typeof data.mailProvider === "string") next.mailProvider = data.mailProvider;
   if (typeof data.onboardingCompleted === "boolean") next.onboardingCompleted = data.onboardingCompleted;
@@ -149,29 +185,35 @@ export async function updateUserRole(userId: string, role: string) {
   if (session.user.id === userId && role !== "ADMIN") {
     throw new Error("You cannot remove your own admin rights");
   }
+  const target = await db.user.findUnique({ where: { id: userId }, select: { role: true, email: true } });
   if (role !== "ADMIN") {
     const adminCount = await db.user.count({ where: { role: "ADMIN" } });
-    const target = await db.user.findUnique({ where: { id: userId }, select: { role: true } });
     if (target?.role === "ADMIN" && adminCount <= 1) {
       throw new Error("Cannot remove the last admin");
     }
   }
-  await db.user.update({
-    where: { id: userId },
-    data: { role },
+  await db.user.update({ where: { id: userId }, data: { role } });
+  await logAdminAction(session.user.id!, "user.role_change", {
+    targetId: userId,
+    targetEmail: target?.email ?? undefined,
+    metadata: { from: target?.role, to: role },
   });
   revalidatePath("/");
 }
 
 export async function suspendUser(userId: string) {
-  await checkAdmin();
+  const session = await checkAdmin();
+  const target = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
   await db.user.update({ where: { id: userId }, data: { isActive: false } });
+  await logAdminAction(session.user.id!, "user.suspend", { targetId: userId, targetEmail: target?.email ?? undefined });
   revalidatePath("/");
 }
 
 export async function unsuspendUser(userId: string) {
-  await checkAdmin();
+  const session = await checkAdmin();
+  const target = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
   await db.user.update({ where: { id: userId }, data: { isActive: true } });
+  await logAdminAction(session.user.id!, "user.unsuspend", { targetId: userId, targetEmail: target?.email ?? undefined });
   revalidatePath("/");
 }
 
@@ -180,7 +222,9 @@ export async function deleteUser(userId: string) {
   if (session.user.id === userId) {
     throw new Error("Cannot delete your own account");
   }
+  const target = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
   await db.user.delete({ where: { id: userId } });
+  await logAdminAction(session.user.id!, "user.delete", { targetId: userId, targetEmail: target?.email ?? undefined });
   revalidatePath("/");
 }
 
@@ -222,6 +266,13 @@ export async function updateGlobalSettings(data: Record<string, unknown>) {
     update: sanitized,
     create: { id: "global", ...sanitized },
   });
+
+  const session = await auth();
+  if (session?.user?.id) {
+    await logAdminAction(session.user.id, "settings.update", {
+      metadata: { fields: Object.keys(sanitized) },
+    });
+  }
 
   revalidatePath("/");
 }
@@ -293,4 +344,22 @@ export async function generateVapidKeyPair() {
     publicKey: keys.publicKey,
     privateKey: keys.privateKey,
   };
+}
+
+export async function getAdminAuditLog(limit = 100) {
+  await checkAdmin();
+  return db.adminAuditLog.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: { actor: { select: { name: true, email: true } } },
+  });
+}
+
+export async function getLoginAttempts(limit = 100) {
+  await checkAdmin();
+  return db.loginAttempt.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: { id: true, email: true, success: true, failReason: true, ip: true, createdAt: true },
+  });
 }

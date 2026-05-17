@@ -59,7 +59,10 @@ The database admin setting is preferred — it can be changed without redeployin
 | CSRF | Next.js Server Actions have built-in CSRF protection |
 | Data isolation | All data is strictly per-user — no cross-user access possible at the query layer |
 | Content sanitization | Article HTML is sanitized by DOMPurify before rendering |
-| 2FA | Optional TOTP for local accounts |
+| 2FA | Optional TOTP for local accounts; can be made mandatory for admins |
+| Session invalidation | `sessionVersion` pattern — 2FA changes instantly kill all existing sessions |
+| Login attempt logging | Every credentials attempt recorded with IP, user agent, and fail reason |
+| Admin audit log | All admin mutations (role change, suspend, delete, settings) recorded with actor and timestamp |
 | Admin safety | Last admin cannot be deleted or demoted |
 | GDPR | Self-service account deletion with full cascade delete |
 | SSRF | See above |
@@ -167,6 +170,57 @@ All entry points for untrusted data enforce explicit limits:
 | Discovery query | Max 500 characters |
 
 Feed URLs are format-validated before the SSRF guard is invoked.
+
+### Admin & Session Hardening ✅
+
+#### Session invalidation
+
+Sessions are JWT-based. A `sessionVersion` integer on the `User` record is stored inside the JWT (`token.sv`). On every request the JWT callback compares `token.sv` to the current `user.sessionVersion` in the database. A mismatch strips `sub` from the token, immediately invalidating the session.
+
+Events that increment `sessionVersion`:
+
+- Enabling TOTP 2FA
+- Disabling TOTP 2FA
+
+This guarantees that if a user changes their security state, all existing browser sessions are invalidated instantly — no grace period.
+
+#### Login attempt logging
+
+Every credentials sign-in attempt is recorded in the `LoginAttempt` table regardless of outcome:
+
+| Field | Description |
+|---|---|
+| `email` | Email address used in the attempt |
+| `userId` | Resolved user ID (null if account does not exist) |
+| `success` | Boolean — whether authentication succeeded |
+| `failReason` | `no_account` / `password` / `otp` |
+| `ip` | Client IP from `X-Forwarded-For` / `X-Real-IP` |
+| `userAgent` | Browser/client user agent string |
+| `createdAt` | Timestamp |
+
+Admins can review the last 100 login attempts in **Server Management → Audit Log**.
+
+#### Admin audit log
+
+All admin mutations are recorded in the `AdminAuditLog` table:
+
+| Action | Trigger |
+|---|---|
+| `user.role_change` | Role promoted or demoted |
+| `user.suspend` | Account suspended |
+| `user.unsuspend` | Account reactivated |
+| `user.delete` | Account permanently deleted |
+| `settings.update` | Any global setting changed (fields listed in metadata) |
+
+Each entry stores the actor's user ID, the target's email address (denormalised — survives user deletion), and a JSON metadata blob. Viewable in **Server Management → Audit Log → Admin Actions**.
+
+#### 2FA requirement for admins
+
+Admins can require all admin accounts to have TOTP 2FA enabled before they can perform any administrative action:
+
+**Server Management → Access → Require 2FA for admins**
+
+When enabled, any admin without 2FA active receives an error on every admin server action until they enable 2FA via **Settings → Security**.
 
 ---
 
