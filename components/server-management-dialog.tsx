@@ -61,6 +61,8 @@ import {
   sendTestEmail,
   getPushDiagnostics,
   generateVapidKeyPair,
+  getAdminAuditLog,
+  getLoginAttempts,
 } from "@/app/actions/admin";
 import { toast } from "sonner";
 import {
@@ -88,6 +90,9 @@ export function ServerManagementDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingDeleteUser, setPendingDeleteUser] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState("users");
+  const [auditLog, setAuditLog] = useState<any[]>([]);
+  const [loginAttempts, setLoginAttempts] = useState<any[]>([]);
+  const [auditLoaded, setAuditLoaded] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -99,6 +104,18 @@ export function ServerManagementDialog({
       toast.error("Failed to load server data");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadAuditData = async () => {
+    if (auditLoaded) return;
+    try {
+      const [log, attempts] = await Promise.all([getAdminAuditLog(), getLoginAttempts()]);
+      setAuditLog(log);
+      setLoginAttempts(attempts);
+      setAuditLoaded(true);
+    } catch {
+      toast.error("Failed to load audit data");
     }
   };
 
@@ -322,13 +339,18 @@ export function ServerManagementDialog({
     { value: "starter-packs", label: "Starter Packs", icon: <PackagePlus className="w-4 h-4" /> },
     { value: "sync", label: "Sync", icon: <Settings2 className="w-4 h-4" /> },
     { value: "discovery", label: "Discovery", icon: <Compass className="w-4 h-4" /> },
+    { value: "audit", label: "Audit Log", icon: <Shield className="w-4 h-4" />, onSelect: loadAuditData },
   ];
 
   const shellProps = {
     title: "Server Settings",
     description: "Control server-wide settings, users, and integrations.",
     activeTab,
-    onTabChange: setActiveTab,
+    onTabChange: (tab: string) => {
+      setActiveTab(tab);
+      const found = shellTabs.find((t) => t.value === tab);
+      if (found && "onSelect" in found && typeof found.onSelect === "function") found.onSelect();
+    },
     tabs: shellTabs,
   };
 
@@ -443,6 +465,18 @@ export function ServerManagementDialog({
                       <Switch
                         checked={settings?.registrationsEnabled ?? true}
                         onCheckedChange={(checked) => handleUpdateSettings({ registrationsEnabled: checked })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1">
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">Require 2FA for Admins</h4>
+                        <p className="text-sm text-muted-foreground">
+                          When enabled, admin actions are blocked unless the admin account has two-factor authentication active.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={settings?.require2FAForAdmins ?? false}
+                        onCheckedChange={(checked) => handleUpdateSettings({ require2FAForAdmins: checked })}
                       />
                     </div>
                     <div className="p-6 rounded-3xl bg-amber-500/10 border border-amber-500/20 space-y-3">
@@ -921,6 +955,95 @@ export function ServerManagementDialog({
                 {/* ── DISCOVERY CATALOG ── */}
                 <TabsContent value="discovery" className="h-full mt-0 focus-visible:outline-none">
                   <DiscoveryCatalogTab />
+                </TabsContent>
+
+                {/* ── AUDIT LOG ── */}
+                <TabsContent value="audit" className="h-full mt-0 focus-visible:outline-none">
+                  <ScrollArea className="h-full">
+                    <div className="px-6 sm:px-8 py-6 max-w-4xl space-y-8">
+                      {/* Admin Actions */}
+                      <div>
+                        <h3 className="text-base font-semibold mb-4">Admin Actions</h3>
+                        {auditLog.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No admin actions recorded yet.</p>
+                        ) : (
+                          <div className="rounded-2xl border border-border/60 overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/40">
+                                <tr>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Time</th>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Actor</th>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Action</th>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Target</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {auditLog.map((entry, i) => (
+                                  <tr key={entry.id} className={cn("border-t border-border/40", i % 2 === 0 ? "" : "bg-muted/20")}>
+                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{new Date(entry.createdAt).toLocaleString()}</td>
+                                    <td className="px-4 py-2 truncate max-w-[140px]">{entry.actor?.name || entry.actor?.email || "—"}</td>
+                                    <td className="px-4 py-2">
+                                      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", {
+                                        "bg-destructive/15 text-destructive": entry.action === "user.delete",
+                                        "bg-amber-500/15 text-amber-600": entry.action === "user.suspend" || entry.action === "user.role_change",
+                                        "bg-green-500/15 text-green-600": entry.action === "user.unsuspend",
+                                        "bg-blue-500/15 text-blue-600": entry.action === "settings.update",
+                                        "bg-muted text-muted-foreground": !["user.delete","user.suspend","user.role_change","user.unsuspend","settings.update"].includes(entry.action),
+                                      })}>
+                                        {entry.action}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2 text-muted-foreground truncate max-w-[160px]">{entry.targetEmail || entry.targetId || "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Login Attempts */}
+                      <div>
+                        <h3 className="text-base font-semibold mb-4">Recent Login Attempts</h3>
+                        {loginAttempts.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No login attempts recorded yet.</p>
+                        ) : (
+                          <div className="rounded-2xl border border-border/60 overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/40">
+                                <tr>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Time</th>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Email</th>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Result</th>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">IP</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {loginAttempts.map((attempt, i) => (
+                                  <tr key={attempt.id} className={cn("border-t border-border/40", i % 2 === 0 ? "" : "bg-muted/20")}>
+                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{new Date(attempt.createdAt).toLocaleString()}</td>
+                                    <td className="px-4 py-2 truncate max-w-[180px]">{attempt.email}</td>
+                                    <td className="px-4 py-2">
+                                      {attempt.success ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-green-500/15 text-green-600">
+                                          <CheckCircle2 className="w-3 h-3" /> success
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-destructive/15 text-destructive">
+                                          <AlertTriangle className="w-3 h-3" /> {attempt.failReason || "failed"}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2 text-muted-foreground">{attempt.ip || "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </ScrollArea>
                 </TabsContent>
               </>
             )}
