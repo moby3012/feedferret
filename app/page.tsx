@@ -87,6 +87,7 @@ export default function RSSReaderPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [openAddFeed, setOpenAddFeed] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState<boolean | null>(null);
   const [isClosingReader, setIsClosingReader] = useState(false);
   const isAuthenticated = status === "authenticated";
@@ -228,6 +229,10 @@ export default function RSSReaderPage() {
     } else if (view === "all") {
       setSelectedCategory("All Articles");
       setSelectedFeed(null);
+    }
+
+    if (params.get("addFeed") === "1") {
+      setOpenAddFeed(true);
     }
   }, [status]);
 
@@ -705,6 +710,7 @@ export default function RSSReaderPage() {
           feeds={sidebarFeeds}
           selectedFeed={selectedFeed}
           selectedCategory={selectedCategory}
+          defaultOpenAddFeed={openAddFeed}
           onSelectFeed={(feedId) => {
             setSelectedFeed(feedId);
             setSelectedArticleId(null);
@@ -734,6 +740,7 @@ export default function RSSReaderPage() {
             feeds={sidebarFeeds}
             selectedFeed={selectedFeed}
             selectedCategory={selectedCategory}
+            defaultOpenAddFeed={openAddFeed}
             onSelectFeed={(feedId) => {
               setSelectedFeed(feedId);
               setSelectedArticleId(null);

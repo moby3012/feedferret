@@ -19,19 +19,29 @@ import {
   Rss,
   Server,
   SkipForward,
+  Layers,
 } from "lucide-react";
 
-type Step = "account" | "instance" | "email" | "security" | "done";
+type Step = "account" | "instance" | "email" | "security" | "starters" | "done";
 
-const STEPS: Step[] = ["account", "instance", "email", "security", "done"];
+const STEPS: Step[] = ["account", "instance", "email", "security", "starters", "done"];
 
-const STEP_META: Record<Step, { title: string; description: string; icon: any }> = {
-  account: { title: "Admin Account", description: "Create your administrator account", icon: ShieldCheck },
-  instance: { title: "Instance Setup", description: "Configure your FeedFerret instance", icon: Server },
-  email: { title: "Email", description: "Set up transactional email delivery", icon: Mail },
-  security: { title: "Security", description: "Harden your installation", icon: Lock },
-  done: { title: "You're set!", description: "Your hub is ready", icon: Rss },
+const STEP_META: Record<Step, { description: string }> = {
+  account: { description: "Create your admin account" },
+  instance: { description: "Name your instance" },
+  email: { description: "Email delivery" },
+  security: { description: "Access control" },
+  starters: { description: "Pick your first feeds" },
+  done: { description: "You're all set" },
 };
+
+const DEFAULT_STARTER_PACKS = [
+  { id: "tech", name: "Technology", path: "tech.opml", emoji: "💻" },
+  { id: "dev", name: "Developer News", path: "dev.opml", emoji: "🛠️" },
+  { id: "science", name: "Science", path: "science.opml", emoji: "🔬" },
+  { id: "news", name: "World News", path: "news.opml", emoji: "🌍" },
+  { id: "design", name: "Design & UX", path: "design.opml", emoji: "🎨" },
+];
 
 export default function SetupPage() {
   const [step, setStep] = useState<Step>("account");
@@ -67,7 +77,12 @@ export default function SetupPage() {
   // Step 4 — Security
   const [registrationsEnabled, setRegistrationsEnabled] = useState(false);
 
+  // Step 5 — Starters
+  const [selectedPacks, setSelectedPacks] = useState<string[]>(["tech", "dev"]);
+  const [importedCount, setImportedCount] = useState(0);
+
   const stepIndex = STEPS.indexOf(step);
+  const visibleSteps = STEPS.filter((s) => s !== "done");
 
   const handleCreateAccount = async () => {
     setError("");
@@ -95,21 +110,20 @@ export default function SetupPage() {
         setError(data.message || "Account creation failed");
         return;
       }
-      // Auto sign-in
       const signInRes = await signIn("credentials", {
         email,
         password,
         redirect: false,
       });
       if (signInRes?.error) {
-        setError("Account created but auto sign-in failed. Please log in manually.");
+        setError("Account created but sign-in failed. Please log in manually.");
         router.push("/login?setup=success");
         return;
       }
       router.refresh();
       setStep("instance");
     } catch {
-      setError("Failed to connect to the server");
+      setError("Could not connect to the server. Check your network and try again.");
     } finally {
       setIsLoading(false);
     }
@@ -164,12 +178,50 @@ export default function SetupPage() {
     try {
       const { updateGlobalSettings } = await import("@/app/actions/admin");
       await updateGlobalSettings({ registrationsEnabled, onboardingCompleted: true });
-      setStep("done");
+      setStep("starters");
     } catch (e: any) {
       setError(e?.message || "Failed to save security settings");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleImportStarters = async () => {
+    if (selectedPacks.length === 0) {
+      router.push("/?addFeed=1");
+      return;
+    }
+    setIsLoading(true);
+    let total = 0;
+    try {
+      const { importOpml } = await import("@/app/actions/feeds");
+      for (const packId of selectedPacks) {
+        const pack = DEFAULT_STARTER_PACKS.find((p) => p.id === packId);
+        if (!pack) continue;
+        try {
+          const res = await fetch(`/starter-opml/${pack.path}`);
+          if (!res.ok) continue;
+          const xml = await res.text();
+          const result = await importOpml(xml);
+          total += result.feedsAdded ?? 0;
+        } catch {
+          // continue with remaining packs
+        }
+      }
+      setImportedCount(total);
+      setStep("done");
+    } catch (e: any) {
+      setError(e?.message || "Import failed. You can add feeds manually after setup.");
+      setStep("done");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const togglePack = (id: string) => {
+    setSelectedPacks((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
+    );
   };
 
   return (
@@ -190,7 +242,7 @@ export default function SetupPage() {
 
         {/* Step indicator */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          {STEPS.filter((s) => s !== "done").map((s, i) => (
+          {visibleSteps.map((s, i) => (
             <div key={s} className="flex items-center gap-2">
               <div
                 className={cn(
@@ -204,7 +256,7 @@ export default function SetupPage() {
               >
                 {stepIndex > i ? <Check className="w-4 h-4" /> : i + 1}
               </div>
-              {i < STEPS.filter((s) => s !== "done").length - 1 && (
+              {i < visibleSteps.length - 1 && (
                 <div className={cn("h-px w-8", stepIndex > i ? "bg-white/40" : "bg-zinc-800")} />
               )}
             </div>
@@ -228,7 +280,7 @@ export default function SetupPage() {
                 </div>
                 <div>
                   <h2 className="font-semibold text-white">Admin Account</h2>
-                  <p className="text-xs text-zinc-500">First registered user becomes administrator</p>
+                  <p className="text-xs text-zinc-500">Create your account. You can invite more users later.</p>
                 </div>
               </div>
               <Input
@@ -240,7 +292,7 @@ export default function SetupPage() {
               />
               <Input
                 type="email"
-                placeholder="Admin email"
+                placeholder="Email address"
                 className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 h-11 rounded-xl"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -248,7 +300,7 @@ export default function SetupPage() {
               />
               <Input
                 type="password"
-                placeholder="Password (min. 8 chars)"
+                placeholder="Password (min. 8 characters)"
                 className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 h-11 rounded-xl"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -290,7 +342,7 @@ export default function SetupPage() {
                 </div>
                 <div>
                   <h2 className="font-semibold text-white">Instance Settings</h2>
-                  <p className="text-xs text-zinc-500">Used in emails and the onboarding wizard</p>
+                  <p className="text-xs text-zinc-500">Appears in email notifications and browser tabs.</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -332,8 +384,8 @@ export default function SetupPage() {
                   <Mail className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-white">Email Configuration</h2>
-                  <p className="text-xs text-zinc-500">Required for magic links and digest emails</p>
+                  <h2 className="font-semibold text-white">Email Delivery</h2>
+                  <p className="text-xs text-zinc-500">Enables magic-link login, password reset, and digest emails. You can skip this and configure it later.</p>
                 </div>
               </div>
 
@@ -341,6 +393,8 @@ export default function SetupPage() {
                 <span className="text-sm text-zinc-300">Enable mail service</span>
                 <button
                   onClick={() => setMailServiceEnabled(!mailServiceEnabled)}
+                  aria-pressed={mailServiceEnabled}
+                  aria-label="Toggle mail service"
                   className={cn(
                     "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
                     mailServiceEnabled ? "bg-white" : "bg-zinc-700",
@@ -412,8 +466,8 @@ export default function SetupPage() {
                   <Lock className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-white">Security</h2>
-                  <p className="text-xs text-zinc-500">Harden your installation</p>
+                  <h2 className="font-semibold text-white">Access Control</h2>
+                  <p className="text-xs text-zinc-500">Control who can register on your instance.</p>
                 </div>
               </div>
 
@@ -422,12 +476,14 @@ export default function SetupPage() {
                   <div>
                     <p className="text-sm font-medium text-white">Allow public registration</p>
                     <p className="text-xs text-zinc-500 mt-1">
-                      When off, only users provisioned via the internal API or admin can log in.
-                      <strong className="text-zinc-400"> Recommended: off</strong> for private instances.
+                      When off, only admin-provisioned users can log in.
+                      <strong className="text-zinc-400"> Recommended: off</strong> for personal instances.
                     </p>
                   </div>
                   <button
                     onClick={() => setRegistrationsEnabled(!registrationsEnabled)}
+                    aria-pressed={registrationsEnabled}
+                    aria-label="Toggle public registration"
                     className={cn(
                       "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
                       registrationsEnabled ? "bg-white" : "bg-zinc-700",
@@ -447,13 +503,90 @@ export default function SetupPage() {
                   <ArrowLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
                 <Button onClick={handleSaveSecurity} disabled={isLoading} className="flex-1 h-11 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl">
-                  {isLoading ? <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span className="flex items-center gap-2">Finish setup <ArrowRight className="w-4 h-4" /></span>}
+                  {isLoading ? <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span className="flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></span>}
                 </Button>
               </div>
             </div>
           )}
 
-          {/* ── Step 5: Done ── */}
+          {/* ── Step 5: Starter Packs ── */}
+          {step === "starters" && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-white">Quick Start</h2>
+                  <p className="text-xs text-zinc-500">Import a curated starter pack to start reading right away. You can add your own feeds anytime.</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {DEFAULT_STARTER_PACKS.map((pack) => {
+                  const selected = selectedPacks.includes(pack.id);
+                  return (
+                    <button
+                      key={pack.id}
+                      onClick={() => togglePack(pack.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all text-left",
+                        selected
+                          ? "bg-white/10 border-white/30 text-white"
+                          : "bg-white/5 border-white/10 text-zinc-400 hover:border-white/20 hover:text-zinc-300",
+                      )}
+                    >
+                      <span className="text-base">{pack.emoji}</span>
+                      <span className="flex-1">{pack.name}</span>
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all",
+                          selected ? "bg-white border-white" : "border-zinc-700",
+                        )}
+                      >
+                        {selected && <Check className="w-3 h-3 text-black" />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="text-xs text-zinc-600 text-center">
+                {selectedPacks.length === 0 ? "Nothing selected — you can add feeds manually." : `${selectedPacks.length} pack${selectedPacks.length === 1 ? "" : "s"} selected`}
+              </p>
+
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
+                <Button variant="ghost" onClick={() => setStep("security")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
+                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => { setSelectedPacks([]); router.push("/?addFeed=1"); }}
+                  className="h-11 rounded-xl text-zinc-500 hover:text-zinc-300 gap-1"
+                >
+                  <SkipForward className="w-4 h-4" /> Skip
+                </Button>
+                <Button
+                  onClick={handleImportStarters}
+                  disabled={isLoading}
+                  className="flex-1 h-11 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl"
+                >
+                  {isLoading ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                      Importing…
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      {selectedPacks.length === 0 ? "Add feeds manually" : "Import & start reading"} <ArrowRight className="w-4 h-4" />
+                    </span>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 6: Done ── */}
           {step === "done" && (
             <div className="text-center space-y-6">
               <div className="flex flex-col items-center gap-4">
@@ -461,24 +594,28 @@ export default function SetupPage() {
                   <Check className="w-8 h-8 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">Setup complete!</h2>
-                  <p className="text-zinc-400 text-sm mt-1">Your FeedFerret instance is ready to use.</p>
+                  <h2 className="text-xl font-bold text-white">You&apos;re all set!</h2>
+                  <p className="text-zinc-400 text-sm mt-1">
+                    {importedCount > 0
+                      ? `${importedCount} feeds imported and ready to read.`
+                      : "Your FeedFerret instance is ready."}
+                  </p>
                 </div>
               </div>
 
               <div className="grid gap-2 text-left p-4 rounded-xl bg-white/5 border border-white/10 text-sm text-zinc-400">
-                <p className="font-medium text-zinc-200">Next steps:</p>
-                <p>→ Add your first RSS feeds</p>
-                <p>→ Set up 2FA in Settings for extra security</p>
-                <p>→ Configure Server Management for advanced options</p>
+                <p className="font-medium text-zinc-200">Next steps</p>
+                <p>→ Add your own feeds via the <span className="text-zinc-300">+ button</span> in the sidebar</p>
+                <p>→ Enable 2FA in <span className="text-zinc-300">Settings → Security</span></p>
+                <p>→ Set up keyword alerts to never miss important topics</p>
               </div>
 
               <Button
-                onClick={() => router.push("/")}
+                onClick={() => router.push(importedCount > 0 ? "/" : "/?addFeed=1")}
                 className="w-full h-12 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl text-base"
               >
                 <Rss className="w-5 h-5 mr-2" />
-                Go to FeedFerret
+                {importedCount > 0 ? "Start reading" : "Add your first feed"}
               </Button>
             </div>
           )}

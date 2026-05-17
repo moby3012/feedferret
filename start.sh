@@ -3,7 +3,7 @@
 # Fail on any error
 set -e
 
-log() { log "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 log "🚀 Starting FeedFerret deployment script..."
 
@@ -22,8 +22,8 @@ fi
 
 log "📂 Current database provider: $DATABASE_PROVIDER"
 if [ "$DATABASE_PROVIDER" = "postgresql" ] || [ "$DATABASE_PROVIDER" = "postgres" ]; then
-    DB_HOST_FOR_LOG=$(log "$DATABASE_URL" | sed 's|.*@\([^:/]*\).*|\1|')
-    DB_NAME_FOR_LOG=$(log "$DATABASE_URL" | sed 's|.*/\([^?]*\).*|\1|')
+    DB_HOST_FOR_LOG=$(echo "$DATABASE_URL" | sed 's|.*@\([^:/]*\).*|\1|')
+    DB_NAME_FOR_LOG=$(echo "$DATABASE_URL" | sed 's|.*/\([^?]*\).*|\1|')
     log "📂 Current database target: ${DB_HOST_FOR_LOG}/${DB_NAME_FOR_LOG}"
 else
     log "📂 Current database target: sqlite"
@@ -32,8 +32,8 @@ fi
 # Wait for Postgres to be ready (no-op for SQLite)
 if [ "$DATABASE_PROVIDER" = "postgresql" ] || [ "$DATABASE_PROVIDER" = "postgres" ]; then
     log "⏳ Waiting for PostgreSQL to be ready..."
-    DB_HOST=$(log "$DATABASE_URL" | sed 's|.*@\([^:/]*\).*|\1|')
-    DB_PORT=$(log "$DATABASE_URL" | sed 's|.*:\([0-9][0-9]*\)/.*|\1|')
+    DB_HOST=$(echo "$DATABASE_URL" | sed 's|.*@\([^:/]*\).*|\1|')
+    DB_PORT=$(echo "$DATABASE_URL" | sed 's|.*:\([0-9][0-9]*\)/.*|\1|')
     DB_PORT="${DB_PORT:-5432}"
     RETRIES=30
     until node -e "
