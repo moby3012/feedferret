@@ -1,7 +1,3 @@
-networks:
-  feedferret_net:
-    driver: bridge
-
 services:
   feedferret:
     build:
@@ -12,6 +8,12 @@ services:
         DATABASE_URL: ${DATABASE_URL:-postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public}
     container_name: feedferret
     restart: always
+    # Note: when deploying under Coolify (or any reverse-proxy platform that
+    # injects its own network), do NOT define a custom 'networks:' block here.
+    # Compose creates a default project network automatically, and the proxy
+    # platform attaches its own network on top so Traefik can route traffic.
+    # Hardcoding a custom bridge network isolates the container from Traefik
+    # and produces Gateway Timeout errors at the public URL.
     ports:
       - "3000:3000"
     environment:
@@ -27,8 +29,6 @@ services:
       # - GOOGLE_CLIENT_SECRET=your-google-secret
       # - GITHUB_ID=your-github-id
       # - GITHUB_SECRET=your-github-secret
-    networks:
-      - feedferret_net
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,8 +52,6 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-feedferret}
       - POSTGRES_USER=${POSTGRES_USER:-feedferret}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-feedferret-change-me}
-    networks:
-      - feedferret_net
     volumes:
       - feedferret_postgres_data:/var/lib/postgresql/data
     healthcheck:
