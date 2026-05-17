@@ -52,6 +52,13 @@ export async function GET(request: Request) {
     );
   }
 
+  if (query.length > 500) {
+    return NextResponse.json(
+      { error: "Query too long (max 500 characters)" },
+      { status: 400, headers: rateLimitHeaders(rateCheck) }
+    );
+  }
+
   // Normalize query to URL format for Feedsearch.dev API
   // API requires a valid URL/domain - keywords won't work
   let searchUrl = query.trim();

@@ -146,39 +146,35 @@ Offene Follow-ups:
 - [ ] Mozilla Observatory Score messen (Ziel ≥ B+)
 - [ ] CSP schrittweise von `unsafe-inline`/`unsafe-eval` befreien (erfordert Nonce-basiertes Next.js Setup)
 
-#### 0.2.3 API Token Hardening
+#### 0.2.3 API Token Hardening ✅ Implementiert
 
-Aktueller Stand: Token im Klartext in DB gespeichert.
+- [x] Token-Hashing: SHA-256 des Tokens in DB gespeichert (`lib/token.ts`)
+- [x] Token-Präfix `ff_` + base64url(32 Random-Bytes) — leicht erkennbares Format
+- [x] Token nur einmalig beim Erstellen anzeigen ✓ (war bereits implementiert)
+- [x] Token-Rotation invalidiert sofort den alten Token (neues POST überschreibt Hash)
+- [ ] Optional: Token-Ablaufdatum konfigurierbar (Zukunft)
 
-Ziel-Stand:
-- [ ] Token-Hashing: SHA-256 des Tokens in DB speichern, nie den Klartext
-- [ ] Token-Präfix für einfache Identifizierung: `ff_` + 32 Random-Bytes (Base58)
-- [ ] Token nur einmalig beim Erstellen anzeigen ✓ (bereits implementiert)
-- [ ] Token-Rotation invalidiert sofort den alten Token
-- [ ] Optional: Token-Ablaufdatum konfigurierbar
+⚠️ Breaking Change: Bestehende Plain-Text-Tokens werden ungültig — Nutzer müssen Token neu generieren.
 
-Hinweis: Breaking Change für bestehende Tokens — Migration-Plan ausarbeiten.
+#### 0.2.4 Input Validation Audit ✅ Implementiert
 
-#### 0.2.4 Input Validation Audit
+- [x] `lib/validation.ts` mit zentralen Limits erstellt (URL 2 KB, OPML 5 MB, Label 100 Zeichen, Search 1000 Zeichen)
+- [x] Feed URL Format-Validierung vor SSRF-Check (server action + API v1)
+- [x] OPML Import: 5-MB-Größenlimit in Server Action und API v1
+- [x] Search Query: Max. 500 Zeichen im Discovery-Endpoint
+- [x] Label-Namen: Max. 100 Zeichen
+- [x] Saved Search Name/Query: Max. 255 / 1000 Zeichen
+- [ ] Vollständige Zod-Schemas für alle Server Actions (Zukunft — größerer Refactor)
 
-- [ ] Alle Server Actions auf Zod-Schemas prüfen — wo fehlen Validierungen?
-- [ ] API v1 Inputs: Feldlängen, Typen, Ranges validieren
-- [ ] OPML Import: Max-Größe, Max-Feeds-Count, XML-Injection prüfen
-- [ ] Search Query: Keine ReDoS-Anfälligkeiten im Parser
-- [ ] Feed URLs: SSRF-Schutz greift ✓, aber URL-Format-Validierung vor dem Fetch?
+#### 0.2.5 Dependency Audit & Updates ✅ Teilweise implementiert
 
-#### 0.2.5 Dependency Audit & Updates
-
-```bash
-pnpm audit
-pnpm outdated
-```
-
-- [ ] Alle Critical/High CVEs beheben
-- [ ] Moderate CVEs bewerten und ggf. beheben
-- [ ] Node.js Version: 22-slim im Dockerfile prüfen (aktuell LTS?)
-- [ ] Prisma auf aktuelle Version (5.x → 6.x Bruch-Potential prüfen)
-- [ ] next-auth auf aktuellste 5.x
+- [x] High CVE `glob`: via `pnpm.overrides` auf ≥10.5.0 gepatcht (war bereits vorhanden)
+- [x] Moderate CVE `postcss`: via `pnpm.overrides` auf ≥8.5.14 gepatcht (war bereits vorhanden)
+- [x] `eslint-config-next` 14.2.23 → 14.2.35 (neuestes ESLint-8-kompatibles Release)
+- [x] Node.js 22-slim im Dockerfile ✓ (bereits LTS)
+- [ ] ESLint 8 → 9 + Flat Config Migration nötig für eslint-config-next 16.x (eigenes Arbeitspaket)
+- [ ] Prisma 5.x → 6.x/7.x: Breaking-Change-Analyse ausstehend
+- [ ] next-auth beta.31 → stable 5.0.0: Kompatibilitätsprüfung ausstehend
 
 #### 0.2.6 Admin & Session Hardening
 

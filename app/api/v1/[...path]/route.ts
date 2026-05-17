@@ -10,6 +10,7 @@ import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { generateOpml, parseOpml, scraperConfigFromOutline, httpOptionsFromOutline, type OpmlOutline } from "@/lib/opml";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
+import { validateFeedUrl, validateOpml } from "@/lib/validation";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
@@ -195,6 +196,8 @@ async function createFeed(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
   const url = allowedString(body?.url);
   if (!url) return apiError("url is required", 400);
+  const urlError = validateFeedUrl(url);
+  if (urlError) return apiError(urlError, 400);
 
   const remoteFeed = await fetchFeedArticles({ url });
   const order = await db.feed.count({ where: { userId: user.id } });
@@ -362,6 +365,8 @@ async function importOpml(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
   const xml = typeof body?.xml === "string" ? body.xml : null;
   if (!xml) return apiError("xml is required", 400);
+  const opmlError = validateOpml(xml);
+  if (opmlError) return apiError(opmlError, 400);
   const outlines = await parseOpml(xml);
   const report = { feedsAdded: 0, feedsUpdated: 0, categoriesAdded: 0, categoriesUpdated: 0, errors: [] as string[] };
 

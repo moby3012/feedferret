@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
+import { hashApiToken } from "@/lib/token";
 
 async function resolveUser(request: Request) {
     // Session auth (web app / same-origin)
@@ -12,8 +13,8 @@ async function resolveUser(request: Request) {
     // Bearer token auth (browser extension / mobile app)
     const authHeader = request.headers.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
-        const token = authHeader.slice(7);
-        const user = await db.user.findUnique({ where: { apiToken: token }, select: { id: true } });
+        const token = authHeader.slice(7).trim();
+        const user = await db.user.findUnique({ where: { apiToken: hashApiToken(token) }, select: { id: true } });
         if (user) return user.id;
     }
 

@@ -62,7 +62,7 @@ COPY --chown=nextjs:nodejs scripts/prepare-prisma-schema.mjs ./scripts/prepare-p
 COPY --chown=nextjs:nodejs start.sh ./start.sh
 RUN chmod +x ./start.sh
 
-# Install prisma globally in the runner so we can run migrations
+# Install prisma CLI globally for db push at startup (keep version in sync with package.json prisma devDependency)
 RUN npm install -g prisma@5.22.0
 
 # Final check of permissions for the root directory and data folder

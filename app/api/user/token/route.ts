@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
-import { randomBytes } from "crypto";
+import { generateApiToken } from "@/lib/token";
 
 /**
  * GET /api/user/token
@@ -40,14 +40,14 @@ export async function POST() {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const token = randomBytes(32).toString("hex");
+    const { raw, hash } = generateApiToken();
 
     await db.user.update({
         where: { id: session.user.id },
-        data: { apiToken: token },
+        data: { apiToken: hash },
     });
 
-    return NextResponse.json({ token });
+    return NextResponse.json({ token: raw });
 }
 
 /**

@@ -13,6 +13,13 @@ import {
     scraperConfigFromOutline,
     httpOptionsFromOutline,
 } from "@/lib/opml";
+import {
+    validateFeedUrl,
+    validateOpml,
+    MAX_LABEL_NAME,
+    MAX_SEARCH_QUERY,
+    MAX_SAVED_SEARCH_NAME,
+} from "@/lib/validation";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { randomBytes } from "crypto";
@@ -143,6 +150,7 @@ export async function createLabel(data: { name: string; color?: string }) {
     if (!session?.user?.id) throw new Error("Unauthorized");
     const name = data.name.trim();
     if (!name) throw new Error("Label name is required");
+    if (name.length > MAX_LABEL_NAME) throw new Error(`Label name too long (max ${MAX_LABEL_NAME} characters)`);
 
     const label = await db.label.create({
         data: {
@@ -243,6 +251,8 @@ export async function createSavedSearch(data: { name: string; query: string }) {
     const name = data.name.trim();
     const query = data.query.trim();
     if (!name || !query) throw new Error("Name and query are required");
+    if (name.length > MAX_SAVED_SEARCH_NAME) throw new Error(`Search name too long (max ${MAX_SAVED_SEARCH_NAME} characters)`);
+    if (query.length > MAX_SEARCH_QUERY) throw new Error(`Search query too long (max ${MAX_SEARCH_QUERY} characters)`);
 
     const savedSearch = await db.savedSearch.create({
         data: {
@@ -312,6 +322,9 @@ export async function deleteSavedSearch(searchId: string) {
 export async function addFeed(url: string, categoryId?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const urlError = validateFeedUrl(url);
+    if (urlError) return { success: false, error: urlError };
 
     try {
         const remoteFeed = await fetchFeedArticles({ url });
@@ -777,6 +790,9 @@ export async function importOpml(xml: string) {
     const session = await auth();
     const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
+
+    const opmlError = validateOpml(xml);
+    if (opmlError) throw new Error(opmlError);
 
     const outlines = await parseOpml(xml);
     const report = {
