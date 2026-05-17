@@ -78,10 +78,10 @@ In-memory sliding window rate limiter (`lib/rate-limit.ts`) protects against bru
 | Magic link requests | 3 attempts | 10 minutes |
 | `POST /api/mcp` | 100 requests | 1 minute |
 | `POST /api/internal/*` | 30 requests | 1 minute |
+| `GET /api/v1/*` (read) | 200 requests | 1 minute |
+| `POST/PATCH/DELETE /api/v1/*` (write) | 60 requests | 1 minute |
 
 Response on limit exceeded: HTTP 429 with `Retry-After`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` headers.
-
-Planned: extend rate limiting to all `/api/v1/*` routes via Next.js middleware.
 
 ### Security Headers ✅
 
@@ -142,16 +142,31 @@ healthcheck:
   start_period: 60s
 ```
 
-### API Token Hardening (planned)
+### API Token Hardening ✅
 
-Current state: API tokens are stored as plaintext in the database.
+API tokens are stored as SHA-256 hashes — the raw token is never persisted.
 
-Target state:
-- SHA-256 hash of the token stored in DB, never plaintext
-- Token prefix `ff_` for identification and secret scanning detection
-- Optional configurable expiry
+- **Format:** `ff_<base64url(32 random bytes)>` — the `ff_` prefix enables secret scanning detection in CI and Git hooks.
+- **Storage:** `SHA-256(rawToken)` hex digest stored in the `apiToken` column. Only the hash is ever written to the database.
+- **Auth:** Incoming `Authorization: Bearer ff_...` is hashed on every request before the database lookup — constant-time hash comparison via Prisma unique index.
+- **Rotation:** Generating a new token via `POST /api/user/token` immediately overwrites the stored hash; the old token stops working at that instant.
 
-This is a breaking change for existing tokens — a migration plan is required before implementation.
+> ⚠️ **Upgraders:** tokens issued before this hardening were stored as plaintext and will no longer authenticate. Regenerate your token in **Settings → API Access**.
+
+### Input Validation ✅
+
+All entry points for untrusted data enforce explicit limits:
+
+| Input | Limit |
+|---|---|
+| Feed URL | Max 2 048 characters, must be a valid `http`/`https` URL |
+| OPML import | Max 5 MB |
+| Label name | Max 100 characters |
+| Saved search name | Max 255 characters |
+| Search query | Max 1 000 characters |
+| Discovery query | Max 500 characters |
+
+Feed URLs are format-validated before the SSRF guard is invoked.
 
 ---
 

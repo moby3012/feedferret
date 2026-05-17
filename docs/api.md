@@ -43,6 +43,7 @@ Sicherheitsregeln:
 - Ein deaktivierter Benutzer verliert API-Zugriff.
 - Token-Rotation über `POST /api/user/token`; Widerruf über `DELETE /api/user/token`.
 - Token nie clientseitig in öffentlichen Webseiten ausliefern.
+- Tokens beginnen mit dem Präfix `ff_` und werden serverseitig als SHA-256-Hash gespeichert — nur der Rohwert verlässt den Server, einmalig bei der Generierung.
 
 ---
 

@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-17  
+> Zuletzt aktualisiert: 2026-05-17 (Docs-Review nach PR #39)  
 > Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
 
 ---
@@ -33,8 +33,11 @@ Die folgenden Bereiche sind vollständig implementiert und dokumentiert:
 | OPML Import/Export (selektiv) + JSON-Export | — |
 | PostgreSQL + SQLite Dual-Provider | `docs/database.md` |
 | SSRF-Schutz für Feed-Fetching | `docs/security.md` |
+| API Token Hardening (SHA-256, ff_-Prefix) | `docs/security.md` |
+| Input Validation (URL, OPML, Search, Labels) | `docs/security.md` |
 | GDPR: Self-Service Account-Deletion | `docs/gdpr.md` |
-| Admin Onboarding Wizard | — |
+| Admin Onboarding Wizard (6-Schritte-Wizard + Starter Packs) | — |
+| Self-Hosting & Reverse Proxy Guide | `docs/self-hosting.md`, `docs/reverse-proxy.md` |
 | SaaS Provisioning API (Internal API) | `docs/internal-api.md` |
 | Admin: Instance Branding, Starter Packs, User-Verwaltung | `docs/admin-customization.md` |
 | Unified Settings Shell UX | `docs/unified-settings-ux.md` |
@@ -329,11 +332,11 @@ Aktuelle Beobachtungen und Aufgaben:
 - [x] Timestamps in allen Startup-Log-Meldungen via `log()` Helper
 - [x] Exit-Codes korrekt über `set -e` + explizite `exit 1`
 
-#### 0.5.4 `/api/health` Endpoint (Aufwand: 0.5 Tage)
+#### 0.5.4 `/api/health` Endpoint ✅ Implementiert
 
-- [ ] Neuen `GET /api/health` Endpoint implementieren: `{ "status": "ok", "db": "ok", "version": "..." }`
-- [ ] DB-Ping-Check einbauen
-- [ ] Für Docker-Healthcheck und Monitoring nutzbar
+- [x] `GET /api/health` implementiert: `{ "status": "ok", "db": "ok", "version": "...", "uptime": N }`
+- [x] DB-Ping-Check eingebaut — HTTP 503 wenn Datenbank nicht erreichbar
+- [x] Als Docker-Healthcheck-Target in `docker-compose.yaml` eingetragen
 
 #### 0.5.5 Coolify & Reverse Proxy Dokumentation ✅ Implementiert
 
@@ -417,18 +420,20 @@ Alle Punkte müssen abgeschlossen sein:
 **Security:**
 - [x] Rate Limiting aktiv (0.2.1) — Auth, MCP, Internal, v1 Read/Write
 - [x] Security Headers konfiguriert (0.2.2)
-- [ ] Dependency Audit: keine Critical/High CVEs (0.2.5)
+- [x] API Token Hardening: SHA-256-Hashing, ff_-Prefix (0.2.3)
+- [x] Input Validation: URL/OPML/Längen-Limits (0.2.4)
+- [x] High/Moderate CVEs gepatcht via pnpm.overrides (0.2.5)
 - [x] Docker Secrets-Warnung aktiv (0.2.7)
 
 **Quality:**
 - [x] Accessibility Sprint A-1, A-2, A-3 abgeschlossen (0.3) — PR #35
-- [ ] Empty States in allen Views (0.4.1)
-- [ ] Onboarding-Flow getestet (0.4.3)
+- [x] Empty States in allen Views (0.4.1) — PR #37
+- [x] Onboarding-Flow überarbeitet — 6 Schritte, Starter Packs (0.4.3) — PR #38
 - [x] `/api/health` Endpoint live (0.5.4)
 
 **Deployment:**
-- [ ] Docker Compose reviewed und gehärtet (0.5.2)
-- [ ] Self-Hosting Guide vollständig (0.5.6)
+- [x] Docker Compose reviewed und gehärtet (0.5.2) — PR #37
+- [x] Self-Hosting Guide vollständig (0.5.6) — PR #38
 - [ ] Coolify-Guide verifiziert (0.5.5)
 
 **Marketing:**

@@ -21,7 +21,7 @@ Diese Anleitung beschreibt die vollständige Installation und den Betrieb von Fe
 
 ```bash
 # 1. Repository klonen
-git clone <repo-url> && cd feedferret
+git clone https://github.com/moby3012/feedferret.git && cd feedferret
 
 # 2. Env-Datei anlegen
 cp .env.example .env
