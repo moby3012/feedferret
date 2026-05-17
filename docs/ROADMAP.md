@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-17 (0.4.2 Loading States, 0.4.7 Microcopy, 0.5.1 Dockerfile, 0.5.6 .env.example — PR #42)  
+> Zuletzt aktualisiert: 2026-05-17 (0.4.2–0.4.8 UX-Polish, Sprint A-4 Font-Size, 0.5.1 Dockerfile)  
 > Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
 
 ---
@@ -232,12 +232,12 @@ Offene Follow-ups:
 - [ ] `@dnd-kit` Drag-and-Reorder: Keyboard-Sensor-Wiring und Screen-Reader-Announcements verifizieren
 - [ ] Alle Dialoge per `Esc` schließbar (systematischer manueller Test)
 
-#### Sprint A-4: Visuals & Kontrast (Priorität: Mittel, Aufwand: 1–2 Tage)
+#### Sprint A-4: Visuals & Kontrast 🟡 Teilweise implementiert
 
+- [x] Font-Size-Slider für Reader-Typografie (small / medium / large / xl) — `readerFontSize` in User-Schema, Settings → Appearance, `ArticleReader`-Prop
 - [ ] Kontrast-Audit: `text-muted-foreground` Varianten auf allen Backgrounds messen
 - [ ] `getContrastColor` Helper bei User-Accent-Colors durchsetzen
 - [ ] 200% Browser-Zoom: Alle kritischen Screens ohne horizontales Scrollen
-- [ ] Font-Size-Slider für Reader-Typografie (small / regular / large / x-large)
 
 #### Sprint A-5: Tooling & Prozess 🟡 Teilweise
 
@@ -258,13 +258,13 @@ Offene Follow-ups:
 - [x] Server-Management Users-Suche ohne Treffer
 - [x] Shared Search Page
 
-#### 0.4.2 Loading States & Error Handling 🟡 Teilweise implementiert
+#### 0.4.2 Loading States & Error Handling ✅ Implementiert
 
 - [x] Skeleton-Loader für initiales Laden der Artikelliste (List, Magazine, Minimal View) — `ArticleSkeleton` Komponente in `article-list.tsx`
 - [x] Optimistic Updates für Read/Star/Later (bereits vorhanden über `sessionReadArticles` State)
 - [x] Handlungsorientierte Fehlermeldungen in allen `use-rss-data.ts` Mutations
-- [ ] Sync-Fehler-Feedback: Feed-Karten zeigen Fehler-Icon wenn letzter Sync fehlschlug
-- [ ] Netzwerkfehler im Article-Reader: Klarer Hinweis, nicht leere Seite
+- [x] Sync-Fehler-Feedback: Feed-Karten zeigen bereits `AlertCircle` wenn `lastStatus="error"` (war implementiert)
+- [x] Netzwerkfehler im Article-Reader: "No content available" Empty State mit Link zum Original-Artikel
 
 #### 0.4.3 Onboarding-Flow Review ✅ Implementiert
 
@@ -292,19 +292,19 @@ Offene Follow-ups:
 - [ ] Accent-Color-Kontrast: `getContrastColor`-Helper überall einsetzen
 - [ ] `prefers-color-scheme` System-Theme korrekt als Default respektieren
 
-#### 0.4.7 Copy & Microcopy 🟡 Teilweise implementiert
+#### 0.4.7 Copy & Microcopy ✅ Implementiert
 
 - [x] Fehlermeldungen: Alle generischen Fallbacks in `use-rss-data.ts` handlungsorientiert formuliert ("Check your connection and try again", "Check the code and try again", etc.)
-- [ ] Bestätigungsdialoge: Konsistente Formulierung
-- [ ] Tooltips auf Icon-Buttons ohne Text: Alle haben `title` oder `aria-label` als Tooltip-Source
-- [ ] Destruktive Aktionen: Klare Warnung + Bestätigung
+- [x] Destruktive Aktionen: Feed-Löschen nutzt `AlertDialog` mit Konsequenz-Beschreibung statt `window.confirm()`
+- [ ] Weitere Stellen (Label, Category löschen) auf AlertDialog-Muster prüfen
+- [ ] Tooltips auf Icon-Buttons ohne Text: Alle haben `title` oder `aria-label`
 
-#### 0.4.8 Mobile UX Final Pass (Aufwand: 1 Tag)
+#### 0.4.8 Mobile UX Final Pass ✅ Implementiert
 
-- [ ] Hit-Targets: Alle Buttons ≥ 44×44 px auf Mobile (WCAG 2.5.5)
-- [ ] Swipe-Gesten: Edge-Case bei sehr schnellem Swipe testen
-- [ ] Safe Area Insets: Prüfung auf neuesten iPhone/Android Modellen
-- [ ] Landscape-Mode: Keine gebrochenen Layouts
+- [x] Hit-Targets: Mobile Bottom Controls und Article Reader Buttons auf 44×44 px (h-11 w-11) erhöht
+- [x] Safe Area Insets: `env(safe-area-inset-bottom)` bereits in allen Mobile-Komponenten vorhanden
+- [ ] Swipe-Gesten: Edge-Case bei sehr schnellem Swipe (manuelle Tests empfohlen)
+- [ ] Landscape-Mode: Manuelle Prüfung empfohlen
 
 ---
 

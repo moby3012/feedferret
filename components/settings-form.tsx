@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import {
   AlignLeft,
+  ALargeSmall,
   ArrowDownAZ,
   ArrowLeft,
   Clock,
@@ -288,6 +289,28 @@ export function SettingsForm() {
                 <SelectItem value="normal">Normal (768px)</SelectItem>
                 <SelectItem value="wide">Wide (1024px)</SelectItem>
                 <SelectItem value="full">Full width</SelectItem>
+              </SelectContent>
+            </Select>
+          </PrefRow>
+
+          {/* Reader font size */}
+          <PrefRow
+            icon={ALargeSmall}
+            title="Reader font size"
+            description="Text size in the article reader pane."
+          >
+            <Select
+              value={prefs?.readerFontSize ?? "medium"}
+              onValueChange={(v) => update({ readerFontSize: v })}
+            >
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="small">Small</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="large">Large</SelectItem>
+                <SelectItem value="xl">Extra large</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>

@@ -38,6 +38,7 @@ model User {
   markReadAfterDelaySecs Int?      // null=instant(1s), 0=disabled
   defaultViewMode        String    @default("list")   // "list"|"grid"|"magazine"|"minimal"
   readerWidth            String    @default("normal")  // "normal"|"wide"|"full"
+  readerFontSize         String    @default("medium")   // "small"|"medium"|"large"|"xl"
   defaultArticleSort     String    @default("newest")  // "newest"|"oldest"
   accentColor            String    @default("#5BA4CF")  // ice blue
   secondaryColor         String    @default("#F0963C")  // soft orange

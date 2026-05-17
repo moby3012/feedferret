@@ -857,6 +857,7 @@ export default function RSSReaderPage() {
               hasPreviousArticle={selectedArticleIndex > 0}
               hasNextArticle={selectedArticleIndex >= 0 && selectedArticleIndex < filteredArticles.length - 1}
               readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
+              readerFontSize={(readingPrefs?.readerFontSize ?? "medium") as "small" | "medium" | "large" | "xl"}
             />
           </div>
         </ResizablePanel>

@@ -25,7 +25,7 @@ interface MobileBottomControlsProps {
 }
 
 const mobileButtonClass =
-  "h-10 w-10 shrink-0 rounded-2xl text-muted-foreground active:scale-95";
+  "h-11 w-11 shrink-0 rounded-2xl text-muted-foreground active:scale-95";
 
 export function MobileBottomControls({
   unreadOnly,

@@ -45,6 +45,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DiscoveryPanel } from "@/components/discovery-panel";
 import {
@@ -286,13 +296,7 @@ export function RssSidebar({
       onMarkRead={() => markAllRead.mutate({ feedId: feed.id })}
       onEdit={() => router.push(`/manage-feeds?feedId=${feed.id}`)}
       onShowHealth={() => router.push("/manage-feeds?tab=health")}
-      onDelete={() => {
-        if (!window.confirm(`Delete "${feed.name}"? This cannot be undone.`)) return;
-        deleteFeedMutation.mutate(feed.id, {
-          onSuccess: () => toast.success(`Deleted ${feed.name}`),
-          onError: () => toast.error("Failed to delete feed"),
-        });
-      }}
+      onDelete={() => setFeedToDelete({ id: feed.id, name: feed.name })}
     />
   );
 
@@ -307,6 +311,7 @@ export function RssSidebar({
     }),
   );
 
+  const [feedToDelete, setFeedToDelete] = useState<{ id: string; name: string } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const totalUnread = feeds.reduce((sum, f) => sum + f.unreadCount, 0);
@@ -435,6 +440,7 @@ export function RssSidebar({
   }
 
   return (
+    <>
     <aside role="navigation" aria-label="Feed navigation" className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-r border-sidebar-border/70 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-5 border-b border-sidebar-border/70">
@@ -990,6 +996,34 @@ export function RssSidebar({
       </Dialog>
 
     </aside>
+
+    <AlertDialog open={!!feedToDelete} onOpenChange={(open) => !open && setFeedToDelete(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete &ldquo;{feedToDelete?.name}&rdquo;?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will permanently delete the feed and all its articles. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={() => {
+              if (!feedToDelete) return;
+              deleteFeedMutation.mutate(feedToDelete.id, {
+                onSuccess: () => toast.success(`Deleted ${feedToDelete.name}`),
+                onError: () => toast.error("Could not delete feed. Try again."),
+              });
+              setFeedToDelete(null);
+            }}
+          >
+            Delete feed
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
