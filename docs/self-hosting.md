@@ -116,6 +116,13 @@ MAILGUN_BASE_URL="https://api.mailgun.net"
 # SendGrid
 SENDGRID_API_KEY="SG.xxxxxxxxxxxx"
 SENDGRID_FROM_EMAIL="noreply@example.com"
+
+# SMTP (jeder SMTP-Anbieter)
+SMTP_HOST="smtp.example.com"
+SMTP_PORT="587"
+SMTP_USER="noreply@example.com"
+SMTP_PASSWORD="smtp-passwort"
+SMTP_FROM="FeedFerret <noreply@example.com>"
 ```
 
 #### Browser-Push-Benachrichtigungen (Web Push / VAPID)
@@ -257,9 +264,26 @@ Den `postgres`-Service und den `depends_on`-Block im `feedferret`-Service könne
 
 ---
 
+## Docker Image Architektur
+
+Das `Dockerfile` verwendet vier Stages:
+
+| Stage | Basis | Zweck |
+|---|---|---|
+| `base-runtime` | `node:22-slim` + openssl, curl | Gemeinsame Laufzeit-Basis (kein Build-Tooling) |
+| `base-build` | `base-runtime` + python3, make, g++ | Basis für alle Build-Stages |
+| `deps` | `base-build` | Installiert npm-Abhängigkeiten via pnpm |
+| `builder` | `base-build` | Kompiliert Next.js |
+| `runner` | `base-runtime` | Produktions-Image — enthält keine Build-Tools |
+
+Das Runner-Image enthält bewusst keine nativen Compiler (`g++`, `make`, `python3`) und kein `libvips`. Die Prisma-CLI wird aus der `deps`-Stage kopiert statt global installiert — so bleibt die Version automatisch mit `package.json` synchron.
+
+---
+
 ## Weiterführende Dokumentation
 
 - **Reverse Proxy (Nginx, Caddy, Traefik):** [`docs/reverse-proxy.md`](./reverse-proxy.md)
 - **OAuth, OIDC und E-Mail-Provider im Detail:** [`docs/self-hosting-auth-email.md`](./self-hosting-auth-email.md)
 - **REST API und Google Reader API:** [`docs/api.md`](./api.md)
 - **Datenbank-Details:** [`docs/database.md`](./database.md)
+- **Sicherheit:** [`docs/security.md`](./security.md)
