@@ -50,12 +50,20 @@ interface ArticleReaderProps {
   hasPreviousArticle?: boolean;
   hasNextArticle?: boolean;
   readerWidth?: "normal" | "wide" | "full";
+  readerFontSize?: "small" | "medium" | "large" | "xl";
 }
 
 const readerWidthClass: Record<string, string> = {
   normal: "max-w-3xl",
   wide: "max-w-5xl",
   full: "max-w-none",
+};
+
+const readerFontSizeClass: Record<string, string> = {
+  small: "text-sm leading-relaxed",
+  medium: "text-base leading-relaxed",
+  large: "text-lg leading-relaxed",
+  xl: "text-xl leading-relaxed",
 };
 
 function FeedFaviconInReader({ feedIcon, feedName, articleLink, size }: { feedIcon: string; feedName: string; articleLink: string; size: number }) {
@@ -94,6 +102,7 @@ export function ArticleReader({
   hasPreviousArticle,
   hasNextArticle,
   readerWidth = "normal",
+  readerFontSize = "medium",
 }: ArticleReaderProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -277,7 +286,7 @@ export function ArticleReader({
             <Button
               variant="ghost"
               size="icon"
-              className="w-10 h-10 rounded-xl hover:bg-muted transition-all duration-200 hover:scale-105 active:scale-95"
+              className="w-11 h-11 rounded-xl hover:bg-muted transition-all duration-200 hover:scale-105 active:scale-95"
               onClick={onBack}
               aria-label="Back to article list"
             >
@@ -302,7 +311,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => onToggleStar(article.id)}
             aria-label={article.isStarred ? "Remove star" : "Star article"}
             aria-pressed={article.isStarred}
@@ -321,7 +330,7 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className={cn(
-              "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
+              "w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
               article.isReadLater && "bg-accent/10",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
@@ -341,7 +350,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => onToggleRead?.(article.id)}
             aria-label={article.isRead ? "Mark as unread" : "Mark as read"}
             aria-pressed={article.isRead}
@@ -356,7 +365,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={shareArticle}
             aria-label="Share article"
             title="Share"
@@ -366,7 +375,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={openOriginal}
             disabled={!article.link}
             aria-label="Open original article"
@@ -377,7 +386,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={copyLink}
             disabled={!article.link}
             aria-label="Copy article link"
@@ -390,7 +399,7 @@ export function ArticleReader({
               <Button
                 variant="ghost"
                 size="icon"
-                className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
                 aria-label="Manage labels"
                 title="Labels"
               >
@@ -529,12 +538,27 @@ export function ArticleReader({
           )}
 
           {/* Article Body */}
-          <div
-            className="animate-fade-in-up animation-delay-200 article-content min-w-0 max-w-full overflow-hidden"
-            dangerouslySetInnerHTML={{ __html: article.content }}
-          />
+          {article.content && article.content.trim().length > 0 ? (
+            <div
+              className={`animate-fade-in-up animation-delay-200 article-content min-w-0 max-w-full overflow-hidden ${readerFontSizeClass[readerFontSize] ?? readerFontSizeClass.medium}`}
+              dangerouslySetInnerHTML={{ __html: article.content }}
+            />
+          ) : (
+            <div className="animate-fade-in-up animation-delay-200 rounded-3xl border border-border/70 bg-card/70 p-6 text-center">
+              <p className="text-sm font-medium text-foreground mb-1">No content available</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                This feed did not include article text. Open the original to read the full article.
+              </p>
+              {article.link && (
+                <Button onClick={openOriginal} variant="outline" className="rounded-xl">
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Open original
+                </Button>
+              )}
+            </div>
+          )}
 
-          {article.link && (!article.content || article.content.length < 900) && (
+          {article.content && article.link && article.content.length < 900 && (
             <div className="mt-10 rounded-3xl border border-border/70 bg-card/70 p-5 shadow-sm">
               <p className="text-sm text-muted-foreground mb-4">
                 This feed appears to provide only a short excerpt. FeedFerret can try to fetch a cleaner full-text version.

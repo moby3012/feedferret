@@ -35,6 +35,7 @@ export async function getReadingPreferences() {
       markReadAfterDelaySecs: true,
       defaultViewMode: true,
       readerWidth: true,
+      readerFontSize: true,
       defaultArticleSort: true,
       accentColor: true,
       secondaryColor: true,
@@ -48,6 +49,7 @@ export async function getReadingPreferences() {
     markReadAfterDelaySecs: user?.markReadAfterDelaySecs ?? null,
     defaultViewMode: user?.defaultViewMode ?? "list",
     readerWidth: user?.readerWidth ?? "normal",
+    readerFontSize: user?.readerFontSize ?? "medium",
     defaultArticleSort: user?.defaultArticleSort ?? "newest",
     accentColor: user?.accentColor ?? "#5BA4CF",
     secondaryColor: user?.secondaryColor ?? "#F0963C",
@@ -64,6 +66,7 @@ export async function updateGlobalSettings(data: {
   markReadAfterDelaySecs?: number | null;
   defaultViewMode?: string;
   readerWidth?: string;
+  readerFontSize?: string;
   defaultArticleSort?: string;
   accentColor?: string;
   secondaryColor?: string;
