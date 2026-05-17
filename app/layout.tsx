@@ -11,9 +11,29 @@ import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
+const APP_DESCRIPTION =
+  "FeedFerret is a beautiful, self-hostable RSS reader. Follow any RSS, Atom or JSON feed, get AI summaries, keyword alerts, email digests and a full REST API — all on your own server.";
+
 export const metadata: Metadata = {
-  title: "FeedFerret - Versatile Simple RSS Reader",
-  description: "A beautiful, self-hostable RSS reader for your daily news feed",
+  title: {
+    default: "FeedFerret — Self-Hosted RSS Reader",
+    template: "%s · FeedFerret",
+  },
+  description: APP_DESCRIPTION,
+  metadataBase: new URL(process.env.AUTH_URL ?? "http://localhost:3000"),
+  openGraph: {
+    type: "website",
+    siteName: "FeedFerret",
+    title: "FeedFerret — Self-Hosted RSS Reader",
+    description: APP_DESCRIPTION,
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "FeedFerret logo" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "FeedFerret — Self-Hosted RSS Reader",
+    description: APP_DESCRIPTION,
+    images: ["/icon-512.png"],
+  },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

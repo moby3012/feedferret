@@ -405,9 +405,9 @@ Benötigte Screenshots (Light + Dark Mode):
 
 #### 0.6.4 SEO-Grundlagen (Aufwand: 0.5 Tage)
 
-- [ ] `metadata` in `app/layout.tsx`: `title`, `description`, `openGraph`, `twitter`
-- [ ] `sitemap.ts` generieren
-- [ ] `robots.txt`
+- [x] `metadata` in `app/layout.tsx`: `title`, `description`, `openGraph`, `twitter` — PR #45
+- [x] `sitemap.ts` generieren — PR #45
+- [x] `robots.txt` — PR #45
 - [ ] Schema.org `SoftwareApplication` Markup auf Landing Page
 
 ---
@@ -441,7 +441,7 @@ Alle Punkte müssen abgeschlossen sein:
 **Marketing:**
 - [ ] Landing Page live mit allen Sektionen (0.6.2)
 - [ ] Screenshots fertig (0.6.3)
-- [ ] SEO-Basics aktiv (0.6.4)
+- [x] SEO-Basics aktiv (0.6.4) — PR #45
 
 **Operations:**
 - [ ] Monitoring: Sentry oder Axiom für Error-Tracking konfiguriert
