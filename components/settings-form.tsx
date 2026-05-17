@@ -194,8 +194,9 @@ export function SettingsForm() {
           >
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground">Primary</label>
+                <label className="text-sm text-muted-foreground" htmlFor="accent-color-primary">Primary</label>
                 <input
+                  id="accent-color-primary"
                   type="color"
                   value={prefs?.accentColor ?? "#5BA4CF"}
                   onChange={(e) => update({ accentColor: e.target.value })}
@@ -204,8 +205,9 @@ export function SettingsForm() {
                 />
               </div>
               <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground">Secondary</label>
+                <label className="text-sm text-muted-foreground" htmlFor="accent-color-secondary">Secondary</label>
                 <input
+                  id="accent-color-secondary"
                   type="color"
                   value={prefs?.secondaryColor ?? "#F0963C"}
                   onChange={(e) => update({ secondaryColor: e.target.value })}
@@ -693,12 +695,12 @@ function PushNotificationSection() {
         {status && (
           <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Frequency</label>
+              <label className="text-sm font-medium" htmlFor="push-frequency-select">Frequency</label>
               <Select
                 value={status.settings.pushFrequency}
                 onValueChange={(value) => updateSettings({ pushFrequency: value })}
               >
-                <SelectTrigger className="rounded-2xl border-border/70 bg-background/70">
+                <SelectTrigger id="push-frequency-select" className="rounded-2xl border-border/70 bg-background/70">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl">
@@ -871,8 +873,9 @@ function TwoFactorSection() {
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <div className="space-y-2">
-                <label className="text-sm font-medium">2. Enter the current 6-digit code</label>
+                <label className="text-sm font-medium" htmlFor="totp-setup-code">2. Enter the current 6-digit code</label>
                 <Input
+                  id="totp-setup-code"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   placeholder="123456"
@@ -903,8 +906,9 @@ function TwoFactorSection() {
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Disable 2FA</label>
+                <label className="text-sm font-medium" htmlFor="totp-disable-code">Disable 2FA</label>
                 <Input
+                  id="totp-disable-code"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   placeholder="Enter current code"
@@ -1006,12 +1010,12 @@ function DigestSection() {
             {/* Frequency */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Frequency</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-frequency-select">Frequency</label>
                 <Select
                   value={digest.digestFrequency}
                   onValueChange={(v) => update({ digestFrequency: v })}
                 >
-                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                  <SelectTrigger id="digest-frequency-select" className="rounded-2xl border-border/70 bg-background/70 h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
@@ -1024,12 +1028,12 @@ function DigestSection() {
               {/* Day of week (weekly only) */}
               {digest.digestFrequency === "weekly" && (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Day</label>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-day-select">Day</label>
                   <Select
                     value={String(digest.digestDayOfWeek)}
                     onValueChange={(v) => update({ digestDayOfWeek: parseInt(v) })}
                   >
-                    <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectTrigger id="digest-day-select" className="rounded-2xl border-border/70 bg-background/70 h-10">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl">
@@ -1043,12 +1047,12 @@ function DigestSection() {
 
               {/* Hour */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Hour (UTC)</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-hour-select">Hour (UTC)</label>
                 <Select
                   value={String(digest.digestHour)}
                   onValueChange={(v) => update({ digestHour: parseInt(v) })}
                 >
-                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                  <SelectTrigger id="digest-hour-select" className="rounded-2xl border-border/70 bg-background/70 h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
@@ -1063,12 +1067,12 @@ function DigestSection() {
 
               {/* Scope */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Include</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-scope-select">Include</label>
                 <Select
                   value={digest.digestScope}
                   onValueChange={(v) => update({ digestScope: v })}
                 >
-                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                  <SelectTrigger id="digest-scope-select" className="rounded-2xl border-border/70 bg-background/70 h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
@@ -1421,9 +1425,9 @@ function AiSummarySection() {
       <div className="space-y-4">
         {/* Provider */}
         <div className="grid gap-1.5">
-          <label className="text-sm font-medium">Provider</label>
+          <label className="text-sm font-medium" htmlFor="ai-provider-select">Provider</label>
           <Select value={provider} onValueChange={setProvider}>
-            <SelectTrigger className="h-10 rounded-xl">
+            <SelectTrigger id="ai-provider-select" className="h-10 rounded-xl">
               <SelectValue placeholder="Select provider" />
             </SelectTrigger>
             <SelectContent>
@@ -1439,13 +1443,14 @@ function AiSummarySection() {
 
         {provider !== "none" && provider !== "ollama" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium">
+            <label className="text-sm font-medium" htmlFor="ai-api-key-input">
               API Key
               {ai?.hasApiKey && !apiKey && (
                 <span className="ml-2 text-xs font-normal text-muted-foreground">(currently set)</span>
               )}
             </label>
             <Input
+              id="ai-api-key-input"
               type="password"
               placeholder={ai?.hasApiKey ? "Leave blank to keep existing key" : "sk-..."}
               value={apiKey}
@@ -1457,8 +1462,9 @@ function AiSummarySection() {
 
         {provider === "ollama" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium">Ollama Base URL</label>
+            <label className="text-sm font-medium" htmlFor="ai-ollama-base-url-input">Ollama Base URL</label>
             <Input
+              id="ai-ollama-base-url-input"
               placeholder="http://localhost:11434"
               value={ollamaBaseUrl}
               onChange={(e) => setOllamaBaseUrl(e.target.value)}
@@ -1469,7 +1475,7 @@ function AiSummarySection() {
 
         {provider !== "none" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium">
+            <label className="text-sm font-medium" htmlFor="ai-model-input">
               Model
               <span className="ml-1 text-xs font-normal text-muted-foreground">
                 {provider === "openai" && "(default: gpt-4o-mini)"}
@@ -1480,6 +1486,7 @@ function AiSummarySection() {
               </span>
             </label>
             <Input
+              id="ai-model-input"
               placeholder="optional override"
               value={model}
               onChange={(e) => setModel(e.target.value)}
@@ -1490,9 +1497,9 @@ function AiSummarySection() {
 
         {provider !== "none" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium">Summary language</label>
+            <label className="text-sm font-medium" htmlFor="ai-language-select">Summary language</label>
             <Select value={language} onValueChange={setLanguage}>
-              <SelectTrigger className="h-10 rounded-xl">
+              <SelectTrigger id="ai-language-select" className="h-10 rounded-xl">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

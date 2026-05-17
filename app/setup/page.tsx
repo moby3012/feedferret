@@ -294,8 +294,9 @@ export default function SetupPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-zinc-400 font-medium">Instance Name</label>
+                <label htmlFor="setup-instance-name" className="text-xs text-zinc-400 font-medium">Instance Name</label>
                 <Input
+                  id="setup-instance-name"
                   placeholder="FeedFerret"
                   className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 h-11 rounded-xl"
                   value={instanceName}
@@ -303,8 +304,9 @@ export default function SetupPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-zinc-400 font-medium">Public URL</label>
+                <label htmlFor="setup-instance-url" className="text-xs text-zinc-400 font-medium">Public URL</label>
                 <Input
+                  id="setup-instance-url"
                   placeholder="https://rss.example.com"
                   className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 h-11 rounded-xl"
                   value={instanceUrl}

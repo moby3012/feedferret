@@ -384,8 +384,9 @@ function WebhookActionConfig({
       {showAdvanced && (
         <div className="space-y-2 pt-1">
           <div className="space-y-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Body template</label>
+            <label htmlFor="webhook-body-template" className="text-[11px] uppercase tracking-wider text-muted-foreground">Body template</label>
             <textarea
+              id="webhook-body-template"
               rows={4}
               placeholder={`{\n  "title": "{{article_title}}",\n  "link": "{{article_link}}"\n}`}
               value={value.bodyTemplate ?? ""}
@@ -399,10 +400,11 @@ function WebhookActionConfig({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            <label htmlFor="webhook-hmac-secret" className="text-[11px] uppercase tracking-wider text-muted-foreground">
               HMAC secret (optional)
             </label>
             <Input
+              id="webhook-hmac-secret"
               type="password"
               placeholder="Used to sign the body via X-FeedFerret-Signature"
               value={value.secret ?? ""}
@@ -477,6 +479,7 @@ function SortableCategoryItem({
         {editingCategoryId === cat.id ? (
           <div className="flex-1 flex flex-col gap-2 sm:flex-row">
             <Input
+              // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
               value={editingCategoryName}
               onChange={(e) => setEditingCategoryName(e.target.value)}
@@ -556,16 +559,17 @@ function SortableCategoryItem({
     </div>
     {/* Category settings dialog (#17) */}
     {settingsOpen && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setSettingsOpen(false)}>
-        <div className="w-full max-w-sm rounded-3xl border border-border/70 bg-background p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+      <button type="button" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setSettingsOpen(false); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') setSettingsOpen(false); }}>
+        <div role="dialog" aria-modal="true" aria-label="Category Settings" className="w-full max-w-sm rounded-3xl border border-border/70 bg-background p-6 shadow-2xl space-y-4">
           <div className="flex items-center gap-3">
             <Folder className="w-5 h-5 text-primary" />
             <h3 className="font-semibold tracking-tight">Category Settings — {cat.name}</h3>
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Sync interval (minutes)</label>
+            <label htmlFor="cat-settings-sync-input" className="text-sm font-medium">Sync interval (minutes)</label>
             <p className="text-xs text-muted-foreground">Leave empty to use the global default.</p>
             <Input
+              id="cat-settings-sync-input"
               type="number"
               placeholder="e.g. 60"
               value={syncValue}
@@ -582,7 +586,7 @@ function SortableCategoryItem({
             }}>Save</Button>
           </div>
         </div>
-      </div>
+      </button>
     )}
     </>
   );
@@ -1585,7 +1589,7 @@ export function FeedManagement({
                           className="rounded-xl h-10"
                         />
                         <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
-                          <label className="text-xs font-medium text-muted-foreground self-center">Trigger</label>
+                          <label htmlFor="new-rule-trigger-select" className="text-xs font-medium text-muted-foreground self-center">Trigger</label>
                           <Select
                             value={newRuleTrigger}
                             onValueChange={(value) => {
@@ -1608,7 +1612,7 @@ export function FeedManagement({
                               setNewRuleAction(packed.actions[0] || "mark_read");
                             }}
                           >
-                            <SelectTrigger className="rounded-xl h-10">
+                            <SelectTrigger id="new-rule-trigger-select" className="rounded-xl h-10">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1646,9 +1650,9 @@ export function FeedManagement({
                           </div>
                         )}
                         <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
-                          <label className="text-xs font-medium text-muted-foreground self-center">Scope</label>
+                          <label htmlFor="new-rule-scope-select" className="text-xs font-medium text-muted-foreground self-center">Scope</label>
                           <Select value={newRuleScope} onValueChange={setNewRuleScope}>
-                            <SelectTrigger className="rounded-xl h-10">
+                            <SelectTrigger id="new-rule-scope-select" className="rounded-xl h-10">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1680,8 +1684,9 @@ export function FeedManagement({
                             catalog={catalogForTrigger(buildActionCatalog(labels), newRuleTrigger)}
                           />
                           {newRuleActions.includes("mark_spoiler") && (
-                            <label className="flex items-center gap-2 cursor-pointer select-none mt-1">
+                            <label htmlFor="new-rule-remove-spoiler-checkbox" className="flex items-center gap-2 cursor-pointer select-none mt-1">
                               <Checkbox
+                                id="new-rule-remove-spoiler-checkbox"
                                 checked={newRuleRemoveSpoilerOnDelete}
                                 onCheckedChange={(v) => setNewRuleRemoveSpoilerOnDelete(!!v)}
                               />
@@ -1954,7 +1959,7 @@ export function FeedManagement({
                                   className="rounded-xl h-10"
                                 />
                                 <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
-                                  <label className="text-xs font-medium text-muted-foreground self-center">Trigger</label>
+                                  <label htmlFor="edit-rule-trigger-select" className="text-xs font-medium text-muted-foreground self-center">Trigger</label>
                                   <Select
                                     value={editRuleTrigger}
                                     onValueChange={(value) => {
@@ -1976,7 +1981,7 @@ export function FeedManagement({
                                       setEditRuleWebhooks(packed.webhookConfigs);
                                     }}
                                   >
-                                    <SelectTrigger className="rounded-xl h-10">
+                                    <SelectTrigger id="edit-rule-trigger-select" className="rounded-xl h-10">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1994,9 +1999,9 @@ export function FeedManagement({
                                   />
                                 )}
                                 <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
-                                  <label className="text-xs font-medium text-muted-foreground self-center">Scope</label>
+                                  <label htmlFor="edit-rule-scope-select" className="text-xs font-medium text-muted-foreground self-center">Scope</label>
                                   <Select value={editRuleScope} onValueChange={setEditRuleScope}>
-                                    <SelectTrigger className="rounded-xl h-10">
+                                    <SelectTrigger id="edit-rule-scope-select" className="rounded-xl h-10">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2027,8 +2032,9 @@ export function FeedManagement({
                                     catalog={catalogForTrigger(catalog, editRuleTrigger)}
                                   />
                                   {editRuleActions.includes("mark_spoiler") && (
-                                    <label className="flex items-center gap-2 cursor-pointer select-none mt-1">
+                                    <label htmlFor="edit-rule-remove-spoiler-checkbox" className="flex items-center gap-2 cursor-pointer select-none mt-1">
                                       <Checkbox
+                                        id="edit-rule-remove-spoiler-checkbox"
                                         checked={editRuleRemoveSpoilerOnDelete}
                                         onCheckedChange={(v) => setEditRuleRemoveSpoilerOnDelete(!!v)}
                                       />
@@ -2330,8 +2336,9 @@ export function FeedManagement({
                               <div className="flex flex-col gap-3 px-4 py-3">
                                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                   <div className="col-span-2">
-                                    <label className="text-xs text-muted-foreground mb-1 block">Name</label>
+                                    <label htmlFor="edit-alert-name-input" className="text-xs text-muted-foreground mb-1 block">Name</label>
                                     <Input
+                                      id="edit-alert-name-input"
                                       value={editAlertName}
                                       onChange={(e) => setEditAlertName(e.target.value)}
                                       className="h-8 rounded-xl text-sm"
@@ -2339,8 +2346,9 @@ export function FeedManagement({
                                     />
                                   </div>
                                   <div className="col-span-2">
-                                    <label className="text-xs text-muted-foreground mb-1 block">Query</label>
+                                    <label htmlFor="edit-alert-query-input" className="text-xs text-muted-foreground mb-1 block">Query</label>
                                     <Input
+                                      id="edit-alert-query-input"
                                       value={editAlertQuery}
                                       onChange={(e) => setEditAlertQuery(e.target.value)}
                                       className="h-8 rounded-xl text-sm font-mono"
@@ -2348,9 +2356,9 @@ export function FeedManagement({
                                     />
                                   </div>
                                   <div>
-                                    <label className="text-xs text-muted-foreground mb-1 block">Scope</label>
+                                    <label htmlFor="edit-alert-scope-select" className="text-xs text-muted-foreground mb-1 block">Scope</label>
                                     <Select value={editAlertScope} onValueChange={setEditAlertScope}>
-                                      <SelectTrigger className="h-8 rounded-xl text-sm">
+                                      <SelectTrigger id="edit-alert-scope-select" className="h-8 rounded-xl text-sm">
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>

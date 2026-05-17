@@ -392,7 +392,7 @@ function ArticlePreview({
   onMarkRead?: (articleId: string) => void;
   scrollRoot?: HTMLElement | null;
 }) {
-  const articleRef = useRef<HTMLElement>(null);
+  const articleRef = useRef<HTMLDivElement>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeActive, setSwipeActive] = useState(false);
@@ -491,7 +491,7 @@ function ArticlePreview({
     return (
       <div className="relative">
         {swipeBackdrop}
-      <article
+      <div
         ref={articleRef}
         onClick={onClick}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
@@ -535,7 +535,7 @@ function ArticlePreview({
         >
           <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent")} />
         </button>
-      </article>
+      </div>
       </div>
     );
   }
@@ -544,7 +544,7 @@ function ArticlePreview({
     return (
       <div className="relative">
         {swipeBackdrop}
-      <article
+      <div
         ref={articleRef}
         onClick={onClick}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
@@ -630,7 +630,7 @@ function ArticlePreview({
             </div>
           </div>
         </div>
-      </article>
+      </div>
       </div>
     );
   }
@@ -639,7 +639,7 @@ function ArticlePreview({
   return (
     <div className="relative">
       {swipeBackdrop}
-    <article
+    <div
       ref={articleRef}
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
@@ -810,7 +810,7 @@ function ArticlePreview({
           </div>
         </div>
       </div>
-    </article>
+    </div>
     </div>
   );
 }

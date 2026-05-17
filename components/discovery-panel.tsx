@@ -350,6 +350,7 @@ function FeedCard({
     <div className="relative rounded-xl bg-muted/50 px-2.5 py-2 pr-10 overflow-hidden w-full">
       <div className="flex items-center gap-2 min-w-0">
         {feed.iconUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={feed.iconUrl}
             alt=""
