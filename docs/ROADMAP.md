@@ -1,22 +1,24 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-17 (Full-Stack-Audit: Dependencies, Code-Quality, Doc-Sync, SEO-Basics)  
+> Zuletzt aktualisiert: 2026-05-17 (Notification-Kanäle + Google Reader QA in Pre-Launch; CVE-Lockfile-Fix; CI-Workflow)  
 > Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
 
 ## Status-Übersicht (Stand 2026-05-17)
 
 | Bereich | Status | Offene Arbeit |
 |---|---|---|
-| 🛡️ Security & Hardening | ✅ Implementiert | CVE-Re-Audit (0.7.4), Observatory-Score messen |
+| 🛡️ Security & Hardening | ✅ Implementiert | Observatory-Score messen |
 | ♿ Accessibility (WCAG 2.2 AA) | 🟡 A1–A3 ✅ / A4–A5 teilweise | Kontrast-Audit, Roving-Tabindex, Playwright-axe in CI |
 | 🎨 UI Polish & UX | ✅ Implementiert | Dark-Mode-Sweep, Landscape-Mode-Test |
 | 🐳 Docker & Deployment | ✅ Implementiert | Image-Größe messen, Coolify-Guide verifizieren |
 | 📣 Marketing & SEO | 🟡 SEO-Basics ✅ / Landing-Page offen | Wettbewerbsanalyse, Pricing, Screenshots |
-| 🔧 Maintenance & Dependencies | 🟡 Neue Findings | Siehe Abschnitt 0.7 (Audit 2026-05-17) |
+| 🔔 Notification-Kanäle | 🔴 Offen | Telegram, Gotify, ntfy (0.8) |
+| 📡 Google Reader API QA | 🔴 Offen | Client-Tests: Reeder, NNW, FeedMe, ReadKit (0.9) |
+| 🔧 Maintenance & Dependencies | 🟡 Teilweise | CVE-Lockfile ✅, CI-Workflow ✅, Patch-Updates offen (0.7) |
 | 🧪 Test-Coverage | 🔴 Noch nicht vorhanden | E2E + Unit-Tests (0.7.6) |
 | 🚢 Launch-Operations | 🔴 Offen | Monitoring, Backup-Drill, Support-Kanal, Changelog |
 
-**Build-Status:** `pnpm run build` ✅ • `pnpm run lint` ✅ • `tsc --noEmit` ✅
+**Build-Status:** `pnpm run build` ✅ • `pnpm run lint` ✅ • `tsc --noEmit` ✅ • `pnpm audit` ⚠️ 2 Build-Tool-CVEs (kein Produktions-Risiko; Fix: ESLint-9-Upgrade, 0.7.2)
 
 ---
 
@@ -516,18 +518,21 @@ Jede Major-Version erfordert separate Validierung. **Reihenfolge der Empfehlung:
 - [ ] Bevorzugt korrekte Prisma-Typen aus `@prisma/client` verwenden (statt `any` auf API-Responses)
 - [ ] `next.config.mjs`: `typescript.ignoreBuildErrors` nicht aktivieren — bleibt false
 
-#### 0.7.4 CVE-Re-Audit & Override-Verfeinerung (Aufwand: 0.5 Tage)
+#### 0.7.4 CVE-Re-Audit & Override-Analyse (Aufwand: 0.5 Tage)
 
-`pnpm audit` Befund am 2026-05-17:
+`pnpm audit` Befund am 2026-05-17 — beide CVEs sind **Build-Tool-Findings (kein Produktions-Risiko)**:
 
-| Severity | Paket | Pfad | Status |
-|---|---|---|---|
-| **HIGH** | `glob 10.3.10` (CWE-78 Command Injection) | `eslint-config-next 14 → @next/eslint-plugin-next → glob` | `pnpm.overrides` setzt `^10.5.0`, greift aber im Lockfile nicht für diesen Pfad |
-| **MODERATE** | `postcss 8.4.31` (CWE-79 XSS via Unescaped `</style>`) | `next → postcss`, `next-auth → next → postcss` | `pnpm.overrides` setzt `^8.5.14`, greift aber transitive nicht durch |
+| Severity | Paket | Pfad | Exploitbarkeit | Fix-Pfad |
+|---|---|---|---|---|
+| **HIGH** | `glob 10.3.10` (CWE-78) | `eslint-config-next 14 → @next/eslint-plugin-next → glob` | ⚠️ Nur via `glob -c "cmd"` CLI-Flag; eslint nutzt glob als API → **false positive** | ESLint 9-Upgrade (0.7.2): `eslint-config-next@16` nutzt `fast-glob`, kein `glob@10.x` mehr |
+| **MODERATE** | `postcss 8.4.31` (CWE-79) | `next → postcss`, `next-auth → next → postcss` | ⚠️ Betrifft nur dynamisch in HTML eingebettetes CSS-Output; Next.js schreibt CSS als statische Dateien → **false positive** | Next.js-Update: neuere Versionen bundeln neueres postcss |
 
-- [ ] `pnpm-lock.yaml` mit `pnpm install --no-frozen-lockfile` neu erzeugen, danach `pnpm audit` erneut prüfen
-- [ ] Falls weiterhin alte Versionen: Overrides als pfad-spezifische Pins ergänzen (`"<pkg>>old-dep": "^new-version"`)
-- [ ] Eskalation: 0.7.2 ESLint-9-Upgrade entfernt den `glob`-CVE-Pfad vollständig (eslint-config-next 16 zieht kein altes glob mehr)
+**Analyse:** pnpm `overrides` (`glob ^10.5.0`, `postcss ^8.5.14`) greifen für eigene Packages korrekt, aber `@next/eslint-plugin-next@14.2.35` pinnt `glob` auf exakt `10.3.10` und `next` pinnt `postcss` auf `8.4.31` — hardgepinnte Transitive überschreiben die pnpm-Overrides nicht zuverlässig in v11.
+
+- [x] Overrides in `package.json` (`glob ^10.5.0`, `postcss ^8.5.14`) korrekt gesetzt
+- [x] Beide CVEs als Build-Tool-Only (nicht production-relevant) klassifiziert und dokumentiert
+- [ ] **Dauerhafter Fix glob**: ESLint 9-Upgrade (0.7.2) → `eslint-config-next@16` → `@next/eslint-plugin-next@16` (nutzt `fast-glob`, kein `glob@10.x`)
+- [ ] **Dauerhafter Fix postcss**: Next.js-Version-Update wenn neuere Version postcss@8.5+ bundelt
 - [ ] Mozilla Observatory Score auf Produktions-Domain messen (Ziel: ≥ B+)
 - [ ] `npm audit signatures` für Supply-Chain-Integrität (npm 9+)
 
@@ -542,9 +547,17 @@ Jede Major-Version erfordert separate Validierung. **Reihenfolge der Empfehlung:
 
 #### 0.7.6 Test-Coverage & CI (Pre-Launch Quality-Gate) (Aufwand: 2 Tage)
 
-**Aktueller Stand:** Kein automatisiertes Test-Setup. Lokale Validation nur über `pnpm run lint` + `pnpm run build`.
+**Aktueller Stand:** CI-Pipeline live. Lokale Validation über `pnpm run lint` + `pnpm run build` + `tsc --noEmit`.
 
-**Empfohlene Minimum-Pyramide für Launch:**
+**CI-Status:**
+- [x] **GitHub Actions Workflow** (`.github/workflows/ci.yml`) — aktiv:
+  - `pnpm install --frozen-lockfile`
+  - `pnpm run lint`
+  - `npx tsc --noEmit`
+  - `pnpm run build`
+  - Caching: `pnpm store` + `.next/cache` via `actions/cache`
+
+**Noch ausstehend — Empfohlene Minimum-Test-Pyramide:**
 
 - [ ] **Playwright E2E** (kritische User-Journeys):
   - Login + 2FA-Flow
@@ -559,12 +572,6 @@ Jede Major-Version erfordert separate Validierung. **Reihenfolge der Empfehlung:
   - `lib/token.ts` — Hashing, Format-Check
   - `lib/rate-limit.ts` — Sliding-Window-Verhalten
   - `lib/feed-fetcher.ts` — URL-Normalisierung, SSRF-Blacklist
-- [ ] **GitHub Actions Workflow** (`.github/workflows/ci.yml`):
-  - `pnpm install --frozen-lockfile`
-  - `pnpm run lint`
-  - `npx tsc --noEmit`
-  - `pnpm run build`
-  - Optional: Tests + Image-Build mit `pnpm-lock` cache
 - [ ] Optional lokal: `.husky/pre-commit` mit `pnpm lint-staged`
 
 #### 0.7.7 Doc-Sync & Lifecycle (Aufwand: 0.5 Tage)
@@ -576,6 +583,63 @@ Jede Major-Version erfordert separate Validierung. **Reihenfolge der Empfehlung:
 - [ ] `docs/api.md`: OpenAPI-Schema (`/api/v1/openapi.json`) gegen tatsächliche v1-Routen abgleichen
 - [ ] Terminologie: `Webhooks` vs. `Outbound Webhooks` einheitlich nutzen (Empfehlung: `Outbound Webhooks`, da auch `Incoming Webhooks` denkbar wären)
 - [ ] `CHANGELOG.md` aufsetzen (Keep-a-Changelog-Format) — bisher nur PR-Beschreibungen als Quelle
+
+---
+
+### 0.8 Erweiterte Notification-Kanäle (Telegram, Gotify, ntfy) — Pre-Launch
+
+**Motivation:** Nicht alle Nutzer wollen Browser-Push. Telegram und Gotify sind in der Homelab-Community Standard — ohne diese Kanäle verlieren wir Self-Hoster, die Push-Notifications bereits an ihrem Notification-Hub zentralisiert haben.
+
+**Vorbedingung:** Generisches `NotificationChannel`-Framework (0.8.4) zuerst aufbauen, dann Kanäle einzeln draufsetzen.
+
+#### 0.8.1 Telegram-Bot-Integration
+
+- [ ] **Bot-Token-Konfiguration:** Nutzer gibt eigenen Telegram-Bot-Token ein (via @BotFather erstellt)
+- [ ] **Chat-ID-Verknüpfung:** `/start`-Befehl im Bot liefert Chat-ID zurück, FeedFerret speichert sie
+- [ ] **Nachrichten-Format:** Artikel-Titel + Kurz-Excerpt + Link (Telegram Markdown)
+- [ ] **Trigger-Konfiguration:** Gleiche Logik wie bestehende Keyword-Alerts (Query-basiert)
+- [ ] **Rate Limiting:** Max. N Nachrichten pro Stunde (Telegram-API-Limits beachten)
+- [ ] **Inline-Buttons:** "Als gelesen markieren" direkt aus Telegram heraus (Webhook-Rückkanal)
+- [ ] Settings: Telegram-Abschnitt in Notification-Settings
+
+#### 0.8.2 Gotify-Integration
+
+- [ ] **Server-URL + Token:** Nutzer gibt eigene Gotify-Instanz ein
+- [ ] **Priorität konfigurierbar:** Low / Normal / High pro Alert-Regel
+- [ ] **Nachrichten-Format:** Titel + Excerpt, Markdown wenn von Gotify-Client unterstützt
+- [ ] **Verbindungstest:** "Send test notification" Button in Settings
+- [ ] Settings: Gotify-Abschnitt in Notification-Settings
+
+#### 0.8.3 ntfy.sh-Integration
+
+- [ ] **Topic-URL:** Nutzer gibt `https://ntfy.sh/my-topic` oder eigene Instanz ein
+- [ ] **Auth-Header:** Optionales Bearer-Token für private Topics
+- [ ] **Priority:** Mapped auf ntfy-Prioritäten (urgent/high/default/low/min)
+- [ ] **Tags/Emoji:** Konfigurierbar pro Alert-Typ
+- [ ] Kein eigener Server nötig — ntfy.sh kostenlos nutzbar
+
+#### 0.8.4 Generisches Notification-Framework (Fundament)
+
+Alle drei Services teilen eine gemeinsame Abstraktion:
+
+- [ ] `NotificationChannel`-Interface: `send(event, article) => Promise<void>`
+- [ ] Implementierungen: `TelegramChannel`, `GotifyChannel`, `NtfyChannel`, `WebhookChannel` (bereits vorhanden), `EmailChannel` (bereits vorhanden), `PushChannel` (bereits vorhanden)
+- [ ] Settings: Pro-Channel Enable/Disable, Test-Button, Channel-spezifische Konfiguration
+- [ ] Alert-Regeln: Welche Channels werden für welche Alerts verwendet (Multi-Select)
+
+---
+
+### 0.9 Google Reader API — Client-Kompatibilitäts-QA — Pre-Launch
+
+**Motivation:** Google Reader API ist bereits implementiert (`docs/google-reader-api.md`). Vor dem Launch müssen echte Clients getestet werden — ungeprüfte Kompatibilität ist kein Verkaufsargument.
+
+- [ ] Reeder (macOS/iOS) End-to-End-Test gegen Prod-Instanz
+- [ ] NetNewsWire End-to-End-Test
+- [ ] FeedMe (Android) End-to-End-Test
+- [ ] ReadKit End-to-End-Test
+- [ ] Client-spezifische Quirks und bewährte Base-URLs in `docs/google-reader-api.md` dokumentieren
+- [ ] Blocking Compatibility Gaps beheben (eigener PR pro kritischem Bugfix)
+- [ ] Fever API: Entscheidung basierend auf tatsächlichem Client-Bedarf (NetNewsWire nutzt Fever als Alternative)
 
 ---
 
@@ -611,12 +675,21 @@ Alle Punkte müssen abgeschlossen sein:
 - [x] SEO-Basics aktiv (0.6.4) — PR #45
 - [ ] SaaS-Pricing finalisiert oder explizit auf "Post-OSS-Launch" verschoben (0.7.7)
 
-**Maintenance & Quality (neu — Audit 2026-05-17):**
+**Notification-Kanäle:**
+- [ ] Generisches Notification-Framework implementiert (0.8.4)
+- [ ] Mindestens ein externer Kanal live: Telegram, Gotify oder ntfy (0.8)
+
+**Google Reader API QA:**
+- [ ] Mindestens Reeder + NetNewsWire End-to-End getestet (0.9)
+- [ ] Blocking Compatibility Gaps behoben (0.9)
+- [ ] Client-spezifische Quirks in `docs/google-reader-api.md` dokumentiert (0.9)
+
+**Maintenance & Quality (Audit 2026-05-17):**
+- [x] CVEs als Build-Tool-Only klassifiziert — kein Produktions-Risiko; Fix-Pfad dokumentiert (0.7.4)
+- [x] CI-Pipeline aktiv (Lint + Type-Check + Build pro PR) — `.github/workflows/ci.yml` (0.7.6)
 - [ ] Patch- & Minor-Updates eingespielt (0.7.1)
-- [ ] `pnpm audit` clean — Overrides für glob + postcss greifen im Lockfile (0.7.4)
 - [ ] Logger-Utility live, `console.*` aus Produktions-Pfaden entfernt (0.7.3)
 - [ ] Minimum E2E + Unit Test-Suite vorhanden (0.7.6)
-- [ ] CI-Pipeline aktiv (Lint + Type-Check + Build pro PR) (0.7.6)
 
 **Operations:**
 - [ ] Monitoring: Sentry oder Axiom für Error-Tracking konfiguriert
@@ -757,54 +830,13 @@ Nach stabilem Launch und erstem Nutzer-Feedback.
 
 ### 2.4 Erweiterte Notification-Dienste
 
-**Motivation:** Nicht alle Nutzer wollen Browser-Push. Telegram und Gotify sind in der Homelab-Community Standard.
-
-#### 2.4.1 Telegram-Bot-Integration
-
-- [ ] **Bot-Token-Konfiguration:** Nutzer gibt eigenen Telegram-Bot-Token ein (via @BotFather erstellt)
-- [ ] **Chat-ID-Verknüpfung:** `/start`-Befehl im Bot liefert Chat-ID zurück, FeedFerret speichert sie
-- [ ] **Nachrichten-Format:** Artikel-Titel + Kurz-Excerpt + Link (Telegram Markdown)
-- [ ] **Trigger-Konfiguration:** Gleiche Logik wie bestehende Keyword-Alerts (Query-basiert)
-- [ ] **Rate Limiting:** Max. N Nachrichten pro Stunde (Telegram-API-Limits beachten)
-- [ ] **Inline-Buttons:** "Als gelesen markieren" direkt aus Telegram heraus (Webhook-Rückkanal)
-- [ ] Settings: Telegram-Abschnitt in Notification-Settings
-
-#### 2.4.2 Gotify-Integration
-
-- [ ] **Server-URL + Token:** Nutzer gibt eigene Gotify-Instanz ein
-- [ ] **Priorität konfigurierbar:** Low / Normal / High pro Alert-Regel
-- [ ] **Nachrichten-Format:** Titel + Excerpt, Markdown wenn von Gotify-Client unterstützt
-- [ ] **Verbindungstest:** "Send test notification" Button in Settings
-- [ ] Settings: Gotify-Abschnitt in Notification-Settings
-
-#### 2.4.3 ntfy.sh-Integration
-
-- [ ] **Topic-URL:** Nutzer gibt `https://ntfy.sh/my-topic` oder eigene Instanz ein
-- [ ] **Auth-Header:** Optionales Bearer-Token für private Topics
-- [ ] **Priority:** Mapped auf ntfy-Prioritäten (urgent/high/default/low/min)
-- [ ] **Tags/Emoji:** Konfigurierbar pro Alert-Typ
-- [ ] Kein eigener Server nötig — ntfy.sh kostenlos nutzbar
-
-#### 2.4.4 Generisches Notification-Framework
-
-Alle drei Services teilen eine gemeinsame Abstraktion:
-
-- [ ] `NotificationChannel`-Interface: `send(event, article) => Promise<void>`
-- [ ] Implementierungen: `TelegramChannel`, `GotifyChannel`, `NtfyChannel`, `WebhookChannel` (bereits vorhanden), `EmailChannel` (bereits vorhanden), `PushChannel` (bereits vorhanden)
-- [ ] Settings: Pro-Channel Enable/Disable, Test-Button, Channel-spezifische Konfiguration
-- [ ] Alert-Regeln: Welche Channels werden für welche Alerts verwendet (Multi-Select)
+> **→ Vorgezogen in Phase 0 als Abschnitt 0.8** (Telegram, Gotify, ntfy). Vollständige Details und Checkliste dort.
 
 ---
 
 ### 2.5 Google Reader API — Client-Kompatibilitäts-QA
 
-- [ ] Reeder (macOS/iOS) End-to-End-Test gegen Prod-Instanz
-- [ ] NetNewsWire End-to-End-Test
-- [ ] FeedMe (Android) End-to-End-Test
-- [ ] ReadKit End-to-End-Test
-- [ ] Client-spezifische Quirks und bewährte Base-URLs dokumentieren
-- [ ] Blocking Compatibility Gaps beheben
-- [ ] Fever API: Entscheidung basierend auf tatsächlichem Client-Bedarf
+> **→ Vorgezogen in Phase 0 als Abschnitt 0.9** (End-to-End-Tests: Reeder, NetNewsWire, FeedMe, ReadKit). Vollständige Details und Checkliste dort.
 
 ---
 
