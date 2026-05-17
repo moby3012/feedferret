@@ -1,7 +1,8 @@
 # FeedFerret — Marketing & SaaS Landing Page Brief
 
-> Zuletzt aktualisiert: 2026-05-16  
-> Zweck: Vorlage für die SaaS Landing Page, ProductHunt-Launch, Vergleichsseiten und Pressematerial.
+> Zuletzt aktualisiert: 2026-05-17 (Feature-Inventar gegen Code synchronisiert, Pricing-Sektion klargestellt)  
+> Zweck: Vorlage für die OSS-Landing Page, ProductHunt-Launch, Vergleichsseiten und Pressematerial.  
+> Status: **OSS-Launch ist Priorität**; SaaS-Tier-Definition kommt nach Wettbewerbsanalyse (Roadmap 0.1.3).
 
 ---
 
@@ -442,24 +443,21 @@ Feature-Bullets:
 
 ### Sektion 10: Preise
 
-**Self-Hosted (Kostenlos, MIT License):**
+**Self-Hosted (Kostenlos, MIT License) — verfügbar zum OSS-Launch:**
 - Alle Features
 - Unbegrenzte Nutzer
 - PostgreSQL oder SQLite
 - Community-Support via GitHub Issues
 
-**SaaS — Personal:** (Preis TBD nach Wettbewerbsanalyse)
-- Managed Hosting
-- Automatische Updates
-- E-Mail-Support
-- TBD Features
+**SaaS — coming soon:**
 
-**SaaS — Team:** (Preis TBD)
-- Mehrere Nutzer (TBD)
-- Priority-Support
-- TBD Features
+> **Status:** Die SaaS-Variante ist nach dem OSS-Launch geplant. Tier-Definition und Pricing werden nach Abschluss der Wettbewerbsanalyse (Roadmap 0.1.3) finalisiert.
 
-> Pricing empfiehlt sich erst nach Wettbewerbsanalyse (Roadmap 0.1.3) festzulegen.
+Erwartete Tiers:
+- **Personal** — Managed Hosting für Einzelnutzer, automatische Updates, E-Mail-Support
+- **Team** — Mehrere Nutzer mit Isolation, Priority-Support, SSO
+
+Für die OSS-Landing Page zum Launch: SaaS-Sektion als "Coming Soon"-Teaser mit Mail-Capture (z.B. Listmonk, Mailchimp, Buttondown) statt fester Preise rendern.
 
 ### Sektion 11: FAQ
 

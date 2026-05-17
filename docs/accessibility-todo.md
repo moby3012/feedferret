@@ -12,7 +12,7 @@ Detaillierte Sprint-Planung steht in `docs/ROADMAP.md` Abschnitt 0.3.
 | A-1 Quick Wins | Motion, Skip Link, ARIA Landmarks, Icon Labels | ✅ Implementiert |
 | A-2 Screen Reader | Live Regions, Focus Management, Semantik | ✅ Implementiert |
 | A-3 Keyboard Navigation | Feed-Karten Tastatur, Artikel-Actions | ✅ Implementiert |
-| A-4 Visuals & Kontrast | Kontrast-Audit, Zoom, Font-Slider | ⬜ Offen (post-launch) |
+| A-4 Visuals & Kontrast | Font-Size-Slider ✅, Kontrast-Audit ⬜, 200% Zoom-Test ⬜ | 🟡 Teilweise (Font-Slider PR #44) |
 | A-5 Tooling & Prozess | eslint-jsx-a11y ✅, /accessibility-Seite ✅, Playwright axe ⬜ | 🟡 Teilweise |
 
 ---

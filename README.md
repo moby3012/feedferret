@@ -285,12 +285,25 @@ Users can delete their account from **Settings → Delete Account**. All data is
 
 ## 🛠 Tech Stack
 
-- **Framework**: [Next.js App Router](https://nextjs.org/) (v16+, React 19)
-- **Auth**: [Auth.js (NextAuth v5)](https://authjs.dev/)
-- **Database**: [Prisma](https://www.prisma.io/) with [PostgreSQL](https://www.postgresql.org/) (default) or [SQLite](https://sqlite.org/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/) & [shadcn/ui](https://ui.shadcn.com/)
-- **State Management**: [TanStack Query](https://tanstack.com/query/latest)
-- **Parsing**: [rss-parser](https://github.com/rbren/rss-parser) & [isomorphic-dompurify](https://github.com/kkomelin/isomorphic-dompurify)
+- **Framework**: [Next.js 16 App Router](https://nextjs.org/) with React 19
+- **Language**: TypeScript 5 (strict)
+- **Auth**: [Auth.js / NextAuth v5](https://authjs.dev/)
+- **Database**: [Prisma 5](https://www.prisma.io/) with [PostgreSQL](https://www.postgresql.org/) (default) or [SQLite](https://sqlite.org/)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/) & [shadcn/ui](https://ui.shadcn.com/) on Radix Primitives
+- **State**: [TanStack Query](https://tanstack.com/query/latest) + React Server Components
+- **Parsing**: [rss-parser](https://github.com/rbren/rss-parser) + [isomorphic-dompurify](https://github.com/kkomelin/isomorphic-dompurify) + [jsdom](https://github.com/jsdom/jsdom) for full-text extraction
+- **Push**: [web-push](https://github.com/web-push-libs/web-push) (VAPID)
+- **Email**: [nodemailer](https://nodemailer.com/) (SMTP) + native fetch for Resend, Postmark, Mailgun, SendGrid APIs
+
+---
+
+## 🗺 Project Status
+
+FeedFerret is in **late Pre-Launch**. The full feature surface is implemented and documented; remaining work is hardening, polish, and launch readiness.
+
+**See [`docs/ROADMAP.md`](docs/ROADMAP.md)** for the full status table — security, accessibility, deployment, marketing, maintenance, and post-launch (Phase 2: Podcasts, TTS, Telegram/Gotify/ntfy, Theming, i18n).
+
+Build status: `pnpm run build` ✅ • `pnpm run lint` ✅ • `tsc --noEmit` ✅
 
 ---
 
