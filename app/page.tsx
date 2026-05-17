@@ -816,6 +816,7 @@ export default function RSSReaderPage() {
                 onToggleReadLater={handleToggleReadLater}
                 onReleaseSpoiler={isSpoilerCategory ? (articleId) => releaseArticleSpoiler.mutate(articleId) : undefined}
                 viewMode={viewMode}
+                isLoading={articlesLoading}
                 markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
                 filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
                 transitionStyle={transitionStyle}
@@ -902,6 +903,7 @@ export default function RSSReaderPage() {
             onToggleReadLater={handleToggleReadLater}
             onReleaseSpoiler={isSpoilerCategory ? (articleId) => releaseArticleSpoiler.mutate(articleId) : undefined}
             viewMode={viewMode}
+            isLoading={articlesLoading}
             markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
             filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
             transitionStyle={transitionStyle}

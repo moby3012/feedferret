@@ -181,7 +181,7 @@ export function useRefreshFeed() {
             toast.success("Feed refreshed")
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Refresh failed")
+            toast.error(error instanceof Error ? error.message : "Feed sync failed. Check your connection and try again.")
         },
     })
 }
@@ -207,7 +207,7 @@ export function useExportUserData() {
     return useMutation({
         mutationFn: () => exportUserData(),
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Export failed")
+            toast.error(error instanceof Error ? error.message : "Export failed. Try again or contact support.")
         },
     })
 }
@@ -248,7 +248,7 @@ export function useApplyRetentionPolicies() {
             }
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Retention failed")
+            toast.error(error instanceof Error ? error.message : "Retention policy failed. Try again.")
         },
     })
 }
@@ -390,7 +390,7 @@ export function useFetchFullText() {
             toast.success("Full text loaded")
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Could not fetch full text")
+            toast.error(error instanceof Error ? error.message : "Full text unavailable. Open the original article instead.")
         },
     })
 }
@@ -466,7 +466,7 @@ export function useCreateAutoReadRule() {
             toast.success("Rule created")
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Could not create rule")
+            toast.error(error instanceof Error ? error.message : "Could not create rule. Check the filter and try again.")
         },
     })
 }
@@ -496,7 +496,7 @@ export function useUpdateAutoReadRule() {
             queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Could not update rule")
+            toast.error(error instanceof Error ? error.message : "Rule update failed. Try saving again.")
         },
     })
 }
@@ -552,7 +552,7 @@ export function useReleaseAllSpoilers() {
             toast.success("All spoiler flags released")
         },
         onError: () => {
-            toast.error("Failed to release spoilers")
+            toast.error("Could not remove spoiler flag. Try refreshing the page.")
         },
     })
 }
@@ -567,7 +567,7 @@ export function useApplyAutoReadRulesNow() {
             toast.success(`Rules applied: ${result.applied} articles updated`)
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Failed to apply rules")
+            toast.error(error instanceof Error ? error.message : "Rules could not be applied. Try again.")
         },
     })
 }
@@ -589,7 +589,7 @@ export function useMigrateKeywordAlertsToRules() {
             toast.success(`Migrated ${result.migrated} alert${result.migrated === 1 ? "" : "s"} to rules`)
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Migration failed")
+            toast.error(error instanceof Error ? error.message : "Migration failed. No data was changed.")
         },
     })
 }
@@ -612,7 +612,7 @@ export function useCreateKeywordAlert() {
             toast.success("Alert created")
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Could not create alert")
+            toast.error(error instanceof Error ? error.message : "Could not create alert. Check the keyword and try again.")
         },
     })
 }
@@ -631,7 +631,7 @@ export function useUpdateKeywordAlert() {
             queryClient.invalidateQueries({ queryKey: ["keyword-alerts"] })
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Could not update alert")
+            toast.error(error instanceof Error ? error.message : "Alert update failed. Try saving again.")
         },
     })
 }
@@ -708,7 +708,7 @@ export function useCreateSavedSearch() {
             toast.success("Search saved")
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Could not save search")
+            toast.error(error instanceof Error ? error.message : "Could not save search. Try a different name.")
         },
     })
 }
@@ -743,7 +743,7 @@ export function useSetSavedSearchSharing() {
             toast.success(variables.enabled ? "Search sharing enabled" : "Search sharing disabled")
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Could not update sharing")
+            toast.error(error instanceof Error ? error.message : "Sharing settings could not be updated. Try again.")
         },
     })
 }
@@ -770,7 +770,7 @@ export function useUpdateDigestSettings() {
             queryClient.invalidateQueries({ queryKey: ["digest-settings"] })
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Failed to save digest settings")
+            toast.error(error instanceof Error ? error.message : "Digest settings could not be saved. Try again.")
         },
     })
 }
@@ -782,7 +782,7 @@ export function useSendTestDigest() {
             toast.success(`Test digest sent — ${result.articleCount} article${result.articleCount !== 1 ? "s" : ""}`)
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Failed to send test digest")
+            toast.error(error instanceof Error ? error.message : "Test digest could not be sent. Check your email settings.")
         },
     })
 }
@@ -803,7 +803,7 @@ export function useBeginTwoFactorSetup() {
             queryClient.invalidateQueries({ queryKey: ["two-factor-status"] })
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Could not start 2FA setup")
+            toast.error(error instanceof Error ? error.message : "Could not start 2FA setup. Make sure your account has an email address.")
         },
     })
 }
@@ -817,7 +817,7 @@ export function useConfirmTwoFactorSetup() {
             toast.success("Two-factor authentication enabled")
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Could not enable 2FA")
+            toast.error(error instanceof Error ? error.message : "Could not enable 2FA. Check the code and try again.")
         },
     })
 }
@@ -831,7 +831,7 @@ export function useDisableTwoFactor() {
             toast.success("Two-factor authentication disabled")
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Could not disable 2FA")
+            toast.error(error instanceof Error ? error.message : "Could not disable 2FA. Check the code and try again.")
         },
     })
 }
@@ -865,7 +865,7 @@ export function useUpdateAiSettings() {
             toast.success("AI settings saved")
         },
         onError: (err) => {
-            toast.error(err instanceof Error ? err.message : "Save failed")
+            toast.error(err instanceof Error ? err.message : "AI settings could not be saved. Try again.")
         },
     })
 }
@@ -884,7 +884,7 @@ export function useSummarizeArticle() {
             queryClient.invalidateQueries({ queryKey: ["articles"] })
         },
         onError: (err) => {
-            toast.error(err instanceof Error ? err.message : "Summarize failed")
+            toast.error(err instanceof Error ? err.message : "Summary failed. Check your AI provider settings.")
         },
     })
 }

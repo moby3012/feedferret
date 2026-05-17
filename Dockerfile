@@ -1,35 +1,36 @@
 # Production Dockerfile
-FROM node:22-slim AS base
-RUN apt-get update && apt-get install -y openssl python3 make g++ ca-certificates libvips-dev curl && rm -rf /var/lib/apt/lists/*
+# ── base-runtime ─────────────────────────────────────────────────────────────
+# Minimal runtime dependencies only — no build tools.
+FROM node:22-slim AS base-runtime
+RUN apt-get update && apt-get install -y openssl ca-certificates curl && rm -rf /var/lib/apt/lists/*
+
+# ── base-build ────────────────────────────────────────────────────────────────
+# Adds native build tools needed for packages that compile C extensions.
+FROM base-runtime AS base-build
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@11.0.8
 ENV CI=true
 
-# Install dependencies only when needed
-FROM base AS deps
+# ── deps ──────────────────────────────────────────────────────────────────────
+FROM base-build AS deps
 WORKDIR /app
-
-# Install package manager
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
-# Rebuild the source code only when needed
-FROM base AS builder
+# ── builder ───────────────────────────────────────────────────────────────────
+FROM base-build AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Next.js collects completely anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Add build arguments for Next.js build time
 ARG DATABASE_URL=postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public
 ARG DATABASE_PROVIDER=postgresql
 ARG AUTH_SECRET
 ARG AUTH_URL
 ARG AUTH_TRUST_HOST
 
-# Make them available as environment variables
 ENV DATABASE_URL=$DATABASE_URL
 ENV DATABASE_PROVIDER=$DATABASE_PROVIDER
 ENV AUTH_SECRET=$AUTH_SECRET
@@ -38,14 +39,16 @@ ENV AUTH_TRUST_HOST=$AUTH_TRUST_HOST
 
 RUN pnpm run build
 
-# Production image, copy all the files and run next
-FROM base AS runner
+# ── runner ────────────────────────────────────────────────────────────────────
+FROM base-runtime AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
+ENV NODE_ENV=production
 ENV DATABASE_URL=postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public
 ENV DATABASE_PROVIDER=postgresql
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN npm install -g pnpm@11.0.8
 
 RUN groupadd --system --gid 1001 nodejs
 RUN useradd --system --uid 1001 -g nodejs nextjs
@@ -62,18 +65,17 @@ COPY --chown=nextjs:nodejs scripts/prepare-prisma-schema.mjs ./scripts/prepare-p
 COPY --chown=nextjs:nodejs start.sh ./start.sh
 RUN chmod +x ./start.sh
 
-# Install prisma CLI globally for db push at startup (keep version in sync with package.json prisma devDependency)
-RUN npm install -g prisma@5.22.0
+# Copy prisma CLI from the deps stage instead of a separate global install.
+# Keep the path in sync with the prisma devDependency version in package.json.
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/.bin/prisma /usr/local/bin/prisma
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 
-# Final check of permissions for the root directory and data folder
 RUN chown -R nextjs:nodejs /app && chmod -R 770 /app/data
 
 USER nextjs
 
 EXPOSE 3000
+ENV PORT=3000
 
-ENV PORT 3000
-
-# server.js is created by next build from the standalone output
-# server.js is created by next build from the standalone output
 CMD ["./start.sh"]

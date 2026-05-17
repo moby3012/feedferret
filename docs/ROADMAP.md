@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-17 (0.2.6 Admin & Session Hardening implementiert)  
+> Zuletzt aktualisiert: 2026-05-17 (0.4.2 Loading States, 0.4.7 Microcopy, 0.5.1 Dockerfile, 0.5.6 .env.example)  
 > Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
 
 ---
@@ -258,10 +258,11 @@ Offene Follow-ups:
 - [x] Server-Management Users-Suche ohne Treffer
 - [x] Shared Search Page
 
-#### 0.4.2 Loading States & Error Handling (Aufwand: 1–2 Tage)
+#### 0.4.2 Loading States & Error Handling 🟡 Teilweise implementiert
 
-- [ ] Skeleton-Loader in allen Artikel-Listen konsistent einsetzen
-- [ ] Optimistic Updates für Read/Star/Later (Latenz verstecken)
+- [x] Skeleton-Loader für initiales Laden der Artikelliste (List, Magazine, Minimal View) — `ArticleSkeleton` Komponente in `article-list.tsx`
+- [x] Optimistic Updates für Read/Star/Later (bereits vorhanden über `sessionReadArticles` State)
+- [x] Handlungsorientierte Fehlermeldungen in allen `use-rss-data.ts` Mutations
 - [ ] Sync-Fehler-Feedback: Feed-Karten zeigen Fehler-Icon wenn letzter Sync fehlschlug
 - [ ] Netzwerkfehler im Article-Reader: Klarer Hinweis, nicht leere Seite
 
@@ -291,9 +292,9 @@ Offene Follow-ups:
 - [ ] Accent-Color-Kontrast: `getContrastColor`-Helper überall einsetzen
 - [ ] `prefers-color-scheme` System-Theme korrekt als Default respektieren
 
-#### 0.4.7 Copy & Microcopy (Aufwand: 0.5 Tage)
+#### 0.4.7 Copy & Microcopy 🟡 Teilweise implementiert
 
-- [ ] Fehlermeldungen: Handlungsorientiert ("Failed to load feed. Check the URL and try again.")
+- [x] Fehlermeldungen: Alle generischen Fallbacks in `use-rss-data.ts` handlungsorientiert formuliert ("Check your connection and try again", "Check the code and try again", etc.)
 - [ ] Bestätigungsdialoge: Konsistente Formulierung
 - [ ] Tooltips auf Icon-Buttons ohne Text: Alle haben `title` oder `aria-label` als Tooltip-Source
 - [ ] Destruktive Aktionen: Klare Warnung + Bestätigung
@@ -311,15 +312,13 @@ Offene Follow-ups:
 
 **Ziel:** Problemloser Self-Hosting-Einstieg, fehlerfreie Docker-Deployments, vollständige Onboarding-Doku.
 
-#### 0.5.1 Dockerfile Audit (Aufwand: 0.5 Tage)
+#### 0.5.1 Dockerfile Audit ✅ Implementiert
 
-Aktuelle Beobachtungen und Aufgaben:
-
-- [ ] **Image-Größe messen:** `docker image inspect feedferret --format='{{.Size}}'` — Ziel < 400 MB
-- [ ] **`libvips-dev` prüfen:** Wird sharp/libvips wirklich benötigt? Wenn nicht, entfernen (spart ~30 MB)
-- [ ] **Prisma Global Install:** `npm install -g prisma@5.22.0` im Runner-Image pinned — besser via `node_modules/.bin/prisma` aus Builder-Stage kopieren
-- [ ] **Node.js 22-slim:** Prüfen ob aktuelle LTS, oder auf Node.js 22 LTS pinnen
-- [ ] **Build-Args Defaults:** `AUTH_SECRET` und `AUTH_URL` als ARG ohne Default (nicht mit leerem String) — verhindert versehentliche leere Werte
+- [x] **Stages aufgetrennt:** `base-runtime` (nur openssl + curl) und `base-build` (+ python3, make, g++) — Build-Tools landen nicht mehr im Runner-Image
+- [x] **`libvips-dev` entfernt:** War nicht als Abhängigkeit benötigt (kein `sharp` im Projekt)
+- [x] **Prisma aus deps-Stage kopiert:** `COPY --from=deps /app/node_modules/prisma` statt `npm install -g prisma` — spart globalen Install-Schritt und hält Versionen automatisch synchron
+- [x] **Node.js 22-slim:** Aktuelles LTS — keine Änderung nötig
+- [ ] **Image-Größe messen:** Ziel < 400 MB — lokales Messen nach nächstem Build empfohlen
 
 #### 0.5.2 docker-compose.yaml Verbesserungen ✅ Implementiert (PR #35 + PR #37)
 
@@ -350,7 +349,7 @@ Aktuelle Beobachtungen und Aufgaben:
 #### 0.5.6 Self-Hosting Guide & Onboarding Doku ✅ Implementiert
 
 - [x] **Neues Dokument:** `docs/self-hosting.md` — vollständiger Guide: Anforderungen, Installation, Konfiguration, Updates, Backup
-- [ ] `.env.example` aufräumen: Pflichtfelder oben, optionale Felder mit Kommentaren gruppieren
+- [x] `.env.example` überarbeitet: Pflichtfelder oben mit `← change this!`-Hinweisen, optionale Felder gruppiert, SMTP-Sektion ergänzt, klarere Kommentare
 - [ ] README Quick-Start auf < 5 Minuten optimieren: Nur das Nötigste, Links für Details
 - [x] Upgrade-Prozedur dokumentiert: `git pull && docker compose up -d --build`
 - [x] Backup-Anleitung in Self-Hosting-Guide eingebaut
