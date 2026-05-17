@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
+import { hashApiToken } from "@/lib/token";
 
 export type ApiUser = {
   id: string;
@@ -24,7 +25,7 @@ export async function resolveApiUser(request: Request): Promise<ApiUser | null> 
   if (!token) return null;
 
   const user = await db.user.findUnique({
-    where: { apiToken: token },
+    where: { apiToken: hashApiToken(token) },
     select: { id: true, email: true, name: true, role: true, isActive: true },
   });
 

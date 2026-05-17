@@ -93,7 +93,7 @@
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
     "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.23",
+    "eslint-config-next": "14.2.35",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "postcss": "^8.5.14",
     "prisma": "^5.22.0",
