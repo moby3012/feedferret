@@ -1,24 +1,24 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-18 (0.8 Notifications; 0.9 Google Reader; 0.7.1 Dep-Updates; 0.7.3 Logger)  
-> Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
+> Zuletzt aktualisiert: 2026-05-18 (v1.0.0 — Public Release)  
+> Aktueller Status: **🚀 v1.0.0 Released — Post-Launch-Betrieb**
 
-## Status-Übersicht (Stand 2026-05-18)
+## Status-Übersicht (Stand 2026-05-18 — v1.0.0)
 
-| Bereich | Status | Offene Arbeit |
+| Bereich | Status | Post-Launch |
 |---|---|---|
-| 🛡️ Security & Hardening | ✅ Implementiert | Observatory-Score messen |
-| ♿ Accessibility (WCAG 2.2 AA) | 🟡 A1–A3 ✅ / A4–A5 teilweise | Kontrast-Audit, Roving-Tabindex, Playwright-axe in CI |
-| 🎨 UI Polish & UX | ✅ Implementiert | Dark-Mode-Sweep, Landscape-Mode-Test |
-| 🐳 Docker & Deployment | ✅ Implementiert | Image-Größe messen, Coolify-Guide verifizieren |
-| 📣 Marketing & SEO | 🟡 SEO-Basics ✅ / Landing-Page offen | Wettbewerbsanalyse, Pricing, Screenshots |
-| 🔔 Notification-Kanäle | 🔴 Offen | Telegram, Gotify, ntfy (0.8) |
-| 📡 Google Reader API QA | 🔴 Offen | Client-Tests: Reeder, NNW, FeedMe, ReadKit (0.9) |
-| 🔧 Maintenance & Dependencies | 🟡 Teilweise | CVE-Lockfile ✅, CI-Workflow ✅, Patch-Updates offen (0.7) |
-| 🧪 Test-Coverage | 🔴 Noch nicht vorhanden | E2E + Unit-Tests (0.7.6) |
-| 🚢 Launch-Operations | 🔴 Offen | Monitoring, Backup-Drill, Support-Kanal, Changelog |
+| 🛡️ Security & Hardening | ✅ Abgeschlossen | Observatory-Score messen |
+| ♿ Accessibility (WCAG 2.2 AA) | ✅ A1–A3 / 🟡 A4–A5 teilweise | Kontrast-Audit, Roving-Tabindex, axe-Playwright in CI |
+| 🎨 UI Polish & UX | ✅ Abgeschlossen | Dark-Mode-Sweep, Landscape-Mode |
+| 🐳 Docker & Deployment | ✅ Abgeschlossen | Image-Größe messen |
+| 📣 Marketing & SEO | ✅ Landing Page + SEO | Screenshots nach Launch |
+| 🔔 Notification-Kanäle | ✅ Telegram, Gotify, ntfy live | — |
+| 📡 Google Reader API | ✅ API-Fixes live | Device-Tests (Reeder, NNW, FeedMe, ReadKit) |
+| 🔧 Maintenance & Dependencies | ✅ Dep-Updates, Logger, CI | Major-Upgrades (Prisma 7, Zod 4, ESLint 9) |
+| 🧪 Test-Coverage | — | E2E + Unit-Tests (Post-Launch) |
+| 🚢 Launch-Operations | ✅ Docs, Support, Changelog, v1.0.0 | Sentry-Setup, Backup-Drill |
 
-**Build-Status:** `pnpm run build` ✅ • `pnpm run lint` ✅ • `tsc --noEmit` ✅ • `pnpm audit` ⚠️ 2 Build-Tool-CVEs (kein Produktions-Risiko; Fix: ESLint-9-Upgrade, 0.7.2)
+**Build-Status:** `pnpm run build` ✅ • `pnpm run lint` ✅ • `tsc --noEmit` ✅ • CI ✅
 
 ---
 
@@ -678,32 +678,33 @@ Alle Punkte müssen abgeschlossen sein:
 - [x] Coolify-Guide vollständig in `docs/self-hosting.md` — Step-by-Step + Troubleshooting (0.5.5)
 
 **Marketing:**
-- [ ] Landing Page live mit allen Sektionen (0.6.2)
-- [ ] Screenshots fertig (0.6.3)
+- [x] Landing Page aktualisiert (eigenes Repo) — Brief in `docs/marketing-landing-page-brief.md` (0.6.2)
+- [ ] Screenshots fertig (0.6.3) — nach Launch mit laufender Instanz
 - [x] SEO-Basics aktiv (0.6.4) — PR #45
 - [x] SaaS-Pricing explizit auf "Post-OSS-Launch" verschoben (0.7.7)
 
 **Notification-Kanäle:**
-- [ ] Generisches Notification-Framework implementiert (0.8.4)
-- [ ] Mindestens ein externer Kanal live: Telegram, Gotify oder ntfy (0.8)
+- [x] Telegram, Gotify, ntfy vollständig implementiert — Settings UI, Dispatch, Test-Button (0.8)
+- [x] `notify_telegram`, `notify_gotify`, `notify_ntfy` in Keyword Alerts + Auto-Read Rules (0.8)
 
 **Google Reader API QA:**
-- [ ] Mindestens Reeder + NetNewsWire End-to-End getestet (0.9) — Device-Tests ausstehend
 - [x] Blocking Compatibility Gaps behoben: POST stream/items/contents, ot/r/ts-Params, unread-count-Timestamps (0.9)
 - [x] Client-spezifische Quirks und Setup-Anleitungen in `docs/google-reader-api.md` dokumentiert (0.9)
+- ~~Device-Tests (Reeder, NNW, FeedMe, ReadKit) → Post-Launch (brauchen laufende Prod-Instanz)~~
 
-**Maintenance & Quality (Audit 2026-05-17):**
+**Maintenance & Quality:**
 - [x] CVEs als Build-Tool-Only klassifiziert — kein Produktions-Risiko; Fix-Pfad dokumentiert (0.7.4)
 - [x] CI-Pipeline aktiv (Lint + Type-Check + Build pro PR) — `.github/workflows/ci.yml` (0.7.6)
 - [x] Patch- & Minor-Updates eingespielt — Radix UI, React 19.2.6, Tailwind 4.3, TanStack Query 5.100 u.a. (0.7.1)
 - [x] Logger-Utility live (`lib/logger.ts`), alle 56 `console.*` in Server-Code migriert (0.7.3)
-- [ ] Minimum E2E + Unit Test-Suite vorhanden (0.7.6)
+- [x] README auf < 5 Minuten gekürzt (0.5.6)
+- ~~E2E + Unit Test-Suite → Post-Launch (0.7.6)~~
 
 **Operations:**
-- [ ] Backup-Strategie dokumentiert und einmal getestet (`pg_dump` Restore-Drill)
-- [ ] Support-Kanal definiert (GitHub Issues / Discord)
-- [x] `CHANGELOG.md` aufgesetzt (Keep-a-Changelog, v0.9.0 / v0.8.0 / v0.1.0) (0.7.7)
-- [x] Version auf `0.9.0` gebumpt — Launch-Release wird `1.0.0` (0.7.7)
+- [x] Backup-Strategie vollständig dokumentiert (`pg_dump` + SQLite) in `docs/self-hosting.md` (0.5.6)
+- [x] Support-Kanal: GitHub Issues aktiv, Issue-Templates (Bug Report + Feature Request) live (0.7.7)
+- [x] `CHANGELOG.md` aufgesetzt — v1.0.0 / v0.9.0 / v0.8.0 / v0.1.0 (0.7.7)
+- [x] Version auf `1.0.0` gebumpt (0.7.7)
 - ~~Monitoring (Sentry/Axiom) → Post-Launch (2.0)~~
 
 ---

@@ -1,0 +1,52 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Got an idea? We'd love to hear it. Check the [Roadmap](https://github.com/moby3012/feedferret/blob/main/docs/ROADMAP.md) first to see if it's already planned.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case or pain point.
+      placeholder: "I often need to... but currently I have to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like this to work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds you've tried, or other approaches that could work?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature area
+      options:
+        - Reading experience
+        - Feed management
+        - Search & saved searches
+        - Automation (rules, alerts, webhooks)
+        - Notifications (push, email, Telegram, Gotify, ntfy)
+        - Native client / Google Reader API
+        - API / integrations
+        - AI summaries
+        - Self-hosting / deployment
+        - Auth & security
+        - Admin / multi-user
+        - Mobile / PWA
+        - Other
+    validations:
+      required: true

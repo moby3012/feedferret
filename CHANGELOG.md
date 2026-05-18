@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [1.0.0] — 2026-05-18 — Initial Public Release 🎉
+
+First stable release. Full feature set, production-hardened, self-hosting ready.
+
+### Highlights
+
+- **Notification channels** — Telegram, Gotify, ntfy alongside browser push, email, and webhooks
+- **Google Reader API** — full client compatibility for Reeder, NetNewsWire, FeedMe, ReadKit
+- **CI pipeline** — lint + type-check + build on every PR
+- **Centralized logger** — `lib/logger.ts`, production-safe log levels
+- **Dependency updates** — Radix UI, React 19.2.6, Tailwind 4.3, TanStack Query 5.100
+- **Coolify deployment guide** — step-by-step with troubleshooting
+- **GitHub Issue Templates** — bug report + feature request forms
+- **README** — streamlined to < 5-minute read
+
+See [0.9.0] below for the full pre-release feature list.
+
+---
+
+---
+
 ## [0.9.0] — 2026-05-18 — Pre-Launch Release
 
 ### Added
