@@ -25,6 +25,7 @@ import { buildAdvancedSearchWhere } from "@/lib/search";
 import { randomBytes } from "crypto";
 import { decryptIfValue } from "@/lib/crypto";
 import type { AiProvider } from "@/lib/ai-summary";
+import { logger } from "@/lib/logger";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -343,7 +344,7 @@ export async function addFeed(url: string, categoryId?: string) {
         revalidatePath("/");
         return { success: true, feed };
     } catch (error) {
-        console.error("Failed to add feed:", error);
+        logger.error("Failed to add feed:", error);
         return { success: false, error: "Invalid RSS/Atom feed URL" };
     }
 }

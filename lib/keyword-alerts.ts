@@ -7,6 +7,7 @@ import {
   sendGotifyNotification,
   sendNtfyNotification,
 } from "@/lib/notification-channels";
+import { logger } from "./logger";
 
 function parseActions(value: string | null | undefined) {
   if (!value) return ["notify_inapp"];
@@ -106,7 +107,7 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
         articleId: matches.length === 1 ? first.id : undefined,
         feedId: matches.length === 1 ? first.feed.id : undefined,
         tag: `keyword-alert:${alert.id}`,
-      }).catch((error) => console.warn("[keyword-alerts] push failed", error));
+      }).catch((error) => logger.warn("[keyword-alerts] push failed", error));
     }
 
     if (actions.includes("notify_email")) {
@@ -126,7 +127,7 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
           subject: `Keyword alert: ${alert.name}`,
           html,
           text,
-        }).catch((e) => console.warn("[keyword-alerts] email failed:", e));
+        }).catch((e) => logger.warn("[keyword-alerts] email failed:", e));
       }
     }
 
@@ -141,7 +142,7 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
         sendTelegramNotification(
           { botToken: ch.telegram.botToken, chatId: ch.telegram.chatId },
           { title: `Keyword alert: ${alert.name}`, body, url: matches.length === 1 ? first.link : undefined },
-        ).catch((e) => console.warn("[keyword-alerts] telegram failed:", e));
+        ).catch((e) => logger.warn("[keyword-alerts] telegram failed:", e));
       }
     }
 
@@ -156,7 +157,7 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
         sendGotifyNotification(
           { url: ch.gotify.url, token: ch.gotify.token },
           { title: `Keyword alert: ${alert.name}`, body, url: matches.length === 1 ? first.link : undefined },
-        ).catch((e) => console.warn("[keyword-alerts] gotify failed:", e));
+        ).catch((e) => logger.warn("[keyword-alerts] gotify failed:", e));
       }
     }
 
@@ -171,7 +172,7 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
         sendNtfyNotification(
           { url: ch.ntfy.url, token: ch.ntfy.token ?? undefined },
           { title: `Keyword alert: ${alert.name}`, body, url: matches.length === 1 ? first.link : undefined },
-        ).catch((e) => console.warn("[keyword-alerts] ntfy failed:", e));
+        ).catch((e) => logger.warn("[keyword-alerts] ntfy failed:", e));
       }
     }
 

@@ -11,6 +11,7 @@ import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { generateOpml, parseOpml, scraperConfigFromOutline, httpOptionsFromOutline, type OpmlOutline } from "@/lib/opml";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { validateFeedUrl, validateOpml } from "@/lib/validation";
+import { logger } from "@/lib/logger";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
@@ -214,7 +215,7 @@ async function createFeed(user: ApiUser, request: Request) {
     include: { category: true },
   });
 
-  if (body?.sync !== false) await syncFeed(user.id, feed.id).catch((error) => console.error("[api/v1] initial feed sync failed", error));
+  if (body?.sync !== false) await syncFeed(user.id, feed.id).catch((error) => logger.error("[api/v1] initial feed sync failed", error));
   const fresh = await db.feed.findFirst({ where: { id: feed.id, userId: user.id }, include: { category: true } });
   return NextResponse.json(feedPayload(fresh), { status: 201 });
 }
@@ -510,7 +511,7 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
       res = apiError("Not found", 404);
     }
   } catch (error) {
-    console.error("[api/v1]", error);
+    logger.error("[api/v1]", error);
     res = apiError(error instanceof Error ? error.message : String(error), 500);
   }
 

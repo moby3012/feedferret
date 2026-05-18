@@ -9,6 +9,7 @@ import {
   parseJsonObject,
 } from "./feed-extraction";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
+import { logger } from "./logger";
 
 export type FeedFetchConfig = {
   url: string;
@@ -228,14 +229,14 @@ async function fetchText(feed: FeedFetchConfig, accept: string) {
       const { ProxyAgent } = await import("undici");
       (init as any).dispatcher = new ProxyAgent(String(http.CURLOPT_PROXY));
     } catch (error) {
-      console.warn("[feed-fetcher] proxy requested but undici ProxyAgent failed", error);
+      logger.warn("[feed-fetcher] proxy requested but undici ProxyAgent failed", error);
     }
   } else if (feed.sslVerify === false) {
     try {
       const { Agent } = await import("undici");
       (init as any).dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
     } catch (error) {
-      console.warn("[feed-fetcher] sslVerify=false requested but undici Agent failed", error);
+      logger.warn("[feed-fetcher] sslVerify=false requested but undici Agent failed", error);
     }
   }
 

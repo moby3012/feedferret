@@ -8,6 +8,7 @@ import {
 } from "@/lib/rate-limit";
 import { discoverFeedsAtUrl } from "@/lib/feed-discovery";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -75,7 +76,7 @@ export async function GET(request: Request) {
   try {
     // For keywords (not URLs/domains): search local catalog
     if (!canUseExternalApi) {
-      console.log("[discovery/search] keyword search in local catalog:", query);
+      logger.log("[discovery/search] keyword search in local catalog:", query);
 
       const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length >= 2);
       if (keywords.length === 0) {
@@ -117,7 +118,7 @@ export async function GET(request: Request) {
 
     // For URLs/domains: use Feedsearch.dev API
     const feedsearchUrl = `https://feedsearch.dev/api/v1/search?url=${encodeURIComponent(searchUrl)}`;
-    console.log("[discovery/search] querying feedsearch.dev:", feedsearchUrl);
+    logger.log("[discovery/search] querying feedsearch.dev:", feedsearchUrl);
 
     const response = await fetch(feedsearchUrl, {
       headers: {
@@ -127,7 +128,7 @@ export async function GET(request: Request) {
       signal: AbortSignal.timeout(15000),
     });
 
-    console.log("[discovery/search] response status:", response.status);
+    logger.log("[discovery/search] response status:", response.status);
 
     if (!response.ok) {
       // Feedsearch might return 404 for no results
@@ -138,12 +139,12 @@ export async function GET(request: Request) {
         );
       }
       const errorText = await response.text().catch(() => "");
-      console.error("[discovery/search] API error:", response.status, errorText);
+      logger.error("[discovery/search] API error:", response.status, errorText);
       throw new Error(`Feedsearch returned ${response.status}`);
     }
 
     const data: FeedsearchResult[] = await response.json();
-    console.log("[discovery/search] found feeds:", data.length);
+    logger.log("[discovery/search] found feeds:", data.length);
 
     // Transform to our format
     const feeds = (Array.isArray(data) ? data : []).map((item) => ({
@@ -165,12 +166,12 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error("[discovery/search] feedsearch.dev error:", message);
+    logger.error("[discovery/search] feedsearch.dev error:", message);
 
     // Fallback: try local feed discovery if query looks like a URL
     if (searchUrl.startsWith("http")) {
       try {
-        console.log("[discovery/search] falling back to local discovery for:", searchUrl);
+        logger.log("[discovery/search] falling back to local discovery for:", searchUrl);
         const localFeeds = await discoverFeedsAtUrl(searchUrl);
         if (localFeeds.length > 0) {
           const feeds = localFeeds.map((f) => ({
@@ -187,7 +188,7 @@ export async function GET(request: Request) {
           );
         }
       } catch (localError) {
-        console.error("[discovery/search] local fallback also failed:", localError);
+        logger.error("[discovery/search] local fallback also failed:", localError);
       }
     }
 

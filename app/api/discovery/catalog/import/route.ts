@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { JSDOM } from "jsdom";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -173,7 +174,7 @@ function extractFeedsFromOpml(xml: string, defaultCategory: string): ParsedFeed[
       });
     }
   } catch (e) {
-    console.error("Error extracting feeds from OPML:", e);
+    logger.error("Error extracting feeds from OPML:", e);
   }
 
   return feeds;
@@ -220,7 +221,7 @@ export async function POST(request: Request) {
 
   for (const source of OPML_SOURCES) {
     try {
-      console.log(`[discovery/import] fetching ${source.name} from ${source.url}`);
+      logger.log(`[discovery/import] fetching ${source.name} from ${source.url}`);
 
       const response = await fetch(source.url, {
         headers: { "User-Agent": "FeedFerret/1.0" },
@@ -263,11 +264,11 @@ export async function POST(request: Request) {
       results.totalAdded += added;
       results.totalSkipped += feeds.length - added;
 
-      console.log(`[discovery/import] ${source.name}: ${feeds.length} feeds found, ${added} added`);
+      logger.log(`[discovery/import] ${source.name}: ${feeds.length} feeds found, ${added} added`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       results.sources.push({ name: source.name, fetched: 0, added: 0, error: message });
-      console.error(`[discovery/import] ${source.name} failed:`, message);
+      logger.error(`[discovery/import] ${source.name} failed:`, message);
     }
   }
 

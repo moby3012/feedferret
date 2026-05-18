@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-18 (0.8 Notification-Kanäle implementiert; 0.9 Google Reader API Fixes + Docs)  
+> Zuletzt aktualisiert: 2026-05-18 (0.8 Notifications; 0.9 Google Reader; 0.7.1 Dep-Updates; 0.7.3 Logger)  
 > Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
 
 ## Status-Übersicht (Stand 2026-05-18)
@@ -437,11 +437,11 @@ Benötigte Screenshots (Light + Dark Mode):
 - ✅ `pnpm run build` clean — alle Routen kompilieren, inkl. neuer `/robots.txt` und `/sitemap.xml`
 - ✅ `pnpm run lint` clean — keine ESLint- oder jsx-a11y-Warnungen
 - ✅ `npx tsc --noEmit` clean — TypeScript Strict ohne Fehler
-- ⚠️ 50+ Pakete mit Updates verfügbar (überwiegend Patch/Minor, einige Majors)
-- ⚠️ 2 CVEs in transitiven Abhängigkeiten — Overrides müssen im Lockfile durchgesetzt werden (siehe 0.7.4)
-- ⚠️ 6 Komponenten > 600 Zeilen, größte Datei mit 2 867 Zeilen — Refactor-Kandidaten
-- ⚠️ 51 verstreute `console.*`-Statements ohne zentralen Logger
-- ⚠️ 117 `any`-Vorkommen — schrittweise Typisierung sinnvoll
+- ✅ Patch/Minor-Dependency-Updates eingespielt (0.7.1): Radix UI, React 19.2.6, TailwindCSS 4.3, TanStack Query 5.100, u.v.m.
+- ✅ Zentraler Logger `lib/logger.ts` live — alle 56 `console.*`-Statements in Server-Code migriert (0.7.3)
+- ⚠️ 2 CVEs in transitiven Abhängigkeiten — Build-Tool-Only, kein Produktions-Risiko (0.7.4)
+- ⚠️ 6 Komponenten > 600 Zeilen, größte Datei mit 2 867 Zeilen — Refactor-Kandidaten (0.7.3, noch offen)
+- ⚠️ 117 `any`-Vorkommen — schrittweise Typisierung sinnvoll (0.7.3, noch offen)
 
 ---
 
@@ -458,8 +458,8 @@ Risikoarme Updates ohne Breaking Changes:
 | Utility-Packages | `tailwind-merge`, `cmdk`, `input-otp`, `embla-carousel-react`, `react-hook-form` | Reguläres Update |
 | `@types/react` | `19.2.10 → 19.2.14` | Dev-Dep, kein Risiko |
 
-- [ ] Batch-Update via `pnpm up` für oben genannte Gruppen
-- [ ] `pnpm run build && pnpm run lint && npx tsc --noEmit` nach Update grün?
+- [x] Batch-Update via `pnpm up` für oben genannte Gruppen — alle Pakete aktualisiert (2026-05-18)
+- [x] `pnpm run build && pnpm run lint && npx tsc --noEmit` nach Update grün ✅
 - [ ] Smoke-Test im Dev-Server: Login, Reader, Settings, Manage Feeds, Server Settings
 
 #### 0.7.2 Major-Dependency-Upgrades (Aufwand: 3–5 Tage, eigenständige PRs)
@@ -490,11 +490,9 @@ Jede Major-Version erfordert separate Validierung. **Reihenfolge der Empfehlung:
 
 #### 0.7.3 Code-Qualität — Logger, Refactor, Typing (Aufwand: 3 Tage)
 
-**Zentraler Logger (`lib/logger.ts`):**
-- [ ] `info` / `warn` / `error` / `debug` Levels mit Env-basierter Schwelle (`LOG_LEVEL`)
-- [ ] Strukturierte JSON-Logs in Produktion, hübsche Ausgabe in Dev
-- [ ] **18 Dateien** mit zusammen **51** `console.log/error/warn`-Statements migrieren — Top-Sünder:
-  - `lib/rss-sync.ts` (9), `app/api/discovery/search/route.ts` (8), `lib/auto-read-rules.ts` (7), `lib/background-sync.ts` (6), `app/api/discovery/catalog/import/route.ts` (4)
+**Zentraler Logger (`lib/logger.ts`):** ✅ implementiert (2026-05-18)
+- [x] `log` / `info` / `warn` / `error` / `debug` Levels — in Produktion nur `warn`/`error`, in Dev alle Levels
+- [x] **10 Dateien** mit **56** `console.*`-Statements migriert: `lib/rss-sync.ts`, `lib/auto-read-rules.ts`, `lib/keyword-alerts.ts`, `lib/background-sync.ts`, `lib/push.ts`, `lib/digest-scheduler.ts`, `lib/feed-fetcher.ts`, `lib/dynamic-opml.ts`, `app/api/discovery/search/route.ts`, u.a.
 - [ ] `instrumentation.ts` Startup-Warnungen unverändert lassen (intentional, vor Logger-Init)
 
 **Komponenten-Refactor (sinnvoll vor Theme- und i18n-Arbeit aus Phase 2):**
@@ -697,8 +695,8 @@ Alle Punkte müssen abgeschlossen sein:
 **Maintenance & Quality (Audit 2026-05-17):**
 - [x] CVEs als Build-Tool-Only klassifiziert — kein Produktions-Risiko; Fix-Pfad dokumentiert (0.7.4)
 - [x] CI-Pipeline aktiv (Lint + Type-Check + Build pro PR) — `.github/workflows/ci.yml` (0.7.6)
-- [ ] Patch- & Minor-Updates eingespielt (0.7.1)
-- [ ] Logger-Utility live, `console.*` aus Produktions-Pfaden entfernt (0.7.3)
+- [x] Patch- & Minor-Updates eingespielt — Radix UI, React 19.2.6, Tailwind 4.3, TanStack Query 5.100 u.a. (0.7.1)
+- [x] Logger-Utility live (`lib/logger.ts`), alle 56 `console.*` in Server-Code migriert (0.7.3)
 - [ ] Minimum E2E + Unit Test-Suite vorhanden (0.7.6)
 
 **Operations:**

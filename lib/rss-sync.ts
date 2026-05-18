@@ -9,6 +9,7 @@ import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssr
 import { computeContentHash } from "./content-hash";
 import { decryptIfValue } from "./crypto";
 import type { AiConfig } from "./ai-summary";
+import { logger } from "./logger";
 
 async function getSanitizer() {
     const { default: DOMPurify } = await import("isomorphic-dompurify");
@@ -145,17 +146,17 @@ export async function syncFeed(userId: string, feedId: string) {
 
         if (createdArticleIds.length > 0) {
             await applyKeywordAlerts(userId, createdArticleIds).catch((e) =>
-                console.error("[rss-sync] keyword alerts failed:", e),
+                logger.error("[rss-sync] keyword alerts failed:", e),
             );
             await queueNewArticleNotifications(userId, createdArticleIds).catch((e) =>
-                console.error("[rss-sync] push notification queue failed:", e),
+                logger.error("[rss-sync] push notification queue failed:", e),
             );
             // Webhook: new_article events (one per created article, non-blocking)
         }
 
         return { success: true, count: articles.length, createdArticleIds };
     } catch (error) {
-        console.error(`Error syncing feed ${feed.url}:`, error);
+        logger.error(`Error syncing feed ${feed.url}:`, error);
         await db.feed.update({
             where: { id: feed.id },
             data: {
@@ -175,7 +176,7 @@ export async function syncFeed(userId: string, feedId: string) {
                     error: errorMessage,
                 }),
             )
-            .catch((e) => console.warn("[rss-sync] feed_error rules failed:", e));
+            .catch((e) => logger.warn("[rss-sync] feed_error rules failed:", e));
         return { success: false, error: String(error) };
     }
 }
@@ -258,7 +259,7 @@ async function autoFetchFullTextForArticles(
                 data: { content: sanitized, excerpt: plain.slice(0, 240) },
             });
         } catch (e) {
-            console.warn(`[rss-sync] autoFetchFullText failed for ${article.link}:`, e);
+            logger.warn(`[rss-sync] autoFetchFullText failed for ${article.link}:`, e);
         }
     }
 }
@@ -310,14 +311,14 @@ async function autoSummarizeNewArticles(userId: string, articleIds: string[]) {
                 data: { aiSummary: summary, aiSummarizedAt: new Date() },
             });
         } catch (error) {
-            console.error("[rss-sync] auto-summary failed:", error);
+            logger.error("[rss-sync] auto-summary failed:", error);
         }
     }
 }
 
 export async function syncUserFeeds(userId: string) {
     await syncDynamicOpmlCategories(userId).catch((e) =>
-        console.error("[rss-sync] dynamic OPML sync failed:", e),
+        logger.error("[rss-sync] dynamic OPML sync failed:", e),
     );
 
     const feeds = await db.feed.findMany({
@@ -350,7 +351,7 @@ export async function syncUserFeeds(userId: string) {
     const hasSynced = results.some((r: any) => r.success && !r.skipped);
     if (hasSynced) {
         await applyAutoReadRules(userId).catch((e) =>
-            console.error("[rss-sync] applyAutoReadRules failed:", e),
+            logger.error("[rss-sync] applyAutoReadRules failed:", e),
         );
     }
 
@@ -359,7 +360,7 @@ export async function syncUserFeeds(userId: string) {
 
 export async function syncAllFeeds() {
     await syncDynamicOpmlCategories().catch((e) =>
-        console.error("[rss-sync] dynamic OPML sync failed:", e),
+        logger.error("[rss-sync] dynamic OPML sync failed:", e),
     );
 
     const feeds = await db.feed.findMany({

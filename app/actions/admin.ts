@@ -7,6 +7,7 @@ import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import { revalidatePath } from "next/cache";
 import { normalizeStarterPacksInput, stringifyStarterPacks } from "@/lib/starter-packs";
 import { getStarterPacksFromSettings } from "@/lib/starter-packs.server";
+import { logger } from "@/lib/logger";
 
 async function checkAdmin() {
   const session = await auth();
@@ -47,7 +48,7 @@ async function logAdminAction(
       },
     });
   } catch (err) {
-    console.error("[audit]", err);
+    logger.error("[audit]", err);
   }
 }
 
@@ -309,7 +310,7 @@ export async function sendTestEmail(config: Record<string, unknown>) {
     });
     return { success: true, sentTo: session.user.email };
   } catch (error: any) {
-    console.error("Mail provider test failed:", error);
+    logger.error("Mail provider test failed:", error);
     return { success: false, error: error?.message || "Unknown mail error" };
   }
 }

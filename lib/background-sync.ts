@@ -1,6 +1,7 @@
 import { syncAllFeeds } from "./rss-sync";
 import { runDigestScheduler } from "./digest-scheduler";
 import { flushDueNotifications } from "./notifications";
+import { logger } from "./logger";
 
 type SchedulerState = {
     timer: NodeJS.Timeout | null;
@@ -34,19 +35,19 @@ async function tick() {
         const failed = results.filter((r: any) => !r.success).length;
         state.lastRun = Date.now();
         state.lastError = null;
-        console.log(
+        logger.log(
             `[background-sync] tick: ${synced} synced, ${failed} failed, ${results.length} total`,
         );
         // Run digest scheduler after each sync tick (internally rate-limits per user)
         void runDigestScheduler().catch((e) =>
-            console.error("[digest-scheduler] error:", e),
+            logger.error("[digest-scheduler] error:", e),
         );
         void flushDueNotifications().catch((e) =>
-            console.error("[push-notifications] flush failed:", e),
+            logger.error("[push-notifications] flush failed:", e),
         );
     } catch (error) {
         state.lastError = String(error);
-        console.error("[background-sync] tick failed:", error);
+        logger.error("[background-sync] tick failed:", error);
     } finally {
         state.running = false;
     }
@@ -55,7 +56,7 @@ async function tick() {
 export function startBackgroundSync() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return;
     if (process.env.DISABLE_BACKGROUND_SYNC === "true") {
-        console.log("[background-sync] disabled via DISABLE_BACKGROUND_SYNC");
+        logger.log("[background-sync] disabled via DISABLE_BACKGROUND_SYNC");
         return;
     }
     if (process.env.NEXT_PHASE === "phase-production-build") return;
@@ -67,7 +68,7 @@ export function startBackgroundSync() {
     const intervalMs = Math.max(1, intervalMinutes) * 60 * 1000;
     const initialDelayMs = 30_000;
 
-    console.log(
+    logger.log(
         `[background-sync] scheduling every ${intervalMinutes}m (initial delay ${initialDelayMs / 1000}s)`,
     );
 
