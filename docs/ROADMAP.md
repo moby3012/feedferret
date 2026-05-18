@@ -700,17 +700,27 @@ Alle Punkte müssen abgeschlossen sein:
 - [ ] Minimum E2E + Unit Test-Suite vorhanden (0.7.6)
 
 **Operations:**
-- [ ] Monitoring: Sentry oder Axiom für Error-Tracking konfiguriert
 - [ ] Backup-Strategie dokumentiert und einmal getestet (`pg_dump` Restore-Drill)
 - [ ] Support-Kanal definiert (GitHub Issues / Discord)
 - [x] `CHANGELOG.md` aufgesetzt (Keep-a-Changelog, v0.9.0 / v0.8.0 / v0.1.0) (0.7.7)
 - [x] Version auf `0.9.0` gebumpt — Launch-Release wird `1.0.0` (0.7.7)
+- ~~Monitoring (Sentry/Axiom) → Post-Launch (2.0)~~
 
 ---
 
 ## Phase 2: Post-Launch Roadmap
 
 Nach stabilem Launch und erstem Nutzer-Feedback.
+
+---
+
+### 2.0 Operations & Monitoring (direkt nach Launch)
+
+- [ ] **Sentry** einrichten — `@sentry/nextjs`, DSN in `.env.example`, `lib/logger.ts` ruft intern `Sentry.captureException()` auf
+- [ ] **Source Maps** über Sentry-Webpack-Plugin hochladen (Stack Traces auf Original-TypeScript)
+- [ ] **Backup-Drill** — einmaligen `pg_dump`-Restore auf separater DB durchführen, Ablauf dokumentieren
+- [ ] **Support-Kanal** — GitHub Issues aktivieren, Issue-Templates (Bug, Feature Request) anlegen
+- [ ] Optional: Axiom für strukturierte Log-Aggregation (passt zu `lib/logger.ts`)
 
 ---
 
