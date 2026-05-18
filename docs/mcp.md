@@ -1,6 +1,23 @@
 # FeedFerret MCP
 
-FeedFerret bietet einen MCP-kompatiblen HTTP-JSON-RPC-Endpunkt, damit Sprachmodelle und Agenten direkt mit dem Reader arbeiten können.
+> **v1.0.0** — 10 tools available. All tools are user-scoped (token owner only).
+
+FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models and agents can work directly with the reader.
+
+## Tools at a Glance
+
+| Tool | Type | Description |
+|---|---|---|
+| `feedferret.search_articles` | read | Full-text + advanced search syntax |
+| `feedferret.get_article` | read | Fetch one article by ID |
+| `feedferret.update_article_state` | write | Set read / starred / read-later |
+| `feedferret.list_feeds` | read | List feeds with unread counts |
+| `feedferret.add_feed` | write | Add an RSS/Atom feed |
+| `feedferret.sync_feeds` | write | Sync all feeds or one feed |
+| `feedferret.list_categories` | read | List feed categories |
+| `feedferret.list_labels` | read | List article labels |
+| `feedferret.create_label` | write | Create a label |
+| `feedferret.mark_all_read` | write | Bulk mark-as-read (use with care) |
 
 ```text
 POST /api/mcp
