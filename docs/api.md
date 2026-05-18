@@ -506,13 +506,13 @@ Content-Type: application/json
 
 ---
 
-# Weitere sinnvolle öffentliche Schnittstellen (Roadmap)
+# API Roadmap
 
-Bereits umgesetzt sind Artikel, Feeds, Kategorien, Labels, gespeicherte Suchen, OPML, Sync und MCP. Als nächste öffentliche APIs wären besonders nützlich:
+Shipped in v1.0: articles, feeds, categories, labels, saved searches, OPML, sync, MCP, Google Reader API.
 
-- Webhook-Management über REST v1 (derzeit UI/Server Actions + Outbound-Doku).
-- Benachrichtigungen/Keyword Alerts als REST v1.
-- Digest-/Push-Einstellungen als REST v1.
-- Batch-Endpunkte für sehr große Automationen (`POST /api/v1/articles/batch`).
-- Feingranulare API Scopes statt eines globalen User-Tokens.
-- Token-Hashing/Token-Präfixe im Datenmodell für bessere Secret Hygiene.
+Planned — see [`docs/releases/backlog.md`](releases/backlog.md) for status:
+
+- Webhook management via REST v1 (currently UI/Server Actions only)
+- Keyword Alerts and Notification settings via REST v1
+- Batch endpoints for bulk automation (`POST /api/v1/articles/batch`)
+- Fine-grained API token scopes (`read` / `write` / `admin`) instead of a single user token
