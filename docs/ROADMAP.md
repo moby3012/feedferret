@@ -1,9 +1,9 @@
 # FeedFerret Roadmap
 
-> Zuletzt aktualisiert: 2026-05-17 (Notification-Kanäle + Google Reader QA in Pre-Launch; CVE-Lockfile-Fix; CI-Workflow)  
+> Zuletzt aktualisiert: 2026-05-18 (0.8 Notification-Kanäle implementiert; 0.9 Google Reader API Fixes + Docs)  
 > Aktueller Status: **Pre-Launch — Finale Härtungs- & Polishing-Phase**
 
-## Status-Übersicht (Stand 2026-05-17)
+## Status-Übersicht (Stand 2026-05-18)
 
 | Bereich | Status | Offene Arbeit |
 |---|---|---|
@@ -633,12 +633,22 @@ Alle drei Services teilen eine gemeinsame Abstraktion:
 
 **Motivation:** Google Reader API ist bereits implementiert (`docs/google-reader-api.md`). Vor dem Launch müssen echte Clients getestet werden — ungeprüfte Kompatibilität ist kein Verkaufsargument.
 
+**Code-Fixes (2026-05-18):**
+
+- [x] `POST stream/items/contents` implementiert — Reeder, NNW, FeedMe, ReadKit nutzen diesen Endpoint nach `GET stream/items/ids`
+- [x] `r=o` (oldest-first) Sortierung in `getArticlesForStream()` unterstützt
+- [x] `ot` (older-than Unix-Sekunden) Filter in `buildStreamWhere()` implementiert
+- [x] `mark-all-as-read` mit `ts`-Cutoff (Unix-Mikrosekunden) — verhindert, dass frisch gesynkte Artikel als gelesen markiert werden
+- [x] `user-info.signupTimeSec` mit echtem Timestamp (statt 0)
+- [x] `unread-count` gibt echte `newestItemTimestampUsec`-Werte zurück (global, starred, pro Feed)
+- [x] Client-spezifische Setup-Anleitungen in `docs/google-reader-api.md` dokumentiert
+
+**Noch ausstehend (Device-Tests):**
+
 - [ ] Reeder (macOS/iOS) End-to-End-Test gegen Prod-Instanz
 - [ ] NetNewsWire End-to-End-Test
 - [ ] FeedMe (Android) End-to-End-Test
 - [ ] ReadKit End-to-End-Test
-- [ ] Client-spezifische Quirks und bewährte Base-URLs in `docs/google-reader-api.md` dokumentieren
-- [ ] Blocking Compatibility Gaps beheben (eigener PR pro kritischem Bugfix)
 - [ ] Fever API: Entscheidung basierend auf tatsächlichem Client-Bedarf (NetNewsWire nutzt Fever als Alternative)
 
 ---
@@ -680,9 +690,9 @@ Alle Punkte müssen abgeschlossen sein:
 - [ ] Mindestens ein externer Kanal live: Telegram, Gotify oder ntfy (0.8)
 
 **Google Reader API QA:**
-- [ ] Mindestens Reeder + NetNewsWire End-to-End getestet (0.9)
-- [ ] Blocking Compatibility Gaps behoben (0.9)
-- [ ] Client-spezifische Quirks in `docs/google-reader-api.md` dokumentiert (0.9)
+- [ ] Mindestens Reeder + NetNewsWire End-to-End getestet (0.9) — Device-Tests ausstehend
+- [x] Blocking Compatibility Gaps behoben: POST stream/items/contents, ot/r/ts-Params, unread-count-Timestamps (0.9)
+- [x] Client-spezifische Quirks und Setup-Anleitungen in `docs/google-reader-api.md` dokumentiert (0.9)
 
 **Maintenance & Quality (Audit 2026-05-17):**
 - [x] CVEs als Build-Tool-Only klassifiziert — kein Produktions-Risiko; Fix-Pfad dokumentiert (0.7.4)

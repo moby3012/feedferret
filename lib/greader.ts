@@ -117,7 +117,13 @@ export function normalizeCategoryNameFromTag(tag: string) {
   return name || null;
 }
 
-export function buildStreamWhere(userId: string, streamId?: string | null, includeStates: string[] = [], excludeStates: string[] = []) {
+export function buildStreamWhere(
+  userId: string,
+  streamId?: string | null,
+  includeStates: string[] = [],
+  excludeStates: string[] = [],
+  olderThanSec?: number | null,
+) {
   const where: any = { userId };
   const stream = parseGReaderStreamId(streamId);
 
@@ -183,6 +189,11 @@ export function buildStreamWhere(userId: string, streamId?: string | null, inclu
         },
       ];
     }
+  }
+
+  // `ot` (older-than) = only return articles published before this Unix timestamp
+  if (olderThanSec != null && Number.isFinite(olderThanSec) && olderThanSec > 0) {
+    where.publishedAt = { ...(where.publishedAt ?? {}), lt: new Date(olderThanSec * 1000) };
   }
 
   return where;
