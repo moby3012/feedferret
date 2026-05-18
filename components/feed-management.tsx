@@ -142,6 +142,9 @@ function buildActionCatalog(labels: any[]): ActionCatalogItem[] {
     { value: "notify_inapp", label: "In-app notification", group: "notify" },
     { value: "notify_push", label: "Push notification", group: "notify" },
     { value: "notify_email", label: "Email notification", group: "notify" },
+    { value: "notify_telegram", label: "Telegram message", group: "notify" },
+    { value: "notify_gotify", label: "Gotify notification", group: "notify" },
+    { value: "notify_ntfy", label: "ntfy notification", group: "notify" },
     { value: ADD_WEBHOOK_TOKEN, label: "Trigger a webhook…", group: "webhook" },
   ];
   for (const label of labels as any[]) {

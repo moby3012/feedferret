@@ -1361,9 +1361,18 @@ export async function migrateKeywordAlertsToRules() {
 
 // ─── Keyword Alerts + Notifications ────────────────────────────────────────
 
+const ALLOWED_ALERT_ACTIONS = [
+    "notify_inapp",
+    "notify_push",
+    "notify_email",
+    "notify_telegram",
+    "notify_gotify",
+    "notify_ntfy",
+] as const;
+
 function stringifyAlertActions(actions?: string[]) {
     const allowed = (actions || ["notify_inapp"]).filter((action) =>
-        ["notify_inapp", "notify_push", "notify_email"].includes(action),
+        (ALLOWED_ALERT_ACTIONS as readonly string[]).includes(action),
     );
     return JSON.stringify(allowed.length ? allowed : ["notify_inapp"]);
 }

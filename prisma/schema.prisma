@@ -57,6 +57,15 @@ model User {
   pushFeedIds             String?                       // JSON array of feed IDs, null = all
   pushPrivatePayloads     Boolean   @default(true)      // include article titles in push payloads
   pushLastSentAt          DateTime?
+  telegramEnabled         Boolean   @default(false)
+  telegramBotToken        String?
+  telegramChatId          String?
+  gotifyEnabled           Boolean   @default(false)
+  gotifyUrl               String?
+  gotifyToken             String?
+  ntfyEnabled             Boolean   @default(false)
+  ntfyUrl                 String?
+  ntfyToken               String?
   hideDuplicates          Boolean   @default(true)
   markReadOnScroll        Boolean   @default(false)
   layoutDirection         String    @default("ltr")     // "ltr" | "rtl"

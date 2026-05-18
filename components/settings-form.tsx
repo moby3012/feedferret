@@ -58,7 +58,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection } from "@/hooks/use-rss-data";
+import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
 import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -469,6 +469,9 @@ export function SettingsForm() {
 
           {/* Digest Email – hidden when mail not configured (#13, handled inside) */}
           <DigestSection />
+
+          {/* External notification channels: Telegram, Gotify, ntfy */}
+          <NotificationChannelsSection />
 
           {/* AI Summaries */}
           <AiSummarySection />
@@ -1776,6 +1779,208 @@ function SyncTutorialSection() {
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+function NotificationChannelsSection() {
+  const { data, isLoading } = useNotificationChannels();
+  const update = useUpdateNotificationChannels();
+  const testChannel = useTestNotificationChannel();
+
+  const [form, setForm] = useState({
+    telegramEnabled: false,
+    telegramBotToken: "",
+    telegramChatId: "",
+    gotifyEnabled: false,
+    gotifyUrl: "",
+    gotifyToken: "",
+    ntfyEnabled: false,
+    ntfyUrl: "",
+    ntfyToken: "",
+  });
+
+  useEffect(() => {
+    if (data) setForm({ ...data });
+  }, [data]);
+
+  function field(key: keyof typeof form) {
+    return {
+      value: form[key] as string,
+      onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+        setForm((prev) => ({ ...prev, [key]: e.target.value })),
+    };
+  }
+
+  function toggle(key: keyof typeof form) {
+    return (checked: boolean) => setForm((prev) => ({ ...prev, [key]: checked }));
+  }
+
+  async function save() {
+    update.mutate(form);
+  }
+
+  async function test(channel: "telegram" | "gotify" | "ntfy") {
+    // Save first so credentials are persisted before testing
+    await update.mutateAsync(form);
+    const result = await testChannel.mutateAsync(channel);
+    if (result.success) {
+      toast.success("Test notification sent successfully");
+    } else {
+      toast.error(result.error ?? "Failed to send test notification");
+    }
+  }
+
+  if (isLoading) return null;
+
+  return (
+    <section className="rounded-[2rem] border border-border/65 bg-card/85 shadow-sm backdrop-blur-2xl">
+      <div className="flex items-start gap-4 p-5 sm:p-6">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+          <Bell className="h-5 w-5" />
+        </div>
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">Notification Channels</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            Forward keyword alerts and rule matches to external services. Enable a channel, enter your credentials, and choose it as an action in Rules &amp; Alerts.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-px">
+        {/* Telegram */}
+        <div className="border-t border-border/40 px-5 py-4 sm:px-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Send className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">Telegram</span>
+            </div>
+            <Switch
+              checked={form.telegramEnabled}
+              onCheckedChange={toggle("telegramEnabled")}
+            />
+          </div>
+          {form.telegramEnabled && (
+            <div className="mt-3 space-y-2">
+              <Input
+                placeholder="Bot token (from @BotFather)"
+                {...field("telegramBotToken")}
+                className="h-9 font-mono text-xs"
+              />
+              <Input
+                placeholder="Chat ID (send /start to your bot to get it)"
+                {...field("telegramChatId")}
+                className="h-9 font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Create a bot via{" "}
+                <span className="font-mono">@BotFather</span>, then send{" "}
+                <span className="font-mono">/start</span> to get your chat ID.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => test("telegram")}
+                disabled={testChannel.isPending || update.isPending || !form.telegramBotToken || !form.telegramChatId}
+                className="h-8 rounded-xl text-xs"
+              >
+                Send test message
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Gotify */}
+        <div className="border-t border-border/40 px-5 py-4 sm:px-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Bell className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">Gotify</span>
+            </div>
+            <Switch
+              checked={form.gotifyEnabled}
+              onCheckedChange={toggle("gotifyEnabled")}
+            />
+          </div>
+          {form.gotifyEnabled && (
+            <div className="mt-3 space-y-2">
+              <Input
+                placeholder="Server URL (e.g. https://gotify.example.com)"
+                {...field("gotifyUrl")}
+                className="h-9 font-mono text-xs"
+              />
+              <Input
+                placeholder="App token"
+                {...field("gotifyToken")}
+                className="h-9 font-mono text-xs"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => test("gotify")}
+                disabled={testChannel.isPending || update.isPending || !form.gotifyUrl || !form.gotifyToken}
+                className="h-8 rounded-xl text-xs"
+              >
+                Send test notification
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* ntfy */}
+        <div className="border-t border-border/40 px-5 py-4 sm:px-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Rss className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">ntfy</span>
+            </div>
+            <Switch
+              checked={form.ntfyEnabled}
+              onCheckedChange={toggle("ntfyEnabled")}
+            />
+          </div>
+          {form.ntfyEnabled && (
+            <div className="mt-3 space-y-2">
+              <Input
+                placeholder="Topic URL (e.g. https://ntfy.sh/my-topic)"
+                {...field("ntfyUrl")}
+                className="h-9 font-mono text-xs"
+              />
+              <Input
+                placeholder="Token (optional, for private topics)"
+                {...field("ntfyToken")}
+                className="h-9 font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Use <span className="font-mono">ntfy.sh</span> for free public topics or your own self-hosted ntfy instance.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => test("ntfy")}
+                disabled={testChannel.isPending || update.isPending || !form.ntfyUrl}
+                className="h-8 rounded-xl text-xs"
+              >
+                Send test notification
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t border-border/40 px-5 py-4 sm:px-6">
+        <Button
+          type="button"
+          onClick={save}
+          disabled={update.isPending}
+          className="h-9 rounded-2xl px-5 text-sm"
+        >
+          {update.isPending ? "Saving…" : "Save channels"}
+        </Button>
+      </div>
     </section>
   );
 }

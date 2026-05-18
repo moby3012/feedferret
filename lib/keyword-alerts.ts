@@ -2,6 +2,11 @@ import { db } from "@/lib/db";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { sendPushToUser } from "@/lib/push";
 import { sendSystemEmail } from "@/lib/mail";
+import {
+  sendTelegramNotification,
+  sendGotifyNotification,
+  sendNtfyNotification,
+} from "@/lib/notification-channels";
 
 function parseActions(value: string | null | undefined) {
   if (!value) return ["notify_inapp"];
@@ -31,6 +36,31 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
 
   let notificationsCreated = 0;
   let userEmail: string | null | undefined = undefined;
+  let channelConfig:
+    | {
+        telegram: { enabled: boolean; botToken: string | null; chatId: string | null };
+        gotify: { enabled: boolean; url: string | null; token: string | null };
+        ntfy: { enabled: boolean; url: string | null; token: string | null };
+      }
+    | undefined = undefined;
+
+  async function loadChannels() {
+    if (channelConfig !== undefined) return channelConfig;
+    const u = await db.user.findUnique({
+      where: { id: userId },
+      select: {
+        telegramEnabled: true, telegramBotToken: true, telegramChatId: true,
+        gotifyEnabled: true, gotifyUrl: true, gotifyToken: true,
+        ntfyEnabled: true, ntfyUrl: true, ntfyToken: true,
+      },
+    });
+    channelConfig = {
+      telegram: { enabled: u?.telegramEnabled ?? false, botToken: u?.telegramBotToken ?? null, chatId: u?.telegramChatId ?? null },
+      gotify: { enabled: u?.gotifyEnabled ?? false, url: u?.gotifyUrl ?? null, token: u?.gotifyToken ?? null },
+      ntfy: { enabled: u?.ntfyEnabled ?? false, url: u?.ntfyUrl ?? null, token: u?.ntfyToken ?? null },
+    };
+    return channelConfig;
+  }
 
   for (const alert of alerts) {
     const searchWhere = await buildAdvancedSearchWhere(userId, alert.query);
@@ -97,6 +127,51 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
           html,
           text,
         }).catch((e) => console.warn("[keyword-alerts] email failed:", e));
+      }
+    }
+
+    if (actions.includes("notify_telegram")) {
+      const ch = await loadChannels();
+      if (ch.telegram.enabled && ch.telegram.botToken && ch.telegram.chatId) {
+        const first = matches[0];
+        const body =
+          matches.length === 1
+            ? first.title
+            : `${matches.length} matching articles`;
+        sendTelegramNotification(
+          { botToken: ch.telegram.botToken, chatId: ch.telegram.chatId },
+          { title: `Keyword alert: ${alert.name}`, body, url: matches.length === 1 ? first.link : undefined },
+        ).catch((e) => console.warn("[keyword-alerts] telegram failed:", e));
+      }
+    }
+
+    if (actions.includes("notify_gotify")) {
+      const ch = await loadChannels();
+      if (ch.gotify.enabled && ch.gotify.url && ch.gotify.token) {
+        const first = matches[0];
+        const body =
+          matches.length === 1
+            ? first.title
+            : matches.map((a) => `• ${a.title}`).join("\n");
+        sendGotifyNotification(
+          { url: ch.gotify.url, token: ch.gotify.token },
+          { title: `Keyword alert: ${alert.name}`, body, url: matches.length === 1 ? first.link : undefined },
+        ).catch((e) => console.warn("[keyword-alerts] gotify failed:", e));
+      }
+    }
+
+    if (actions.includes("notify_ntfy")) {
+      const ch = await loadChannels();
+      if (ch.ntfy.enabled && ch.ntfy.url) {
+        const first = matches[0];
+        const body =
+          matches.length === 1
+            ? first.title
+            : matches.map((a) => `• ${a.title}`).join("\n");
+        sendNtfyNotification(
+          { url: ch.ntfy.url, token: ch.ntfy.token ?? undefined },
+          { title: `Keyword alert: ${alert.name}`, body, url: matches.length === 1 ? first.link : undefined },
+        ).catch((e) => console.warn("[keyword-alerts] ntfy failed:", e));
       }
     }
 

@@ -3,6 +3,11 @@ import { buildAdvancedSearchWhere } from "./search";
 import { executeWebhookCall, getWebhookConfig } from "./webhooks";
 import { sendPushToUser } from "./push";
 import { sendSystemEmail } from "./mail";
+import {
+  sendTelegramNotification,
+  sendGotifyNotification,
+  sendNtfyNotification,
+} from "./notification-channels";
 
 export type RuleAction = string;
 
@@ -41,12 +46,39 @@ type MatchArticle = {
     feed: { id: string; name: string };
 };
 
+type ChannelCache = {
+    userEmail?: string | null;
+    channels?: {
+        telegram: { enabled: boolean; botToken: string | null; chatId: string | null };
+        gotify: { enabled: boolean; url: string | null; token: string | null };
+        ntfy: { enabled: boolean; url: string | null; token: string | null };
+    };
+};
+
+async function loadChannelConfig(userId: string, cache: ChannelCache) {
+    if (cache.channels !== undefined) return cache.channels;
+    const u = await db.user.findUnique({
+        where: { id: userId },
+        select: {
+            telegramEnabled: true, telegramBotToken: true, telegramChatId: true,
+            gotifyEnabled: true, gotifyUrl: true, gotifyToken: true,
+            ntfyEnabled: true, ntfyUrl: true, ntfyToken: true,
+        },
+    });
+    cache.channels = {
+        telegram: { enabled: u?.telegramEnabled ?? false, botToken: u?.telegramBotToken ?? null, chatId: u?.telegramChatId ?? null },
+        gotify: { enabled: u?.gotifyEnabled ?? false, url: u?.gotifyUrl ?? null, token: u?.gotifyToken ?? null },
+        ntfy: { enabled: u?.ntfyEnabled ?? false, url: u?.ntfyUrl ?? null, token: u?.ntfyToken ?? null },
+    };
+    return cache.channels;
+}
+
 async function applySingleAction(
     userId: string,
     rule: { id: string; name: string; query: string },
     action: RuleAction,
     matches: MatchArticle[],
-    cache: { userEmail?: string | null },
+    cache: ChannelCache,
 ): Promise<number> {
     if (matches.length === 0) return 0;
 
@@ -245,6 +277,42 @@ async function applySingleAction(
         return matches.length;
     }
 
+    if (action === "notify_telegram") {
+        const ch = await loadChannelConfig(userId, cache);
+        if (!ch.telegram.enabled || !ch.telegram.botToken || !ch.telegram.chatId) return 0;
+        const first = matches[0];
+        const body = matches.length === 1 ? first.title : `${matches.length} matching articles`;
+        await sendTelegramNotification(
+            { botToken: ch.telegram.botToken, chatId: ch.telegram.chatId },
+            { title: `Rule: ${rule.name}`, body, url: matches.length === 1 ? first.link : undefined },
+        ).catch((e) => console.warn("[auto-read-rules] telegram failed:", e));
+        return matches.length;
+    }
+
+    if (action === "notify_gotify") {
+        const ch = await loadChannelConfig(userId, cache);
+        if (!ch.gotify.enabled || !ch.gotify.url || !ch.gotify.token) return 0;
+        const first = matches[0];
+        const body = matches.length === 1 ? first.title : matches.map((a) => `• ${a.title}`).join("\n");
+        await sendGotifyNotification(
+            { url: ch.gotify.url, token: ch.gotify.token },
+            { title: `Rule: ${rule.name}`, body, url: matches.length === 1 ? first.link : undefined },
+        ).catch((e) => console.warn("[auto-read-rules] gotify failed:", e));
+        return matches.length;
+    }
+
+    if (action === "notify_ntfy") {
+        const ch = await loadChannelConfig(userId, cache);
+        if (!ch.ntfy.enabled || !ch.ntfy.url) return 0;
+        const first = matches[0];
+        const body = matches.length === 1 ? first.title : matches.map((a) => `• ${a.title}`).join("\n");
+        await sendNtfyNotification(
+            { url: ch.ntfy.url, token: ch.ntfy.token ?? undefined },
+            { title: `Rule: ${rule.name}`, body, url: matches.length === 1 ? first.link : undefined },
+        ).catch((e) => console.warn("[auto-read-rules] ntfy failed:", e));
+        return matches.length;
+    }
+
     return 0;
 }
 
@@ -409,6 +477,33 @@ export async function applyFeedErrorRules(
                 });
                 if (result.ok) ruleFired = true;
                 else console.warn(`[auto-read-rules] webhook ${config.url} failed (${result.status ?? "no-response"}): ${result.error}`);
+            } else if (action === "notify_telegram") {
+                const ch = await loadChannelConfig(userId, cache);
+                if (ch.telegram.enabled && ch.telegram.botToken && ch.telegram.chatId) {
+                    const res = await sendTelegramNotification(
+                        { botToken: ch.telegram.botToken, chatId: ch.telegram.chatId },
+                        { title: `Feed error: ${payload.feedName}`, body: payload.error.slice(0, 280) },
+                    ).catch(() => ({ ok: false }));
+                    if (res.ok) ruleFired = true;
+                }
+            } else if (action === "notify_gotify") {
+                const ch = await loadChannelConfig(userId, cache);
+                if (ch.gotify.enabled && ch.gotify.url && ch.gotify.token) {
+                    const res = await sendGotifyNotification(
+                        { url: ch.gotify.url, token: ch.gotify.token },
+                        { title: `Feed error: ${payload.feedName}`, body: payload.error.slice(0, 280) },
+                    ).catch(() => ({ ok: false }));
+                    if (res.ok) ruleFired = true;
+                }
+            } else if (action === "notify_ntfy") {
+                const ch = await loadChannelConfig(userId, cache);
+                if (ch.ntfy.enabled && ch.ntfy.url) {
+                    const res = await sendNtfyNotification(
+                        { url: ch.ntfy.url, token: ch.ntfy.token ?? undefined },
+                        { title: `Feed error: ${payload.feedName}`, body: payload.error.slice(0, 280) },
+                    ).catch(() => ({ ok: false }));
+                    if (res.ok) ruleFired = true;
+                }
             }
             // Other action types are ignored for feed_error triggers.
         }
