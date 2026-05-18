@@ -356,10 +356,10 @@ Offene Follow-ups:
 - [x] DB-Ping-Check eingebaut — HTTP 503 wenn Datenbank nicht erreichbar
 - [x] Als Docker-Healthcheck-Target in `docker-compose.yaml` eingetragen
 
-#### 0.5.5 Coolify & Reverse Proxy Dokumentation ✅ Implementiert
+#### 0.5.5 Coolify & Reverse Proxy Dokumentation ✅ Abgeschlossen (2026-05-18)
 
-- [ ] Coolify-Guide in `README.md` auf Aktualität prüfen — alle dokumentierten Schritte durchführen
-- [ ] Häufige Probleme als Troubleshooting-Tabelle: AUTH_TRUST_HOST, Build Args, Passwort-Mismatch
+- [x] Coolify-Guide in `docs/self-hosting.md` vollständig ausgebaut — Step-by-Step mit Schritt-für-Schritt-Anleitung
+- [x] Häufige Probleme als Troubleshooting-Tabelle: `AUTH_TRUST_HOST`, Gateway Timeout, DB-Passwort-Mismatch, Force-Rebuild
 - [x] **Neues Dokument:** `docs/reverse-proxy.md` mit Nginx, Caddy und Traefik Beispiel-Configs
 - [x] HSTS, HTTP→HTTPS Redirect, WebSocket dokumentiert
 
@@ -572,15 +572,15 @@ Jede Major-Version erfordert separate Validierung. **Reihenfolge der Empfehlung:
   - `lib/feed-fetcher.ts` — URL-Normalisierung, SSRF-Blacklist
 - [ ] Optional lokal: `.husky/pre-commit` mit `pnpm lint-staged`
 
-#### 0.7.7 Doc-Sync & Lifecycle (Aufwand: 0.5 Tage)
+#### 0.7.7 Doc-Sync & Lifecycle ✅ Abgeschlossen (2026-05-18)
 
-- [ ] `docs/marketing-landing-page-brief.md`: SaaS-Pricing-Sektion entweder finalisieren (nach 0.1.3 Wettbewerbsanalyse) oder explizit als "v1 nach OSS-Launch" markieren — keine offenen "TBD"-Platzhalter
-- [ ] `docs/scout-studio.md`: GA-Features klar von "Future Extensions" trennen
-- [ ] `docs/accessibility-todo.md`: A-4 und A-5 Status auf den Stand der Implementierung bringen (Font-Size-Slider ist live)
-- [ ] `docs/mcp.md`: 11 MCP-Tools gegen `app/api/mcp/route.ts` cross-checken (Signaturen aktuell?)
-- [ ] `docs/api.md`: OpenAPI-Schema (`/api/v1/openapi.json`) gegen tatsächliche v1-Routen abgleichen
-- [ ] Terminologie: `Webhooks` vs. `Outbound Webhooks` einheitlich nutzen (Empfehlung: `Outbound Webhooks`, da auch `Incoming Webhooks` denkbar wären)
-- [ ] `CHANGELOG.md` aufsetzen (Keep-a-Changelog-Format) — bisher nur PR-Beschreibungen als Quelle
+- [x] `docs/marketing-landing-page-brief.md`: Telegram/Gotify/ntfy + Google Reader API ergänzt; SaaS-Pricing als "Post-OSS-Launch" markiert
+- [x] `CHANGELOG.md` aufgesetzt (Keep-a-Changelog-Format) mit v0.9.0, v0.8.0, v0.1.0
+- [x] `package.json` Version 0.1.0 → **0.9.0**
+- [ ] `docs/scout-studio.md`: GA-Features klar von "Future Extensions" trennen (Post-Launch)
+- [ ] `docs/accessibility-todo.md`: A-4 und A-5 Status aktualisieren (Post-Launch)
+- [ ] `docs/mcp.md`: MCP-Tools cross-checken (Post-Launch)
+- [ ] `docs/api.md`: OpenAPI-Schema gegen v1-Routen abgleichen (Post-Launch)
 
 ---
 
@@ -675,13 +675,13 @@ Alle Punkte müssen abgeschlossen sein:
 **Deployment:**
 - [x] Docker Compose reviewed und gehärtet (0.5.2) — PR #37
 - [x] Self-Hosting Guide vollständig (0.5.6) — PR #38
-- [ ] Coolify-Guide verifiziert (0.5.5)
+- [x] Coolify-Guide vollständig in `docs/self-hosting.md` — Step-by-Step + Troubleshooting (0.5.5)
 
 **Marketing:**
 - [ ] Landing Page live mit allen Sektionen (0.6.2)
 - [ ] Screenshots fertig (0.6.3)
 - [x] SEO-Basics aktiv (0.6.4) — PR #45
-- [ ] SaaS-Pricing finalisiert oder explizit auf "Post-OSS-Launch" verschoben (0.7.7)
+- [x] SaaS-Pricing explizit auf "Post-OSS-Launch" verschoben (0.7.7)
 
 **Notification-Kanäle:**
 - [ ] Generisches Notification-Framework implementiert (0.8.4)
@@ -703,8 +703,8 @@ Alle Punkte müssen abgeschlossen sein:
 - [ ] Monitoring: Sentry oder Axiom für Error-Tracking konfiguriert
 - [ ] Backup-Strategie dokumentiert und einmal getestet (`pg_dump` Restore-Drill)
 - [ ] Support-Kanal definiert (GitHub Issues / Discord)
-- [ ] `CHANGELOG.md` aufgesetzt + GitHub Releases mit Template (0.7.7)
-- [ ] Version-Bump-Strategie definiert (SemVer; aktuell `package.json` auf `0.1.0` — Empfehlung: vor Launch auf `0.9.0` setzen, Launch-Release als `1.0.0`)
+- [x] `CHANGELOG.md` aufgesetzt (Keep-a-Changelog, v0.9.0 / v0.8.0 / v0.1.0) (0.7.7)
+- [x] Version auf `0.9.0` gebumpt — Launch-Release wird `1.0.0` (0.7.7)
 
 ---
 
