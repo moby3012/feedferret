@@ -86,4 +86,8 @@ Next.js 16 · React 19 · TypeScript 5 · Prisma 5 · PostgreSQL / SQLite · Tai
 
 ## 📄 License
 
-MIT — see [LICENSE](LICENSE).
+[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE)
+
+You are free to use, fork, and contribute to FeedFerret. Any modified version — including one run as a hosted service — must be released under the same license with attribution. See [LICENSE](LICENSE) for the full terms.
+
+For commercial use without the AGPL obligations, contact us about a commercial license.
