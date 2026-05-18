@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/moby3012/feedferret/tree/main/docs
+    about: Check the docs first — self-hosting, API, Google Reader, webhooks and more.
+  - name: Roadmap
+    url: https://github.com/moby3012/feedferret/blob/main/docs/ROADMAP.md
+    about: See what's planned, in progress, and post-launch.
