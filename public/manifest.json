@@ -98,16 +98,16 @@
   ],
   "screenshots": [
     {
-      "src": "/screenshots/mobile-narrow.svg",
-      "sizes": "390x844",
-      "type": "image/svg+xml",
+      "src": "/screenshots/feedlist-mobile-light-393x852.png",
+      "sizes": "393x852",
+      "type": "image/png",
       "form_factor": "narrow",
-      "label": "FeedFerret mobile article list"
+      "label": "FeedFerret mobile feed list"
     },
     {
-      "src": "/screenshots/desktop-wide.svg",
+      "src": "/screenshots/hero-desktop-light-1440x900.png",
       "sizes": "1440x900",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "form_factor": "wide",
       "label": "FeedFerret desktop reader layout"
     }
