@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { validateInternalApiKey } from "@/lib/internal-auth";
 import { sendSystemEmail } from "@/lib/mail";
 import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
 
   // Send welcome email non-blocking — don't fail provisioning if mail is down
   sendWelcomeEmail(email, body?.name).catch((e) =>
-    console.error("[provision-user] welcome email failed:", e),
+    logger.error("[provision-user] welcome email failed:", e),
   );
 
   return NextResponse.json(

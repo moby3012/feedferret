@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { httpOptionsFromOutline, OpmlOutline, parseOpml, scraperConfigFromOutline } from "@/lib/opml";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { logger } from "./logger";
 
 async function fetchSafeOpml(url: string) {
   return fetchTextWithSsrfProtection(
@@ -95,7 +96,7 @@ export async function syncDynamicOpmlCategories(userId?: string) {
       for (const outline of outlines) await importDynamicOutline(category.userId, outline, category.id);
       results.push({ category: category.name, success: true, count: outlines.length });
     } catch (error) {
-      console.error(`[dynamic-opml] failed for ${category.opmlUrl}:`, error);
+      logger.error(`[dynamic-opml] failed for ${category.opmlUrl}:`, error);
       results.push({ category: category.name, success: false, error: String(error) });
     }
   }

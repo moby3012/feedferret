@@ -8,6 +8,7 @@ import {
   sendGotifyNotification,
   sendNtfyNotification,
 } from "./notification-channels";
+import { logger } from "./logger";
 
 export type RuleAction = string;
 
@@ -216,7 +217,7 @@ async function applySingleAction(
                 feed_name: article.feed.name,
             });
             if (result.ok) fired += 1;
-            else console.warn(`[auto-read-rules] webhook ${config.url} failed (${result.status ?? "no-response"}): ${result.error}`);
+            else logger.warn(`[auto-read-rules] webhook ${config.url} failed (${result.status ?? "no-response"}): ${result.error}`);
         }
         return fired;
     }
@@ -247,7 +248,7 @@ async function applySingleAction(
             articleId: matches.length === 1 ? first.id : undefined,
             feedId: matches.length === 1 ? first.feed.id : undefined,
             tag: `rule:${rule.id}`,
-        }).catch((error) => console.warn("[auto-read-rules] push failed", error));
+        }).catch((error) => logger.warn("[auto-read-rules] push failed", error));
         return matches.length;
     }
 
@@ -272,7 +273,7 @@ async function applySingleAction(
                 text,
             });
         } catch (e) {
-            console.warn("[auto-read-rules] email failed:", e);
+            logger.warn("[auto-read-rules] email failed:", e);
         }
         return matches.length;
     }
@@ -285,7 +286,7 @@ async function applySingleAction(
         await sendTelegramNotification(
             { botToken: ch.telegram.botToken, chatId: ch.telegram.chatId },
             { title: `Rule: ${rule.name}`, body, url: matches.length === 1 ? first.link : undefined },
-        ).catch((e) => console.warn("[auto-read-rules] telegram failed:", e));
+        ).catch((e) => logger.warn("[auto-read-rules] telegram failed:", e));
         return matches.length;
     }
 
@@ -297,7 +298,7 @@ async function applySingleAction(
         await sendGotifyNotification(
             { url: ch.gotify.url, token: ch.gotify.token },
             { title: `Rule: ${rule.name}`, body, url: matches.length === 1 ? first.link : undefined },
-        ).catch((e) => console.warn("[auto-read-rules] gotify failed:", e));
+        ).catch((e) => logger.warn("[auto-read-rules] gotify failed:", e));
         return matches.length;
     }
 
@@ -309,7 +310,7 @@ async function applySingleAction(
         await sendNtfyNotification(
             { url: ch.ntfy.url, token: ch.ntfy.token ?? undefined },
             { title: `Rule: ${rule.name}`, body, url: matches.length === 1 ? first.link : undefined },
-        ).catch((e) => console.warn("[auto-read-rules] ntfy failed:", e));
+        ).catch((e) => logger.warn("[auto-read-rules] ntfy failed:", e));
         return matches.length;
     }
 
@@ -377,7 +378,7 @@ export async function applyAutoReadRules(
                 });
             }
         } catch (error) {
-            console.error(`[auto-read-rules] rule "${rule.name}" failed:`, error);
+            logger.error(`[auto-read-rules] rule "${rule.name}" failed:`, error);
         }
     }
 
@@ -437,7 +438,7 @@ export async function applyFeedErrorRules(
                     body: `${payload.feedName} — ${payload.error.slice(0, 140)}`,
                     feedId: payload.feedId,
                     tag: `rule:${rule.id}`,
-                }).catch((error) => console.warn("[auto-read-rules] push failed", error));
+                }).catch((error) => logger.warn("[auto-read-rules] push failed", error));
                 ruleFired = true;
             } else if (action === "notify_email") {
                 if (cache.userEmail === undefined) {
@@ -456,7 +457,7 @@ export async function applyFeedErrorRules(
                         });
                         ruleFired = true;
                     } catch (e) {
-                        console.warn("[auto-read-rules] email failed:", e);
+                        logger.warn("[auto-read-rules] email failed:", e);
                     }
                 }
             } else if (action.startsWith("webhook_call:")) {
@@ -476,7 +477,7 @@ export async function applyFeedErrorRules(
                     error: payload.error,
                 });
                 if (result.ok) ruleFired = true;
-                else console.warn(`[auto-read-rules] webhook ${config.url} failed (${result.status ?? "no-response"}): ${result.error}`);
+                else logger.warn(`[auto-read-rules] webhook ${config.url} failed (${result.status ?? "no-response"}): ${result.error}`);
             } else if (action === "notify_telegram") {
                 const ch = await loadChannelConfig(userId, cache);
                 if (ch.telegram.enabled && ch.telegram.botToken && ch.telegram.chatId) {

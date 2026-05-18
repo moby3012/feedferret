@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { SEED_FEEDS } from "@/lib/discovery-catalog-seeds";
+import { logger } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
       total: SEED_FEEDS.length,
     });
   } catch (error) {
-    console.error("[discovery/catalog/seed] error:", error);
+    logger.error("[discovery/catalog/seed] error:", error);
     return NextResponse.json({ error: "Seeding failed" }, { status: 500 });
   }
 }

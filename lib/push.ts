@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import webpush, { type PushSubscription as WebPushSubscription } from "web-push";
+import { logger } from "@/lib/logger";
 
 export type BrowserPushPayload = {
   title: string;
@@ -87,7 +88,7 @@ export async function sendPushToUser(userId: string, payload: BrowserPushPayload
           data: { disabledAt: new Date() },
         });
       } else {
-        console.warn("[push] send failed", error);
+        logger.warn("[push] send failed", error);
       }
     }
   }

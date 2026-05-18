@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { sendDigestEmail, getDigestArticles } from "@/lib/digest-email";
 import { randomBytes } from "crypto";
+import { logger } from "./logger";
 
 function getBaseUrl(): string {
     if (process.env.AUTH_URL) return process.env.AUTH_URL.replace(/\/$/, "");
@@ -112,11 +113,11 @@ export async function runDigestScheduler(): Promise<void> {
                 data: { digestLastSentAt: new Date() },
             });
 
-            console.log(
+            logger.log(
                 `[digest] sent to ${user.email}: ${articles.length} articles`,
             );
         } catch (err) {
-            console.error(`[digest] failed for ${user.email}:`, err);
+            logger.error(`[digest] failed for ${user.email}:`, err);
         }
     }
 }
