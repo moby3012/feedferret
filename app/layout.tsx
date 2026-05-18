@@ -26,13 +26,13 @@ export const metadata: Metadata = {
     siteName: "FeedFerret",
     title: "FeedFerret — Self-Hosted RSS Reader",
     description: APP_DESCRIPTION,
-    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "FeedFerret logo" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "FeedFerret — Self-Hosted RSS Reader" }],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "FeedFerret — Self-Hosted RSS Reader",
     description: APP_DESCRIPTION,
-    images: ["/icon-512.png"],
+    images: ["/og-image.png"],
   },
   manifest: "/manifest.json",
   appleWebApp: {

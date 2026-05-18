@@ -11,6 +11,7 @@ First stable release. Full feature set, production-hardened, self-hosting ready.
 
 ### Highlights
 
+- **License** — switched from MIT to AGPL-3.0 (copyleft; SaaS loophole closed; attribution required; forks must use same license)
 - **Notification channels** — Telegram, Gotify, ntfy alongside browser push, email, and webhooks
 - **Google Reader API** — full client compatibility for Reeder, NetNewsWire, FeedMe, ReadKit
 - **CI pipeline** — lint + type-check + build on every PR
@@ -19,6 +20,7 @@ First stable release. Full feature set, production-hardened, self-hosting ready.
 - **Coolify deployment guide** — step-by-step with troubleshooting
 - **GitHub Issue Templates** — bug report + feature request forms
 - **README** — streamlined to < 5-minute read
+- **CONTRIBUTING.md** — contribution guide with CLA explanation
 
 See [0.9.0] below for the full pre-release feature list.
 
