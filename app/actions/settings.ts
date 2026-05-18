@@ -351,3 +351,118 @@ export async function testAiConnection(): Promise<{ success: boolean; error?: st
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// ─── Notification Channels ──────────────────────────────────────────────────
+
+export async function getNotificationChannels() {
+  const session = await requireUser();
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      telegramEnabled: true,
+      telegramBotToken: true,
+      telegramChatId: true,
+      gotifyEnabled: true,
+      gotifyUrl: true,
+      gotifyToken: true,
+      ntfyEnabled: true,
+      ntfyUrl: true,
+      ntfyToken: true,
+    },
+  });
+  return {
+    telegramEnabled: user?.telegramEnabled ?? false,
+    telegramBotToken: user?.telegramBotToken ?? "",
+    telegramChatId: user?.telegramChatId ?? "",
+    gotifyEnabled: user?.gotifyEnabled ?? false,
+    gotifyUrl: user?.gotifyUrl ?? "",
+    gotifyToken: user?.gotifyToken ?? "",
+    ntfyEnabled: user?.ntfyEnabled ?? false,
+    ntfyUrl: user?.ntfyUrl ?? "",
+    ntfyToken: user?.ntfyToken ?? "",
+  };
+}
+
+export async function updateNotificationChannels(data: {
+  telegramEnabled?: boolean;
+  telegramBotToken?: string;
+  telegramChatId?: string;
+  gotifyEnabled?: boolean;
+  gotifyUrl?: string;
+  gotifyToken?: string;
+  ntfyEnabled?: boolean;
+  ntfyUrl?: string;
+  ntfyToken?: string;
+}) {
+  const session = await requireUser();
+  const sanitized: Record<string, unknown> = {};
+
+  if (data.telegramEnabled !== undefined) sanitized.telegramEnabled = data.telegramEnabled;
+  if (data.telegramBotToken !== undefined) sanitized.telegramBotToken = data.telegramBotToken.trim() || null;
+  if (data.telegramChatId !== undefined) sanitized.telegramChatId = data.telegramChatId.trim() || null;
+  if (data.gotifyEnabled !== undefined) sanitized.gotifyEnabled = data.gotifyEnabled;
+  if (data.gotifyUrl !== undefined) sanitized.gotifyUrl = data.gotifyUrl.trim() || null;
+  if (data.gotifyToken !== undefined) sanitized.gotifyToken = data.gotifyToken.trim() || null;
+  if (data.ntfyEnabled !== undefined) sanitized.ntfyEnabled = data.ntfyEnabled;
+  if (data.ntfyUrl !== undefined) sanitized.ntfyUrl = data.ntfyUrl.trim() || null;
+  if (data.ntfyToken !== undefined) sanitized.ntfyToken = data.ntfyToken.trim() || null;
+
+  await db.user.update({ where: { id: session.user.id }, data: sanitized });
+  revalidatePath("/settings");
+}
+
+export async function testNotificationChannel(
+  channel: "telegram" | "gotify" | "ntfy",
+): Promise<{ success: boolean; error?: string }> {
+  const session = await requireUser();
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      telegramBotToken: true, telegramChatId: true,
+      gotifyUrl: true, gotifyToken: true,
+      ntfyUrl: true, ntfyToken: true,
+    },
+  });
+
+  const {
+    sendTelegramNotification,
+    sendGotifyNotification,
+    sendNtfyNotification,
+  } = await import("@/lib/notification-channels");
+
+  const testPayload = {
+    title: "FeedFerret test notification",
+    body: "This is a test from your FeedFerret instance. Notifications are working correctly.",
+  };
+
+  try {
+    let result: { ok: boolean; error?: string };
+    if (channel === "telegram") {
+      if (!user?.telegramBotToken || !user.telegramChatId)
+        return { success: false, error: "Bot token and Chat ID are required" };
+      result = await sendTelegramNotification(
+        { botToken: user.telegramBotToken, chatId: user.telegramChatId },
+        testPayload,
+      );
+    } else if (channel === "gotify") {
+      if (!user?.gotifyUrl || !user.gotifyToken)
+        return { success: false, error: "Server URL and token are required" };
+      result = await sendGotifyNotification(
+        { url: user.gotifyUrl, token: user.gotifyToken },
+        testPayload,
+      );
+    } else if (channel === "ntfy") {
+      if (!user?.ntfyUrl)
+        return { success: false, error: "Topic URL is required" };
+      result = await sendNtfyNotification(
+        { url: user.ntfyUrl, token: user.ntfyToken ?? undefined },
+        testPayload,
+      );
+    } else {
+      return { success: false, error: "Unknown channel" };
+    }
+    return { success: result.ok, error: result.error };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
