@@ -17,6 +17,59 @@ Diese Anleitung beschreibt die vollständige Installation und den Betrieb von Fe
 
 ---
 
+## Deployment mit Coolify
+
+[Coolify](https://coolify.io/) ist eine selbst gehostete PaaS-Plattform, die Git-basiertes Deployment mit automatischen SSL-Zertifikaten und einer Web-UI für Umgebungsvariablen bietet.
+
+### Schritt-für-Schritt
+
+**1. Neues Projekt in Coolify anlegen**
+
+1. Coolify öffnen → *Projects* → *Add New Project*
+2. *Add New Resource* → **Docker Compose**
+3. Als Source **GitHub** (oder deine Git-Instanz) auswählen und das `feedferret`-Repository verbinden
+
+**2. Deployment-Typ konfigurieren**
+
+- Deployment Type: **Docker Compose**
+- Docker Compose File: `docker-compose.yaml` (im Root des Repos)
+- Branch: `main`
+
+> **Wichtig:** Keinen eigenen `networks:`-Block im `docker-compose.yaml` definieren. Coolify fügt seinen eigenen Traefik-Netzwerk-Eintrag automatisch hinzu. Ein hardkodiertes custom Bridge-Netzwerk isoliert die Container von Traefik und führt zu *Gateway Timeout*-Fehlern. Das mitgelieferte `docker-compose.yaml` ist bereits korrekt konfiguriert.
+
+**3. Umgebungsvariablen im Coolify-Dashboard setzen**
+
+Statt einer `.env`-Datei werden die Variablen in *Environment Variables* eingegeben. Pflichtfelder:
+
+| Variable | Beschreibung | Beispiel |
+|---|---|---|
+| `AUTH_SECRET` | Session-Schlüssel (32+ Zeichen) | `openssl rand -base64 32` |
+| `AUTH_URL` | Öffentliche URL der Instanz | `https://rss.example.com` |
+| `AUTH_TRUST_HOST` | Muss `true` sein hinter Coolify-Traefik | `true` |
+| `POSTGRES_PASSWORD` | DB-Passwort (PostgreSQL-Modus) | zufälliger String |
+
+Optionale Variablen (OAuth, E-Mail, VAPID) können ebenfalls hier gesetzt werden — alle Felder aus dem Abschnitt *Umgebungsvariablen* weiter unten funktionieren identisch.
+
+**4. Domain konfigurieren**
+
+In Coolify unter *Domains* die gewünschte Domain eintragen. Coolify stellt automatisch ein Let's Encrypt-Zertifikat aus.
+
+**5. Deploy**
+
+*Deploy* klicken — Coolify baut das Image, startet die Container und richtet HTTPS ein. Der Build dauert beim ersten Mal 3–5 Minuten.
+
+### Troubleshooting Coolify
+
+| Problem | Ursache | Lösung |
+|---|---|---|
+| *Gateway Timeout* nach Deploy | Custom `networks:` Block im Compose | `networks:` Abschnitt aus `docker-compose.yaml` entfernen — Coolify verwaltet Netzwerke selbst |
+| Login schlägt fehl / CSRF-Fehler | `AUTH_TRUST_HOST` fehlt | `AUTH_TRUST_HOST=true` in Coolify-Env-Variablen setzen |
+| `AUTH_URL` wird ignoriert | Coolify setzt keine `AUTH_URL` | Manuell in den Environment Variables setzen mit dem vollen `https://`-Präfix |
+| Build schlägt mit `prisma generate` fehl | Cache-Problem | In Coolify *Force Rebuild* aktivieren und erneut deployen |
+| PostgreSQL-Password-Fehler nach Rebuild | Volume mit altem Passwort vorhanden | In Coolify *Volumes* das PostgreSQL-Volume löschen und neu deployen (alle Daten gehen verloren — vorher Backup machen!) |
+
+---
+
 ## Schnellstart (5 Minuten)
 
 ```bash

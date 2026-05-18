@@ -1,6 +1,6 @@
 # FeedFerret — Marketing & SaaS Landing Page Brief
 
-> Zuletzt aktualisiert: 2026-05-17 (Feature-Inventar gegen Code synchronisiert, Pricing-Sektion klargestellt)  
+> Zuletzt aktualisiert: 2026-05-18 (Notification-Kanäle + Google Reader API ergänzt; Version 0.9.0)  
 > Zweck: Vorlage für die OSS-Landing Page, ProductHunt-Launch, Vergleichsseiten und Pressematerial.  
 > Status: **OSS-Launch ist Priorität**; SaaS-Tier-Definition kommt nach Wettbewerbsanalyse (Roadmap 0.1.3).
 
@@ -22,7 +22,7 @@ Er kombiniert:
 - Kompatibilität mit nativen RSS-Clients via Google Reader API
 - REST API + MCP-Endpoint für Automatisierungen und AI-Agenten
 - Ausgehende Webhooks für n8n, Zapier und eigene Systeme
-- Keyword-Alerts mit Push-, E-Mail- und Webhook-Delivery
+- Keyword-Alerts mit Push-, E-Mail-, Webhook- und externem Channel-Delivery (Telegram, Gotify, ntfy)
 
 FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte und Power-User, die mehr Kontrolle wollen als kommerzielle Feed-Reader bieten.
 
@@ -149,7 +149,7 @@ FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte u
 **Keyword Alerts:**
 - Alerts für gespeicherte Queries
 - Scope: alle Feeds, ein Feed oder eine Kategorie
-- Delivery-Kanäle: In-App Bell, Browser Push, E-Mail, Outbound Webhook
+- Delivery-Kanäle: In-App Bell, Browser Push, E-Mail, Outbound Webhook, Telegram, Gotify, ntfy
 - Alert-History mit Read/Unread-Status
 - Match-Count-Badge pro Alert
 
@@ -205,6 +205,13 @@ FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte u
 - Privacy Toggle: Generische vs. Titel-enthaltende Payloads
 - Badge-Updates (App-Icon-Zähler) via Service Worker
 
+### 3.13b Externe Notification-Kanäle
+
+- **Telegram:** Bot-API, MarkdownV2-Formatierung, per Keyword-Alert und Auto-Rule
+- **Gotify:** Self-Hosted Push-Server, konfigurierbare Priorität
+- **ntfy:** Self-Hosted oder ntfy.sh, Bearer-Token-Unterstützung für private Topics
+- Alle Kanäle: per-Channel aktivieren/deaktivieren, Test-Button in Settings, fehlertolerant (fire-and-forget)
+
 ### 3.14 E-Mail-Digests
 
 - Aktivieren/Deaktivieren pro User
@@ -247,9 +254,10 @@ FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte u
 
 **Google Reader API:**
 - Kompatibel mit Reeder, NetNewsWire, FeedMe, ReadKit
-- Cursor-basierte Paginierung
-- Streams, Tags, Subscriptions, Preferences
-- Docs: `docs/google-reader-api.md`
+- Batch-Fetch via `POST stream/items/contents` (wie alle vier Clients es erwarten)
+- Cursor-basierte Paginierung, Oldest-First-Sort (`r=o`), Older-Than-Filter (`ot`)
+- Streams, Tags, Subscriptions, Preferences, echte Unread-Timestamps
+- Per-Client Setup-Anleitungen in `docs/google-reader-api.md`
 
 ### 3.17 Import & Export
 
@@ -511,6 +519,8 @@ Diese Features sind besonders stark für Launch-Messaging:
 | **KI-Zusammenfassungen (BYOK)** | Deine KI, dein Schlüssel — OpenAI, Anthropic, Gemini, Ollama |
 | **Outbound Webhooks** | Sofort-Benachrichtigung bei neuen Artikeln → n8n, Zapier, eigene Systeme |
 | **Keyword Alerts (vollständig)** | Push + E-Mail + Webhook wenn Artikel deiner Query matchen |
+| **Telegram / Gotify / ntfy Alerts** | Homelab-native Notification-Kanäle — kein fremder Service nötig |
+| **Google Reader API (vollständig)** | Reeder, NetNewsWire, FeedMe, ReadKit — alles funktioniert, per-Client Anleitung |
 | **Duplicate Detection** | Gleiche Geschichte aus 5 Feeds? Nur einmal zeigen |
 | **Feed Discovery** | Gibt es RSS? FeedFerret findet es. Oder starte mit kurierten Packs |
 | **Admin Starter Packs** | Vorkonfigurierte Feed-Sammlungen für neue Nutzer anpassen |
