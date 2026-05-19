@@ -793,9 +793,9 @@ export default function RSSReaderPage() {
       >
         <ResizablePanel
           id="article-list"
-          defaultSize={36}
-          minSize={20}
-          maxSize={70}
+          defaultSize="36%"
+          minSize="20%"
+          maxSize="70%"
         >
           <div role="region" aria-label="Article list" className="relative z-10 flex h-full min-w-[320px] flex-col border-r border-border/60 bg-card/70 backdrop-blur-2xl">
             <RssHeader
@@ -858,7 +858,7 @@ export default function RSSReaderPage() {
           className="bg-border/40 transition-colors hover:bg-accent/35"
         />
 
-        <ResizablePanel id="article-reader" defaultSize={64} minSize={30}>
+        <ResizablePanel id="article-reader" defaultSize="64%" minSize="30%">
           <div role="region" aria-label="Article reader" className="flex h-full bg-background">
             <ArticleReader
               article={selectedArticle}
