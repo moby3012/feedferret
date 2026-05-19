@@ -697,6 +697,7 @@ export default function RSSReaderPage() {
   const sidebarFeeds = feeds.map((f: any) => ({
     ...f,
     category: f.category?.name || "Uncategorized",
+    categoryHideFromAllFeeds: f.category?.hideFromAllFeeds ?? false,
     unreadCount: f._count?.articles || 0,
     icon: f.icon || "📰",
   }));

@@ -6,6 +6,8 @@ export interface FeedSource {
   category: string
   categoryId?: string | null
   unreadCount: number
+  hideFromAllFeeds?: boolean
+  categoryHideFromAllFeeds?: boolean
 }
 
 export interface Article {
