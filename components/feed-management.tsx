@@ -482,7 +482,6 @@ function SortableCategoryItem({
         {editingCategoryId === cat.id ? (
           <div className="flex-1 flex flex-col gap-2 sm:flex-row">
             <Input
-              // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
               value={editingCategoryName}
               onChange={(e) => setEditingCategoryName(e.target.value)}
