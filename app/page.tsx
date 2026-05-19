@@ -38,15 +38,15 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { useDefaultLayout } from "react-resizable-panels";
+import { hasUsers } from "./actions/onboarding";
+import { useRouter } from "next/navigation";
+import { useAppBadge, useUnreadBadgeCount } from "@/hooks/use-app-badge";
+import { useOfflineArticleCache } from "@/hooks/use-offline-articles";
 
 const ssrSafeStorage = {
   getItem: (key: string) => (typeof window !== "undefined" ? localStorage.getItem(key) : null),
   setItem: (key: string, value: string) => { if (typeof window !== "undefined") localStorage.setItem(key, value); },
 };
-import { hasUsers } from "./actions/onboarding";
-import { useRouter } from "next/navigation";
-import { useAppBadge, useUnreadBadgeCount } from "@/hooks/use-app-badge";
-import { useOfflineArticleCache } from "@/hooks/use-offline-articles";
 
 function toUiArticle(a: any) {
   const publishedAt = new Date(a.publishedAt);
