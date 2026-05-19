@@ -317,7 +317,9 @@ export function RssSidebar({
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const visibleFeeds = hideEmptyFeeds ? feeds.filter((f) => f.unreadCount > 0) : feeds;
-  const totalUnread = feeds.reduce((sum, f) => sum + f.unreadCount, 0);
+  const totalUnread = feeds
+    .filter((f) => !f.hideFromAllFeeds && !f.categoryHideFromAllFeeds)
+    .reduce((sum, f) => sum + f.unreadCount, 0);
 
   const navItems = [
     { id: "all", icon: Home, label: "All Articles", count: totalUnread },
