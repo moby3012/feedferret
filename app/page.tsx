@@ -729,6 +729,7 @@ export default function RSSReaderPage() {
           selectedFeed={selectedFeed}
           selectedCategory={selectedCategory}
           defaultOpenAddFeed={openAddFeed}
+          hideEmptyFeeds={readingPrefs?.hideEmptyFeeds ?? false}
           onSelectFeed={(feedId) => {
             setSelectedFeed(feedId);
             setSelectedArticleId(null);
@@ -759,6 +760,7 @@ export default function RSSReaderPage() {
             selectedFeed={selectedFeed}
             selectedCategory={selectedCategory}
             defaultOpenAddFeed={openAddFeed}
+            hideEmptyFeeds={readingPrefs?.hideEmptyFeeds ?? false}
             onSelectFeed={(feedId) => {
               setSelectedFeed(feedId);
               setSelectedArticleId(null);

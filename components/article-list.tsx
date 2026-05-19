@@ -300,7 +300,8 @@ export function ArticleList({
 
     const handleWheel = (e: WheelEvent) => {
       const { scrollTop, scrollHeight, clientHeight } = scrollRoot;
-      const atBottom = scrollHeight - (scrollTop + clientHeight) < 8 && scrollHeight > clientHeight + 8;
+      const canScroll = scrollHeight > clientHeight + 8;
+      const atBottom = !canScroll || scrollHeight - (scrollTop + clientHeight) < 8;
       const atTop = scrollTop < 4;
       if (atBottom && e.deltaY > 0) {
         accum += e.deltaY;

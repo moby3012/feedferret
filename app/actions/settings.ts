@@ -42,6 +42,7 @@ export async function getReadingPreferences() {
       hideDuplicates: true,
       markReadOnScroll: true,
       layoutDirection: true,
+      hideEmptyFeeds: true,
     },
   });
   return {
@@ -56,6 +57,7 @@ export async function getReadingPreferences() {
     hideDuplicates: user?.hideDuplicates ?? true,
     markReadOnScroll: user?.markReadOnScroll ?? false,
     layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
+    hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
   };
 }
 
@@ -73,6 +75,7 @@ export async function updateGlobalSettings(data: {
   hideDuplicates?: boolean;
   markReadOnScroll?: boolean;
   layoutDirection?: "ltr" | "rtl";
+  hideEmptyFeeds?: boolean;
 }) {
   const session = await requireUser();
 

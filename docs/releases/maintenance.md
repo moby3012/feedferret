@@ -47,6 +47,8 @@ Each upgrade gets its own PR. Never bundle two major upgrades in one PR. Run the
 | `sonner` | 1.x | 2.x | 2026-05-19 | Zero breaking changes |
 | `lucide-react` | 0.454 | 1.16 | 2026-05-19 | Github/Chrome brand icons → inline SVGs |
 | `react-day-picker` | 9.x | 10.x | 2026-05-19 | classNames.table → month_grid |
+| `react-resizable-panels` | 2.x | 4.x | 2026-05-19 | `className` on Panel routes to inner div; size props need `"36%"` strings not numbers |
+| `@prisma/client` + `prisma` | 5.22 | 7.x | 2026-05-19 | Direct 5→7; removed `--skip-generate`; runtime uses `--url` flag; native Node.js adapters |
 
 ---
 
@@ -56,8 +58,6 @@ Identified via `pnpm outdated`; not yet scheduled. Each will need its own dedica
 
 | Package | Current | Latest | Risk | Notes |
 |---|---|---|---|---|
-| `react-resizable-panels` | 2.x | 4.x | Hoch | Zwei Major-Versionssprünge, API incompatible. Nur `ResizablePanel`-Komponente betroffen. Changelog sorgfältig lesen vor Upgrade. — in Bearbeitung (aktuelle Session) |
-| `@prisma/client` + `prisma` | 5.22 | 7.x | Hoch | Zwei-Schritt: 5→6 zuerst, dann 6→7. Jeweils eigener PR. SQLite und PostgreSQL testen. Eigene dedizierte Session. — in Bearbeitung (aktuelle Session, Schritt 1: 5→6) |
 | `lucide-react` | 0.454 | 1.x | Hoch | Icon-API und viele Icon-Namen haben sich in v1.0 geändert. Betrifft alle Komponenten-Dateien (~40 Imports). Eigene Session, sorgfältige Benennung prüfen. ✅ Done — Brand-Icons (Github, Chrome) ersetzt durch inline SVG-Komponenten |
 | `sonner` | 1.x | 2.x | Niedrig-Mittel | Toast-API-Änderungen möglich. `toast.success/error/warning` prüfen. ✅ Done — Zero Breaking Changes |
 | `react-day-picker` | 9.x | 10.x | Mittel | Datumsauswahl-Komponente. Prüfen ob Props-API geändert. ✅ Done — `classNames.table` → `classNames.month_grid` |

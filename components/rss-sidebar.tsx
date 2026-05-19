@@ -127,6 +127,7 @@ interface RssSidebarProps {
   onSelectCategory: (category: string) => void;
   isCollapsed?: boolean;
   defaultOpenAddFeed?: boolean;
+  hideEmptyFeeds?: boolean;
 }
 
 export function RssSidebar({
@@ -137,6 +138,7 @@ export function RssSidebar({
   onSelectCategory,
   isCollapsed = false,
   defaultOpenAddFeed = false,
+  hideEmptyFeeds = false,
 }: RssSidebarProps) {
   const router = useRouter();
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
@@ -314,6 +316,7 @@ export function RssSidebar({
   const [feedToDelete, setFeedToDelete] = useState<{ id: string; name: string } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
+  const visibleFeeds = hideEmptyFeeds ? feeds.filter((f) => f.unreadCount > 0) : feeds;
   const totalUnread = feeds.reduce((sum, f) => sum + f.unreadCount, 0);
 
   const navItems = [
@@ -622,23 +625,27 @@ export function RssSidebar({
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-1">
-                  {allCategories.map((category: any) => (
-                    <SortableCategory
-                      key={category.id}
-                      category={category}
-                      feeds={feeds.filter((f) => f.categoryId === category.id)}
-                      selectedFeed={selectedFeed}
-                      onSelectFeed={onSelectFeed}
-                      expanded={expandedCategories.includes(category.id)}
-                      onToggle={() => toggleCategory(category.id)}
-                      renderFeedRow={renderFeedRow}
-                      onSelectCategory={onSelectCategory}
-                    />
-                  ))}
+                  {allCategories.map((category: any) => {
+                    const categoryFeeds = visibleFeeds.filter((f) => f.categoryId === category.id);
+                    if (hideEmptyFeeds && categoryFeeds.length === 0) return null;
+                    return (
+                      <SortableCategory
+                        key={category.id}
+                        category={category}
+                        feeds={categoryFeeds}
+                        selectedFeed={selectedFeed}
+                        onSelectFeed={onSelectFeed}
+                        expanded={expandedCategories.includes(category.id)}
+                        onToggle={() => toggleCategory(category.id)}
+                        renderFeedRow={renderFeedRow}
+                        onSelectCategory={onSelectCategory}
+                      />
+                    );
+                  })}
 
                   {/* Uncategorized Feeds */}
                   <UncategorizedGroup
-                    feeds={feeds.filter((f) => !f.categoryId)}
+                    feeds={visibleFeeds.filter((f) => !f.categoryId)}
                     renderFeedRow={renderFeedRow}
                   />
                 </div>
