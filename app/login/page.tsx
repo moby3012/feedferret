@@ -14,15 +14,9 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import Link from "next/link";
-import {
-  Mail,
-  Lock,
-  LogIn,
-  Github,
-  Chrome,
-  Shield,
-  Wand2,
-} from "lucide-react";
+import { Mail, Lock, LogIn, Shield, Wand2 } from "lucide-react";
+import { GithubIcon } from "@/components/icons/github-icon";
+import { GoogleIcon } from "@/components/icons/google-icon";
 import { hasUsers, getAuthProviders } from "../actions/onboarding";
 import { Separator } from "@/components/ui/separator";
 import { useInstance } from "@/hooks/use-instance";
@@ -306,7 +300,7 @@ export default function LoginPage() {
                       className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("google")}
                     >
-                      <Chrome className="w-4 h-4 mr-2" />
+                      <GoogleIcon className="w-4 h-4 mr-2" />
                       Google
                     </Button>
                   )}
@@ -316,7 +310,7 @@ export default function LoginPage() {
                       className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("github")}
                     >
-                      <Github className="w-4 h-4 mr-2" />
+                      <GithubIcon className="w-4 h-4 mr-2" />
                       GitHub
                     </Button>
                   )}
