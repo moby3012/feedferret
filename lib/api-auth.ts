@@ -8,6 +8,8 @@ export type ApiUser = {
   email: string | null;
   name: string | null;
   role: string;
+  tokenScope?: string;  // undefined = session auth (full access)
+  tokenId?: string;
 };
 
 export async function resolveApiUser(request: Request): Promise<ApiUser | null> {
@@ -24,13 +26,20 @@ export async function resolveApiUser(request: Request): Promise<ApiUser | null> 
   const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   if (!token) return null;
 
-  const user = await db.user.findUnique({
-    where: { apiToken: hashApiToken(token) },
-    select: { id: true, email: true, name: true, role: true, isActive: true },
+  const tokenRecord = await db.apiToken.findUnique({
+    where: { tokenHash: hashApiToken(token) },
+    include: {
+      user: { select: { id: true, email: true, name: true, role: true, isActive: true } },
+    },
   });
 
-  if (!user?.isActive) return null;
-  return user;
+  if (!tokenRecord?.user?.isActive) return null;
+  if (tokenRecord.expiresAt && tokenRecord.expiresAt < new Date()) return null;
+
+  // Update lastUsedAt without blocking the request
+  db.apiToken.update({ where: { id: tokenRecord.id }, data: { lastUsedAt: new Date() } }).catch(() => {});
+
+  return { ...tokenRecord.user, tokenScope: tokenRecord.scope, tokenId: tokenRecord.id };
 }
 
 export async function requireApiUser(request: Request): Promise<ApiUser | NextResponse> {
@@ -41,12 +50,7 @@ export async function requireApiUser(request: Request): Promise<ApiUser | NextRe
 
 export function apiError(message: string, status = 400, details?: unknown) {
   return NextResponse.json(
-    {
-      error: {
-        message,
-        ...(details === undefined ? {} : { details }),
-      },
-    },
+    { error: { message, ...(details === undefined ? {} : { details }) } },
     { status },
   );
 }

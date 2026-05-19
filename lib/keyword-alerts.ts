@@ -7,6 +7,7 @@ import {
   sendGotifyNotification,
   sendNtfyNotification,
 } from "@/lib/notification-channels";
+import { generateMarkReadUrl } from "./telegram-callback";
 import { logger } from "./logger";
 
 function parseActions(value: string | null | undefined) {
@@ -135,13 +136,19 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
       const ch = await loadChannels();
       if (ch.telegram.enabled && ch.telegram.botToken && ch.telegram.chatId) {
         const first = matches[0];
-        const body =
-          matches.length === 1
-            ? first.title
-            : `${matches.length} matching articles`;
+        const body = matches.length === 1 ? first.title : `${matches.length} matching articles`;
+        const instanceUrl = process.env.NEXTAUTH_URL || "";
+        const markReadUrl = matches.length === 1 && instanceUrl
+          ? generateMarkReadUrl(first.id, userId, instanceUrl)
+          : undefined;
         sendTelegramNotification(
           { botToken: ch.telegram.botToken, chatId: ch.telegram.chatId },
-          { title: `Keyword alert: ${alert.name}`, body, url: matches.length === 1 ? first.link : undefined },
+          {
+            title: `Keyword alert: ${alert.name}`,
+            body,
+            url: matches.length === 1 ? first.link : undefined,
+            markReadUrl,
+          },
         ).catch((e) => logger.warn("[keyword-alerts] telegram failed:", e));
       }
     }

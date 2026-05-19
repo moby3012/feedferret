@@ -37,6 +37,7 @@ import {
   Rss,
   ChevronDown,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -50,6 +51,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { deleteOwnAccount } from "@/app/actions/account";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -1262,59 +1264,76 @@ function DeleteAccountSection() {
 }
 
 function ApiTokenSection() {
-  const [token, setToken] = useState<string | null>(null);
-  const [hasToken, setHasToken] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [tokens, setTokens] = useState<Array<{
+    id: string; name: string; scope: string; expiresAt: string | null; lastUsedAt: string | null; createdAt: string;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [newRawToken, setNewRawToken] = useState<string | null>(null);
+  const [newTokenId, setNewTokenId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createName, setCreateName] = useState("My token");
+  const [createScope, setCreateScope] = useState("write");
+  const [createExpiry, setCreateExpiry] = useState("never");
+  const [creating, setCreating] = useState(false);
 
-  const checkToken = useCallback(async () => {
-    const res = await fetch("/api/user/token");
+  const loadTokens = useCallback(async () => {
+    const res = await fetch("/api/user/tokens");
     if (res.ok) {
       const data = await res.json();
-      setHasToken(data.hasToken);
+      setTokens(data.tokens ?? []);
     }
+    setLoading(false);
   }, []);
 
-  const generateToken = useCallback(async () => {
-    setLoading(true);
+  useEffect(() => { void loadTokens(); }, [loadTokens]);
+
+  const handleCreate = useCallback(async () => {
+    setCreating(true);
     try {
-      const res = await fetch("/api/user/token", { method: "POST" });
+      const expiresAt = createExpiry === "never" ? null
+        : new Date(Date.now() + ({ "30d": 30, "90d": 90, "1y": 365 } as Record<string, number>)[createExpiry]! * 86400_000).toISOString();
+      const res = await fetch("/api/user/tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: createName, scope: createScope, expiresAt }),
+      });
       if (res.ok) {
         const data = await res.json();
-        setToken(data.token);
-        setHasToken(true);
-        toast.success("API token generated — save it now, it won't be shown again");
+        setNewRawToken(data.token);
+        setNewTokenId(data.id);
+        setShowCreate(false);
+        setCreateName("My token");
+        setCreateScope("write");
+        setCreateExpiry("never");
+        await loadTokens();
+        toast.success("Token created — copy it now, it won't be shown again");
+      } else {
+        toast.error("Failed to create token");
       }
     } finally {
-      setLoading(false);
+      setCreating(false);
     }
-  }, []);
+  }, [createName, createScope, createExpiry, loadTokens]);
 
-  const revokeToken = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/user/token", { method: "DELETE" });
-      if (res.ok) {
-        setToken(null);
-        setHasToken(false);
-        toast.success("API token revoked");
-      }
-    } finally {
-      setLoading(false);
+  const handleRevoke = useCallback(async (id: string, name: string) => {
+    const res = await fetch(`/api/user/tokens/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      if (newTokenId === id) { setNewRawToken(null); setNewTokenId(null); }
+      await loadTokens();
+      toast.success(`Token "${name}" revoked`);
     }
-  }, []);
+  }, [loadTokens, newTokenId]);
 
-  const copyToken = useCallback(() => {
-    if (token) {
-      navigator.clipboard.writeText(token);
+  const handleCopy = useCallback(() => {
+    if (newRawToken) {
+      navigator.clipboard.writeText(newRawToken);
       toast.success("Token copied to clipboard");
     }
-  }, [token]);
+  }, [newRawToken]);
 
-  useEffect(() => {
-    void checkToken();
-  }, [checkToken]);
-
-  if (hasToken === null) return null;
+  const scopeLabel = (scope: string) => ({ read: "Read-only", write: "Read+Write", admin: "Admin" } as Record<string, string>)[scope] ?? scope;
+  const scopeColor = (scope: string): "secondary" | "default" | "destructive" =>
+    scope === "read" ? "secondary" : scope === "admin" ? "destructive" : "default";
 
   return (
     <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
@@ -1322,74 +1341,109 @@ function ApiTokenSection() {
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <Key className="h-5 w-5" />
         </div>
-        <div>
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">API Access</h2>
+        <div className="flex-1">
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">API Tokens</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Personal API token for browser extensions, mobile apps, and external integrations.
-            Each user has one token. Treat it like a password — it grants full read-later access.
+            Personal API tokens for browser extensions, mobile apps, and external integrations.
+            Each token has its own scope and optional expiry. Treat them like passwords.
           </p>
         </div>
+        <Button size="sm" onClick={() => setShowCreate(true)} className="rounded-2xl h-9 shrink-0">
+          <Plus className="w-4 h-4 mr-1" />
+          Add token
+        </Button>
       </div>
 
-      {token && (
+      {newRawToken && (
         <div className="mb-4 rounded-2xl bg-accent/5 border border-accent/20 p-4">
           <p className="text-xs font-semibold text-accent mb-2 uppercase tracking-wider">
             New token — copy now, won&apos;t be shown again
           </p>
           <div className="flex items-center gap-2">
-            <Input
-              readOnly
-              value={token}
-              className="font-mono text-xs h-9 bg-background/60"
-            />
-            <Button size="sm" variant="outline" onClick={copyToken} className="shrink-0 h-9 rounded-xl">
+            <Input readOnly value={newRawToken} className="font-mono text-xs h-9 bg-background/60" />
+            <Button size="sm" variant="outline" onClick={handleCopy} className="shrink-0 h-9 rounded-xl">
               <Copy className="w-4 h-4" />
             </Button>
           </div>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
-        {!hasToken ? (
-          <Button
-            onClick={generateToken}
-            disabled={loading}
-            className="rounded-2xl h-10"
-          >
-            <Key className="w-4 h-4 mr-2" />
-            Generate API token
-          </Button>
-        ) : (
-          <>
-            <Button
-              onClick={generateToken}
-              disabled={loading}
-              variant="outline"
-              className="rounded-2xl h-10"
-            >
-              <Key className="w-4 h-4 mr-2" />
-              Regenerate token
+      {showCreate && (
+        <div className="mb-4 rounded-2xl border border-border/50 bg-muted/30 p-4 space-y-3">
+          <p className="text-sm font-medium">Create new token</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-1">
+              <label htmlFor="token-name" className="text-xs text-muted-foreground mb-1 block">Name</label>
+              <Input id="token-name" value={createName} onChange={(e) => setCreateName(e.target.value)} className="h-9 rounded-xl" maxLength={80} />
+            </div>
+            <div>
+              <label htmlFor="token-scope" className="text-xs text-muted-foreground mb-1 block">Scope</label>
+              <Select value={createScope} onValueChange={setCreateScope}>
+                <SelectTrigger id="token-scope" className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="read">Read-only</SelectItem>
+                  <SelectItem value="write">Read + Write</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label htmlFor="token-expiry" className="text-xs text-muted-foreground mb-1 block">Expires</label>
+              <Select value={createExpiry} onValueChange={setCreateExpiry}>
+                <SelectTrigger id="token-expiry" className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="never">Never</SelectItem>
+                  <SelectItem value="30d">30 days</SelectItem>
+                  <SelectItem value="90d">90 days</SelectItem>
+                  <SelectItem value="1y">1 year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" onClick={handleCreate} disabled={creating || !createName.trim()} className="rounded-xl h-9">
+              {creating ? "Creating…" : "Create"}
             </Button>
-            <Button
-              onClick={revokeToken}
-              disabled={loading}
-              variant="outline"
-              className="rounded-2xl h-10 text-destructive border-destructive/30 hover:bg-destructive/10"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Revoke token
-            </Button>
-          </>
-        )}
-        <span className="text-sm text-muted-foreground">
-          {hasToken ? "Token is active" : "No token set"}
-        </span>
-      </div>
+            <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)} className="rounded-xl h-9">Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : tokens.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No tokens yet. Create one to get started.</p>
+      ) : (
+        <div className="space-y-2">
+          {tokens.map((t) => (
+            <div key={t.id} className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/40 px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium truncate">{t.name}</span>
+                  <Badge variant={scopeColor(t.scope)} className="text-[10px] h-4 px-1.5">{scopeLabel(t.scope)}</Badge>
+                  {t.expiresAt && <span className="text-[11px] text-muted-foreground">Expires {new Date(t.expiresAt).toLocaleDateString()}</span>}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Created {new Date(t.createdAt).toLocaleDateString()}
+                  {t.lastUsedAt ? ` · Last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : " · Never used"}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                onClick={() => handleRevoke(t.id, t.name)}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <p className="mt-4 text-xs text-muted-foreground">
-        See <a href="/docs/api" className="underline hover:text-foreground">API documentation</a> for
-        usage examples. Pass the token as{" "}
-        <code className="bg-muted px-1 py-0.5 rounded text-[11px]">Authorization: Bearer &lt;token&gt;</code>.
+        Pass the token as <code className="bg-muted px-1 py-0.5 rounded text-[11px]">Authorization: Bearer &lt;token&gt;</code>.{" "}
+        The Fever API uses <code className="bg-muted px-1 py-0.5 rounded text-[11px]">md5(email:token)</code> as its api_key.
       </p>
     </section>
   );

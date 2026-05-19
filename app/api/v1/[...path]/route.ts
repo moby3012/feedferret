@@ -504,9 +504,14 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
     return res;
   };
 
+  // Scope enforcement: "read" tokens can only use safe GET endpoints
+  if (user.tokenScope === "read" && isWriteMethod) {
+    return withRl(apiError("Forbidden: read-only token cannot perform write operations", 403));
+  }
+
   let res: Response;
   try {
-    if (method === "GET" && path[0] === "me" && path.length === 1) res = NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+    if (method === "GET" && path[0] === "me" && path.length === 1) res = NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role, tokenScope: user.tokenScope ?? "session" });
     else if (path[0] === "articles") {
       if (method === "GET" && path.length === 1) res = await listArticles(user, request);
       else if (method === "POST" && path[1] === "mark-all-read") res = await markAllRead(user, request);
