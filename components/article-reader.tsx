@@ -190,7 +190,8 @@ export function ArticleReader({
 
     const handleWheel = (e: WheelEvent) => {
       const { scrollTop, scrollHeight, clientHeight } = viewport;
-      const atBottom = scrollHeight - (scrollTop + clientHeight) < 8 && scrollHeight > clientHeight + 8;
+      const canScroll = scrollHeight > clientHeight + 8;
+      const atBottom = !canScroll || scrollHeight - (scrollTop + clientHeight) < 8;
       const atTop = scrollTop < 4;
       if (atBottom && e.deltaY > 0) {
         accum += e.deltaY;
@@ -213,7 +214,8 @@ export function ArticleReader({
     const handleEdgeTouchMove = (e: globalThis.TouchEvent) => {
       if (e.touches.length !== 1) return;
       const { scrollTop, scrollHeight, clientHeight } = viewport;
-      const atBottom = scrollHeight - (scrollTop + clientHeight) < 8 && scrollHeight > clientHeight + 8;
+      const canScroll = scrollHeight > clientHeight + 8;
+      const atBottom = !canScroll || scrollHeight - (scrollTop + clientHeight) < 8;
       const atTop = scrollTop < 4;
       const dy = touchStartY - e.touches[0].clientY;
       if (atBottom && dy > 0) {

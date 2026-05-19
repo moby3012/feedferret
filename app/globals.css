@@ -264,6 +264,14 @@
     animation: pulse-gentle 2s ease-in-out infinite;
   }
 
+  .animate-article-enter-bottom {
+    animation: article-enter-from-bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-article-enter-top {
+    animation: article-enter-from-top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
   /* Staggered animation delays */
   .animation-delay-100 { animation-delay: 100ms; animation-fill-mode: backwards; }
   .animation-delay-200 { animation-delay: 200ms; animation-fill-mode: backwards; }
@@ -292,6 +300,28 @@
     transform: translateY(-1px) scale(1.002);
   }
   100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes article-enter-from-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(32px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes article-enter-from-top {
+  from {
+    opacity: 0;
+    transform: translateY(-32px) scale(0.985);
+  }
+  to {
     opacity: 1;
     transform: translateY(0) scale(1);
   }

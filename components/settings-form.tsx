@@ -38,6 +38,7 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
+  EyeOff,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -421,6 +422,19 @@ export function SettingsForm() {
             <Switch
               checked={(prefs?.layoutDirection ?? "ltr") === "rtl"}
               onCheckedChange={(checked) => update({ layoutDirection: checked ? "rtl" : "ltr" })}
+              className="h-7 w-12"
+            />
+          </PrefRow>
+
+          {/* Hide empty feeds */}
+          <PrefRow
+            icon={EyeOff}
+            title="Hide empty feeds"
+            description="Hide feeds and categories with no unread articles from the sidebar."
+          >
+            <Switch
+              checked={prefs?.hideEmptyFeeds ?? false}
+              onCheckedChange={(checked) => update({ hideEmptyFeeds: checked })}
               className="h-7 w-12"
             />
           </PrefRow>
