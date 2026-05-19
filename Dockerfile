@@ -59,9 +59,9 @@ RUN mkdir -p /app/data && touch /app/data/dev.db && chown -R nextjs:nodejs /app/
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-# Copy Prisma schema, config and startup script
+# Copy Prisma schema and startup script
+# Note: prisma.config.ts is NOT copied here — the CLI receives the URL via --url flag in start.sh
 COPY --chown=nextjs:nodejs prisma ./prisma
-COPY --chown=nextjs:nodejs prisma.config.ts ./prisma.config.ts
 COPY --chown=nextjs:nodejs scripts/prepare-prisma-schema.mjs ./scripts/prepare-prisma-schema.mjs
 COPY --chown=nextjs:nodejs start.sh ./start.sh
 RUN chmod +x ./start.sh

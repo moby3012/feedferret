@@ -58,7 +58,8 @@ node scripts/prepare-prisma-schema.mjs
 log "🔄 Running database sync (db push)..."
 
 # Sync schema with database
-$PRISMA_CMD db push --schema prisma/schema.generated.prisma --accept-data-loss --skip-generate
+# Pass --url explicitly so the CLI does not need prisma.config.ts in the runner
+$PRISMA_CMD db push --schema prisma/schema.generated.prisma --url "$DATABASE_URL" --accept-data-loss --skip-generate
 
 log "✅ Database is ready."
 log "🌟 Starting Next.js server..."
