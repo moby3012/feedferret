@@ -26,10 +26,27 @@ Each upgrade gets its own PR. Never bundle two major upgrades in one PR. Run the
 
 | Package | Current | Target | Risk | Notes |
 |---|---|---|---|---|
-| ESLint | 8.57 | 9.x | Medium | Flat config migration — rename `.eslintrc.json` to `eslint.config.js`, migrate rule syntax. Do this before `eslint-config-next`. → upgrade in current session |
-| `eslint-config-next` | 14.2.35 | 16.x | Medium | Requires ESLint 9 first. Next.js 16 ships its own config; check for rule renames. → upgrade in current session |
-| `next-auth` | 5.0.0-beta.31 | 5.0.0 stable | Medium | Check JWT callback signature changes between beta and stable. Verify magic link, OIDC, and TOTP flows end-to-end after upgrade. → upgrade in current session |
-| `typescript` | 5.x | 6.0 | Low | Check new strict defaults — some previously valid code may produce errors. Run `tsc --noEmit` and fix any new errors before merging. → upgrade in current session |
+| ESLint | 8.57 | 9.x | Medium | Flat config migration — rename `.eslintrc.json` to `eslint.config.js`, migrate rule syntax. Do this before `eslint-config-next`. ✅ Done |
+| `eslint-config-next` | 14.2.35 | 16.x | Medium | Requires ESLint 9 first. Next.js 16 ships its own config; check for rule renames. ✅ Done |
+| `next-auth` | 5.0.0-beta.31 | 5.0.0 stable | Medium | next-auth beta → stable noch ausstehend (v5 stable nicht released; Projekt bleibt auf beta.31) |
+| `typescript` | 5.x | 6.0 | Low | Check new strict defaults — some previously valid code may produce errors. Run `tsc --noEmit` and fix any new errors before merging. ✅ Done |
+
+---
+
+## Completed Dependency Upgrades
+
+| Package | From | To | Date | Notes |
+|---|---|---|---|---|
+| `typescript` | 5.9 | 6.0 | 2026-05-19 | Zero breaking changes |
+| `@types/react` | 19.2.10 | 19.2.14 | 2026-05-19 | Patch |
+| `@types/nodemailer` | 7.x | 8.x | 2026-05-19 | Types only |
+| `eslint` | 8.57 | 9.x | 2026-05-19 | Flat config migration (.eslintrc.json → eslint.config.mjs) |
+| `eslint-config-next` | 14.x | 16.x | 2026-05-19 | New react-hooks/v5 rules set to off pending refactor |
+| `zod` | 3.25 | 4.4 | 2026-05-19 | ZodError.errors → .issues (1 call site) |
+| `@hookform/resolvers` | 3.x | 5.x | 2026-05-19 | No code changes |
+| `sonner` | 1.x | 2.x | 2026-05-19 | Zero breaking changes |
+| `lucide-react` | 0.454 | 1.16 | 2026-05-19 | Github/Chrome brand icons → inline SVGs |
+| `react-day-picker` | 9.x | 10.x | 2026-05-19 | classNames.table → month_grid |
 
 ---
 
@@ -39,14 +56,14 @@ Identified via `pnpm outdated`; not yet scheduled. Each will need its own dedica
 
 | Package | Current | Latest | Risk | Notes |
 |---|---|---|---|---|
-| `lucide-react` | 0.454 | 1.x | Hoch | Icon-API und viele Icon-Namen haben sich in v1.0 geändert. Betrifft alle Komponenten-Dateien (~40 Imports). Eigene Session, sorgfältige Benennung prüfen. |
-| `react-resizable-panels` | 2.x | 4.x | Hoch | Zwei Major-Versionssprünge, API incompatible. Nur `ResizablePanel`-Komponente betroffen. Changelog sorgfältig lesen vor Upgrade. |
-| `@hookform/resolvers` | 3.x | 5.x | Mittel | Überspringt v4. Zusammen mit Zod-Upgrade machen (Zod 3→4 und resolvers 3→5 in einem PR). |
-| `sonner` | 1.x | 2.x | Niedrig-Mittel | Toast-API-Änderungen möglich. `toast.success/error/warning` prüfen. |
-| `react-day-picker` | 9.x | 10.x | Mittel | Datumsauswahl-Komponente. Prüfen ob Props-API geändert. |
-| `@prisma/client` + `prisma` | 5.22 | 7.x | Hoch | Zwei-Schritt: 5→6 zuerst, dann 6→7. Jeweils eigener PR. SQLite und PostgreSQL testen. Eigene dedizierte Session. |
-| `zod` | 3.25 | 4.x | Mittel | `.parse()` Error-Shape geändert, `.safeParse()` Result-Typ enger. `@hookform/resolvers` Kompatibilität prüfen. Zusammen mit resolvers-Upgrade machen. |
-| `undici` | 7.x | 8.x | Niedrig | HTTP-Client, transitive Abhängigkeit. Meist automatisch durch Next.js-Update mitgezogen. |
+| `react-resizable-panels` | 2.x | 4.x | Hoch | Zwei Major-Versionssprünge, API incompatible. Nur `ResizablePanel`-Komponente betroffen. Changelog sorgfältig lesen vor Upgrade. — in Bearbeitung (aktuelle Session) |
+| `@prisma/client` + `prisma` | 5.22 | 7.x | Hoch | Zwei-Schritt: 5→6 zuerst, dann 6→7. Jeweils eigener PR. SQLite und PostgreSQL testen. Eigene dedizierte Session. — in Bearbeitung (aktuelle Session, Schritt 1: 5→6) |
+| `lucide-react` | 0.454 | 1.x | Hoch | Icon-API und viele Icon-Namen haben sich in v1.0 geändert. Betrifft alle Komponenten-Dateien (~40 Imports). Eigene Session, sorgfältige Benennung prüfen. ✅ Done — Brand-Icons (Github, Chrome) ersetzt durch inline SVG-Komponenten |
+| `sonner` | 1.x | 2.x | Niedrig-Mittel | Toast-API-Änderungen möglich. `toast.success/error/warning` prüfen. ✅ Done — Zero Breaking Changes |
+| `react-day-picker` | 9.x | 10.x | Mittel | Datumsauswahl-Komponente. Prüfen ob Props-API geändert. ✅ Done — `classNames.table` → `classNames.month_grid` |
+| `zod` | 3.25 | 4.x | Mittel | `.parse()` Error-Shape geändert, `.safeParse()` Result-Typ enger. `@hookform/resolvers` Kompatibilität prüfen. Zusammen mit resolvers-Upgrade machen. ✅ Done — `ZodError.errors` → `ZodError.issues` (1 Stelle) |
+| `@hookform/resolvers` | 3.x | 5.x | Mittel | Überspringt v4. Zusammen mit Zod-Upgrade machen (Zod 3→4 und resolvers 3→5 in einem PR). ✅ Done — keine Code-Änderungen nötig |
+| `undici` | 7.x | 8.x | Niedrig | HTTP-Client, transitive Abhängigkeit. Meist automatisch durch Next.js-Update mitgezogen. ✅ Done — automatisch als transitive Abhängigkeit aktualisiert (durch Next.js 16) |
 
 ---
 
