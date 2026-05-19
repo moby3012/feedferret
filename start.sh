@@ -59,7 +59,7 @@ log "🔄 Running database sync (db push)..."
 
 # Sync schema with database
 # Pass --url explicitly so the CLI does not need prisma.config.ts in the runner
-$PRISMA_CMD db push --schema prisma/schema.generated.prisma --url "$DATABASE_URL" --accept-data-loss --skip-generate
+$PRISMA_CMD db push --schema prisma/schema.generated.prisma --url "$DATABASE_URL" --accept-data-loss
 
 log "✅ Database is ready."
 log "🌟 Starting Next.js server..."
