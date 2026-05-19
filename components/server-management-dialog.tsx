@@ -479,6 +479,18 @@ export function ServerManagementDialog({
                         onCheckedChange={(checked) => handleUpdateSettings({ require2FAForAdmins: checked })}
                       />
                     </div>
+                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1">
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">Public Saved-Search Shares</h4>
+                        <p className="text-sm text-muted-foreground">
+                          When disabled, all public saved-search share URLs return 404. Useful for private or single-user instances.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={!(settings?.disablePublicSharedSearches ?? false)}
+                        onCheckedChange={(checked) => handleUpdateSettings({ disablePublicSharedSearches: !checked })}
+                      />
+                    </div>
                     <div className="p-6 rounded-3xl bg-amber-500/10 border border-amber-500/20 space-y-3">
                       <div className="flex items-center gap-2 text-amber-500">
                         <AlertCircle className="w-5 h-5" />

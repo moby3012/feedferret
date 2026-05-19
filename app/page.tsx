@@ -123,6 +123,7 @@ export default function RSSReaderPage() {
   const [autoReadSuppressedArticles, setAutoReadSuppressedArticles] = useState<string[]>([]);
   const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
   const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);
+  const [lastClosedArticleId, setLastClosedArticleId] = useState<string | null>(null);
   const deepLinkAppliedRef = useRef(false);
   const articleDeepLinkRef = useRef<string | null>(null);
 
@@ -359,6 +360,7 @@ export default function RSSReaderPage() {
   }, [readingPrefs?.openOriginalByDefault]);
 
   const handleCloseArticle = useCallback(() => {
+    setLastClosedArticleId(selectedArticleIdRef.current);
     setSelectedArticleId(null);
     setSelectedArticleSnapshot(null);
   }, []);
@@ -517,12 +519,16 @@ export default function RSSReaderPage() {
     if (idx === -1) return;
     const next = feedsList[(idx + direction + feedsList.length) % feedsList.length];
     if (next && next.id !== selectedFeed) {
+      // Auto-mark all articles in the current feed as read when swiping forward
+      if (direction === 1) {
+        markAllAsRead.mutate({ feedId: selectedFeed, category: null });
+      }
       setSelectedFeed(next.id);
       setSelectedCategory("All");
       setSelectedArticleId(null);
       setSelectedArticleSnapshot(null);
     }
-  }, [feeds, selectedFeed]);
+  }, [feeds, selectedFeed, markAllAsRead]);
 
   const handleToggleSort = useCallback(() => {
     setSortOrder((prev) => {
@@ -686,6 +692,9 @@ export default function RSSReaderPage() {
     icon: f.icon || "📰",
   }));
 
+  const selectedFeedData = (feeds as any[]).find((f: any) => f.id === selectedArticle?.feedId);
+  const hideArticleImage = selectedFeedData?.hideArticleImage ?? false;
+
   if (isMobileLayout === null) {
     return (
       <div className="h-dvh flex items-center justify-center bg-[#05060a]">
@@ -828,6 +837,7 @@ export default function RSSReaderPage() {
                 onOverscrollPastTop={() => navigateFeed(-1)}
                 onSwipeNextFeed={() => navigateFeed(1)}
                 onSwipePreviousFeed={() => navigateFeed(-1)}
+                scrollBackToId={lastClosedArticleId}
               />
             )}
           </div>
@@ -858,6 +868,7 @@ export default function RSSReaderPage() {
               hasNextArticle={selectedArticleIndex >= 0 && selectedArticleIndex < filteredArticles.length - 1}
               readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
               readerFontSize={(readingPrefs?.readerFontSize ?? "medium") as "small" | "medium" | "large" | "xl"}
+              hideArticleImage={hideArticleImage}
             />
           </div>
         </ResizablePanel>
@@ -919,6 +930,7 @@ export default function RSSReaderPage() {
             onOverscrollPastTop={() => navigateFeed(-1)}
             onSwipeNextFeed={() => navigateFeed(1)}
             onSwipePreviousFeed={() => navigateFeed(-1)}
+            scrollBackToId={lastClosedArticleId}
           />
         )}
         <MobileBottomControls
@@ -955,6 +967,7 @@ export default function RSSReaderPage() {
           hasPreviousArticle={selectedArticleIndex > 0}
           hasNextArticle={selectedArticleIndex >= 0 && selectedArticleIndex < filteredArticles.length - 1}
           readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
+          hideArticleImage={hideArticleImage}
         />
       </div>
       )}

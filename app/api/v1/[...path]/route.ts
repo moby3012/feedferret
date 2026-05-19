@@ -170,6 +170,46 @@ async function patchArticle(user: ApiUser, articleId: string, request: Request) 
   return NextResponse.json(articlePayload(updated));
 }
 
+async function batchArticles(user: ApiUser, request: Request) {
+  const body = await readJson<any>(request);
+  if (!body) return apiError("Invalid JSON body", 400);
+  const ids: string[] = Array.isArray(body.ids) ? body.ids.filter((id: unknown) => typeof id === "string") : [];
+  if (ids.length === 0) return apiError("ids must be a non-empty array of strings", 400);
+  if (ids.length > 200) return apiError("ids array must not exceed 200 items", 400);
+
+  const action: string = typeof body.action === "string" ? body.action : "";
+  const VALID_ACTIONS = ["read", "unread", "star", "unstar", "label"] as const;
+  if (!VALID_ACTIONS.includes(action as (typeof VALID_ACTIONS)[number])) {
+    return apiError(`action must be one of: ${VALID_ACTIONS.join(", ")}`, 400);
+  }
+
+  // Verify ownership in one query
+  const owned = await db.article.findMany({ where: { id: { in: ids }, userId: user.id }, select: { id: true } });
+  const ownedIds = owned.map((a) => a.id);
+  if (ownedIds.length === 0) return apiError("No matching articles found", 404);
+
+  let data: any = {};
+  if (action === "read") { data = { isRead: true, readAt: new Date() }; }
+  else if (action === "unread") { data = { isRead: false, readAt: null }; }
+  else if (action === "star") { data = { isStarred: true }; }
+  else if (action === "unstar") { data = { isStarred: false }; }
+  else if (action === "label") {
+    const labelIds: string[] = Array.isArray(body.labelIds) ? body.labelIds.filter((id: unknown) => typeof id === "string") : [];
+    const validLabels = await db.label.findMany({ where: { userId: user.id, id: { in: labelIds } }, select: { id: true } });
+    const validLabelIds = validLabels.map((l) => l.id);
+    await db.$transaction([
+      db.articleLabel.deleteMany({ where: { userId: user.id, articleId: { in: ownedIds } } }),
+      ...ownedIds.flatMap((articleId) =>
+        validLabelIds.map((labelId) => db.articleLabel.create({ data: { userId: user.id, articleId, labelId } }))
+      ),
+    ]);
+    return NextResponse.json({ updated: ownedIds.length, notFound: ids.length - ownedIds.length });
+  }
+
+  const result = await db.article.updateMany({ where: { id: { in: ownedIds } }, data });
+  return NextResponse.json({ updated: result.count, notFound: ids.length - ownedIds.length });
+}
+
 async function markAllRead(user: ApiUser, request: Request) {
   const body = (await readJson<any>(request)) || {};
   const where: any = { userId: user.id, isRead: false };
@@ -470,6 +510,7 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
     else if (path[0] === "articles") {
       if (method === "GET" && path.length === 1) res = await listArticles(user, request);
       else if (method === "POST" && path[1] === "mark-all-read") res = await markAllRead(user, request);
+      else if (method === "POST" && path[1] === "batch") res = await batchArticles(user, request);
       else if (method === "GET" && path.length === 2) res = await getArticle(user, path[1]);
       else if (method === "PATCH" && path.length === 2) res = await patchArticle(user, path[1], request);
       else res = apiError("Not found", 404);

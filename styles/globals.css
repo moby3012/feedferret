@@ -127,3 +127,46 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* prefers-contrast: more — boost borders and text contrast */
+@media (prefers-contrast: more) {
+  :root {
+    --border: oklch(0.6 0 0);
+    --input: oklch(0.6 0 0);
+    --ring: oklch(0.4 0 0);
+    --muted-foreground: oklch(0.35 0 0);
+    --sidebar-border: oklch(0.6 0 0);
+  }
+  .dark {
+    --border: oklch(0.55 0 0);
+    --input: oklch(0.55 0 0);
+    --ring: oklch(0.65 0 0);
+    --muted-foreground: oklch(0.75 0 0);
+    --sidebar-border: oklch(0.55 0 0);
+  }
+  * {
+    border-width: max(1px, var(--tw-border-width, 1px));
+  }
+  [class*="border"] {
+    border-width: 2px;
+  }
+  hr, [role="separator"] {
+    border-width: 2px;
+  }
+}
+
+/* Article page-turn enter animations */
+@keyframes article-enter-from-bottom {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes article-enter-from-top {
+  from { transform: translateY(-40px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+.animate-article-enter-bottom {
+  animation: article-enter-from-bottom 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-article-enter-top {
+  animation: article-enter-from-top 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
