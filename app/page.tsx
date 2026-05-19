@@ -37,6 +37,12 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { useDefaultLayout } from "react-resizable-panels";
+
+const ssrSafeStorage = {
+  getItem: (key: string) => (typeof window !== "undefined" ? localStorage.getItem(key) : null),
+  setItem: (key: string, value: string) => { if (typeof window !== "undefined") localStorage.setItem(key, value); },
+};
 import { hasUsers } from "./actions/onboarding";
 import { useRouter } from "next/navigation";
 import { useAppBadge, useUnreadBadgeCount } from "@/hooks/use-app-badge";
@@ -118,6 +124,9 @@ export default function RSSReaderPage() {
 
   const unreadBadgeCount = useUnreadBadgeCount(feeds);
   useAppBadge(unreadBadgeCount, status === "authenticated");
+
+  const { defaultLayout: readerLayout, onLayoutChanged: onReaderLayoutChanged } =
+    useDefaultLayout({ id: "feedferret-reader-layout", panelIds: ["article-list", "article-reader"], storage: ssrSafeStorage });
 
   const [readInSession, setReadInSession] = useState<string[]>([]);
   const [autoReadSuppressedArticles, setAutoReadSuppressedArticles] = useState<string[]>([]);
@@ -777,11 +786,13 @@ export default function RSSReaderPage() {
       {/* Desktop: resizable article list + reader */}
       {!isMobileLayout && (
       <ResizablePanelGroup
-        direction="horizontal"
-        autoSaveId="feedferret-reader-layout"
+        orientation="horizontal"
+        defaultLayout={readerLayout}
+        onLayoutChanged={onReaderLayoutChanged}
         className="hidden min-w-0 flex-1 lg:flex"
       >
         <ResizablePanel
+          id="article-list"
           defaultSize={36}
           minSize={26}
           maxSize={55}
@@ -848,7 +859,7 @@ export default function RSSReaderPage() {
           className="bg-border/40 transition-colors hover:bg-accent/35"
         />
 
-        <ResizablePanel defaultSize={64} minSize={45}>
+        <ResizablePanel id="article-reader" defaultSize={64} minSize={45}>
           <div role="region" aria-label="Article reader" className="flex h-full bg-background">
             <ArticleReader
               article={selectedArticle}
