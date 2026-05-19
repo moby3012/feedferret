@@ -796,9 +796,8 @@ export default function RSSReaderPage() {
           defaultSize={36}
           minSize={26}
           maxSize={55}
-          className="min-w-[360px]"
         >
-          <div role="region" aria-label="Article list" className="relative z-10 flex h-full flex-col border-r border-border/60 bg-card/70 backdrop-blur-2xl">
+          <div role="region" aria-label="Article list" className="relative z-10 flex h-full min-w-[320px] flex-col border-r border-border/60 bg-card/70 backdrop-blur-2xl">
             <RssHeader
               title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
               articleCount={filteredArticles.length}
