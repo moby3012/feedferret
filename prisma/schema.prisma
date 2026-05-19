@@ -226,6 +226,7 @@ model Category {
   feeds     Feed[]
   opmlUrl   String?
   updateFrequency Int?
+  hideFromAllFeeds Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, name, parentId])
@@ -270,6 +271,8 @@ model Feed {
   autoFetchFullText        Boolean   @default(false)
   fullTextConditions       String?
   filtersActionRead        String?
+  hideFromAllFeeds         Boolean  @default(false)
+  hideArticleImage         Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, url])
@@ -397,6 +400,7 @@ model GlobalSettings {
   onboardingCompleted Boolean @default(false)
   // Security
   require2FAForAdmins Boolean @default(false)
+  disablePublicSharedSearches Boolean @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

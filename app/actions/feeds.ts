@@ -388,6 +388,9 @@ export async function updateFeed(feedId: string, data: {
     unicityCriteriaForced?: boolean;
     scraperConfig?: string | null;
     httpOptions?: string | null;
+    // Behavior
+    hideFromAllFeeds?: boolean;
+    hideArticleImage?: boolean;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -657,7 +660,18 @@ export async function getArticles(feedId?: string | null, category?: string, sea
 
     if (feedId) {
         where.feedId = feedId;
-    } else if (category && category !== "All" && category !== "All Articles") {
+    } else if (!category || category === "All" || category === "All Articles") {
+        // Exclude feeds and categories marked as hidden from all feeds view
+        where.AND = [...(where.AND || []), {
+            feed: {
+                hideFromAllFeeds: false,
+                OR: [
+                    { categoryId: null },
+                    { category: { hideFromAllFeeds: false } },
+                ],
+            },
+        }];
+    } else if (category !== "All" && category !== "All Articles") {
         if (category === "Starred") {
             where.isStarred = true;
         } else if (category === "Read Later") {

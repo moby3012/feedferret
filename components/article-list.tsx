@@ -114,6 +114,7 @@ interface ArticleListProps {
   onOverscrollPastTop?: () => void;
   onSwipeNextFeed?: () => void;
   onSwipePreviousFeed?: () => void;
+  scrollBackToId?: string | null;
 }
 
 export function ArticleList({
@@ -138,6 +139,7 @@ export function ArticleList({
   onOverscrollPastTop,
   onSwipeNextFeed,
   onSwipePreviousFeed,
+  scrollBackToId,
 }: ArticleListProps) {
   const transitionClass =
     transitionStyle === "flip"
@@ -181,6 +183,17 @@ export function ArticleList({
   useEffect(() => {
     setVisibleCount(pageSize ?? 30);
   }, [firstArticleId, pageSize]);
+
+  // Restore scroll position to the previously selected article when the reader closes
+  useEffect(() => {
+    if (!scrollBackToId || !scrollRoot) return;
+    const el = contentRef.current?.querySelector<HTMLElement>(`[data-article-id="${scrollBackToId}"]`);
+    if (!el) return;
+    const elTop = el.getBoundingClientRect().top;
+    const rootTop = scrollRoot.getBoundingClientRect().top;
+    const offset = scrollRoot.scrollTop + elTop - rootTop - 80;
+    scrollRoot.scrollTo({ top: Math.max(0, offset), behavior: "instant" });
+  }, [scrollBackToId, scrollRoot]);
 
   useEffect(() => {
     const nextRoot = contentRef.current?.closest(
@@ -546,7 +559,7 @@ function ArticlePreview({
   }, [article.id, article.isRead, markReadOnScroll, onMarkRead, scrollRoot]);
   if (viewMode === "minimal") {
     return (
-      <div className="relative">
+      <div className="relative" data-article-id={article.id}>
         {swipeBackdrop}
       <div
         ref={articleRef}
@@ -599,7 +612,7 @@ function ArticlePreview({
 
   if (viewMode === "magazine") {
     return (
-      <div className="relative">
+      <div className="relative" data-article-id={article.id}>
         {swipeBackdrop}
       <div
         ref={articleRef}
@@ -694,7 +707,7 @@ function ArticlePreview({
 
   // Classic View (Default)
   return (
-    <div className="relative">
+    <div className="relative" data-article-id={article.id}>
       {swipeBackdrop}
     <div
       ref={articleRef}

@@ -52,6 +52,8 @@ interface FeedEditDialogProps {
     filtersActionRead?: string | null;
     retentionDays?: number | null;
     keepMinArticles?: number | null;
+    hideFromAllFeeds?: boolean;
+    hideArticleImage?: boolean;
   } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -82,6 +84,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const [filtersActionRead, setFiltersActionRead] = useState("");
   const [retentionDays, setRetentionDays] = useState("");
   const [keepMinArticles, setKeepMinArticles] = useState("");
+  const [hideFromAllFeeds, setHideFromAllFeeds] = useState(false);
+  const [hideArticleImage, setHideArticleImage] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
   const [activeTab, setActiveTab] = useState("auth");
   const [previewResult, setPreviewResult] = useState<{
@@ -121,6 +125,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     setFiltersActionRead(feed.filtersActionRead || "");
     setRetentionDays(feed.retentionDays ? String(feed.retentionDays) : "");
     setKeepMinArticles(feed.keepMinArticles ? String(feed.keepMinArticles) : "");
+    setHideFromAllFeeds(feed.hideFromAllFeeds ?? false);
+    setHideArticleImage(feed.hideArticleImage ?? false);
     setPreviewResult(null);
     setPreviewUrl("");
   }, [feed]);
@@ -152,6 +158,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           filtersActionRead: filtersActionRead.trim() || null,
           retentionDays: retentionDays ? parseInt(retentionDays) : null,
           keepMinArticles: keepMinArticles ? parseInt(keepMinArticles) : null,
+          hideFromAllFeeds,
+          hideArticleImage,
         },
       },
       {
@@ -199,6 +207,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               options={[
                 { value: "auth", label: "Authentication" },
                 { value: "fetch", label: "Fetch Options" },
+                { value: "behavior", label: "Behavior" },
                 { value: "retention", label: "Retention" },
                 { value: "fulltext", label: "Full-Text" },
                 { value: "scout", label: "Scout Studio" },
@@ -252,6 +261,37 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               <p className="text-xs text-muted-foreground">
                 Credentials used when fetching this feed&apos;s RSS/Atom URL.
               </p>
+            </TabsContent>
+
+            <TabsContent value="behavior" className="mt-0 space-y-5">
+              <div className="flex items-start justify-between gap-4 rounded-2xl border border-border/60 bg-muted/20 p-4">
+                <div className="space-y-1 min-w-0">
+                  <Label className="text-sm font-medium cursor-pointer" htmlFor="hide-from-all">Hide from All Articles</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Articles from this feed will not appear in the &ldquo;All Articles&rdquo; or &ldquo;All&rdquo; view. The feed remains accessible when selected directly.
+                  </p>
+                </div>
+                <Switch
+                  id="hide-from-all"
+                  checked={hideFromAllFeeds}
+                  onCheckedChange={setHideFromAllFeeds}
+                  className="shrink-0 mt-0.5"
+                />
+              </div>
+              <div className="flex items-start justify-between gap-4 rounded-2xl border border-border/60 bg-muted/20 p-4">
+                <div className="space-y-1 min-w-0">
+                  <Label className="text-sm font-medium cursor-pointer" htmlFor="hide-article-image">Hide article hero image</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Suppress the hero image in the article reader. Useful for feeds that embed the same image both as a thumbnail and inside the article body.
+                  </p>
+                </div>
+                <Switch
+                  id="hide-article-image"
+                  checked={hideArticleImage}
+                  onCheckedChange={setHideArticleImage}
+                  className="shrink-0 mt-0.5"
+                />
+              </div>
             </TabsContent>
 
             <TabsContent value="retention" className="mt-0 space-y-5">

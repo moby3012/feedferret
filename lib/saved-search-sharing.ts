@@ -4,6 +4,9 @@ import { buildAdvancedSearchWhere } from "@/lib/search";
 export async function getSharedSavedSearch(token: string, limit = 100) {
   if (!token || token.length < 16) return null;
 
+  const globalSettings = await db.globalSettings.findUnique({ where: { id: "global" }, select: { disablePublicSharedSearches: true } });
+  if (globalSettings?.disablePublicSharedSearches) return null;
+
   const savedSearch = await db.savedSearch.findUnique({
     where: { shareToken: token },
     include: {

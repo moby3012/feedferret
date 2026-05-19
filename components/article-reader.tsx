@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type TouchEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
 import Image from "next/image";
 import { Article } from "@/lib/rss-data";
 import { useAiSettings, useSummarizeArticle } from "@/hooks/use-rss-data";
@@ -51,6 +51,7 @@ interface ArticleReaderProps {
   hasNextArticle?: boolean;
   readerWidth?: "normal" | "wide" | "full";
   readerFontSize?: "small" | "medium" | "large" | "xl";
+  hideArticleImage?: boolean;
 }
 
 const readerWidthClass: Record<string, string> = {
@@ -103,9 +104,24 @@ export function ArticleReader({
   hasNextArticle,
   readerWidth = "normal",
   readerFontSize = "medium",
+  hideArticleImage = false,
 }: ArticleReaderProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Track navigation direction for page-turn animation
+  const navDirRef = useRef<"next" | "prev" | null>(null);
+  const [articleAnimClass, setArticleAnimClass] = useState("animate-fade-in");
+
+  const handleNextArticle = useCallback(() => {
+    navDirRef.current = "next";
+    onNextArticle?.();
+  }, [onNextArticle]);
+
+  const handlePreviousArticle = useCallback(() => {
+    navDirRef.current = "prev";
+    onPreviousArticle?.();
+  }, [onPreviousArticle]);
 
   const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
     const t = e.touches[0];
@@ -133,6 +149,12 @@ export function ArticleReader({
 
   useEffect(() => {
     if (!article?.id) return;
+
+    const dir = navDirRef.current;
+    navDirRef.current = null;
+    if (dir === "next") setArticleAnimClass("animate-article-enter-bottom");
+    else if (dir === "prev") setArticleAnimClass("animate-article-enter-top");
+    else setArticleAnimClass("animate-fade-in");
 
     const animationFrame = window.requestAnimationFrame(() => {
       const viewport = rootRef.current?.querySelector<HTMLElement>(
@@ -162,8 +184,8 @@ export function ArticleReader({
       if (now - lastFire < COOLDOWN) return;
       lastFire = now;
       accum = 0;
-      if (dir === 1 && hasNextArticle) onNextArticle?.();
-      else if (dir === -1 && hasPreviousArticle) onPreviousArticle?.();
+      if (dir === 1 && hasNextArticle) handleNextArticle();
+      else if (dir === -1 && hasPreviousArticle) handlePreviousArticle();
     };
 
     const handleWheel = (e: WheelEvent) => {
@@ -211,7 +233,7 @@ export function ArticleReader({
       viewport.removeEventListener("touchstart", handleEdgeTouchStart);
       viewport.removeEventListener("touchmove", handleEdgeTouchMove);
     };
-  }, [article?.id, hasNextArticle, hasPreviousArticle, onNextArticle, onPreviousArticle]);
+  }, [article?.id, hasNextArticle, hasPreviousArticle, handleNextArticle, handlePreviousArticle]);
 
   if (!article) {
     return (
@@ -448,7 +470,7 @@ export function ArticleReader({
       </header>
 
       {/* Article Content */}
-      <ScrollArea className="flex-1 overflow-hidden min-h-0">
+      <ScrollArea className={cn("flex-1 overflow-hidden min-h-0", articleAnimClass)}>
         <article aria-labelledby="article-title" className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-28 sm:px-8 sm:py-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">
@@ -523,7 +545,7 @@ export function ArticleReader({
           })()}
 
           {/* Hero Image */}
-          {article.imageUrl && (
+          {article.imageUrl && !hideArticleImage && (
             <figure className="mb-12 -mx-6 sm:mx-0 animate-scale-in">
               <div className="aspect-[16/9] sm:rounded-2xl overflow-hidden bg-muted shadow-2xl shadow-black/10 relative">
                 <Image
@@ -611,7 +633,7 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
-            onClick={hasPreviousArticle ? onPreviousArticle : onBack}
+            onClick={hasPreviousArticle ? handlePreviousArticle : onBack}
             aria-label={hasPreviousArticle ? "Previous article" : "Back to list"}
           >
             <ChevronLeft className="h-5 w-5" />
@@ -733,7 +755,7 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
-            onClick={onNextArticle}
+            onClick={handleNextArticle}
             disabled={!hasNextArticle}
             aria-label="Next article"
           >
