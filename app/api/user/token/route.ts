@@ -4,69 +4,41 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { generateApiToken } from "@/lib/token";
+import { generateFeverKey } from "@/lib/token";
 
-/**
- * GET /api/user/token
- * Returns whether the authenticated user has an API token set.
- * Does NOT return the token value (use POST to generate and retrieve it).
- *
- * Auth: session cookie only
- *
- * Response 200: { hasToken: boolean }
- */
+// GET /api/user/token — returns { hasToken: boolean } for backward compat
 export async function GET() {
-    const session = await auth();
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = await db.user.findUnique({
-        where: { id: session.user.id },
-        select: { apiToken: true },
-    });
-
-    return NextResponse.json({ hasToken: !!user?.apiToken });
+  const count = await db.apiToken.count({ where: { userId: session.user.id } });
+  return NextResponse.json({ hasToken: count > 0 });
 }
 
-/**
- * POST /api/user/token
- * Generate (or regenerate) the API token for the authenticated user.
- * Returns the new token — this is the ONLY time the raw token is returned.
- * Store it securely; it cannot be retrieved again (only revoked).
- *
- * Auth: session cookie only
- *
- * Response 200: { token: string }
- */
+// POST /api/user/token — revoke all + generate new "Default write" token
 export async function POST() {
-    const session = await auth();
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { raw, hash } = generateApiToken();
+  const user = await db.user.findUnique({ where: { id: session.user.id }, select: { email: true } });
+  const { raw, hash } = generateApiToken();
+  const feverKey = user?.email ? generateFeverKey(user.email, raw) : null;
 
-    await db.user.update({
-        where: { id: session.user.id },
-        data: { apiToken: hash },
-    });
+  await db.$transaction([
+    db.apiToken.deleteMany({ where: { userId: session.user.id } }),
+    db.apiToken.create({
+      data: { userId: session.user.id, tokenHash: hash, feverKey, name: "Default", scope: "write" },
+    }),
+  ]);
 
-    return NextResponse.json({ token: raw });
+  return NextResponse.json({ token: raw });
 }
 
-/**
- * DELETE /api/user/token
- * Revoke the API token for the authenticated user.
- * All existing integrations using this token will stop working immediately.
- *
- * Auth: session cookie only
- *
- * Response 200: { revoked: true }
- */
+// DELETE /api/user/token — revoke all tokens
 export async function DELETE() {
-    const session = await auth();
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    await db.user.update({
-        where: { id: session.user.id },
-        data: { apiToken: null },
-    });
-
-    return NextResponse.json({ revoked: true });
+  await db.apiToken.deleteMany({ where: { userId: session.user.id } });
+  return NextResponse.json({ revoked: true });
 }

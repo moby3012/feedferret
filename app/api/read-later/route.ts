@@ -14,8 +14,8 @@ async function resolveUser(request: Request) {
     const authHeader = request.headers.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
         const token = authHeader.slice(7).trim();
-        const user = await db.user.findUnique({ where: { apiToken: hashApiToken(token) }, select: { id: true } });
-        if (user) return user.id;
+        const tokenRecord = await db.apiToken.findUnique({ where: { tokenHash: hashApiToken(token) }, select: { userId: true, expiresAt: true } });
+        if (tokenRecord && (!tokenRecord.expiresAt || tokenRecord.expiresAt > new Date())) return tokenRecord.userId;
     }
 
     return null;

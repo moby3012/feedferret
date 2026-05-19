@@ -2,6 +2,7 @@ export type ChannelPayload = {
   title: string;
   body: string;
   url?: string;
+  markReadUrl?: string;  // URL for inline "Mark as Read" button
 };
 
 export type TelegramConfig = {
@@ -32,20 +33,28 @@ export async function sendTelegramNotification(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const lines = [`*${escapeTgMd(payload.title)}*`, escapeTgMd(payload.body)];
-    if (payload.url) lines.push(`[Open article](${payload.url})`);
+    // Only add URL as text link if no inline keyboard will be shown
+    if (payload.url && !payload.markReadUrl) lines.push(`[Open article](${payload.url})`);
     const text = lines.join("\n");
+
+    const messageBody: Record<string, unknown> = {
+      chat_id: config.chatId,
+      text,
+      parse_mode: "MarkdownV2",
+      disable_web_page_preview: true,
+    };
+
+    const buttons: Array<{ text: string; url: string }> = [];
+    if (payload.markReadUrl) buttons.push({ text: "✓ Mark as Read", url: payload.markReadUrl });
+    if (payload.url) buttons.push({ text: "↗ Open", url: payload.url });
+    if (buttons.length) messageBody.reply_markup = { inline_keyboard: [buttons] };
 
     const res = await fetch(
       `https://api.telegram.org/bot${config.botToken}/sendMessage`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: config.chatId,
-          text,
-          parse_mode: "MarkdownV2",
-          disable_web_page_preview: true,
-        }),
+        body: JSON.stringify(messageBody),
         signal: AbortSignal.timeout(10_000),
       },
     );

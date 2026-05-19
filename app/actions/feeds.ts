@@ -19,6 +19,7 @@ import {
     MAX_LABEL_NAME,
     MAX_SEARCH_QUERY,
     MAX_SAVED_SEARCH_NAME,
+    CreateFeedSchema,
 } from "@/lib/validation";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { buildAdvancedSearchWhere } from "@/lib/search";
@@ -323,6 +324,11 @@ export async function deleteSavedSearch(searchId: string) {
 export async function addFeed(url: string, categoryId?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const parsed = CreateFeedSchema.safeParse({ url, categoryId });
+    if (!parsed.success) {
+        return { success: false, error: parsed.error.errors[0]?.message ?? "Invalid input" };
+    }
 
     const urlError = validateFeedUrl(url);
     if (urlError) return { success: false, error: urlError };

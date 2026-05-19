@@ -42,7 +42,7 @@ model User {
   defaultArticleSort     String    @default("newest")  // "newest"|"oldest"
   accentColor            String    @default("#5BA4CF")  // ice blue
   secondaryColor         String    @default("#F0963C")  // soft orange
-  apiToken      String?   @unique
+  apiTokens     ApiToken[]
   isActive      Boolean   @default(true)
   digestEnabled           Boolean   @default(false)
   digestFrequency         String    @default("daily")   // "daily" | "weekly"
@@ -403,6 +403,21 @@ model GlobalSettings {
   disablePublicSharedSearches Boolean @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  feverKey   String?   @unique
+  name       String    @default("Default")
+  scope      String    @default("write")  // "read" | "write" | "admin"
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  @@index([userId])
 }
 
 model LoginAttempt {
