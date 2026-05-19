@@ -52,7 +52,6 @@ export function MobileBottomControls({
               value={searchQuery}
               onChange={(event) => onSearchChange(event.target.value)}
               className="h-12 rounded-2xl border-border/50 bg-muted/45 pl-10 pr-11 text-base"
-              // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
             />
             <Button

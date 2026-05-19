@@ -995,7 +995,6 @@ export default function RSSReaderPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Enter search term — try author:, intitle:, is:unread, label:"
                 className="border-0 bg-transparent text-base sm:text-lg font-medium focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-12 py-0 placeholder:text-muted-foreground/70"
-                // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
                 enterKeyHint="search"
               />
