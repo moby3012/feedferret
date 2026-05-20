@@ -1862,6 +1862,7 @@ function SyncTutorialSection() {
 }
 
 function LanguageSection() {
+  const t = useTranslations();
   const { data: prefs } = useReadingPreferences();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -1883,8 +1884,8 @@ function LanguageSection() {
   return (
     <PrefRow
       icon={Globe}
-      title="Language"
-      description="Interface language for the app."
+      title={t("settings.language")}
+      description={t("settings.languageDescription")}
     >
       <Select
         value={currentLocale}
@@ -1895,8 +1896,8 @@ function LanguageSection() {
           <SelectValue />
         </SelectTrigger>
         <SelectContent className="rounded-2xl">
-          <SelectItem value="en">English</SelectItem>
-          <SelectItem value="de">Deutsch</SelectItem>
+          <SelectItem value="en">{t("settings.languageOptions.en")}</SelectItem>
+          <SelectItem value="de">{t("settings.languageOptions.de")}</SelectItem>
         </SelectContent>
       </Select>
     </PrefRow>
@@ -1904,6 +1905,7 @@ function LanguageSection() {
 }
 
 function NotificationChannelsSection() {
+  const t = useTranslations();
   const { data, isLoading } = useNotificationChannels();
   const update = useUpdateNotificationChannels();
   const testChannel = useTestNotificationChannel();
@@ -1945,9 +1947,9 @@ function NotificationChannelsSection() {
     await update.mutateAsync(form);
     const result = await testChannel.mutateAsync(channel);
     if (result.success) {
-      toast.success("Test notification sent successfully");
+      toast.success(t("notifications.successTitle"));
     } else {
-      toast.error(result.error ?? "Failed to send test notification");
+      toast.error(result.error ?? t("notifications.errorTitle"));
     }
   }
 
@@ -1960,9 +1962,9 @@ function NotificationChannelsSection() {
           <Bell className="h-5 w-5" />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">Notification Channels</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("notifications.title")}</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Forward keyword alerts and rule matches to external services. Enable a channel, enter your credentials, and choose it as an action in Rules &amp; Alerts.
+            {t("notifications.description")}
           </p>
         </div>
       </div>
@@ -1973,7 +1975,7 @@ function NotificationChannelsSection() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Send className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">Telegram</span>
+              <span className="font-medium">{t("notifications.telegram")}</span>
             </div>
             <Switch
               checked={form.telegramEnabled}
@@ -1983,19 +1985,17 @@ function NotificationChannelsSection() {
           {form.telegramEnabled && (
             <div className="mt-3 space-y-2">
               <Input
-                placeholder="Bot token (from @BotFather)"
+                placeholder={t("notifications.botTokenPlaceholder")}
                 {...field("telegramBotToken")}
                 className="h-9 font-mono text-xs"
               />
               <Input
-                placeholder="Chat ID (send /start to your bot to get it)"
+                placeholder={t("notifications.chatIdPlaceholder")}
                 {...field("telegramChatId")}
                 className="h-9 font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground">
-                Create a bot via{" "}
-                <span className="font-mono">@BotFather</span>, then send{" "}
-                <span className="font-mono">/start</span> to get your chat ID.
+                {t("notifications.telegramHint")}
               </p>
               <Button
                 type="button"
@@ -2005,7 +2005,7 @@ function NotificationChannelsSection() {
                 disabled={testChannel.isPending || update.isPending || !form.telegramBotToken || !form.telegramChatId}
                 className="h-8 rounded-xl text-xs"
               >
-                Send test message
+                {t("notifications.sendTestMessage")}
               </Button>
             </div>
           )}
@@ -2016,7 +2016,7 @@ function NotificationChannelsSection() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Bell className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">Gotify</span>
+              <span className="font-medium">{t("notifications.gotify")}</span>
             </div>
             <Switch
               checked={form.gotifyEnabled}
@@ -2026,12 +2026,12 @@ function NotificationChannelsSection() {
           {form.gotifyEnabled && (
             <div className="mt-3 space-y-2">
               <Input
-                placeholder="Server URL (e.g. https://gotify.example.com)"
+                placeholder={t("notifications.serverUrlPlaceholder")}
                 {...field("gotifyUrl")}
                 className="h-9 font-mono text-xs"
               />
               <Input
-                placeholder="App token"
+                placeholder={t("notifications.appToken")}
                 {...field("gotifyToken")}
                 className="h-9 font-mono text-xs"
               />
@@ -2043,7 +2043,7 @@ function NotificationChannelsSection() {
                 disabled={testChannel.isPending || update.isPending || !form.gotifyUrl || !form.gotifyToken}
                 className="h-8 rounded-xl text-xs"
               >
-                Send test notification
+                {t("notifications.sendTestNotification")}
               </Button>
             </div>
           )}
@@ -2054,7 +2054,7 @@ function NotificationChannelsSection() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Rss className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">ntfy</span>
+              <span className="font-medium">{t("notifications.ntfy")}</span>
             </div>
             <Switch
               checked={form.ntfyEnabled}
@@ -2064,17 +2064,17 @@ function NotificationChannelsSection() {
           {form.ntfyEnabled && (
             <div className="mt-3 space-y-2">
               <Input
-                placeholder="Topic URL (e.g. https://ntfy.sh/my-topic)"
+                placeholder={t("notifications.topicUrlPlaceholder")}
                 {...field("ntfyUrl")}
                 className="h-9 font-mono text-xs"
               />
               <Input
-                placeholder="Token (optional, for private topics)"
+                placeholder={t("notifications.tokenOptionalPlaceholder")}
                 {...field("ntfyToken")}
                 className="h-9 font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground">
-                Use <span className="font-mono">ntfy.sh</span> for free public topics or your own self-hosted ntfy instance.
+                {t("notifications.ntfyHint")}
               </p>
               <Button
                 type="button"
@@ -2084,7 +2084,7 @@ function NotificationChannelsSection() {
                 disabled={testChannel.isPending || update.isPending || !form.ntfyUrl}
                 className="h-8 rounded-xl text-xs"
               >
-                Send test notification
+                {t("notifications.sendTestNotification")}
               </Button>
             </div>
           )}
@@ -2098,7 +2098,7 @@ function NotificationChannelsSection() {
           disabled={update.isPending}
           className="h-9 rounded-2xl px-5 text-sm"
         >
-          {update.isPending ? "Saving…" : "Save channels"}
+          {update.isPending ? t("notifications.saving") : t("notifications.saveChannels")}
         </Button>
       </div>
     </section>
