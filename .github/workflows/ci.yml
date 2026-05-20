@@ -30,7 +30,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: pnpm run prisma:generate
         env:
           DATABASE_PROVIDER: sqlite
           DATABASE_URL: file:./dev.db
