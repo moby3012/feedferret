@@ -1405,10 +1405,9 @@ function NotificationsAdminPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xl font-semibold tracking-[-0.02em]">Push notifications</h3>
+        <h3 className="text-xl font-semibold tracking-[-0.02em]">{t("pushNotifications.title")}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Configure Web Push (VAPID) credentials so users on this instance can receive browser notifications
-          and PWA badge updates for new articles.
+          {t("pushNotifications.description")}
         </p>
       </div>
 
@@ -1422,13 +1421,13 @@ function NotificationsAdminPanel() {
           </div>
           <div className="flex-1">
             <div className="text-sm font-semibold">
-              {loading ? "Checking…" : diag?.configured ? "Push notifications are configured" : "Not configured yet"}
+              {loading ? t("pushNotifications.checking") : diag?.configured ? t("pushNotifications.configured") : t("pushNotifications.notConfigured")}
             </div>
             {!loading && diag && (
               <div className="mt-1 text-xs text-muted-foreground space-y-0.5">
-                <p>Public key: <code className="rounded bg-background/60 px-1">{diag.publicKey || "—"}</code></p>
-                <p>Private key: {diag.privateKeyConfigured ? "set" : "missing"}</p>
-                <p>Contact: <code className="rounded bg-background/60 px-1">{diag.contact || "—"}</code></p>
+                <p>{t("pushNotifications.publicKey")} <code className="rounded bg-background/60 px-1">{diag.publicKey || "—"}</code></p>
+                <p>{t("pushNotifications.privateKey")} {diag.privateKeyConfigured ? t("pushNotifications.set") : t("pushNotifications.missing")}</p>
+                <p>{t("pushNotifications.contact")} <code className="rounded bg-background/60 px-1">{diag.contact || "—"}</code></p>
                 <p>{diag.activeSubscriptions} active subscription{diag.activeSubscriptions === 1 ? "" : "s"} across {diag.totalUsers} user{diag.totalUsers === 1 ? "" : "s"}</p>
               </div>
             )}
@@ -1440,7 +1439,7 @@ function NotificationsAdminPanel() {
         <div className="flex items-start gap-3">
           <KeyRound className="w-5 h-5 text-muted-foreground mt-0.5" />
           <div className="flex-1 space-y-2">
-            <h4 className="text-sm font-semibold">Set up VAPID credentials</h4>
+            <h4 className="text-sm font-semibold">{t("pushNotifications.setupVapid")}</h4>
             <p className="text-xs text-muted-foreground">
               Generate a key pair and add the values to your environment, then restart the server.
             </p>
@@ -1460,14 +1459,14 @@ WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button type="button" className="rounded-2xl" onClick={handleGenerate} disabled={generating}>
             {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <KeyRound className="w-4 h-4 mr-2" />}
-            Generate keys
+            {t("pushNotifications.generateKeys")}
           </Button>
         </div>
 
         {generated && (
           <div className="rounded-2xl border border-border/60 bg-background/60 p-4 space-y-3">
             <div>
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Public key</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("pushNotifications.publicKeyLabel")}</Label>
               <div className="flex items-center gap-2 mt-1">
                 <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">
                   {generated.publicKey}
@@ -1478,7 +1477,7 @@ WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
               </div>
             </div>
             <div>
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Private key (keep secret)</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("pushNotifications.privateKeyLabel")}</Label>
               <div className="flex items-center gap-2 mt-1">
                 <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">
                   {generated.privateKey}
@@ -1489,17 +1488,16 @@ WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              These keys are generated on-the-fly and not stored. Paste them into your environment before closing this view.
+              {t("pushNotifications.generatedKeysNote")}
             </p>
           </div>
         )}
       </div>
 
       <div className="rounded-3xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-2">
-        <h4 className="text-sm font-semibold">PWA app badge</h4>
+        <h4 className="text-sm font-semibold">{t("pushNotifications.pwaAppBadge")}</h4>
         <p className="text-xs text-muted-foreground">
-          When push is configured, the installed PWA shows the unread count on its app icon (Android, iOS 16.4+, supported desktops).
-          The badge value mirrors the user&apos;s current unread feed total — no extra configuration required.
+          {t("pushNotifications.badgeDescription")}
         </p>
       </div>
     </div>
