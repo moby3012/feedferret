@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
-## [1.1.0] — 2026-05-20 — Internationalization
+## [1.1.0] — 2026-05-20 — Internationalization + Full API Coverage
 
 ### Added
 
@@ -16,6 +16,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 - **`defaultUiLanguage` in GlobalSettings** — administrators can define the instance-level default language for unauthenticated pages and new users.
 - **Cookie-based locale strategy** — locale is stored in a cookie (`locale`, 1-year `maxAge`). No `[locale]` folder restructuring, no URL prefixes. Compatible with all existing links and API routes.
 - **Contributing translations guide** — `docs/contributing-translations.md` explains how to add a new locale, key naming conventions, ICU syntax, and the 100% coverage requirement.
+- **REST API v1 extended** — new endpoints for keyword alerts (`/api/v1/alerts`), auto-read rules (`/api/v1/rules`), notifications (`/api/v1/notifications`), and aggregate stats (`/api/v1/stats`). All are Bearer-token-secured with standard rate limiting and ownership checks.
+- **MCP endpoint v1.1.0** — expanded from 10 to 28 tools. New tools: `delete_feed`, `update_feed`, `create/update/delete_category`, `update/delete_label`, `label_article`, `batch_update_articles`, `list/create/delete_saved_search`, `list/create/update/delete_keyword_alert`, `list_notifications`, `get_stats`. An AI agent can now control every operational aspect of the app at the user level.
+- **Vitest unit tests** — 76 tests across 6 suites covering `lib/rate-limit`, `lib/token`, `lib/validation`, `lib/search` (tokenizeSearch + parseDateToken), `lib/ssrf` (isPrivateIp — IPv4, IPv6, CGNAT, mapped addresses), and Telegram callback parsing.
+- **OpenAPI spec** — version bumped to 1.1.0; all new endpoints documented at `GET /api/v1/openapi.json`.
+- **Updated documentation** — `docs/api.md` and `docs/mcp.md` fully updated with all new endpoints and tools.
 
 ---
 

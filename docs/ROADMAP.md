@@ -11,7 +11,7 @@ This file is the **top-level index**. Each release and workstream has its own de
 | Version | Theme | Status | Details |
 |---|---|---|---|
 | **v1.0.0** | Initial public release | ✅ Shipped 2026-05-18 | [`releases/v1.0.md`](releases/v1.0.md) |
-| **v1.1** | Internationalization (i18n) | 🟡 Planning | [`releases/v1.1-i18n.md`](releases/v1.1-i18n.md) |
+| **v1.1** | i18n + Full API/MCP Coverage | 🟡 In Progress | [`releases/v1.1-i18n.md`](releases/v1.1-i18n.md) |
 | **v1.2** | Theming & Accessibility | ⬜ Queued | [`releases/v1.2-theming.md`](releases/v1.2-theming.md) |
 | **v1.3** | Podcast & Text-to-Speech | ⬜ Queued | [`releases/v1.3-podcast-tts.md`](releases/v1.3-podcast-tts.md) |
 

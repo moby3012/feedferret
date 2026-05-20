@@ -621,7 +621,7 @@ function openApiSpec(request: Request) {
   const origin = new URL(request.url).origin;
   return NextResponse.json({
     openapi: "3.1.0",
-    info: { title: "FeedFerret API", version: "1.0.0", description: "Public REST API for FeedFerret readers, automations and AI tools." },
+    info: { title: "FeedFerret API", version: "1.1.0", description: "Public REST API for FeedFerret readers, automations and AI tools." },
     servers: [{ url: origin }],
     security: [{ bearerAuth: [] }],
     components: { securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "FeedFerret API token" } } },
