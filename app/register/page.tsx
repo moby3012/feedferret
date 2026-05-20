@@ -97,7 +97,7 @@ export default function RegisterPage() {
         </div>
 
         <Card className="border-white/5 bg-zinc-950/50 backdrop-blur-xl shadow-2xl overflow-hidden ring-1 ring-white/10">
-          <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-left">
+          <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-start">
             <CardTitle className="text-lg font-semibold text-white flex items-center justify-center sm:justify-start gap-2">
               <UserPlus className="w-4 h-4 text-zinc-400" />
               Registration

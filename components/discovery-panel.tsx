@@ -80,13 +80,13 @@ export function DiscoveryPanel({
     <div className="space-y-3">
       {/* Search Input */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search by topic or domain..."
           value={searchQuery}
           onChange={(e) => handleSearchChange(e.target.value)}
           onFocus={handleSearchFocus}
-          className="h-9 pl-9 text-sm"
+          className="h-9 ps-9 text-sm"
         />
       </div>
 
@@ -173,7 +173,7 @@ function CategoryGrid({
             onClick={() => onSelect(category.id)}
             className={cn(
               "flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2.5",
-              "hover:bg-muted/60 hover:border-border transition-colors text-left"
+              "hover:bg-muted/60 hover:border-border transition-colors text-start"
             )}
           >
             <span className="text-lg">{category.icon}</span>
@@ -214,9 +214,9 @@ function FeedList({
         variant="ghost"
         size="sm"
         onClick={onBack}
-        className="h-9 px-3 -ml-3 text-sm text-muted-foreground hover:text-foreground"
+        className="h-9 px-3 -ms-3 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4 mr-1.5" />
+        <ArrowLeft className="h-4 w-4 me-1.5 rtl:rotate-180" />
         Back to categories
       </Button>
       <p className="text-xs font-medium text-muted-foreground px-0.5">
@@ -281,7 +281,7 @@ function SearchResults({
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">Searching...</span>
+        <span className="ms-2 text-sm text-muted-foreground">Searching...</span>
       </div>
     );
   }
@@ -347,7 +347,7 @@ function FeedCard({
   isSubscribed: boolean;
 }) {
   return (
-    <div className="relative rounded-xl bg-muted/50 px-2.5 py-2 pr-10 overflow-hidden w-full">
+    <div className="relative rounded-xl bg-muted/50 px-2.5 py-2 pe-10 overflow-hidden w-full">
       <div className="flex items-center gap-2 min-w-0">
         {feed.iconUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -368,7 +368,7 @@ function FeedCard({
       </div>
       {feed.description && (
         <p
-          className="text-xs text-muted-foreground mt-0.5 pr-1"
+          className="text-xs text-muted-foreground mt-0.5 pe-1"
           style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
         >
           {feed.description}
@@ -378,7 +378,7 @@ function FeedCard({
         size="sm"
         variant={isSubscribed ? "ghost" : "ghost"}
         className={cn(
-          "absolute right-1.5 top-1.5 h-7 w-7 p-0 rounded-lg shrink-0",
+          "absolute end-1.5 top-1.5 h-7 w-7 p-0 rounded-lg shrink-0",
           isSubscribed && "text-green-500 cursor-default"
         )}
         onClick={isSubscribed ? undefined : onAdd}

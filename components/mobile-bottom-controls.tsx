@@ -45,20 +45,20 @@ export function MobileBottomControls({
       {searchOpen && (
         <div className="pointer-events-auto mb-2 rounded-[1.65rem] border border-border/70 bg-background/95 p-2 shadow-2xl shadow-black/20 backdrop-blur-2xl">
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
               placeholder="Search articles, author:, is:unread…"
               value={searchQuery}
               onChange={(event) => onSearchChange(event.target.value)}
-              className="h-12 rounded-2xl border-border/50 bg-muted/45 pl-10 pr-11 text-base"
+              className="h-12 rounded-2xl border-border/50 bg-muted/45 ps-10 pe-11 text-base"
               autoFocus
             />
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="absolute right-1 top-1/2 h-10 w-10 -translate-y-1/2 rounded-xl"
+              className="absolute end-1 top-1/2 h-10 w-10 -translate-y-1/2 rounded-xl"
               onClick={() => {
                 if (searchQuery) onSearchChange("");
                 else setSearchOpen(false);

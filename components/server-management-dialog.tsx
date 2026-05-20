@@ -724,7 +724,7 @@ export function ServerManagementDialog({
                             Reset defaults
                           </Button>
                           <Button type="button" className="rounded-2xl" onClick={addPack}>
-                            <Plus className="mr-2 h-4 w-4" /> Add pack
+                            <Plus className="me-2 h-4 w-4" /> Add pack
                           </Button>
                         </div>
                       </div>
@@ -739,7 +739,7 @@ export function ServerManagementDialog({
                           <p className="font-semibold">
                             {starterPackValidation.errors.length > 0 ? "Starter pack validation needs attention" : "Starter pack cleanup will be applied on save"}
                           </p>
-                          <ul className="mt-2 list-disc space-y-1 pl-5">
+                          <ul className="mt-2 list-disc space-y-1 ps-5">
                             {[...starterPackValidation.errors, ...starterPackValidation.warnings].slice(0, 4).map((message) => (
                               <li key={message}>{message}</li>
                             ))}
@@ -812,7 +812,7 @@ export function ServerManagementDialog({
                               <Label>Feeds ({pack.feeds.length})</Label>
                               <div className="flex flex-wrap gap-2">
                                 <Label className="inline-flex h-9 cursor-pointer items-center rounded-xl border border-border/70 bg-background/70 px-3 text-sm font-medium hover:bg-muted">
-                                  <Upload className="mr-1.5 h-3.5 w-3.5" /> Import OPML
+                                  <Upload className="me-1.5 h-3.5 w-3.5" /> Import OPML
                                   <Input
                                     type="file"
                                     accept=".opml,.xml,text/xml,application/xml"
@@ -824,10 +824,10 @@ export function ServerManagementDialog({
                                   />
                                 </Label>
                                 <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => exportStarterPack(pack)} disabled={pack.feeds.length === 0}>
-                                  <Download className="mr-1.5 h-3.5 w-3.5" /> Export
+                                  <Download className="me-1.5 h-3.5 w-3.5" /> Export
                                 </Button>
                                 <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => addPackFeed(packIndex)}>
-                                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add feed
+                                  <Plus className="me-1.5 h-3.5 w-3.5" /> Add feed
                                 </Button>
                               </div>
                             </div>
@@ -938,7 +938,7 @@ export function ServerManagementDialog({
                       </div>
                     )}
                     <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                      <div className="space-y-1 pr-6">
+                      <div className="space-y-1 pe-6">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">Trusted internal feed URLs</h4>
                         <p className="text-sm text-muted-foreground">
                           Allow feed fetches to private IPs, localhost, and internal network hosts. Keep this off for public multi-user instances.
@@ -983,10 +983,10 @@ export function ServerManagementDialog({
                             <table className="w-full text-sm">
                               <thead className="bg-muted/40">
                                 <tr>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Time</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Actor</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Action</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Target</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">Time</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">Actor</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">Action</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">Target</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1024,10 +1024,10 @@ export function ServerManagementDialog({
                             <table className="w-full text-sm">
                               <thead className="bg-muted/40">
                                 <tr>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Time</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Email</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Result</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">IP</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">Time</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">Email</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">Result</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">IP</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1247,12 +1247,12 @@ function DiscoveryCatalogTab() {
           >
             {isImporting ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-4 h-4 me-2 animate-spin" />
                 Importing...
               </>
             ) : (
               <>
-                <Download className="w-4 h-4 mr-2" />
+                <Download className="w-4 h-4 me-2" />
                 Import from Public Directories
               </>
             )}
@@ -1263,7 +1263,7 @@ function DiscoveryCatalogTab() {
               onClick={handleClear}
               className="rounded-2xl"
             >
-              <Trash2 className="w-4 h-4 mr-2" />
+              <Trash2 className="w-4 h-4 me-2" />
               Clear Catalog
             </Button>
           )}
@@ -1437,7 +1437,7 @@ WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
 
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button type="button" className="rounded-2xl" onClick={handleGenerate} disabled={generating}>
-            {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <KeyRound className="w-4 h-4 mr-2" />}
+            {generating ? <Loader2 className="w-4 h-4 animate-spin me-2" /> : <KeyRound className="w-4 h-4 me-2" />}
             Generate keys
           </Button>
         </div>

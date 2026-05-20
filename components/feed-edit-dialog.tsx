@@ -468,7 +468,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                           <button
                             key={`${candidate.selector}-${index}`}
                             type="button"
-                            className="rounded-xl border border-border/60 bg-background/70 p-3 text-left transition hover:border-primary/50 hover:bg-primary/5"
+                            className="rounded-xl border border-border/60 bg-background/70 p-3 text-start transition hover:border-primary/50 hover:bg-primary/5"
                             onClick={() => {
                               setFullTextSelector(candidate.selector);
                               toast.success("Selector applied");
@@ -619,7 +619,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               onClick={handleSave}
             >
               {updateFeed.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                <Loader2 className="w-4 h-4 animate-spin me-2" />
               ) : null}
               Save settings
             </Button>

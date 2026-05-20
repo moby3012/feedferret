@@ -367,7 +367,7 @@ export default function SetupPage() {
               </div>
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("account")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  <ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" /> Back
                 </Button>
                 <Button onClick={handleSaveInstance} disabled={isLoading} className="flex-1 h-11 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl">
                   {isLoading ? <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span className="flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></span>}
@@ -446,7 +446,7 @@ export default function SetupPage() {
 
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("instance")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  <ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" /> Back
                 </Button>
                 <Button variant="ghost" onClick={() => handleSaveEmail(true)} className="h-11 rounded-xl text-zinc-500 hover:text-zinc-300 gap-1">
                   <SkipForward className="w-4 h-4" /> Skip
@@ -500,7 +500,7 @@ export default function SetupPage() {
 
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("email")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  <ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" /> Back
                 </Button>
                 <Button onClick={handleSaveSecurity} disabled={isLoading} className="flex-1 h-11 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl">
                   {isLoading ? <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span className="flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></span>}
@@ -530,7 +530,7 @@ export default function SetupPage() {
                       key={pack.id}
                       onClick={() => togglePack(pack.id)}
                       className={cn(
-                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all text-left",
+                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all text-start",
                         selected
                           ? "bg-white/10 border-white/30 text-white"
                           : "bg-white/5 border-white/10 text-zinc-400 hover:border-white/20 hover:text-zinc-300",
@@ -557,7 +557,7 @@ export default function SetupPage() {
 
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("security")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  <ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" /> Back
                 </Button>
                 <Button
                   variant="ghost"
@@ -603,7 +603,7 @@ export default function SetupPage() {
                 </div>
               </div>
 
-              <div className="grid gap-2 text-left p-4 rounded-xl bg-white/5 border border-white/10 text-sm text-zinc-400">
+              <div className="grid gap-2 text-start p-4 rounded-xl bg-white/5 border border-white/10 text-sm text-zinc-400">
                 <p className="font-medium text-zinc-200">Next steps</p>
                 <p>→ Add your own feeds via the <span className="text-zinc-300">+ button</span> in the sidebar</p>
                 <p>→ Enable 2FA in <span className="text-zinc-300">Settings → Security</span></p>
@@ -614,7 +614,7 @@ export default function SetupPage() {
                 onClick={() => router.push(importedCount > 0 ? "/" : "/?addFeed=1")}
                 className="w-full h-12 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl text-base"
               >
-                <Rss className="w-5 h-5 mr-2" />
+                <Rss className="w-5 h-5 me-2" />
                 {importedCount > 0 ? "Start reading" : "Add your first feed"}
               </Button>
             </div>

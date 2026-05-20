@@ -404,7 +404,7 @@ export function RssSidebar({
   if (isCollapsed) {
     // Keep internal collapsed view as-is for now, maybe add tooltips
     return (
-      <aside className="w-20 h-full bg-sidebar border-r border-sidebar-border flex flex-col items-center py-6 gap-3">
+      <aside className="w-20 h-full bg-sidebar border-e border-sidebar-border flex flex-col items-center py-6 gap-3">
         <div className="mb-6 shadow-sm">
           <Image
             src="/logo.svg"
@@ -434,7 +434,7 @@ export function RssSidebar({
           >
             <item.icon className="w-5 h-5 text-sidebar-foreground" />
             {item.count !== null && item.count > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-brand/90 text-white text-xs flex items-center justify-center font-semibold shadow-sm">
+              <span className="absolute -top-1 -end-1 w-5 h-5 rounded-full bg-brand/90 text-white text-xs flex items-center justify-center font-semibold shadow-sm">
                 {item.count > 99 ? "99+" : item.count}
               </span>
             )}
@@ -446,7 +446,7 @@ export function RssSidebar({
 
   return (
     <>
-    <aside role="navigation" aria-label="Feed navigation" className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-r border-sidebar-border/70 flex flex-col overflow-hidden">
+    <aside role="navigation" aria-label="Feed navigation" className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-e border-sidebar-border/70 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">
@@ -516,7 +516,7 @@ export function RssSidebar({
                 )}
               >
                 <item.icon className="w-5 h-5" />
-                <span className="flex-1 text-left">{item.label}</span>
+                <span className="flex-1 text-start">{item.label}</span>
                 {item.count !== null && item.count > 0 && (
                   <span className="text-xs tabular-nums text-muted-foreground bg-muted px-2 py-0.5 rounded-full font-medium">
                     {item.count}
@@ -551,7 +551,7 @@ export function RssSidebar({
                       )}
                     >
                       <Bookmark className="h-4 w-4 text-muted-foreground" />
-                      <span className="flex-1 truncate text-left">
+                      <span className="flex-1 truncate text-start">
                         {item.name}
                       </span>
                     </button>
@@ -582,7 +582,7 @@ export function RssSidebar({
                       )}
                     >
                       <Tag className="h-4 w-4" style={{ color: item.color }} />
-                      <span className="flex-1 truncate text-left">
+                      <span className="flex-1 truncate text-start">
                         {item.name}
                       </span>
                       {item._count?.articles > 0 && (
@@ -730,7 +730,7 @@ export function RssSidebar({
                     >
                       <Bell className="w-4 h-4" />
                       {unreadNotifications > 0 && (
-                        <span className="absolute -right-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-destructive px-1 text-[10px] font-bold leading-none text-destructive-foreground shadow-sm">
+                        <span className="absolute -end-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-destructive px-1 text-[10px] font-bold leading-none text-destructive-foreground shadow-sm">
                           {unreadNotifications > 9 ? "9+" : unreadNotifications}
                         </span>
                       )}
@@ -955,7 +955,7 @@ export function RssSidebar({
                     <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
                       <span className="text-xs flex-1 text-foreground">
                         {pack.name}
-                        <span className="text-muted-foreground ml-1">({pack.feeds.length || "OPML"})</span>
+                        <span className="text-muted-foreground ms-1">({pack.feeds.length || "OPML"})</span>
                       </span>
                       <Button
                         size="sm"
@@ -964,7 +964,7 @@ export function RssSidebar({
                         disabled={importingPack === pack.id || (pack.feeds.length === 0 && !pack.path)}
                         onClick={() => handleImportStarterPack(pack)}
                       >
-                        <Download className={cn("w-3 h-3 mr-1", importingPack === pack.id && "animate-bounce")} />
+                        <Download className={cn("w-3 h-3 me-1", importingPack === pack.id && "animate-bounce")} />
                         {importingPack === pack.id ? "Importing" : "Import"}
                       </Button>
                     </div>
@@ -1099,7 +1099,7 @@ function SortableCategory({
       </div>
 
       {expanded && (
-        <div className="pl-4 pr-2 border-l border-sidebar-border/50 py-1 space-y-0.5 overflow-hidden">
+        <div className="ps-4 pe-2 border-s border-sidebar-border/50 py-1 space-y-0.5 overflow-hidden">
           <SortableContext
             items={feeds.map((f: any) => f.id)}
             strategy={verticalListSortingStrategy}
@@ -1192,7 +1192,7 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
           <span className="text-xs">{feed.icon || "📰"}</span>
         )}
       </div>
-      <span className="flex-1 text-left truncate font-medium">{feed.name}</span>
+      <span className="flex-1 text-start truncate font-medium">{feed.name}</span>
       {feed.lastStatus === "error" && (
         <span title={feed.lastError || "Last sync failed"}>
           <AlertCircle className={cn("h-3.5 w-3.5 shrink-0 text-destructive", isSelected && "text-primary-foreground/70")} />
@@ -1256,14 +1256,14 @@ function FeedQuickActions({
           className="rounded-xl py-2.5 px-3 text-sm"
           onClick={onRefresh}
         >
-          <RefreshCw className="w-4 h-4 mr-3" />
+          <RefreshCw className="w-4 h-4 me-3" />
           Refresh feed
         </DropdownMenuItem>
         <DropdownMenuItem
           className="rounded-xl py-2.5 px-3 text-sm"
           onClick={onMarkRead}
         >
-          <CheckCheck className="w-4 h-4 mr-3" />
+          <CheckCheck className="w-4 h-4 me-3" />
           Mark all as read
         </DropdownMenuItem>
         {websiteUrl && (
@@ -1273,7 +1273,7 @@ function FeedQuickActions({
               window.open(websiteUrl, "_blank", "noopener,noreferrer")
             }
           >
-            <ExternalLink className="w-4 h-4 mr-3" />
+            <ExternalLink className="w-4 h-4 me-3" />
             Open website
           </DropdownMenuItem>
         )}
@@ -1282,14 +1282,14 @@ function FeedQuickActions({
           className="rounded-xl py-2.5 px-3 text-sm"
           onClick={onEdit}
         >
-          <Pencil className="w-4 h-4 mr-3" />
+          <Pencil className="w-4 h-4 me-3" />
           Edit feed
         </DropdownMenuItem>
         <DropdownMenuItem
           className="rounded-xl py-2.5 px-3 text-sm"
           onClick={onShowHealth}
         >
-          <Activity className="w-4 h-4 mr-3" />
+          <Activity className="w-4 h-4 me-3" />
           Feed health
         </DropdownMenuItem>
         <DropdownMenuSeparator className="my-1.5 bg-border/50" />
@@ -1297,7 +1297,7 @@ function FeedQuickActions({
           className="rounded-xl py-2.5 px-3 text-sm text-destructive focus:text-destructive focus:bg-destructive/10"
           onClick={onDelete}
         >
-          <Trash2 className="w-4 h-4 mr-3" />
+          <Trash2 className="w-4 h-4 me-3" />
           Delete feed
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -1356,7 +1356,7 @@ function UncategorizedGroup({ feeds, renderFeedRow }: any) {
           Uncategorized
         </h3>
       </div>
-      <div className="pl-4 pr-2 py-1 space-y-0.5">
+      <div className="ps-4 pe-2 py-1 space-y-0.5">
         {feeds.map((feed: any) => renderFeedRow(feed))}
       </div>
     </div>
