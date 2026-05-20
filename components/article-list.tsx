@@ -429,7 +429,7 @@ export function ArticleList({
         ))}
         {hasMore && (
           <div ref={sentinelRef} className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-            <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin mr-2" />
+            <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin me-2" />
             {t("loadingMore")}
           </div>
         )}
@@ -579,7 +579,7 @@ function ArticlePreview({
         aria-pressed={isSelected}
         className={cn(
           "px-3 py-2.5 cursor-pointer rounded-2xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden relative focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          "border-l-4",
+          "border-s-4",
           isSelected
             ? "bg-accent/10 ring-1 ring-accent/20"
             : "hover:bg-muted/50",
@@ -645,7 +645,7 @@ function ArticlePreview({
               sizes="(max-width: 640px) 100vw, 400px"
               className="object-cover transition-transform duration-700 hover:scale-110"
             />
-            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-white text-[10px] font-bold">
+            <div className="absolute top-3 start-3 flex items-center gap-1.5 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-white text-[10px] font-bold">
               <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={12} />
               {article.feedName}
             </div>
@@ -746,7 +746,7 @@ function ArticlePreview({
               className="object-cover transition-transform duration-500 group-hover:scale-105"
             />
             {!article.isRead && (
-              <div className="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-brand animate-pulse-gentle" />
+              <div className="absolute top-2 start-2 w-2.5 h-2.5 rounded-full bg-brand animate-pulse-gentle" />
             )}
           </div>
         )}

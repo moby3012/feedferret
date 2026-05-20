@@ -977,7 +977,7 @@ export function FeedManagement({
                         <button
                           type="button"
                           onClick={() => toggleCategory(groupId)}
-                          className="flex w-full items-center gap-2 py-1.5 text-left text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                          className="flex w-full items-center gap-2 py-1.5 text-start text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <ChevronRight className={cn("w-4 h-4 transition-transform duration-200", expanded && "rotate-90")} />
                           <Folder className="w-3.5 h-3.5 text-primary" />
@@ -985,7 +985,7 @@ export function FeedManagement({
                           <span className="text-xs font-normal text-muted-foreground/60">({groupFeeds.length})</span>
                         </button>
                         {expanded && (
-                          <div className="mt-1.5 space-y-2 pl-6 border-l-2 border-border/40">
+                          <div className="mt-1.5 space-y-2 ps-6 border-s-2 border-border/40">
                             {groupFeeds.map((feed: any) => (
                               <div
                                 key={feed.id}
@@ -1054,7 +1054,7 @@ export function FeedManagement({
                                       onClick={() => setEditingFeed(feed)}
                                     >
                                       <Settings2 className="w-4 h-4" />
-                                      <span className="ml-1.5 hidden lg:inline text-xs">{t("feeds.settings")}</span>
+                                      <span className="ms-1.5 hidden lg:inline text-xs">{t("feeds.settings")}</span>
                                     </Button>
                                     <Button
                                       variant="ghost"
@@ -1065,7 +1065,7 @@ export function FeedManagement({
                                       }
                                     >
                                       <Trash2 className="w-4 h-4" />
-                                      <span className="ml-1.5 hidden lg:inline text-xs">{t("feeds.delete")}</span>
+                                      <span className="ms-1.5 hidden lg:inline text-xs">{t("feeds.delete")}</span>
                                     </Button>
                                   </div>
                                 </div>
@@ -1108,7 +1108,7 @@ export function FeedManagement({
                     onClick={handleAddCategory}
                     className="h-11 rounded-2xl bg-primary px-6 transition-all hover:bg-primary/90 active:scale-95"
                   >
-                    <FolderPlus className="w-4 h-4 mr-2" />
+                    <FolderPlus className="w-4 h-4 me-2" />
                     {t("categories.addButton")}
                   </Button>
                 </div>
@@ -1183,7 +1183,7 @@ export function FeedManagement({
                     </Button>
                   </div>
                   <ScrollArea className="h-[48vh]">
-                    <div className="space-y-2 pr-3">
+                    <div className="space-y-2 pe-3">
                       {labels.map((label: any) => (
                         <div
                           key={label.id}
@@ -1224,7 +1224,7 @@ export function FeedManagement({
                     </div>
                   </div>
                   <ScrollArea className="h-[56vh]">
-                    <div className="space-y-2 pr-3">
+                    <div className="space-y-2 pe-3">
                       {savedSearches.map((search: any) => {
                         const shareOrigin = typeof window !== "undefined" ? window.location.origin : "";
                         const shareUrl = search.shareToken
@@ -1275,18 +1275,18 @@ export function FeedManagement({
                                   className="h-8 rounded-xl"
                                   onClick={() => { navigator.clipboard.writeText(shareUrl); toast.success(t("toasts.sharingEnabled")); }}
                                 >
-                                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                  <Copy className="me-1.5 h-3.5 w-3.5" />
                                   {t("savedSearches.copy")}
                                 </Button>
                                 <Button asChild variant="outline" size="sm" className="h-8 rounded-xl">
                                   <a href={shareUrl} target="_blank" rel="noreferrer">
-                                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                                    <ExternalLink className="me-1.5 h-3.5 w-3.5" />
                                     {t("savedSearches.open")}
                                   </a>
                                 </Button>
                                 <Button asChild variant="outline" size="sm" className="h-8 rounded-xl">
                                   <a href={rssUrl} target="_blank" rel="noreferrer">
-                                    <Rss className="mr-1.5 h-3.5 w-3.5" />
+                                    <Rss className="me-1.5 h-3.5 w-3.5" />
                                     {t("savedSearches.rss")}
                                   </a>
                                 </Button>
@@ -1337,13 +1337,13 @@ export function FeedManagement({
                       disabled={applyRetention.isPending}
                       className="w-full rounded-2xl sm:w-auto"
                     >
-                      <ShieldCheck className="mr-2 h-4 w-4" />
+                      <ShieldCheck className="me-2 h-4 w-4" />
                       {t("health.applyRetention")}
                     </Button>
                   </div>
                 </div>
                 <ScrollArea className="min-h-0 flex-1">
-                  <div className="space-y-3 pb-8 pr-3">
+                  <div className="space-y-3 pb-8 pe-3">
                     {feedHealth.map((feed: any) => (
                       <div key={feed.id} className="rounded-3xl border border-border/60 bg-card p-4 shadow-sm">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -1741,7 +1741,7 @@ export function FeedManagement({
                           <label className="text-xs font-medium text-muted-foreground">
                             {t("rules.actionsRunInOrder")}
                             {newRuleTrigger === "feed_error" && (
-                              <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-500">notifications &amp; webhooks only</span>
+                              <span className="ms-2 text-[10px] uppercase tracking-wider text-amber-500">notifications &amp; webhooks only</span>
                             )}
                           </label>
                           <ActionListEditor
@@ -2091,7 +2091,7 @@ export function FeedManagement({
                                   <label className="text-xs font-medium text-muted-foreground">
                                     {t("rules.actionsRunInOrder")}
                                     {editRuleTrigger === "feed_error" && (
-                                      <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-500">notifications &amp; webhooks only</span>
+                                      <span className="ms-2 text-[10px] uppercase tracking-wider text-amber-500">notifications &amp; webhooks only</span>
                                     )}
                                   </label>
                                   <ActionListEditor
@@ -2602,7 +2602,7 @@ export function FeedManagement({
                                       <button
                                         key={n.id}
                                         className={cn(
-                                          "w-full text-left rounded-lg px-2.5 py-1.5 text-xs transition-colors",
+                                          "w-full text-start rounded-lg px-2.5 py-1.5 text-xs transition-colors",
                                           n.read ? "text-muted-foreground" : "text-foreground font-medium bg-primary/5",
                                         )}
                                         onClick={() => {
@@ -2851,10 +2851,10 @@ function MigrationWizard({
                   setSelected(src);
                   setStep("instructions");
                 }}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/70 px-4 py-3 text-left text-sm font-medium hover:border-primary/40 hover:bg-primary/5 transition-colors active:scale-[0.99]"
+                className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/70 px-4 py-3 text-start text-sm font-medium hover:border-primary/40 hover:bg-primary/5 transition-colors active:scale-[0.99]"
               >
                 <span>{src.name}</span>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <ChevronRight className="h-4 w-4 text-muted-foreground rtl:rotate-180" />
               </button>
             ))}
           </div>

@@ -118,7 +118,7 @@ export function PwaInstallPrompt() {
           <button
             type="button"
             onClick={closeAndRemember}
-            className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted/70 text-muted-foreground transition-colors hover:text-foreground"
+            className="absolute end-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted/70 text-muted-foreground transition-colors hover:text-foreground"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -128,7 +128,7 @@ export function PwaInstallPrompt() {
             <Smartphone className="h-7 w-7" />
           </div>
 
-          <DialogHeader className="pr-8 text-left">
+          <DialogHeader className="pe-8 text-start">
             <DialogTitle className="text-2xl tracking-[-0.04em]">
               {t("title")}
             </DialogTitle>
@@ -162,7 +162,7 @@ export function PwaInstallPrompt() {
               onClick={installOrClose}
               className="h-12 rounded-2xl"
             >
-              <Download className="mr-2 h-4 w-4" />
+              <Download className="me-2 h-4 w-4" />
               {deferredPrompt.current ? t("install") : manualOpen ? t("done") : t("gotIt")}
             </Button>
           </DialogFooter>

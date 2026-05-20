@@ -170,7 +170,7 @@ export default function LoginPage() {
         </div>
 
         <Card className="border-white/5 bg-zinc-950/50 backdrop-blur-xl shadow-2xl overflow-hidden ring-1 ring-white/10">
-          <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-left">
+          <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-start">
             <CardTitle className="text-lg font-semibold text-white flex items-center justify-center sm:justify-start gap-2">
               <LogIn className="w-4 h-4 text-zinc-400" />
               {t("signIn")}
@@ -302,7 +302,7 @@ export default function LoginPage() {
                       className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("google")}
                     >
-                      <GoogleIcon className="w-4 h-4 mr-2" />
+                      <GoogleIcon className="w-4 h-4 me-2" />
                       Google
                     </Button>
                   )}
@@ -312,7 +312,7 @@ export default function LoginPage() {
                       className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("github")}
                     >
-                      <GithubIcon className="w-4 h-4 mr-2" />
+                      <GithubIcon className="w-4 h-4 me-2" />
                       GitHub
                     </Button>
                   )}
@@ -322,7 +322,7 @@ export default function LoginPage() {
                       className="sm:col-span-2 bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("authelia")}
                     >
-                      <Shield className="w-4 h-4 mr-2" />
+                      <Shield className="w-4 h-4 me-2" />
                       {providers.autheliaLabel}
                     </Button>
                   )}

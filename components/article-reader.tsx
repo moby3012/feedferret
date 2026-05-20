@@ -322,7 +322,7 @@ export function ArticleReader({
           <button
             type="button"
             onClick={() => onOpenFeed?.(article.feedId)}
-            className="flex min-w-0 items-center gap-3 rounded-2xl px-2 py-1.5 text-left transition-colors hover:bg-muted/70 active:scale-[0.99]"
+            className="flex min-w-0 items-center gap-3 rounded-2xl px-2 py-1.5 text-start transition-colors hover:bg-muted/70 active:scale-[0.99]"
             aria-label={`Show all articles from ${article.feedName}`}
           >
             <div className="w-6 h-6 rounded-md overflow-hidden bg-muted flex items-center justify-center shrink-0">
@@ -577,7 +577,7 @@ export function ArticleReader({
               </p>
               {article.link && (
                 <Button onClick={openOriginal} variant="outline" className="rounded-xl">
-                  <ExternalLink className="w-4 h-4 mr-2" />
+                  <ExternalLink className="w-4 h-4 me-2" />
                   {t("openOriginal")}
                 </Button>
               )}
@@ -595,11 +595,11 @@ export function ArticleReader({
                   disabled={isFetchingFullText}
                   className="rounded-xl"
                 >
-                  <Sparkles className="w-4 h-4 mr-2" />
+                  <Sparkles className="w-4 h-4 me-2" />
                   {isFetchingFullText ? t("fetching") : t("fetchFullText")}
                 </Button>
                 <Button onClick={openOriginal} variant="outline" className="rounded-xl">
-                  <ExternalLink className="w-4 h-4 mr-2" />
+                  <ExternalLink className="w-4 h-4 me-2" />
                   {t("openOriginal")}
                 </Button>
               </div>
@@ -612,7 +612,7 @@ export function ArticleReader({
               type="button"
               onClick={() => onOpenFeed?.(article.feedId)}
               aria-label={`View all articles from ${article.feedName}`}
-              className="flex w-full items-center gap-4 rounded-3xl p-2 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
+              className="flex w-full items-center gap-4 rounded-3xl p-2 text-start transition-colors hover:bg-muted/50 active:scale-[0.99]"
             >
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center shadow-lg overflow-hidden">
                 <FeedFaviconInReader feedIcon={article.feedIcon} feedName={article.feedName} articleLink={article.link} size={36} />
@@ -699,19 +699,19 @@ export function ArticleReader({
               className="mb-2 w-64 rounded-3xl border-border/70 bg-popover/95 p-2 shadow-2xl backdrop-blur-xl"
             >
               <DropdownMenuItem className="rounded-2xl py-3" onClick={scrollReaderToTop}>
-                <ArrowUp className="mr-3 h-4 w-4" />
+                <ArrowUp className="me-3 h-4 w-4" />
                 {t("scrollToTop")}
               </DropdownMenuItem>
               <DropdownMenuItem className="rounded-2xl py-3" onClick={shareArticle}>
-                <Share2 className="mr-3 h-4 w-4" />
+                <Share2 className="me-3 h-4 w-4" />
                 {t("share")}
               </DropdownMenuItem>
               <DropdownMenuItem className="rounded-2xl py-3" onClick={openOriginal} disabled={!article.link}>
-                <ExternalLink className="mr-3 h-4 w-4" />
+                <ExternalLink className="me-3 h-4 w-4" />
                 {t("openOriginal")}
               </DropdownMenuItem>
               <DropdownMenuItem className="rounded-2xl py-3" onClick={copyLink} disabled={!article.link}>
-                <Copy className="mr-3 h-4 w-4" />
+                <Copy className="me-3 h-4 w-4" />
                 {t("copyLink")}
               </DropdownMenuItem>
               {article.link && (!article.content || article.content.length < 900) && (
@@ -720,7 +720,7 @@ export function ArticleReader({
                   onClick={() => onFetchFullText?.(article.id)}
                   disabled={isFetchingFullText}
                 >
-                  <Sparkles className="mr-3 h-4 w-4" />
+                  <Sparkles className="me-3 h-4 w-4" />
                   {isFetchingFullText ? t("fetching") : t("fetchFullText")}
                 </DropdownMenuItem>
               )}
