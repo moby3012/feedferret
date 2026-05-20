@@ -69,6 +69,7 @@ model User {
   layoutDirection         String    @default("ltr")     // "ltr" | "rtl"
   hideEmptyFeeds          Boolean   @default(false)
   hideEmptyLabels         Boolean   @default(false)
+  uiLanguage              String    @default("en")     // BCP-47 tag e.g. "en" | "de"
   aiProvider              String?                       // "openai" | "anthropic" | "ollama" | "gemini" | "openrouter"
   aiApiKey                String?                       // encrypted at rest
   aiModel                 String?

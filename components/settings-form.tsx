@@ -12,6 +12,7 @@ import {
   Copy,
   ExternalLink,
   Key,
+  Languages,
   Laptop,
   Layers,
   LogOut,
@@ -62,7 +63,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
+import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
 import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -122,6 +123,7 @@ export function SettingsForm() {
   const router = useRouter();
   const { data: prefs } = useReadingPreferences();
   const updateSettings = useUpdateGlobalSettings();
+  const updateUiLang = useUpdateUiLanguage();
 
   const update = (data: Parameters<typeof updateSettings.mutate>[0]) =>
     updateSettings.mutate(data);
@@ -425,6 +427,30 @@ export function SettingsForm() {
               onCheckedChange={(checked) => update({ layoutDirection: checked ? "rtl" : "ltr" })}
               className="h-7 w-12"
             />
+          </PrefRow>
+
+          {/* Language */}
+          <PrefRow
+            icon={Languages}
+            title="Language"
+            description="Interface language for the app. Takes effect after navigating away and back."
+          >
+            <Select
+              value={prefs?.uiLanguage ?? "en"}
+              onValueChange={(locale) => {
+                updateUiLang.mutate(locale, {
+                  onSuccess: () => router.refresh(),
+                });
+              }}
+            >
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="de">Deutsch</SelectItem>
+              </SelectContent>
+            </Select>
           </PrefRow>
 
           {/* Hide empty feeds */}
