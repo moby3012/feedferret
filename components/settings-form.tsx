@@ -1393,69 +1393,69 @@ function ApiTokenSection() {
 
       {showCreate && (
         <div className="mb-4 rounded-2xl border border-border/50 bg-muted/30 p-4 space-y-3">
-          <p className="text-sm font-medium">Create new token</p>
+          <p className="text-sm font-medium">{tc("apiTokens.createNewToken")}</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-1">
-              <label htmlFor="token-name" className="text-xs text-muted-foreground mb-1 block">Name</label>
+              <label htmlFor="token-name" className="text-xs text-muted-foreground mb-1 block">{tc("apiTokens.name")}</label>
               <Input id="token-name" value={createName} onChange={(e) => setCreateName(e.target.value)} className="h-9 rounded-xl" maxLength={80} />
             </div>
             <div>
-              <label htmlFor="token-scope" className="text-xs text-muted-foreground mb-1 block">Scope</label>
+              <label htmlFor="token-scope" className="text-xs text-muted-foreground mb-1 block">{tc("apiTokens.scope")}</label>
               <Select value={createScope} onValueChange={setCreateScope}>
                 <SelectTrigger id="token-scope" className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="read">Read-only</SelectItem>
-                  <SelectItem value="write">Read + Write</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="read">{tc("apiTokens.scopes.read")}</SelectItem>
+                  <SelectItem value="write">{tc("apiTokens.scopes.readWrite")}</SelectItem>
+                  <SelectItem value="admin">{tc("apiTokens.scopes.admin")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <label htmlFor="token-expiry" className="text-xs text-muted-foreground mb-1 block">Expires</label>
+              <label htmlFor="token-expiry" className="text-xs text-muted-foreground mb-1 block">{tc("apiTokens.expires")}</label>
               <Select value={createExpiry} onValueChange={setCreateExpiry}>
                 <SelectTrigger id="token-expiry" className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="never">Never</SelectItem>
-                  <SelectItem value="30d">30 days</SelectItem>
-                  <SelectItem value="90d">90 days</SelectItem>
-                  <SelectItem value="1y">1 year</SelectItem>
+                  <SelectItem value="never">{tc("apiTokens.expiry.never")}</SelectItem>
+                  <SelectItem value="30d">{tc("apiTokens.expiry.d30")}</SelectItem>
+                  <SelectItem value="90d">{tc("apiTokens.expiry.d90")}</SelectItem>
+                  <SelectItem value="1y">{tc("apiTokens.expiry.y1")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <div className="flex gap-2 pt-1">
             <Button size="sm" onClick={handleCreate} disabled={creating || !createName.trim()} className="rounded-xl h-9">
-              {creating ? "Creating…" : "Create"}
+              {creating ? tc("apiTokens.creating") : tc("apiTokens.create")}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)} className="rounded-xl h-9">Cancel</Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)} className="rounded-xl h-9">{tc("apiTokens.cancel")}</Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{tc("apiTokens.loading")}</p>
       ) : tokens.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No tokens yet. Create one to get started.</p>
+        <p className="text-sm text-muted-foreground">{tc("apiTokens.noTokens")}</p>
       ) : (
         <div className="space-y-2">
-          {tokens.map((t) => (
-            <div key={t.id} className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/40 px-3 py-2">
+          {tokens.map((tok) => (
+            <div key={tok.id} className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/40 px-3 py-2">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium truncate">{t.name}</span>
-                  <Badge variant={scopeColor(t.scope)} className="text-[10px] h-4 px-1.5">{scopeLabel(t.scope)}</Badge>
-                  {t.expiresAt && <span className="text-[11px] text-muted-foreground">Expires {new Date(t.expiresAt).toLocaleDateString()}</span>}
+                  <span className="text-sm font-medium truncate">{tok.name}</span>
+                  <Badge variant={scopeColor(tok.scope)} className="text-[10px] h-4 px-1.5">{scopeLabel(tok.scope)}</Badge>
+                  {tok.expiresAt && <span className="text-[11px] text-muted-foreground">{tc("apiTokens.expires")} {new Date(tok.expiresAt).toLocaleDateString()}</span>}
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Created {new Date(t.createdAt).toLocaleDateString()}
-                  {t.lastUsedAt ? ` · Last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : " · Never used"}
+                  {tc("apiTokens.created")} {new Date(tok.createdAt).toLocaleDateString()}
+                  {tok.lastUsedAt ? ` · ${tc("apiTokens.lastUsed")} ${new Date(tok.lastUsedAt).toLocaleDateString()}` : ` · ${tc("apiTokens.neverUsed")}`}
                 </p>
               </div>
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                onClick={() => handleRevoke(t.id, t.name)}
+                onClick={() => handleRevoke(tok.id, tok.name)}
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
@@ -1465,14 +1465,14 @@ function ApiTokenSection() {
       )}
 
       <p className="mt-4 text-xs text-muted-foreground">
-        Pass the token as <code className="bg-muted px-1 py-0.5 rounded text-[11px]">Authorization: Bearer &lt;token&gt;</code>.{" "}
-        The Fever API uses <code className="bg-muted px-1 py-0.5 rounded text-[11px]">md5(email:token)</code> as its api_key.
+        {tc("apiTokens.usageHint")}
       </p>
     </section>
   );
 }
 
 function AiSummarySection() {
+  const t = useTranslations();
   const { data: ai } = useAiSettings();
   const updateAi = useUpdateAiSettings();
   const testAi = useTestAiConnection();
@@ -1518,9 +1518,9 @@ function AiSummarySection() {
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">AI Summaries (BYOK)</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("ai.title")}</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Summarize articles on demand or automatically on sync using your own OpenAI, Anthropic, Gemini, OpenRouter, or Ollama credentials. Your API key is encrypted at rest and never shared.
+            {t("ai.description")}
           </p>
         </div>
       </div>
@@ -1528,18 +1528,18 @@ function AiSummarySection() {
       <div className="space-y-4">
         {/* Provider */}
         <div className="grid gap-1.5">
-          <label className="text-sm font-medium" htmlFor="ai-provider-select">Provider</label>
+          <label className="text-sm font-medium" htmlFor="ai-provider-select">{t("ai.provider")}</label>
           <Select value={provider} onValueChange={setProvider}>
             <SelectTrigger id="ai-provider-select" className="h-10 rounded-xl">
-              <SelectValue placeholder="Select provider" />
+              <SelectValue placeholder={t("ai.provider")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">None (disabled)</SelectItem>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="anthropic">Anthropic</SelectItem>
-              <SelectItem value="gemini">Google Gemini</SelectItem>
-              <SelectItem value="openrouter">OpenRouter</SelectItem>
-              <SelectItem value="ollama">Ollama (local)</SelectItem>
+              <SelectItem value="none">{t("ai.providers.none")}</SelectItem>
+              <SelectItem value="openai">{t("ai.providers.openai")}</SelectItem>
+              <SelectItem value="anthropic">{t("ai.providers.anthropic")}</SelectItem>
+              <SelectItem value="gemini">{t("ai.providers.gemini")}</SelectItem>
+              <SelectItem value="openrouter">{t("ai.providers.openrouter")}</SelectItem>
+              <SelectItem value="ollama">{t("ai.providers.ollama")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1547,15 +1547,15 @@ function AiSummarySection() {
         {provider !== "none" && provider !== "ollama" && (
           <div className="grid gap-1.5">
             <label className="text-sm font-medium" htmlFor="ai-api-key-input">
-              API Key
+              {t("ai.apiKey")}
               {ai?.hasApiKey && !apiKey && (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">(currently set)</span>
+                <span className="ml-2 text-xs font-normal text-muted-foreground">({t("ai.currentlySet")})</span>
               )}
             </label>
             <Input
               id="ai-api-key-input"
               type="password"
-              placeholder={ai?.hasApiKey ? "Leave blank to keep existing key" : "sk-..."}
+              placeholder={ai?.hasApiKey ? t("ai.leaveBlankToKeep") : "sk-..."}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               className="h-10 rounded-xl font-mono text-sm"
@@ -1565,7 +1565,7 @@ function AiSummarySection() {
 
         {provider === "ollama" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-ollama-base-url-input">Ollama Base URL</label>
+            <label className="text-sm font-medium" htmlFor="ai-ollama-base-url-input">{t("ai.ollamaBaseUrl")}</label>
             <Input
               id="ai-ollama-base-url-input"
               placeholder="http://localhost:11434"
@@ -1579,7 +1579,7 @@ function AiSummarySection() {
         {provider !== "none" && (
           <div className="grid gap-1.5">
             <label className="text-sm font-medium" htmlFor="ai-model-input">
-              Model
+              {t("ai.model")}
               <span className="ml-1 text-xs font-normal text-muted-foreground">
                 {provider === "openai" && "(default: gpt-4o-mini)"}
                 {provider === "anthropic" && "(default: claude-haiku-4-5-20251001)"}
@@ -1600,19 +1600,19 @@ function AiSummarySection() {
 
         {provider !== "none" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-language-select">Summary language</label>
+            <label className="text-sm font-medium" htmlFor="ai-language-select">{t("ai.summaryLanguage")}</label>
             <Select value={language} onValueChange={setLanguage}>
               <SelectTrigger id="ai-language-select" className="h-10 rounded-xl">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="same">Same as article</SelectItem>
-                <SelectItem value="English">English</SelectItem>
-                <SelectItem value="German">German</SelectItem>
-                <SelectItem value="French">French</SelectItem>
-                <SelectItem value="Spanish">Spanish</SelectItem>
-                <SelectItem value="Japanese">Japanese</SelectItem>
-                <SelectItem value="Chinese">Chinese</SelectItem>
+                <SelectItem value="same">{t("ai.languages.same")}</SelectItem>
+                <SelectItem value="English">{t("ai.languages.english")}</SelectItem>
+                <SelectItem value="German">{t("ai.languages.german")}</SelectItem>
+                <SelectItem value="French">{t("ai.languages.french")}</SelectItem>
+                <SelectItem value="Spanish">{t("ai.languages.spanish")}</SelectItem>
+                <SelectItem value="Japanese">{t("ai.languages.japanese")}</SelectItem>
+                <SelectItem value="Chinese">{t("ai.languages.chinese")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1621,8 +1621,8 @@ function AiSummarySection() {
         {provider !== "none" && (
           <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
             <div>
-              <p className="text-sm font-medium">Auto-summarize on sync</p>
-              <p className="text-xs text-muted-foreground">Automatically summarize new articles (uses API credits)</p>
+              <p className="text-sm font-medium">{t("ai.autoSummarize")}</p>
+              <p className="text-xs text-muted-foreground">{t("ai.autoSummarizeDescription")}</p>
             </div>
             <Switch
               checked={autoSummarize}
@@ -1642,7 +1642,7 @@ function AiSummarySection() {
             {testResult.success
               ? <CheckCircle2 className="h-4 w-4 shrink-0" />
               : <XCircle className="h-4 w-4 shrink-0" />}
-            <span>{testResult.success ? "Connection successful" : testResult.error}</span>
+            <span>{testResult.success ? t("ai.connectionSuccessful") : testResult.error}</span>
           </div>
         )}
 
@@ -1652,7 +1652,7 @@ function AiSummarySection() {
             disabled={updateAi.isPending}
             className="rounded-2xl h-10"
           >
-            {updateAi.isPending ? "Saving…" : "Save"}
+            {updateAi.isPending ? t("ai.saving") : t("ai.save")}
           </Button>
           {provider !== "none" && (
             <Button
@@ -1662,7 +1662,7 @@ function AiSummarySection() {
               className="rounded-2xl h-10"
             >
               <Sparkles className="w-4 h-4 mr-2" />
-              {testAi.isPending ? "Testing…" : "Test connection"}
+              {testAi.isPending ? t("ai.testing") : t("ai.testConnection")}
             </Button>
           )}
         </div>
@@ -1748,6 +1748,7 @@ const SYNC_CLIENTS: SyncClient[] = [
 ];
 
 function SyncTutorialSection() {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [instanceUrl, setInstanceUrl] = useState<string>("");
 
@@ -1771,9 +1772,9 @@ function SyncTutorialSection() {
           <Rss className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">Sync with external readers</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("syncReaders.title")}</h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Connect Reeder, NetNewsWire, Fluent Reader and other RSS clients to this FeedFerret instance. Hosted services like Feedly need an OPML round-trip instead.
+            {t("syncReaders.description")}
           </p>
         </div>
         <span className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground">
@@ -1785,17 +1786,17 @@ function SyncTutorialSection() {
         <div className="mt-6 space-y-6">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Google Reader API endpoint</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.greaderEndpoint")}</p>
               <p className="mt-1 break-all text-sm font-mono">{greaderUrl}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Username = your FeedFerret email. Password = your FeedFerret password (or an API token).
+                {t("syncReaders.greaderUsernameHint")}
               </p>
             </div>
             <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">REST API base</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.restApiBase")}</p>
               <p className="mt-1 break-all text-sm font-mono">{apiUrl}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Used by custom integrations. Authenticate with a bearer token from Profile → API tokens.
+                {t("syncReaders.restApiHint")}
               </p>
             </div>
           </div>
@@ -1821,7 +1822,7 @@ function SyncTutorialSection() {
                             : "bg-amber-500/10 text-amber-600",
                         )}
                       >
-                        {client.api === "greader" ? "Direct sync" : "OPML only"}
+                        {client.api === "greader" ? t("syncReaders.directSync") : t("syncReaders.opmlOnly")}
                       </span>
                     </div>
                     {client.notes && (

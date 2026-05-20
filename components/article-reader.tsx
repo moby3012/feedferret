@@ -127,15 +127,15 @@ export function ArticleReader({
   }, [onPreviousArticle]);
 
   const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
-    const t = e.touches[0];
-    touchStartRef.current = { x: t.clientX, y: t.clientY };
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
   };
 
   const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
     if (!touchStartRef.current) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - touchStartRef.current.x;
-    const dy = t.clientY - touchStartRef.current.y;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
     touchStartRef.current = null;
     if (Math.abs(dx) < 72 || Math.abs(dy) > Math.abs(dx) * 0.75) return;
     if (dx > 0) onBack?.();

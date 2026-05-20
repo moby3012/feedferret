@@ -351,6 +351,7 @@ function FeedCard({
   isAdding: boolean;
   isSubscribed: boolean;
 }) {
+  const t = useTranslations("discovery");
   return (
     <div className="relative rounded-xl bg-muted/50 px-2.5 py-2 pr-10 overflow-hidden w-full">
       <div className="flex items-center gap-2 min-w-0">
@@ -388,7 +389,7 @@ function FeedCard({
         )}
         onClick={isSubscribed ? undefined : onAdd}
         disabled={isAdding || isSubscribed}
-        title={isSubscribed ? "Already added" : "Add feed"}
+        title={isSubscribed ? t("alreadyAdded") : t("addFeed")}
       >
         {isAdding ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />

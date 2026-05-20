@@ -475,16 +475,16 @@ function ArticlePreview({
   const SWIPE_MAX = 160;
 
   const handleSwipeStart = (e: React.TouchEvent) => {
-    const t = e.touches[0];
-    swipeStartRef.current = { x: t.clientX, y: t.clientY };
+    const touch = e.touches[0];
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
     setSwipeActive(false);
   };
 
   const handleSwipeMove = (e: React.TouchEvent) => {
     if (!swipeStartRef.current) return;
-    const t = e.touches[0];
-    const dx = t.clientX - swipeStartRef.current.x;
-    const dy = t.clientY - swipeStartRef.current.y;
+    const touch = e.touches[0];
+    const dx = touch.clientX - swipeStartRef.current.x;
+    const dy = touch.clientY - swipeStartRef.current.y;
     if (!swipeActive) {
       // Lock direction: if vertical dominates, abandon swipe
       if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
@@ -504,9 +504,9 @@ function ArticlePreview({
       setSwipeActive(false);
       return;
     }
-    const t = e.changedTouches[0];
-    const dx = t.clientX - swipeStartRef.current.x;
-    const dy = t.clientY - swipeStartRef.current.y;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - swipeStartRef.current.x;
+    const dy = touch.clientY - swipeStartRef.current.y;
     swipeStartRef.current = null;
     setSwipeActive(false);
     setSwipeOffset(0);
@@ -760,7 +760,7 @@ function ArticlePreview({
             {(article.duplicateCount ?? 0) > 0 && (
               <span
                 className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium shrink-0"
-                title={`${t("alsoIn")} ${t("otherFeeds", { count: article.duplicateCount ?? 0 })}`}
+                title={`${t("alsoIn")} ${article.duplicateCount} ${(article.duplicateCount ?? 0) > 1 ? t("otherFeeds") : t("otherFeed")}`}
               >
                 <Layers className="w-2.5 h-2.5" />
                 {article.duplicateCount}
