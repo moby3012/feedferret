@@ -386,13 +386,12 @@
     "quickStart": "Schnellstart",
     "quickStartDescription": "Starter-Paket beliebter Feeds hinzufügen, um schnell loszulegen.",
     "nothingSelected": "Nichts ausgewählt",
-    "packsSelected": "Pakete ausgewählt",
-    "packSelected": "Paket ausgewählt",
+    "packsSelected": "{count, plural, one {# Paket ausgewählt} other {# Pakete ausgewählt}}",
     "importAndStart": "Importieren und starten",
     "addManually": "Manuell hinzufügen",
     "importing": "Wird importiert…",
     "allSetTitle": "Alles bereit!",
-    "feedsImported": "Feeds importiert",
+    "feedsImported": "{count, plural, one {# Feed importiert} other {# Feeds importiert}}",
     "instanceReady": "Deine FeedFerret-Instanz ist bereit.",
     "nextSteps": "Nächste Schritte",
     "addFeeds": "Weitere Feeds hinzufügen",
@@ -451,7 +450,7 @@
       "importFailed": "Import fehlgeschlagen.",
       "noPacks": "Keine Starter-Pakete verfügbar.",
       "noNewFeeds": "Keine neuen Feeds zum Hinzufügen.",
-      "imported": "Feeds importiert",
+      "imported": "{count, plural, one {# Feed importiert} other {# Feeds importiert}}",
       "deleted": "Feed gelöscht.",
       "couldNotDelete": "Feed konnte nicht gelöscht werden."
     }
@@ -466,8 +465,7 @@
     "removeFromReadLater": "Aus 'Später lesen' entfernen",
     "saveToReadLater": "In 'Später lesen' speichern",
     "releaseSpoiler": "Spoiler aufheben",
-    "otherFeed": "weiterer Feed",
-    "otherFeeds": "weitere Feeds",
+    "otherFeeds": "{count, plural, one {weiterer Feed} other {weitere Feeds}}",
     "firstSeenIn": "Zuerst gesehen in",
     "removeStar": "Markierung entfernen",
     "star": "Markieren",
@@ -1081,5 +1079,23 @@
     "noResults": "Diese Suche hat noch keine Ergebnisse. Nach dem nächsten Sync erneut prüfen.",
     "openOriginal": "Original öffnen",
     "publicUrl": "Öffentliche URL:"
+  },
+  "emailDigest": {
+    "tagline": "Dein Leseüberblick",
+    "greeting": "Hallo {name}",
+    "greetingGeneric": "Hallo",
+    "articleCount": "{count, plural, one {Hier ist # Artikel aus deinen Feeds.} other {Hier sind # Artikel aus deinen Feeds.}}",
+    "aiSummary": "✦ KI-Zusammenfassung",
+    "openApp": "FeedFerret öffnen →",
+    "footer": "Du erhältst diese E-Mail, weil du E-Mail-Digests in FeedFerret aktiviert hast.",
+    "unsubscribe": "Abmelden",
+    "subjectNothingNew": "FeedFerret Digest — Nichts Neues",
+    "subject": "{count, plural, one {FeedFerret Digest — # neuer Artikel} other {FeedFerret Digest — # neue Artikel}}"
+  },
+  "emailAuth": {
+    "signInSubject": "Anmeldung bei {host}",
+    "signInBody": "Klicke auf den Button, um dich bei deinem FeedFerret-Konto anzumelden. Dieser Link läuft in 24 Stunden ab.",
+    "signInButton": "Anmelden",
+    "signInIgnore": "Wenn du diese E-Mail nicht angefordert hast, kannst du sie ignorieren."
   }
 }

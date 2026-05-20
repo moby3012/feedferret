@@ -1,5 +1,6 @@
 import { sendSystemEmail } from "@/lib/mail";
 import { db } from "@/lib/db";
+import { createEmailTranslator } from "@/lib/email-i18n";
 
 export interface DigestArticle {
   id: string;
@@ -19,6 +20,7 @@ export interface DigestEmailOptions {
   articles: DigestArticle[];
   unsubscribeToken: string;
   baseUrl: string;
+  locale?: string;
 }
 
 function escapeHtml(value: string): string {
@@ -31,14 +33,15 @@ function escapeHtml(value: string): string {
 }
 
 function buildHtml(opts: DigestEmailOptions): string {
-  const { userName, articles, unsubscribeToken, baseUrl } = opts;
+  const { userName, articles, unsubscribeToken, baseUrl, locale } = opts;
+  const t = createEmailTranslator(locale ?? "en");
   const unsubUrl = `${baseUrl}/api/digest/unsubscribe?token=${unsubscribeToken}`;
-  const greeting = userName ? `Hi ${userName}` : "Hi there";
+  const greeting = userName ? t("emailDigest.greeting", { name: userName }) : t("emailDigest.greetingGeneric");
 
   const articleRows = articles
     .map((a) => {
       const blurb = a.aiSummary
-        ? `<p style="margin:6px 0 0;font-size:14px;color:#374151;line-height:1.6;font-family:sans-serif;white-space:pre-wrap;">${escapeHtml(a.aiSummary)}</p><div style="margin-top:4px;font-size:11px;color:#9ca3af;font-family:sans-serif;">✦ AI summary</div>`
+        ? `<p style="margin:6px 0 0;font-size:14px;color:#374151;line-height:1.6;font-family:sans-serif;white-space:pre-wrap;">${escapeHtml(a.aiSummary)}</p><div style="margin-top:4px;font-size:11px;color:#9ca3af;font-family:sans-serif;">${escapeHtml(t("emailDigest.aiSummary"))}</div>`
         : a.excerpt
           ? `<p style="margin:6px 0 0;font-size:14px;color:#6b7280;line-height:1.6;font-family:sans-serif;">${escapeHtml(a.excerpt.slice(0, 200))}${a.excerpt.length > 200 ? "…" : ""}</p>`
           : "";
@@ -46,7 +49,7 @@ function buildHtml(opts: DigestEmailOptions): string {
       <tr>
         <td style="padding:16px 0;border-bottom:1px solid #e5e7eb;">
           <div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-family:sans-serif;">
-            ${escapeHtml(a.feedIcon ?? "📰")} ${escapeHtml(a.feedName)} &nbsp;·&nbsp; ${new Date(a.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            ${escapeHtml(a.feedIcon ?? "📰")} ${escapeHtml(a.feedName)} &nbsp;·&nbsp; ${new Date(a.publishedAt).toLocaleDateString(locale ?? "en", { month: "short", day: "numeric" })}
           </div>
           <a href="${escapeHtml(a.link)}" style="font-size:16px;font-weight:600;color:#111827;text-decoration:none;line-height:1.4;font-family:sans-serif;">
             ${escapeHtml(a.title)}
@@ -59,7 +62,7 @@ function buildHtml(opts: DigestEmailOptions): string {
     .join("");
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${locale ?? "en"}">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f9fafb;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:32px 16px;">
@@ -68,13 +71,13 @@ function buildHtml(opts: DigestEmailOptions): string {
         <tr>
           <td style="background:#111827;padding:24px 32px;">
             <span style="font-size:20px;font-weight:700;color:#ffffff;font-family:sans-serif;">🦦 FeedFerret</span>
-            <span style="font-size:13px;color:#9ca3af;margin-left:12px;font-family:sans-serif;">Your reading digest</span>
+            <span style="font-size:13px;color:#9ca3af;margin-left:12px;font-family:sans-serif;">${escapeHtml(t("emailDigest.tagline"))}</span>
           </td>
         </tr>
         <tr>
           <td style="padding:24px 32px 8px;font-family:sans-serif;">
             <p style="margin:0;font-size:15px;color:#374151;">${escapeHtml(greeting)},</p>
-            <p style="margin:8px 0 0;font-size:15px;color:#374151;">Here are <strong>${articles.length}</strong> article${articles.length !== 1 ? "s" : ""} from your feeds.</p>
+            <p style="margin:8px 0 0;font-size:15px;color:#374151;">${escapeHtml(t("emailDigest.articleCount", { count: articles.length }))}</p>
           </td>
         </tr>
         <tr>
@@ -87,16 +90,16 @@ function buildHtml(opts: DigestEmailOptions): string {
         <tr>
           <td style="padding:0 32px 32px;">
             <a href="${escapeHtml(baseUrl)}" style="display:inline-block;background:#111827;color:#ffffff;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;font-family:sans-serif;">
-              Open FeedFerret →
+              ${escapeHtml(t("emailDigest.openApp"))}
             </a>
           </td>
         </tr>
         <tr>
           <td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
             <p style="margin:0;font-size:12px;color:#9ca3af;font-family:sans-serif;">
-              You're receiving this because you enabled email digests in FeedFerret.
+              ${escapeHtml(t("emailDigest.footer"))}
               &nbsp;·&nbsp;
-              <a href="${escapeHtml(unsubUrl)}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
+              <a href="${escapeHtml(unsubUrl)}" style="color:#6b7280;text-decoration:underline;">${escapeHtml(t("emailDigest.unsubscribe"))}</a>
             </p>
           </td>
         </tr>
@@ -108,16 +111,17 @@ function buildHtml(opts: DigestEmailOptions): string {
 }
 
 function buildText(opts: DigestEmailOptions): string {
-  const { articles, unsubscribeToken, baseUrl } = opts;
+  const { articles, unsubscribeToken, baseUrl, locale } = opts;
+  const t = createEmailTranslator(locale ?? "en");
   const unsubUrl = `${baseUrl}/api/digest/unsubscribe?token=${unsubscribeToken}`;
   const lines = [
-    "🦦 FeedFerret — Your reading digest",
-    `${articles.length} article${articles.length !== 1 ? "s" : ""} from your feeds`,
+    `🦦 FeedFerret — ${t("emailDigest.tagline")}`,
+    t("emailDigest.articleCount", { count: articles.length }),
     "",
   ];
   for (const a of articles) {
     lines.push(`${a.title}`);
-    lines.push(`${a.feedName} · ${new Date(a.publishedAt).toLocaleDateString()}`);
+    lines.push(`${a.feedName} · ${new Date(a.publishedAt).toLocaleDateString(locale ?? "en")}`);
     lines.push(a.link);
     if (a.aiSummary) {
       lines.push(`[AI] ${a.aiSummary}`);
@@ -126,17 +130,17 @@ function buildText(opts: DigestEmailOptions): string {
     }
     lines.push("");
   }
-  lines.push(`Open FeedFerret: ${baseUrl}`);
-  lines.push(`Unsubscribe: ${unsubUrl}`);
+  lines.push(`${t("emailDigest.openApp")} ${baseUrl}`);
+  lines.push(`${t("emailDigest.unsubscribe")}: ${unsubUrl}`);
   return lines.join("\n");
 }
 
 export async function sendDigestEmail(opts: DigestEmailOptions): Promise<void> {
-  const articleCount = opts.articles.length;
-  const subject =
-    articleCount === 0
-      ? "FeedFerret digest — nothing new"
-      : `FeedFerret digest — ${articleCount} new article${articleCount !== 1 ? "s" : ""}`;
+  const t = createEmailTranslator(opts.locale ?? "en");
+  const count = opts.articles.length;
+  const subject = count === 0
+    ? t("emailDigest.subjectNothingNew")
+    : t("emailDigest.subject", { count });
 
   await sendSystemEmail({
     to: opts.to,

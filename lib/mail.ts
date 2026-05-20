@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import type { GlobalSettings } from "@prisma/client";
 import { db } from "@/lib/db";
 import { decryptIfValue } from "@/lib/crypto";
+import { createEmailTranslator } from "@/lib/email-i18n";
 
 export type MailProviderId = "smtp" | "resend" | "postmark" | "mailgun" | "sendgrid";
 
@@ -363,20 +364,21 @@ export async function sendSystemEmail({
   await sendWithSendgrid({ to, subject, html, text, from, apiKey });
 }
 
-export async function sendSignInEmail({ email, url }: { email: string; url: string }) {
+export async function sendSignInEmail({ email, url, locale }: { email: string; url: string; locale?: string }) {
+  const t = createEmailTranslator(locale ?? "en");
   const { host } = new URL(url);
   await sendSystemEmail({
     to: email,
-    subject: `Sign in to ${host}`,
-    text: `Sign in to ${host}\n${url}\n\n`,
+    subject: t("emailAuth.signInSubject", { host }),
+    text: `${t("emailAuth.signInSubject", { host })}\n${url}\n\n`,
     html: `
       <div style="background:#f9f9f9;padding:20px;font-family:sans-serif;">
         <div style="max-width:600px;margin:0 auto;background:white;padding:40px;border-radius:10px;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
-          <h1 style="color:#111;margin-bottom:20px;">Sign in to ${host}</h1>
-          <p style="color:#444;font-size:16px;line-height:1.6;">Click the button below to sign in to your FeedFerret account. This link will expire in 24 hours.</p>
-          <a href="${url}" style="display:inline-block;background:#000;color:#fff;padding:12px 30px;border-radius:6px;text-decoration:none;font-weight:bold;margin-top:20px;">Sign in</a>
+          <h1 style="color:#111;margin-bottom:20px;">${t("emailAuth.signInSubject", { host })}</h1>
+          <p style="color:#444;font-size:16px;line-height:1.6;">${t("emailAuth.signInBody")}</p>
+          <a href="${url}" style="display:inline-block;background:#000;color:#fff;padding:12px 30px;border-radius:6px;text-decoration:none;font-weight:bold;margin-top:20px;">${t("emailAuth.signInButton")}</a>
           <hr style="border:none;border-top:1px solid #eee;margin:30px 0;" />
-          <p style="color:#888;font-size:12px;">If you didn't request this email, you can safely ignore it.</p>
+          <p style="color:#888;font-size:12px;">${t("emailAuth.signInIgnore")}</p>
         </div>
       </div>
     `,

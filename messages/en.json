@@ -386,13 +386,12 @@
     "quickStart": "Quick start",
     "quickStartDescription": "Add a starter pack of popular feeds to get started quickly.",
     "nothingSelected": "Nothing selected",
-    "packsSelected": "packs selected",
-    "packSelected": "pack selected",
+    "packsSelected": "{count, plural, one {# pack selected} other {# packs selected}}",
     "importAndStart": "Import and start",
     "addManually": "Add manually",
     "importing": "Importing…",
     "allSetTitle": "You're all set!",
-    "feedsImported": "feeds imported",
+    "feedsImported": "{count, plural, one {# feed imported} other {# feeds imported}}",
     "instanceReady": "Your FeedFerret instance is ready.",
     "nextSteps": "Next steps",
     "addFeeds": "Add more feeds",
@@ -451,7 +450,7 @@
       "importFailed": "Import failed.",
       "noPacks": "No starter packs available.",
       "noNewFeeds": "No new feeds to add.",
-      "imported": "feeds imported",
+      "imported": "{count, plural, one {# feed imported} other {# feeds imported}}",
       "deleted": "Feed deleted.",
       "couldNotDelete": "Could not delete feed."
     }
@@ -466,8 +465,7 @@
     "removeFromReadLater": "Remove from Read Later",
     "saveToReadLater": "Save to Read Later",
     "releaseSpoiler": "Release spoiler",
-    "otherFeed": "other feed",
-    "otherFeeds": "other feeds",
+    "otherFeeds": "{count, plural, one {other feed} other {other feeds}}",
     "firstSeenIn": "First seen in",
     "removeStar": "Remove star",
     "star": "Star",
@@ -1081,5 +1079,23 @@
     "noResults": "This search has no results yet. Check back after the next sync.",
     "openOriginal": "Open original",
     "publicUrl": "Public URL:"
+  },
+  "emailDigest": {
+    "tagline": "Your reading digest",
+    "greeting": "Hi {name}",
+    "greetingGeneric": "Hi there",
+    "articleCount": "{count, plural, one {Here is # article from your feeds.} other {Here are # articles from your feeds.}}",
+    "aiSummary": "✦ AI summary",
+    "openApp": "Open FeedFerret →",
+    "footer": "You're receiving this because you enabled email digests in FeedFerret.",
+    "unsubscribe": "Unsubscribe",
+    "subjectNothingNew": "FeedFerret digest — nothing new",
+    "subject": "{count, plural, one {FeedFerret digest — # new article} other {FeedFerret digest — # new articles}}"
+  },
+  "emailAuth": {
+    "signInSubject": "Sign in to {host}",
+    "signInBody": "Click the button below to sign in to your FeedFerret account. This link will expire in 24 hours.",
+    "signInButton": "Sign in",
+    "signInIgnore": "If you didn't request this email, you can safely ignore it."
   }
 }
