@@ -1835,13 +1835,13 @@ function SyncTutorialSection() {
                     rel="noopener noreferrer"
                     className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border/60 bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted/60 transition-colors"
                   >
-                    Open site
+                    {t("syncReaders.openSite")}
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
                 {client.api === "greader" && (
                   <p className="mt-3 text-[11px] text-muted-foreground">
-                    In the client, choose <strong>{client.serverField}</strong> and paste <code className="rounded bg-background/80 px-1 font-mono">{greaderUrl}</code> as the server URL.
+                    {t("syncReaders.inClientChoose")} <strong>{client.serverField}</strong> and paste <code className="rounded bg-background/80 px-1 font-mono">{greaderUrl}</code> {t("syncReaders.serverUrl")}
                   </p>
                 )}
               </div>
@@ -1849,7 +1849,7 @@ function SyncTutorialSection() {
           </div>
 
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-muted-foreground leading-relaxed">
-            <p className="font-medium text-amber-600 dark:text-amber-400 mb-1">A note on two-factor authentication</p>
+            <p className="font-medium text-amber-600 dark:text-amber-400 mb-1">{t("syncReaders.twoFactorNote")}</p>
             <p>
               External clients can&apos;t prompt for a TOTP code. If you have 2FA on, generate a dedicated API token under
               Profile → API tokens and use that in place of your password.
