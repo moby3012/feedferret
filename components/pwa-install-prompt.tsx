@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Download, Home, Share, Smartphone, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +45,7 @@ function dismissAutoPrompt() {
 }
 
 export function PwaInstallPrompt() {
+  const t = useTranslations("pwa");
   const [open, setOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
@@ -128,26 +130,21 @@ export function PwaInstallPrompt() {
 
           <DialogHeader className="pr-8 text-left">
             <DialogTitle className="text-2xl tracking-[-0.04em]">
-              Add FeedFerret to your Home Screen
+              {t("title")}
             </DialogTitle>
             <DialogDescription className="text-sm leading-6">
-              Use FeedFerret like a native app: quicker launch, full-screen reading,
-              and one-tap access from your phone.
+              {t("description")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="mt-5 grid gap-3 text-sm text-muted-foreground">
             <div className="flex gap-3 rounded-2xl bg-muted/45 p-3">
               <Share className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-              <p>
-                On iPhone/iPad: open Safari share menu, then choose <strong>Add to Home Screen</strong>.
-              </p>
+              <p>{t("iphoneInstructions")}</p>
             </div>
             <div className="flex gap-3 rounded-2xl bg-muted/45 p-3">
               <Home className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-              <p>
-                On Android: use the browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.
-              </p>
+              <p>{t("androidInstructions")}</p>
             </div>
           </div>
 
@@ -158,7 +155,7 @@ export function PwaInstallPrompt() {
               onClick={closeAndRemember}
               className="h-12 rounded-2xl"
             >
-              Not now
+              {t("notNow")}
             </Button>
             <Button
               type="button"
@@ -166,7 +163,7 @@ export function PwaInstallPrompt() {
               className="h-12 rounded-2xl"
             >
               <Download className="mr-2 h-4 w-4" />
-              {deferredPrompt.current ? "Install app" : manualOpen ? "Done" : "Got it"}
+              {deferredPrompt.current ? t("install") : manualOpen ? t("done") : t("gotIt")}
             </Button>
           </DialogFooter>
         </div>

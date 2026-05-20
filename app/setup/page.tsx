@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -26,15 +27,6 @@ type Step = "account" | "instance" | "email" | "security" | "starters" | "done";
 
 const STEPS: Step[] = ["account", "instance", "email", "security", "starters", "done"];
 
-const STEP_META: Record<Step, { description: string }> = {
-  account: { description: "Create your admin account" },
-  instance: { description: "Name your instance" },
-  email: { description: "Email delivery" },
-  security: { description: "Access control" },
-  starters: { description: "Pick your first feeds" },
-  done: { description: "You're all set" },
-};
-
 const DEFAULT_STARTER_PACKS = [
   { id: "tech", name: "Technology", path: "tech.opml", emoji: "💻" },
   { id: "dev", name: "Developer News", path: "dev.opml", emoji: "🛠️" },
@@ -44,6 +36,8 @@ const DEFAULT_STARTER_PACKS = [
 ];
 
 export default function SetupPage() {
+  const t = useTranslations("setup");
+  const tCommon = useTranslations("common");
   const [step, setStep] = useState<Step>("account");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -87,15 +81,15 @@ export default function SetupPage() {
   const handleCreateAccount = async () => {
     setError("");
     if (!name || !email || !password) {
-      setError("All fields are required");
+      setError(t("errors.allFieldsRequired"));
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(t("errors.passwordsMismatch"));
       return;
     }
     if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError(t("errors.passwordTooShort"));
       return;
     }
     setIsLoading(true);
@@ -107,7 +101,7 @@ export default function SetupPage() {
       });
       if (!res.ok) {
         const data = await res.json();
-        setError(data.message || "Account creation failed");
+        setError(data.message || t("errors.accountCreationFailed"));
         return;
       }
       const signInRes = await signIn("credentials", {
@@ -116,14 +110,14 @@ export default function SetupPage() {
         redirect: false,
       });
       if (signInRes?.error) {
-        setError("Account created but sign-in failed. Please log in manually.");
+        setError(t("errors.signInFailed"));
         router.push("/login?setup=success");
         return;
       }
       router.refresh();
       setStep("instance");
     } catch {
-      setError("Could not connect to the server. Check your network and try again.");
+      setError(t("errors.networkError"));
     } finally {
       setIsLoading(false);
     }
@@ -235,9 +229,6 @@ export default function SetupPage() {
           <h1 className="text-2xl font-bold tracking-tight text-white">
             Feed<span className="text-zinc-400">Ferret</span> Setup
           </h1>
-          <p className="text-zinc-500 mt-1 text-sm font-medium tracking-tight">
-            {STEP_META[step].description}
-          </p>
         </div>
 
         {/* Step indicator */}
@@ -279,12 +270,12 @@ export default function SetupPage() {
                   <UserPlus className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-white">Admin Account</h2>
-                  <p className="text-xs text-zinc-500">Create your account. You can invite more users later.</p>
+                  <h2 className="font-semibold text-white">{t("adminAccount")}</h2>
+                  <p className="text-xs text-zinc-500">{t("adminAccountDescription")}</p>
                 </div>
               </div>
               <Input
-                placeholder="Your name"
+                placeholder={t("yourName")}
                 className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 h-11 rounded-xl"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -292,7 +283,7 @@ export default function SetupPage() {
               />
               <Input
                 type="email"
-                placeholder="Email address"
+                placeholder={t("emailAddress")}
                 className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 h-11 rounded-xl"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -300,7 +291,7 @@ export default function SetupPage() {
               />
               <Input
                 type="password"
-                placeholder="Password (min. 8 characters)"
+                placeholder={t("password")}
                 className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 h-11 rounded-xl"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -308,7 +299,7 @@ export default function SetupPage() {
               />
               <Input
                 type="password"
-                placeholder="Confirm password"
+                placeholder={t("confirmPassword")}
                 className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 h-11 rounded-xl"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -322,11 +313,11 @@ export default function SetupPage() {
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                    Creating account…
+                    {t("creating")}
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">
-                    Continue <ArrowRight className="w-4 h-4" />
+                    {t("continue")} <ArrowRight className="w-4 h-4" />
                   </span>
                 )}
               </Button>
@@ -341,12 +332,12 @@ export default function SetupPage() {
                   <Globe className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-white">Instance Settings</h2>
-                  <p className="text-xs text-zinc-500">Appears in email notifications and browser tabs.</p>
+                  <h2 className="font-semibold text-white">{t("instanceSettings")}</h2>
+                  <p className="text-xs text-zinc-500">{t("instanceSettingsDescription")}</p>
                 </div>
               </div>
               <div className="space-y-2">
-                <label htmlFor="setup-instance-name" className="text-xs text-zinc-400 font-medium">Instance Name</label>
+                <label htmlFor="setup-instance-name" className="text-xs text-zinc-400 font-medium">{t("instanceName")}</label>
                 <Input
                   id="setup-instance-name"
                   placeholder="FeedFerret"
@@ -356,7 +347,7 @@ export default function SetupPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label htmlFor="setup-instance-url" className="text-xs text-zinc-400 font-medium">Public URL</label>
+                <label htmlFor="setup-instance-url" className="text-xs text-zinc-400 font-medium">{t("publicUrl")}</label>
                 <Input
                   id="setup-instance-url"
                   placeholder="https://rss.example.com"
@@ -367,10 +358,10 @@ export default function SetupPage() {
               </div>
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("account")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  <ArrowLeft className="w-4 h-4 mr-1" /> {tCommon("back")}
                 </Button>
                 <Button onClick={handleSaveInstance} disabled={isLoading} className="flex-1 h-11 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl">
-                  {isLoading ? <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span className="flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></span>}
+                  {isLoading ? <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span className="flex items-center gap-2">{t("continue")} <ArrowRight className="w-4 h-4" /></span>}
                 </Button>
               </div>
             </div>
@@ -384,13 +375,13 @@ export default function SetupPage() {
                   <Mail className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-white">Email Delivery</h2>
-                  <p className="text-xs text-zinc-500">Enables magic-link login, password reset, and digest emails. You can skip this and configure it later.</p>
+                  <h2 className="font-semibold text-white">{t("emailDelivery")}</h2>
+                  <p className="text-xs text-zinc-500">{t("emailDeliveryDescription")}</p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
-                <span className="text-sm text-zinc-300">Enable mail service</span>
+                <span className="text-sm text-zinc-300">{t("enableMailService")}</span>
                 <button
                   onClick={() => setMailServiceEnabled(!mailServiceEnabled)}
                   aria-pressed={mailServiceEnabled}
@@ -418,7 +409,7 @@ export default function SetupPage() {
                             : "bg-white/5 text-zinc-400 border-white/10 hover:border-white/30",
                         )}
                       >
-                        {p === "smtp" ? "SMTP" : "Resend"}
+                        {p === "smtp" ? t("smtp") : t("resend")}
                       </button>
                     ))}
                   </div>
@@ -426,19 +417,19 @@ export default function SetupPage() {
                   {mailProvider === "smtp" && (
                     <>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <Input placeholder="SMTP Host" className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
-                        <Input placeholder="Port (587)" type="number" className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} />
+                        <Input placeholder={t("smtpHost")} className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
+                        <Input placeholder={t("port")} type="number" className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} />
                       </div>
-                      <Input placeholder="SMTP Username" className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} />
-                      <Input type="password" placeholder="SMTP Password" className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} />
-                      <Input placeholder="From: noreply@example.com" className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} />
+                      <Input placeholder={t("smtpUsername")} className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} />
+                      <Input type="password" placeholder={t("smtpPassword")} className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} />
+                      <Input placeholder={t("smtpFrom")} className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} />
                     </>
                   )}
 
                   {mailProvider === "resend" && (
                     <>
-                      <Input type="password" placeholder="Resend API Key (re_…)" className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={resendApiKey} onChange={(e) => setResendApiKey(e.target.value)} />
-                      <Input placeholder="From: Name <noreply@example.com>" className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={resendFromEmail} onChange={(e) => setResendFromEmail(e.target.value)} />
+                      <Input type="password" placeholder={t("resendApiKey")} className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={resendApiKey} onChange={(e) => setResendApiKey(e.target.value)} />
+                      <Input placeholder={t("resendFromEmail")} className="bg-white/5 border-white/10 text-white placeholder:text-zinc-600 h-10 rounded-xl text-sm" value={resendFromEmail} onChange={(e) => setResendFromEmail(e.target.value)} />
                     </>
                   )}
                 </>
@@ -446,13 +437,13 @@ export default function SetupPage() {
 
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("instance")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  <ArrowLeft className="w-4 h-4 mr-1" /> {tCommon("back")}
                 </Button>
                 <Button variant="ghost" onClick={() => handleSaveEmail(true)} className="h-11 rounded-xl text-zinc-500 hover:text-zinc-300 gap-1">
-                  <SkipForward className="w-4 h-4" /> Skip
+                  <SkipForward className="w-4 h-4" /> {t("skip")}
                 </Button>
                 <Button onClick={() => handleSaveEmail(false)} disabled={isLoading} className="flex-1 h-11 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl">
-                  {isLoading ? <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span className="flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></span>}
+                  {isLoading ? <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span className="flex items-center gap-2">{t("continue")} <ArrowRight className="w-4 h-4" /></span>}
                 </Button>
               </div>
             </div>
@@ -466,18 +457,17 @@ export default function SetupPage() {
                   <Lock className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-white">Access Control</h2>
-                  <p className="text-xs text-zinc-500">Control who can register on your instance.</p>
+                  <h2 className="font-semibold text-white">{t("accessControl")}</h2>
+                  <p className="text-xs text-zinc-500">{t("accessControlDescription")}</p>
                 </div>
               </div>
 
               <div className="p-5 rounded-xl bg-white/5 border border-white/10 space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium text-white">Allow public registration</p>
+                    <p className="text-sm font-medium text-white">{t("allowPublicRegistration")}</p>
                     <p className="text-xs text-zinc-500 mt-1">
-                      When off, only admin-provisioned users can log in.
-                      <strong className="text-zinc-400"> Recommended: off</strong> for personal instances.
+                      {t("allowPublicRegistrationDescription")}
                     </p>
                   </div>
                   <button
@@ -495,15 +485,15 @@ export default function SetupPage() {
               </div>
 
               <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-400 text-xs leading-relaxed">
-                You can enable 2FA per-account in Settings after login. OAuth providers (Google, GitHub, Authelia) are configured via environment variables.
+                {t("twoFactorNote")}
               </div>
 
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("email")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  <ArrowLeft className="w-4 h-4 mr-1" /> {tCommon("back")}
                 </Button>
                 <Button onClick={handleSaveSecurity} disabled={isLoading} className="flex-1 h-11 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl">
-                  {isLoading ? <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span className="flex items-center gap-2">Continue <ArrowRight className="w-4 h-4" /></span>}
+                  {isLoading ? <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span className="flex items-center gap-2">{t("continue")} <ArrowRight className="w-4 h-4" /></span>}
                 </Button>
               </div>
             </div>
@@ -517,8 +507,8 @@ export default function SetupPage() {
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-white">Quick Start</h2>
-                  <p className="text-xs text-zinc-500">Import a curated starter pack to start reading right away. You can add your own feeds anytime.</p>
+                  <h2 className="font-semibold text-white">{t("quickStart")}</h2>
+                  <p className="text-xs text-zinc-500">{t("quickStartDescription")}</p>
                 </div>
               </div>
 
@@ -552,19 +542,21 @@ export default function SetupPage() {
               </div>
 
               <p className="text-xs text-zinc-600 text-center">
-                {selectedPacks.length === 0 ? "Nothing selected — you can add feeds manually." : `${selectedPacks.length} pack${selectedPacks.length === 1 ? "" : "s"} selected`}
+                {selectedPacks.length === 0
+                  ? t("nothingSelected")
+                  : `${selectedPacks.length} ${selectedPacks.length === 1 ? t("packSelected") : t("packsSelected")}`}
               </p>
 
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
                 <Button variant="ghost" onClick={() => setStep("security")} className="h-11 rounded-xl text-zinc-400 hover:text-white">
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  <ArrowLeft className="w-4 h-4 mr-1" /> {tCommon("back")}
                 </Button>
                 <Button
                   variant="ghost"
                   onClick={() => { setSelectedPacks([]); router.push("/?addFeed=1"); }}
                   className="h-11 rounded-xl text-zinc-500 hover:text-zinc-300 gap-1"
                 >
-                  <SkipForward className="w-4 h-4" /> Skip
+                  <SkipForward className="w-4 h-4" /> {t("skip")}
                 </Button>
                 <Button
                   onClick={handleImportStarters}
@@ -574,11 +566,11 @@ export default function SetupPage() {
                   {isLoading ? (
                     <span className="flex items-center gap-2">
                       <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                      Importing…
+                      {t("importing")}
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
-                      {selectedPacks.length === 0 ? "Add feeds manually" : "Import & start reading"} <ArrowRight className="w-4 h-4" />
+                      {selectedPacks.length === 0 ? t("addManually") : t("importAndStart")} <ArrowRight className="w-4 h-4" />
                     </span>
                   )}
                 </Button>
@@ -594,20 +586,20 @@ export default function SetupPage() {
                   <Check className="w-8 h-8 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">You&apos;re all set!</h2>
+                  <h2 className="text-xl font-bold text-white">{t("allSetTitle")}</h2>
                   <p className="text-zinc-400 text-sm mt-1">
                     {importedCount > 0
-                      ? `${importedCount} feeds imported and ready to read.`
-                      : "Your FeedFerret instance is ready."}
+                      ? `${importedCount} ${t("feedsImported")}`
+                      : t("instanceReady")}
                   </p>
                 </div>
               </div>
 
               <div className="grid gap-2 text-left p-4 rounded-xl bg-white/5 border border-white/10 text-sm text-zinc-400">
-                <p className="font-medium text-zinc-200">Next steps</p>
-                <p>→ Add your own feeds via the <span className="text-zinc-300">+ button</span> in the sidebar</p>
-                <p>→ Enable 2FA in <span className="text-zinc-300">Settings → Security</span></p>
-                <p>→ Set up keyword alerts to never miss important topics</p>
+                <p className="font-medium text-zinc-200">{t("nextSteps")}</p>
+                <p>→ {t("addFeeds")}</p>
+                <p>→ {t("enable2fa")}</p>
+                <p>→ {t("setUpAlerts")}</p>
               </div>
 
               <Button
@@ -615,7 +607,7 @@ export default function SetupPage() {
                 className="w-full h-12 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl text-base"
               >
                 <Rss className="w-5 h-5 mr-2" />
-                {importedCount > 0 ? "Start reading" : "Add your first feed"}
+                {importedCount > 0 ? t("startReading") : t("addFirstFeed")}
               </Button>
             </div>
           )}
