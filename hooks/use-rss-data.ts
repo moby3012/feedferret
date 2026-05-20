@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers } from "@/app/actions/feeds"
-import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel } from "@/app/actions/settings"
+import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
 import { toast } from "sonner"
 
 export function useFeeds(enabled = true) {
@@ -893,6 +893,14 @@ export function useNotificationChannels() {
     return useQuery({
         queryKey: ["notification-channels"],
         queryFn: () => getNotificationChannels(),
+    })
+}
+
+export function useNotificationChannelStatus() {
+    return useQuery({
+        queryKey: ["notification-channel-status"],
+        queryFn: () => getNotificationChannelStatus(),
+        staleTime: 60_000,
     })
 }
 

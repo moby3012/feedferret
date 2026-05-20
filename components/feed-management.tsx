@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -38,6 +39,7 @@ import {
   useMarkNotificationRead,
   useAlertHistory,
   useExportUserData,
+  useNotificationChannelStatus,
 } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import {
@@ -119,16 +121,24 @@ import { cn } from "@/lib/utils";
 
 type ActionCatalogItem = { value: string; label: string; group: "article" | "labels" | "notify" | "webhook"; };
 
+type NotificationChannels = { push: boolean; email: boolean; telegram: boolean; gotify: boolean; ntfy: boolean };
+
+const DEFAULT_CHANNELS: NotificationChannels = { push: false, email: false, telegram: false, gotify: false, ntfy: false };
+
 // Sentinel value used by the picker — actual rule actions become
 // "webhook_call:<n>" once the user fills in a URL.
 const ADD_WEBHOOK_TOKEN = "__add_webhook__";
+
+// Sentinel values for the label pickers — never stored; resolved to label:${id} / remove_label:${id}
+const PICK_LABEL_TOKEN = "__pick_label__";
+const REMOVE_LABEL_TOKEN = "__remove_label__";
 
 function catalogForTrigger(catalog: ActionCatalogItem[], trigger: "article" | "feed_error"): ActionCatalogItem[] {
   if (trigger !== "feed_error") return catalog;
   return catalog.filter((item) => item.group === "notify" || item.group === "webhook");
 }
 
-function buildActionCatalog(labels: any[], t: (key: string) => string): ActionCatalogItem[] {
+function buildActionCatalog(labels: any[], t: (key: string) => string, channels: NotificationChannels = DEFAULT_CHANNELS): ActionCatalogItem[] {
   const catalog: ActionCatalogItem[] = [
     { value: "mark_read", label: t("actions.markAsRead"), group: "article" },
     { value: "mark_unread", label: t("actions.markAsUnread"), group: "article" },
@@ -140,26 +150,32 @@ function buildActionCatalog(labels: any[], t: (key: string) => string): ActionCa
     { value: "mark_spoiler", label: t("actions.markAsSpoiler"), group: "article" },
     { value: "remove_spoiler", label: t("actions.removeSpoilerFlag"), group: "article" },
     { value: "clear_labels", label: t("actions.removeAllLabels"), group: "labels" },
+    { value: PICK_LABEL_TOKEN, label: t("actions.attachLabel") + "…", group: "labels" },
+    { value: REMOVE_LABEL_TOKEN, label: t("actions.removeLabel") + "…", group: "labels" },
     { value: "notify_inapp", label: t("actions.inAppNotification"), group: "notify" },
-    { value: "notify_push", label: t("actions.pushNotification"), group: "notify" },
-    { value: "notify_email", label: t("actions.emailNotification"), group: "notify" },
-    { value: "notify_telegram", label: t("actions.telegramMessage"), group: "notify" },
-    { value: "notify_gotify", label: t("actions.gotifyNotification"), group: "notify" },
-    { value: "notify_ntfy", label: t("actions.ntfyNotification"), group: "notify" },
-    { value: ADD_WEBHOOK_TOKEN, label: t("webhooks.triggerWebhook") + "…", group: "webhook" },
   ];
-  for (const label of labels as any[]) {
-    catalog.push({ value: `label:${label.id}`, label: `${t("actions.attachLabel")} · ${label.name}`, group: "labels" });
-    catalog.push({ value: `remove_label:${label.id}`, label: `${t("actions.removeLabel")} · ${label.name}`, group: "labels" });
-  }
+  if (channels.push) catalog.push({ value: "notify_push", label: t("actions.pushNotification"), group: "notify" });
+  if (channels.email) catalog.push({ value: "notify_email", label: t("actions.emailNotification"), group: "notify" });
+  if (channels.telegram) catalog.push({ value: "notify_telegram", label: t("actions.telegramMessage"), group: "notify" });
+  if (channels.gotify) catalog.push({ value: "notify_gotify", label: t("actions.gotifyNotification"), group: "notify" });
+  if (channels.ntfy) catalog.push({ value: "notify_ntfy", label: t("actions.ntfyNotification"), group: "notify" });
+  catalog.push({ value: ADD_WEBHOOK_TOKEN, label: t("webhooks.triggerWebhook") + "…", group: "webhook" });
   return catalog;
 }
 
-function actionLabel(value: string, catalog: ActionCatalogItem[]): string {
+function actionLabel(value: string, catalog: ActionCatalogItem[], labels?: any[]): string {
   const hit = catalog.find((item) => item.value === value);
   if (hit) return hit.label;
-  if (value.startsWith("label:")) return "label (deleted)";
-  if (value.startsWith("remove_label:")) return "remove label (deleted)";
+  if (value.startsWith("label:")) {
+    const id = value.slice("label:".length);
+    const lbl = labels?.find((l: any) => l.id === id);
+    return lbl ? `Attach label · ${lbl.name}` : "label (deleted)";
+  }
+  if (value.startsWith("remove_label:")) {
+    const id = value.slice("remove_label:".length);
+    const lbl = labels?.find((l: any) => l.id === id);
+    return lbl ? `Remove label · ${lbl.name}` : "remove label (deleted)";
+  }
   if (value.startsWith("webhook_call:")) return "webhook";
   return value;
 }
@@ -204,13 +220,17 @@ function ActionListEditor({
   webhookConfigs,
   onChange,
   catalog,
+  labels,
 }: {
   value: string[];
   webhookConfigs: WebhookConfigUi[];
   onChange: (next: { actions: string[]; webhookConfigs: WebhookConfigUi[] }) => void;
   catalog: ActionCatalogItem[];
+  labels?: any[];
 }) {
   const t = useTranslations("feedManagement");
+  const [pendingLabelToken, setPendingLabelToken] = useState<typeof PICK_LABEL_TOKEN | typeof REMOVE_LABEL_TOKEN | null>(null);
+
   const reorderable = (mover: (arr: string[]) => string[]) => {
     const next = mover(value);
     onChange(repackWebhooks(next, webhookConfigs));
@@ -234,10 +254,21 @@ function ActionListEditor({
       });
       return;
     }
+    if (val === PICK_LABEL_TOKEN || val === REMOVE_LABEL_TOKEN) {
+      setPendingLabelToken(val);
+      return;
+    }
     onChange({
       actions: [...value, val],
       webhookConfigs,
     });
+  };
+
+  const resolveLabelPick = (labelId: string) => {
+    if (!pendingLabelToken || !labelId) return;
+    const action = pendingLabelToken === PICK_LABEL_TOKEN ? `label:${labelId}` : `remove_label:${labelId}`;
+    setPendingLabelToken(null);
+    onChange({ actions: [...value, action], webhookConfigs });
   };
 
   const updateWebhookConfig = (actionIdx: number, patch: Partial<WebhookConfigUi>) => {
@@ -252,7 +283,11 @@ function ActionListEditor({
   };
 
   const available = catalog.filter(
-    (item) => item.value === ADD_WEBHOOK_TOKEN || !value.includes(item.value),
+    (item) =>
+      item.value === ADD_WEBHOOK_TOKEN ||
+      item.value === PICK_LABEL_TOKEN ||
+      item.value === REMOVE_LABEL_TOKEN ||
+      !value.includes(item.value),
   );
 
   return (
@@ -273,7 +308,7 @@ function ActionListEditor({
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground tabular-nums shrink-0">{idx + 1}.</span>
               <span className="flex-1 truncate text-sm font-medium">
-                {isWebhook ? t("webhooks.triggerWebhook") : actionLabel(action, catalog)}
+                {isWebhook ? t("webhooks.triggerWebhook") : actionLabel(action, catalog, labels)}
               </span>
               <button
                 type="button"
@@ -314,7 +349,23 @@ function ActionListEditor({
           </div>
         );
       })}
-      {available.length > 0 && (
+      {pendingLabelToken && (
+        <Select value="" onValueChange={resolveLabelPick}>
+          <SelectTrigger className="rounded-xl h-10 border-primary/50">
+            <SelectValue placeholder={
+              pendingLabelToken === PICK_LABEL_TOKEN
+                ? t("actions.attachLabel") + " — pick a label"
+                : t("actions.removeLabel") + " — pick a label"
+            } />
+          </SelectTrigger>
+          <SelectContent>
+            {(labels ?? []).map((lbl: any) => (
+              <SelectItem key={lbl.id} value={lbl.id}>{lbl.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {!pendingLabelToken && available.length > 0 && (
         <Select value="" onValueChange={addAction}>
           <SelectTrigger className="rounded-xl h-10">
             <SelectValue placeholder={value.length === 0 ? t("rules.addFirstActionPlaceholder") : t("rules.addAnotherAction")} />
@@ -745,6 +796,7 @@ export function FeedManagement({
 
   const { data: categories = [] } = useCategories();
   const { data: labels = [] } = useLabels();
+  const { data: notificationChannels = DEFAULT_CHANNELS } = useNotificationChannelStatus();
   // webhook actions are now configured inline per rule (see ActionListEditor)
   const { data: savedSearches = [] } = useSavedSearches();
 
@@ -1614,10 +1666,10 @@ export function FeedManagement({
                             onValueChange={(value) => {
                               const trigger = value === "feed_error" ? "feed_error" : "article";
                               setNewRuleTrigger(trigger);
-                              const filtered = catalogForTrigger(buildActionCatalog(labels, t), trigger);
+                              const filtered = catalogForTrigger(buildActionCatalog(labels, t, notificationChannels), trigger);
                               const allowed = new Set(filtered.map((i) => i.value));
                               const survived = newRuleActions.filter(
-                                (a) => allowed.has(a) || a.startsWith("webhook_call:"),
+                                (a) => allowed.has(a) || a.startsWith("webhook_call:") || a.startsWith("label:") || a.startsWith("remove_label:"),
                               );
                               const finalActions =
                                 survived.length === 0
@@ -1700,7 +1752,8 @@ export function FeedManagement({
                               setNewRuleWebhooks(webhookConfigs);
                               setNewRuleAction(actions[0] || "mark_read");
                             }}
-                            catalog={catalogForTrigger(buildActionCatalog(labels, t), newRuleTrigger)}
+                            catalog={catalogForTrigger(buildActionCatalog(labels, t, notificationChannels), newRuleTrigger)}
+                            labels={labels}
                           />
                           {newRuleActions.includes("mark_spoiler") && (
                             <label htmlFor="new-rule-remove-spoiler-checkbox" className="flex items-center gap-2 cursor-pointer select-none mt-1">
@@ -1831,7 +1884,7 @@ export function FeedManagement({
                   ) : (
                     <div className="space-y-2">
                       {autoReadRules.map((rule: any) => {
-                        const catalog = buildActionCatalog(labels, t);
+                        const catalog = buildActionCatalog(labels, t, notificationChannels);
                         const ruleActions: string[] = (() => {
                           if (rule.actions) {
                             try {
@@ -1908,7 +1961,7 @@ export function FeedManagement({
                                         key={`${rule.id}-act-${idx}-${a}`}
                                         className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground"
                                       >
-                                        {idx + 1}. {actionLabel(a, catalog)}
+                                        {idx + 1}. {actionLabel(a, catalog, labels)}
                                       </span>
                                     ))
                                   )}
@@ -1987,7 +2040,7 @@ export function FeedManagement({
                                       const filtered = catalogForTrigger(catalog, trigger);
                                       const allowed = new Set(filtered.map((i) => i.value));
                                       const survived = editRuleActions.filter(
-                                        (a) => allowed.has(a) || a.startsWith("webhook_call:"),
+                                        (a) => allowed.has(a) || a.startsWith("webhook_call:") || a.startsWith("label:") || a.startsWith("remove_label:"),
                                       );
                                       const finalActions =
                                         survived.length === 0
@@ -2049,6 +2102,7 @@ export function FeedManagement({
                                       setEditRuleWebhooks(webhookConfigs);
                                     }}
                                     catalog={catalogForTrigger(catalog, editRuleTrigger)}
+                                    labels={labels}
                                   />
                                   {editRuleActions.includes("mark_spoiler") && (
                                     <label htmlFor="edit-rule-remove-spoiler-checkbox" className="flex items-center gap-2 cursor-pointer select-none mt-1">
