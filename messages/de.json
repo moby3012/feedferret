@@ -443,6 +443,7 @@
     "noNotificationsHint": "Keyword-Benachrichtigungen und Regel-Treffer erscheinen hier.",
     "searchArticles": "Artikel suchen",
     "lastSyncFailed": "Letzte Synchronisierung fehlgeschlagen",
+    "hideEmptyLabels": "Leere Labels ausblenden",
     "errors": {
       "noFeedFound": "Unter dieser URL wurde kein Feed gefunden.",
       "discoveryFailed": "Feed-Erkennung fehlgeschlagen.",

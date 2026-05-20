@@ -443,6 +443,7 @@
     "noNotificationsHint": "Keyword alerts and rule matches will appear here.",
     "searchArticles": "Search articles",
     "lastSyncFailed": "Last sync failed",
+    "hideEmptyLabels": "Hide empty labels",
     "errors": {
       "noFeedFound": "No feed found at that URL.",
       "discoveryFailed": "Feed discovery failed.",

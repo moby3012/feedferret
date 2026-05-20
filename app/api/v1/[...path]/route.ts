@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { apiError, clampInt, parseBool, readJson, requireApiUser, type ApiUser } from "@/lib/api-auth";
+import { apiError, clampInt, parseBool, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
 import { checkRateLimit, getClientIdentifier, rateLimitHeaders, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
@@ -173,41 +173,55 @@ async function patchArticle(user: ApiUser, articleId: string, request: Request) 
 async function batchArticles(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
   if (!body) return apiError("Invalid JSON body", 400);
+
   const ids: string[] = Array.isArray(body.ids) ? body.ids.filter((id: unknown) => typeof id === "string") : [];
   if (ids.length === 0) return apiError("ids must be a non-empty array of strings", 400);
-  if (ids.length > 200) return apiError("ids array must not exceed 200 items", 400);
+  if (ids.length > 500) return apiError("ids array must not exceed 500 items", 400);
 
   const action: string = typeof body.action === "string" ? body.action : "";
-  const VALID_ACTIONS = ["read", "unread", "star", "unstar", "label"] as const;
+  const VALID_ACTIONS = ["read", "unread", "star", "unstar", "label", "unlabel", "read_later", "remove_read_later"] as const;
   if (!VALID_ACTIONS.includes(action as (typeof VALID_ACTIONS)[number])) {
     return apiError(`action must be one of: ${VALID_ACTIONS.join(", ")}`, 400);
   }
 
-  // Verify ownership in one query
+  if ((action === "label" || action === "unlabel") && typeof body.labelId !== "string") {
+    return apiError("labelId is required for label/unlabel actions", 400);
+  }
+
+  // Filter to only articles belonging to the authenticated user
   const owned = await db.article.findMany({ where: { id: { in: ids }, userId: user.id }, select: { id: true } });
   const ownedIds = owned.map((a) => a.id);
   if (ownedIds.length === 0) return apiError("No matching articles found", 404);
+
+  if (action === "label") {
+    // Verify the label belongs to the user
+    const label = await db.label.findFirst({ where: { id: body.labelId, userId: user.id }, select: { id: true } });
+    if (!label) return apiError("Label not found", 404);
+    // Find which article-label pairs already exist to skip duplicates (SQLite does not support createMany skipDuplicates)
+    const existing = await db.articleLabel.findMany({ where: { labelId: body.labelId, articleId: { in: ownedIds } }, select: { articleId: true } });
+    const existingSet = new Set(existing.map((e) => e.articleId));
+    const toCreate = ownedIds.filter((id) => !existingSet.has(id));
+    if (toCreate.length > 0) {
+      await db.articleLabel.createMany({ data: toCreate.map((articleId) => ({ userId: user.id, articleId, labelId: body.labelId })) });
+    }
+    return NextResponse.json({ updated: ownedIds.length });
+  }
+
+  if (action === "unlabel") {
+    const result = await db.articleLabel.deleteMany({ where: { userId: user.id, articleId: { in: ownedIds }, labelId: body.labelId } });
+    return NextResponse.json({ updated: result.count });
+  }
 
   let data: any = {};
   if (action === "read") { data = { isRead: true, readAt: new Date() }; }
   else if (action === "unread") { data = { isRead: false, readAt: null }; }
   else if (action === "star") { data = { isStarred: true }; }
   else if (action === "unstar") { data = { isStarred: false }; }
-  else if (action === "label") {
-    const labelIds: string[] = Array.isArray(body.labelIds) ? body.labelIds.filter((id: unknown) => typeof id === "string") : [];
-    const validLabels = await db.label.findMany({ where: { userId: user.id, id: { in: labelIds } }, select: { id: true } });
-    const validLabelIds = validLabels.map((l) => l.id);
-    await db.$transaction([
-      db.articleLabel.deleteMany({ where: { userId: user.id, articleId: { in: ownedIds } } }),
-      ...ownedIds.flatMap((articleId) =>
-        validLabelIds.map((labelId) => db.articleLabel.create({ data: { userId: user.id, articleId, labelId } }))
-      ),
-    ]);
-    return NextResponse.json({ updated: ownedIds.length, notFound: ids.length - ownedIds.length });
-  }
+  else if (action === "read_later") { data = { isReadLater: true, readLaterSavedAt: new Date() }; }
+  else if (action === "remove_read_later") { data = { isReadLater: false, readLaterSavedAt: null }; }
 
   const result = await db.article.updateMany({ where: { id: { in: ownedIds } }, data });
-  return NextResponse.json({ updated: result.count, notFound: ids.length - ownedIds.length });
+  return NextResponse.json({ updated: result.count });
 }
 
 async function markAllRead(user: ApiUser, request: Request) {
@@ -381,6 +395,75 @@ async function deleteSavedSearch(user: ApiUser, searchId: string) {
   return NextResponse.json({ deleted: true, id: searchId });
 }
 
+async function setSavedSearchShare(user: ApiUser, searchId: string, request: Request) {
+  const body = (await readJson<any>(request)) || {};
+  const enabled = body.enabled !== false;
+  const existing = await db.savedSearch.findFirst({ where: { id: searchId, userId: user.id }, select: { id: true, shareToken: true } });
+  if (!existing) return apiError("Saved search not found", 404);
+  const { randomBytes } = await import("crypto");
+  const savedSearch = await db.savedSearch.update({
+    where: { id: searchId },
+    data: enabled ? { shareToken: existing.shareToken || randomBytes(24).toString("base64url"), sharedAt: new Date() } : { shareToken: null, sharedAt: null },
+  });
+  return NextResponse.json(savedSearch);
+}
+
+async function exportOpml(user: ApiUser) {
+  const [feeds, categories] = await Promise.all([
+    db.feed.findMany({ where: { userId: user.id }, include: { category: true }, orderBy: [{ category: { name: "asc" } }, { name: "asc" }] }),
+    db.category.findMany({ where: { userId: user.id }, orderBy: [{ order: "asc" }, { name: "asc" }] }),
+  ]);
+  return new NextResponse(generateOpml(feeds, categories), { headers: { "content-type": "application/xml; charset=utf-8" } });
+}
+
+async function importOpml(user: ApiUser, request: Request) {
+  const body = await readJson<any>(request);
+  const xml = typeof body?.xml === "string" ? body.xml : null;
+  if (!xml) return apiError("xml is required", 400);
+  const opmlError = validateOpml(xml);
+  if (opmlError) return apiError(opmlError, 400);
+  const outlines = await parseOpml(xml);
+  const report = { feedsAdded: 0, feedsUpdated: 0, categoriesAdded: 0, categoriesUpdated: 0, errors: [] as string[] };
+
+  const getOrCreateCategory = async (name: string, parentId?: string | null, opmlUrl?: string | null) => {
+    const existing = await db.category.findUnique({ where: { userId_name_parentId: { userId: user.id, name, parentId: (parentId || null) as any } } });
+    const category = await db.category.upsert({
+      where: { userId_name_parentId: { userId: user.id, name, parentId: (parentId || null) as any } },
+      update: opmlUrl !== undefined ? { opmlUrl } : {},
+      create: { userId: user.id, name, parentId: parentId || undefined, opmlUrl: opmlUrl || undefined },
+    });
+    if (existing) report.categoriesUpdated += 1;
+    else report.categoriesAdded += 1;
+    return category;
+  };
+
+  const processOutline = async (outline: OpmlOutline, categoryId?: string) => {
+    if (outline.xmlUrl) {
+      let targetCategoryId = categoryId;
+      if (!targetCategoryId && outline.category) targetCategoryId = (await getOrCreateCategory(outline.category)).id;
+      const scraperConfig = scraperConfigFromOutline(outline);
+      const httpOptions = httpOptionsFromOutline(outline);
+      const extensions = outline.extensions ?? {};
+      const existing = await db.feed.findUnique({ where: { userId_url: { userId: user.id, url: outline.xmlUrl } } });
+      await db.feed.upsert({
+        where: { userId_url: { userId: user.id, url: outline.xmlUrl } },
+        update: { name: outline.text, categoryId: targetCategoryId, sourceType: normalizeSourceType(outline.type), htmlUrl: outline.htmlUrl || null, description: outline.description || null, priority: extensions.priority || "main", unicityCriteria: extensions.unicityCriteria || "id", unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1", scraperConfig: stringifyNonEmpty(scraperConfig), httpOptions: stringifyNonEmpty(httpOptions) },
+        create: { userId: user.id, url: outline.xmlUrl, name: outline.text, categoryId: targetCategoryId, sourceType: normalizeSourceType(outline.type), htmlUrl: outline.htmlUrl || null, description: outline.description || null, priority: extensions.priority || "main", unicityCriteria: extensions.unicityCriteria || "id", unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1", scraperConfig: stringifyNonEmpty(scraperConfig), httpOptions: stringifyNonEmpty(httpOptions) },
+      });
+      if (existing) report.feedsUpdated += 1;
+      else report.feedsAdded += 1;
+    } else if (outline.children) {
+      const category = await getOrCreateCategory(outline.text, categoryId, outline.extensions?.opmlUrl ?? null);
+      for (const child of outline.children) await processOutline(child, category.id);
+    }
+  };
+
+  for (const outline of outlines) {
+    try { await processOutline(outline); } catch (error) { report.errors.push(`${outline.text}: ${String(error)}`); }
+  }
+  return NextResponse.json(report);
+}
+
 // ─── Keyword Alerts ───────────────────────────────────────────────────────────
 
 async function listAlerts(user: ApiUser) {
@@ -548,75 +631,6 @@ async function getStats(user: ApiUser) {
   return NextResponse.json({ totalFeeds, totalArticles, unreadArticles, starredArticles, readLaterArticles, totalLabels, totalCategories, totalSavedSearches, totalKeywordAlerts, totalAutoReadRules, unreadNotifications });
 }
 
-async function setSavedSearchShare(user: ApiUser, searchId: string, request: Request) {
-  const body = (await readJson<any>(request)) || {};
-  const enabled = body.enabled !== false;
-  const existing = await db.savedSearch.findFirst({ where: { id: searchId, userId: user.id }, select: { id: true, shareToken: true } });
-  if (!existing) return apiError("Saved search not found", 404);
-  const { randomBytes } = await import("crypto");
-  const savedSearch = await db.savedSearch.update({
-    where: { id: searchId },
-    data: enabled ? { shareToken: existing.shareToken || randomBytes(24).toString("base64url"), sharedAt: new Date() } : { shareToken: null, sharedAt: null },
-  });
-  return NextResponse.json(savedSearch);
-}
-
-async function exportOpml(user: ApiUser) {
-  const [feeds, categories] = await Promise.all([
-    db.feed.findMany({ where: { userId: user.id }, include: { category: true }, orderBy: [{ category: { name: "asc" } }, { name: "asc" }] }),
-    db.category.findMany({ where: { userId: user.id }, orderBy: [{ order: "asc" }, { name: "asc" }] }),
-  ]);
-  return new NextResponse(generateOpml(feeds, categories), { headers: { "content-type": "application/xml; charset=utf-8" } });
-}
-
-async function importOpml(user: ApiUser, request: Request) {
-  const body = await readJson<any>(request);
-  const xml = typeof body?.xml === "string" ? body.xml : null;
-  if (!xml) return apiError("xml is required", 400);
-  const opmlError = validateOpml(xml);
-  if (opmlError) return apiError(opmlError, 400);
-  const outlines = await parseOpml(xml);
-  const report = { feedsAdded: 0, feedsUpdated: 0, categoriesAdded: 0, categoriesUpdated: 0, errors: [] as string[] };
-
-  const getOrCreateCategory = async (name: string, parentId?: string | null, opmlUrl?: string | null) => {
-    const existing = await db.category.findUnique({ where: { userId_name_parentId: { userId: user.id, name, parentId: (parentId || null) as any } } });
-    const category = await db.category.upsert({
-      where: { userId_name_parentId: { userId: user.id, name, parentId: (parentId || null) as any } },
-      update: opmlUrl !== undefined ? { opmlUrl } : {},
-      create: { userId: user.id, name, parentId: parentId || undefined, opmlUrl: opmlUrl || undefined },
-    });
-    if (existing) report.categoriesUpdated += 1;
-    else report.categoriesAdded += 1;
-    return category;
-  };
-
-  const processOutline = async (outline: OpmlOutline, categoryId?: string) => {
-    if (outline.xmlUrl) {
-      let targetCategoryId = categoryId;
-      if (!targetCategoryId && outline.category) targetCategoryId = (await getOrCreateCategory(outline.category)).id;
-      const scraperConfig = scraperConfigFromOutline(outline);
-      const httpOptions = httpOptionsFromOutline(outline);
-      const extensions = outline.extensions ?? {};
-      const existing = await db.feed.findUnique({ where: { userId_url: { userId: user.id, url: outline.xmlUrl } } });
-      await db.feed.upsert({
-        where: { userId_url: { userId: user.id, url: outline.xmlUrl } },
-        update: { name: outline.text, categoryId: targetCategoryId, sourceType: normalizeSourceType(outline.type), htmlUrl: outline.htmlUrl || null, description: outline.description || null, priority: extensions.priority || "main", unicityCriteria: extensions.unicityCriteria || "id", unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1", scraperConfig: stringifyNonEmpty(scraperConfig), httpOptions: stringifyNonEmpty(httpOptions) },
-        create: { userId: user.id, url: outline.xmlUrl, name: outline.text, categoryId: targetCategoryId, sourceType: normalizeSourceType(outline.type), htmlUrl: outline.htmlUrl || null, description: outline.description || null, priority: extensions.priority || "main", unicityCriteria: extensions.unicityCriteria || "id", unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1", scraperConfig: stringifyNonEmpty(scraperConfig), httpOptions: stringifyNonEmpty(httpOptions) },
-      });
-      if (existing) report.feedsUpdated += 1;
-      else report.feedsAdded += 1;
-    } else if (outline.children) {
-      const category = await getOrCreateCategory(outline.text, categoryId, outline.extensions?.opmlUrl ?? null);
-      for (const child of outline.children) await processOutline(child, category.id);
-    }
-  };
-
-  for (const outline of outlines) {
-    try { await processOutline(outline); } catch (error) { report.errors.push(`${outline.text}: ${String(error)}`); }
-  }
-  return NextResponse.json(report);
-}
-
 function openApiSpec(request: Request) {
   const origin = new URL(request.url).origin;
   return NextResponse.json({
@@ -630,6 +644,33 @@ function openApiSpec(request: Request) {
       "/api/v1/articles": { get: { summary: "Search/list articles" } },
       "/api/v1/articles/{id}": { get: { summary: "Get article" }, patch: { summary: "Update read/star/read-later state and labels" } },
       "/api/v1/articles/mark-all-read": { post: { summary: "Bulk mark matching articles as read" } },
+      "/api/v1/articles/batch": {
+        post: {
+          summary: "Batch update articles",
+          description: "Apply an action to up to 500 articles at once.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["ids", "action"],
+                  properties: {
+                    ids: { type: "array", items: { type: "string" }, maxItems: 500, description: "Article IDs to update" },
+                    action: { type: "string", enum: ["read", "unread", "star", "unstar", "label", "unlabel", "read_later", "remove_read_later"] },
+                    labelId: { type: "string", description: "Required when action is label or unlabel" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Number of updated articles", content: { "application/json": { schema: { type: "object", properties: { updated: { type: "integer" } } } } } },
+            "400": { description: "Invalid input" },
+            "404": { description: "No matching articles found" },
+          },
+        },
+      },
       "/api/v1/feeds": { get: { summary: "List feeds" }, post: { summary: "Add feed" } },
       "/api/v1/feeds/{id}": { get: { summary: "Get feed" }, patch: { summary: "Update feed" }, delete: { summary: "Delete feed" } },
       "/api/v1/feeds/{id}/sync": { post: { summary: "Sync one feed" } },
@@ -679,73 +720,68 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
     return res;
   };
 
-  // Scope enforcement: "read" tokens can only use safe GET endpoints
-  if (user.tokenScope === "read" && isWriteMethod) {
-    return withRl(apiError("Forbidden: read-only token cannot perform write operations", 403));
-  }
-
   let res: Response;
   try {
     if (method === "GET" && path[0] === "me" && path.length === 1) res = NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role, tokenScope: user.tokenScope ?? "session" });
     else if (path[0] === "articles") {
       if (method === "GET" && path.length === 1) res = await listArticles(user, request);
-      else if (method === "POST" && path[1] === "mark-all-read") res = await markAllRead(user, request);
-      else if (method === "POST" && path[1] === "batch") res = await batchArticles(user, request);
+      else if (method === "POST" && path[1] === "mark-all-read") { const se = scopeError(user, "write"); if (se) res = se; else res = await markAllRead(user, request); }
+      else if (method === "POST" && path[1] === "batch") { const se = scopeError(user, "write"); if (se) res = se; else res = await batchArticles(user, request); }
       else if (method === "GET" && path.length === 2) res = await getArticle(user, path[1]);
-      else if (method === "PATCH" && path.length === 2) res = await patchArticle(user, path[1], request);
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchArticle(user, path[1], request); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "feeds") {
       if (method === "GET" && path.length === 1) res = await listFeeds(user);
-      else if (method === "POST" && path.length === 1) res = await createFeed(user, request);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createFeed(user, request); }
       else if (method === "GET" && path.length === 2) res = await getFeed(user, path[1]);
-      else if (method === "PATCH" && path.length === 2) res = await patchFeed(user, path[1], request);
-      else if (method === "DELETE" && path.length === 2) res = await deleteFeed(user, path[1]);
-      else if (method === "POST" && path.length === 3 && path[2] === "sync") res = await syncOneFeed(user, path[1]);
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchFeed(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteFeed(user, path[1]); }
+      else if (method === "POST" && path.length === 3 && path[2] === "sync") { const se = scopeError(user, "write"); if (se) res = se; else res = await syncOneFeed(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "categories") {
       if (method === "GET" && path.length === 1) res = await listCategories(user);
-      else if (method === "POST" && path.length === 1) res = await createCategory(user, request);
-      else if (method === "PATCH" && path.length === 2) res = await patchCategory(user, path[1], request);
-      else if (method === "DELETE" && path.length === 2) res = await deleteCategory(user, path[1]);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createCategory(user, request); }
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchCategory(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteCategory(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "labels") {
       if (method === "GET" && path.length === 1) res = await listLabels(user);
-      else if (method === "POST" && path.length === 1) res = await createLabel(user, request);
-      else if (method === "PATCH" && path.length === 2) res = await patchLabel(user, path[1], request);
-      else if (method === "DELETE" && path.length === 2) res = await deleteLabel(user, path[1]);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createLabel(user, request); }
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchLabel(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteLabel(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "saved-searches") {
       if (method === "GET" && path.length === 1) res = await listSavedSearches(user);
-      else if (method === "POST" && path.length === 1) res = await createSavedSearch(user, request);
-      else if (method === "PATCH" && path.length === 2) res = await patchSavedSearch(user, path[1], request);
-      else if (method === "DELETE" && path.length === 2) res = await deleteSavedSearch(user, path[1]);
-      else if (method === "POST" && path.length === 3 && path[2] === "share") res = await setSavedSearchShare(user, path[1], request);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createSavedSearch(user, request); }
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchSavedSearch(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteSavedSearch(user, path[1]); }
+      else if (method === "POST" && path.length === 3 && path[2] === "share") { const se = scopeError(user, "write"); if (se) res = se; else res = await setSavedSearchShare(user, path[1], request); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "opml" && path.length === 1) {
       if (method === "GET") res = await exportOpml(user);
-      else if (method === "POST") res = await importOpml(user, request);
+      else if (method === "POST") { const se = scopeError(user, "write"); if (se) res = se; else res = await importOpml(user, request); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "sync" && path.length === 1 && method === "POST") {
-      const results = await syncUserFeeds(user.id);
-      res = NextResponse.json({ success: true, synced: results.filter((r) => r.success && !r.skipped).length, total: results.length, results });
+      const se = scopeError(user, "write"); if (se) res = se;
+      else { const results = await syncUserFeeds(user.id); res = NextResponse.json({ success: true, synced: results.filter((r) => r.success && !r.skipped).length, total: results.length, results }); }
     } else if (path[0] === "alerts") {
       if (method === "GET" && path.length === 1) res = await listAlerts(user);
-      else if (method === "POST" && path.length === 1) res = await createAlert(user, request);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createAlert(user, request); }
       else if (method === "GET" && path.length === 2) res = await getAlert(user, path[1]);
-      else if (method === "PATCH" && path.length === 2) res = await patchAlert(user, path[1], request);
-      else if (method === "DELETE" && path.length === 2) res = await deleteAlert(user, path[1]);
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchAlert(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteAlert(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "rules") {
       if (method === "GET" && path.length === 1) res = await listRules(user);
-      else if (method === "POST" && path.length === 1) res = await createRule(user, request);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createRule(user, request); }
       else if (method === "GET" && path.length === 2) res = await getRule(user, path[1]);
-      else if (method === "PATCH" && path.length === 2) res = await patchRule(user, path[1], request);
-      else if (method === "DELETE" && path.length === 2) res = await deleteRule(user, path[1]);
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchRule(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteRule(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "notifications") {
       if (method === "GET" && path.length === 1) res = await listNotifications(user, request);
-      else if (method === "POST" && path[1] === "mark-all-read") res = await markAllNotificationsRead(user);
-      else if (method === "POST" && path.length === 3 && path[2] === "read") res = await markNotificationRead(user, path[1]);
+      else if (method === "POST" && path[1] === "mark-all-read") { const se = scopeError(user, "write"); if (se) res = se; else res = await markAllNotificationsRead(user); }
+      else if (method === "POST" && path.length === 3 && path[2] === "read") { const se = scopeError(user, "write"); if (se) res = se; else res = await markNotificationRead(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "stats" && path.length === 1 && method === "GET") {
       res = await getStats(user);
