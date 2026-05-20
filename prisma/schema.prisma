@@ -67,6 +67,7 @@ model User {
   hideDuplicates          Boolean   @default(true)
   markReadOnScroll        Boolean   @default(false)
   layoutDirection         String    @default("ltr")     // "ltr" | "rtl"
+  uiLanguage              String    @default("en")      // BCP-47 tag e.g. "en" | "de"
   hideEmptyFeeds          Boolean   @default(false)
   aiProvider              String?                       // "openai" | "anthropic" | "ollama" | "gemini" | "openrouter"
   aiApiKey                String?                       // encrypted at rest
@@ -394,6 +395,7 @@ model GlobalSettings {
   totpIssuer          String?
   backgroundSyncEnabled          Boolean @default(true)
   backgroundSyncIntervalMinutes  Int     @default(5)
+  defaultUiLanguage              String  @default("en")
   allowInternalFeedUrls          Boolean @default(false)
   // Onboarding
   onboardingCompleted Boolean @default(false)
