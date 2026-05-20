@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState, useEffect, useCallback } from "react";
 import { Search, ArrowLeft, Plus, Loader2, Rss, Globe, AlertCircle, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ export function DiscoveryPanel({
   addingUrl,
   subscribedUrls = new Set(),
 }: DiscoveryPanelProps) {
+  const t = useTranslations("discovery");
   const [mode, setMode] = useState<"categories" | "feeds" | "search">("categories");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -82,7 +84,7 @@ export function DiscoveryPanel({
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by topic or domain..."
+          placeholder={t("searchPlaceholder")}
           value={searchQuery}
           onChange={(e) => handleSearchChange(e.target.value)}
           onFocus={handleSearchFocus}
@@ -141,6 +143,7 @@ function CategoryGrid({
   onSelect: (id: string) => void;
   isEmpty: boolean;
 }) {
+  const t = useTranslations("discovery");
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -154,10 +157,10 @@ function CategoryGrid({
       <div className="flex flex-col items-center justify-center py-8 text-center">
         <Globe className="h-8 w-8 text-muted-foreground/50 mb-2" />
         <p className="text-sm text-muted-foreground">
-          Discovery catalog is empty.
+          {t("catalogEmpty")}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Use search above to find feeds by URL or domain.
+          {t("useSearchHint")}
         </p>
       </div>
     );
@@ -208,6 +211,7 @@ function FeedList({
   addingUrl: string | null;
   subscribedUrls: Set<string>;
 }) {
+  const t = useTranslations("discovery");
   return (
     <div className="space-y-2">
       <Button
@@ -217,7 +221,7 @@ function FeedList({
         className="h-9 px-3 -ml-3 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4 mr-1.5" />
-        Back to categories
+        {t("backToCategories")}
       </Button>
       <p className="text-xs font-medium text-muted-foreground px-0.5">
         {categoryName}
@@ -229,7 +233,7 @@ function FeedList({
         </div>
       ) : feeds.length === 0 ? (
         <div className="py-8 text-center text-sm text-muted-foreground">
-          No feeds in this category yet.
+          {t("noFeedsInCategory")}
         </div>
       ) : (
         <div className="space-y-1.5">
@@ -269,10 +273,11 @@ function SearchResults({
   addingUrl: string | null;
   subscribedUrls: Set<string>;
 }) {
+  const t = useTranslations("discovery");
   if (query.length < 2) {
     return (
       <div className="py-8 text-center text-sm text-muted-foreground">
-        Enter at least 2 characters to search
+        {t("minCharsToSearch")}
       </div>
     );
   }
@@ -281,7 +286,7 @@ function SearchResults({
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">Searching...</span>
+        <span className="ml-2 text-sm text-muted-foreground">{t("searching")}</span>
       </div>
     );
   }
@@ -299,10 +304,10 @@ function SearchResults({
     return (
       <div className="py-8 text-center">
         <p className="text-sm text-muted-foreground">
-          {hint || `No feeds found for "${query}"`}
+          {hint || t("noFeedsFound")}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Try topics like &ldquo;tech&rdquo;, &ldquo;news&rdquo; or domains like &ldquo;bbc.com&rdquo;
+          {t("tryTopics")}
         </p>
       </div>
     );
@@ -311,7 +316,7 @@ function SearchResults({
   return (
     <div className="space-y-1.5">
       <p className="text-xs text-muted-foreground px-0.5">
-        Found {feeds.length} feed{feeds.length !== 1 ? "s" : ""}
+        {feeds.length} {t("feedsFound")}
       </p>
       {feeds.map((feed, i) => (
         <FeedCard

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -72,6 +73,7 @@ export function RssHeader({
   onSwipeNextFeed,
   onSwipePreviousFeed,
 }: RssHeaderProps) {
+  const t = useTranslations("rssHeader");
   const activeViewMode: ViewMode =
     viewMode === "minimal" || viewMode === "magazine" ? viewMode : "list";
 
@@ -85,8 +87,8 @@ export function RssHeader({
   }, [isRefreshing]);
 
   const lastRefreshedLabel = lastRefreshed
-    ? `Last synced ${lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-    : "Refresh feeds";
+    ? `${t("lastSynced")} ${lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    : t("refreshFeeds");
 
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const handleTitleSwipeStart = (e: React.TouchEvent) => {
@@ -128,8 +130,8 @@ export function RssHeader({
           size="icon"
           className="w-10 h-10 rounded-xl transition-all duration-200 active:scale-95 text-muted-foreground"
           onClick={() => onToggleSort?.()}
-          aria-label={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
-          title={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
+          aria-label={sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
+          title={sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
         >
           {sortOrder === "oldest" ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />}
         </Button>
@@ -165,8 +167,8 @@ export function RssHeader({
           )}
           onClick={onToggleUnreadOnly}
           aria-pressed={unreadOnly}
-          aria-label={unreadOnly ? "Showing unread only — click to show all" : "Show unread only"}
-          title={unreadOnly ? "Showing unread only (click to show all)" : "Show unread only"}
+          aria-label={unreadOnly ? t("showingUnreadOnly") : t("showUnreadOnly")}
+          title={unreadOnly ? t("showingUnreadOnly") : t("showUnreadOnly")}
         >
           <Filter className="w-4 h-4" />
         </Button>
@@ -178,8 +180,8 @@ export function RssHeader({
           className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={onRefresh}
           disabled={isRefreshing}
-          aria-label={isRefreshing ? "Refreshing…" : lastRefreshedLabel}
-          title={isRefreshing ? "Refreshing…" : lastRefreshedLabel}
+          aria-label={isRefreshing ? t("refreshing") : lastRefreshedLabel}
+          title={isRefreshing ? t("refreshing") : lastRefreshedLabel}
         >
           <RefreshCw
             className={cn(
@@ -195,8 +197,8 @@ export function RssHeader({
           size="icon"
           className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={() => onToggleSort?.()}
-          aria-label={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
-          title={sortOrder === "oldest" ? "Sort: oldest first" : "Sort: newest first"}
+          aria-label={sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
+          title={sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
         >
           {sortOrder === "oldest" ? (
             <SortAsc className="w-4 h-4" />
@@ -212,8 +214,8 @@ export function RssHeader({
           className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={() => onMarkAllRead?.()}
           disabled={isMarkingAllRead}
-          aria-label="Mark all as read"
-          title="Mark all as read"
+          aria-label={t("markAllAsRead")}
+          title={t("markAllAsRead")}
         >
           <CheckCheck className={cn("w-4 h-4", isMarkingAllRead && "animate-pulse")} />
         </Button>
@@ -225,8 +227,8 @@ export function RssHeader({
             size="icon"
             className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
             onClick={onSaveSearch}
-            aria-label="Save search"
-            title="Save search"
+            aria-label={t("saveSearch")}
+            title={t("saveSearch")}
           >
             <BookmarkPlus className="w-4 h-4" />
           </Button>
@@ -257,8 +259,8 @@ export function RssHeader({
               variant="ghost"
               size="icon"
               className="xl:hidden w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
-              aria-label="More options"
-              title="More options"
+              aria-label={t("moreOptions")}
+              title={t("moreOptions")}
             >
               <MoreHorizontal className="w-4 h-4" />
             </Button>
@@ -273,7 +275,7 @@ export function RssHeader({
               ) : (
                 <SortDesc className="w-4 h-4" />
               )}
-              Sort: {sortOrder === "oldest" ? "oldest first" : "newest first"}
+              {sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="rounded-xl gap-2 cursor-pointer"
@@ -281,7 +283,7 @@ export function RssHeader({
               disabled={isMarkingAllRead}
             >
               <CheckCheck className="w-4 h-4" />
-              Mark all as read
+              {t("markAllAsRead")}
             </DropdownMenuItem>
             {searchQuery.trim() && onSaveSearch && (
               <>
@@ -291,7 +293,7 @@ export function RssHeader({
                   onClick={onSaveSearch}
                 >
                   <BookmarkPlus className="w-4 h-4" />
-                  Save search
+                  {t("saveSearch")}
                 </DropdownMenuItem>
               </>
             )}

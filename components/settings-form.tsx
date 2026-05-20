@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
@@ -73,9 +74,9 @@ import { toast } from "sonner";
 import { SHOW_PWA_INSTALL_PROMPT_EVENT } from "@/components/pwa-install-prompt";
 
 const themeOptions = [
-  { id: "light", label: "Light", icon: Sun },
-  { id: "dark", label: "Dark", icon: Moon },
-  { id: "system", label: "System", icon: Laptop },
+  { id: "light", labelKey: "settings.themeOptions.light" as const, icon: Sun },
+  { id: "dark", labelKey: "settings.themeOptions.dark" as const, icon: Moon },
+  { id: "system", labelKey: "settings.themeOptions.system" as const, icon: Laptop },
 ];
 
 function normalizeDefaultViewMode(value?: string | null) {
@@ -118,6 +119,7 @@ function PrefRow({
 }
 
 export function SettingsForm() {
+  const t = useTranslations();
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
@@ -136,17 +138,17 @@ export function SettingsForm() {
             size="icon"
             onClick={() => router.back()}
             className="h-11 w-11 rounded-2xl bg-card/70 backdrop-blur-xl border border-border/60 shadow-sm"
-            aria-label="Back"
+            aria-label={t("settings.back")}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <Settings className="h-4 w-4" />
-              FeedFerret
+              {t("settings.breadcrumb")}
             </div>
             <h1 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-              Settings
+              {t("settings.title")}
             </h1>
           </div>
         </header>
@@ -162,9 +164,9 @@ export function SettingsForm() {
                   <Palette className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">Appearance</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("settings.appearance")}</h2>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                    Choose the visual mode.
+                    {t("settings.chooseVisualMode")}
                   </p>
                 </div>
               </div>
@@ -184,7 +186,7 @@ export function SettingsForm() {
                       )}
                     >
                       <Icon className="h-4 w-4" />
-                      <span className="hidden sm:inline">{option.label}</span>
+                      <span className="hidden sm:inline">{t(option.labelKey)}</span>
                     </button>
                   );
                 })}
@@ -195,30 +197,30 @@ export function SettingsForm() {
           {/* Accent colors */}
           <PrefRow
             icon={Palette}
-            title="Accent colors"
-            description="Primary and secondary accent colors used for highlights and indicators."
+            title={t("settings.accentColors")}
+            description={t("settings.accentColorsDescription")}
           >
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground" htmlFor="accent-color-primary">Primary</label>
+                <label className="text-sm text-muted-foreground" htmlFor="accent-color-primary">{t("settings.primary")}</label>
                 <input
                   id="accent-color-primary"
                   type="color"
                   value={prefs?.accentColor ?? "#5BA4CF"}
                   onChange={(e) => update({ accentColor: e.target.value })}
                   className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
-                  title="Primary accent color"
+                  title={t("settings.primary")}
                 />
               </div>
               <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground" htmlFor="accent-color-secondary">Secondary</label>
+                <label className="text-sm text-muted-foreground" htmlFor="accent-color-secondary">{t("settings.secondary")}</label>
                 <input
                   id="accent-color-secondary"
                   type="color"
                   value={prefs?.secondaryColor ?? "#F0963C"}
                   onChange={(e) => update({ secondaryColor: e.target.value })}
                   className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
-                  title="Secondary accent color"
+                  title={t("settings.secondary")}
                 />
               </div>
               <button
@@ -226,7 +228,7 @@ export function SettingsForm() {
                 onClick={() => update({ accentColor: "#5BA4CF", secondaryColor: "#F0963C" })}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                Reset
+                {t("settings.reset")}
               </button>
               <div
                 className="w-full min-w-[180px] rounded-2xl border border-border/70 p-3 shadow-sm sm:ml-auto sm:w-auto"
@@ -237,9 +239,9 @@ export function SettingsForm() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="space-y-1">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      Preview
+                      {t("settings.preview")}
                     </p>
-                    <p className="text-sm font-medium">App accents</p>
+                    <p className="text-sm font-medium">{t("settings.appAccents")}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span
@@ -259,8 +261,8 @@ export function SettingsForm() {
           {/* Default view mode */}
           <PrefRow
             icon={AlignLeft}
-            title="Default view"
-            description="Article list layout shown by default when opening the app."
+            title={t("settings.defaultView")}
+            description={t("settings.defaultViewDescription")}
           >
             <Select
               value={normalizeDefaultViewMode(prefs?.defaultViewMode)}
@@ -270,9 +272,9 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="list">List</SelectItem>
-                <SelectItem value="magazine">Magazine</SelectItem>
-                <SelectItem value="minimal">Minimal</SelectItem>
+                <SelectItem value="list">{t("settings.viewOptions.list")}</SelectItem>
+                <SelectItem value="magazine">{t("settings.viewOptions.magazine")}</SelectItem>
+                <SelectItem value="minimal">{t("settings.viewOptions.minimal")}</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -280,8 +282,8 @@ export function SettingsForm() {
           {/* Reader width */}
           <PrefRow
             icon={AlignLeft}
-            title="Reader width"
-            description="Maximum width of article content in the reader pane."
+            title={t("settings.readerWidth")}
+            description={t("settings.readerWidthDescription")}
           >
             <Select
               value={prefs?.readerWidth ?? "normal"}
@@ -291,9 +293,9 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="normal">Normal (768px)</SelectItem>
-                <SelectItem value="wide">Wide (1024px)</SelectItem>
-                <SelectItem value="full">Full width</SelectItem>
+                <SelectItem value="normal">{t("settings.widthOptions.normal")}</SelectItem>
+                <SelectItem value="wide">{t("settings.widthOptions.wide")}</SelectItem>
+                <SelectItem value="full">{t("settings.widthOptions.full")}</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -301,8 +303,8 @@ export function SettingsForm() {
           {/* Reader font size */}
           <PrefRow
             icon={ALargeSmall}
-            title="Reader font size"
-            description="Text size in the article reader pane."
+            title={t("settings.readerFontSize")}
+            description={t("settings.readerFontSizeDescription")}
           >
             <Select
               value={prefs?.readerFontSize ?? "medium"}
@@ -312,10 +314,10 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="small">Small</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="large">Large</SelectItem>
-                <SelectItem value="xl">Extra large</SelectItem>
+                <SelectItem value="small">{t("settings.fontSizeOptions.small")}</SelectItem>
+                <SelectItem value="medium">{t("settings.fontSizeOptions.medium")}</SelectItem>
+                <SelectItem value="large">{t("settings.fontSizeOptions.large")}</SelectItem>
+                <SelectItem value="xl">{t("settings.fontSizeOptions.xl")}</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -325,8 +327,8 @@ export function SettingsForm() {
           {/* Default sort order */}
           <PrefRow
             icon={ArrowDownAZ}
-            title="Default sort"
-            description="Default article sort order in all feeds and categories."
+            title={t("settings.defaultSort")}
+            description={t("settings.defaultSortDescription")}
           >
             <Select
               value={prefs?.defaultArticleSort ?? "newest"}
@@ -336,8 +338,8 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="newest">Newest first</SelectItem>
-                <SelectItem value="oldest">Oldest first</SelectItem>
+                <SelectItem value="newest">{t("settings.sortOptions.newest")}</SelectItem>
+                <SelectItem value="oldest">{t("settings.sortOptions.oldest")}</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -345,8 +347,8 @@ export function SettingsForm() {
           {/* Mark-as-read delay */}
           <PrefRow
             icon={Clock}
-            title="Mark as read"
-            description="How long after opening an article it gets marked as read. 'Off' disables auto-mark."
+            title={t("settings.markAsRead")}
+            description={t("settings.markAsReadDescription")}
           >
             <Select
               value={
@@ -366,12 +368,12 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="instant">Instant (1s)</SelectItem>
-                <SelectItem value="5">After 5s</SelectItem>
-                <SelectItem value="15">After 15s</SelectItem>
-                <SelectItem value="30">After 30s</SelectItem>
-                <SelectItem value="60">After 60s</SelectItem>
-                <SelectItem value="off">Off</SelectItem>
+                <SelectItem value="instant">{t("settings.markReadOptions.instant")}</SelectItem>
+                <SelectItem value="5">{t("settings.markReadOptions.after5s")}</SelectItem>
+                <SelectItem value="15">{t("settings.markReadOptions.after15s")}</SelectItem>
+                <SelectItem value="30">{t("settings.markReadOptions.after30s")}</SelectItem>
+                <SelectItem value="60">{t("settings.markReadOptions.after60s")}</SelectItem>
+                <SelectItem value="off">{t("settings.markReadOptions.off")}</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -379,8 +381,8 @@ export function SettingsForm() {
           {/* Mark as read on scroll */}
           <PrefRow
             icon={ScrollText}
-            title="Mark as read while scrolling"
-            description="Articles are automatically marked as read once they scroll out of view."
+            title={t("settings.markAsReadOnScroll")}
+            description={t("settings.markAsReadOnScrollDescription")}
           >
             <Switch
               checked={prefs?.markReadOnScroll ?? false}
@@ -392,8 +394,8 @@ export function SettingsForm() {
           {/* Open original */}
           <PrefRow
             icon={ExternalLink}
-            title="Open original"
-            description="Open original article in new tab when selecting from list."
+            title={t("settings.openOriginal")}
+            description={t("settings.openOriginalDescription")}
           >
             <Switch
               checked={prefs?.openOriginalByDefault ?? false}
@@ -405,8 +407,8 @@ export function SettingsForm() {
           {/* Hide duplicates */}
           <PrefRow
             icon={Layers}
-            title="Hide duplicates"
-            description="When the same article appears in multiple feeds, show it only once (from the first feed that synced it)."
+            title={t("settings.hideDuplicates")}
+            description={t("settings.hideDuplicatesDescription")}
           >
             <Switch
               checked={prefs?.hideDuplicates ?? true}
@@ -418,8 +420,8 @@ export function SettingsForm() {
           {/* RTL layout */}
           <PrefRow
             icon={AlignLeft}
-            title="Right-to-left layout"
-            description="Mirror the entire interface for Arabic, Hebrew, Persian, and other RTL scripts."
+            title={t("settings.rtlLayout")}
+            description={t("settings.rtlLayoutDescription")}
           >
             <Switch
               checked={(prefs?.layoutDirection ?? "ltr") === "rtl"}
@@ -431,8 +433,8 @@ export function SettingsForm() {
           {/* Hide empty feeds */}
           <PrefRow
             icon={EyeOff}
-            title="Hide empty feeds"
-            description="Hide feeds and categories with no unread articles from the sidebar."
+            title={t("settings.hideEmptyFeeds")}
+            description={t("settings.hideEmptyFeedsDescription")}
           >
             <Switch
               checked={prefs?.hideEmptyFeeds ?? false}
@@ -457,9 +459,9 @@ export function SettingsForm() {
                   <User className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">User Profile</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("settings.userProfile")}</h2>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                    Signed in as{" "}
+                    {t("settings.signedInAs")}{" "}
                     <span className="font-medium text-foreground">
                       {session?.user?.email || "Unknown user"}
                     </span>
@@ -472,7 +474,7 @@ export function SettingsForm() {
                 className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                Sign out
+                {t("settings.signOut")}
               </Button>
             </div>
           </section>
@@ -505,8 +507,8 @@ export function SettingsForm() {
           {/* Add to Home Screen */}
           <PrefRow
             icon={Smartphone}
-            title="Add to Home Screen"
-            description="Show instructions for installing FeedFerret as a PWA on your phone or tablet."
+            title={t("pwa.title")}
+            description={t("pwa.description")}
           >
             <Button
               type="button"
@@ -514,27 +516,27 @@ export function SettingsForm() {
               onClick={() => window.dispatchEvent(new Event(SHOW_PWA_INSTALL_PROMPT_EVENT))}
               className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
             >
-              Show instructions
+              {t("pwa.install")}
             </Button>
           </PrefRow>
 
           <PrefRow
             icon={Keyboard}
-            title="Keyboard shortcuts"
-            description="Desktop keyboard shortcuts for fast navigation without a mouse."
+            title={t("keyboard.title")}
+            description={t("keyboard.description")}
           >
             <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground sm:min-w-80">
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
                 <span className="font-mono text-foreground">j / k</span>
-                <span>Next / previous article</span>
+                <span>{t("keyboard.nextArticle")} / {t("keyboard.previousArticle")}</span>
                 <span className="font-mono text-foreground">n / p</span>
-                <span>Next / previous unread article</span>
+                <span>{t("keyboard.nextUnread")} / {t("keyboard.previousUnread")}</span>
                 <span className="font-mono text-foreground">m / s</span>
-                <span>Toggle read / star</span>
+                <span>{t("keyboard.toggleRead")} / {t("keyboard.toggleStar")}</span>
                 <span className="font-mono text-foreground">/</span>
-                <span>Open search</span>
+                <span>{t("keyboard.focusSearch")}</span>
                 <span className="font-mono text-foreground">?</span>
-                <span>Open shortcut help</span>
+                <span>{t("keyboard.toggleHelp")}</span>
               </div>
             </div>
           </PrefRow>
@@ -571,6 +573,7 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 function PushNotificationSection() {
+  const t = useTranslations();
   const { data: feeds = [] } = useFeeds();
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -706,13 +709,13 @@ function PushNotificationSection() {
               {enabled ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.02em]">Browser notifications</h2>
+              <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("push.title")}</h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                Get notified when new articles arrive. Titles are included in notifications.
+                {t("push.description")}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Status: {loading ? "checking…" : !supported ? "unsupported" : !status?.configured ? "server not configured" : permission}
-                {status ? ` · ${status.activeSubscriptions} active device${status.activeSubscriptions === 1 ? "" : "s"}` : ""}
+                {t("push.status")}: {loading ? t("push.checking") : !supported ? t("push.unsupported") : !status?.configured ? t("push.serverNotConfigured") : permission}
+                {status ? ` · ${status.activeSubscriptions} ${status.activeSubscriptions === 1 ? t("push.activeDevice") : t("push.activeDevices")}` : ""}
               </p>
             </div>
           </div>
@@ -724,15 +727,15 @@ function PushNotificationSection() {
                 disabled={busy || loading || !supported || !status?.configured}
                 className="h-11 rounded-2xl px-5"
               >
-                Enable
+                {t("push.enable")}
               </Button>
             ) : (
               <>
                 <Button type="button" variant="outline" onClick={sendTest} disabled={busy} className="h-11 rounded-2xl px-5">
-                  Test
+                  {t("push.test")}
                 </Button>
                 <Button type="button" variant="outline" onClick={disable} disabled={busy} className="h-11 rounded-2xl px-5">
-                  Disable device
+                  {t("push.disableDevice")}
                 </Button>
               </>
             )}
@@ -742,7 +745,7 @@ function PushNotificationSection() {
         {status && (
           <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="push-frequency-select">Frequency</label>
+              <label className="text-sm font-medium" htmlFor="push-frequency-select">{t("push.frequency")}</label>
               <Select
                 value={status.settings.pushFrequency}
                 onValueChange={(value) => updateSettings({ pushFrequency: value })}
@@ -751,17 +754,17 @@ function PushNotificationSection() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl">
-                  <SelectItem value="immediate">Immediately</SelectItem>
-                  <SelectItem value="hourly">Hourly summary</SelectItem>
-                  <SelectItem value="daily">Daily summary</SelectItem>
-                  <SelectItem value="off">Off</SelectItem>
+                  <SelectItem value="immediate">{t("push.frequencies.immediately")}</SelectItem>
+                  <SelectItem value="hourly">{t("push.frequencies.hourly")}</SelectItem>
+                  <SelectItem value="daily">{t("push.frequencies.daily")}</SelectItem>
+                  <SelectItem value="off">{t("push.frequencies.off")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
               <div>
-                <p className="text-sm font-medium">Include article titles</p>
-                <p className="text-xs text-muted-foreground">Disable for generic private notifications.</p>
+                <p className="text-sm font-medium">{t("push.includeArticleTitles")}</p>
+                <p className="text-xs text-muted-foreground">{t("push.includeArticleTitlesDescription")}</p>
               </div>
               <Switch
                 checked={status.settings.pushPrivatePayloads}
@@ -769,7 +772,7 @@ function PushNotificationSection() {
               />
             </div>
             <div className="sm:col-span-2">
-              <p className="mb-2 text-sm font-medium">Feeds</p>
+              <p className="mb-2 text-sm font-medium">{t("push.feeds")}</p>
               <div className="max-h-44 overflow-y-auto rounded-2xl border border-border/70 bg-background/70 p-3">
                 <label className="mb-2 flex items-center gap-2 text-sm">
                   <input
@@ -777,7 +780,7 @@ function PushNotificationSection() {
                     checked={feedIds.size === 0}
                     onChange={() => updateSettings({ pushFeedIds: [] })}
                   />
-                  All feeds
+                  {t("push.allFeeds")}
                 </label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {feeds.map((feed: any) => (
@@ -813,6 +816,7 @@ function PushNotificationSection() {
 
 
 function TwoFactorSection() {
+  const t = useTranslations();
   const { data: status } = useTwoFactorStatus();
   const beginSetup = useBeginTwoFactorSetup();
   const confirmSetup = useConfirmTwoFactorSetup();
@@ -862,15 +866,15 @@ function TwoFactorSection() {
               <Shield className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.02em]">Two-factor authentication</h2>
+              <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("twoFactor.title")}</h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                Protect your email/password login with a 6-digit authenticator code. OAuth providers like Authelia can enforce MFA separately.
+                {t("twoFactor.description")}
               </p>
             </div>
           </div>
           {status?.enabled ? (
             <div className="inline-flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-              <Shield className="h-4 w-4" /> Enabled
+              <Shield className="h-4 w-4" /> {t("twoFactor.enabled")}
             </div>
           ) : (
             <Button
@@ -879,7 +883,7 @@ function TwoFactorSection() {
               disabled={beginSetup.isPending}
               className="h-11 rounded-2xl px-5"
             >
-              {beginSetup.isPending ? "Starting…" : "Set up 2FA"}
+              {beginSetup.isPending ? t("twoFactor.starting") : t("twoFactor.beginSetup")}
             </Button>
           )}
         </div>
@@ -887,21 +891,21 @@ function TwoFactorSection() {
         {setupData && !status?.enabled && (
           <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:p-5">
             <div className="grid gap-2">
-              <p className="text-sm font-medium">1. Add this account in your authenticator app</p>
+              <p className="text-sm font-medium">1. {t("twoFactor.setupInProgress")}</p>
               <p className="text-xs text-muted-foreground">
                 Use manual setup if your app does not support opening otpauth links directly.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Account</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("twoFactor.account")}</p>
                 <p className="mt-1 text-sm font-medium break-all">{setupData.accountName}</p>
               </div>
               <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Secret</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("twoFactor.secret")}</p>
                 <div className="mt-1 flex items-center gap-2">
                   <p className="text-sm font-medium break-all">{setupData.secret}</p>
-                  <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-xl" onClick={() => copyValue(setupData.secret, "Secret")}>
+                  <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-xl" onClick={() => copyValue(setupData.secret, t("twoFactor.secret"))}>
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
@@ -910,17 +914,17 @@ function TwoFactorSection() {
             <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">otpauth URI</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("twoFactor.otpauthUri")}</p>
                   <p className="mt-1 text-xs text-muted-foreground break-all">{setupData.uri}</p>
                 </div>
                 <Button type="button" variant="outline" className="rounded-2xl" onClick={() => copyValue(setupData.uri, "URI")}>
-                  <Copy className="mr-2 h-4 w-4" /> Copy
+                  <Copy className="mr-2 h-4 w-4" /> {t("twoFactor.copy")}
                 </Button>
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="totp-setup-code">2. Enter the current 6-digit code</label>
+                <label className="text-sm font-medium" htmlFor="totp-setup-code">2. {t("twoFactor.enterCode")}</label>
                 <Input
                   id="totp-setup-code"
                   inputMode="numeric"
@@ -933,10 +937,10 @@ function TwoFactorSection() {
               </div>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setSetupData(null)}>
-                  Cancel
+                  {t("twoFactor.cancel")}
                 </Button>
                 <Button type="button" className="rounded-2xl" onClick={handleEnable} disabled={confirmSetup.isPending || setupCode.length !== 6}>
-                  {confirmSetup.isPending ? "Enabling…" : "Enable 2FA"}
+                  {confirmSetup.isPending ? t("twoFactor.enabling") : t("twoFactor.enableTwoFa")}
                 </Button>
               </div>
             </div>
@@ -948,12 +952,12 @@ function TwoFactorSection() {
             <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
               <ShieldOff className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                Google Reader password login is disabled for accounts with 2FA enabled. For SSO flows like Authelia, MFA should be handled by your identity provider.
+                {t("twoFactor.greaderWarning")}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="totp-disable-code">Disable 2FA</label>
+                <label className="text-sm font-medium" htmlFor="totp-disable-code">{t("twoFactor.disableTwoFa")}</label>
                 <Input
                   id="totp-disable-code"
                   inputMode="numeric"
@@ -971,7 +975,7 @@ function TwoFactorSection() {
                 onClick={handleDisable}
                 disabled={disableTwoFactor.isPending || disableCode.length !== 6}
               >
-                {disableTwoFactor.isPending ? "Disabling…" : "Disable 2FA"}
+                {disableTwoFactor.isPending ? t("twoFactor.disabling") : t("twoFactor.disableTwoFa")}
               </Button>
             </div>
           </div>
@@ -982,16 +986,17 @@ function TwoFactorSection() {
 }
 
 const DAYS = [
-  { value: "0", label: "Sunday" },
-  { value: "1", label: "Monday" },
-  { value: "2", label: "Tuesday" },
-  { value: "3", label: "Wednesday" },
-  { value: "4", label: "Thursday" },
-  { value: "5", label: "Friday" },
-  { value: "6", label: "Saturday" },
+  { value: "0", labelKey: "digest.days.sunday" as const },
+  { value: "1", labelKey: "digest.days.monday" as const },
+  { value: "2", labelKey: "digest.days.tuesday" as const },
+  { value: "3", labelKey: "digest.days.wednesday" as const },
+  { value: "4", labelKey: "digest.days.thursday" as const },
+  { value: "5", labelKey: "digest.days.friday" as const },
+  { value: "6", labelKey: "digest.days.saturday" as const },
 ];
 
 function DigestSection() {
+  const t = useTranslations();
   const { data: digest } = useDigestSettings();
   const { data: feedsData } = useFeeds();
   const { data: instance, loading: instanceLoading } = useInstance();
@@ -1015,10 +1020,9 @@ function DigestSection() {
           <Mail className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">Email Digest</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("digest.title")}</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Receive a periodic email summary of articles from your feeds.
-            Requires SMTP to be configured by your administrator.
+            {t("digest.description")}
           </p>
         </div>
       </div>
@@ -1027,10 +1031,10 @@ function DigestSection() {
         {/* Enable toggle */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">Enable digest emails</p>
+            <p className="text-sm font-medium">{t("digest.enableDigestEmails")}</p>
             {digest.digestLastSentAt && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Last sent: {new Date(digest.digestLastSentAt).toLocaleString()}
+                {t("digest.lastSent")}: {new Date(digest.digestLastSentAt).toLocaleString()}
               </p>
             )}
           </div>
@@ -1057,7 +1061,7 @@ function DigestSection() {
             {/* Frequency */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-frequency-select">Frequency</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-frequency-select">{t("digest.frequency")}</label>
                 <Select
                   value={digest.digestFrequency}
                   onValueChange={(v) => update({ digestFrequency: v })}
@@ -1066,8 +1070,8 @@ function DigestSection() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="daily">{t("digest.frequencies.daily")}</SelectItem>
+                    <SelectItem value="weekly">{t("digest.frequencies.weekly")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1075,7 +1079,7 @@ function DigestSection() {
               {/* Day of week (weekly only) */}
               {digest.digestFrequency === "weekly" && (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-day-select">Day</label>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-day-select">{t("digest.day")}</label>
                   <Select
                     value={String(digest.digestDayOfWeek)}
                     onValueChange={(v) => update({ digestDayOfWeek: parseInt(v) })}
@@ -1085,7 +1089,7 @@ function DigestSection() {
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl">
                       {DAYS.map((d) => (
-                        <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                        <SelectItem key={d.value} value={d.value}>{t(d.labelKey)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1094,7 +1098,7 @@ function DigestSection() {
 
               {/* Hour */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-hour-select">Hour (UTC)</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-hour-select">{t("digest.hour")}</label>
                 <Select
                   value={String(digest.digestHour)}
                   onValueChange={(v) => update({ digestHour: parseInt(v) })}
@@ -1114,7 +1118,7 @@ function DigestSection() {
 
               {/* Scope */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-scope-select">Include</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-scope-select">{t("digest.include")}</label>
                 <Select
                   value={digest.digestScope}
                   onValueChange={(v) => update({ digestScope: v })}
@@ -1123,10 +1127,10 @@ function DigestSection() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
-                    <SelectItem value="unread">Unread</SelectItem>
-                    <SelectItem value="all">All new</SelectItem>
-                    <SelectItem value="starred">Starred</SelectItem>
-                    <SelectItem value="readlater">Read Later</SelectItem>
+                    <SelectItem value="unread">{t("digest.scope.unread")}</SelectItem>
+                    <SelectItem value="all">{t("digest.scope.allNew")}</SelectItem>
+                    <SelectItem value="starred">{t("digest.scope.starred")}</SelectItem>
+                    <SelectItem value="readlater">{t("digest.scope.readLater")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1136,8 +1140,8 @@ function DigestSection() {
             {feeds.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Feed filter{" "}
-                  <span className="normal-case font-normal">(leave empty for all feeds)</span>
+                  {t("digest.feedFilter")}{" "}
+                  <span className="normal-case font-normal">({t("digest.feedFilterHint")})</span>
                 </label>
                 <div className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-background/50 p-3 min-h-[48px]">
                   {feeds.map((feed: any) => {
@@ -1178,10 +1182,10 @@ function DigestSection() {
                 className="rounded-2xl h-10"
               >
                 <Send className="w-4 h-4 mr-2" />
-                {sendTest.isPending ? "Sending…" : "Send test digest now"}
+                {sendTest.isPending ? t("digest.sending") : t("digest.sendTestDigest")}
               </Button>
               <p className="text-xs text-muted-foreground">
-                Sends to your account email using the last 7 days of articles.
+                {t("digest.testDigestHint")}
               </p>
             </div>
           </>
@@ -1192,6 +1196,7 @@ function DigestSection() {
 }
 
 function DeleteAccountSection() {
+  const t = useTranslations();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1206,10 +1211,10 @@ function DeleteAccountSection() {
         setLoading(false);
         return;
       }
-      toast.success("Account deleted. Goodbye!");
+      toast.success(t("deleteAccount.accountDeleted"));
       await signOut({ callbackUrl: "/login" });
     } catch {
-      toast.error("Account deletion failed. Try again.");
+      toast.error(t("deleteAccount.deletionFailed"));
       setLoading(false);
     }
   };
@@ -1223,10 +1228,9 @@ function DeleteAccountSection() {
               <AlertTriangle className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.02em]">Delete Account</h2>
+              <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("deleteAccount.title")}</h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                Permanently delete your account and all associated data — feeds, articles, labels, and settings.
-                This action is irreversible and complies with GDPR Art. 17 (right to erasure).
+                {t("deleteAccount.description")}
               </p>
             </div>
           </div>
@@ -1236,7 +1240,7 @@ function DeleteAccountSection() {
             className="h-11 rounded-2xl border-destructive/40 text-destructive hover:bg-destructive/10 px-5 shrink-0"
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            Delete my account
+            {t("deleteAccount.deleteMyAccount")}
           </Button>
         </div>
       </section>
@@ -1246,34 +1250,34 @@ function DeleteAccountSection() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
-              Delete your account?
+              {t("deleteAccount.confirmDialogTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-3">
               <span className="block">
-                This will permanently delete your account, all your feeds, articles, labels, and settings.
-                <strong> This cannot be undone.</strong>
+                {t("deleteAccount.confirmDialogDescription")}
+                <strong> {t("deleteAccount.cannotBeUndone")}</strong>
               </span>
               <span className="block mt-3 text-sm font-medium text-foreground">
-                Type <code className="bg-muted px-1.5 py-0.5 rounded text-xs">delete my account</code> to confirm:
+                {t("deleteAccount.typeToConfirm")}
               </span>
               <Input
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                placeholder="delete my account"
+                placeholder={t("deleteAccount.confirmPlaceholder")}
                 className="rounded-2xl border-border/70 bg-background/70"
               />
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="rounded-2xl" onClick={() => setConfirmText("")}>
-              Cancel
+              {t("deleteAccount.cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDelete}
               disabled={confirmText !== "delete my account" || loading}
             >
-              {loading ? "Deleting…" : "Delete permanently"}
+              {loading ? t("deleteAccount.deleting") : t("deleteAccount.deletePermanently")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1283,6 +1287,7 @@ function DeleteAccountSection() {
 }
 
 function ApiTokenSection() {
+  const tc = useTranslations();
   const [tokens, setTokens] = useState<Array<{
     id: string; name: string; scope: string; expiresAt: string | null; lastUsedAt: string | null; createdAt: string;
   }>>([]);
@@ -1325,7 +1330,7 @@ function ApiTokenSection() {
         setCreateScope("write");
         setCreateExpiry("never");
         await loadTokens();
-        toast.success("Token created — copy it now, it won't be shown again");
+        toast.success(tc("apiTokens.newTokenWarning"));
       } else {
         toast.error("Failed to create token");
       }
@@ -1339,18 +1344,18 @@ function ApiTokenSection() {
     if (res.ok) {
       if (newTokenId === id) { setNewRawToken(null); setNewTokenId(null); }
       await loadTokens();
-      toast.success(`Token "${name}" revoked`);
+      toast.success(`"${name}" ${tc("apiTokens.revoked")}`);
     }
   }, [loadTokens, newTokenId]);
 
   const handleCopy = useCallback(() => {
     if (newRawToken) {
       navigator.clipboard.writeText(newRawToken);
-      toast.success("Token copied to clipboard");
+      toast.success(tc("apiTokens.copy"));
     }
   }, [newRawToken]);
 
-  const scopeLabel = (scope: string) => ({ read: "Read-only", write: "Read+Write", admin: "Admin" } as Record<string, string>)[scope] ?? scope;
+  const scopeLabel = (scope: string) => ({ read: tc("apiTokens.scopes.read"), write: tc("apiTokens.scopes.readWrite"), admin: tc("apiTokens.scopes.admin") } as Record<string, string>)[scope] ?? scope;
   const scopeColor = (scope: string): "secondary" | "default" | "destructive" =>
     scope === "read" ? "secondary" : scope === "admin" ? "destructive" : "default";
 
@@ -1361,22 +1366,21 @@ function ApiTokenSection() {
           <Key className="h-5 w-5" />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">API Tokens</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{tc("apiTokens.title")}</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Personal API tokens for browser extensions, mobile apps, and external integrations.
-            Each token has its own scope and optional expiry. Treat them like passwords.
+            {tc("apiTokens.description")}
           </p>
         </div>
         <Button size="sm" onClick={() => setShowCreate(true)} className="rounded-2xl h-9 shrink-0">
           <Plus className="w-4 h-4 mr-1" />
-          Add token
+          {tc("apiTokens.addToken")}
         </Button>
       </div>
 
       {newRawToken && (
         <div className="mb-4 rounded-2xl bg-accent/5 border border-accent/20 p-4">
           <p className="text-xs font-semibold text-accent mb-2 uppercase tracking-wider">
-            New token — copy now, won&apos;t be shown again
+            {tc("apiTokens.newTokenWarning")}
           </p>
           <div className="flex items-center gap-2">
             <Input readOnly value={newRawToken} className="font-mono text-xs h-9 bg-background/60" />

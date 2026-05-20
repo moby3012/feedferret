@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import {
 import { useInstance } from "@/hooks/use-instance";
 
 export default function RegisterPage() {
+  const t = useTranslations("register");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -49,7 +51,7 @@ export default function RegisterPage() {
     setError("");
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(t("errors.passwordsMismatch"));
       return;
     }
 
@@ -66,10 +68,10 @@ export default function RegisterPage() {
         router.push("/login?registered=true");
       } else {
         const data = await response.json();
-        setError(data.message || "Something went wrong");
+        setError(data.message || t("errors.somethingWentWrong"));
       }
     } catch (err) {
-      setError("Failed to register. Please try again.");
+      setError(t("errors.failedToRegister"));
     } finally {
       setIsLoading(false);
     }
@@ -89,10 +91,10 @@ export default function RegisterPage() {
             />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">
-            Join Feed<span className="text-zinc-400">Ferret</span>
+            {t("subtitle")}
           </h1>
           <p className="text-zinc-500 mt-2 text-sm font-medium tracking-tight">
-            Create your private news Hub
+            {t("title")}
           </p>
         </div>
 
@@ -100,7 +102,7 @@ export default function RegisterPage() {
           <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-left">
             <CardTitle className="text-lg font-semibold text-white flex items-center justify-center sm:justify-start gap-2">
               <UserPlus className="w-4 h-4 text-zinc-400" />
-              Registration
+              {t("registration")}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-8 pb-6">
@@ -108,7 +110,7 @@ export default function RegisterPage() {
               <div className="relative group/input">
                 <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within/input:text-white transition-colors" />
                 <Input
-                  placeholder="Name"
+                  placeholder={t("name")}
                   className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -119,7 +121,7 @@ export default function RegisterPage() {
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within/input:text-white transition-colors" />
                 <Input
                   type="email"
-                  placeholder="Email"
+                  placeholder={t("email")}
                   className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -130,7 +132,7 @@ export default function RegisterPage() {
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within/input:text-white transition-colors" />
                 <Input
                   type="password"
-                  placeholder="Password"
+                  placeholder={t("password")}
                   className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -141,7 +143,7 @@ export default function RegisterPage() {
                 <ShieldCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within/input:text-white transition-colors" />
                 <Input
                   type="password"
-                  placeholder="Confirm Password"
+                  placeholder={t("confirmPassword")}
                   className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -163,11 +165,11 @@ export default function RegisterPage() {
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                    Creating account...
+                    {t("registering")}
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">
-                    Register
+                    {t("register")}
                     <ArrowRight className="w-4 h-4" />
                   </span>
                 )}
@@ -176,12 +178,12 @@ export default function RegisterPage() {
           </CardContent>
           <CardFooter className="flex flex-col space-y-4 border-t border-white/5 pt-6 pb-8 bg-white/[0.02]">
             <div className="text-zinc-500 text-xs font-medium text-center w-full">
-              Already have an account?{" "}
+              {t("alreadyHaveAccount")}{" "}
               <Link
                 href="/login"
                 className="text-white hover:underline transition-all"
               >
-                Sign In
+                {t("signIn")}
               </Link>
             </div>
           </CardFooter>

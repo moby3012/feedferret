@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
 import Image from "next/image";
 import { Article } from "@/lib/rss-data";
@@ -106,6 +107,8 @@ export function ArticleReader({
   readerFontSize = "medium",
   hideArticleImage = false,
 }: ArticleReaderProps) {
+  const t = useTranslations("articleReader");
+  const tList = useTranslations("articleList");
   const rootRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -251,11 +254,10 @@ export function ArticleReader({
             />
           </div>
           <h2 className="text-2xl font-bold text-foreground mb-3 text-balance">
-            Select an article to read
+            {t("selectArticle")}
           </h2>
           <p className="text-lg text-muted-foreground leading-relaxed">
-            Choose an article from the list to start reading. Your reading
-            progress will be saved automatically.
+            {t("selectArticleDescription")}
           </p>
         </div>
       </div>
@@ -270,7 +272,7 @@ export function ArticleReader({
   const copyLink = async () => {
     if (!article.link) return;
     await navigator.clipboard.writeText(article.link);
-    toast.success("Link copied");
+    toast.success(t("linkCopied"));
   };
 
   const shareArticle = async () => {
@@ -312,7 +314,7 @@ export function ArticleReader({
               size="icon"
               className="w-11 h-11 rounded-xl hover:bg-muted transition-all duration-200 hover:scale-105 active:scale-95"
               onClick={onBack}
-              aria-label="Back to article list"
+              aria-label={t("back")}
             >
               <ChevronLeft className="w-5 h-5" />
             </Button>
@@ -337,9 +339,9 @@ export function ArticleReader({
             size="icon"
             className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => onToggleStar(article.id)}
-            aria-label={article.isStarred ? "Remove star" : "Star article"}
+            aria-label={article.isStarred ? tList("removeStar") : tList("star")}
             aria-pressed={article.isStarred}
-            title={article.isStarred ? "Remove star (s)" : "Star (s)"}
+            title={article.isStarred ? tList("removeStar") : tList("star")}
           >
             <Star
               className={cn(
@@ -358,9 +360,9 @@ export function ArticleReader({
               article.isReadLater && "bg-accent/10",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
-            aria-label={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
+            aria-label={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
             aria-pressed={article.isReadLater}
-            title={article.isReadLater ? "Remove from Read Later (l)" : "Save to Read Later (l)"}
+            title={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
           >
             <Bookmark
               className={cn(
@@ -376,9 +378,9 @@ export function ArticleReader({
             size="icon"
             className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => onToggleRead?.(article.id)}
-            aria-label={article.isRead ? "Mark as unread" : "Mark as read"}
+            aria-label={article.isRead ? tList("markAsUnread") : tList("markAsRead")}
             aria-pressed={article.isRead}
-            title={article.isRead ? "Mark as unread (m)" : "Mark as read (m)"}
+            title={article.isRead ? tList("markAsUnread") : tList("markAsRead")}
           >
             {article.isRead ? (
               <Circle className="w-5 h-5 text-muted-foreground" />
@@ -391,8 +393,8 @@ export function ArticleReader({
             size="icon"
             className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={shareArticle}
-            aria-label="Share article"
-            title="Share"
+            aria-label={t("share")}
+            title={t("share")}
           >
             <Share2 className="w-5 h-5 text-muted-foreground" />
           </Button>
@@ -402,8 +404,8 @@ export function ArticleReader({
             className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={openOriginal}
             disabled={!article.link}
-            aria-label="Open original article"
-            title="Open original (o)"
+            aria-label={t("openOriginal")}
+            title={t("openOriginal")}
           >
             <ExternalLink className="w-5 h-5 text-muted-foreground" />
           </Button>
@@ -413,8 +415,8 @@ export function ArticleReader({
             className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={copyLink}
             disabled={!article.link}
-            aria-label="Copy article link"
-            title="Copy link"
+            aria-label={t("copyLink")}
+            title={t("copyLink")}
           >
             <Copy className="w-5 h-5 text-muted-foreground" />
           </Button>
@@ -424,8 +426,8 @@ export function ArticleReader({
                 variant="ghost"
                 size="icon"
                 className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-                aria-label="Manage labels"
-                title="Labels"
+                aria-label={t("labels")}
+                title={t("labels")}
               >
                 <Tag className="w-5 h-5 text-muted-foreground" />
               </Button>
@@ -435,12 +437,12 @@ export function ArticleReader({
               className="w-56 rounded-2xl border-border/70 bg-popover/95 p-2 shadow-2xl backdrop-blur-xl"
             >
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Labels
+                {t("labels")}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {labels.length === 0 ? (
                 <div className="px-2 py-3 text-sm text-muted-foreground">
-                  Create labels in Manage Feeds.
+                  {t("noLabels")}
                 </div>
               ) : (
                 labels.map((label) => {
@@ -514,7 +516,7 @@ export function ArticleReader({
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     <Sparkles className="h-3.5 w-3.5 text-primary" />
-                    AI Summary
+                    {t("aiSummary")}
                   </div>
                   <Button
                     variant="ghost"
@@ -527,11 +529,11 @@ export function ArticleReader({
                     }}
                   >
                     {summarize.isPending ? (
-                      <span className="animate-pulse">Summarizing…</span>
+                      <span className="animate-pulse">{t("summarizing")}</span>
                     ) : summary ? (
-                      "Regenerate"
+                      t("regenerate")
                     ) : (
-                      "Summarize"
+                      t("summarize")
                     )}
                   </Button>
                 </div>
@@ -539,7 +541,7 @@ export function ArticleReader({
                   <p className="mt-2 text-sm leading-relaxed text-foreground/80">{summary}</p>
                 ) : (
                   <p className="mt-2 text-sm text-muted-foreground italic">
-                    Click &ldquo;Summarize&rdquo; to generate an AI summary. Requires AI provider configured in Settings.
+                    {t("aiSummaryHint")}
                   </p>
                 )}
               </div>
@@ -569,14 +571,14 @@ export function ArticleReader({
             />
           ) : (
             <div className="animate-fade-in-up animation-delay-200 rounded-3xl border border-border/70 bg-card/70 p-6 text-center">
-              <p className="text-sm font-medium text-foreground mb-1">No content available</p>
+              <p className="text-sm font-medium text-foreground mb-1">{t("noContent")}</p>
               <p className="text-sm text-muted-foreground mb-4">
-                This feed did not include article text. Open the original to read the full article.
+                {t("noContentDescription")}
               </p>
               {article.link && (
                 <Button onClick={openOriginal} variant="outline" className="rounded-xl">
                   <ExternalLink className="w-4 h-4 mr-2" />
-                  Open original
+                  {t("openOriginal")}
                 </Button>
               )}
             </div>
@@ -585,7 +587,7 @@ export function ArticleReader({
           {article.content && article.link && article.content.length < 900 && (
             <div className="mt-10 rounded-3xl border border-border/70 bg-card/70 p-5 shadow-sm">
               <p className="text-sm text-muted-foreground mb-4">
-                This feed appears to provide only a short excerpt. FeedFerret can try to fetch a cleaner full-text version.
+                {t("noContentDescription")}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -594,11 +596,11 @@ export function ArticleReader({
                   className="rounded-xl"
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
-                  {isFetchingFullText ? "Fetching..." : "Fetch full text"}
+                  {isFetchingFullText ? t("fetching") : t("fetchFullText")}
                 </Button>
                 <Button onClick={openOriginal} variant="outline" className="rounded-xl">
                   <ExternalLink className="w-4 h-4 mr-2" />
-                  Open original
+                  {t("openOriginal")}
                 </Button>
               </div>
             </div>
@@ -620,7 +622,7 @@ export function ArticleReader({
                   {article.feedName}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  View all articles from this feed
+                  {t("viewAllFromFeed")}
                 </p>
               </div>
             </button>
@@ -636,7 +638,7 @@ export function ArticleReader({
             size="icon"
             className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
             onClick={hasPreviousArticle ? handlePreviousArticle : onBack}
-            aria-label={hasPreviousArticle ? "Previous article" : "Back to list"}
+            aria-label={hasPreviousArticle ? t("previousArticle") : t("backToList")}
           >
             <ChevronLeft className="h-5 w-5" />
           </Button>
@@ -649,7 +651,7 @@ export function ArticleReader({
               article.isStarred ? "bg-amber-500/10 text-amber-500" : "text-muted-foreground",
             )}
             onClick={() => onToggleStar(article.id)}
-            aria-label={article.isStarred ? "Remove star" : "Star article"}
+            aria-label={article.isStarred ? tList("removeStar") : tList("star")}
           >
             <Star className={cn("h-5 w-5", article.isStarred && "fill-amber-500")} />
           </Button>
@@ -662,7 +664,7 @@ export function ArticleReader({
             )}
             onClick={() => onToggleRead?.(article.id)}
             aria-pressed={article.isRead}
-            aria-label={article.isRead ? "Mark as unread" : "Mark as read"}
+            aria-label={article.isRead ? tList("markAsUnread") : tList("markAsRead")}
           >
             {article.isRead ? <Circle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
           </Button>
@@ -675,7 +677,7 @@ export function ArticleReader({
               article.isReadLater ? "bg-accent/10 text-accent" : "text-muted-foreground",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
-            aria-label={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
+            aria-label={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
           >
             <Bookmark className={cn("h-5 w-5", article.isReadLater && "fill-accent")} />
           </Button>
@@ -686,7 +688,7 @@ export function ArticleReader({
                 variant="ghost"
                 size="icon"
                 className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
-                aria-label="More reader actions"
+                aria-label={t("moreActions")}
               >
                 <MoreHorizontal className="h-5 w-5" />
               </Button>
@@ -698,19 +700,19 @@ export function ArticleReader({
             >
               <DropdownMenuItem className="rounded-2xl py-3" onClick={scrollReaderToTop}>
                 <ArrowUp className="mr-3 h-4 w-4" />
-                Scroll to top
+                {t("scrollToTop")}
               </DropdownMenuItem>
               <DropdownMenuItem className="rounded-2xl py-3" onClick={shareArticle}>
                 <Share2 className="mr-3 h-4 w-4" />
-                Share
+                {t("share")}
               </DropdownMenuItem>
               <DropdownMenuItem className="rounded-2xl py-3" onClick={openOriginal} disabled={!article.link}>
                 <ExternalLink className="mr-3 h-4 w-4" />
-                Open original
+                {t("openOriginal")}
               </DropdownMenuItem>
               <DropdownMenuItem className="rounded-2xl py-3" onClick={copyLink} disabled={!article.link}>
                 <Copy className="mr-3 h-4 w-4" />
-                Copy link
+                {t("copyLink")}
               </DropdownMenuItem>
               {article.link && (!article.content || article.content.length < 900) && (
                 <DropdownMenuItem
@@ -719,13 +721,13 @@ export function ArticleReader({
                   disabled={isFetchingFullText}
                 >
                   <Sparkles className="mr-3 h-4 w-4" />
-                  {isFetchingFullText ? "Fetching…" : "Fetch full text"}
+                  {isFetchingFullText ? t("fetching") : t("fetchFullText")}
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator className="my-2" />
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Labels</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-xs text-muted-foreground">{t("labels")}</DropdownMenuLabel>
               {labels.length === 0 ? (
-                <div className="px-2 py-3 text-sm text-muted-foreground">Create labels in Manage Feeds.</div>
+                <div className="px-2 py-3 text-sm text-muted-foreground">{t("noLabels")}</div>
               ) : (
                 labels.map((label) => {
                   const checked = articleLabelIds.includes(label.id);
@@ -759,7 +761,7 @@ export function ArticleReader({
             className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
             onClick={handleNextArticle}
             disabled={!hasNextArticle}
-            aria-label="Next article"
+            aria-label={t("nextArticle")}
           >
             <ChevronRight className="h-5 w-5" />
           </Button>
