@@ -1,10 +1,8 @@
 "use client";
 
-import { useTranslations } from "next-intl";
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
-import { updateUiLanguage } from "@/app/actions/locale";
 import {
   AlignLeft,
   ALargeSmall,
@@ -13,7 +11,6 @@ import {
   Clock,
   Copy,
   ExternalLink,
-  Globe,
   Key,
   Laptop,
   Layers,
@@ -74,9 +71,9 @@ import { toast } from "sonner";
 import { SHOW_PWA_INSTALL_PROMPT_EVENT } from "@/components/pwa-install-prompt";
 
 const themeOptions = [
-  { id: "light", labelKey: "settings.themeOptions.light" as const, icon: Sun },
-  { id: "dark", labelKey: "settings.themeOptions.dark" as const, icon: Moon },
-  { id: "system", labelKey: "settings.themeOptions.system" as const, icon: Laptop },
+  { id: "light", label: "Light", icon: Sun },
+  { id: "dark", label: "Dark", icon: Moon },
+  { id: "system", label: "System", icon: Laptop },
 ];
 
 function normalizeDefaultViewMode(value?: string | null) {
@@ -119,7 +116,6 @@ function PrefRow({
 }
 
 export function SettingsForm() {
-  const t = useTranslations();
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
@@ -138,17 +134,17 @@ export function SettingsForm() {
             size="icon"
             onClick={() => router.back()}
             className="h-11 w-11 rounded-2xl bg-card/70 backdrop-blur-xl border border-border/60 shadow-sm"
-            aria-label={t("settings.back")}
+            aria-label="Back"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <Settings className="h-4 w-4" />
-              {t("settings.breadcrumb")}
+              FeedFerret
             </div>
             <h1 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-              {t("settings.title")}
+              Settings
             </h1>
           </div>
         </header>
@@ -164,9 +160,9 @@ export function SettingsForm() {
                   <Palette className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("settings.appearance")}</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">Appearance</h2>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                    {t("settings.chooseVisualMode")}
+                    Choose the visual mode.
                   </p>
                 </div>
               </div>
@@ -186,7 +182,7 @@ export function SettingsForm() {
                       )}
                     >
                       <Icon className="h-4 w-4" />
-                      <span className="hidden sm:inline">{t(option.labelKey)}</span>
+                      <span className="hidden sm:inline">{option.label}</span>
                     </button>
                   );
                 })}
@@ -197,30 +193,30 @@ export function SettingsForm() {
           {/* Accent colors */}
           <PrefRow
             icon={Palette}
-            title={t("settings.accentColors")}
-            description={t("settings.accentColorsDescription")}
+            title="Accent colors"
+            description="Primary and secondary accent colors used for highlights and indicators."
           >
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground" htmlFor="accent-color-primary">{t("settings.primary")}</label>
+                <label className="text-sm text-muted-foreground" htmlFor="accent-color-primary">Primary</label>
                 <input
                   id="accent-color-primary"
                   type="color"
                   value={prefs?.accentColor ?? "#5BA4CF"}
                   onChange={(e) => update({ accentColor: e.target.value })}
                   className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
-                  title={t("settings.primary")}
+                  title="Primary accent color"
                 />
               </div>
               <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground" htmlFor="accent-color-secondary">{t("settings.secondary")}</label>
+                <label className="text-sm text-muted-foreground" htmlFor="accent-color-secondary">Secondary</label>
                 <input
                   id="accent-color-secondary"
                   type="color"
                   value={prefs?.secondaryColor ?? "#F0963C"}
                   onChange={(e) => update({ secondaryColor: e.target.value })}
                   className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
-                  title={t("settings.secondary")}
+                  title="Secondary accent color"
                 />
               </div>
               <button
@@ -228,7 +224,7 @@ export function SettingsForm() {
                 onClick={() => update({ accentColor: "#5BA4CF", secondaryColor: "#F0963C" })}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                {t("settings.reset")}
+                Reset
               </button>
               <div
                 className="w-full min-w-[180px] rounded-2xl border border-border/70 p-3 shadow-sm sm:ml-auto sm:w-auto"
@@ -239,9 +235,9 @@ export function SettingsForm() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="space-y-1">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      {t("settings.preview")}
+                      Preview
                     </p>
-                    <p className="text-sm font-medium">{t("settings.appAccents")}</p>
+                    <p className="text-sm font-medium">App accents</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span
@@ -261,8 +257,8 @@ export function SettingsForm() {
           {/* Default view mode */}
           <PrefRow
             icon={AlignLeft}
-            title={t("settings.defaultView")}
-            description={t("settings.defaultViewDescription")}
+            title="Default view"
+            description="Article list layout shown by default when opening the app."
           >
             <Select
               value={normalizeDefaultViewMode(prefs?.defaultViewMode)}
@@ -272,9 +268,9 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="list">{t("settings.viewOptions.list")}</SelectItem>
-                <SelectItem value="magazine">{t("settings.viewOptions.magazine")}</SelectItem>
-                <SelectItem value="minimal">{t("settings.viewOptions.minimal")}</SelectItem>
+                <SelectItem value="list">List</SelectItem>
+                <SelectItem value="magazine">Magazine</SelectItem>
+                <SelectItem value="minimal">Minimal</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -282,8 +278,8 @@ export function SettingsForm() {
           {/* Reader width */}
           <PrefRow
             icon={AlignLeft}
-            title={t("settings.readerWidth")}
-            description={t("settings.readerWidthDescription")}
+            title="Reader width"
+            description="Maximum width of article content in the reader pane."
           >
             <Select
               value={prefs?.readerWidth ?? "normal"}
@@ -293,9 +289,9 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="normal">{t("settings.widthOptions.normal")}</SelectItem>
-                <SelectItem value="wide">{t("settings.widthOptions.wide")}</SelectItem>
-                <SelectItem value="full">{t("settings.widthOptions.full")}</SelectItem>
+                <SelectItem value="normal">Normal (768px)</SelectItem>
+                <SelectItem value="wide">Wide (1024px)</SelectItem>
+                <SelectItem value="full">Full width</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -303,8 +299,8 @@ export function SettingsForm() {
           {/* Reader font size */}
           <PrefRow
             icon={ALargeSmall}
-            title={t("settings.readerFontSize")}
-            description={t("settings.readerFontSizeDescription")}
+            title="Reader font size"
+            description="Text size in the article reader pane."
           >
             <Select
               value={prefs?.readerFontSize ?? "medium"}
@@ -314,10 +310,10 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="small">{t("settings.fontSizeOptions.small")}</SelectItem>
-                <SelectItem value="medium">{t("settings.fontSizeOptions.medium")}</SelectItem>
-                <SelectItem value="large">{t("settings.fontSizeOptions.large")}</SelectItem>
-                <SelectItem value="xl">{t("settings.fontSizeOptions.xl")}</SelectItem>
+                <SelectItem value="small">Small</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="large">Large</SelectItem>
+                <SelectItem value="xl">Extra large</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -327,8 +323,8 @@ export function SettingsForm() {
           {/* Default sort order */}
           <PrefRow
             icon={ArrowDownAZ}
-            title={t("settings.defaultSort")}
-            description={t("settings.defaultSortDescription")}
+            title="Default sort"
+            description="Default article sort order in all feeds and categories."
           >
             <Select
               value={prefs?.defaultArticleSort ?? "newest"}
@@ -338,8 +334,8 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="newest">{t("settings.sortOptions.newest")}</SelectItem>
-                <SelectItem value="oldest">{t("settings.sortOptions.oldest")}</SelectItem>
+                <SelectItem value="newest">Newest first</SelectItem>
+                <SelectItem value="oldest">Oldest first</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -347,8 +343,8 @@ export function SettingsForm() {
           {/* Mark-as-read delay */}
           <PrefRow
             icon={Clock}
-            title={t("settings.markAsRead")}
-            description={t("settings.markAsReadDescription")}
+            title="Mark as read"
+            description="How long after opening an article it gets marked as read. 'Off' disables auto-mark."
           >
             <Select
               value={
@@ -368,12 +364,12 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="instant">{t("settings.markReadOptions.instant")}</SelectItem>
-                <SelectItem value="5">{t("settings.markReadOptions.after5s")}</SelectItem>
-                <SelectItem value="15">{t("settings.markReadOptions.after15s")}</SelectItem>
-                <SelectItem value="30">{t("settings.markReadOptions.after30s")}</SelectItem>
-                <SelectItem value="60">{t("settings.markReadOptions.after60s")}</SelectItem>
-                <SelectItem value="off">{t("settings.markReadOptions.off")}</SelectItem>
+                <SelectItem value="instant">Instant (1s)</SelectItem>
+                <SelectItem value="5">After 5s</SelectItem>
+                <SelectItem value="15">After 15s</SelectItem>
+                <SelectItem value="30">After 30s</SelectItem>
+                <SelectItem value="60">After 60s</SelectItem>
+                <SelectItem value="off">Off</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -381,8 +377,8 @@ export function SettingsForm() {
           {/* Mark as read on scroll */}
           <PrefRow
             icon={ScrollText}
-            title={t("settings.markAsReadOnScroll")}
-            description={t("settings.markAsReadOnScrollDescription")}
+            title="Mark as read while scrolling"
+            description="Articles are automatically marked as read once they scroll out of view."
           >
             <Switch
               checked={prefs?.markReadOnScroll ?? false}
@@ -394,8 +390,8 @@ export function SettingsForm() {
           {/* Open original */}
           <PrefRow
             icon={ExternalLink}
-            title={t("settings.openOriginal")}
-            description={t("settings.openOriginalDescription")}
+            title="Open original"
+            description="Open original article in new tab when selecting from list."
           >
             <Switch
               checked={prefs?.openOriginalByDefault ?? false}
@@ -407,8 +403,8 @@ export function SettingsForm() {
           {/* Hide duplicates */}
           <PrefRow
             icon={Layers}
-            title={t("settings.hideDuplicates")}
-            description={t("settings.hideDuplicatesDescription")}
+            title="Hide duplicates"
+            description="When the same article appears in multiple feeds, show it only once (from the first feed that synced it)."
           >
             <Switch
               checked={prefs?.hideDuplicates ?? true}
@@ -420,8 +416,8 @@ export function SettingsForm() {
           {/* RTL layout */}
           <PrefRow
             icon={AlignLeft}
-            title={t("settings.rtlLayout")}
-            description={t("settings.rtlLayoutDescription")}
+            title="Right-to-left layout"
+            description="Mirror the entire interface for Arabic, Hebrew, Persian, and other RTL scripts."
           >
             <Switch
               checked={(prefs?.layoutDirection ?? "ltr") === "rtl"}
@@ -433,8 +429,8 @@ export function SettingsForm() {
           {/* Hide empty feeds */}
           <PrefRow
             icon={EyeOff}
-            title={t("settings.hideEmptyFeeds")}
-            description={t("settings.hideEmptyFeedsDescription")}
+            title="Hide empty feeds"
+            description="Hide feeds and categories with no unread articles from the sidebar."
           >
             <Switch
               checked={prefs?.hideEmptyFeeds ?? false}
@@ -443,8 +439,18 @@ export function SettingsForm() {
             />
           </PrefRow>
 
-          {/* Language picker */}
-          <LanguageSection />
+          {/* Hide empty labels */}
+          <PrefRow
+            icon={EyeOff}
+            title="Hide empty labels"
+            description="Hide labels with no unread articles from the sidebar."
+          >
+            <Switch
+              checked={prefs?.hideEmptyLabels ?? false}
+              onCheckedChange={(checked) => update({ hideEmptyLabels: checked })}
+              className="h-7 w-12"
+            />
+          </PrefRow>
 
           {/* Sync with external readers */}
           <SyncTutorialSection />
@@ -459,9 +465,9 @@ export function SettingsForm() {
                   <User className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("settings.userProfile")}</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">User Profile</h2>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                    {t("settings.signedInAs")}{" "}
+                    Signed in as{" "}
                     <span className="font-medium text-foreground">
                       {session?.user?.email || "Unknown user"}
                     </span>
@@ -474,7 +480,7 @@ export function SettingsForm() {
                 className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                {t("settings.signOut")}
+                Sign out
               </Button>
             </div>
           </section>
@@ -507,8 +513,8 @@ export function SettingsForm() {
           {/* Add to Home Screen */}
           <PrefRow
             icon={Smartphone}
-            title={t("pwa.title")}
-            description={t("pwa.description")}
+            title="Add to Home Screen"
+            description="Show instructions for installing FeedFerret as a PWA on your phone or tablet."
           >
             <Button
               type="button"
@@ -516,27 +522,27 @@ export function SettingsForm() {
               onClick={() => window.dispatchEvent(new Event(SHOW_PWA_INSTALL_PROMPT_EVENT))}
               className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
             >
-              {t("pwa.install")}
+              Show instructions
             </Button>
           </PrefRow>
 
           <PrefRow
             icon={Keyboard}
-            title={t("keyboard.title")}
-            description={t("keyboard.description")}
+            title="Keyboard shortcuts"
+            description="Desktop keyboard shortcuts for fast navigation without a mouse."
           >
             <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground sm:min-w-80">
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
                 <span className="font-mono text-foreground">j / k</span>
-                <span>{t("keyboard.nextArticle")} / {t("keyboard.previousArticle")}</span>
+                <span>Next / previous article</span>
                 <span className="font-mono text-foreground">n / p</span>
-                <span>{t("keyboard.nextUnread")} / {t("keyboard.previousUnread")}</span>
+                <span>Next / previous unread article</span>
                 <span className="font-mono text-foreground">m / s</span>
-                <span>{t("keyboard.toggleRead")} / {t("keyboard.toggleStar")}</span>
+                <span>Toggle read / star</span>
                 <span className="font-mono text-foreground">/</span>
-                <span>{t("keyboard.focusSearch")}</span>
+                <span>Open search</span>
                 <span className="font-mono text-foreground">?</span>
-                <span>{t("keyboard.toggleHelp")}</span>
+                <span>Open shortcut help</span>
               </div>
             </div>
           </PrefRow>
@@ -573,7 +579,6 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 function PushNotificationSection() {
-  const t = useTranslations();
   const { data: feeds = [] } = useFeeds();
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -709,13 +714,13 @@ function PushNotificationSection() {
               {enabled ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("push.title")}</h2>
+              <h2 className="text-lg font-semibold tracking-[-0.02em]">Browser notifications</h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                {t("push.description")}
+                Get notified when new articles arrive. Titles are included in notifications.
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {t("push.status")}: {loading ? t("push.checking") : !supported ? t("push.unsupported") : !status?.configured ? t("push.serverNotConfigured") : permission}
-                {status ? ` · ${status.activeSubscriptions} ${status.activeSubscriptions === 1 ? t("push.activeDevice") : t("push.activeDevices")}` : ""}
+                Status: {loading ? "checking…" : !supported ? "unsupported" : !status?.configured ? "server not configured" : permission}
+                {status ? ` · ${status.activeSubscriptions} active device${status.activeSubscriptions === 1 ? "" : "s"}` : ""}
               </p>
             </div>
           </div>
@@ -727,15 +732,15 @@ function PushNotificationSection() {
                 disabled={busy || loading || !supported || !status?.configured}
                 className="h-11 rounded-2xl px-5"
               >
-                {t("push.enable")}
+                Enable
               </Button>
             ) : (
               <>
                 <Button type="button" variant="outline" onClick={sendTest} disabled={busy} className="h-11 rounded-2xl px-5">
-                  {t("push.test")}
+                  Test
                 </Button>
                 <Button type="button" variant="outline" onClick={disable} disabled={busy} className="h-11 rounded-2xl px-5">
-                  {t("push.disableDevice")}
+                  Disable device
                 </Button>
               </>
             )}
@@ -745,7 +750,7 @@ function PushNotificationSection() {
         {status && (
           <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="push-frequency-select">{t("push.frequency")}</label>
+              <label className="text-sm font-medium" htmlFor="push-frequency-select">Frequency</label>
               <Select
                 value={status.settings.pushFrequency}
                 onValueChange={(value) => updateSettings({ pushFrequency: value })}
@@ -754,17 +759,17 @@ function PushNotificationSection() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl">
-                  <SelectItem value="immediate">{t("push.frequencies.immediately")}</SelectItem>
-                  <SelectItem value="hourly">{t("push.frequencies.hourly")}</SelectItem>
-                  <SelectItem value="daily">{t("push.frequencies.daily")}</SelectItem>
-                  <SelectItem value="off">{t("push.frequencies.off")}</SelectItem>
+                  <SelectItem value="immediate">Immediately</SelectItem>
+                  <SelectItem value="hourly">Hourly summary</SelectItem>
+                  <SelectItem value="daily">Daily summary</SelectItem>
+                  <SelectItem value="off">Off</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
               <div>
-                <p className="text-sm font-medium">{t("push.includeArticleTitles")}</p>
-                <p className="text-xs text-muted-foreground">{t("push.includeArticleTitlesDescription")}</p>
+                <p className="text-sm font-medium">Include article titles</p>
+                <p className="text-xs text-muted-foreground">Disable for generic private notifications.</p>
               </div>
               <Switch
                 checked={status.settings.pushPrivatePayloads}
@@ -772,7 +777,7 @@ function PushNotificationSection() {
               />
             </div>
             <div className="sm:col-span-2">
-              <p className="mb-2 text-sm font-medium">{t("push.feeds")}</p>
+              <p className="mb-2 text-sm font-medium">Feeds</p>
               <div className="max-h-44 overflow-y-auto rounded-2xl border border-border/70 bg-background/70 p-3">
                 <label className="mb-2 flex items-center gap-2 text-sm">
                   <input
@@ -780,7 +785,7 @@ function PushNotificationSection() {
                     checked={feedIds.size === 0}
                     onChange={() => updateSettings({ pushFeedIds: [] })}
                   />
-                  {t("push.allFeeds")}
+                  All feeds
                 </label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {feeds.map((feed: any) => (
@@ -816,7 +821,6 @@ function PushNotificationSection() {
 
 
 function TwoFactorSection() {
-  const t = useTranslations();
   const { data: status } = useTwoFactorStatus();
   const beginSetup = useBeginTwoFactorSetup();
   const confirmSetup = useConfirmTwoFactorSetup();
@@ -866,15 +870,15 @@ function TwoFactorSection() {
               <Shield className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("twoFactor.title")}</h2>
+              <h2 className="text-lg font-semibold tracking-[-0.02em]">Two-factor authentication</h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                {t("twoFactor.description")}
+                Protect your email/password login with a 6-digit authenticator code. OAuth providers like Authelia can enforce MFA separately.
               </p>
             </div>
           </div>
           {status?.enabled ? (
             <div className="inline-flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-              <Shield className="h-4 w-4" /> {t("twoFactor.enabled")}
+              <Shield className="h-4 w-4" /> Enabled
             </div>
           ) : (
             <Button
@@ -883,7 +887,7 @@ function TwoFactorSection() {
               disabled={beginSetup.isPending}
               className="h-11 rounded-2xl px-5"
             >
-              {beginSetup.isPending ? t("twoFactor.starting") : t("twoFactor.beginSetup")}
+              {beginSetup.isPending ? "Starting…" : "Set up 2FA"}
             </Button>
           )}
         </div>
@@ -891,21 +895,21 @@ function TwoFactorSection() {
         {setupData && !status?.enabled && (
           <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:p-5">
             <div className="grid gap-2">
-              <p className="text-sm font-medium">1. {t("twoFactor.setupInProgress")}</p>
+              <p className="text-sm font-medium">1. Add this account in your authenticator app</p>
               <p className="text-xs text-muted-foreground">
                 Use manual setup if your app does not support opening otpauth links directly.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("twoFactor.account")}</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Account</p>
                 <p className="mt-1 text-sm font-medium break-all">{setupData.accountName}</p>
               </div>
               <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("twoFactor.secret")}</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Secret</p>
                 <div className="mt-1 flex items-center gap-2">
                   <p className="text-sm font-medium break-all">{setupData.secret}</p>
-                  <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-xl" onClick={() => copyValue(setupData.secret, t("twoFactor.secret"))}>
+                  <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-xl" onClick={() => copyValue(setupData.secret, "Secret")}>
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
@@ -914,17 +918,17 @@ function TwoFactorSection() {
             <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("twoFactor.otpauthUri")}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">otpauth URI</p>
                   <p className="mt-1 text-xs text-muted-foreground break-all">{setupData.uri}</p>
                 </div>
                 <Button type="button" variant="outline" className="rounded-2xl" onClick={() => copyValue(setupData.uri, "URI")}>
-                  <Copy className="mr-2 h-4 w-4" /> {t("twoFactor.copy")}
+                  <Copy className="mr-2 h-4 w-4" /> Copy
                 </Button>
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="totp-setup-code">2. {t("twoFactor.enterCode")}</label>
+                <label className="text-sm font-medium" htmlFor="totp-setup-code">2. Enter the current 6-digit code</label>
                 <Input
                   id="totp-setup-code"
                   inputMode="numeric"
@@ -937,10 +941,10 @@ function TwoFactorSection() {
               </div>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setSetupData(null)}>
-                  {t("twoFactor.cancel")}
+                  Cancel
                 </Button>
                 <Button type="button" className="rounded-2xl" onClick={handleEnable} disabled={confirmSetup.isPending || setupCode.length !== 6}>
-                  {confirmSetup.isPending ? t("twoFactor.enabling") : t("twoFactor.enableTwoFa")}
+                  {confirmSetup.isPending ? "Enabling…" : "Enable 2FA"}
                 </Button>
               </div>
             </div>
@@ -952,12 +956,12 @@ function TwoFactorSection() {
             <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
               <ShieldOff className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                {t("twoFactor.greaderWarning")}
+                Google Reader password login is disabled for accounts with 2FA enabled. For SSO flows like Authelia, MFA should be handled by your identity provider.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="totp-disable-code">{t("twoFactor.disableTwoFa")}</label>
+                <label className="text-sm font-medium" htmlFor="totp-disable-code">Disable 2FA</label>
                 <Input
                   id="totp-disable-code"
                   inputMode="numeric"
@@ -975,7 +979,7 @@ function TwoFactorSection() {
                 onClick={handleDisable}
                 disabled={disableTwoFactor.isPending || disableCode.length !== 6}
               >
-                {disableTwoFactor.isPending ? t("twoFactor.disabling") : t("twoFactor.disableTwoFa")}
+                {disableTwoFactor.isPending ? "Disabling…" : "Disable 2FA"}
               </Button>
             </div>
           </div>
@@ -986,17 +990,16 @@ function TwoFactorSection() {
 }
 
 const DAYS = [
-  { value: "0", labelKey: "digest.days.sunday" as const },
-  { value: "1", labelKey: "digest.days.monday" as const },
-  { value: "2", labelKey: "digest.days.tuesday" as const },
-  { value: "3", labelKey: "digest.days.wednesday" as const },
-  { value: "4", labelKey: "digest.days.thursday" as const },
-  { value: "5", labelKey: "digest.days.friday" as const },
-  { value: "6", labelKey: "digest.days.saturday" as const },
+  { value: "0", label: "Sunday" },
+  { value: "1", label: "Monday" },
+  { value: "2", label: "Tuesday" },
+  { value: "3", label: "Wednesday" },
+  { value: "4", label: "Thursday" },
+  { value: "5", label: "Friday" },
+  { value: "6", label: "Saturday" },
 ];
 
 function DigestSection() {
-  const t = useTranslations();
   const { data: digest } = useDigestSettings();
   const { data: feedsData } = useFeeds();
   const { data: instance, loading: instanceLoading } = useInstance();
@@ -1020,9 +1023,10 @@ function DigestSection() {
           <Mail className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("digest.title")}</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">Email Digest</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {t("digest.description")}
+            Receive a periodic email summary of articles from your feeds.
+            Requires SMTP to be configured by your administrator.
           </p>
         </div>
       </div>
@@ -1031,10 +1035,10 @@ function DigestSection() {
         {/* Enable toggle */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">{t("digest.enableDigestEmails")}</p>
+            <p className="text-sm font-medium">Enable digest emails</p>
             {digest.digestLastSentAt && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                {t("digest.lastSent")}: {new Date(digest.digestLastSentAt).toLocaleString()}
+                Last sent: {new Date(digest.digestLastSentAt).toLocaleString()}
               </p>
             )}
           </div>
@@ -1061,7 +1065,7 @@ function DigestSection() {
             {/* Frequency */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-frequency-select">{t("digest.frequency")}</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-frequency-select">Frequency</label>
                 <Select
                   value={digest.digestFrequency}
                   onValueChange={(v) => update({ digestFrequency: v })}
@@ -1070,8 +1074,8 @@ function DigestSection() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
-                    <SelectItem value="daily">{t("digest.frequencies.daily")}</SelectItem>
-                    <SelectItem value="weekly">{t("digest.frequencies.weekly")}</SelectItem>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1079,7 +1083,7 @@ function DigestSection() {
               {/* Day of week (weekly only) */}
               {digest.digestFrequency === "weekly" && (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-day-select">{t("digest.day")}</label>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-day-select">Day</label>
                   <Select
                     value={String(digest.digestDayOfWeek)}
                     onValueChange={(v) => update({ digestDayOfWeek: parseInt(v) })}
@@ -1089,7 +1093,7 @@ function DigestSection() {
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl">
                       {DAYS.map((d) => (
-                        <SelectItem key={d.value} value={d.value}>{t(d.labelKey)}</SelectItem>
+                        <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1098,7 +1102,7 @@ function DigestSection() {
 
               {/* Hour */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-hour-select">{t("digest.hour")}</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-hour-select">Hour (UTC)</label>
                 <Select
                   value={String(digest.digestHour)}
                   onValueChange={(v) => update({ digestHour: parseInt(v) })}
@@ -1118,7 +1122,7 @@ function DigestSection() {
 
               {/* Scope */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-scope-select">{t("digest.include")}</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-scope-select">Include</label>
                 <Select
                   value={digest.digestScope}
                   onValueChange={(v) => update({ digestScope: v })}
@@ -1127,10 +1131,10 @@ function DigestSection() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
-                    <SelectItem value="unread">{t("digest.scope.unread")}</SelectItem>
-                    <SelectItem value="all">{t("digest.scope.allNew")}</SelectItem>
-                    <SelectItem value="starred">{t("digest.scope.starred")}</SelectItem>
-                    <SelectItem value="readlater">{t("digest.scope.readLater")}</SelectItem>
+                    <SelectItem value="unread">Unread</SelectItem>
+                    <SelectItem value="all">All new</SelectItem>
+                    <SelectItem value="starred">Starred</SelectItem>
+                    <SelectItem value="readlater">Read Later</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1140,8 +1144,8 @@ function DigestSection() {
             {feeds.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  {t("digest.feedFilter")}{" "}
-                  <span className="normal-case font-normal">({t("digest.feedFilterHint")})</span>
+                  Feed filter{" "}
+                  <span className="normal-case font-normal">(leave empty for all feeds)</span>
                 </label>
                 <div className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-background/50 p-3 min-h-[48px]">
                   {feeds.map((feed: any) => {
@@ -1182,10 +1186,10 @@ function DigestSection() {
                 className="rounded-2xl h-10"
               >
                 <Send className="w-4 h-4 mr-2" />
-                {sendTest.isPending ? t("digest.sending") : t("digest.sendTestDigest")}
+                {sendTest.isPending ? "Sending…" : "Send test digest now"}
               </Button>
               <p className="text-xs text-muted-foreground">
-                {t("digest.testDigestHint")}
+                Sends to your account email using the last 7 days of articles.
               </p>
             </div>
           </>
@@ -1196,7 +1200,6 @@ function DigestSection() {
 }
 
 function DeleteAccountSection() {
-  const t = useTranslations();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1211,10 +1214,10 @@ function DeleteAccountSection() {
         setLoading(false);
         return;
       }
-      toast.success(t("deleteAccount.accountDeleted"));
+      toast.success("Account deleted. Goodbye!");
       await signOut({ callbackUrl: "/login" });
     } catch {
-      toast.error(t("deleteAccount.deletionFailed"));
+      toast.error("Account deletion failed. Try again.");
       setLoading(false);
     }
   };
@@ -1228,9 +1231,10 @@ function DeleteAccountSection() {
               <AlertTriangle className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("deleteAccount.title")}</h2>
+              <h2 className="text-lg font-semibold tracking-[-0.02em]">Delete Account</h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                {t("deleteAccount.description")}
+                Permanently delete your account and all associated data — feeds, articles, labels, and settings.
+                This action is irreversible and complies with GDPR Art. 17 (right to erasure).
               </p>
             </div>
           </div>
@@ -1240,7 +1244,7 @@ function DeleteAccountSection() {
             className="h-11 rounded-2xl border-destructive/40 text-destructive hover:bg-destructive/10 px-5 shrink-0"
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            {t("deleteAccount.deleteMyAccount")}
+            Delete my account
           </Button>
         </div>
       </section>
@@ -1250,34 +1254,34 @@ function DeleteAccountSection() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
-              {t("deleteAccount.confirmDialogTitle")}
+              Delete your account?
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-3">
               <span className="block">
-                {t("deleteAccount.confirmDialogDescription")}
-                <strong> {t("deleteAccount.cannotBeUndone")}</strong>
+                This will permanently delete your account, all your feeds, articles, labels, and settings.
+                <strong> This cannot be undone.</strong>
               </span>
               <span className="block mt-3 text-sm font-medium text-foreground">
-                {t("deleteAccount.typeToConfirm")}
+                Type <code className="bg-muted px-1.5 py-0.5 rounded text-xs">delete my account</code> to confirm:
               </span>
               <Input
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                placeholder={t("deleteAccount.confirmPlaceholder")}
+                placeholder="delete my account"
                 className="rounded-2xl border-border/70 bg-background/70"
               />
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="rounded-2xl" onClick={() => setConfirmText("")}>
-              {t("deleteAccount.cancel")}
+              Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDelete}
               disabled={confirmText !== "delete my account" || loading}
             >
-              {loading ? t("deleteAccount.deleting") : t("deleteAccount.deletePermanently")}
+              {loading ? "Deleting…" : "Delete permanently"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1287,7 +1291,6 @@ function DeleteAccountSection() {
 }
 
 function ApiTokenSection() {
-  const tc = useTranslations();
   const [tokens, setTokens] = useState<Array<{
     id: string; name: string; scope: string; expiresAt: string | null; lastUsedAt: string | null; createdAt: string;
   }>>([]);
@@ -1330,7 +1333,7 @@ function ApiTokenSection() {
         setCreateScope("write");
         setCreateExpiry("never");
         await loadTokens();
-        toast.success(tc("apiTokens.newTokenWarning"));
+        toast.success("Token created — copy it now, it won't be shown again");
       } else {
         toast.error("Failed to create token");
       }
@@ -1344,18 +1347,18 @@ function ApiTokenSection() {
     if (res.ok) {
       if (newTokenId === id) { setNewRawToken(null); setNewTokenId(null); }
       await loadTokens();
-      toast.success(`"${name}" ${tc("apiTokens.revoked")}`);
+      toast.success(`Token "${name}" revoked`);
     }
   }, [loadTokens, newTokenId]);
 
   const handleCopy = useCallback(() => {
     if (newRawToken) {
       navigator.clipboard.writeText(newRawToken);
-      toast.success(tc("apiTokens.copy"));
+      toast.success("Token copied to clipboard");
     }
   }, [newRawToken]);
 
-  const scopeLabel = (scope: string) => ({ read: tc("apiTokens.scopes.read"), write: tc("apiTokens.scopes.readWrite"), admin: tc("apiTokens.scopes.admin") } as Record<string, string>)[scope] ?? scope;
+  const scopeLabel = (scope: string) => ({ read: "Read-only", write: "Read+Write", admin: "Admin" } as Record<string, string>)[scope] ?? scope;
   const scopeColor = (scope: string): "secondary" | "default" | "destructive" =>
     scope === "read" ? "secondary" : scope === "admin" ? "destructive" : "default";
 
@@ -1366,21 +1369,22 @@ function ApiTokenSection() {
           <Key className="h-5 w-5" />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">{tc("apiTokens.title")}</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">API Tokens</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {tc("apiTokens.description")}
+            Personal API tokens for browser extensions, mobile apps, and external integrations.
+            Each token has its own scope and optional expiry. Treat them like passwords.
           </p>
         </div>
         <Button size="sm" onClick={() => setShowCreate(true)} className="rounded-2xl h-9 shrink-0">
           <Plus className="w-4 h-4 mr-1" />
-          {tc("apiTokens.addToken")}
+          Add token
         </Button>
       </div>
 
       {newRawToken && (
         <div className="mb-4 rounded-2xl bg-accent/5 border border-accent/20 p-4">
           <p className="text-xs font-semibold text-accent mb-2 uppercase tracking-wider">
-            {tc("apiTokens.newTokenWarning")}
+            New token — copy now, won&apos;t be shown again
           </p>
           <div className="flex items-center gap-2">
             <Input readOnly value={newRawToken} className="font-mono text-xs h-9 bg-background/60" />
@@ -1393,69 +1397,69 @@ function ApiTokenSection() {
 
       {showCreate && (
         <div className="mb-4 rounded-2xl border border-border/50 bg-muted/30 p-4 space-y-3">
-          <p className="text-sm font-medium">{tc("apiTokens.createNewToken")}</p>
+          <p className="text-sm font-medium">Create new token</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-1">
-              <label htmlFor="token-name" className="text-xs text-muted-foreground mb-1 block">{tc("apiTokens.name")}</label>
+              <label htmlFor="token-name" className="text-xs text-muted-foreground mb-1 block">Name</label>
               <Input id="token-name" value={createName} onChange={(e) => setCreateName(e.target.value)} className="h-9 rounded-xl" maxLength={80} />
             </div>
             <div>
-              <label htmlFor="token-scope" className="text-xs text-muted-foreground mb-1 block">{tc("apiTokens.scope")}</label>
+              <label htmlFor="token-scope" className="text-xs text-muted-foreground mb-1 block">Scope</label>
               <Select value={createScope} onValueChange={setCreateScope}>
                 <SelectTrigger id="token-scope" className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="read">{tc("apiTokens.scopes.read")}</SelectItem>
-                  <SelectItem value="write">{tc("apiTokens.scopes.readWrite")}</SelectItem>
-                  <SelectItem value="admin">{tc("apiTokens.scopes.admin")}</SelectItem>
+                  <SelectItem value="read">Read-only</SelectItem>
+                  <SelectItem value="write">Read + Write</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <label htmlFor="token-expiry" className="text-xs text-muted-foreground mb-1 block">{tc("apiTokens.expires")}</label>
+              <label htmlFor="token-expiry" className="text-xs text-muted-foreground mb-1 block">Expires</label>
               <Select value={createExpiry} onValueChange={setCreateExpiry}>
                 <SelectTrigger id="token-expiry" className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="never">{tc("apiTokens.expiry.never")}</SelectItem>
-                  <SelectItem value="30d">{tc("apiTokens.expiry.d30")}</SelectItem>
-                  <SelectItem value="90d">{tc("apiTokens.expiry.d90")}</SelectItem>
-                  <SelectItem value="1y">{tc("apiTokens.expiry.y1")}</SelectItem>
+                  <SelectItem value="never">Never</SelectItem>
+                  <SelectItem value="30d">30 days</SelectItem>
+                  <SelectItem value="90d">90 days</SelectItem>
+                  <SelectItem value="1y">1 year</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <div className="flex gap-2 pt-1">
             <Button size="sm" onClick={handleCreate} disabled={creating || !createName.trim()} className="rounded-xl h-9">
-              {creating ? tc("apiTokens.creating") : tc("apiTokens.create")}
+              {creating ? "Creating…" : "Create"}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)} className="rounded-xl h-9">{tc("apiTokens.cancel")}</Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)} className="rounded-xl h-9">Cancel</Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">{tc("apiTokens.loading")}</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       ) : tokens.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{tc("apiTokens.noTokens")}</p>
+        <p className="text-sm text-muted-foreground">No tokens yet. Create one to get started.</p>
       ) : (
         <div className="space-y-2">
-          {tokens.map((tok) => (
-            <div key={tok.id} className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/40 px-3 py-2">
+          {tokens.map((t) => (
+            <div key={t.id} className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/40 px-3 py-2">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium truncate">{tok.name}</span>
-                  <Badge variant={scopeColor(tok.scope)} className="text-[10px] h-4 px-1.5">{scopeLabel(tok.scope)}</Badge>
-                  {tok.expiresAt && <span className="text-[11px] text-muted-foreground">{tc("apiTokens.expires")} {new Date(tok.expiresAt).toLocaleDateString()}</span>}
+                  <span className="text-sm font-medium truncate">{t.name}</span>
+                  <Badge variant={scopeColor(t.scope)} className="text-[10px] h-4 px-1.5">{scopeLabel(t.scope)}</Badge>
+                  {t.expiresAt && <span className="text-[11px] text-muted-foreground">Expires {new Date(t.expiresAt).toLocaleDateString()}</span>}
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {tc("apiTokens.created")} {new Date(tok.createdAt).toLocaleDateString()}
-                  {tok.lastUsedAt ? ` · ${tc("apiTokens.lastUsed")} ${new Date(tok.lastUsedAt).toLocaleDateString()}` : ` · ${tc("apiTokens.neverUsed")}`}
+                  Created {new Date(t.createdAt).toLocaleDateString()}
+                  {t.lastUsedAt ? ` · Last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : " · Never used"}
                 </p>
               </div>
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                onClick={() => handleRevoke(tok.id, tok.name)}
+                onClick={() => handleRevoke(t.id, t.name)}
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
@@ -1465,14 +1469,14 @@ function ApiTokenSection() {
       )}
 
       <p className="mt-4 text-xs text-muted-foreground">
-        {tc("apiTokens.usageHint")}
+        Pass the token as <code className="bg-muted px-1 py-0.5 rounded text-[11px]">Authorization: Bearer &lt;token&gt;</code>.{" "}
+        The Fever API uses <code className="bg-muted px-1 py-0.5 rounded text-[11px]">md5(email:token)</code> as its api_key.
       </p>
     </section>
   );
 }
 
 function AiSummarySection() {
-  const t = useTranslations();
   const { data: ai } = useAiSettings();
   const updateAi = useUpdateAiSettings();
   const testAi = useTestAiConnection();
@@ -1518,9 +1522,9 @@ function AiSummarySection() {
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("ai.title")}</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">AI Summaries (BYOK)</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {t("ai.description")}
+            Summarize articles on demand or automatically on sync using your own OpenAI, Anthropic, Gemini, OpenRouter, or Ollama credentials. Your API key is encrypted at rest and never shared.
           </p>
         </div>
       </div>
@@ -1528,18 +1532,18 @@ function AiSummarySection() {
       <div className="space-y-4">
         {/* Provider */}
         <div className="grid gap-1.5">
-          <label className="text-sm font-medium" htmlFor="ai-provider-select">{t("ai.provider")}</label>
+          <label className="text-sm font-medium" htmlFor="ai-provider-select">Provider</label>
           <Select value={provider} onValueChange={setProvider}>
             <SelectTrigger id="ai-provider-select" className="h-10 rounded-xl">
-              <SelectValue placeholder={t("ai.provider")} />
+              <SelectValue placeholder="Select provider" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">{t("ai.providers.none")}</SelectItem>
-              <SelectItem value="openai">{t("ai.providers.openai")}</SelectItem>
-              <SelectItem value="anthropic">{t("ai.providers.anthropic")}</SelectItem>
-              <SelectItem value="gemini">{t("ai.providers.gemini")}</SelectItem>
-              <SelectItem value="openrouter">{t("ai.providers.openrouter")}</SelectItem>
-              <SelectItem value="ollama">{t("ai.providers.ollama")}</SelectItem>
+              <SelectItem value="none">None (disabled)</SelectItem>
+              <SelectItem value="openai">OpenAI</SelectItem>
+              <SelectItem value="anthropic">Anthropic</SelectItem>
+              <SelectItem value="gemini">Google Gemini</SelectItem>
+              <SelectItem value="openrouter">OpenRouter</SelectItem>
+              <SelectItem value="ollama">Ollama (local)</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1547,15 +1551,15 @@ function AiSummarySection() {
         {provider !== "none" && provider !== "ollama" && (
           <div className="grid gap-1.5">
             <label className="text-sm font-medium" htmlFor="ai-api-key-input">
-              {t("ai.apiKey")}
+              API Key
               {ai?.hasApiKey && !apiKey && (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">({t("ai.currentlySet")})</span>
+                <span className="ml-2 text-xs font-normal text-muted-foreground">(currently set)</span>
               )}
             </label>
             <Input
               id="ai-api-key-input"
               type="password"
-              placeholder={ai?.hasApiKey ? t("ai.leaveBlankToKeep") : "sk-..."}
+              placeholder={ai?.hasApiKey ? "Leave blank to keep existing key" : "sk-..."}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               className="h-10 rounded-xl font-mono text-sm"
@@ -1565,7 +1569,7 @@ function AiSummarySection() {
 
         {provider === "ollama" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-ollama-base-url-input">{t("ai.ollamaBaseUrl")}</label>
+            <label className="text-sm font-medium" htmlFor="ai-ollama-base-url-input">Ollama Base URL</label>
             <Input
               id="ai-ollama-base-url-input"
               placeholder="http://localhost:11434"
@@ -1579,7 +1583,7 @@ function AiSummarySection() {
         {provider !== "none" && (
           <div className="grid gap-1.5">
             <label className="text-sm font-medium" htmlFor="ai-model-input">
-              {t("ai.model")}
+              Model
               <span className="ml-1 text-xs font-normal text-muted-foreground">
                 {provider === "openai" && "(default: gpt-4o-mini)"}
                 {provider === "anthropic" && "(default: claude-haiku-4-5-20251001)"}
@@ -1600,19 +1604,19 @@ function AiSummarySection() {
 
         {provider !== "none" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-language-select">{t("ai.summaryLanguage")}</label>
+            <label className="text-sm font-medium" htmlFor="ai-language-select">Summary language</label>
             <Select value={language} onValueChange={setLanguage}>
               <SelectTrigger id="ai-language-select" className="h-10 rounded-xl">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="same">{t("ai.languages.same")}</SelectItem>
-                <SelectItem value="English">{t("ai.languages.english")}</SelectItem>
-                <SelectItem value="German">{t("ai.languages.german")}</SelectItem>
-                <SelectItem value="French">{t("ai.languages.french")}</SelectItem>
-                <SelectItem value="Spanish">{t("ai.languages.spanish")}</SelectItem>
-                <SelectItem value="Japanese">{t("ai.languages.japanese")}</SelectItem>
-                <SelectItem value="Chinese">{t("ai.languages.chinese")}</SelectItem>
+                <SelectItem value="same">Same as article</SelectItem>
+                <SelectItem value="English">English</SelectItem>
+                <SelectItem value="German">German</SelectItem>
+                <SelectItem value="French">French</SelectItem>
+                <SelectItem value="Spanish">Spanish</SelectItem>
+                <SelectItem value="Japanese">Japanese</SelectItem>
+                <SelectItem value="Chinese">Chinese</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1621,8 +1625,8 @@ function AiSummarySection() {
         {provider !== "none" && (
           <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
             <div>
-              <p className="text-sm font-medium">{t("ai.autoSummarize")}</p>
-              <p className="text-xs text-muted-foreground">{t("ai.autoSummarizeDescription")}</p>
+              <p className="text-sm font-medium">Auto-summarize on sync</p>
+              <p className="text-xs text-muted-foreground">Automatically summarize new articles (uses API credits)</p>
             </div>
             <Switch
               checked={autoSummarize}
@@ -1642,7 +1646,7 @@ function AiSummarySection() {
             {testResult.success
               ? <CheckCircle2 className="h-4 w-4 shrink-0" />
               : <XCircle className="h-4 w-4 shrink-0" />}
-            <span>{testResult.success ? t("ai.connectionSuccessful") : testResult.error}</span>
+            <span>{testResult.success ? "Connection successful" : testResult.error}</span>
           </div>
         )}
 
@@ -1652,7 +1656,7 @@ function AiSummarySection() {
             disabled={updateAi.isPending}
             className="rounded-2xl h-10"
           >
-            {updateAi.isPending ? t("ai.saving") : t("ai.save")}
+            {updateAi.isPending ? "Saving…" : "Save"}
           </Button>
           {provider !== "none" && (
             <Button
@@ -1662,7 +1666,7 @@ function AiSummarySection() {
               className="rounded-2xl h-10"
             >
               <Sparkles className="w-4 h-4 mr-2" />
-              {testAi.isPending ? t("ai.testing") : t("ai.testConnection")}
+              {testAi.isPending ? "Testing…" : "Test connection"}
             </Button>
           )}
         </div>
@@ -1748,7 +1752,6 @@ const SYNC_CLIENTS: SyncClient[] = [
 ];
 
 function SyncTutorialSection() {
-  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [instanceUrl, setInstanceUrl] = useState<string>("");
 
@@ -1772,9 +1775,9 @@ function SyncTutorialSection() {
           <Rss className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("syncReaders.title")}</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">Sync with external readers</h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-            {t("syncReaders.description")}
+            Connect Reeder, NetNewsWire, Fluent Reader and other RSS clients to this FeedFerret instance. Hosted services like Feedly need an OPML round-trip instead.
           </p>
         </div>
         <span className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground">
@@ -1786,17 +1789,17 @@ function SyncTutorialSection() {
         <div className="mt-6 space-y-6">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.greaderEndpoint")}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Google Reader API endpoint</p>
               <p className="mt-1 break-all text-sm font-mono">{greaderUrl}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                {t("syncReaders.greaderUsernameHint")}
+                Username = your FeedFerret email. Password = your FeedFerret password (or an API token).
               </p>
             </div>
             <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.restApiBase")}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">REST API base</p>
               <p className="mt-1 break-all text-sm font-mono">{apiUrl}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                {t("syncReaders.restApiHint")}
+                Used by custom integrations. Authenticate with a bearer token from Profile → API tokens.
               </p>
             </div>
           </div>
@@ -1822,7 +1825,7 @@ function SyncTutorialSection() {
                             : "bg-amber-500/10 text-amber-600",
                         )}
                       >
-                        {client.api === "greader" ? t("syncReaders.directSync") : t("syncReaders.opmlOnly")}
+                        {client.api === "greader" ? "Direct sync" : "OPML only"}
                       </span>
                     </div>
                     {client.notes && (
@@ -1835,13 +1838,13 @@ function SyncTutorialSection() {
                     rel="noopener noreferrer"
                     className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border/60 bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted/60 transition-colors"
                   >
-                    {t("syncReaders.openSite")}
+                    Open site
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
                 {client.api === "greader" && (
                   <p className="mt-3 text-[11px] text-muted-foreground">
-                    {t("syncReaders.inClientChoose")} <strong>{client.serverField}</strong> and paste <code className="rounded bg-background/80 px-1 font-mono">{greaderUrl}</code> {t("syncReaders.serverUrl")}
+                    In the client, choose <strong>{client.serverField}</strong> and paste <code className="rounded bg-background/80 px-1 font-mono">{greaderUrl}</code> as the server URL.
                   </p>
                 )}
               </div>
@@ -1849,7 +1852,7 @@ function SyncTutorialSection() {
           </div>
 
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-muted-foreground leading-relaxed">
-            <p className="font-medium text-amber-600 dark:text-amber-400 mb-1">{t("syncReaders.twoFactorNote")}</p>
+            <p className="font-medium text-amber-600 dark:text-amber-400 mb-1">A note on two-factor authentication</p>
             <p>
               External clients can&apos;t prompt for a TOTP code. If you have 2FA on, generate a dedicated API token under
               Profile → API tokens and use that in place of your password.
@@ -1861,51 +1864,7 @@ function SyncTutorialSection() {
   );
 }
 
-function LanguageSection() {
-  const t = useTranslations();
-  const { data: prefs } = useReadingPreferences();
-  const router = useRouter();
-  const [saving, setSaving] = useState(false);
-
-  const currentLocale = prefs?.uiLanguage ?? "en";
-
-  const handleChange = async (locale: string) => {
-    setSaving(true);
-    try {
-      await updateUiLanguage(locale);
-      router.refresh();
-    } catch {
-      toast.error("Could not update language");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <PrefRow
-      icon={Globe}
-      title={t("settings.language")}
-      description={t("settings.languageDescription")}
-    >
-      <Select
-        value={currentLocale}
-        onValueChange={handleChange}
-        disabled={saving}
-      >
-        <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="rounded-2xl">
-          <SelectItem value="en">{t("settings.languageOptions.en")}</SelectItem>
-          <SelectItem value="de">{t("settings.languageOptions.de")}</SelectItem>
-        </SelectContent>
-      </Select>
-    </PrefRow>
-  );
-}
-
 function NotificationChannelsSection() {
-  const t = useTranslations();
   const { data, isLoading } = useNotificationChannels();
   const update = useUpdateNotificationChannels();
   const testChannel = useTestNotificationChannel();
@@ -1947,9 +1906,9 @@ function NotificationChannelsSection() {
     await update.mutateAsync(form);
     const result = await testChannel.mutateAsync(channel);
     if (result.success) {
-      toast.success(t("notifications.successTitle"));
+      toast.success("Test notification sent successfully");
     } else {
-      toast.error(result.error ?? t("notifications.errorTitle"));
+      toast.error(result.error ?? "Failed to send test notification");
     }
   }
 
@@ -1962,9 +1921,9 @@ function NotificationChannelsSection() {
           <Bell className="h-5 w-5" />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("notifications.title")}</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">Notification Channels</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {t("notifications.description")}
+            Forward keyword alerts and rule matches to external services. Enable a channel, enter your credentials, and choose it as an action in Rules &amp; Alerts.
           </p>
         </div>
       </div>
@@ -1975,7 +1934,7 @@ function NotificationChannelsSection() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Send className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{t("notifications.telegram")}</span>
+              <span className="font-medium">Telegram</span>
             </div>
             <Switch
               checked={form.telegramEnabled}
@@ -1985,17 +1944,19 @@ function NotificationChannelsSection() {
           {form.telegramEnabled && (
             <div className="mt-3 space-y-2">
               <Input
-                placeholder={t("notifications.botTokenPlaceholder")}
+                placeholder="Bot token (from @BotFather)"
                 {...field("telegramBotToken")}
                 className="h-9 font-mono text-xs"
               />
               <Input
-                placeholder={t("notifications.chatIdPlaceholder")}
+                placeholder="Chat ID (send /start to your bot to get it)"
                 {...field("telegramChatId")}
                 className="h-9 font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground">
-                {t("notifications.telegramHint")}
+                Create a bot via{" "}
+                <span className="font-mono">@BotFather</span>, then send{" "}
+                <span className="font-mono">/start</span> to get your chat ID.
               </p>
               <Button
                 type="button"
@@ -2005,7 +1966,7 @@ function NotificationChannelsSection() {
                 disabled={testChannel.isPending || update.isPending || !form.telegramBotToken || !form.telegramChatId}
                 className="h-8 rounded-xl text-xs"
               >
-                {t("notifications.sendTestMessage")}
+                Send test message
               </Button>
             </div>
           )}
@@ -2016,7 +1977,7 @@ function NotificationChannelsSection() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Bell className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{t("notifications.gotify")}</span>
+              <span className="font-medium">Gotify</span>
             </div>
             <Switch
               checked={form.gotifyEnabled}
@@ -2026,12 +1987,12 @@ function NotificationChannelsSection() {
           {form.gotifyEnabled && (
             <div className="mt-3 space-y-2">
               <Input
-                placeholder={t("notifications.serverUrlPlaceholder")}
+                placeholder="Server URL (e.g. https://gotify.example.com)"
                 {...field("gotifyUrl")}
                 className="h-9 font-mono text-xs"
               />
               <Input
-                placeholder={t("notifications.appToken")}
+                placeholder="App token"
                 {...field("gotifyToken")}
                 className="h-9 font-mono text-xs"
               />
@@ -2043,7 +2004,7 @@ function NotificationChannelsSection() {
                 disabled={testChannel.isPending || update.isPending || !form.gotifyUrl || !form.gotifyToken}
                 className="h-8 rounded-xl text-xs"
               >
-                {t("notifications.sendTestNotification")}
+                Send test notification
               </Button>
             </div>
           )}
@@ -2054,7 +2015,7 @@ function NotificationChannelsSection() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Rss className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{t("notifications.ntfy")}</span>
+              <span className="font-medium">ntfy</span>
             </div>
             <Switch
               checked={form.ntfyEnabled}
@@ -2064,17 +2025,17 @@ function NotificationChannelsSection() {
           {form.ntfyEnabled && (
             <div className="mt-3 space-y-2">
               <Input
-                placeholder={t("notifications.topicUrlPlaceholder")}
+                placeholder="Topic URL (e.g. https://ntfy.sh/my-topic)"
                 {...field("ntfyUrl")}
                 className="h-9 font-mono text-xs"
               />
               <Input
-                placeholder={t("notifications.tokenOptionalPlaceholder")}
+                placeholder="Token (optional, for private topics)"
                 {...field("ntfyToken")}
                 className="h-9 font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground">
-                {t("notifications.ntfyHint")}
+                Use <span className="font-mono">ntfy.sh</span> for free public topics or your own self-hosted ntfy instance.
               </p>
               <Button
                 type="button"
@@ -2084,7 +2045,7 @@ function NotificationChannelsSection() {
                 disabled={testChannel.isPending || update.isPending || !form.ntfyUrl}
                 className="h-8 rounded-xl text-xs"
               >
-                {t("notifications.sendTestNotification")}
+                Send test notification
               </Button>
             </div>
           )}
@@ -2098,7 +2059,7 @@ function NotificationChannelsSection() {
           disabled={update.isPending}
           className="h-9 rounded-2xl px-5 text-sm"
         >
-          {update.isPending ? t("notifications.saving") : t("notifications.saveChannels")}
+          {update.isPending ? "Saving…" : "Save channels"}
         </Button>
       </div>
     </section>

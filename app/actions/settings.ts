@@ -43,7 +43,7 @@ export async function getReadingPreferences() {
       markReadOnScroll: true,
       layoutDirection: true,
       hideEmptyFeeds: true,
-      uiLanguage: true,
+      hideEmptyLabels: true,
     },
   });
   return {
@@ -59,7 +59,7 @@ export async function getReadingPreferences() {
     markReadOnScroll: user?.markReadOnScroll ?? false,
     layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
     hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
-    uiLanguage: user?.uiLanguage ?? "en",
+    hideEmptyLabels: user?.hideEmptyLabels ?? false,
   };
 }
 
@@ -78,6 +78,7 @@ export async function updateGlobalSettings(data: {
   markReadOnScroll?: boolean;
   layoutDirection?: "ltr" | "rtl";
   hideEmptyFeeds?: boolean;
+  hideEmptyLabels?: boolean;
 }) {
   const session = await requireUser();
 
@@ -416,28 +417,6 @@ export async function updateNotificationChannels(data: {
   revalidatePath("/settings");
 }
 
-export async function getNotificationChannelStatus() {
-  const session = await auth();
-  if (!session?.user?.id) return { push: false, email: false, telegram: false, gotify: false, ntfy: false };
-  const user = await db.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      telegramEnabled: true, telegramBotToken: true, telegramChatId: true,
-      gotifyEnabled: true, gotifyUrl: true, gotifyToken: true,
-      ntfyEnabled: true, ntfyUrl: true, ntfyToken: true,
-    },
-  });
-  const settings = await db.globalSettings.findUnique({ where: { id: "global" }, select: { mailServiceEnabled: true } });
-  const pushCount = await db.pushSubscription.count({ where: { userId: session.user.id } });
-  return {
-    push: pushCount > 0,
-    email: settings?.mailServiceEnabled ?? false,
-    telegram: !!(user?.telegramEnabled && user.telegramBotToken && user.telegramChatId),
-    gotify: !!(user?.gotifyEnabled && user.gotifyUrl && user.gotifyToken),
-    ntfy: !!(user?.ntfyEnabled && user.ntfyUrl),
-  };
-}
-
 export async function testNotificationChannel(
   channel: "telegram" | "gotify" | "ntfy",
 ): Promise<{ success: boolean; error?: string }> {
@@ -492,4 +471,28 @@ export async function testNotificationChannel(
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+export async function getNotificationChannelStatus() {
+  const session = await auth();
+  if (!session?.user?.id) return { push: false, email: false, telegram: false, gotify: false, ntfy: false };
+  const [user, settings, pushCount] = await Promise.all([
+    db.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        telegramEnabled: true, telegramBotToken: true, telegramChatId: true,
+        gotifyEnabled: true, gotifyUrl: true, gotifyToken: true,
+        ntfyEnabled: true, ntfyUrl: true, ntfyToken: true,
+      },
+    }),
+    db.globalSettings.findUnique({ where: { id: "global" }, select: { mailServiceEnabled: true } }),
+    db.pushSubscription.count({ where: { userId: session.user.id } }),
+  ]);
+  return {
+    push: pushCount > 0,
+    email: settings?.mailServiceEnabled ?? false,
+    telegram: !!(user?.telegramEnabled && user.telegramBotToken && user.telegramChatId),
+    gotify: !!(user?.gotifyEnabled && user.gotifyUrl && user.gotifyToken),
+    ntfy: !!(user?.ntfyEnabled && user.ntfyUrl),
+  };
 }

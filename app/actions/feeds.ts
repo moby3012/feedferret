@@ -140,7 +140,13 @@ export async function getLabels() {
         where: { userId: session.user.id },
         include: {
             _count: {
-                select: { articles: true },
+                select: {
+                    articles: {
+                        where: {
+                            article: { isRead: false },
+                        },
+                    },
+                },
             },
         },
         orderBy: { name: "asc" },
