@@ -1,6 +1,6 @@
 # FeedFerret MCP
 
-> **v1.0.0** — 10 tools available. All tools are user-scoped (token owner only).
+> **v1.1.0** — 28 tools available. All tools are user-scoped (token owner only).
 
 FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models and agents can work directly with the reader.
 
@@ -18,6 +18,24 @@ FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models a
 | `feedferret.list_labels` | read | List article labels |
 | `feedferret.create_label` | write | Create a label |
 | `feedferret.mark_all_read` | write | Bulk mark-as-read (use with care) |
+| `feedferret.delete_feed` | write | Delete a feed and all its articles |
+| `feedferret.update_feed` | write | Update feed metadata and fetch options |
+| `feedferret.create_category` | write | Create a feed category/folder |
+| `feedferret.update_category` | write | Update a category name, parent or order |
+| `feedferret.delete_category` | write | Delete a feed category |
+| `feedferret.update_label` | write | Update a label name or color |
+| `feedferret.delete_label` | write | Delete a label and its article associations |
+| `feedferret.label_article` | write | Replace all labels on an article |
+| `feedferret.batch_update_articles` | write | Bulk update read/star state on multiple articles |
+| `feedferret.list_saved_searches` | read | List saved searches |
+| `feedferret.create_saved_search` | write | Create a saved search |
+| `feedferret.delete_saved_search` | write | Delete a saved search |
+| `feedferret.list_keyword_alerts` | read | List keyword alerts |
+| `feedferret.create_keyword_alert` | write | Create a keyword alert |
+| `feedferret.update_keyword_alert` | write | Update a keyword alert |
+| `feedferret.delete_keyword_alert` | write | Delete a keyword alert |
+| `feedferret.list_notifications` | read | List notifications ordered by newest first |
+| `feedferret.get_stats` | read | Get aggregate stats for the current user |
 
 ```text
 POST /api/mcp
@@ -181,6 +199,152 @@ Markiert passende Artikel als gelesen. Vorsichtig verwenden.
 { "query": "is:unread after:30d" }
 ```
 
+### `feedferret.delete_feed`
+
+Löscht einen Feed und alle zugehörigen Artikel.
+
+```json
+{ "feedId": "clf123" }
+```
+
+### `feedferret.update_feed`
+
+Aktualisiert Feed-Metadaten und Fetch-Optionen.
+
+```json
+{ "feedId": "clf123", "name": "New Title", "categoryId": "cat1", "updateFrequency": 60, "retentionDays": 90, "priority": "main" }
+```
+
+### `feedferret.create_category`
+
+Erstellt eine neue Kategorie/Ordner.
+
+```json
+{ "name": "AI", "parentId": null }
+```
+
+### `feedferret.update_category`
+
+Aktualisiert eine Kategorie.
+
+```json
+{ "categoryId": "cat123", "name": "Machine Learning", "order": 5 }
+```
+
+### `feedferret.delete_category`
+
+Löscht eine Kategorie.
+
+```json
+{ "categoryId": "cat123" }
+```
+
+### `feedferret.update_label`
+
+Aktualisiert Name oder Farbe eines Labels.
+
+```json
+{ "labelId": "lbl123", "name": "Important", "color": "#ef4444" }
+```
+
+### `feedferret.delete_label`
+
+Löscht ein Label und seine Artikelzuordnungen.
+
+```json
+{ "labelId": "lbl123" }
+```
+
+### `feedferret.label_article`
+
+Ersetzt alle Labels eines Artikels (ownership wird geprüft).
+
+```json
+{ "articleId": "cla123", "labelIds": ["lbl1", "lbl2"] }
+```
+
+### `feedferret.batch_update_articles`
+
+Ändert Lesestatus oder Favorit für bis zu 200 Artikel gleichzeitig.
+
+```json
+{ "ids": ["cla1", "cla2", "cla3"], "action": "read" }
+```
+
+Gültige Aktionen: `read`, `unread`, `star`, `unstar`.
+
+### `feedferret.list_saved_searches`
+
+Listet gespeicherte Suchen.
+
+```json
+{}
+```
+
+### `feedferret.create_saved_search`
+
+Erstellt eine gespeicherte Suche.
+
+```json
+{ "name": "Unread AI", "query": "is:unread AI after:7d" }
+```
+
+### `feedferret.delete_saved_search`
+
+Löscht eine gespeicherte Suche.
+
+```json
+{ "searchId": "ss123" }
+```
+
+### `feedferret.list_keyword_alerts`
+
+Listet alle Keyword-Alerts.
+
+```json
+{}
+```
+
+### `feedferret.create_keyword_alert`
+
+Erstellt einen Keyword-Alert.
+
+```json
+{ "name": "AI News", "query": "is:unread AI", "scope": "all", "actions": ["notify_inapp"] }
+```
+
+### `feedferret.update_keyword_alert`
+
+Aktualisiert einen Keyword-Alert.
+
+```json
+{ "alertId": "ka123", "enabled": false, "query": "is:unread ML" }
+```
+
+### `feedferret.delete_keyword_alert`
+
+Löscht einen Keyword-Alert.
+
+```json
+{ "alertId": "ka123" }
+```
+
+### `feedferret.list_notifications`
+
+Listet Benachrichtigungen, neueste zuerst.
+
+```json
+{ "isRead": false, "limit": 20 }
+```
+
+### `feedferret.get_stats`
+
+Gibt aggregierte Nutzungsstatistiken zurück.
+
+```json
+{}
+```
+
 ---
 
 ## Tool Call Beispiel
@@ -223,5 +387,7 @@ Antwortform:
 
 - MCP braucht denselben Bearer Token wie REST v1.
 - Tools schreiben nur im Kontext des Token-Benutzers.
-- Mutierende Tools: `update_article_state`, `add_feed`, `sync_feeds`, `create_label`, `mark_all_read`.
+- Alle Datenbankabfragen erzwingen `userId` als Filterkriterium — kein Cross-User-Zugriff möglich.
+- Mutierende Tools: `update_article_state`, `add_feed`, `sync_feeds`, `create_label`, `mark_all_read`, `delete_feed`, `update_feed`, `create_category`, `update_category`, `delete_category`, `update_label`, `delete_label`, `label_article`, `batch_update_articles`, `create_saved_search`, `delete_saved_search`, `create_keyword_alert`, `update_keyword_alert`, `delete_keyword_alert`.
+- `label_article` prüft zusätzlich, ob der Artikel dem Token-Inhaber gehört, bevor Labels geändert werden.
 - Für fremde Agenten empfiehlt sich ein dedizierter FeedFerret-Benutzer oder ein frisch rotierbarer Token.

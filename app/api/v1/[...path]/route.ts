@@ -381,6 +381,173 @@ async function deleteSavedSearch(user: ApiUser, searchId: string) {
   return NextResponse.json({ deleted: true, id: searchId });
 }
 
+// ─── Keyword Alerts ───────────────────────────────────────────────────────────
+
+async function listAlerts(user: ApiUser) {
+  const items = await db.keywordAlert.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+  return NextResponse.json({ items });
+}
+
+async function createAlert(user: ApiUser, request: Request) {
+  const body = await readJson<any>(request);
+  const name = allowedString(body?.name);
+  const query = allowedString(body?.query);
+  if (!name || !query) return apiError("name and query are required", 400);
+  const actions = Array.isArray(body?.actions) ? body.actions.filter((a: unknown) => typeof a === "string") : ["notify_inapp"];
+  const item = await db.keywordAlert.create({
+    data: {
+      userId: user.id,
+      name,
+      query,
+      scope: allowedString(body?.scope) || "all",
+      actions: JSON.stringify(actions),
+      enabled: typeof body?.enabled === "boolean" ? body.enabled : true,
+    },
+  });
+  return NextResponse.json(item, { status: 201 });
+}
+
+async function getAlert(user: ApiUser, alertId: string) {
+  const item = await db.keywordAlert.findFirst({ where: { id: alertId, userId: user.id } });
+  if (!item) return apiError("Alert not found", 404);
+  return NextResponse.json(item);
+}
+
+async function patchAlert(user: ApiUser, alertId: string, request: Request) {
+  const body = await readJson<any>(request);
+  if (!body) return apiError("Invalid JSON body", 400);
+  const data: any = {};
+  if (body.name !== undefined) data.name = allowedString(body.name);
+  if (body.query !== undefined) data.query = allowedString(body.query);
+  if (body.scope !== undefined) data.scope = allowedString(body.scope);
+  if (body.enabled !== undefined) data.enabled = Boolean(body.enabled);
+  if (Array.isArray(body.actions)) data.actions = JSON.stringify(body.actions.filter((a: unknown) => typeof a === "string"));
+  const result = await db.keywordAlert.updateMany({ where: { id: alertId, userId: user.id }, data });
+  if (!result.count) return apiError("Alert not found", 404);
+  return NextResponse.json(await db.keywordAlert.findFirst({ where: { id: alertId, userId: user.id } }));
+}
+
+async function deleteAlert(user: ApiUser, alertId: string) {
+  const result = await db.keywordAlert.deleteMany({ where: { id: alertId, userId: user.id } });
+  if (!result.count) return apiError("Alert not found", 404);
+  return NextResponse.json({ deleted: true, id: alertId });
+}
+
+// ─── Auto-Read Rules ──────────────────────────────────────────────────────────
+
+async function listRules(user: ApiUser) {
+  const items = await db.autoReadRule.findMany({ where: { userId: user.id }, orderBy: { order: "asc" } });
+  return NextResponse.json({ items });
+}
+
+async function createRule(user: ApiUser, request: Request) {
+  const body = await readJson<any>(request);
+  const name = allowedString(body?.name);
+  const query = allowedString(body?.query);
+  if (!name || !query) return apiError("name and query are required", 400);
+  const actions = Array.isArray(body?.actions) ? body.actions.filter((a: unknown) => typeof a === "string") : null;
+  const order = await db.autoReadRule.count({ where: { userId: user.id } });
+  const item = await db.autoReadRule.create({
+    data: {
+      userId: user.id,
+      name,
+      query,
+      action: "mark_read",
+      actions: actions ? JSON.stringify(actions) : null,
+      scope: allowedString(body?.scope) || null,
+      trigger: allowedString(body?.trigger) || "article",
+      enabled: typeof body?.enabled === "boolean" ? body.enabled : true,
+      order,
+    },
+  });
+  return NextResponse.json(item, { status: 201 });
+}
+
+async function getRule(user: ApiUser, ruleId: string) {
+  const item = await db.autoReadRule.findFirst({ where: { id: ruleId, userId: user.id } });
+  if (!item) return apiError("Rule not found", 404);
+  return NextResponse.json(item);
+}
+
+async function patchRule(user: ApiUser, ruleId: string, request: Request) {
+  const body = await readJson<any>(request);
+  if (!body) return apiError("Invalid JSON body", 400);
+  const data: any = {};
+  if (body.name !== undefined) data.name = allowedString(body.name);
+  if (body.query !== undefined) data.query = allowedString(body.query);
+  if (body.scope !== undefined) data.scope = allowedString(body.scope);
+  if (body.trigger !== undefined) data.trigger = allowedString(body.trigger);
+  if (body.enabled !== undefined) data.enabled = Boolean(body.enabled);
+  if (Array.isArray(body.actions)) data.actions = JSON.stringify(body.actions.filter((a: unknown) => typeof a === "string"));
+  const result = await db.autoReadRule.updateMany({ where: { id: ruleId, userId: user.id }, data });
+  if (!result.count) return apiError("Rule not found", 404);
+  return NextResponse.json(await db.autoReadRule.findFirst({ where: { id: ruleId, userId: user.id } }));
+}
+
+async function deleteRule(user: ApiUser, ruleId: string) {
+  const result = await db.autoReadRule.deleteMany({ where: { id: ruleId, userId: user.id } });
+  if (!result.count) return apiError("Rule not found", 404);
+  return NextResponse.json({ deleted: true, id: ruleId });
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+async function listNotifications(user: ApiUser, request: Request) {
+  const url = new URL(request.url);
+  const isRead = parseBool(url.searchParams.get("isRead"));
+  const limit = clampInt(url.searchParams.get("limit"), 50, 1, 100);
+  const offset = clampInt(url.searchParams.get("offset"), 0, 0, 100_000);
+  const where: any = { userId: user.id };
+  if (isRead !== undefined) where.isRead = isRead;
+  const [items, total] = await Promise.all([
+    db.notification.findMany({ where, orderBy: { createdAt: "desc" }, skip: offset, take: limit }),
+    db.notification.count({ where }),
+  ]);
+  return NextResponse.json({ items, pagination: { limit, offset, total, nextOffset: offset + items.length < total ? offset + items.length : null } });
+}
+
+async function markAllNotificationsRead(user: ApiUser) {
+  const result = await db.notification.updateMany({ where: { userId: user.id, isRead: false }, data: { isRead: true } });
+  return NextResponse.json({ updated: result.count });
+}
+
+async function markNotificationRead(user: ApiUser, notificationId: string) {
+  const result = await db.notification.updateMany({ where: { id: notificationId, userId: user.id }, data: { isRead: true } });
+  if (!result.count) return apiError("Notification not found", 404);
+  return NextResponse.json(await db.notification.findFirst({ where: { id: notificationId, userId: user.id } }));
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+
+async function getStats(user: ApiUser) {
+  const [
+    totalFeeds,
+    totalArticles,
+    unreadArticles,
+    starredArticles,
+    readLaterArticles,
+    totalLabels,
+    totalCategories,
+    totalSavedSearches,
+    totalKeywordAlerts,
+    totalAutoReadRules,
+    unreadNotifications,
+  ] = await db.$transaction([
+    db.feed.count({ where: { userId: user.id } }),
+    db.article.count({ where: { userId: user.id } }),
+    db.article.count({ where: { userId: user.id, isRead: false } }),
+    db.article.count({ where: { userId: user.id, isStarred: true } }),
+    db.article.count({ where: { userId: user.id, isReadLater: true } }),
+    db.label.count({ where: { userId: user.id } }),
+    db.category.count({ where: { userId: user.id } }),
+    db.savedSearch.count({ where: { userId: user.id } }),
+    db.keywordAlert.count({ where: { userId: user.id } }),
+    db.autoReadRule.count({ where: { userId: user.id } }),
+    db.notification.count({ where: { userId: user.id, isRead: false } }),
+  ]);
+  return NextResponse.json({ totalFeeds, totalArticles, unreadArticles, starredArticles, readLaterArticles, totalLabels, totalCategories, totalSavedSearches, totalKeywordAlerts, totalAutoReadRules, unreadNotifications });
+}
+
 async function setSavedSearchShare(user: ApiUser, searchId: string, request: Request) {
   const body = (await readJson<any>(request)) || {};
   const enabled = body.enabled !== false;
@@ -476,6 +643,14 @@ function openApiSpec(request: Request) {
       "/api/v1/saved-searches/{id}/share": { post: { summary: "Enable/disable public saved-search sharing" } },
       "/api/v1/opml": { get: { summary: "Export OPML" }, post: { summary: "Import OPML" } },
       "/api/v1/openapi.json": { get: { summary: "OpenAPI document" } },
+      "/api/v1/alerts": { get: { summary: "List keyword alerts" }, post: { summary: "Create keyword alert" } },
+      "/api/v1/alerts/{id}": { get: { summary: "Get keyword alert" }, patch: { summary: "Update keyword alert" }, delete: { summary: "Delete keyword alert" } },
+      "/api/v1/rules": { get: { summary: "List auto-read rules" }, post: { summary: "Create auto-read rule" } },
+      "/api/v1/rules/{id}": { get: { summary: "Get auto-read rule" }, patch: { summary: "Update auto-read rule" }, delete: { summary: "Delete auto-read rule" } },
+      "/api/v1/notifications": { get: { summary: "List notifications" } },
+      "/api/v1/notifications/mark-all-read": { post: { summary: "Mark all notifications as read" } },
+      "/api/v1/notifications/{id}/read": { post: { summary: "Mark one notification as read" } },
+      "/api/v1/stats": { get: { summary: "Aggregate user stats" } },
     },
   });
 }
@@ -553,6 +728,27 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
     } else if (path[0] === "sync" && path.length === 1 && method === "POST") {
       const results = await syncUserFeeds(user.id);
       res = NextResponse.json({ success: true, synced: results.filter((r) => r.success && !r.skipped).length, total: results.length, results });
+    } else if (path[0] === "alerts") {
+      if (method === "GET" && path.length === 1) res = await listAlerts(user);
+      else if (method === "POST" && path.length === 1) res = await createAlert(user, request);
+      else if (method === "GET" && path.length === 2) res = await getAlert(user, path[1]);
+      else if (method === "PATCH" && path.length === 2) res = await patchAlert(user, path[1], request);
+      else if (method === "DELETE" && path.length === 2) res = await deleteAlert(user, path[1]);
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "rules") {
+      if (method === "GET" && path.length === 1) res = await listRules(user);
+      else if (method === "POST" && path.length === 1) res = await createRule(user, request);
+      else if (method === "GET" && path.length === 2) res = await getRule(user, path[1]);
+      else if (method === "PATCH" && path.length === 2) res = await patchRule(user, path[1], request);
+      else if (method === "DELETE" && path.length === 2) res = await deleteRule(user, path[1]);
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "notifications") {
+      if (method === "GET" && path.length === 1) res = await listNotifications(user, request);
+      else if (method === "POST" && path[1] === "mark-all-read") res = await markAllNotificationsRead(user);
+      else if (method === "POST" && path.length === 3 && path[2] === "read") res = await markNotificationRead(user, path[1]);
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "stats" && path.length === 1 && method === "GET") {
+      res = await getStats(user);
     } else {
       res = apiError("Not found", 404);
     }

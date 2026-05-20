@@ -397,6 +397,116 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ---
 
+## Keyword-Alerts
+
+### `GET /api/v1/alerts`
+
+Listet alle Keyword-Alerts des Benutzers.
+
+### `POST /api/v1/alerts`
+
+```json
+{ "name": "AI News", "query": "is:unread AI", "scope": "all", "actions": ["notify_inapp"], "enabled": true }
+```
+
+### `GET /api/v1/alerts/{id}`
+
+Lädt einen Keyword-Alert.
+
+### `PATCH /api/v1/alerts/{id}`
+
+Aktualisiert einen Keyword-Alert (alle Felder optional).
+
+```json
+{ "name": "AI & ML News", "enabled": false }
+```
+
+### `DELETE /api/v1/alerts/{id}`
+
+Löscht einen Keyword-Alert.
+
+---
+
+## Auto-Read Regeln
+
+### `GET /api/v1/rules`
+
+Listet alle Auto-Read-Regeln des Benutzers (sortiert nach `order` aufsteigend).
+
+### `POST /api/v1/rules`
+
+```json
+{ "name": "Mark newsletters read", "query": "feed:newsletter", "actions": ["mark_read"], "enabled": true }
+```
+
+### `GET /api/v1/rules/{id}`
+
+Lädt eine Auto-Read-Regel.
+
+### `PATCH /api/v1/rules/{id}`
+
+Aktualisiert eine Auto-Read-Regel (alle Felder optional).
+
+```json
+{ "enabled": false }
+```
+
+### `DELETE /api/v1/rules/{id}`
+
+Löscht eine Auto-Read-Regel.
+
+---
+
+## Benachrichtigungen
+
+### `GET /api/v1/notifications`
+
+Listet Benachrichtigungen, sortiert nach Erstelldatum absteigend.
+
+Query-Parameter: `isRead` (bool), `limit` (1–100, default 50), `offset`.
+
+### `POST /api/v1/notifications/mark-all-read`
+
+Markiert alle Benachrichtigungen des Benutzers als gelesen.
+
+Antwort:
+
+```json
+{ "updated": 5 }
+```
+
+### `POST /api/v1/notifications/{id}/read`
+
+Markiert eine einzelne Benachrichtigung als gelesen.
+
+---
+
+## Statistiken
+
+### `GET /api/v1/stats`
+
+Gibt Aggregatwerte zurück: Feeds, Artikel, Unread, Starred, ReadLater, Labels, Kategorien, Suchen, Alerts, Regeln, Benachrichtigungen.
+
+Antwort:
+
+```json
+{
+  "totalFeeds": 42,
+  "totalArticles": 1500,
+  "unreadArticles": 87,
+  "starredArticles": 12,
+  "readLaterArticles": 5,
+  "totalLabels": 8,
+  "totalCategories": 6,
+  "totalSavedSearches": 3,
+  "totalKeywordAlerts": 4,
+  "totalAutoReadRules": 2,
+  "unreadNotifications": 1
+}
+```
+
+---
+
 # Bestehende Spezial-APIs
 
 ## Read Later Kurz-API
@@ -510,9 +620,8 @@ Content-Type: application/json
 
 Shipped in v1.0: articles, feeds, categories, labels, saved searches, OPML, sync, MCP, Google Reader API.
 
+Shipped in v1.1: keyword alerts (`/api/v1/alerts`), auto-read rules (`/api/v1/rules`), notifications (`/api/v1/notifications`), aggregate stats (`/api/v1/stats`), batch article actions (`POST /api/v1/articles/batch`), fine-grained API token scopes (`read` / `write` / `admin`), 18 new MCP tools (28 total).
+
 Planned — see [`docs/releases/backlog.md`](releases/backlog.md) for status:
 
 - Webhook management via REST v1 (currently UI/Server Actions only)
-- Keyword Alerts and Notification settings via REST v1
-- Batch endpoints for bulk automation (`POST /api/v1/articles/batch`)
-- Fine-grained API token scopes (`read` / `write` / `admin`) instead of a single user token
