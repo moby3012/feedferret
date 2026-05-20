@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useTranslations, useFormatter } from "next-intl";
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
 import Image from "next/image";
 import { Article } from "@/lib/rss-data";
@@ -109,6 +109,7 @@ export function ArticleReader({
 }: ArticleReaderProps) {
   const t = useTranslations("articleReader");
   const tList = useTranslations("articleList");
+  const format = useFormatter();
   const rootRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -486,7 +487,7 @@ export function ArticleReader({
                 {article.author}
               </address>
               <span aria-hidden="true" className="text-muted-foreground/40">·</span>
-              <time dateTime={article.publishedAt}>{new Date(article.publishedAt).toLocaleDateString()}</time>
+              <time dateTime={article.publishedAt}>{format.dateTime(new Date(article.publishedAt), { dateStyle: "medium" })}</time>
               <span aria-hidden="true" className="text-muted-foreground/40">·</span>
               <span>{article.readTime}</span>
             </div>

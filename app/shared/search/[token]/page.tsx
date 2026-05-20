@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Rss, ExternalLink } from "lucide-react";
-import { getTranslations } from "next-intl/server";
+import { getFormatter, getTranslations } from "next-intl/server";
 import { getPublicBaseUrl, getSharedSavedSearch, stripHtml } from "@/lib/saved-search-sharing";
 
 export const dynamic = "force-dynamic";
 
 export default async function SharedSearchPage({ params }: { params: Promise<{ token: string }> }) {
   const t = await getTranslations("sharedSearch");
+  const format = await getFormatter();
   const { token } = await params;
   const result = await getSharedSavedSearch(token, 100);
   if (!result) notFound();
@@ -40,7 +41,7 @@ export default async function SharedSearchPage({ params }: { params: Promise<{ t
                 <span>{article.feed.icon || "📰"}</span>
                 <span>{article.feed.name}</span>
                 <span>·</span>
-                <time dateTime={article.publishedAt.toISOString()}>{article.publishedAt.toLocaleDateString()}</time>
+                <time dateTime={article.publishedAt.toISOString()}>{format.dateTime(article.publishedAt, { dateStyle: "medium" })}</time>
               </div>
               <h2 className="text-xl font-semibold tracking-[-0.03em]">
                 {article.link ? (

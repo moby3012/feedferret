@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useTranslations, useFormatter } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -74,6 +74,7 @@ export function RssHeader({
   onSwipePreviousFeed,
 }: RssHeaderProps) {
   const t = useTranslations("rssHeader");
+  const format = useFormatter();
   const activeViewMode: ViewMode =
     viewMode === "minimal" || viewMode === "magazine" ? viewMode : "list";
 
@@ -87,7 +88,7 @@ export function RssHeader({
   }, [isRefreshing]);
 
   const lastRefreshedLabel = lastRefreshed
-    ? `${t("lastSynced")} ${lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    ? `${t("lastSynced")} ${format.dateTime(lastRefreshed, { hour: "2-digit", minute: "2-digit" })}`
     : t("refreshFeeds");
 
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
@@ -102,7 +103,10 @@ export function RssHeader({
     const dy = t.clientY - swipeStart.current.y;
     swipeStart.current = null;
     if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
-    if (dx < 0) onSwipeNextFeed?.();
+    
+    const isRtl = typeof document !== "undefined" && document.documentElement.getAttribute("dir") === "rtl";
+    const goNext = isRtl ? dx > 0 : dx < 0;
+    if (goNext) onSwipeNextFeed?.();
     else onSwipePreviousFeed?.();
   };
 

@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useTranslations, useFormatter } from "next-intl";
 import {
   useFeeds,
   useDeleteFeed,
@@ -686,6 +686,7 @@ export function FeedManagement({
   pageMode?: boolean;
 }) {
   const t = useTranslations("feedManagement");
+  const format = useFormatter();
   const { data: feeds = [] } = useFeeds();
   const deleteFeed = useDeleteFeed();
   const updateFeed = useUpdateFeed();
@@ -1012,7 +1013,7 @@ export function FeedManagement({
                                       <span>
                                         {t("feeds.lastSync")}{" "}
                                         {feed.lastFetchedAt
-                                          ? new Date(feed.lastFetchedAt).toLocaleString()
+                                          ? format.dateTime(new Date(feed.lastFetchedAt), { dateStyle: "medium", timeStyle: "short" })
                                           : t("feeds.never")}
                                       </span>
                                       {feed.lastStatus === "error" && (
@@ -1367,7 +1368,7 @@ export function FeedManagement({
                               <span>{feed.articleCount} {t("health.articles")}</span>
                               <span>{feed.unreadCount} {t("health.unread")}</span>
                               <span>{feed.avgArticlesPerDay != null ? `${feed.avgArticlesPerDay}${t("health.perDay")}` : "—"}</span>
-                              <span>{t("health.sync")} {feed.lastFetchedAt ? new Date(feed.lastFetchedAt).toLocaleString() : t("feeds.never")}</span>
+                              <span>{t("health.sync")} {feed.lastFetchedAt ? format.dateTime(new Date(feed.lastFetchedAt), { dateStyle: "medium", timeStyle: "short" }) : t("feeds.never")}</span>
                               <span>{t("health.retention")} {feed.retentionDays || t("health.default")} {t("health.days")}</span>
                             </div>
                             {feed.lastError && (
@@ -2539,7 +2540,7 @@ export function FeedManagement({
                                         ...(actions.includes("notify_email") ? ["email"] : []),
                                       ].join(" + ")
                                     }
-                                    {alert.lastTriggeredAt ? ` · last: ${new Date(alert.lastTriggeredAt).toLocaleString()}` : ""}
+                                    {alert.lastTriggeredAt ? ` · last: ${format.dateTime(new Date(alert.lastTriggeredAt), { dateStyle: "medium", timeStyle: "short" })}` : ""}
                                   </p>
                                   </div>
                                 </div>
@@ -2611,7 +2612,7 @@ export function FeedManagement({
                                       >
                                         <span className="block truncate">{n.body}</span>
                                         <span className="text-[10px] text-muted-foreground">
-                                          {new Date(n.createdAt).toLocaleString()}
+                                          {format.dateTime(new Date(n.createdAt), { dateStyle: "medium", timeStyle: "short" })}
                                         </span>
                                       </button>
                                     ))}

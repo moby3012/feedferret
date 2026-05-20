@@ -53,6 +53,7 @@ import {
 import { deleteOwnAccount } from "@/app/actions/account";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useFormatter } from "next-intl";
 import {
   Select,
   SelectContent,
@@ -1005,6 +1006,7 @@ function DigestSection() {
   const { data: instance, loading: instanceLoading } = useInstance();
   const updateDigest = useUpdateDigestSettings();
   const sendTest = useSendTestDigest();
+  const format = useFormatter();
 
   if (!digest) return null;
   // Hide entirely if instance has no mail configured (#5)
@@ -1038,7 +1040,7 @@ function DigestSection() {
             <p className="text-sm font-medium">Enable digest emails</p>
             {digest.digestLastSentAt && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Last sent: {new Date(digest.digestLastSentAt).toLocaleString()}
+                Last sent: {format.dateTime(new Date(digest.digestLastSentAt), { dateStyle: "medium", timeStyle: "short" })}
               </p>
             )}
           </div>
@@ -1302,6 +1304,7 @@ function ApiTokenSection() {
   const [createScope, setCreateScope] = useState("write");
   const [createExpiry, setCreateExpiry] = useState("never");
   const [creating, setCreating] = useState(false);
+  const format = useFormatter();
 
   const loadTokens = useCallback(async () => {
     const res = await fetch("/api/user/tokens");
@@ -1448,11 +1451,11 @@ function ApiTokenSection() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium truncate">{t.name}</span>
                   <Badge variant={scopeColor(t.scope)} className="text-[10px] h-4 px-1.5">{scopeLabel(t.scope)}</Badge>
-                  {t.expiresAt && <span className="text-[11px] text-muted-foreground">Expires {new Date(t.expiresAt).toLocaleDateString()}</span>}
+                  {t.expiresAt && <span className="text-[11px] text-muted-foreground">Expires {format.dateTime(new Date(t.expiresAt), { dateStyle: "medium" })}</span>}
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Created {new Date(t.createdAt).toLocaleDateString()}
-                  {t.lastUsedAt ? ` · Last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : " · Never used"}
+                  Created {format.dateTime(new Date(t.createdAt), { dateStyle: "medium" })}
+                  {t.lastUsedAt ? ` · Last used ${format.dateTime(new Date(t.lastUsedAt), { dateStyle: "medium" })}` : " · Never used"}
                 </p>
               </div>
               <Button
