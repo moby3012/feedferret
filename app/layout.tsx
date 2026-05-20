@@ -8,6 +8,8 @@ import { Providers } from "@/components/providers";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { SessionProvider } from "next-auth/react";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 
 const APP_DESCRIPTION =
@@ -59,35 +61,40 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="en" className="bg-background" suppressHydrationWarning>
+    <html lang={locale} className="bg-background" suppressHydrationWarning>
       <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}>
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-lg focus:outline-none"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:start-4 focus:z-[9999] focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-lg focus:outline-none"
         >
           Skip to content
         </a>
-        <SessionProvider>
-          <Providers>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <ThemeColorApplier />
-              {children}
-              <PwaInstallPrompt />
-              <ServiceWorkerRegister />
-            </ThemeProvider>
-          </Providers>
-        </SessionProvider>
+        <NextIntlClientProvider messages={messages}>
+          <SessionProvider>
+            <Providers>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <ThemeColorApplier />
+                {children}
+                <PwaInstallPrompt />
+                <ServiceWorkerRegister />
+              </ThemeProvider>
+            </Providers>
+          </SessionProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

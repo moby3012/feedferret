@@ -31,7 +31,7 @@ export function MobileFloatingBackButton({
           className="pointer-events-auto h-12 rounded-full border border-border/70 bg-background/95 px-5 shadow-2xl shadow-black/20 backdrop-blur-2xl"
           aria-label={label}
         >
-          <ArrowLeft className="mr-2 h-4 w-4" />
+          <ArrowLeft className="me-2 h-4 w-4 rtl:rotate-180" />
           {label}
         </Button>
       </div>

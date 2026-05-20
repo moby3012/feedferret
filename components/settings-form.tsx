@@ -439,6 +439,19 @@ export function SettingsForm() {
             />
           </PrefRow>
 
+          {/* Hide empty labels */}
+          <PrefRow
+            icon={EyeOff}
+            title="Hide empty labels"
+            description="Hide labels with no unread articles from the sidebar."
+          >
+            <Switch
+              checked={prefs?.hideEmptyLabels ?? false}
+              onCheckedChange={(checked) => update({ hideEmptyLabels: checked })}
+              className="h-7 w-12"
+            />
+          </PrefRow>
+
           {/* Sync with external readers */}
           <SyncTutorialSection />
 
@@ -466,7 +479,7 @@ export function SettingsForm() {
                 onClick={() => signOut({ callbackUrl: "/" })}
                 className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
               >
-                <LogOut className="mr-2 h-4 w-4" />
+                <LogOut className="me-2 h-4 w-4" />
                 Sign out
               </Button>
             </div>
@@ -909,7 +922,7 @@ function TwoFactorSection() {
                   <p className="mt-1 text-xs text-muted-foreground break-all">{setupData.uri}</p>
                 </div>
                 <Button type="button" variant="outline" className="rounded-2xl" onClick={() => copyValue(setupData.uri, "URI")}>
-                  <Copy className="mr-2 h-4 w-4" /> Copy
+                  <Copy className="me-2 h-4 w-4" /> Copy
                 </Button>
               </div>
             </div>
@@ -1172,7 +1185,7 @@ function DigestSection() {
                 disabled={sendTest.isPending}
                 className="rounded-2xl h-10"
               >
-                <Send className="w-4 h-4 mr-2" />
+                <Send className="w-4 h-4 me-2" />
                 {sendTest.isPending ? "Sending…" : "Send test digest now"}
               </Button>
               <p className="text-xs text-muted-foreground">
@@ -1230,7 +1243,7 @@ function DeleteAccountSection() {
             onClick={() => setOpen(true)}
             className="h-11 rounded-2xl border-destructive/40 text-destructive hover:bg-destructive/10 px-5 shrink-0"
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="me-2 h-4 w-4" />
             Delete my account
           </Button>
         </div>
@@ -1363,7 +1376,7 @@ function ApiTokenSection() {
           </p>
         </div>
         <Button size="sm" onClick={() => setShowCreate(true)} className="rounded-2xl h-9 shrink-0">
-          <Plus className="w-4 h-4 mr-1" />
+          <Plus className="w-4 h-4 me-1" />
           Add token
         </Button>
       </div>
@@ -1540,7 +1553,7 @@ function AiSummarySection() {
             <label className="text-sm font-medium" htmlFor="ai-api-key-input">
               API Key
               {ai?.hasApiKey && !apiKey && (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">(currently set)</span>
+                <span className="ms-2 text-xs font-normal text-muted-foreground">(currently set)</span>
               )}
             </label>
             <Input
@@ -1571,7 +1584,7 @@ function AiSummarySection() {
           <div className="grid gap-1.5">
             <label className="text-sm font-medium" htmlFor="ai-model-input">
               Model
-              <span className="ml-1 text-xs font-normal text-muted-foreground">
+              <span className="ms-1 text-xs font-normal text-muted-foreground">
                 {provider === "openai" && "(default: gpt-4o-mini)"}
                 {provider === "anthropic" && "(default: claude-haiku-4-5-20251001)"}
                 {provider === "gemini" && "(default: gemini-1.5-flash)"}
@@ -1652,7 +1665,7 @@ function AiSummarySection() {
               disabled={testAi.isPending}
               className="rounded-2xl h-10"
             >
-              <Sparkles className="w-4 h-4 mr-2" />
+              <Sparkles className="w-4 h-4 me-2" />
               {testAi.isPending ? "Testing…" : "Test connection"}
             </Button>
           )}
@@ -1756,7 +1769,7 @@ function SyncTutorialSection() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-start gap-4 text-left"
+        className="flex w-full items-start gap-4 text-start"
       >
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <Rss className="h-5 w-5" />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ export function MobileBottomControls({
   onMarkAllRead,
   isMarkingAllRead,
 }: MobileBottomControlsProps) {
+  const t = useTranslations();
   const [searchOpen, setSearchOpen] = useState(!!searchQuery);
 
   return (
@@ -45,25 +47,25 @@ export function MobileBottomControls({
       {searchOpen && (
         <div className="pointer-events-auto mb-2 rounded-[1.65rem] border border-border/70 bg-background/95 p-2 shadow-2xl shadow-black/20 backdrop-blur-2xl">
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search articles, author:, is:unread…"
+              placeholder={t("sidebar.searchArticles")}
               value={searchQuery}
               onChange={(event) => onSearchChange(event.target.value)}
-              className="h-12 rounded-2xl border-border/50 bg-muted/45 pl-10 pr-11 text-base"
+              className="h-12 rounded-2xl border-border/50 bg-muted/45 ps-10 pe-11 text-base"
               autoFocus
             />
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="absolute right-1 top-1/2 h-10 w-10 -translate-y-1/2 rounded-xl"
+              className="absolute end-1 top-1/2 h-10 w-10 -translate-y-1/2 rounded-xl"
               onClick={() => {
                 if (searchQuery) onSearchChange("");
                 else setSearchOpen(false);
               }}
-              aria-label={searchQuery ? "Clear search" : "Close search"}
+              aria-label={searchQuery ? t("rssHeader.clearSearch") : t("common.close")}
             >
               <X className="h-4 w-4" />
             </Button>
@@ -78,7 +80,7 @@ export function MobileBottomControls({
           size="icon"
           className={mobileButtonClass}
           onClick={onToggleSidebar}
-          aria-label="Open feeds"
+          aria-label={t("sidebar.feeds")}
         >
           <PanelLeft className="h-5 w-5" />
         </Button>
@@ -89,7 +91,7 @@ export function MobileBottomControls({
           className={mobileButtonClass}
           onClick={onRefresh}
           disabled={isRefreshing}
-          aria-label="Refresh feeds"
+          aria-label={t("rssHeader.refreshFeeds")}
         >
           <RefreshCw className={cn("h-5 w-5", isRefreshing && "animate-spin")} />
         </Button>
@@ -106,7 +108,7 @@ export function MobileBottomControls({
           aria-pressed={unreadOnly}
         >
           <span className={cn("h-2 w-2 rounded-full", unreadOnly ? "bg-accent-foreground" : "bg-muted-foreground")} />
-          {unreadOnly ? "Unread" : "All"}
+          {unreadOnly ? t("sidebar.unread") : t("sidebar.allArticles")}
         </Button>
         <Button
           type="button"
@@ -115,8 +117,8 @@ export function MobileBottomControls({
           className={cn(mobileButtonClass, isMarkingAllRead && "text-accent")}
           disabled={isMarkingAllRead}
           onClick={() => onMarkAllRead?.()}
-          aria-label="Mark all articles as read"
-          title="Mark all as read"
+          aria-label={t("sidebar.markAllAsRead")}
+          title={t("sidebar.markAllAsRead")}
         >
           <CheckCheck className={cn("h-5 w-5", isMarkingAllRead && "animate-pulse")} />
         </Button>
@@ -129,7 +131,7 @@ export function MobileBottomControls({
             (searchOpen || searchQuery) && "bg-accent/10 text-accent",
           )}
           onClick={() => setSearchOpen((open) => !open)}
-          aria-label="Search articles"
+          aria-label={t("sidebar.searchArticles")}
         >
           <Search className="h-5 w-5" />
         </Button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +44,7 @@ import {
   ClipboardCopy,
   CheckCircle2,
   AlertTriangle,
+  HardDrive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +65,7 @@ import {
   generateVapidKeyPair,
   getAdminAuditLog,
   getLoginAttempts,
+  getStorageStats,
 } from "@/app/actions/admin";
 import { toast } from "sonner";
 import {
@@ -83,6 +86,7 @@ export function ServerManagementDialog({
   onOpenChange: (open: boolean) => void;
   pageMode?: boolean;
 }) {
+  const t = useTranslations("serverManagement");
   const [users, setUsers] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -93,6 +97,8 @@ export function ServerManagementDialog({
   const [auditLog, setAuditLog] = useState<any[]>([]);
   const [loginAttempts, setLoginAttempts] = useState<any[]>([]);
   const [auditLoaded, setAuditLoaded] = useState(false);
+  const [storageStats, setStorageStats] = useState<any[]>([]);
+  const [storageLoaded, setStorageLoaded] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -116,6 +122,17 @@ export function ServerManagementDialog({
       setAuditLoaded(true);
     } catch {
       toast.error("Failed to load audit data");
+    }
+  };
+
+  const loadStorageStats = async () => {
+    if (storageLoaded) return;
+    try {
+      const stats = await getStorageStats();
+      setStorageStats(stats);
+      setStorageLoaded(true);
+    } catch {
+      toast.error("Failed to load storage stats");
     }
   };
 
@@ -331,20 +348,21 @@ export function ServerManagementDialog({
   };
 
   const shellTabs = [
-    { value: "users", label: "Users", icon: <Users className="w-4 h-4" /> },
-    { value: "registrations", label: "Access", icon: <ShieldCheck className="w-4 h-4" /> },
-    { value: "email", label: "Email", icon: <Mail className="w-4 h-4" /> },
-    { value: "notifications", label: "Notifications", icon: <Bell className="w-4 h-4" /> },
-    { value: "instance", label: "Instance", icon: <Globe className="w-4 h-4" /> },
-    { value: "starter-packs", label: "Starter Packs", icon: <PackagePlus className="w-4 h-4" /> },
-    { value: "sync", label: "Sync", icon: <Settings2 className="w-4 h-4" /> },
-    { value: "discovery", label: "Discovery", icon: <Compass className="w-4 h-4" /> },
-    { value: "audit", label: "Audit Log", icon: <Shield className="w-4 h-4" />, onSelect: loadAuditData },
+    { value: "users", label: t("tabs.users"), icon: <Users className="w-4 h-4" /> },
+    { value: "registrations", label: t("tabs.registrations"), icon: <ShieldCheck className="w-4 h-4" /> },
+    { value: "email", label: t("tabs.email"), icon: <Mail className="w-4 h-4" /> },
+    { value: "notifications", label: t("tabs.notifications"), icon: <Bell className="w-4 h-4" /> },
+    { value: "instance", label: t("tabs.instance"), icon: <Globe className="w-4 h-4" /> },
+    { value: "starter-packs", label: t("tabs.starterPacks"), icon: <PackagePlus className="w-4 h-4" /> },
+    { value: "sync", label: t("tabs.sync"), icon: <Settings2 className="w-4 h-4" /> },
+    { value: "discovery", label: t("tabs.discovery"), icon: <Compass className="w-4 h-4" /> },
+    { value: "audit", label: t("tabs.audit"), icon: <Shield className="w-4 h-4" />, onSelect: loadAuditData },
+    { value: "storage", label: t("tabs.storage"), icon: <HardDrive className="w-4 h-4" />, onSelect: loadStorageStats },
   ];
 
   const shellProps = {
-    title: "Server Settings",
-    description: "Control server-wide settings, users, and integrations.",
+    title: t("title"),
+    description: t("title"),
     activeTab,
     onTabChange: (tab: string) => {
       setActiveTab(tab);
@@ -368,7 +386,7 @@ export function ServerManagementDialog({
                   <div className="px-6 sm:px-8 flex flex-col h-full">
                     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <Input
-                        placeholder="Search users..."
+                        placeholder={t("users.searchPlaceholder")}
                         className="h-11 w-full rounded-2xl bg-card border-border/70 sm:max-w-md"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -380,8 +398,8 @@ export function ServerManagementDialog({
                           <Empty className="border-0">
                             <EmptyMedia variant="icon"><Users className="size-5" /></EmptyMedia>
                             <EmptyContent>
-                              <EmptyTitle>No users found</EmptyTitle>
-                              <EmptyDescription>Try a different search term.</EmptyDescription>
+                              <EmptyTitle>{t("users.noUsersFound")}</EmptyTitle>
+                              <EmptyDescription>{t("users.tryDifferentSearch")}</EmptyDescription>
                             </EmptyContent>
                           </Empty>
                         )}
@@ -401,15 +419,15 @@ export function ServerManagementDialog({
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="font-semibold truncate flex flex-wrap items-center gap-2 tracking-[-0.01em]">
-                                  {user.name || "Unnamed User"}
+                                  {user.name || t("users.unnamedUser")}
                                   {user.role === "ADMIN" && (
                                     <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">
-                                      ADMIN
+                                      {t("users.adminBadge")}
                                     </span>
                                   )}
                                   {!user.isActive && (
                                     <span className="text-[10px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full font-bold">
-                                      SUSPENDED
+                                      {t("users.suspendedBadge")}
                                     </span>
                                   )}
                                 </div>
@@ -422,7 +440,7 @@ export function ServerManagementDialog({
                                 variant="ghost"
                                 className={cn("rounded-lg transition-colors", user.role === "ADMIN" ? "text-primary" : "text-muted-foreground")}
                                 onClick={() => handleToggleRole(user)}
-                                title={user.role === "ADMIN" ? "Remove admin" : "Make admin"}
+                                title={user.role === "ADMIN" ? t("users.removeAdmin") : t("users.makeAdmin")}
                               >
                                 {user.role === "ADMIN" ? <ShieldCheck className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
                               </Button>
@@ -431,7 +449,7 @@ export function ServerManagementDialog({
                                 variant="ghost"
                                 className={cn("rounded-lg transition-colors", user.isActive ? "text-amber-500 hover:bg-amber-500/10" : "text-emerald-500 hover:bg-emerald-500/10")}
                                 onClick={() => handleToggleSuspend(user)}
-                                title={user.isActive ? "Suspend user" : "Reactivate user"}
+                                title={user.isActive ? t("users.suspendUser") : t("users.reactivateUser")}
                               >
                                 {user.isActive ? <Ban className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
                               </Button>
@@ -457,9 +475,9 @@ export function ServerManagementDialog({
                     <div className="max-w-2xl space-y-8 px-6 py-6 sm:px-8">
                     <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">Allow New Registrations</h4>
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.allowNewRegistrations")}</h4>
                         <p className="text-sm text-muted-foreground">
-                          When disabled, only existing users can log in. New users cannot sign up.
+                          {t("registrations.registrationsDescription")}
                         </p>
                       </div>
                       <Switch
@@ -469,9 +487,9 @@ export function ServerManagementDialog({
                     </div>
                     <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">Require 2FA for Admins</h4>
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.require2FA")}</h4>
                         <p className="text-sm text-muted-foreground">
-                          When enabled, admin actions are blocked unless the admin account has two-factor authentication active.
+                          {t("registrations.require2FADescription")}
                         </p>
                       </div>
                       <Switch
@@ -481,9 +499,9 @@ export function ServerManagementDialog({
                     </div>
                     <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">Public Saved-Search Shares</h4>
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.publicSavedSearches")}</h4>
                         <p className="text-sm text-muted-foreground">
-                          When disabled, all public saved-search share URLs return 404. Useful for private or single-user instances.
+                          {t("registrations.publicSavedSearchesDescription")}
                         </p>
                       </div>
                       <Switch
@@ -491,14 +509,33 @@ export function ServerManagementDialog({
                         onCheckedChange={(checked) => handleUpdateSettings({ disablePublicSharedSearches: !checked })}
                       />
                     </div>
+                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1">
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.defaultUiLanguage")}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {t("registrations.defaultUiLanguageDescription")}
+                        </p>
+                      </div>
+                      <Select
+                        value={settings?.defaultUiLanguage ?? "en"}
+                        onValueChange={(value) => handleUpdateSettings({ defaultUiLanguage: value })}
+                      >
+                        <SelectTrigger className="w-40 rounded-2xl bg-background/70 border-border/70">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-2xl">
+                          <SelectItem value="en">English</SelectItem>
+                          <SelectItem value="de">Deutsch</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="p-6 rounded-3xl bg-amber-500/10 border border-amber-500/20 space-y-3">
                       <div className="flex items-center gap-2 text-amber-500">
                         <AlertCircle className="w-5 h-5" />
-                        <h4 className="font-bold">Security Note</h4>
+                        <h4 className="font-bold">{t("registrations.securityNote")}</h4>
                       </div>
                       <p className="text-sm text-amber-500/80 leading-relaxed">
-                        Disable registrations after setting up your accounts on a private server.
-                        SaaS-provisioned users are created via the internal API regardless of this setting.
+                        {t("registrations.disableRegistrations")}
                       </p>
                     </div>
                     </div>
@@ -512,9 +549,9 @@ export function ServerManagementDialog({
                       {/* Enable toggle */}
                       <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
-                          <h4 className="text-lg font-semibold tracking-[-0.02em]">Mail Service</h4>
+                          <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("email.mailService")}</h4>
                           <p className="text-sm text-muted-foreground">
-                            Enable magic links, digest emails, and welcome messages.
+                            {t("email.enableMailService")}
                           </p>
                         </div>
                         <Switch
@@ -527,20 +564,20 @@ export function ServerManagementDialog({
                         <div className="grid gap-6 p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
                           {/* Provider selection */}
                           <div className="space-y-2">
-                            <Label>Email Provider</Label>
+                            <Label>{t("email.emailProvider")}</Label>
                             <Select
                               value={settings.mailProvider || "smtp"}
                               onValueChange={(value) => setSettings({ ...settings, mailProvider: value })}
                             >
                               <SelectTrigger className="rounded-2xl bg-background/70 border-border/70">
-                                <SelectValue placeholder="Choose provider" />
+                                <SelectValue placeholder={t("email.chooseProvider")} />
                               </SelectTrigger>
                               <SelectContent className="rounded-2xl">
-                                {["smtp", "resend", "postmark", "mailgun", "sendgrid"].map((id) => (
-                                  <SelectItem key={id} value={id}>
-                                    {id === "smtp" ? "SMTP" : id.charAt(0).toUpperCase() + id.slice(1)}
-                                  </SelectItem>
-                                ))}
+                                <SelectItem value="smtp">{t("email.smtp")}</SelectItem>
+                                <SelectItem value="resend">{t("email.resend")}</SelectItem>
+                                <SelectItem value="postmark">{t("email.postmark")}</SelectItem>
+                                <SelectItem value="mailgun">{t("email.mailgun")}</SelectItem>
+                                <SelectItem value="sendgrid">{t("email.sendgrid")}</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -549,49 +586,49 @@ export function ServerManagementDialog({
                           {settings.mailProvider === "smtp" && (
                             <>
                               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <SettingsField label="SMTP Host" placeholder="smtp.gmail.com" field="smtpHost" settings={settings} setSettings={setSettings} />
-                                <SettingsField label="Port" placeholder="587" field="smtpPort" settings={settings} setSettings={setSettings} type="number" />
+                                <SettingsField label={t("email.smtpHost")} placeholder="smtp.gmail.com" field="smtpHost" settings={settings} setSettings={setSettings} />
+                                <SettingsField label={t("email.smtpPort")} placeholder="587" field="smtpPort" settings={settings} setSettings={setSettings} type="number" />
                               </div>
                               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <SettingsField label="Username" placeholder="user@gmail.com" field="smtpUser" settings={settings} setSettings={setSettings} />
-                                <SettingsField label="Password" placeholder="••••••••" field="smtpPassword" settings={settings} setSettings={setSettings} type="password" isSecret />
+                                <SettingsField label={t("email.smtpUsername")} placeholder="user@gmail.com" field="smtpUser" settings={settings} setSettings={setSettings} />
+                                <SettingsField label={t("email.smtpPassword")} placeholder="••••••••" field="smtpPassword" settings={settings} setSettings={setSettings} type="password" isSecret />
                               </div>
-                              <SettingsField label="From Email" placeholder="noreply@feedferret.cloud" field="smtpFrom" settings={settings} setSettings={setSettings} />
+                              <SettingsField label={t("email.smtpFromEmail")} placeholder="noreply@feedferret.cloud" field="smtpFrom" settings={settings} setSettings={setSettings} />
                             </>
                           )}
 
                           {/* Resend fields */}
                           {settings.mailProvider === "resend" && (
                             <>
-                              <SettingsField label="Resend API Key" placeholder="re_…" field="resendApiKey" settings={settings} setSettings={setSettings} type="password" isSecret />
-                              <SettingsField label="From Email" placeholder="FeedFerret <noreply@example.com>" field="resendFromEmail" settings={settings} setSettings={setSettings} />
+                              <SettingsField label={t("email.apiKey")} placeholder="re_…" field="resendApiKey" settings={settings} setSettings={setSettings} type="password" isSecret />
+                              <SettingsField label={t("email.fromEmail")} placeholder="FeedFerret <noreply@example.com>" field="resendFromEmail" settings={settings} setSettings={setSettings} />
                             </>
                           )}
 
                           {/* Postmark fields */}
                           {settings.mailProvider === "postmark" && (
                             <>
-                              <SettingsField label="Server Token" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" field="postmarkServerToken" settings={settings} setSettings={setSettings} type="password" isSecret />
-                              <SettingsField label="From Email" placeholder="noreply@example.com" field="postmarkFromEmail" settings={settings} setSettings={setSettings} />
-                              <SettingsField label="Message Stream" placeholder="outbound" field="postmarkMessageStream" settings={settings} setSettings={setSettings} />
+                              <SettingsField label={t("email.serverToken")} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" field="postmarkServerToken" settings={settings} setSettings={setSettings} type="password" isSecret />
+                              <SettingsField label={t("email.fromEmail")} placeholder="noreply@example.com" field="postmarkFromEmail" settings={settings} setSettings={setSettings} />
+                              <SettingsField label={t("email.messageStream")} placeholder="outbound" field="postmarkMessageStream" settings={settings} setSettings={setSettings} />
                             </>
                           )}
 
                           {/* Mailgun fields */}
                           {settings.mailProvider === "mailgun" && (
                             <>
-                              <SettingsField label="API Key" placeholder="key-…" field="mailgunApiKey" settings={settings} setSettings={setSettings} type="password" isSecret />
-                              <SettingsField label="Domain" placeholder="mg.example.com" field="mailgunDomain" settings={settings} setSettings={setSettings} />
-                              <SettingsField label="From Email" placeholder="FeedFerret <noreply@example.com>" field="mailgunFromEmail" settings={settings} setSettings={setSettings} />
-                              <SettingsField label="API Base URL (optional)" placeholder="https://api.eu.mailgun.net" field="mailgunBaseUrl" settings={settings} setSettings={setSettings} />
+                              <SettingsField label={t("email.apiKey")} placeholder="key-…" field="mailgunApiKey" settings={settings} setSettings={setSettings} type="password" isSecret />
+                              <SettingsField label={t("email.domain")} placeholder="mg.example.com" field="mailgunDomain" settings={settings} setSettings={setSettings} />
+                              <SettingsField label={t("email.fromEmail")} placeholder="FeedFerret <noreply@example.com>" field="mailgunFromEmail" settings={settings} setSettings={setSettings} />
+                              <SettingsField label={t("email.baseUrl")} placeholder="https://api.eu.mailgun.net" field="mailgunBaseUrl" settings={settings} setSettings={setSettings} />
                             </>
                           )}
 
                           {/* SendGrid fields */}
                           {settings.mailProvider === "sendgrid" && (
                             <>
-                              <SettingsField label="API Key" placeholder="SG.…" field="sendgridApiKey" settings={settings} setSettings={setSettings} type="password" isSecret />
-                              <SettingsField label="From Email" placeholder="noreply@example.com" field="sendgridFromEmail" settings={settings} setSettings={setSettings} />
+                              <SettingsField label={t("email.apiKey")} placeholder="SG.…" field="sendgridApiKey" settings={settings} setSettings={setSettings} type="password" isSecret />
+                              <SettingsField label={t("email.fromEmail")} placeholder="noreply@example.com" field="sendgridFromEmail" settings={settings} setSettings={setSettings} />
                             </>
                           )}
 
@@ -603,14 +640,14 @@ export function ServerManagementDialog({
                               disabled={isSaving}
                             >
                               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                              Send Test Email
+                              {t("email.sendTestEmail")}
                             </Button>
                             <Button
                               className="rounded-2xl px-8"
                               onClick={() => handleUpdateSettings(settings)}
                               disabled={isSaving}
                             >
-                              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+                              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("email.save")}
                             </Button>
                           </div>
                         </div>
@@ -634,7 +671,7 @@ export function ServerManagementDialog({
                     <div className="px-6 py-6 sm:px-8">
                   <div className="max-w-2xl grid gap-6 p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
                     <div className="grid gap-3">
-                      <Label>Sidebar logo</Label>
+                      <Label>{t("instance.sidebarLogo")}</Label>
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                         <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-background/70">
                           {settings?.instanceIconDataUrl ? (
@@ -646,7 +683,7 @@ export function ServerManagementDialog({
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <Label className="inline-flex h-10 cursor-pointer items-center rounded-2xl border border-border/70 bg-background/70 px-4 text-sm font-medium hover:bg-muted">
-                            Upload icon
+                            {t("instance.uploadIcon")}
                             <Input
                               type="file"
                               accept="image/*"
@@ -661,29 +698,29 @@ export function ServerManagementDialog({
                               className="rounded-2xl"
                               onClick={() => setSettings({ ...settings, instanceIconDataUrl: null })}
                             >
-                              Reset
+                              {t("instance.reset")}
                             </Button>
                           )}
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">PNG/SVG/JPEG up to 180 KB. Stored in the database for self-hosted persistence.</p>
+                      <p className="text-xs text-muted-foreground">{t("instance.logoDescription")}</p>
                     </div>
                     <SettingsField
-                      label="Instance Name"
+                      label={t("instance.instanceName")}
                       placeholder="FeedFerret"
                       field="instanceName"
                       settings={settings}
                       setSettings={setSettings}
                     />
                     <SettingsField
-                      label="Public URL"
+                      label={t("instance.publicUrl")}
                       placeholder="https://rss.example.com"
                       field="instanceUrl"
                       settings={settings}
                       setSettings={setSettings}
                     />
                     <SettingsField
-                      label="Authenticator App Label"
+                      label={t("instance.authenticatorLabel")}
                       placeholder="FeedFerret"
                       field="totpIssuer"
                       settings={settings}
@@ -700,7 +737,7 @@ export function ServerManagementDialog({
                         })}
                         disabled={isSaving}
                       >
-                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("instance.save")}
                       </Button>
                     </div>
                   </div>
@@ -714,17 +751,17 @@ export function ServerManagementDialog({
                     <div className="space-y-4 px-6 py-6 sm:px-8">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <h4 className="text-lg font-semibold tracking-[-0.02em]">Starter Packs</h4>
+                          <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("starterPacks.title")}</h4>
                           <p className="text-sm text-muted-foreground">
-                            Customize, validate, import, export, and reorder the packs users can import from the sidebar.
+                            {t("starterPacks.description")}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <Button type="button" variant="outline" className="rounded-2xl" onClick={resetStarterPacks}>
-                            Reset defaults
+                            {t("starterPacks.resetDefaults")}
                           </Button>
                           <Button type="button" className="rounded-2xl" onClick={addPack}>
-                            <Plus className="mr-2 h-4 w-4" /> Add pack
+                            <Plus className="me-2 h-4 w-4" /> {t("starterPacks.addPack")}
                           </Button>
                         </div>
                       </div>
@@ -739,7 +776,7 @@ export function ServerManagementDialog({
                           <p className="font-semibold">
                             {starterPackValidation.errors.length > 0 ? "Starter pack validation needs attention" : "Starter pack cleanup will be applied on save"}
                           </p>
-                          <ul className="mt-2 list-disc space-y-1 pl-5">
+                          <ul className="mt-2 list-disc space-y-1 ps-5">
                             {[...starterPackValidation.errors, ...starterPackValidation.warnings].slice(0, 4).map((message) => (
                               <li key={message}>{message}</li>
                             ))}
@@ -751,7 +788,7 @@ export function ServerManagementDialog({
                         <div key={pack.id} className="space-y-4 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
                           <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
                             <div className="space-y-1.5">
-                              <Label>Name</Label>
+                              <Label>{t("starterPacks.name")}</Label>
                               <Input
                                 className="rounded-2xl bg-background/70 border-border/70"
                                 value={pack.name}
@@ -759,7 +796,7 @@ export function ServerManagementDialog({
                               />
                             </div>
                             <div className="space-y-1.5">
-                              <Label>Description</Label>
+                              <Label>{t("starterPacks.description")}</Label>
                               <Input
                                 className="rounded-2xl bg-background/70 border-border/70"
                                 value={pack.description || ""}
@@ -776,7 +813,7 @@ export function ServerManagementDialog({
                                 </Button>
                               </div>
                               <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-background/70 px-3 py-2">
-                                <span className="text-sm">Enabled</span>
+                                <span className="text-sm">{t("starterPacks.enabled")}</span>
                                 <Switch checked={pack.enabled} onCheckedChange={(checked) => updatePack(packIndex, { enabled: checked })} />
                               </div>
                               <Button
@@ -785,7 +822,7 @@ export function ServerManagementDialog({
                                 size="icon"
                                 className="rounded-xl"
                                 onClick={() => duplicatePack(packIndex)}
-                                title="Duplicate pack"
+                                title={t("starterPacks.duplicatePack")}
                               >
                                 <Copy className="h-4 w-4" />
                               </Button>
@@ -809,10 +846,10 @@ export function ServerManagementDialog({
 
                           <div className="space-y-2">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <Label>Feeds ({pack.feeds.length})</Label>
+                              <Label>{t("starterPacks.feeds")} ({pack.feeds.length})</Label>
                               <div className="flex flex-wrap gap-2">
                                 <Label className="inline-flex h-9 cursor-pointer items-center rounded-xl border border-border/70 bg-background/70 px-3 text-sm font-medium hover:bg-muted">
-                                  <Upload className="mr-1.5 h-3.5 w-3.5" /> Import OPML
+                                  <Upload className="me-1.5 h-3.5 w-3.5" /> {t("starterPacks.importOpml")}
                                   <Input
                                     type="file"
                                     accept=".opml,.xml,text/xml,application/xml"
@@ -824,10 +861,10 @@ export function ServerManagementDialog({
                                   />
                                 </Label>
                                 <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => exportStarterPack(pack)} disabled={pack.feeds.length === 0}>
-                                  <Download className="mr-1.5 h-3.5 w-3.5" /> Export
+                                  <Download className="me-1.5 h-3.5 w-3.5" /> {t("starterPacks.export")}
                                 </Button>
                                 <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => addPackFeed(packIndex)}>
-                                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add feed
+                                  <Plus className="me-1.5 h-3.5 w-3.5" /> {t("starterPacks.addFeed")}
                                 </Button>
                               </div>
                             </div>
@@ -843,25 +880,25 @@ export function ServerManagementDialog({
                                     </Button>
                                   </div>
                                   <Input
-                                    placeholder="Title"
+                                    placeholder={t("starterPacks.feedTitle")}
                                     className="rounded-xl bg-background/70 border-border/70"
                                     value={feed.title}
                                     onChange={(event) => updatePackFeed(packIndex, feedIndex, { title: event.target.value })}
                                   />
                                   <Input
-                                    placeholder="RSS/Atom URL"
+                                    placeholder={t("starterPacks.feedUrl")}
                                     className="rounded-xl bg-background/70 border-border/70"
                                     value={feed.xmlUrl}
                                     onChange={(event) => updatePackFeed(packIndex, feedIndex, { xmlUrl: event.target.value })}
                                   />
                                   <Input
-                                    placeholder="Website URL"
+                                    placeholder={t("starterPacks.feedWebsiteUrl")}
                                     className="rounded-xl bg-background/70 border-border/70"
                                     value={feed.htmlUrl || ""}
                                     onChange={(event) => updatePackFeed(packIndex, feedIndex, { htmlUrl: event.target.value })}
                                   />
                                   <Input
-                                    placeholder="Category"
+                                    placeholder={t("starterPacks.feedCategory")}
                                     className="rounded-xl bg-background/70 border-border/70"
                                     value={feed.category || ""}
                                     onChange={(event) => updatePackFeed(packIndex, feedIndex, { category: event.target.value })}
@@ -873,7 +910,7 @@ export function ServerManagementDialog({
                               ))}
                               {pack.feeds.length === 0 && !pack.path && (
                                 <div className="rounded-2xl border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
-                                  No feeds yet. Add at least one feed before enabling this pack.
+                                  {t("starterPacks.noFeedsYet")}
                                 </div>
                               )}
                             </div>
@@ -887,7 +924,7 @@ export function ServerManagementDialog({
                           disabled={isSaving}
                           onClick={saveStarterPacks}
                         >
-                          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save starter packs"}
+                          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("starterPacks.saveStarterPacks")}
                         </Button>
                       </div>
                     </div>
@@ -900,9 +937,9 @@ export function ServerManagementDialog({
                     <div className="max-w-2xl space-y-6 px-6 py-6 sm:px-8">
                     <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">Background Sync</h4>
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.backgroundSync")}</h4>
                         <p className="text-sm text-muted-foreground">
-                          Automatically fetch new articles for all feeds at a regular interval.
+                          {t("sync.automaticallyFetch")}
                         </p>
                       </div>
                       <Switch
@@ -913,7 +950,7 @@ export function ServerManagementDialog({
                     {settings?.backgroundSyncEnabled !== false && (
                       <div className="p-6 rounded-3xl bg-card border border-border/60 shadow-sm space-y-4">
                         <div className="space-y-2">
-                          <Label>Sync Interval (minutes)</Label>
+                          <Label>{t("sync.syncInterval")}</Label>
                           <Input
                             type="number"
                             min={1}
@@ -924,7 +961,7 @@ export function ServerManagementDialog({
                               setSettings({ ...settings, backgroundSyncIntervalMinutes: parseInt(e.target.value) || 5 })
                             }
                           />
-                          <p className="text-xs text-muted-foreground">Minimum 1 minute. Changes take effect on next server restart.</p>
+                          <p className="text-xs text-muted-foreground">{t("sync.minOneMinute")}</p>
                         </div>
                         <div className="flex justify-end">
                           <Button
@@ -932,16 +969,16 @@ export function ServerManagementDialog({
                             onClick={() => handleUpdateSettings({ backgroundSyncIntervalMinutes: settings?.backgroundSyncIntervalMinutes })}
                             disabled={isSaving}
                           >
-                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.save")}
                           </Button>
                         </div>
                       </div>
                     )}
                     <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                      <div className="space-y-1 pr-6">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">Trusted internal feed URLs</h4>
+                      <div className="space-y-1 pe-6">
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.trustedInternalFeeds")}</h4>
                         <p className="text-sm text-muted-foreground">
-                          Allow feed fetches to private IPs, localhost, and internal network hosts. Keep this off for public multi-user instances.
+                          {t("sync.allowInternalIps")}
                         </p>
                       </div>
                       <Switch
@@ -953,10 +990,10 @@ export function ServerManagementDialog({
                       <div className="p-6 rounded-3xl bg-destructive/10 border border-destructive/20 space-y-2">
                         <div className="flex items-center gap-2 text-destructive">
                           <AlertCircle className="w-5 h-5" />
-                          <h4 className="font-bold">Internal URL fetching enabled</h4>
+                          <h4 className="font-bold">{t("sync.internalUrlFetching")}</h4>
                         </div>
                         <p className="text-sm text-destructive/80 leading-relaxed">
-                          Users can now add feeds that resolve to private/internal network addresses. Only enable this on trusted single-tenant deployments.
+                          {t("sync.internalUrlWarning")}
                         </p>
                       </div>
                     )}
@@ -975,18 +1012,18 @@ export function ServerManagementDialog({
                     <div className="px-6 sm:px-8 py-6 max-w-4xl space-y-8">
                       {/* Admin Actions */}
                       <div>
-                        <h3 className="text-base font-semibold mb-4">Admin Actions</h3>
+                        <h3 className="text-base font-semibold mb-4">{t("audit.adminActions")}</h3>
                         {auditLog.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">No admin actions recorded yet.</p>
+                          <p className="text-sm text-muted-foreground">{t("audit.noAdminActionsRecorded")}</p>
                         ) : (
                           <div className="rounded-2xl border border-border/60 overflow-hidden">
                             <table className="w-full text-sm">
                               <thead className="bg-muted/40">
                                 <tr>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Time</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Actor</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Action</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Target</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">{t("audit.time")}</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">{t("audit.actor")}</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">{t("audit.action")}</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">{t("audit.target")}</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1016,18 +1053,18 @@ export function ServerManagementDialog({
 
                       {/* Login Attempts */}
                       <div>
-                        <h3 className="text-base font-semibold mb-4">Recent Login Attempts</h3>
+                        <h3 className="text-base font-semibold mb-4">{t("audit.recentLoginAttempts")}</h3>
                         {loginAttempts.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">No login attempts recorded yet.</p>
+                          <p className="text-sm text-muted-foreground">{t("audit.noLoginAttemptsRecorded")}</p>
                         ) : (
                           <div className="rounded-2xl border border-border/60 overflow-hidden">
                             <table className="w-full text-sm">
                               <thead className="bg-muted/40">
                                 <tr>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Time</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Email</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Result</th>
-                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">IP</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">{t("audit.time")}</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">{t("audit.email")}</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">{t("audit.result")}</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">{t("audit.ip")}</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1038,11 +1075,11 @@ export function ServerManagementDialog({
                                     <td className="px-4 py-2">
                                       {attempt.success ? (
                                         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-green-500/15 text-green-600">
-                                          <CheckCircle2 className="w-3 h-3" /> success
+                                          <CheckCircle2 className="w-3 h-3" /> {t("audit.success")}
                                         </span>
                                       ) : (
                                         <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-destructive/15 text-destructive">
-                                          <AlertTriangle className="w-3 h-3" /> {attempt.failReason || "failed"}
+                                          <AlertTriangle className="w-3 h-3" /> {attempt.failReason || t("audit.failed")}
                                         </span>
                                       )}
                                     </td>
@@ -1057,6 +1094,57 @@ export function ServerManagementDialog({
                     </div>
                   </ScrollArea>
                 </TabsContent>
+
+                <TabsContent value="storage" className="h-full mt-0 focus-visible:outline-none">
+                  <div className="px-6 sm:px-8 flex flex-col h-full">
+                    <div className="mb-4">
+                      <p className="text-sm text-muted-foreground">{t("storage.description")}</p>
+                    </div>
+                    <ScrollArea className="flex-1">
+                      {!storageLoaded ? (
+                        <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-sm">{t("storage.loading")}</span>
+                        </div>
+                      ) : storageStats.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-8 text-center">{t("storage.noData")}</p>
+                      ) : (
+                        <div className="pb-8">
+                          <div className="grid grid-cols-5 gap-2 mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            <div className="col-span-2">{t("storage.user")}</div>
+                            <div className="text-right">{t("storage.articles")}</div>
+                            <div className="text-right">{t("storage.feeds")}</div>
+                            <div className="text-right">{t("storage.aiSummaries")}</div>
+                          </div>
+                          <div className="space-y-2">
+                            {storageStats
+                              .sort((a, b) => b.articles - a.articles)
+                              .map((stat) => (
+                                <div
+                                  key={stat.id}
+                                  className="grid grid-cols-5 gap-2 items-center rounded-2xl border border-border/50 bg-card/70 px-4 py-3 text-sm"
+                                >
+                                  <div className="col-span-2 min-w-0">
+                                    <div className="font-medium truncate">{stat.name || stat.email}</div>
+                                    {stat.name && <div className="text-xs text-muted-foreground truncate">{stat.email}</div>}
+                                  </div>
+                                  <div className="text-right tabular-nums">{stat.articles.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums">{stat.feeds.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums">{stat.aiSummaries.toLocaleString()}</div>
+                                </div>
+                              ))}
+                          </div>
+                          <div className="mt-4 rounded-2xl border border-border/40 bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                            <strong>Total:</strong>{" "}
+                            {storageStats.reduce((s, r) => s + r.articles, 0).toLocaleString()} {t("storage.articles").toLowerCase()} ·{" "}
+                            {storageStats.reduce((s, r) => s + r.feeds, 0).toLocaleString()} {t("storage.feeds").toLowerCase()} ·{" "}
+                            {storageStats.reduce((s, r) => s + r.aiSummaries, 0).toLocaleString()} {t("storage.aiSummaries").toLowerCase()}
+                          </div>
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+                </TabsContent>
               </>
             )}
           </div>
@@ -1067,13 +1155,13 @@ export function ServerManagementDialog({
         >
           <AlertDialogContent className="rounded-3xl border-border/70 bg-background">
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete user?</AlertDialogTitle>
+              <AlertDialogTitle>{t("users.deleteUserTitle")}</AlertDialogTitle>
               <AlertDialogDescription>
-                {pendingDeleteUser?.email || "This user"} and all related data will be removed. This cannot be undone.
+                {pendingDeleteUser?.email || ""} {t("users.deleteUserConfirm")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
+              <AlertDialogCancel className="rounded-2xl">{t("users.cancelButton")}</AlertDialogCancel>
               <AlertDialogAction
                 className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={() => {
@@ -1082,7 +1170,7 @@ export function ServerManagementDialog({
                   setPendingDeleteUser(null);
                 }}
               >
-                Delete user
+                {t("users.deleteButton")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -1134,6 +1222,7 @@ function SettingsField({
 }
 
 function DiscoveryCatalogTab() {
+  const t = useTranslations("serverManagement");
   const [stats, setStats] = useState<{
     totalFeeds: number;
     byCategory: { category: string; count: number }[];
@@ -1205,9 +1294,9 @@ function DiscoveryCatalogTab() {
     <ScrollArea className="h-full">
       <div className="px-6 sm:px-8 py-6 space-y-6">
         <div>
-          <h3 className="text-lg font-semibold mb-1">Feed Discovery Catalog</h3>
+          <h3 className="text-lg font-semibold mb-1">{t("discovery.title")}</h3>
           <p className="text-sm text-muted-foreground">
-            Import feeds from public directories to enable topic-based feed discovery for users.
+            {t("discovery.description")}
           </p>
         </div>
 
@@ -1215,13 +1304,13 @@ function DiscoveryCatalogTab() {
         {isLoading ? (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="text-sm">Loading stats...</span>
+            <span className="text-sm">{t("discovery.loadingStats")}</span>
           </div>
         ) : stats ? (
           <div className="p-4 rounded-2xl bg-muted/50 border border-border/50">
             <div className="flex items-center justify-between mb-3">
-              <span className="font-medium">Catalog Status</span>
-              <span className="text-2xl font-bold">{stats.totalFeeds} feeds</span>
+              <span className="font-medium">{t("discovery.catalogStatus")}</span>
+              <span className="text-2xl font-bold">{stats.totalFeeds} {t("discovery.feeds")}</span>
             </div>
             {stats.byCategory.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -1247,13 +1336,13 @@ function DiscoveryCatalogTab() {
           >
             {isImporting ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Importing...
+                <Loader2 className="w-4 h-4 me-2 animate-spin" />
+                {t("discovery.importing")}
               </>
             ) : (
               <>
-                <Download className="w-4 h-4 mr-2" />
-                Import from Public Directories
+                <Download className="w-4 h-4 me-2" />
+                {t("discovery.importFromPublic")}
               </>
             )}
           </Button>
@@ -1263,8 +1352,8 @@ function DiscoveryCatalogTab() {
               onClick={handleClear}
               className="rounded-2xl"
             >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Clear Catalog
+              <Trash2 className="w-4 h-4 me-2" />
+              {t("discovery.clearCatalog")}
             </Button>
           )}
         </div>
@@ -1274,28 +1363,28 @@ function DiscoveryCatalogTab() {
           <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-3">
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
               <ShieldCheck className="w-5 h-5" />
-              <span className="font-medium">Import Complete</span>
+              <span className="font-medium">{t("discovery.importComplete")}</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
               <div>
-                <span className="text-muted-foreground">Fetched</span>
+                <span className="text-muted-foreground">{t("discovery.fetched")}</span>
                 <p className="font-medium">{importResult.totalFetched}</p>
               </div>
               <div>
-                <span className="text-muted-foreground">Added</span>
+                <span className="text-muted-foreground">{t("discovery.added")}</span>
                 <p className="font-medium text-emerald-600">{importResult.totalAdded}</p>
               </div>
               <div>
-                <span className="text-muted-foreground">Skipped</span>
+                <span className="text-muted-foreground">{t("discovery.skipped")}</span>
                 <p className="font-medium">{importResult.totalSkipped}</p>
               </div>
               <div>
-                <span className="text-muted-foreground">Total</span>
+                <span className="text-muted-foreground">{t("discovery.total")}</span>
                 <p className="font-medium">{importResult.totalInCatalog}</p>
               </div>
             </div>
             <div className="pt-2 border-t border-emerald-500/20">
-              <p className="text-xs text-muted-foreground mb-2">Sources:</p>
+              <p className="text-xs text-muted-foreground mb-2">{t("discovery.sources")}</p>
               <div className="space-y-1">
                 {importResult.sources.map((src) => (
                   <div key={src.name} className="flex items-center justify-between text-xs">
@@ -1315,11 +1404,10 @@ function DiscoveryCatalogTab() {
         {/* Info */}
         <div className="p-4 rounded-2xl bg-muted/30 border border-border/50 text-sm text-muted-foreground">
           <p className="mb-2">
-            <strong>Sources:</strong> awesome-rss-feeds, awesome-tech-rss (GitHub)
+            <strong>{t("discovery.sources")}</strong> awesome-rss-feeds, awesome-tech-rss (GitHub)
           </p>
           <p>
-            Feeds are imported once and stored locally. Users can then search the catalog by topic or keyword.
-            Re-importing will update existing feeds and add new ones.
+            {t("discovery.feedsImportedLocally")}
           </p>
         </div>
       </div>
@@ -1328,6 +1416,7 @@ function DiscoveryCatalogTab() {
 }
 
 function NotificationsAdminPanel() {
+  const t = useTranslations("serverManagement");
   const [diag, setDiag] = useState<{
     configured: boolean;
     publicKey: string;
@@ -1383,10 +1472,9 @@ function NotificationsAdminPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xl font-semibold tracking-[-0.02em]">Push notifications</h3>
+        <h3 className="text-xl font-semibold tracking-[-0.02em]">{t("pushNotifications.title")}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Configure Web Push (VAPID) credentials so users on this instance can receive browser notifications
-          and PWA badge updates for new articles.
+          {t("pushNotifications.description")}
         </p>
       </div>
 
@@ -1400,13 +1488,13 @@ function NotificationsAdminPanel() {
           </div>
           <div className="flex-1">
             <div className="text-sm font-semibold">
-              {loading ? "Checking…" : diag?.configured ? "Push notifications are configured" : "Not configured yet"}
+              {loading ? t("pushNotifications.checking") : diag?.configured ? t("pushNotifications.configured") : t("pushNotifications.notConfigured")}
             </div>
             {!loading && diag && (
               <div className="mt-1 text-xs text-muted-foreground space-y-0.5">
-                <p>Public key: <code className="rounded bg-background/60 px-1">{diag.publicKey || "—"}</code></p>
-                <p>Private key: {diag.privateKeyConfigured ? "set" : "missing"}</p>
-                <p>Contact: <code className="rounded bg-background/60 px-1">{diag.contact || "—"}</code></p>
+                <p>{t("pushNotifications.publicKey")} <code className="rounded bg-background/60 px-1">{diag.publicKey || "—"}</code></p>
+                <p>{t("pushNotifications.privateKey")} {diag.privateKeyConfigured ? t("pushNotifications.set") : t("pushNotifications.missing")}</p>
+                <p>{t("pushNotifications.contact")} <code className="rounded bg-background/60 px-1">{diag.contact || "—"}</code></p>
                 <p>{diag.activeSubscriptions} active subscription{diag.activeSubscriptions === 1 ? "" : "s"} across {diag.totalUsers} user{diag.totalUsers === 1 ? "" : "s"}</p>
               </div>
             )}
@@ -1418,7 +1506,7 @@ function NotificationsAdminPanel() {
         <div className="flex items-start gap-3">
           <KeyRound className="w-5 h-5 text-muted-foreground mt-0.5" />
           <div className="flex-1 space-y-2">
-            <h4 className="text-sm font-semibold">Set up VAPID credentials</h4>
+            <h4 className="text-sm font-semibold">{t("pushNotifications.setupVapid")}</h4>
             <p className="text-xs text-muted-foreground">
               Generate a key pair and add the values to your environment, then restart the server.
             </p>
@@ -1437,15 +1525,15 @@ WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
 
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button type="button" className="rounded-2xl" onClick={handleGenerate} disabled={generating}>
-            {generating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <KeyRound className="w-4 h-4 mr-2" />}
-            Generate keys
+            {generating ? <Loader2 className="w-4 h-4 animate-spin me-2" /> : <KeyRound className="w-4 h-4 me-2" />}
+            {t("pushNotifications.generateKeys")}
           </Button>
         </div>
 
         {generated && (
           <div className="rounded-2xl border border-border/60 bg-background/60 p-4 space-y-3">
             <div>
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Public key</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("pushNotifications.publicKeyLabel")}</Label>
               <div className="flex items-center gap-2 mt-1">
                 <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">
                   {generated.publicKey}
@@ -1456,7 +1544,7 @@ WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
               </div>
             </div>
             <div>
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Private key (keep secret)</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("pushNotifications.privateKeyLabel")}</Label>
               <div className="flex items-center gap-2 mt-1">
                 <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">
                   {generated.privateKey}
@@ -1467,17 +1555,16 @@ WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              These keys are generated on-the-fly and not stored. Paste them into your environment before closing this view.
+              {t("pushNotifications.generatedKeysNote")}
             </p>
           </div>
         )}
       </div>
 
       <div className="rounded-3xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-2">
-        <h4 className="text-sm font-semibold">PWA app badge</h4>
+        <h4 className="text-sm font-semibold">{t("pushNotifications.pwaAppBadge")}</h4>
         <p className="text-xs text-muted-foreground">
-          When push is configured, the installed PWA shows the unread count on its app icon (Android, iOS 16.4+, supported desktops).
-          The badge value mirrors the user&apos;s current unread feed total — no extra configuration required.
+          {t("pushNotifications.badgeDescription")}
         </p>
       </div>
     </div>

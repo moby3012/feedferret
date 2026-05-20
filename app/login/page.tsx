@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -22,6 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { useInstance } from "@/hooks/use-instance";
 
 export default function LoginPage() {
+  const t = useTranslations("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -74,7 +76,7 @@ export default function LoginPage() {
         });
 
         if (!preflight.ok) {
-          setError("Username or password incorrect");
+          setError(t("errors.incorrectCredentials"));
           return;
         }
 
@@ -82,7 +84,7 @@ export default function LoginPage() {
         if (preflightData.requiresTwoFactor) {
           setShowOtpField(true);
           setErrorIsWarning(true);
-          setError("2FA required — enter your authenticator code below");
+          setError(t("errors.twoFactorRequired"));
           return;
         }
         // 2FA not enabled: fall through to signIn which verifies the password
@@ -97,13 +99,13 @@ export default function LoginPage() {
 
       if (result?.error) {
         setErrorIsWarning(false);
-        setError(showOtpField ? "Password or 2FA code is incorrect" : "Username or password incorrect");
+        setError(showOtpField ? t("errors.passwordOrCodeIncorrect") : t("errors.incorrectCredentials"));
       } else {
         router.push("/");
         router.refresh();
       }
     } catch {
-      setError("An unexpected error occurred");
+      setError(t("errors.unexpectedError"));
     } finally {
       setIsLoading(false);
     }
@@ -115,7 +117,7 @@ export default function LoginPage() {
 
   const handleMagicLink = async () => {
     if (!email.trim()) {
-      setError("Enter your email address first");
+      setError(t("errors.enterEmailFirst"));
       setErrorIsWarning(false);
       return;
     }
@@ -129,14 +131,14 @@ export default function LoginPage() {
         callbackUrl: "/",
       });
       if (result?.error) {
-        setError("Could not send magic link — check your email and try again");
+        setError(t("errors.magicLinkFailed"));
       } else {
         setMagicLinkSent(true);
-        setError("Sign-in link sent — check your inbox");
+        setError(t("errors.magicLinkSent"));
         setErrorIsWarning(true);
       }
     } catch {
-      setError("Could not send magic link");
+      setError(t("errors.magicLinkFailed"));
     } finally {
       setMagicLinkSending(false);
     }
@@ -168,10 +170,10 @@ export default function LoginPage() {
         </div>
 
         <Card className="border-white/5 bg-zinc-950/50 backdrop-blur-xl shadow-2xl overflow-hidden ring-1 ring-white/10">
-          <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-left">
+          <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-start">
             <CardTitle className="text-lg font-semibold text-white flex items-center justify-center sm:justify-start gap-2">
               <LogIn className="w-4 h-4 text-zinc-400" />
-              Sign In
+              {t("signIn")}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-8 pb-6">
@@ -180,7 +182,7 @@ export default function LoginPage() {
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-white" />
                 <Input
                   type="email"
-                  placeholder="Email"
+                  placeholder={t("email")}
                   className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                   value={email}
                   onChange={(e) => {
@@ -197,7 +199,7 @@ export default function LoginPage() {
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-white" />
                 <Input
                   type="password"
-                  placeholder="Password"
+                  placeholder={t("password")}
                   className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                   value={password}
                   onChange={(e) => {
@@ -216,7 +218,7 @@ export default function LoginPage() {
                   <Input
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    placeholder="Authenticator code"
+                    placeholder={t("authenticatorCode")}
                     className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -245,10 +247,10 @@ export default function LoginPage() {
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                    Signing in...
+                    {t("signingIn")}
                   </span>
                 ) : (
-                  "Continue with Email"
+                  t("continueWithEmail")
                 )}
               </Button>
 
@@ -263,17 +265,17 @@ export default function LoginPage() {
                   {magicLinkSending ? (
                     <span className="flex items-center gap-2">
                       <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                      Sending link…
+                      {t("sendingLink")}
                     </span>
                   ) : magicLinkSent ? (
                     <span className="flex items-center gap-2">
                       <Mail className="w-4 h-4" />
-                      Check your inbox
+                      {t("checkInbox")}
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
                       <Wand2 className="w-4 h-4" />
-                      Send me a magic link
+                      {t("sendMagicLink")}
                     </span>
                   )}
                 </Button>
@@ -288,7 +290,7 @@ export default function LoginPage() {
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
                     <span className="bg-[#0c0c0e] px-2 text-zinc-500 font-medium">
-                      Or continue with
+                      {t("orContinueWith")}
                     </span>
                   </div>
                 </div>
@@ -300,7 +302,7 @@ export default function LoginPage() {
                       className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("google")}
                     >
-                      <GoogleIcon className="w-4 h-4 mr-2" />
+                      <GoogleIcon className="w-4 h-4 me-2" />
                       Google
                     </Button>
                   )}
@@ -310,7 +312,7 @@ export default function LoginPage() {
                       className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("github")}
                     >
-                      <GithubIcon className="w-4 h-4 mr-2" />
+                      <GithubIcon className="w-4 h-4 me-2" />
                       GitHub
                     </Button>
                   )}
@@ -320,7 +322,7 @@ export default function LoginPage() {
                       className="sm:col-span-2 bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("authelia")}
                     >
-                      <Shield className="w-4 h-4 mr-2" />
+                      <Shield className="w-4 h-4 me-2" />
                       {providers.autheliaLabel}
                     </Button>
                   )}
@@ -336,12 +338,12 @@ export default function LoginPage() {
                   href="/register"
                   className="text-white hover:underline transition-all"
                 >
-                  Create one
+                  {t("createAccount")}
                 </Link>
               </div>
             ) : (
               <div className="text-zinc-600 text-xs font-medium text-center w-full">
-                Registrations are currently disabled on this instance.
+                {t("registrationsDisabled")}
               </div>
             )}
           </CardFooter>
@@ -349,7 +351,7 @@ export default function LoginPage() {
 
         <div className="text-center mt-12 opacity-20">
           <p className="text-[10px] font-medium tracking-[0.2em] text-white uppercase">
-            Private & Secure News Feed
+            {t("privateSecureNewsFeed")}
           </p>
         </div>
       </div>

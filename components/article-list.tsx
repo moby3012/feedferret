@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
@@ -141,6 +142,7 @@ export function ArticleList({
   onSwipePreviousFeed,
   scrollBackToId,
 }: ArticleListProps) {
+  const t = useTranslations("articleList");
   const transitionClass =
     transitionStyle === "flip"
       ? "animate-feed-flip"
@@ -153,18 +155,18 @@ export function ArticleList({
   const bgSwipeRef = useRef<{ x: number; y: number; onArticle: boolean } | null>(null);
   const handleBgSwipeStart = (e: React.TouchEvent) => {
     if (!onSwipeNextFeed && !onSwipePreviousFeed) return;
-    const t = e.touches[0];
-    const onArticle = !!(t.target as HTMLElement | null)?.closest?.("article");
-    bgSwipeRef.current = { x: t.clientX, y: t.clientY, onArticle };
+    const touch = e.touches[0];
+    const onArticle = !!(touch.target as HTMLElement | null)?.closest?.("article");
+    bgSwipeRef.current = { x: touch.clientX, y: touch.clientY, onArticle };
   };
   const handleBgSwipeEnd = (e: React.TouchEvent) => {
     if (!bgSwipeRef.current) return;
     const start = bgSwipeRef.current;
     bgSwipeRef.current = null;
     if (start.onArticle) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - start.x;
-    const dy = t.clientY - start.y;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
     if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
     if (dx < 0) onSwipeNextFeed?.();
     else onSwipePreviousFeed?.();
@@ -367,8 +369,8 @@ export function ArticleList({
         <Empty className="border-0">
           <EmptyMedia variant="icon"><Circle className="size-6" /></EmptyMedia>
           <EmptyContent>
-            <EmptyTitle>No articles</EmptyTitle>
-            <EmptyDescription>Add feeds to start reading, or adjust your filters.</EmptyDescription>
+            <EmptyTitle>{t("noArticles")}</EmptyTitle>
+            <EmptyDescription>{t("noArticlesDescription")}</EmptyDescription>
           </EmptyContent>
         </Empty>
       </div>
@@ -388,10 +390,10 @@ export function ArticleList({
             <RefreshCw className={cn("h-3.5 w-3.5", (isRefreshing || pullTriggered) && "animate-spin", pullReady && !isRefreshing && "text-foreground")} />
             <span>
               {isRefreshing || pullTriggered
-                ? "Refreshing feeds…"
+                ? t("refreshingFeeds")
                 : pullReady
-                  ? "Release to refresh"
-                  : "Pull to refresh"}
+                  ? t("releaseToRefresh")
+                  : t("pullToRefresh")}
             </span>
           </div>
         </div>
@@ -427,8 +429,8 @@ export function ArticleList({
         ))}
         {hasMore && (
           <div ref={sentinelRef} className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-            <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin mr-2" />
-            Loading more...
+            <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin me-2" />
+            {t("loadingMore")}
           </div>
         )}
       </div>
@@ -463,6 +465,7 @@ function ArticlePreview({
   onMarkRead?: (articleId: string) => void;
   scrollRoot?: HTMLElement | null;
 }) {
+  const t = useTranslations("articleList");
   const articleRef = useRef<HTMLDivElement>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -472,16 +475,16 @@ function ArticlePreview({
   const SWIPE_MAX = 160;
 
   const handleSwipeStart = (e: React.TouchEvent) => {
-    const t = e.touches[0];
-    swipeStartRef.current = { x: t.clientX, y: t.clientY };
+    const touch = e.touches[0];
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
     setSwipeActive(false);
   };
 
   const handleSwipeMove = (e: React.TouchEvent) => {
     if (!swipeStartRef.current) return;
-    const t = e.touches[0];
-    const dx = t.clientX - swipeStartRef.current.x;
-    const dy = t.clientY - swipeStartRef.current.y;
+    const touch = e.touches[0];
+    const dx = touch.clientX - swipeStartRef.current.x;
+    const dy = touch.clientY - swipeStartRef.current.y;
     if (!swipeActive) {
       // Lock direction: if vertical dominates, abandon swipe
       if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
@@ -501,9 +504,9 @@ function ArticlePreview({
       setSwipeActive(false);
       return;
     }
-    const t = e.changedTouches[0];
-    const dx = t.clientX - swipeStartRef.current.x;
-    const dy = t.clientY - swipeStartRef.current.y;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - swipeStartRef.current.x;
+    const dy = touch.clientY - swipeStartRef.current.y;
     swipeStartRef.current = null;
     setSwipeActive(false);
     setSwipeOffset(0);
@@ -576,7 +579,7 @@ function ArticlePreview({
         aria-pressed={isSelected}
         className={cn(
           "px-3 py-2.5 cursor-pointer rounded-2xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden relative focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          "border-l-4",
+          "border-s-4",
           isSelected
             ? "bg-accent/10 ring-1 ring-accent/20"
             : "hover:bg-muted/50",
@@ -594,7 +597,7 @@ function ArticlePreview({
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
           className={cn("rounded-md p-1 transition-colors shrink-0", article.isStarred ? "text-amber-500" : "text-muted-foreground hover:text-amber-500")}
-          aria-label={article.isStarred ? "Remove star" : "Star"}
+          aria-label={article.isStarred ? t("removeStar") : t("star")}
         >
           <Star className={cn("w-3.5 h-3.5", article.isStarred && "fill-amber-500")} />
         </button>
@@ -602,7 +605,7 @@ function ArticlePreview({
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
           className={cn("rounded-md p-1 transition-colors shrink-0", article.isReadLater ? "text-accent" : "text-muted-foreground hover:text-accent")}
-          aria-label={article.isReadLater ? "Remove from Read Later" : "Read Later"}
+          aria-label={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
         >
           <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent")} />
         </button>
@@ -642,7 +645,7 @@ function ArticlePreview({
               sizes="(max-width: 640px) 100vw, 400px"
               className="object-cover transition-transform duration-700 hover:scale-110"
             />
-            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-white text-[10px] font-bold">
+            <div className="absolute top-3 start-3 flex items-center gap-1.5 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-white text-[10px] font-bold">
               <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={12} />
               {article.feedName}
             </div>
@@ -674,7 +677,7 @@ function ArticlePreview({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
                 className={cn("rounded-md p-1 transition-colors", article.isStarred ? "text-amber-500 hover:bg-amber-500/10" : "text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10")}
-                aria-label={article.isStarred ? "Remove star" : "Star"}
+                aria-label={article.isStarred ? t("removeStar") : t("star")}
               >
                 <Star className={cn("w-3.5 h-3.5", article.isStarred && "fill-amber-500")} />
               </button>
@@ -682,8 +685,8 @@ function ArticlePreview({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
                 className={cn("rounded-md p-1 transition-colors", article.isReadLater ? "text-accent" : "text-muted-foreground hover:text-accent hover:bg-accent/10")}
-                aria-label={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
-                title={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
+                aria-label={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
+                title={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
               >
                 <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent")} />
               </button>
@@ -692,8 +695,8 @@ function ArticlePreview({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onReleaseSpoiler(article.id); }}
                   className="rounded-md p-1 transition-colors text-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
-                  aria-label="Release spoiler flag"
-                  title="Release spoiler flag"
+                  aria-label={t("releaseSpoiler")}
+                  title={t("releaseSpoiler")}
                 >
                   <ShieldOff className="w-3.5 h-3.5" />
                 </button>
@@ -743,7 +746,7 @@ function ArticlePreview({
               className="object-cover transition-transform duration-500 group-hover:scale-105"
             />
             {!article.isRead && (
-              <div className="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-brand animate-pulse-gentle" />
+              <div className="absolute top-2 start-2 w-2.5 h-2.5 rounded-full bg-brand animate-pulse-gentle" />
             )}
           </div>
         )}
@@ -757,7 +760,7 @@ function ArticlePreview({
             {(article.duplicateCount ?? 0) > 0 && (
               <span
                 className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium shrink-0"
-                title={`Also in ${article.duplicateCount} other feed${(article.duplicateCount ?? 0) > 1 ? "s" : ""}`}
+                title={`${t("alsoIn")} ${article.duplicateCount} ${(article.duplicateCount ?? 0) > 1 ? t("otherFeeds") : t("otherFeed")}`}
               >
                 <Layers className="w-2.5 h-2.5" />
                 {article.duplicateCount}
@@ -766,7 +769,7 @@ function ArticlePreview({
             {article.isDuplicate && article.canonicalFeedName && (
               <span
                 className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/70 text-[10px] font-medium shrink-0"
-                title={`First seen in: ${article.canonicalFeedName}`}
+                title={`${t("firstSeenIn")}: ${article.canonicalFeedName}`}
               >
                 <Layers className="w-2.5 h-2.5" />
                 dup
@@ -782,7 +785,7 @@ function ArticlePreview({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
                   className="rounded-lg p-1 hover:bg-amber-500/10 transition-colors"
-                  aria-label="Remove star"
+                  aria-label={t("removeStar")}
                 >
                   <Star className="w-4 h-4 text-amber-500 fill-amber-500 transition-transform duration-300 group-hover:scale-110" />
                 </button>
@@ -792,7 +795,7 @@ function ArticlePreview({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
                   className="rounded-lg p-1 hover:bg-accent/10 transition-colors"
-                  aria-label="Remove from Read Later"
+                  aria-label={t("removeFromReadLater")}
                 >
                   <Bookmark className="w-4 h-4 text-accent fill-accent" />
                 </button>
@@ -841,8 +844,8 @@ function ArticlePreview({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleRead?.(article.id); }}
                 className="rounded-lg p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground"
-                aria-label={article.isRead ? "Mark as unread" : "Mark as read"}
-                title={article.isRead ? "Mark as unread" : "Mark as read"}
+                aria-label={article.isRead ? t("markAsUnread") : t("markAsRead")}
+                title={article.isRead ? t("markAsUnread") : t("markAsRead")}
               >
                 {article.isRead ? <Circle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
               </button>
@@ -851,8 +854,8 @@ function ArticlePreview({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
                   className="rounded-lg p-1.5 hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500"
-                  aria-label="Add star"
-                  title="Star"
+                  aria-label={t("star")}
+                  title={t("star")}
                 >
                   <Star className="w-4 h-4" />
                 </button>
@@ -861,8 +864,8 @@ function ArticlePreview({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
                 className={cn("rounded-lg p-1.5 transition-colors", article.isReadLater ? "text-accent bg-accent/10" : "text-muted-foreground hover:text-accent hover:bg-accent/10")}
-                aria-label={article.isReadLater ? "Remove from Read Later" : "Save to Read Later"}
-                title={article.isReadLater ? "Remove from Read Later (l)" : "Save to Read Later (l)"}
+                aria-label={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
+                title={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
               >
                 <Bookmark className={cn("w-4 h-4", article.isReadLater && "fill-accent")} />
               </button>
@@ -871,8 +874,8 @@ function ArticlePreview({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onReleaseSpoiler(article.id); }}
                   className="rounded-lg p-1.5 transition-colors text-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
-                  aria-label="Release spoiler flag"
-                  title="Release spoiler flag"
+                  aria-label={t("releaseSpoiler")}
+                  title={t("releaseSpoiler")}
                 >
                   <ShieldOff className="w-4 h-4" />
                 </button>

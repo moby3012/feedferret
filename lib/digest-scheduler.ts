@@ -51,6 +51,7 @@ export async function runDigestScheduler(): Promise<void> {
             id: true,
             name: true,
             email: true,
+            uiLanguage: true,
             digestFrequency: true,
             digestDayOfWeek: true,
             digestHour: true,
@@ -106,6 +107,7 @@ export async function runDigestScheduler(): Promise<void> {
                 articles,
                 unsubscribeToken: token,
                 baseUrl: getBaseUrl(),
+                locale: user.uiLanguage ?? "en",
             });
 
             await db.user.update({

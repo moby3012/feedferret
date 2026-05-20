@@ -75,3 +75,20 @@ export function clampInt(value: string | number | null | undefined, fallback: nu
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, Math.trunc(parsed)));
 }
+
+const SCOPE_LEVEL: Record<string, number> = { read: 1, write: 2, admin: 3 };
+
+/**
+ * Returns a 403 error response if the user's token scope is below the required level.
+ * Returns null if access is allowed (scope is sufficient, or user has session auth with no token scope).
+ */
+export function scopeError(user: ApiUser, required: "read" | "write" | "admin"): NextResponse | null {
+  // Session auth (no tokenScope) always has full access
+  if (user.tokenScope === undefined) return null;
+  const userLevel = SCOPE_LEVEL[user.tokenScope] ?? 0;
+  const requiredLevel = SCOPE_LEVEL[required];
+  if (userLevel < requiredLevel) {
+    return apiError("Insufficient token scope", 403);
+  }
+  return null;
+}

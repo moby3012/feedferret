@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { apiError, clampInt, parseBool, readJson, requireApiUser, type ApiUser } from "@/lib/api-auth";
+import { apiError, clampInt, parseBool, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
 import { checkRateLimit, getClientIdentifier, rateLimitHeaders, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
@@ -173,41 +173,55 @@ async function patchArticle(user: ApiUser, articleId: string, request: Request) 
 async function batchArticles(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
   if (!body) return apiError("Invalid JSON body", 400);
+
   const ids: string[] = Array.isArray(body.ids) ? body.ids.filter((id: unknown) => typeof id === "string") : [];
   if (ids.length === 0) return apiError("ids must be a non-empty array of strings", 400);
-  if (ids.length > 200) return apiError("ids array must not exceed 200 items", 400);
+  if (ids.length > 500) return apiError("ids array must not exceed 500 items", 400);
 
   const action: string = typeof body.action === "string" ? body.action : "";
-  const VALID_ACTIONS = ["read", "unread", "star", "unstar", "label"] as const;
+  const VALID_ACTIONS = ["read", "unread", "star", "unstar", "label", "unlabel", "read_later", "remove_read_later"] as const;
   if (!VALID_ACTIONS.includes(action as (typeof VALID_ACTIONS)[number])) {
     return apiError(`action must be one of: ${VALID_ACTIONS.join(", ")}`, 400);
   }
 
-  // Verify ownership in one query
+  if ((action === "label" || action === "unlabel") && typeof body.labelId !== "string") {
+    return apiError("labelId is required for label/unlabel actions", 400);
+  }
+
+  // Filter to only articles belonging to the authenticated user
   const owned = await db.article.findMany({ where: { id: { in: ids }, userId: user.id }, select: { id: true } });
   const ownedIds = owned.map((a) => a.id);
   if (ownedIds.length === 0) return apiError("No matching articles found", 404);
+
+  if (action === "label") {
+    // Verify the label belongs to the user
+    const label = await db.label.findFirst({ where: { id: body.labelId, userId: user.id }, select: { id: true } });
+    if (!label) return apiError("Label not found", 404);
+    // Find which article-label pairs already exist to skip duplicates (SQLite does not support createMany skipDuplicates)
+    const existing = await db.articleLabel.findMany({ where: { labelId: body.labelId, articleId: { in: ownedIds } }, select: { articleId: true } });
+    const existingSet = new Set(existing.map((e) => e.articleId));
+    const toCreate = ownedIds.filter((id) => !existingSet.has(id));
+    if (toCreate.length > 0) {
+      await db.articleLabel.createMany({ data: toCreate.map((articleId) => ({ userId: user.id, articleId, labelId: body.labelId })) });
+    }
+    return NextResponse.json({ updated: ownedIds.length });
+  }
+
+  if (action === "unlabel") {
+    const result = await db.articleLabel.deleteMany({ where: { userId: user.id, articleId: { in: ownedIds }, labelId: body.labelId } });
+    return NextResponse.json({ updated: result.count });
+  }
 
   let data: any = {};
   if (action === "read") { data = { isRead: true, readAt: new Date() }; }
   else if (action === "unread") { data = { isRead: false, readAt: null }; }
   else if (action === "star") { data = { isStarred: true }; }
   else if (action === "unstar") { data = { isStarred: false }; }
-  else if (action === "label") {
-    const labelIds: string[] = Array.isArray(body.labelIds) ? body.labelIds.filter((id: unknown) => typeof id === "string") : [];
-    const validLabels = await db.label.findMany({ where: { userId: user.id, id: { in: labelIds } }, select: { id: true } });
-    const validLabelIds = validLabels.map((l) => l.id);
-    await db.$transaction([
-      db.articleLabel.deleteMany({ where: { userId: user.id, articleId: { in: ownedIds } } }),
-      ...ownedIds.flatMap((articleId) =>
-        validLabelIds.map((labelId) => db.articleLabel.create({ data: { userId: user.id, articleId, labelId } }))
-      ),
-    ]);
-    return NextResponse.json({ updated: ownedIds.length, notFound: ids.length - ownedIds.length });
-  }
+  else if (action === "read_later") { data = { isReadLater: true, readLaterSavedAt: new Date() }; }
+  else if (action === "remove_read_later") { data = { isReadLater: false, readLaterSavedAt: null }; }
 
   const result = await db.article.updateMany({ where: { id: { in: ownedIds } }, data });
-  return NextResponse.json({ updated: result.count, notFound: ids.length - ownedIds.length });
+  return NextResponse.json({ updated: result.count });
 }
 
 async function markAllRead(user: ApiUser, request: Request) {
@@ -450,11 +464,178 @@ async function importOpml(user: ApiUser, request: Request) {
   return NextResponse.json(report);
 }
 
+// ─── Keyword Alerts ───────────────────────────────────────────────────────────
+
+async function listAlerts(user: ApiUser) {
+  const items = await db.keywordAlert.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+  return NextResponse.json({ items });
+}
+
+async function createAlert(user: ApiUser, request: Request) {
+  const body = await readJson<any>(request);
+  const name = allowedString(body?.name);
+  const query = allowedString(body?.query);
+  if (!name || !query) return apiError("name and query are required", 400);
+  const actions = Array.isArray(body?.actions) ? body.actions.filter((a: unknown) => typeof a === "string") : ["notify_inapp"];
+  const item = await db.keywordAlert.create({
+    data: {
+      userId: user.id,
+      name,
+      query,
+      scope: allowedString(body?.scope) || "all",
+      actions: JSON.stringify(actions),
+      enabled: typeof body?.enabled === "boolean" ? body.enabled : true,
+    },
+  });
+  return NextResponse.json(item, { status: 201 });
+}
+
+async function getAlert(user: ApiUser, alertId: string) {
+  const item = await db.keywordAlert.findFirst({ where: { id: alertId, userId: user.id } });
+  if (!item) return apiError("Alert not found", 404);
+  return NextResponse.json(item);
+}
+
+async function patchAlert(user: ApiUser, alertId: string, request: Request) {
+  const body = await readJson<any>(request);
+  if (!body) return apiError("Invalid JSON body", 400);
+  const data: any = {};
+  if (body.name !== undefined) data.name = allowedString(body.name);
+  if (body.query !== undefined) data.query = allowedString(body.query);
+  if (body.scope !== undefined) data.scope = allowedString(body.scope);
+  if (body.enabled !== undefined) data.enabled = Boolean(body.enabled);
+  if (Array.isArray(body.actions)) data.actions = JSON.stringify(body.actions.filter((a: unknown) => typeof a === "string"));
+  const result = await db.keywordAlert.updateMany({ where: { id: alertId, userId: user.id }, data });
+  if (!result.count) return apiError("Alert not found", 404);
+  return NextResponse.json(await db.keywordAlert.findFirst({ where: { id: alertId, userId: user.id } }));
+}
+
+async function deleteAlert(user: ApiUser, alertId: string) {
+  const result = await db.keywordAlert.deleteMany({ where: { id: alertId, userId: user.id } });
+  if (!result.count) return apiError("Alert not found", 404);
+  return NextResponse.json({ deleted: true, id: alertId });
+}
+
+// ─── Auto-Read Rules ──────────────────────────────────────────────────────────
+
+async function listRules(user: ApiUser) {
+  const items = await db.autoReadRule.findMany({ where: { userId: user.id }, orderBy: { order: "asc" } });
+  return NextResponse.json({ items });
+}
+
+async function createRule(user: ApiUser, request: Request) {
+  const body = await readJson<any>(request);
+  const name = allowedString(body?.name);
+  const query = allowedString(body?.query);
+  if (!name || !query) return apiError("name and query are required", 400);
+  const actions = Array.isArray(body?.actions) ? body.actions.filter((a: unknown) => typeof a === "string") : null;
+  const order = await db.autoReadRule.count({ where: { userId: user.id } });
+  const item = await db.autoReadRule.create({
+    data: {
+      userId: user.id,
+      name,
+      query,
+      action: "mark_read",
+      actions: actions ? JSON.stringify(actions) : null,
+      scope: allowedString(body?.scope) || null,
+      trigger: allowedString(body?.trigger) || "article",
+      enabled: typeof body?.enabled === "boolean" ? body.enabled : true,
+      order,
+    },
+  });
+  return NextResponse.json(item, { status: 201 });
+}
+
+async function getRule(user: ApiUser, ruleId: string) {
+  const item = await db.autoReadRule.findFirst({ where: { id: ruleId, userId: user.id } });
+  if (!item) return apiError("Rule not found", 404);
+  return NextResponse.json(item);
+}
+
+async function patchRule(user: ApiUser, ruleId: string, request: Request) {
+  const body = await readJson<any>(request);
+  if (!body) return apiError("Invalid JSON body", 400);
+  const data: any = {};
+  if (body.name !== undefined) data.name = allowedString(body.name);
+  if (body.query !== undefined) data.query = allowedString(body.query);
+  if (body.scope !== undefined) data.scope = allowedString(body.scope);
+  if (body.trigger !== undefined) data.trigger = allowedString(body.trigger);
+  if (body.enabled !== undefined) data.enabled = Boolean(body.enabled);
+  if (Array.isArray(body.actions)) data.actions = JSON.stringify(body.actions.filter((a: unknown) => typeof a === "string"));
+  const result = await db.autoReadRule.updateMany({ where: { id: ruleId, userId: user.id }, data });
+  if (!result.count) return apiError("Rule not found", 404);
+  return NextResponse.json(await db.autoReadRule.findFirst({ where: { id: ruleId, userId: user.id } }));
+}
+
+async function deleteRule(user: ApiUser, ruleId: string) {
+  const result = await db.autoReadRule.deleteMany({ where: { id: ruleId, userId: user.id } });
+  if (!result.count) return apiError("Rule not found", 404);
+  return NextResponse.json({ deleted: true, id: ruleId });
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+async function listNotifications(user: ApiUser, request: Request) {
+  const url = new URL(request.url);
+  const isRead = parseBool(url.searchParams.get("isRead"));
+  const limit = clampInt(url.searchParams.get("limit"), 50, 1, 100);
+  const offset = clampInt(url.searchParams.get("offset"), 0, 0, 100_000);
+  const where: any = { userId: user.id };
+  if (isRead !== undefined) where.isRead = isRead;
+  const [items, total] = await Promise.all([
+    db.notification.findMany({ where, orderBy: { createdAt: "desc" }, skip: offset, take: limit }),
+    db.notification.count({ where }),
+  ]);
+  return NextResponse.json({ items, pagination: { limit, offset, total, nextOffset: offset + items.length < total ? offset + items.length : null } });
+}
+
+async function markAllNotificationsRead(user: ApiUser) {
+  const result = await db.notification.updateMany({ where: { userId: user.id, isRead: false }, data: { isRead: true } });
+  return NextResponse.json({ updated: result.count });
+}
+
+async function markNotificationRead(user: ApiUser, notificationId: string) {
+  const result = await db.notification.updateMany({ where: { id: notificationId, userId: user.id }, data: { isRead: true } });
+  if (!result.count) return apiError("Notification not found", 404);
+  return NextResponse.json(await db.notification.findFirst({ where: { id: notificationId, userId: user.id } }));
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+
+async function getStats(user: ApiUser) {
+  const [
+    totalFeeds,
+    totalArticles,
+    unreadArticles,
+    starredArticles,
+    readLaterArticles,
+    totalLabels,
+    totalCategories,
+    totalSavedSearches,
+    totalKeywordAlerts,
+    totalAutoReadRules,
+    unreadNotifications,
+  ] = await db.$transaction([
+    db.feed.count({ where: { userId: user.id } }),
+    db.article.count({ where: { userId: user.id } }),
+    db.article.count({ where: { userId: user.id, isRead: false } }),
+    db.article.count({ where: { userId: user.id, isStarred: true } }),
+    db.article.count({ where: { userId: user.id, isReadLater: true } }),
+    db.label.count({ where: { userId: user.id } }),
+    db.category.count({ where: { userId: user.id } }),
+    db.savedSearch.count({ where: { userId: user.id } }),
+    db.keywordAlert.count({ where: { userId: user.id } }),
+    db.autoReadRule.count({ where: { userId: user.id } }),
+    db.notification.count({ where: { userId: user.id, isRead: false } }),
+  ]);
+  return NextResponse.json({ totalFeeds, totalArticles, unreadArticles, starredArticles, readLaterArticles, totalLabels, totalCategories, totalSavedSearches, totalKeywordAlerts, totalAutoReadRules, unreadNotifications });
+}
+
 function openApiSpec(request: Request) {
   const origin = new URL(request.url).origin;
   return NextResponse.json({
     openapi: "3.1.0",
-    info: { title: "FeedFerret API", version: "1.0.0", description: "Public REST API for FeedFerret readers, automations and AI tools." },
+    info: { title: "FeedFerret API", version: "1.1.0", description: "Public REST API for FeedFerret readers, automations and AI tools." },
     servers: [{ url: origin }],
     security: [{ bearerAuth: [] }],
     components: { securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "FeedFerret API token" } } },
@@ -463,6 +644,33 @@ function openApiSpec(request: Request) {
       "/api/v1/articles": { get: { summary: "Search/list articles" } },
       "/api/v1/articles/{id}": { get: { summary: "Get article" }, patch: { summary: "Update read/star/read-later state and labels" } },
       "/api/v1/articles/mark-all-read": { post: { summary: "Bulk mark matching articles as read" } },
+      "/api/v1/articles/batch": {
+        post: {
+          summary: "Batch update articles",
+          description: "Apply an action to up to 500 articles at once.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["ids", "action"],
+                  properties: {
+                    ids: { type: "array", items: { type: "string" }, maxItems: 500, description: "Article IDs to update" },
+                    action: { type: "string", enum: ["read", "unread", "star", "unstar", "label", "unlabel", "read_later", "remove_read_later"] },
+                    labelId: { type: "string", description: "Required when action is label or unlabel" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Number of updated articles", content: { "application/json": { schema: { type: "object", properties: { updated: { type: "integer" } } } } } },
+            "400": { description: "Invalid input" },
+            "404": { description: "No matching articles found" },
+          },
+        },
+      },
       "/api/v1/feeds": { get: { summary: "List feeds" }, post: { summary: "Add feed" } },
       "/api/v1/feeds/{id}": { get: { summary: "Get feed" }, patch: { summary: "Update feed" }, delete: { summary: "Delete feed" } },
       "/api/v1/feeds/{id}/sync": { post: { summary: "Sync one feed" } },
@@ -476,6 +684,14 @@ function openApiSpec(request: Request) {
       "/api/v1/saved-searches/{id}/share": { post: { summary: "Enable/disable public saved-search sharing" } },
       "/api/v1/opml": { get: { summary: "Export OPML" }, post: { summary: "Import OPML" } },
       "/api/v1/openapi.json": { get: { summary: "OpenAPI document" } },
+      "/api/v1/alerts": { get: { summary: "List keyword alerts" }, post: { summary: "Create keyword alert" } },
+      "/api/v1/alerts/{id}": { get: { summary: "Get keyword alert" }, patch: { summary: "Update keyword alert" }, delete: { summary: "Delete keyword alert" } },
+      "/api/v1/rules": { get: { summary: "List auto-read rules" }, post: { summary: "Create auto-read rule" } },
+      "/api/v1/rules/{id}": { get: { summary: "Get auto-read rule" }, patch: { summary: "Update auto-read rule" }, delete: { summary: "Delete auto-read rule" } },
+      "/api/v1/notifications": { get: { summary: "List notifications" } },
+      "/api/v1/notifications/mark-all-read": { post: { summary: "Mark all notifications as read" } },
+      "/api/v1/notifications/{id}/read": { post: { summary: "Mark one notification as read" } },
+      "/api/v1/stats": { get: { summary: "Aggregate user stats" } },
     },
   });
 }
@@ -504,55 +720,71 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
     return res;
   };
 
-  // Scope enforcement: "read" tokens can only use safe GET endpoints
-  if (user.tokenScope === "read" && isWriteMethod) {
-    return withRl(apiError("Forbidden: read-only token cannot perform write operations", 403));
-  }
-
   let res: Response;
   try {
     if (method === "GET" && path[0] === "me" && path.length === 1) res = NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role, tokenScope: user.tokenScope ?? "session" });
     else if (path[0] === "articles") {
       if (method === "GET" && path.length === 1) res = await listArticles(user, request);
-      else if (method === "POST" && path[1] === "mark-all-read") res = await markAllRead(user, request);
-      else if (method === "POST" && path[1] === "batch") res = await batchArticles(user, request);
+      else if (method === "POST" && path[1] === "mark-all-read") { const se = scopeError(user, "write"); if (se) res = se; else res = await markAllRead(user, request); }
+      else if (method === "POST" && path[1] === "batch") { const se = scopeError(user, "write"); if (se) res = se; else res = await batchArticles(user, request); }
       else if (method === "GET" && path.length === 2) res = await getArticle(user, path[1]);
-      else if (method === "PATCH" && path.length === 2) res = await patchArticle(user, path[1], request);
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchArticle(user, path[1], request); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "feeds") {
       if (method === "GET" && path.length === 1) res = await listFeeds(user);
-      else if (method === "POST" && path.length === 1) res = await createFeed(user, request);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createFeed(user, request); }
       else if (method === "GET" && path.length === 2) res = await getFeed(user, path[1]);
-      else if (method === "PATCH" && path.length === 2) res = await patchFeed(user, path[1], request);
-      else if (method === "DELETE" && path.length === 2) res = await deleteFeed(user, path[1]);
-      else if (method === "POST" && path.length === 3 && path[2] === "sync") res = await syncOneFeed(user, path[1]);
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchFeed(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteFeed(user, path[1]); }
+      else if (method === "POST" && path.length === 3 && path[2] === "sync") { const se = scopeError(user, "write"); if (se) res = se; else res = await syncOneFeed(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "categories") {
       if (method === "GET" && path.length === 1) res = await listCategories(user);
-      else if (method === "POST" && path.length === 1) res = await createCategory(user, request);
-      else if (method === "PATCH" && path.length === 2) res = await patchCategory(user, path[1], request);
-      else if (method === "DELETE" && path.length === 2) res = await deleteCategory(user, path[1]);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createCategory(user, request); }
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchCategory(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteCategory(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "labels") {
       if (method === "GET" && path.length === 1) res = await listLabels(user);
-      else if (method === "POST" && path.length === 1) res = await createLabel(user, request);
-      else if (method === "PATCH" && path.length === 2) res = await patchLabel(user, path[1], request);
-      else if (method === "DELETE" && path.length === 2) res = await deleteLabel(user, path[1]);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createLabel(user, request); }
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchLabel(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteLabel(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "saved-searches") {
       if (method === "GET" && path.length === 1) res = await listSavedSearches(user);
-      else if (method === "POST" && path.length === 1) res = await createSavedSearch(user, request);
-      else if (method === "PATCH" && path.length === 2) res = await patchSavedSearch(user, path[1], request);
-      else if (method === "DELETE" && path.length === 2) res = await deleteSavedSearch(user, path[1]);
-      else if (method === "POST" && path.length === 3 && path[2] === "share") res = await setSavedSearchShare(user, path[1], request);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createSavedSearch(user, request); }
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchSavedSearch(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteSavedSearch(user, path[1]); }
+      else if (method === "POST" && path.length === 3 && path[2] === "share") { const se = scopeError(user, "write"); if (se) res = se; else res = await setSavedSearchShare(user, path[1], request); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "opml" && path.length === 1) {
       if (method === "GET") res = await exportOpml(user);
-      else if (method === "POST") res = await importOpml(user, request);
+      else if (method === "POST") { const se = scopeError(user, "write"); if (se) res = se; else res = await importOpml(user, request); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "sync" && path.length === 1 && method === "POST") {
-      const results = await syncUserFeeds(user.id);
-      res = NextResponse.json({ success: true, synced: results.filter((r) => r.success && !r.skipped).length, total: results.length, results });
+      const se = scopeError(user, "write"); if (se) res = se;
+      else { const results = await syncUserFeeds(user.id); res = NextResponse.json({ success: true, synced: results.filter((r) => r.success && !r.skipped).length, total: results.length, results }); }
+    } else if (path[0] === "alerts") {
+      if (method === "GET" && path.length === 1) res = await listAlerts(user);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createAlert(user, request); }
+      else if (method === "GET" && path.length === 2) res = await getAlert(user, path[1]);
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchAlert(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteAlert(user, path[1]); }
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "rules") {
+      if (method === "GET" && path.length === 1) res = await listRules(user);
+      else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createRule(user, request); }
+      else if (method === "GET" && path.length === 2) res = await getRule(user, path[1]);
+      else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchRule(user, path[1], request); }
+      else if (method === "DELETE" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await deleteRule(user, path[1]); }
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "notifications") {
+      if (method === "GET" && path.length === 1) res = await listNotifications(user, request);
+      else if (method === "POST" && path[1] === "mark-all-read") { const se = scopeError(user, "write"); if (se) res = se; else res = await markAllNotificationsRead(user); }
+      else if (method === "POST" && path.length === 3 && path[2] === "read") { const se = scopeError(user, "write"); if (se) res = se; else res = await markNotificationRead(user, path[1]); }
+      else res = apiError("Not found", 404);
+    } else if (path[0] === "stats" && path.length === 1 && method === "GET") {
+      res = await getStats(user);
     } else {
       res = apiError("Not found", 404);
     }

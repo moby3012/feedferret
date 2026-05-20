@@ -68,6 +68,7 @@ model User {
   markReadOnScroll        Boolean   @default(false)
   layoutDirection         String    @default("ltr")     // "ltr" | "rtl"
   hideEmptyFeeds          Boolean   @default(false)
+  hideEmptyLabels         Boolean   @default(false)
   aiProvider              String?                       // "openai" | "anthropic" | "ollama" | "gemini" | "openrouter"
   aiApiKey                String?                       // encrypted at rest
   aiModel                 String?

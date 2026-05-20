@@ -5,6 +5,63 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [1.1.0] — 2026-05-20 — Internationalization, Full API Coverage & UX Polish
+
+### Internationalization (i18n)
+
+- **next-intl integration** — English and German translations ship with this release. All 945 user-visible strings managed in `messages/en.json` (canonical) and `messages/de.json`. ICU MessageFormat plurals throughout.
+- **Language picker in Settings** — new "Language" row in Settings → Appearance. Persisted per user in `User.uiLanguage` and a `locale` cookie. Cookie-based locale (no URL prefix restructuring).
+- **Locale detection** — middleware reads `Accept-Language` on first visit and sets the locale cookie automatically.
+- **Admin default language** — Server Management → Registrations: admins set the instance-wide default language for new users.
+- **All components wired** — `settings-form`, `rss-sidebar`, `article-list`, `article-reader`, `rss-header`, `discovery-panel`, `keyboard-shortcuts-dialog`, `pwa-install-prompt`, `server-management-dialog`, `mobile-bottom-controls`, `feed-management`, `feed-edit-dialog`, all page routes.
+- **Email localization** — digest and sign-in emails rendered in recipient's `uiLanguage`. Subject uses ICU plural (`{count, plural, one {# new article} other {# new articles}}`). `<html lang>` set per user.
+- **RTL CSS** — physical directional Tailwind classes (`ml-`, `mr-`, `pl-`, `pr-`, `left-`, `right-`, etc.) replaced with logical equivalents (`ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`) across all components. Directional icons get `rtl:rotate-180`.
+- **Translation tooling** — `pnpm run translations:check` CI script; GitHub PR template for community translation contributions; `docs/contributing-translations.md` guide.
+
+### REST API v1 Extensions
+
+- **New endpoints**: `/api/v1/alerts` (CRUD keyword alerts), `/api/v1/rules` (CRUD auto-read rules), `/api/v1/notifications` (list + mark read), `/api/v1/stats`.
+- **`POST /api/v1/articles/batch`** — applies `read`/`unread`/`star`/`unstar`/`label`/`unlabel`/`read_later`/`remove_read_later` to up to 500 article IDs in one request. Eliminates round-trip overhead for sync clients.
+- **Token scopes** — `read`, `write`, `admin` enforced per endpoint. Read-only tokens blocked from all POST/PATCH/DELETE operations. Scope picker in Settings → API Access.
+- **OpenAPI spec** bumped to 1.1.0; all new endpoints documented at `GET /api/v1/openapi.json`.
+
+### MCP Server (AI Agent Integration)
+
+- Expanded from 10 → 28 tools: `delete_feed`, `update_feed`, `create/update/delete_category`, `update/delete_label`, `label_article`, `batch_update_articles`, `list/create/delete_saved_search`, `list/create/update/delete_keyword_alert`, `list_notifications`, `get_stats`.
+- An AI agent can now control every operational aspect of the app at the user level via MCP.
+- `GET /api/mcp` returns `version: "1.1.0"`, `tools: 28`.
+
+### Rules & Keyword Alerts
+
+- **OR operator** — `openclaw OR hermes` now correctly matches articles containing *either* word. Previously AND-joined all tokens including the literal "OR".
+- **Unified label action** — replaced the per-label `Add label: XYZ` action catalog entries with a single "Add label…" / "Remove label…" picker that lists all user labels in a dropdown. No more catalog bloat.
+- **Availability filter** — notification actions (Telegram, Gotify, ntfy, email, push) only appear in the action picker when the corresponding channel is configured by the user.
+
+### Sidebar & Labels
+
+- **Label unread counts** — sidebar label badges now show *unread* article count instead of total.
+- **Hide empty labels** — new user setting (Settings → Reading): hides labels with 0 unread articles from the sidebar. Mirrors the existing "Hide empty feeds" toggle. Schema: `User.hideEmptyLabels Boolean @default(false)`.
+
+### Admin
+
+- **Storage dashboard** — new "Storage" tab in Server Management shows per-user article/feed/AI-summary counts, sorted by article count descending. Foundation for future quota enforcement.
+- **Public saved search kill-switch** — `GlobalSettings.disablePublicSharedSearches` toggle in Server Management → Registrations. Already active: shared search page returns 404 when disabled.
+
+### Tests
+
+- **85 Vitest tests** across 6 suites (was 76). New: 9 OR-operator tests for `buildAdvancedSearchWhere`.
+- All existing tests continue to pass.
+
+### Documentation
+
+- `docs/api.md` — batch endpoint, token scopes, OR operator syntax
+- `docs/mcp.md` — all 28 tools documented
+- `docs/releases/backlog.md` — completed items marked
+- `docs/releases/v1.1-i18n.md` — milestone checklist updated
+- `docs/deferred.md` — new file documenting what was explicitly scoped out of v1.1 and why
+
+---
+
 ## [1.0.0] — 2026-05-18 — Initial Public Release 🎉
 
 First stable release. Full feature set, production-hardened, self-hosting ready.

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -19,41 +20,6 @@ type Group = {
   items: Shortcut[];
 };
 
-const groups: Group[] = [
-  {
-    title: "Navigation",
-    items: [
-      { keys: ["j"], description: "Next article" },
-      { keys: ["k"], description: "Previous article" },
-      { keys: ["n"], description: "Next unread article" },
-      { keys: ["p"], description: "Previous unread article" },
-      { keys: ["o"], description: "Open original in new tab" },
-    ],
-  },
-  {
-    title: "Actions",
-    items: [
-      { keys: ["s"], description: "Toggle star on current article" },
-      { keys: ["l"], description: "Toggle Read Later on current article" },
-      { keys: ["m"], description: "Toggle read/unread" },
-      { keys: ["r"], description: "Refresh feeds" },
-      { keys: ["Shift", "A"], description: "Mark all as read in current view" },
-    ],
-  },
-  {
-    title: "Search",
-    items: [
-      { keys: ["/"], description: "Focus search" },
-      { keys: ["Esc"], description: "Clear search" },
-      { keys: ["Shift", "S"], description: "Save current search" },
-    ],
-  },
-  {
-    title: "Help",
-    items: [{ keys: ["?"], description: "Toggle this help overlay" }],
-  },
-];
-
 export function KeyboardShortcutsDialog({
   open,
   onOpenChange,
@@ -61,13 +27,50 @@ export function KeyboardShortcutsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("keyboard");
+
+  const groups: Group[] = [
+    {
+      title: t("navigation"),
+      items: [
+        { keys: ["j"], description: t("nextArticle") },
+        { keys: ["k"], description: t("previousArticle") },
+        { keys: ["n"], description: t("nextUnread") },
+        { keys: ["p"], description: t("previousUnread") },
+        { keys: ["o"], description: t("openOriginal") },
+      ],
+    },
+    {
+      title: t("actions"),
+      items: [
+        { keys: ["s"], description: t("toggleStar") },
+        { keys: ["l"], description: t("toggleReadLater") },
+        { keys: ["m"], description: t("toggleRead") },
+        { keys: ["r"], description: t("refreshFeeds") },
+        { keys: ["Shift", "A"], description: t("markAllRead") },
+      ],
+    },
+    {
+      title: t("search"),
+      items: [
+        { keys: ["/"], description: t("focusSearch") },
+        { keys: ["Esc"], description: t("clearSearch") },
+        { keys: ["Shift", "S"], description: t("saveSearch") },
+      ],
+    },
+    {
+      title: t("help"),
+      items: [{ keys: ["?"], description: t("toggleHelp") }],
+    },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Keyboard shortcuts</DialogTitle>
+          <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>
-            Power-user shortcuts for fast navigation. Disabled while typing in inputs.
+            {t("description")}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-6 sm:grid-cols-2">

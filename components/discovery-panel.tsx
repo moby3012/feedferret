@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState, useEffect, useCallback } from "react";
 import { Search, ArrowLeft, Plus, Loader2, Rss, Globe, AlertCircle, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ export function DiscoveryPanel({
   addingUrl,
   subscribedUrls = new Set(),
 }: DiscoveryPanelProps) {
+  const t = useTranslations("discovery");
   const [mode, setMode] = useState<"categories" | "feeds" | "search">("categories");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,13 +82,13 @@ export function DiscoveryPanel({
     <div className="space-y-3">
       {/* Search Input */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by topic or domain..."
+          placeholder={t("searchPlaceholder")}
           value={searchQuery}
           onChange={(e) => handleSearchChange(e.target.value)}
           onFocus={handleSearchFocus}
-          className="h-9 pl-9 text-sm"
+          className="h-9 ps-9 text-sm"
         />
       </div>
 
@@ -141,6 +143,7 @@ function CategoryGrid({
   onSelect: (id: string) => void;
   isEmpty: boolean;
 }) {
+  const t = useTranslations("discovery");
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -154,10 +157,10 @@ function CategoryGrid({
       <div className="flex flex-col items-center justify-center py-8 text-center">
         <Globe className="h-8 w-8 text-muted-foreground/50 mb-2" />
         <p className="text-sm text-muted-foreground">
-          Discovery catalog is empty.
+          {t("catalogEmpty")}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Use search above to find feeds by URL or domain.
+          {t("useSearchHint")}
         </p>
       </div>
     );
@@ -173,7 +176,7 @@ function CategoryGrid({
             onClick={() => onSelect(category.id)}
             className={cn(
               "flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2.5",
-              "hover:bg-muted/60 hover:border-border transition-colors text-left"
+              "hover:bg-muted/60 hover:border-border transition-colors text-start"
             )}
           >
             <span className="text-lg">{category.icon}</span>
@@ -208,16 +211,17 @@ function FeedList({
   addingUrl: string | null;
   subscribedUrls: Set<string>;
 }) {
+  const t = useTranslations("discovery");
   return (
     <div className="space-y-2">
       <Button
         variant="ghost"
         size="sm"
         onClick={onBack}
-        className="h-9 px-3 -ml-3 text-sm text-muted-foreground hover:text-foreground"
+        className="h-9 px-3 -ms-3 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4 mr-1.5" />
-        Back to categories
+        <ArrowLeft className="h-4 w-4 me-1.5 rtl:rotate-180" />
+        {t("backToCategories")}
       </Button>
       <p className="text-xs font-medium text-muted-foreground px-0.5">
         {categoryName}
@@ -229,7 +233,7 @@ function FeedList({
         </div>
       ) : feeds.length === 0 ? (
         <div className="py-8 text-center text-sm text-muted-foreground">
-          No feeds in this category yet.
+          {t("noFeedsInCategory")}
         </div>
       ) : (
         <div className="space-y-1.5">
@@ -269,10 +273,11 @@ function SearchResults({
   addingUrl: string | null;
   subscribedUrls: Set<string>;
 }) {
+  const t = useTranslations("discovery");
   if (query.length < 2) {
     return (
       <div className="py-8 text-center text-sm text-muted-foreground">
-        Enter at least 2 characters to search
+        {t("minCharsToSearch")}
       </div>
     );
   }
@@ -281,7 +286,7 @@ function SearchResults({
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">Searching...</span>
+        <span className="ms-2 text-sm text-muted-foreground">{t("searching")}</span>
       </div>
     );
   }
@@ -299,10 +304,10 @@ function SearchResults({
     return (
       <div className="py-8 text-center">
         <p className="text-sm text-muted-foreground">
-          {hint || `No feeds found for "${query}"`}
+          {hint || t("noFeedsFound")}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Try topics like &ldquo;tech&rdquo;, &ldquo;news&rdquo; or domains like &ldquo;bbc.com&rdquo;
+          {t("tryTopics")}
         </p>
       </div>
     );
@@ -311,7 +316,7 @@ function SearchResults({
   return (
     <div className="space-y-1.5">
       <p className="text-xs text-muted-foreground px-0.5">
-        Found {feeds.length} feed{feeds.length !== 1 ? "s" : ""}
+        {feeds.length} {t("feedsFound")}
       </p>
       {feeds.map((feed, i) => (
         <FeedCard
@@ -346,8 +351,9 @@ function FeedCard({
   isAdding: boolean;
   isSubscribed: boolean;
 }) {
+  const t = useTranslations("discovery");
   return (
-    <div className="relative rounded-xl bg-muted/50 px-2.5 py-2 pr-10 overflow-hidden w-full">
+    <div className="relative rounded-xl bg-muted/50 px-2.5 py-2 pe-10 overflow-hidden w-full">
       <div className="flex items-center gap-2 min-w-0">
         {feed.iconUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -368,7 +374,7 @@ function FeedCard({
       </div>
       {feed.description && (
         <p
-          className="text-xs text-muted-foreground mt-0.5 pr-1"
+          className="text-xs text-muted-foreground mt-0.5 pe-1"
           style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
         >
           {feed.description}
@@ -378,12 +384,12 @@ function FeedCard({
         size="sm"
         variant={isSubscribed ? "ghost" : "ghost"}
         className={cn(
-          "absolute right-1.5 top-1.5 h-7 w-7 p-0 rounded-lg shrink-0",
+          "absolute end-1.5 top-1.5 h-7 w-7 p-0 rounded-lg shrink-0",
           isSubscribed && "text-green-500 cursor-default"
         )}
         onClick={isSubscribed ? undefined : onAdd}
         disabled={isAdding || isSubscribed}
-        title={isSubscribed ? "Already added" : "Add feed"}
+        title={isSubscribed ? t("alreadyAdded") : t("addFeed")}
       >
         {isAdding ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />

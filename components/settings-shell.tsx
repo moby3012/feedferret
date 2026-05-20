@@ -51,7 +51,7 @@ export function SettingsModalShell({
         )}
       >
         <DialogHeader className="border-b border-border/60 bg-card/95 p-5 pb-4 backdrop-blur-2xl sm:p-8 sm:pb-5">
-          <div className="flex flex-col gap-1 pr-10">
+          <div className="flex flex-col gap-1 pe-10">
             {eyebrow ? (
               <div className="text-sm font-medium text-muted-foreground">
                 {eyebrow}
