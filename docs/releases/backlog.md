@@ -8,9 +8,9 @@ Effort scale: **S** < 1 day · **M** 1–3 days · **L** 1–2 weeks · **XL** 2
 
 | Feature | Description | Effort |
 |---|---|---|
-| **Saved Search Admin Policy** | Global kill-switch in Server Management to disable all public saved search shares instance-wide. Useful for single-user or private deployments where public share URLs are undesirable. | S |
-| **Batch API Endpoints** | `POST /api/v1/articles/batch` accepting an array of article IDs and an action (`read`, `unread`, `star`, `unstar`, `label`). Reduces round-trips for clients syncing large read states. | S |
-| **API Token Scopes** | Per-token scope selection: `read` / `write` / `admin` instead of the current all-or-nothing access. Token creation UI updated with a scope picker. `admin` scope gates user management and settings endpoints. | M |
+| **Saved Search Admin Policy** | ✅ Done in v1.1 | S |
+| **Batch API Endpoints** | ✅ Done in v1.1 — `POST /api/v1/articles/batch` with 8 actions, max 500 IDs, write-scope required. | S |
+| **API Token Scopes** | ✅ Done in v1.1 — `read`/`write`/`admin` enforced per endpoint in `lib/api-auth.ts`. UI scope picker was already in settings-form. | M |
 | **WebSub / PubSubHubbub** | Subscribe to WebSub hubs declared in feed `<link rel="hub">` tags. Enables instant article delivery for feeds that advertise a hub, eliminating polling latency. Requires a public callback URL. | L |
 | **Offline-First Mutations** | Queue mark-read and star actions in IndexedDB when the network is unavailable. Sync the queue on reconnect using a Service Worker background sync event. Requires no UI change — the actions appear to succeed immediately. | L |
 | **Website Scraping Feeds** | Subscribe to any HTML page without an RSS feed. User provides a URL and a CSS or XPath selector targeting the list of items. FeedFerret polls the page, extracts items, and presents them as a synthetic feed. | L |

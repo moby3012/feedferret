@@ -45,6 +45,18 @@ Sicherheitsregeln:
 - Token nie clientseitig in öffentlichen Webseiten ausliefern.
 - Tokens beginnen mit dem Präfix `ff_` und werden serverseitig als SHA-256-Hash gespeichert — nur der Rohwert verlässt den Server, einmalig bei der Generierung.
 
+### Token-Scopes
+
+Beim Erstellen eines Tokens in **Settings → API Access** kann ein Scope gewählt werden:
+
+| Scope | Zugriff |
+|---|---|
+| `read` | Nur lesende `GET`-Endpunkte |
+| `write` | `GET` + alle schreibenden `POST`/`PATCH`/`DELETE`-Endpunkte auf eigene Daten |
+| `admin` | Voller Zugriff (wie Session-Auth) |
+
+Session-Auth (Cookie) hat immer vollen Zugriff. Ein `read`-Token erhält HTTP 403 auf mutierenden Endpunkten.
+
 ---
 
 ## Fehlerformat
@@ -210,6 +222,47 @@ Antwort:
 ```json
 { "updated": 12 }
 ```
+
+### `POST /api/v1/articles/batch`
+
+Wendet eine Aktion auf bis zu 500 Artikel-IDs in einem Request an. Ideal für Sync-Clients, die große Lesestatus-Mengen übertragen müssen.
+
+Body:
+
+```json
+{
+  "ids": ["art1", "art2", "art3"],
+  "action": "read",
+  "labelId": "lbl1"
+}
+```
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `ids` | `string[]` | Artikel-IDs (max. 500). Nur Artikel des authentifizierten Benutzers werden verändert. |
+| `action` | `string` | Pflicht. Siehe Tabelle unten. |
+| `labelId` | `string` | Nur für `label` / `unlabel` erforderlich. |
+
+Verfügbare Aktionen:
+
+| `action` | Effekt |
+|---|---|
+| `read` | Als gelesen markieren |
+| `unread` | Als ungelesen markieren |
+| `star` | Mit Stern versehen |
+| `unstar` | Stern entfernen |
+| `read_later` | Zu „Später lesen" hinzufügen |
+| `remove_read_later` | Aus „Später lesen" entfernen |
+| `label` | Label anhängen (`labelId` erforderlich) |
+| `unlabel` | Label entfernen (`labelId` erforderlich) |
+
+Antwort:
+
+```json
+{ "updated": 42 }
+```
+
+> **Scope:** Erfordert `write`-Scope (oder Session-Auth). Read-only-Tokens (`read`) erhalten HTTP 403.
 
 ---
 
