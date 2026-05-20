@@ -870,7 +870,8 @@
       "starterPacks": "Starterpakete",
       "sync": "Synchronisierung",
       "discovery": "Entdecken",
-      "audit": "Audit"
+      "audit": "Audit",
+      "storage": "Speicher"
     },
     "users": {
       "searchPlaceholder": "Benutzer suchen…",
@@ -958,11 +959,10 @@
     },
     "starterPacks": {
       "title": "Starterpakete",
-      "description": "Pakete, die Benutzer aus der Seitenleiste importieren können, anpassen und neu anordnen.",
+      "description": "Beschreibung",
       "resetDefaults": "Standards zurücksetzen",
       "addPack": "Paket hinzufügen",
       "name": "Name",
-      "description": "Beschreibung",
       "enabled": "Aktiviert",
       "duplicatePack": "Paket duplizieren",
       "importOpml": "OPML importieren",
@@ -1021,6 +1021,17 @@
       "ip": "IP",
       "success": "erfolgreich",
       "failed": "fehlgeschlagen"
+    },
+    "storage": {
+      "title": "Speicherverbrauch pro Nutzer",
+      "description": "Überblick über Artikel, Feeds und KI-Zusammenfassungen pro Nutzer. Nützlich zur Quota-Planung.",
+      "user": "Nutzer",
+      "articles": "Artikel",
+      "feeds": "Feeds",
+      "aiSummaries": "KI-Zusammenfassungen",
+      "labeledArticles": "Label-Zuweisungen",
+      "noData": "Keine Nutzer gefunden.",
+      "loading": "Lade Speicherdaten…"
     }
   },
   "accessibility": {

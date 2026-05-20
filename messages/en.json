@@ -870,7 +870,8 @@
       "starterPacks": "Starter Packs",
       "sync": "Sync",
       "discovery": "Discovery",
-      "audit": "Audit"
+      "audit": "Audit",
+      "storage": "Storage"
     },
     "users": {
       "searchPlaceholder": "Search users…",
@@ -958,11 +959,10 @@
     },
     "starterPacks": {
       "title": "Starter Packs",
-      "description": "Customize, validate, import, export, and reorder packs users can import.",
+      "description": "Description",
       "resetDefaults": "Reset defaults",
       "addPack": "Add pack",
       "name": "Name",
-      "description": "Description",
       "enabled": "Enabled",
       "duplicatePack": "Duplicate pack",
       "importOpml": "Import OPML",
@@ -1021,6 +1021,17 @@
       "ip": "IP",
       "success": "success",
       "failed": "failed"
+    },
+    "storage": {
+      "title": "Storage Usage per User",
+      "description": "Overview of articles, feeds, and AI summaries per user. Use this to identify heavy users and plan quota policies.",
+      "user": "User",
+      "articles": "Articles",
+      "feeds": "Feeds",
+      "aiSummaries": "AI Summaries",
+      "labeledArticles": "Label assignments",
+      "noData": "No users found.",
+      "loading": "Loading storage data…"
     }
   },
   "accessibility": {

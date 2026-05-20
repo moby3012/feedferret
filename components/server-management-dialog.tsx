@@ -44,6 +44,7 @@ import {
   ClipboardCopy,
   CheckCircle2,
   AlertTriangle,
+  HardDrive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +65,7 @@ import {
   generateVapidKeyPair,
   getAdminAuditLog,
   getLoginAttempts,
+  getStorageStats,
 } from "@/app/actions/admin";
 import { toast } from "sonner";
 import {
@@ -95,6 +97,8 @@ export function ServerManagementDialog({
   const [auditLog, setAuditLog] = useState<any[]>([]);
   const [loginAttempts, setLoginAttempts] = useState<any[]>([]);
   const [auditLoaded, setAuditLoaded] = useState(false);
+  const [storageStats, setStorageStats] = useState<any[]>([]);
+  const [storageLoaded, setStorageLoaded] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -118,6 +122,17 @@ export function ServerManagementDialog({
       setAuditLoaded(true);
     } catch {
       toast.error("Failed to load audit data");
+    }
+  };
+
+  const loadStorageStats = async () => {
+    if (storageLoaded) return;
+    try {
+      const stats = await getStorageStats();
+      setStorageStats(stats);
+      setStorageLoaded(true);
+    } catch {
+      toast.error("Failed to load storage stats");
     }
   };
 
@@ -342,6 +357,7 @@ export function ServerManagementDialog({
     { value: "sync", label: t("tabs.sync"), icon: <Settings2 className="w-4 h-4" /> },
     { value: "discovery", label: t("tabs.discovery"), icon: <Compass className="w-4 h-4" /> },
     { value: "audit", label: t("tabs.audit"), icon: <Shield className="w-4 h-4" />, onSelect: loadAuditData },
+    { value: "storage", label: t("tabs.storage"), icon: <HardDrive className="w-4 h-4" />, onSelect: loadStorageStats },
   ];
 
   const shellProps = {
@@ -1077,6 +1093,57 @@ export function ServerManagementDialog({
                       </div>
                     </div>
                   </ScrollArea>
+                </TabsContent>
+
+                <TabsContent value="storage" className="h-full mt-0 focus-visible:outline-none">
+                  <div className="px-6 sm:px-8 flex flex-col h-full">
+                    <div className="mb-4">
+                      <p className="text-sm text-muted-foreground">{t("storage.description")}</p>
+                    </div>
+                    <ScrollArea className="flex-1">
+                      {!storageLoaded ? (
+                        <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-sm">{t("storage.loading")}</span>
+                        </div>
+                      ) : storageStats.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-8 text-center">{t("storage.noData")}</p>
+                      ) : (
+                        <div className="pb-8">
+                          <div className="grid grid-cols-5 gap-2 mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            <div className="col-span-2">{t("storage.user")}</div>
+                            <div className="text-right">{t("storage.articles")}</div>
+                            <div className="text-right">{t("storage.feeds")}</div>
+                            <div className="text-right">{t("storage.aiSummaries")}</div>
+                          </div>
+                          <div className="space-y-2">
+                            {storageStats
+                              .sort((a, b) => b.articles - a.articles)
+                              .map((stat) => (
+                                <div
+                                  key={stat.id}
+                                  className="grid grid-cols-5 gap-2 items-center rounded-2xl border border-border/50 bg-card/70 px-4 py-3 text-sm"
+                                >
+                                  <div className="col-span-2 min-w-0">
+                                    <div className="font-medium truncate">{stat.name || stat.email}</div>
+                                    {stat.name && <div className="text-xs text-muted-foreground truncate">{stat.email}</div>}
+                                  </div>
+                                  <div className="text-right tabular-nums">{stat.articles.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums">{stat.feeds.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums">{stat.aiSummaries.toLocaleString()}</div>
+                                </div>
+                              ))}
+                          </div>
+                          <div className="mt-4 rounded-2xl border border-border/40 bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                            <strong>Total:</strong>{" "}
+                            {storageStats.reduce((s, r) => s + r.articles, 0).toLocaleString()} {t("storage.articles").toLowerCase()} ·{" "}
+                            {storageStats.reduce((s, r) => s + r.feeds, 0).toLocaleString()} {t("storage.feeds").toLowerCase()} ·{" "}
+                            {storageStats.reduce((s, r) => s + r.aiSummaries, 0).toLocaleString()} {t("storage.aiSummaries").toLowerCase()}
+                          </div>
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
                 </TabsContent>
               </>
             )}

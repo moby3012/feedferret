@@ -364,3 +364,34 @@ export async function getLoginAttempts(limit = 100) {
     select: { id: true, email: true, success: true, failReason: true, ip: true, createdAt: true },
   });
 }
+
+export async function getStorageStats() {
+  await checkAdmin();
+
+  const users = await db.user.findMany({
+    select: { id: true, name: true, email: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const [articleCounts, feedCounts, summaryCount, labelCounts] = await Promise.all([
+    db.article.groupBy({ by: ["userId"], _count: { _all: true } }),
+    db.feed.groupBy({ by: ["userId"], _count: { _all: true } }),
+    db.article.groupBy({ by: ["userId"], where: { aiSummary: { not: null } }, _count: { _all: true } }),
+    db.articleLabel.groupBy({ by: ["userId"], _count: { _all: true } }),
+  ]);
+
+  const articleMap = new Map(articleCounts.map((r) => [r.userId, r._count._all]));
+  const feedMap = new Map(feedCounts.map((r) => [r.userId, r._count._all]));
+  const summaryMap = new Map(summaryCount.map((r) => [r.userId, r._count._all]));
+  const labelMap = new Map(labelCounts.map((r) => [r.userId, r._count._all]));
+
+  return users.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    articles: articleMap.get(u.id) ?? 0,
+    feeds: feedMap.get(u.id) ?? 0,
+    aiSummaries: summaryMap.get(u.id) ?? 0,
+    labeledArticles: labelMap.get(u.id) ?? 0,
+  }));
+}
