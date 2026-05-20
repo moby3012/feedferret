@@ -8,6 +8,8 @@ import { Providers } from "@/components/providers";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { SessionProvider } from "next-auth/react";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 
 const APP_DESCRIPTION =
@@ -59,13 +61,16 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="en" className="bg-background" suppressHydrationWarning>
+    <html lang={locale} className="bg-background" suppressHydrationWarning>
       <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}>
         <a
           href="#main-content"
@@ -73,21 +78,23 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <SessionProvider>
-          <Providers>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <ThemeColorApplier />
-              {children}
-              <PwaInstallPrompt />
-              <ServiceWorkerRegister />
-            </ThemeProvider>
-          </Providers>
-        </SessionProvider>
+        <NextIntlClientProvider messages={messages}>
+          <SessionProvider>
+            <Providers>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <ThemeColorApplier />
+                {children}
+                <PwaInstallPrompt />
+                <ServiceWorkerRegister />
+              </ThemeProvider>
+            </Providers>
+          </SessionProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

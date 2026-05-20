@@ -3,6 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
+import { updateUiLanguage } from "@/app/actions/locale";
 import {
   AlignLeft,
   ALargeSmall,
@@ -11,6 +12,7 @@ import {
   Clock,
   Copy,
   ExternalLink,
+  Globe,
   Key,
   Laptop,
   Layers,
@@ -438,6 +440,9 @@ export function SettingsForm() {
               className="h-7 w-12"
             />
           </PrefRow>
+
+          {/* Language picker */}
+          <LanguageSection />
 
           {/* Sync with external readers */}
           <SyncTutorialSection />
@@ -1848,6 +1853,48 @@ function SyncTutorialSection() {
         </div>
       )}
     </section>
+  );
+}
+
+function LanguageSection() {
+  const { data: prefs } = useReadingPreferences();
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
+
+  const currentLocale = prefs?.uiLanguage ?? "en";
+
+  const handleChange = async (locale: string) => {
+    setSaving(true);
+    try {
+      await updateUiLanguage(locale);
+      router.refresh();
+    } catch {
+      toast.error("Could not update language");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <PrefRow
+      icon={Globe}
+      title="Language"
+      description="Interface language for the app."
+    >
+      <Select
+        value={currentLocale}
+        onValueChange={handleChange}
+        disabled={saving}
+      >
+        <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="rounded-2xl">
+          <SelectItem value="en">English</SelectItem>
+          <SelectItem value="de">Deutsch</SelectItem>
+        </SelectContent>
+      </Select>
+    </PrefRow>
   );
 }
 

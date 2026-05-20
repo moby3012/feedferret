@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [1.1.0] — 2026-05-20 — Internationalization
+
+### Added
+
+- **next-intl integration** — English and German translations ship with this release. All user-visible strings are now managed in `messages/en.json` (canonical) and `messages/de.json` (German translation).
+- **Language picker in Settings** — new "Language" row in Settings → Appearance. Selecting a language immediately updates the UI and persists the choice per user. Language names are displayed in their own language ("Deutsch", not "German").
+- **Locale detection from browser** — the middleware reads the `Accept-Language` header on first visit and sets the locale cookie automatically. No URL restructuring required.
+- **`uiLanguage` preference persisted per user** — stored in `User.uiLanguage` (Prisma) and in a `locale` cookie. The two stay in sync via the `updateUiLanguage` server action.
+- **`defaultUiLanguage` in GlobalSettings** — administrators can define the instance-level default language for unauthenticated pages and new users.
+- **Cookie-based locale strategy** — locale is stored in a cookie (`locale`, 1-year `maxAge`). No `[locale]` folder restructuring, no URL prefixes. Compatible with all existing links and API routes.
+- **Contributing translations guide** — `docs/contributing-translations.md` explains how to add a new locale, key naming conventions, ICU syntax, and the 100% coverage requirement.
+
+---
+
 ## [1.0.0] — 2026-05-18 — Initial Public Release 🎉
 
 First stable release. Full feature set, production-hardened, self-hosting ready.

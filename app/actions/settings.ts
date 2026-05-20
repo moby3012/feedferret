@@ -43,6 +43,7 @@ export async function getReadingPreferences() {
       markReadOnScroll: true,
       layoutDirection: true,
       hideEmptyFeeds: true,
+      uiLanguage: true,
     },
   });
   return {
@@ -58,6 +59,7 @@ export async function getReadingPreferences() {
     markReadOnScroll: user?.markReadOnScroll ?? false,
     layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
     hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
+    uiLanguage: user?.uiLanguage ?? "en",
   };
 }
 
