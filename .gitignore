@@ -40,3 +40,4 @@ next-env.d.ts
 # AI/Agent working directories (Claude Code internal)
 .ai/
 .agent/
+*.bak
