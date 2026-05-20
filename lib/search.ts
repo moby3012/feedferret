@@ -27,10 +27,7 @@ export function parseDateToken(value: string) {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-export async function buildAdvancedSearchWhere(userId: string, query?: string) {
-    if (!query?.trim()) return {};
-
-    const tokens = tokenizeSearch(query.trim());
+function processGroupTokens(userId: string, tokens: string[]): object {
     const and: any[] = [];
     const freeText: string[] = [];
 
@@ -147,4 +144,38 @@ export async function buildAdvancedSearchWhere(userId: string, query?: string) {
     }
 
     return and.length ? { AND: and } : {};
+}
+
+export async function buildAdvancedSearchWhere(userId: string, query?: string) {
+    if (!query?.trim()) return {};
+
+    const allTokens = tokenizeSearch(query.trim());
+
+    // Split token list by "OR" (case-insensitive, exact token match) into groups
+    const groups: string[][] = [];
+    let current: string[] = [];
+    for (const tok of allTokens) {
+        if (tok.toUpperCase() === "OR") {
+            groups.push(current);
+            current = [];
+        } else {
+            current.push(tok);
+        }
+    }
+    groups.push(current);
+
+    // Filter out empty groups (handles leading/trailing OR)
+    const nonEmptyGroups = groups.filter(g => g.length > 0);
+
+    if (nonEmptyGroups.length === 0) return {};
+    if (nonEmptyGroups.length === 1) return processGroupTokens(userId, nonEmptyGroups[0]);
+
+    // Multiple groups: process each and OR the results
+    const results = nonEmptyGroups
+        .map(g => processGroupTokens(userId, g))
+        .filter(r => Object.keys(r).length > 0);
+
+    if (results.length === 0) return {};
+    if (results.length === 1) return results[0];
+    return { OR: results };
 }

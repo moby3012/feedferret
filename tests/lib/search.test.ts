@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { tokenizeSearch, parseDateToken } from "../../lib/search";
+import { describe, it, expect, vi } from "vitest";
+import { tokenizeSearch, parseDateToken, buildAdvancedSearchWhere } from "../../lib/search";
+
+// Mock the db module so search.ts can be imported without a real DB connection
+vi.mock("../../lib/db", () => ({ db: {} }));
+
+const USER = "user-1";
 
 // ── tokenizeSearch ────────────────────────────────────────────────────────────
 
@@ -111,5 +116,78 @@ describe("parseDateToken", () => {
   it("is case-insensitive for unit letters", () => {
     const lower = parseDateToken("3D");
     expect(lower).toBeInstanceOf(Date);
+  });
+});
+
+// ── buildAdvancedSearchWhere — OR operator ────────────────────────────────────
+
+describe("buildAdvancedSearchWhere OR operator", () => {
+  it("returns empty object for empty query", async () => {
+    expect(await buildAdvancedSearchWhere(USER, "")).toEqual({});
+    expect(await buildAdvancedSearchWhere(USER, "   ")).toEqual({});
+    expect(await buildAdvancedSearchWhere(USER)).toEqual({});
+  });
+
+  it("AND-joins two bare keywords without OR", async () => {
+    const result = await buildAdvancedSearchWhere(USER, "openclaw hermes") as any;
+    // Both terms must appear → AND with two OR-expanded free-text conditions
+    expect(result).toHaveProperty("AND");
+    expect(result.AND).toHaveLength(2);
+  });
+
+  it("OR-splits two bare keywords with OR", async () => {
+    const result = await buildAdvancedSearchWhere(USER, "openclaw OR hermes") as any;
+    // Each group produces a single free-text condition; two groups → { OR: [...] }
+    expect(result).toHaveProperty("OR");
+    expect(result.OR).toHaveLength(2);
+  });
+
+  it("OR is case-insensitive (lowercase 'or' is treated as boolean operator)", async () => {
+    const upperResult = await buildAdvancedSearchWhere(USER, "foo OR bar") as any;
+    const lowerResult = await buildAdvancedSearchWhere(USER, "foo or bar") as any;
+    expect(upperResult).toHaveProperty("OR");
+    expect(lowerResult).toHaveProperty("OR");
+  });
+
+  it("handles trailing OR by ignoring the empty group", async () => {
+    // "openclaw OR" should be identical to just "openclaw"
+    const withTrailing = await buildAdvancedSearchWhere(USER, "openclaw OR") as any;
+    const withoutOr = await buildAdvancedSearchWhere(USER, "openclaw") as any;
+    expect(withTrailing).toEqual(withoutOr);
+    // Should not produce an OR wrapper
+    expect(withTrailing).not.toHaveProperty("OR");
+  });
+
+  it("handles leading OR by ignoring the empty group", async () => {
+    // "OR openclaw" should be identical to just "openclaw"
+    const withLeading = await buildAdvancedSearchWhere(USER, "OR openclaw") as any;
+    const withoutOr = await buildAdvancedSearchWhere(USER, "openclaw") as any;
+    expect(withLeading).toEqual(withoutOr);
+    expect(withLeading).not.toHaveProperty("OR");
+  });
+
+  it("handles only OR token (all groups are empty)", async () => {
+    expect(await buildAdvancedSearchWhere(USER, "OR")).toEqual({});
+  });
+
+  it("OR-splits field qualifiers across groups", async () => {
+    // "feed:tech openclaw OR feed:sports hermes"
+    // Group 1 → feed:tech AND openclaw; Group 2 → feed:sports AND hermes
+    const result = await buildAdvancedSearchWhere(USER, "feed:tech openclaw OR feed:sports hermes") as any;
+    expect(result).toHaveProperty("OR");
+    expect(result.OR).toHaveLength(2);
+
+    const [g1, g2] = result.OR;
+    // Each group has AND with a feed condition and a free-text condition
+    expect(g1).toHaveProperty("AND");
+    expect(g2).toHaveProperty("AND");
+    expect(g1.AND).toHaveLength(2);
+    expect(g2.AND).toHaveLength(2);
+  });
+
+  it("three-way OR produces three entries", async () => {
+    const result = await buildAdvancedSearchWhere(USER, "alpha OR beta OR gamma") as any;
+    expect(result).toHaveProperty("OR");
+    expect(result.OR).toHaveLength(3);
   });
 });
