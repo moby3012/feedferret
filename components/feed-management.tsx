@@ -699,7 +699,7 @@ function SortableCategoryItem({
     {/* Category settings dialog (#17) */}
     {settingsOpen && (
       <button type="button" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setSettingsOpen(false); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') setSettingsOpen(false); }}>
-        <div role="dialog" aria-modal="true" aria-label="Category Settings" className="w-full max-w-sm rounded-3xl border border-border/70 bg-background p-6 shadow-2xl space-y-4">
+        <div role="dialog" aria-modal="true" aria-label={t("categorySettings")} className="w-full max-w-sm rounded-3xl border border-border/70 bg-background p-6 shadow-2xl space-y-4">
           <div className="flex items-center gap-3">
             <Folder className="w-5 h-5 text-primary" />
             <h3 className="font-semibold tracking-tight">{t("categories.categorySettingsTitle")} — {cat.name}</h3>
@@ -1800,10 +1800,10 @@ export function FeedManagement({
                             <SelectContent>
                               <SelectItem value="all">{newRuleTrigger === "feed_error" ? t("rules.anyFeed") : t("rules.allArticles")}</SelectItem>
                               {feeds.map((feed) => (
-                                <SelectItem key={`scope-feed-${feed.id}`} value={`feed:${feed.id}`}>Feed · {feed.name}</SelectItem>
+                                <SelectItem key={`scope-feed-${feed.id}`} value={`feed:${feed.id}`}>{t("rules.feedScope", { name: feed.name })}</SelectItem>
                               ))}
                               {categories.map((c) => (
-                                <SelectItem key={`scope-cat-${c.id}`} value={`category:${c.id}`}>Category · {c.name}</SelectItem>
+                                <SelectItem key={`scope-cat-${c.id}`} value={`category:${c.id}`}>{t("rules.categoryScope", { name: c.name })}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -1971,12 +1971,12 @@ export function FeedManagement({
                           if (s.startsWith("feed:")) {
                             const fid = s.slice("feed:".length);
                             const f = feeds.find((x) => x.id === fid);
-                            return `Feed · ${f?.name ?? "?"}`;
+                            return t("rules.feedScope", { name: f?.name ?? "?" });
                           }
                           if (s.startsWith("category:")) {
                             const cid = s.slice("category:".length);
                             const c = categories.find((x) => x.id === cid);
-                            return `Category · ${c?.name ?? "?"}`;
+                            return t("rules.categoryScope", { name: c?.name ?? "?" });
                           }
                           return s;
                         })();
@@ -2150,10 +2150,10 @@ export function FeedManagement({
                                     <SelectContent>
                                       <SelectItem value="all">{editRuleTrigger === "feed_error" ? t("rules.anyFeed") : t("rules.allArticles")}</SelectItem>
                                       {feeds.map((feed) => (
-                                        <SelectItem key={`edit-scope-feed-${feed.id}`} value={`feed:${feed.id}`}>Feed · {feed.name}</SelectItem>
+                                        <SelectItem key={`edit-scope-feed-${feed.id}`} value={`feed:${feed.id}`}>{t("rules.feedScope", { name: feed.name })}</SelectItem>
                                       ))}
                                       {categories.map((c) => (
-                                        <SelectItem key={`edit-scope-cat-${c.id}`} value={`category:${c.id}`}>Category · {c.name}</SelectItem>
+                                        <SelectItem key={`edit-scope-cat-${c.id}`} value={`category:${c.id}`}>{t("rules.categoryScope", { name: c.name })}</SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>

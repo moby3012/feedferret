@@ -534,7 +534,9 @@
     "backToAllArticles": "Zurück zu allen Artikeln",
     "feedFallback": "Feed",
     "labelFallback": "Label",
-    "savedSearchFallback": "Gespeicherte Suche"
+    "savedSearchFallback": "Gespeicherte Suche",
+    "feedNavigation": "Feed-Navigation",
+    "feedActions": "Feed-Aktionen"
   },
   "articleList": {
     "noArticles": "Keine Artikel",
@@ -754,7 +756,9 @@
       "closeEditor": "Editor schließen",
       "editRule": "Regel bearbeiten",
       "saveRule": "Regel speichern",
-      "saveChanges": "Änderungen speichern"
+      "saveChanges": "Änderungen speichern",
+      "feedScope": "Feed · {name}",
+      "categoryScope": "Kategorie · {name}"
     },
     "alerts": {
       "keywordAlerts": "Keyword-Alerts",
@@ -845,7 +849,8 @@
       "dataExported": "Daten exportiert",
       "sharingEnabled": "Teilen aktiviert",
       "sharingDisabled": "Teilen deaktiviert"
-    }
+    },
+    "categorySettings": "Kategorie-Einstellungen"
   },
   "feedEdit": {
     "authTab": "Authentifizierung",
