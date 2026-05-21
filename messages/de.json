@@ -39,6 +39,7 @@
     "userProfile": "Benutzerprofil",
     "signedInAs": "Angemeldet als",
     "signOut": "Abmelden",
+    "unknownUser": "Unbekannter Benutzer",
     "back": "Zurück",
     "viewOptions": {
       "list": "Liste",
@@ -95,7 +96,11 @@
     "enabling": "Wird aktiviert…",
     "disabling": "Wird deaktiviert…",
     "starting": "Wird gestartet…",
-    "greaderWarning": "Die Google-Reader-Passwortanmeldung ist für Konten mit aktivierter 2FA deaktiviert. Bei SSO-Abläufen wie Authelia sollte MFA vom Identitätsanbieter gehandhabt werden."
+    "greaderWarning": "Die Google-Reader-Passwortanmeldung ist für Konten mit aktivierter 2FA deaktiviert. Bei SSO-Abläufen wie Authelia sollte MFA vom Identitätsanbieter gehandhabt werden.",
+    "addToAuthApp": "1. Füge dieses Konto in deiner Authentifizierungs-App hinzu",
+    "manualSetupHint": "Verwende die manuelle Einrichtung, wenn deine App das Öffnen von otpauth-Links nicht unterstützt.",
+    "copied": "{label} kopiert",
+    "couldNotCopy": "{label} konnte nicht kopiert werden"
   },
   "digest": {
     "title": "E-Mail-Digest",
@@ -153,6 +158,15 @@
       "hourly": "Stündliche Zusammenfassung",
       "daily": "Tägliche Zusammenfassung",
       "off": "Aus"
+    },
+    "toasts": {
+      "couldNotSaveSettings": "Benachrichtigungseinstellungen konnten nicht gespeichert werden",
+      "permissionNotGranted": "Benachrichtigungsberechtigung wurde nicht erteilt",
+      "enabled": "Browser-Benachrichtigungen aktiviert",
+      "couldNotEnable": "Benachrichtigungen konnten nicht aktiviert werden",
+      "disabled": "Benachrichtigungen für dieses Gerät deaktiviert",
+      "testSent": "Testbenachrichtigung gesendet",
+      "couldNotSendTest": "Testbenachrichtigung konnte nicht gesendet werden"
     }
   },
   "apiTokens": {
@@ -185,6 +199,13 @@
       "d30": "30 Tage",
       "d90": "90 Tage",
       "y1": "1 Jahr"
+    },
+    "defaultTokenName": "Mein Token",
+    "toasts": {
+      "created": "Token erstellt — jetzt kopieren, wird nicht erneut angezeigt",
+      "failedCreate": "Token konnte nicht erstellt werden",
+      "copied": "Token in die Zwischenablage kopiert",
+      "revoked": "Token \"{name}\" widerrufen"
     }
   },
   "ai": {
@@ -255,7 +276,34 @@
     "opmlOnly": "Nur OPML",
     "twoFactorNote": "Hinweis zur Zwei-Faktor-Authentifizierung",
     "inClientChoose": "Wähle im Client",
-    "serverUrl": "als Server-URL."
+    "serverUrl": "als Server-URL.",
+    "twoFactorNoteBody": "Externe Clients können nicht nach einem TOTP-Code fragen. Wenn du 2FA aktiviert hast, erstelle ein dediziertes API-Token unter Profil → API-Token und verwende es anstelle deines Passworts.",
+    "clients": {
+      "reeder5": {
+        "notes": "Konto hinzufügen → FreshRSS → API-URL = deine FeedFerret-Basis-URL + /api/greader."
+      },
+      "netnewswire": {
+        "notes": "Konten → Hinzufügen → FreshRSS, dann die API-URL auf /api/greader zeigen lassen."
+      },
+      "readkit": {
+        "notes": "Verwende die FreshRSS-Option; die Fever-Variante ist noch nicht verfügbar."
+      },
+      "fluentreader": {
+        "notes": "Füge einen FreshRSS-kompatiblen Dienst in den Diensteinstellungen von Fluent Reader hinzu."
+      },
+      "feedme": {
+        "notes": "Verwende den Anbieter „Google Reader API compatible“ und deine /api/greader-URL."
+      },
+      "newsplus": {
+        "notes": "Wähle das GReader/FreshRSS-Plugin und zeige es auf /api/greader."
+      },
+      "feedly": {
+        "notes": "Feedly verbindet sich nicht mit selbst gehosteten Servern. Exportiere OPML aus Feedly und importiere es über FeedFerret → Feeds verwalten → Import/Export."
+      },
+      "inoreader": {
+        "notes": "Inoreader ist ein gehosteter Reader und meldet sich nicht bei FeedFerret an. Feeds per OPML übertragen."
+      }
+    }
   },
   "deleteAccount": {
     "title": "Konto löschen",
@@ -427,6 +475,7 @@
     "byUrl": "Per URL",
     "discover": "Entdecken",
     "feedOrSiteUrl": "Feed- oder Website-URL",
+    "findFeedsAtUrl": "Feeds an dieser URL suchen",
     "foundFeeds": "Gefundene Feeds",
     "starterPacks": "Starter-Pakete",
     "deleteConfirmTitle": "Feed löschen?",
@@ -454,14 +503,24 @@
     "searchArticles": "Artikel suchen",
     "lastSyncFailed": "Letzte Synchronisierung fehlgeschlagen",
     "hideEmptyLabels": "Leere Labels ausblenden",
+    "feedAdded": "{name} hinzugefügt",
     "errors": {
       "noFeedFound": "Unter dieser URL wurde kein Feed gefunden.",
       "discoveryFailed": "Feed-Erkennung fehlgeschlagen.",
+      "discoveryFailedHint": "Erkennung fehlgeschlagen. Versuche, eine direkte RSS/Atom-Feed-URL einzufügen.",
+      "discoveryFailedToast": "Erkennung fehlgeschlagen – direkte RSS/Atom-URL verwenden",
       "couldNotAdd": "Feed konnte nicht hinzugefügt werden.",
       "importFailed": "Import fehlgeschlagen.",
+      "importFailedWithError": "Import fehlgeschlagen: {error}",
       "noPacks": "Keine Starter-Pakete verfügbar.",
       "noNewFeeds": "Keine neuen Feeds zum Hinzufügen.",
       "imported": "{count, plural, one {# Feed importiert} other {# Feeds importiert}}",
+      "packNoFeeds": "{name} enthält keine Feeds zum Importieren",
+      "packNoNewFeeds": "{name} enthielt keine neuen Feeds",
+      "packImported": "{name} importiert",
+      "packImportedWithDetails": "{name} importiert: {details}",
+      "feedsAdded": "{count} hinzugefügt",
+      "feedsUpdated": "{count} aktualisiert",
       "deleted": "Feed gelöscht.",
       "couldNotDelete": "Feed konnte nicht gelöscht werden."
     }

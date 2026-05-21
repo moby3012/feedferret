@@ -474,7 +474,7 @@ export function SettingsForm() {
                   <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
                     {t("settings.signedInAs")}{" "}
                     <span className="font-medium text-foreground">
-                      {session?.user?.email || "Unknown user"}
+                      {session?.user?.email || t("settings.unknownUser")}
                     </span>
                   </p>
                 </div>
@@ -584,6 +584,7 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 function PushNotificationSection() {
+  const t = useTranslations();
   const { data: feeds = [] } = useFeeds();
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -628,7 +629,7 @@ function PushNotificationSection() {
         body: JSON.stringify(next),
       });
       if (!res.ok) {
-        toast.error("Could not save notification settings");
+        toast.error(t("push.toasts.couldNotSaveSettings"));
         await loadStatus();
       }
     },
@@ -642,7 +643,7 @@ function PushNotificationSection() {
       const registration = await navigator.serviceWorker.ready;
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
-        toast.error("Notification permission was not granted");
+        toast.error(t("push.toasts.permissionNotGranted"));
         return;
       }
       const subscription =
@@ -662,10 +663,10 @@ function PushNotificationSection() {
         }),
       });
       if (!res.ok) throw new Error(await res.text());
-      toast.success("Browser notifications enabled");
+      toast.success(t("push.toasts.enabled"));
       await loadStatus();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not enable notifications");
+      toast.error(error instanceof Error ? error.message : t("push.toasts.couldNotEnable"));
     } finally {
       setBusy(false);
     }
@@ -682,7 +683,7 @@ function PushNotificationSection() {
         body: JSON.stringify({ endpoint: subscription?.endpoint }),
       });
       await subscription?.unsubscribe();
-      toast.success("Notifications disabled for this device");
+      toast.success(t("push.toasts.disabled"));
       await loadStatus();
     } finally {
       setBusy(false);
@@ -694,9 +695,9 @@ function PushNotificationSection() {
     try {
       const res = await fetch("/api/push/test", { method: "POST" });
       if (!res.ok) throw new Error(await res.text());
-      toast.success("Test notification sent");
+      toast.success(t("push.toasts.testSent"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not send test notification");
+      toast.error(error instanceof Error ? error.message : t("push.toasts.couldNotSendTest"));
     } finally {
       setBusy(false);
     }
@@ -719,13 +720,13 @@ function PushNotificationSection() {
               {enabled ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.02em]">Browser notifications</h2>
+              <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("push.title")}</h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                Get notified when new articles arrive. Titles are included in notifications.
+                {t("push.description")}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Status: {loading ? "checking…" : !supported ? "unsupported" : !status?.configured ? "server not configured" : permission}
-                {status ? ` · ${status.activeSubscriptions} active device${status.activeSubscriptions === 1 ? "" : "s"}` : ""}
+                {t("push.status")}: {loading ? t("push.checking") : !supported ? t("push.unsupported") : !status?.configured ? t("push.serverNotConfigured") : permission}
+                {status ? ` · ${status.activeSubscriptions} ${status.activeSubscriptions === 1 ? t("push.activeDevice") : t("push.activeDevices")}` : ""}
               </p>
             </div>
           </div>
@@ -737,15 +738,15 @@ function PushNotificationSection() {
                 disabled={busy || loading || !supported || !status?.configured}
                 className="h-11 rounded-2xl px-5"
               >
-                Enable
+                {t("push.enable")}
               </Button>
             ) : (
               <>
                 <Button type="button" variant="outline" onClick={sendTest} disabled={busy} className="h-11 rounded-2xl px-5">
-                  Test
+                  {t("push.test")}
                 </Button>
                 <Button type="button" variant="outline" onClick={disable} disabled={busy} className="h-11 rounded-2xl px-5">
-                  Disable device
+                  {t("push.disableDevice")}
                 </Button>
               </>
             )}
@@ -755,7 +756,7 @@ function PushNotificationSection() {
         {status && (
           <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="push-frequency-select">Frequency</label>
+              <label className="text-sm font-medium" htmlFor="push-frequency-select">{t("push.frequency")}</label>
               <Select
                 value={status.settings.pushFrequency}
                 onValueChange={(value) => updateSettings({ pushFrequency: value })}
@@ -764,17 +765,17 @@ function PushNotificationSection() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl">
-                  <SelectItem value="immediate">Immediately</SelectItem>
-                  <SelectItem value="hourly">Hourly summary</SelectItem>
-                  <SelectItem value="daily">Daily summary</SelectItem>
-                  <SelectItem value="off">Off</SelectItem>
+                  <SelectItem value="immediate">{t("push.frequencies.immediately")}</SelectItem>
+                  <SelectItem value="hourly">{t("push.frequencies.hourly")}</SelectItem>
+                  <SelectItem value="daily">{t("push.frequencies.daily")}</SelectItem>
+                  <SelectItem value="off">{t("push.frequencies.off")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
               <div>
-                <p className="text-sm font-medium">Include article titles</p>
-                <p className="text-xs text-muted-foreground">Disable for generic private notifications.</p>
+                <p className="text-sm font-medium">{t("push.includeArticleTitles")}</p>
+                <p className="text-xs text-muted-foreground">{t("push.includeArticleTitlesDescription")}</p>
               </div>
               <Switch
                 checked={status.settings.pushPrivatePayloads}
@@ -782,7 +783,7 @@ function PushNotificationSection() {
               />
             </div>
             <div className="sm:col-span-2">
-              <p className="mb-2 text-sm font-medium">Feeds</p>
+              <p className="mb-2 text-sm font-medium">{t("push.feeds")}</p>
               <div className="max-h-44 overflow-y-auto rounded-2xl border border-border/70 bg-background/70 p-3">
                 <label className="mb-2 flex items-center gap-2 text-sm">
                   <input
@@ -790,7 +791,7 @@ function PushNotificationSection() {
                     checked={feedIds.size === 0}
                     onChange={() => updateSettings({ pushFeedIds: [] })}
                   />
-                  All feeds
+                  {t("push.allFeeds")}
                 </label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {feeds.map((feed: any) => (
@@ -826,6 +827,7 @@ function PushNotificationSection() {
 
 
 function TwoFactorSection() {
+  const t = useTranslations();
   const { data: status } = useTwoFactorStatus();
   const beginSetup = useBeginTwoFactorSetup();
   const confirmSetup = useConfirmTwoFactorSetup();
@@ -837,9 +839,9 @@ function TwoFactorSection() {
   const copyValue = useCallback(async (value: string, label: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success(`${label} copied`);
+      toast.success(t("twoFactor.copied", { label }));
     } catch {
-      toast.error(`Could not copy ${label.toLowerCase()}`);
+      toast.error(t("twoFactor.couldNotCopy", { label: label.toLowerCase() }));
     }
   }, []);
 
@@ -875,15 +877,15 @@ function TwoFactorSection() {
               <Shield className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.02em]">Two-factor authentication</h2>
+              <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("twoFactor.title")}</h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                Protect your email/password login with a 6-digit authenticator code. OAuth providers like Authelia can enforce MFA separately.
+                {t("twoFactor.description")}
               </p>
             </div>
           </div>
           {status?.enabled ? (
             <div className="inline-flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-              <Shield className="h-4 w-4" /> Enabled
+              <Shield className="h-4 w-4" /> {t("twoFactor.enabled")}
             </div>
           ) : (
             <Button
@@ -892,7 +894,7 @@ function TwoFactorSection() {
               disabled={beginSetup.isPending}
               className="h-11 rounded-2xl px-5"
             >
-              {beginSetup.isPending ? "Starting…" : "Set up 2FA"}
+              {beginSetup.isPending ? t("twoFactor.starting") : t("twoFactor.beginSetup")}
             </Button>
           )}
         </div>
@@ -900,21 +902,21 @@ function TwoFactorSection() {
         {setupData && !status?.enabled && (
           <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:p-5">
             <div className="grid gap-2">
-              <p className="text-sm font-medium">1. Add this account in your authenticator app</p>
+              <p className="text-sm font-medium">{t("twoFactor.addToAuthApp")}</p>
               <p className="text-xs text-muted-foreground">
-                Use manual setup if your app does not support opening otpauth links directly.
+                {t("twoFactor.manualSetupHint")}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Account</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("twoFactor.account")}</p>
                 <p className="mt-1 text-sm font-medium break-all">{setupData.accountName}</p>
               </div>
               <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Secret</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("twoFactor.secret")}</p>
                 <div className="mt-1 flex items-center gap-2">
                   <p className="text-sm font-medium break-all">{setupData.secret}</p>
-                  <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-xl" onClick={() => copyValue(setupData.secret, "Secret")}>
+                  <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-xl" onClick={() => copyValue(setupData.secret, t("twoFactor.secret"))}>
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
@@ -923,17 +925,17 @@ function TwoFactorSection() {
             <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">otpauth URI</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("twoFactor.otpauthUri")}</p>
                   <p className="mt-1 text-xs text-muted-foreground break-all">{setupData.uri}</p>
                 </div>
                 <Button type="button" variant="outline" className="rounded-2xl" onClick={() => copyValue(setupData.uri, "URI")}>
-                  <Copy className="me-2 h-4 w-4" /> Copy
+                  <Copy className="me-2 h-4 w-4" /> {t("twoFactor.copy")}
                 </Button>
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="totp-setup-code">2. Enter the current 6-digit code</label>
+                <label className="text-sm font-medium" htmlFor="totp-setup-code">{t("twoFactor.enterCode")}</label>
                 <Input
                   id="totp-setup-code"
                   inputMode="numeric"
@@ -946,10 +948,10 @@ function TwoFactorSection() {
               </div>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setSetupData(null)}>
-                  Cancel
+                  {t("twoFactor.cancel")}
                 </Button>
                 <Button type="button" className="rounded-2xl" onClick={handleEnable} disabled={confirmSetup.isPending || setupCode.length !== 6}>
-                  {confirmSetup.isPending ? "Enabling…" : "Enable 2FA"}
+                  {confirmSetup.isPending ? t("twoFactor.enabling") : t("twoFactor.enableTwoFa")}
                 </Button>
               </div>
             </div>
@@ -961,17 +963,17 @@ function TwoFactorSection() {
             <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
               <ShieldOff className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                Google Reader password login is disabled for accounts with 2FA enabled. For SSO flows like Authelia, MFA should be handled by your identity provider.
+                {t("twoFactor.greaderWarning")}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <div className="space-y-2">
-                <label className="text-sm font-medium" htmlFor="totp-disable-code">Disable 2FA</label>
+                <label className="text-sm font-medium" htmlFor="totp-disable-code">{t("twoFactor.disableTwoFa")}</label>
                 <Input
                   id="totp-disable-code"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  placeholder="Enter current code"
+                  placeholder="123456"
                   className="rounded-2xl border-border/70 bg-background/70"
                   value={disableCode}
                   onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -984,7 +986,7 @@ function TwoFactorSection() {
                 onClick={handleDisable}
                 disabled={disableTwoFactor.isPending || disableCode.length !== 6}
               >
-                {disableTwoFactor.isPending ? "Disabling…" : "Disable 2FA"}
+                {disableTwoFactor.isPending ? t("twoFactor.disabling") : t("twoFactor.disableTwoFa")}
               </Button>
             </div>
           </div>
@@ -995,16 +997,17 @@ function TwoFactorSection() {
 }
 
 const DAYS = [
-  { value: "0", label: "Sunday" },
-  { value: "1", label: "Monday" },
-  { value: "2", label: "Tuesday" },
-  { value: "3", label: "Wednesday" },
-  { value: "4", label: "Thursday" },
-  { value: "5", label: "Friday" },
-  { value: "6", label: "Saturday" },
-];
+  { value: "0", key: "digest.days.sunday" },
+  { value: "1", key: "digest.days.monday" },
+  { value: "2", key: "digest.days.tuesday" },
+  { value: "3", key: "digest.days.wednesday" },
+  { value: "4", key: "digest.days.thursday" },
+  { value: "5", key: "digest.days.friday" },
+  { value: "6", key: "digest.days.saturday" },
+] as const;
 
 function DigestSection() {
+  const t = useTranslations();
   const { data: digest } = useDigestSettings();
   const { data: feedsData } = useFeeds();
   const { data: instance, loading: instanceLoading } = useInstance();
@@ -1028,10 +1031,9 @@ function DigestSection() {
           <Mail className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">Email Digest</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("digest.title")}</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Receive a periodic email summary of articles from your feeds.
-            Requires SMTP to be configured by your administrator.
+            {t("digest.description")}
           </p>
         </div>
       </div>
@@ -1040,10 +1042,10 @@ function DigestSection() {
         {/* Enable toggle */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">Enable digest emails</p>
+            <p className="text-sm font-medium">{t("digest.enableDigestEmails")}</p>
             {digest.digestLastSentAt && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Last sent: {new Date(digest.digestLastSentAt).toLocaleString()}
+                {t("digest.lastSent")}: {new Date(digest.digestLastSentAt).toLocaleString()}
               </p>
             )}
           </div>
@@ -1070,7 +1072,7 @@ function DigestSection() {
             {/* Frequency */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-frequency-select">Frequency</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-frequency-select">{t("digest.frequency")}</label>
                 <Select
                   value={digest.digestFrequency}
                   onValueChange={(v) => update({ digestFrequency: v })}
@@ -1079,8 +1081,8 @@ function DigestSection() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="daily">{t("digest.frequencies.daily")}</SelectItem>
+                    <SelectItem value="weekly">{t("digest.frequencies.weekly")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1088,7 +1090,7 @@ function DigestSection() {
               {/* Day of week (weekly only) */}
               {digest.digestFrequency === "weekly" && (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-day-select">Day</label>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-day-select">{t("digest.day")}</label>
                   <Select
                     value={String(digest.digestDayOfWeek)}
                     onValueChange={(v) => update({ digestDayOfWeek: parseInt(v) })}
@@ -1098,7 +1100,7 @@ function DigestSection() {
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl">
                       {DAYS.map((d) => (
-                        <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                        <SelectItem key={d.value} value={d.value}>{t(d.key)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1107,7 +1109,7 @@ function DigestSection() {
 
               {/* Hour */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-hour-select">Hour (UTC)</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-hour-select">{t("digest.hour")}</label>
                 <Select
                   value={String(digest.digestHour)}
                   onValueChange={(v) => update({ digestHour: parseInt(v) })}
@@ -1127,7 +1129,7 @@ function DigestSection() {
 
               {/* Scope */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-scope-select">Include</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-scope-select">{t("digest.include")}</label>
                 <Select
                   value={digest.digestScope}
                   onValueChange={(v) => update({ digestScope: v })}
@@ -1136,10 +1138,10 @@ function DigestSection() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
-                    <SelectItem value="unread">Unread</SelectItem>
-                    <SelectItem value="all">All new</SelectItem>
-                    <SelectItem value="starred">Starred</SelectItem>
-                    <SelectItem value="readlater">Read Later</SelectItem>
+                    <SelectItem value="unread">{t("digest.scope.unread")}</SelectItem>
+                    <SelectItem value="all">{t("digest.scope.allNew")}</SelectItem>
+                    <SelectItem value="starred">{t("digest.scope.starred")}</SelectItem>
+                    <SelectItem value="readlater">{t("digest.scope.readLater")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1149,8 +1151,8 @@ function DigestSection() {
             {feeds.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Feed filter{" "}
-                  <span className="normal-case font-normal">(leave empty for all feeds)</span>
+                  {t("digest.feedFilter")}{" "}
+                  <span className="normal-case font-normal">({t("digest.feedFilterHint")})</span>
                 </label>
                 <div className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-background/50 p-3 min-h-[48px]">
                   {feeds.map((feed: any) => {
@@ -1191,10 +1193,10 @@ function DigestSection() {
                 className="rounded-2xl h-10"
               >
                 <Send className="w-4 h-4 me-2" />
-                {sendTest.isPending ? "Sending…" : "Send test digest now"}
+                {sendTest.isPending ? t("digest.sending") : t("digest.sendTestDigest")}
               </Button>
               <p className="text-xs text-muted-foreground">
-                Sends to your account email using the last 7 days of articles.
+                {t("digest.testDigestHint")}
               </p>
             </div>
           </>
@@ -1205,6 +1207,7 @@ function DigestSection() {
 }
 
 function DeleteAccountSection() {
+  const t = useTranslations();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1219,10 +1222,10 @@ function DeleteAccountSection() {
         setLoading(false);
         return;
       }
-      toast.success("Account deleted. Goodbye!");
+      toast.success(t("deleteAccount.accountDeleted"));
       await signOut({ callbackUrl: "/login" });
     } catch {
-      toast.error("Account deletion failed. Try again.");
+      toast.error(t("deleteAccount.deletionFailed"));
       setLoading(false);
     }
   };
@@ -1236,10 +1239,9 @@ function DeleteAccountSection() {
               <AlertTriangle className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-[-0.02em]">Delete Account</h2>
+              <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("deleteAccount.title")}</h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                Permanently delete your account and all associated data — feeds, articles, labels, and settings.
-                This action is irreversible and complies with GDPR Art. 17 (right to erasure).
+                {t("deleteAccount.description")}
               </p>
             </div>
           </div>
@@ -1249,7 +1251,7 @@ function DeleteAccountSection() {
             className="h-11 rounded-2xl border-destructive/40 text-destructive hover:bg-destructive/10 px-5 shrink-0"
           >
             <Trash2 className="me-2 h-4 w-4" />
-            Delete my account
+            {t("deleteAccount.deleteMyAccount")}
           </Button>
         </div>
       </section>
@@ -1259,34 +1261,34 @@ function DeleteAccountSection() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
-              Delete your account?
+              {t("deleteAccount.confirmDialogTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-3">
               <span className="block">
-                This will permanently delete your account, all your feeds, articles, labels, and settings.
-                <strong> This cannot be undone.</strong>
+                {t("deleteAccount.confirmDialogDescription")}
+                <strong> {t("deleteAccount.cannotBeUndone")}</strong>
               </span>
               <span className="block mt-3 text-sm font-medium text-foreground">
-                Type <code className="bg-muted px-1.5 py-0.5 rounded text-xs">delete my account</code> to confirm:
+                {t("deleteAccount.typeToConfirm")}
               </span>
               <Input
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                placeholder="delete my account"
+                placeholder={t("deleteAccount.confirmPlaceholder")}
                 className="rounded-2xl border-border/70 bg-background/70"
               />
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="rounded-2xl" onClick={() => setConfirmText("")}>
-              Cancel
+              {t("deleteAccount.cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDelete}
               disabled={confirmText !== "delete my account" || loading}
             >
-              {loading ? "Deleting…" : "Delete permanently"}
+              {loading ? t("deleteAccount.deleting") : t("deleteAccount.deletePermanently")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1296,6 +1298,7 @@ function DeleteAccountSection() {
 }
 
 function ApiTokenSection() {
+  const t = useTranslations();
   const [tokens, setTokens] = useState<Array<{
     id: string; name: string; scope: string; expiresAt: string | null; lastUsedAt: string | null; createdAt: string;
   }>>([]);
@@ -1303,7 +1306,7 @@ function ApiTokenSection() {
   const [newRawToken, setNewRawToken] = useState<string | null>(null);
   const [newTokenId, setNewTokenId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [createName, setCreateName] = useState("My token");
+  const [createName, setCreateName] = useState(t("apiTokens.defaultTokenName"));
   const [createScope, setCreateScope] = useState("write");
   const [createExpiry, setCreateExpiry] = useState("never");
   const [creating, setCreating] = useState(false);
@@ -1334,13 +1337,13 @@ function ApiTokenSection() {
         setNewRawToken(data.token);
         setNewTokenId(data.id);
         setShowCreate(false);
-        setCreateName("My token");
+        setCreateName(t("apiTokens.defaultTokenName"));
         setCreateScope("write");
         setCreateExpiry("never");
         await loadTokens();
-        toast.success("Token created — copy it now, it won't be shown again");
+        toast.success(t("apiTokens.toasts.created"));
       } else {
-        toast.error("Failed to create token");
+        toast.error(t("apiTokens.toasts.failedCreate"));
       }
     } finally {
       setCreating(false);
@@ -1352,18 +1355,18 @@ function ApiTokenSection() {
     if (res.ok) {
       if (newTokenId === id) { setNewRawToken(null); setNewTokenId(null); }
       await loadTokens();
-      toast.success(`Token "${name}" revoked`);
+      toast.success(t("apiTokens.toasts.revoked", { name }));
     }
   }, [loadTokens, newTokenId]);
 
   const handleCopy = useCallback(() => {
     if (newRawToken) {
       navigator.clipboard.writeText(newRawToken);
-      toast.success("Token copied to clipboard");
+      toast.success(t("apiTokens.toasts.copied"));
     }
   }, [newRawToken]);
 
-  const scopeLabel = (scope: string) => ({ read: "Read-only", write: "Read+Write", admin: "Admin" } as Record<string, string>)[scope] ?? scope;
+  const scopeLabel = (scope: string) => ({ read: t("apiTokens.scopes.read"), write: t("apiTokens.scopes.readWrite"), admin: t("apiTokens.scopes.admin") } as Record<string, string>)[scope] ?? scope;
   const scopeColor = (scope: string): "secondary" | "default" | "destructive" =>
     scope === "read" ? "secondary" : scope === "admin" ? "destructive" : "default";
 
@@ -1374,22 +1377,21 @@ function ApiTokenSection() {
           <Key className="h-5 w-5" />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">API Tokens</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("apiTokens.title")}</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Personal API tokens for browser extensions, mobile apps, and external integrations.
-            Each token has its own scope and optional expiry. Treat them like passwords.
+            {t("apiTokens.description")}
           </p>
         </div>
         <Button size="sm" onClick={() => setShowCreate(true)} className="rounded-2xl h-9 shrink-0">
           <Plus className="w-4 h-4 me-1" />
-          Add token
+          {t("apiTokens.addToken")}
         </Button>
       </div>
 
       {newRawToken && (
         <div className="mb-4 rounded-2xl bg-accent/5 border border-accent/20 p-4">
           <p className="text-xs font-semibold text-accent mb-2 uppercase tracking-wider">
-            New token — copy now, won&apos;t be shown again
+            {t("apiTokens.newTokenWarning")}
           </p>
           <div className="flex items-center gap-2">
             <Input readOnly value={newRawToken} className="font-mono text-xs h-9 bg-background/60" />
@@ -1402,69 +1404,69 @@ function ApiTokenSection() {
 
       {showCreate && (
         <div className="mb-4 rounded-2xl border border-border/50 bg-muted/30 p-4 space-y-3">
-          <p className="text-sm font-medium">Create new token</p>
+          <p className="text-sm font-medium">{t("apiTokens.createNewToken")}</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-1">
-              <label htmlFor="token-name" className="text-xs text-muted-foreground mb-1 block">Name</label>
+              <label htmlFor="token-name" className="text-xs text-muted-foreground mb-1 block">{t("apiTokens.name")}</label>
               <Input id="token-name" value={createName} onChange={(e) => setCreateName(e.target.value)} className="h-9 rounded-xl" maxLength={80} />
             </div>
             <div>
-              <label htmlFor="token-scope" className="text-xs text-muted-foreground mb-1 block">Scope</label>
+              <label htmlFor="token-scope" className="text-xs text-muted-foreground mb-1 block">{t("apiTokens.scope")}</label>
               <Select value={createScope} onValueChange={setCreateScope}>
                 <SelectTrigger id="token-scope" className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="read">Read-only</SelectItem>
-                  <SelectItem value="write">Read + Write</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="read">{t("apiTokens.scopes.read")}</SelectItem>
+                  <SelectItem value="write">{t("apiTokens.scopes.readWrite")}</SelectItem>
+                  <SelectItem value="admin">{t("apiTokens.scopes.admin")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <label htmlFor="token-expiry" className="text-xs text-muted-foreground mb-1 block">Expires</label>
+              <label htmlFor="token-expiry" className="text-xs text-muted-foreground mb-1 block">{t("apiTokens.expires")}</label>
               <Select value={createExpiry} onValueChange={setCreateExpiry}>
                 <SelectTrigger id="token-expiry" className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="never">Never</SelectItem>
-                  <SelectItem value="30d">30 days</SelectItem>
-                  <SelectItem value="90d">90 days</SelectItem>
-                  <SelectItem value="1y">1 year</SelectItem>
+                  <SelectItem value="never">{t("apiTokens.expiry.never")}</SelectItem>
+                  <SelectItem value="30d">{t("apiTokens.expiry.d30")}</SelectItem>
+                  <SelectItem value="90d">{t("apiTokens.expiry.d90")}</SelectItem>
+                  <SelectItem value="1y">{t("apiTokens.expiry.y1")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <div className="flex gap-2 pt-1">
             <Button size="sm" onClick={handleCreate} disabled={creating || !createName.trim()} className="rounded-xl h-9">
-              {creating ? "Creating…" : "Create"}
+              {creating ? t("apiTokens.creating") : t("apiTokens.create")}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)} className="rounded-xl h-9">Cancel</Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowCreate(false)} className="rounded-xl h-9">{t("apiTokens.cancel")}</Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{t("apiTokens.loading")}</p>
       ) : tokens.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No tokens yet. Create one to get started.</p>
+        <p className="text-sm text-muted-foreground">{t("apiTokens.noTokens")}</p>
       ) : (
         <div className="space-y-2">
-          {tokens.map((t) => (
-            <div key={t.id} className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/40 px-3 py-2">
+          {tokens.map((tok) => (
+            <div key={tok.id} className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/40 px-3 py-2">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium truncate">{t.name}</span>
-                  <Badge variant={scopeColor(t.scope)} className="text-[10px] h-4 px-1.5">{scopeLabel(t.scope)}</Badge>
-                  {t.expiresAt && <span className="text-[11px] text-muted-foreground">Expires {new Date(t.expiresAt).toLocaleDateString()}</span>}
+                  <span className="text-sm font-medium truncate">{tok.name}</span>
+                  <Badge variant={scopeColor(tok.scope)} className="text-[10px] h-4 px-1.5">{scopeLabel(tok.scope)}</Badge>
+                  {tok.expiresAt && <span className="text-[11px] text-muted-foreground">{t("apiTokens.expires")} {new Date(tok.expiresAt).toLocaleDateString()}</span>}
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Created {new Date(t.createdAt).toLocaleDateString()}
-                  {t.lastUsedAt ? ` · Last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : " · Never used"}
+                  {t("apiTokens.created")} {new Date(tok.createdAt).toLocaleDateString()}
+                  {tok.lastUsedAt ? ` · ${t("apiTokens.lastUsed")} ${new Date(tok.lastUsedAt).toLocaleDateString()}` : ` · ${t("apiTokens.neverUsed")}`}
                 </p>
               </div>
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                onClick={() => handleRevoke(t.id, t.name)}
+                onClick={() => handleRevoke(tok.id, tok.name)}
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
@@ -1482,6 +1484,7 @@ function ApiTokenSection() {
 }
 
 function AiSummarySection() {
+  const t = useTranslations();
   const { data: ai } = useAiSettings();
   const updateAi = useUpdateAiSettings();
   const testAi = useTestAiConnection();
@@ -1527,9 +1530,9 @@ function AiSummarySection() {
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">AI Summaries (BYOK)</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("ai.title")}</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Summarize articles on demand or automatically on sync using your own OpenAI, Anthropic, Gemini, OpenRouter, or Ollama credentials. Your API key is encrypted at rest and never shared.
+            {t("ai.description")}
           </p>
         </div>
       </div>
@@ -1537,18 +1540,18 @@ function AiSummarySection() {
       <div className="space-y-4">
         {/* Provider */}
         <div className="grid gap-1.5">
-          <label className="text-sm font-medium" htmlFor="ai-provider-select">Provider</label>
+          <label className="text-sm font-medium" htmlFor="ai-provider-select">{t("ai.provider")}</label>
           <Select value={provider} onValueChange={setProvider}>
             <SelectTrigger id="ai-provider-select" className="h-10 rounded-xl">
-              <SelectValue placeholder="Select provider" />
+              <SelectValue placeholder={t("ai.provider")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">None (disabled)</SelectItem>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="anthropic">Anthropic</SelectItem>
-              <SelectItem value="gemini">Google Gemini</SelectItem>
-              <SelectItem value="openrouter">OpenRouter</SelectItem>
-              <SelectItem value="ollama">Ollama (local)</SelectItem>
+              <SelectItem value="none">{t("ai.providers.none")}</SelectItem>
+              <SelectItem value="openai">{t("ai.providers.openai")}</SelectItem>
+              <SelectItem value="anthropic">{t("ai.providers.anthropic")}</SelectItem>
+              <SelectItem value="gemini">{t("ai.providers.gemini")}</SelectItem>
+              <SelectItem value="openrouter">{t("ai.providers.openrouter")}</SelectItem>
+              <SelectItem value="ollama">{t("ai.providers.ollama")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1556,15 +1559,15 @@ function AiSummarySection() {
         {provider !== "none" && provider !== "ollama" && (
           <div className="grid gap-1.5">
             <label className="text-sm font-medium" htmlFor="ai-api-key-input">
-              API Key
+              {t("ai.apiKey")}
               {ai?.hasApiKey && !apiKey && (
-                <span className="ms-2 text-xs font-normal text-muted-foreground">(currently set)</span>
+                <span className="ms-2 text-xs font-normal text-muted-foreground">({t("ai.currentlySet")})</span>
               )}
             </label>
             <Input
               id="ai-api-key-input"
               type="password"
-              placeholder={ai?.hasApiKey ? "Leave blank to keep existing key" : "sk-..."}
+              placeholder={ai?.hasApiKey ? t("ai.leaveBlankToKeep") : "sk-..."}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               className="h-10 rounded-xl font-mono text-sm"
@@ -1574,7 +1577,7 @@ function AiSummarySection() {
 
         {provider === "ollama" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-ollama-base-url-input">Ollama Base URL</label>
+            <label className="text-sm font-medium" htmlFor="ai-ollama-base-url-input">{t("ai.ollamaBaseUrl")}</label>
             <Input
               id="ai-ollama-base-url-input"
               placeholder="http://localhost:11434"
@@ -1588,7 +1591,7 @@ function AiSummarySection() {
         {provider !== "none" && (
           <div className="grid gap-1.5">
             <label className="text-sm font-medium" htmlFor="ai-model-input">
-              Model
+              {t("ai.model")}
               <span className="ms-1 text-xs font-normal text-muted-foreground">
                 {provider === "openai" && "(default: gpt-4o-mini)"}
                 {provider === "anthropic" && "(default: claude-haiku-4-5-20251001)"}
@@ -1609,19 +1612,19 @@ function AiSummarySection() {
 
         {provider !== "none" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-language-select">Summary language</label>
+            <label className="text-sm font-medium" htmlFor="ai-language-select">{t("ai.summaryLanguage")}</label>
             <Select value={language} onValueChange={setLanguage}>
               <SelectTrigger id="ai-language-select" className="h-10 rounded-xl">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="same">Same as article</SelectItem>
-                <SelectItem value="English">English</SelectItem>
-                <SelectItem value="German">German</SelectItem>
-                <SelectItem value="French">French</SelectItem>
-                <SelectItem value="Spanish">Spanish</SelectItem>
-                <SelectItem value="Japanese">Japanese</SelectItem>
-                <SelectItem value="Chinese">Chinese</SelectItem>
+                <SelectItem value="same">{t("ai.languages.same")}</SelectItem>
+                <SelectItem value="English">{t("ai.languages.english")}</SelectItem>
+                <SelectItem value="German">{t("ai.languages.german")}</SelectItem>
+                <SelectItem value="French">{t("ai.languages.french")}</SelectItem>
+                <SelectItem value="Spanish">{t("ai.languages.spanish")}</SelectItem>
+                <SelectItem value="Japanese">{t("ai.languages.japanese")}</SelectItem>
+                <SelectItem value="Chinese">{t("ai.languages.chinese")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1630,8 +1633,8 @@ function AiSummarySection() {
         {provider !== "none" && (
           <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
             <div>
-              <p className="text-sm font-medium">Auto-summarize on sync</p>
-              <p className="text-xs text-muted-foreground">Automatically summarize new articles (uses API credits)</p>
+              <p className="text-sm font-medium">{t("ai.autoSummarize")}</p>
+              <p className="text-xs text-muted-foreground">{t("ai.autoSummarizeDescription")}</p>
             </div>
             <Switch
               checked={autoSummarize}
@@ -1651,7 +1654,7 @@ function AiSummarySection() {
             {testResult.success
               ? <CheckCircle2 className="h-4 w-4 shrink-0" />
               : <XCircle className="h-4 w-4 shrink-0" />}
-            <span>{testResult.success ? "Connection successful" : testResult.error}</span>
+            <span>{testResult.success ? t("ai.connectionSuccessful") : testResult.error}</span>
           </div>
         )}
 
@@ -1661,7 +1664,7 @@ function AiSummarySection() {
             disabled={updateAi.isPending}
             className="rounded-2xl h-10"
           >
-            {updateAi.isPending ? "Saving…" : "Save"}
+            {updateAi.isPending ? t("ai.saving") : t("ai.save")}
           </Button>
           {provider !== "none" && (
             <Button
@@ -1671,7 +1674,7 @@ function AiSummarySection() {
               className="rounded-2xl h-10"
             >
               <Sparkles className="w-4 h-4 me-2" />
-              {testAi.isPending ? "Testing…" : "Test connection"}
+              {testAi.isPending ? t("ai.testing") : t("ai.testConnection")}
             </Button>
           )}
         </div>
@@ -1684,79 +1687,80 @@ type SyncClient = {
   name: string;
   platforms: string;
   url: string;
-  api: "greader" | "opml";
+  api: “greader” | “opml”;
   serverField: string;
-  notes?: string;
+  notesKey?: string;
 };
 
 const SYNC_CLIENTS: SyncClient[] = [
   {
-    name: "Reeder 5 / Classic",
-    platforms: "macOS, iOS, iPadOS",
-    url: "https://reederapp.com/",
-    api: "greader",
-    serverField: "FreshRSS / FeedHQ",
-    notes: "Add account → FreshRSS → API URL = your FeedFerret base URL + /api/greader.",
+    name: “Reeder 5 / Classic”,
+    platforms: “macOS, iOS, iPadOS”,
+    url: “https://reederapp.com/”,
+    api: “greader”,
+    serverField: “FreshRSS / FeedHQ”,
+    notesKey: “syncReaders.clients.reeder5.notes”,
   },
   {
-    name: "NetNewsWire",
-    platforms: "macOS, iOS",
-    url: "https://netnewswire.com/",
-    api: "greader",
-    serverField: "FreshRSS",
-    notes: "Accounts → Add → FreshRSS, then point the API URL at /api/greader.",
+    name: “NetNewsWire”,
+    platforms: “macOS, iOS”,
+    url: “https://netnewswire.com/”,
+    api: “greader”,
+    serverField: “FreshRSS”,
+    notesKey: “syncReaders.clients.netnewswire.notes”,
   },
   {
-    name: "ReadKit",
-    platforms: "macOS, iOS",
-    url: "https://readkit.app/",
-    api: "greader",
-    serverField: "Fever / FreshRSS",
-    notes: "Use the FreshRSS option; the Fever variant is not yet exposed.",
+    name: “ReadKit”,
+    platforms: “macOS, iOS”,
+    url: “https://readkit.app/”,
+    api: “greader”,
+    serverField: “Fever / FreshRSS”,
+    notesKey: “syncReaders.clients.readkit.notes”,
   },
   {
-    name: "Fluent Reader",
-    platforms: "Windows, macOS, Linux",
-    url: "https://hyliu.me/fluent-reader/",
-    api: "greader",
-    serverField: "FreshRSS",
-    notes: "Add a FreshRSS-style service inside Fluent Reader’s service settings.",
+    name: “Fluent Reader”,
+    platforms: “Windows, macOS, Linux”,
+    url: “https://hyliu.me/fluent-reader/”,
+    api: “greader”,
+    serverField: “FreshRSS”,
+    notesKey: “syncReaders.clients.fluentreader.notes”,
   },
   {
-    name: "FeedMe",
-    platforms: "Android",
-    url: "https://play.google.com/store/apps/details?id=com.seazon.feedme",
-    api: "greader",
-    serverField: "Custom Google Reader API",
-    notes: "Use the “Google Reader API compatible” provider and your /api/greader URL.",
+    name: “FeedMe”,
+    platforms: “Android”,
+    url: “https://play.google.com/store/apps/details?id=com.seazon.feedme”,
+    api: “greader”,
+    serverField: “Custom Google Reader API”,
+    notesKey: “syncReaders.clients.feedme.notes”,
   },
   {
-    name: "News+",
-    platforms: "Android",
-    url: "https://noinnion.com/newsplus/",
-    api: "greader",
-    serverField: "GReader compatible",
-    notes: "Pick the GReader/FreshRSS plugin and point it at /api/greader.",
+    name: “News+”,
+    platforms: “Android”,
+    url: “https://noinnion.com/newsplus/”,
+    api: “greader”,
+    serverField: “GReader compatible”,
+    notesKey: “syncReaders.clients.newsplus.notes”,
   },
   {
-    name: "Feedly",
-    platforms: "Web, iOS, Android",
-    url: "https://feedly.com/",
-    api: "opml",
-    serverField: "OPML import / export",
-    notes: "Feedly does not connect to self-hosted servers. Export OPML from Feedly and import it via FeedFerret → Manage feeds → Import/Export.",
+    name: “Feedly”,
+    platforms: “Web, iOS, Android”,
+    url: “https://feedly.com/”,
+    api: “opml”,
+    serverField: “OPML import / export”,
+    notesKey: “syncReaders.clients.feedly.notes”,
   },
   {
-    name: "Inoreader",
-    platforms: "Web, iOS, Android",
-    url: "https://www.inoreader.com/",
-    api: "opml",
-    serverField: "OPML import / export",
-    notes: "Inoreader is a hosted reader and does not log into FeedFerret. Move feeds via OPML.",
+    name: “Inoreader”,
+    platforms: “Web, iOS, Android”,
+    url: “https://www.inoreader.com/”,
+    api: “opml”,
+    serverField: “OPML import / export”,
+    notesKey: “syncReaders.clients.inoreader.notes”,
   },
 ];
 
 function SyncTutorialSection() {
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [instanceUrl, setInstanceUrl] = useState<string>("");
 
@@ -1780,9 +1784,9 @@ function SyncTutorialSection() {
           <Rss className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">Sync with external readers</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("syncReaders.title")}</h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Connect Reeder, NetNewsWire, Fluent Reader and other RSS clients to this FeedFerret instance. Hosted services like Feedly need an OPML round-trip instead.
+            {t("syncReaders.description")}
           </p>
         </div>
         <span className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground">
@@ -1794,17 +1798,17 @@ function SyncTutorialSection() {
         <div className="mt-6 space-y-6">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Google Reader API endpoint</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.greaderEndpoint")}</p>
               <p className="mt-1 break-all text-sm font-mono">{greaderUrl}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Username = your FeedFerret email. Password = your FeedFerret password (or an API token).
+                {t("syncReaders.greaderUsernameHint")}
               </p>
             </div>
             <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">REST API base</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.restApiBase")}</p>
               <p className="mt-1 break-all text-sm font-mono">{apiUrl}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Used by custom integrations. Authenticate with a bearer token from Profile → API tokens.
+                {t("syncReaders.restApiHint")}
               </p>
             </div>
           </div>
@@ -1830,11 +1834,11 @@ function SyncTutorialSection() {
                             : "bg-amber-500/10 text-amber-600",
                         )}
                       >
-                        {client.api === "greader" ? "Direct sync" : "OPML only"}
+                        {client.api === "greader" ? t("syncReaders.directSync") : t("syncReaders.opmlOnly")}
                       </span>
                     </div>
-                    {client.notes && (
-                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{client.notes}</p>
+                    {client.notesKey && (
+                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{t(client.notesKey as any)}</p>
                     )}
                   </div>
                   <a
@@ -1843,13 +1847,13 @@ function SyncTutorialSection() {
                     rel="noopener noreferrer"
                     className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border/60 bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted/60 transition-colors"
                   >
-                    Open site
+                    {t("syncReaders.openSite")}
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
                 {client.api === "greader" && (
                   <p className="mt-3 text-[11px] text-muted-foreground">
-                    In the client, choose <strong>{client.serverField}</strong> and paste <code className="rounded bg-background/80 px-1 font-mono">{greaderUrl}</code> as the server URL.
+                    {t("syncReaders.inClientChoose")} <strong>{client.serverField}</strong> and paste <code className="rounded bg-background/80 px-1 font-mono">{greaderUrl}</code> {t("syncReaders.serverUrl")}
                   </p>
                 )}
               </div>
@@ -1857,10 +1861,9 @@ function SyncTutorialSection() {
           </div>
 
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-muted-foreground leading-relaxed">
-            <p className="font-medium text-amber-600 dark:text-amber-400 mb-1">A note on two-factor authentication</p>
+            <p className="font-medium text-amber-600 dark:text-amber-400 mb-1">{t("syncReaders.twoFactorNote")}</p>
             <p>
-              External clients can&apos;t prompt for a TOTP code. If you have 2FA on, generate a dedicated API token under
-              Profile → API tokens and use that in place of your password.
+              {t("syncReaders.twoFactorNoteBody")}
             </p>
           </div>
         </div>
@@ -1870,6 +1873,7 @@ function SyncTutorialSection() {
 }
 
 function NotificationChannelsSection() {
+  const t = useTranslations();
   const { data, isLoading } = useNotificationChannels();
   const update = useUpdateNotificationChannels();
   const testChannel = useTestNotificationChannel();
@@ -1911,9 +1915,9 @@ function NotificationChannelsSection() {
     await update.mutateAsync(form);
     const result = await testChannel.mutateAsync(channel);
     if (result.success) {
-      toast.success("Test notification sent successfully");
+      toast.success(t("notifications.successTitle"));
     } else {
-      toast.error(result.error ?? "Failed to send test notification");
+      toast.error(result.error ?? t("notifications.errorTitle"));
     }
   }
 
@@ -1926,9 +1930,9 @@ function NotificationChannelsSection() {
           <Bell className="h-5 w-5" />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-semibold tracking-[-0.02em]">Notification Channels</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("notifications.title")}</h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            Forward keyword alerts and rule matches to external services. Enable a channel, enter your credentials, and choose it as an action in Rules &amp; Alerts.
+            {t("notifications.description")}
           </p>
         </div>
       </div>
@@ -1949,19 +1953,17 @@ function NotificationChannelsSection() {
           {form.telegramEnabled && (
             <div className="mt-3 space-y-2">
               <Input
-                placeholder="Bot token (from @BotFather)"
+                placeholder={t("notifications.botTokenPlaceholder")}
                 {...field("telegramBotToken")}
                 className="h-9 font-mono text-xs"
               />
               <Input
-                placeholder="Chat ID (send /start to your bot to get it)"
+                placeholder={t("notifications.chatIdPlaceholder")}
                 {...field("telegramChatId")}
                 className="h-9 font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground">
-                Create a bot via{" "}
-                <span className="font-mono">@BotFather</span>, then send{" "}
-                <span className="font-mono">/start</span> to get your chat ID.
+                {t("notifications.telegramHint")}
               </p>
               <Button
                 type="button"
@@ -1971,7 +1973,7 @@ function NotificationChannelsSection() {
                 disabled={testChannel.isPending || update.isPending || !form.telegramBotToken || !form.telegramChatId}
                 className="h-8 rounded-xl text-xs"
               >
-                Send test message
+                {t("notifications.sendTestMessage")}
               </Button>
             </div>
           )}
@@ -1992,12 +1994,12 @@ function NotificationChannelsSection() {
           {form.gotifyEnabled && (
             <div className="mt-3 space-y-2">
               <Input
-                placeholder="Server URL (e.g. https://gotify.example.com)"
+                placeholder={t("notifications.serverUrlPlaceholder")}
                 {...field("gotifyUrl")}
                 className="h-9 font-mono text-xs"
               />
               <Input
-                placeholder="App token"
+                placeholder={t("notifications.appToken")}
                 {...field("gotifyToken")}
                 className="h-9 font-mono text-xs"
               />
@@ -2009,7 +2011,7 @@ function NotificationChannelsSection() {
                 disabled={testChannel.isPending || update.isPending || !form.gotifyUrl || !form.gotifyToken}
                 className="h-8 rounded-xl text-xs"
               >
-                Send test notification
+                {t("notifications.sendTestNotification")}
               </Button>
             </div>
           )}
@@ -2030,17 +2032,17 @@ function NotificationChannelsSection() {
           {form.ntfyEnabled && (
             <div className="mt-3 space-y-2">
               <Input
-                placeholder="Topic URL (e.g. https://ntfy.sh/my-topic)"
+                placeholder={t("notifications.topicUrlPlaceholder")}
                 {...field("ntfyUrl")}
                 className="h-9 font-mono text-xs"
               />
               <Input
-                placeholder="Token (optional, for private topics)"
+                placeholder={t("notifications.tokenOptionalPlaceholder")}
                 {...field("ntfyToken")}
                 className="h-9 font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground">
-                Use <span className="font-mono">ntfy.sh</span> for free public topics or your own self-hosted ntfy instance.
+                {t("notifications.ntfyHint")}
               </p>
               <Button
                 type="button"
@@ -2050,7 +2052,7 @@ function NotificationChannelsSection() {
                 disabled={testChannel.isPending || update.isPending || !form.ntfyUrl}
                 className="h-8 rounded-xl text-xs"
               >
-                Send test notification
+                {t("notifications.sendTestNotification")}
               </Button>
             </div>
           )}
@@ -2064,7 +2066,7 @@ function NotificationChannelsSection() {
           disabled={update.isPending}
           className="h-9 rounded-2xl px-5 text-sm"
         >
-          {update.isPending ? "Saving…" : "Save channels"}
+          {update.isPending ? t("notifications.saving") : t("notifications.saveChannels")}
         </Button>
       </div>
     </section>

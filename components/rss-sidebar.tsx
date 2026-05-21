@@ -224,8 +224,8 @@ export function RssSidebar({
         toast.info(message);
       }
     } catch {
-      setDiscoveryMessage("Discovery failed. Try pasting a direct RSS/Atom feed URL.");
-      toast.error("Discovery failed — try a direct RSS/Atom URL");
+      setDiscoveryMessage(t("sidebar.errors.discoveryFailedHint"));
+      toast.error(t("sidebar.errors.discoveryFailedToast"));
     } finally {
       setIsDiscovering(false);
     }
@@ -240,10 +240,10 @@ export function RssSidebar({
         categoryId: newFeedCategoryId === "none" ? undefined : newFeedCategoryId,
       });
       if (!result?.success) {
-        toast.error(result?.error || "Could not add feed");
+        toast.error(result?.error || t("sidebar.errors.couldNotAdd"));
         return;
       }
-      toast.success(`Added ${result.feed?.name || title || "feed"}`);
+      toast.success(t("sidebar.feedAdded", { name: result.feed?.name || title || "feed" }));
       if (addFeedTab === "discover") {
         return;
       }
@@ -252,7 +252,7 @@ export function RssSidebar({
       setDiscoveryMessage(null);
       setIsAddFeedOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not add feed");
+      toast.error(err instanceof Error ? err.message : t("sidebar.errors.couldNotAdd"));
     } finally {
       setIsAddingFeed(false);
       setAddingFeedUrl(null);
@@ -261,7 +261,7 @@ export function RssSidebar({
 
   const handleImportStarterPack = async (pack: StarterPack) => {
     if (pack.feeds.length === 0 && !pack.path) {
-      toast.error(`${pack.name} has no feeds to import`);
+      toast.error(t("sidebar.errors.packNoFeeds", { name: pack.name }));
       return;
     }
     setImportingPack(pack.id);
@@ -276,17 +276,19 @@ export function RssSidebar({
       }
       const result = await importOpml.mutateAsync(xml);
       const details = [
-        result.feedsAdded ? `${result.feedsAdded} added` : null,
-        result.feedsUpdated ? `${result.feedsUpdated} updated` : null,
+        result.feedsAdded ? t("sidebar.errors.feedsAdded", { count: result.feedsAdded }) : null,
+        result.feedsUpdated ? t("sidebar.errors.feedsUpdated", { count: result.feedsUpdated }) : null,
       ].filter(Boolean).join(", ");
       if (!result.feedsAdded && !result.feedsUpdated) {
-        toast.info(`${pack.name} did not contain new feeds`);
+        toast.info(t("sidebar.errors.packNoNewFeeds", { name: pack.name }));
+      } else if (details) {
+        toast.success(t("sidebar.errors.packImportedWithDetails", { name: pack.name, details }));
       } else {
-        toast.success(`Imported ${pack.name}${details ? `: ${details}` : ""}`);
+        toast.success(t("sidebar.errors.packImported", { name: pack.name }));
       }
       setIsAddFeedOpen(false);
     } catch (err) {
-      toast.error(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(t("sidebar.errors.importFailedWithError", { error: err instanceof Error ? err.message : String(err) }));
     } finally {
       setImportingPack(null);
     }
@@ -327,11 +329,11 @@ export function RssSidebar({
     .reduce((sum, f) => sum + f.unreadCount, 0);
 
   const navItems = [
-    { id: "all", icon: Home, label: "All Articles", count: totalUnread },
-    ...(starredCount > 0 ? [{ id: "starred", icon: Star, label: "Starred", count: starredCount }] : []),
-    ...(readLaterCount > 0 ? [{ id: "readlater", icon: Bookmark, label: "Read Later", count: readLaterCount }] : []),
+    { id: "all", icon: Home, label: t("sidebar.allArticles"), categoryId: "All", count: totalUnread },
+    ...(starredCount > 0 ? [{ id: "starred", icon: Star, label: t("sidebar.starred"), categoryId: "Starred", count: starredCount }] : []),
+    ...(readLaterCount > 0 ? [{ id: "readlater", icon: Bookmark, label: t("sidebar.readLater"), categoryId: "Read Later", count: readLaterCount }] : []),
     ...(spoilerCount > 0
-      ? [{ id: "spoiler", icon: SpoilerIcon as any, label: "Spoiler", count: spoilerCount }]
+      ? [{ id: "spoiler", icon: SpoilerIcon as any, label: t("sidebar.spoiler"), categoryId: "Spoiler", count: spoilerCount }]
       : []),
   ];
 
@@ -427,14 +429,12 @@ export function RssSidebar({
             className={cn(
               "w-12 h-12 rounded-xl relative transition-all duration-200",
               selectedFeed === null &&
-                selectedCategory === (item.id === "all" ? "All" : item.label) &&
+                selectedCategory === item.categoryId &&
                 "bg-sidebar-accent",
             )}
             onClick={() => {
               onSelectFeed(null);
-              onSelectCategory(
-                item.id === "all" ? "All" : item.label,
-              );
+              onSelectCategory(item.categoryId);
             }}
           >
             <item.icon className="w-5 h-5 text-sidebar-foreground" />
@@ -506,16 +506,12 @@ export function RssSidebar({
                 key={item.id}
                 onClick={() => {
                   onSelectFeed(null);
-                  onSelectCategory(
-                    item.id === "all" ? "All" : item.label,
-                  );
+                  onSelectCategory(item.categoryId);
                 }}
                 className={cn(
                   "w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm transition-all",
                   selectedFeed === null &&
-                    (item.id === "all"
-                      ? selectedCategory === "All"
-                      : selectedCategory === item.label)
+                    selectedCategory === item.categoryId
                     ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
@@ -880,7 +876,7 @@ export function RssSidebar({
                   className="h-9 px-2 shrink-0"
                   disabled={!newFeedUrl || isDiscovering}
                   onClick={handleDiscover}
-                  title="Find feeds at this URL"
+                  title={t("sidebar.findFeedsAtUrl")}
                 >
                   <Compass className={`w-4 h-4 ${isDiscovering ? "animate-spin" : ""}`} />
                 </Button>
@@ -1026,8 +1022,8 @@ export function RssSidebar({
             onClick={() => {
               if (!feedToDelete) return;
               deleteFeedMutation.mutate(feedToDelete.id, {
-                onSuccess: () => toast.success(`Deleted ${feedToDelete.name}`),
-                onError: () => toast.error("Could not delete feed. Try again."),
+                onSuccess: () => toast.success(t("sidebar.errors.deleted")),
+                onError: () => toast.error(t("sidebar.errors.couldNotDelete")),
               });
               setFeedToDelete(null);
             }}
@@ -1168,6 +1164,7 @@ function SortableFeedItem({ feed, renderFeedRow }: any) {
 }
 
 function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
+  const t = useTranslations();
   return (
     <button
       onClick={onSelect}
@@ -1200,7 +1197,7 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
       </div>
       <span className="flex-1 text-start truncate font-medium">{feed.name}</span>
       {feed.lastStatus === "error" && (
-        <span title={feed.lastError || "Last sync failed"}>
+        <span title={feed.lastError || t("sidebar.lastSyncFailed")}>
           <AlertCircle className={cn("h-3.5 w-3.5 shrink-0 text-destructive", isSelected && "text-primary-foreground/70")} />
         </span>
       )}
