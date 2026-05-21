@@ -69,6 +69,13 @@ import {
   getStorageStats,
   getSystemLogs,
 } from "@/app/actions/admin";
+
+type AdminUser = Awaited<ReturnType<typeof getUsers>>[number];
+type GlobalSettings = Awaited<ReturnType<typeof getGlobalSettings>>;
+type AuditLogEntry = Awaited<ReturnType<typeof getAdminAuditLog>>[number];
+type LoginAttempt = Awaited<ReturnType<typeof getLoginAttempts>>[number];
+type StorageStat = Awaited<ReturnType<typeof getStorageStats>>[number];
+type SystemLogEntry = Awaited<ReturnType<typeof getSystemLogs>>[number];
 import { toast } from "sonner";
 import {
   DEFAULT_STARTER_PACKS,
@@ -90,19 +97,19 @@ export function ServerManagementDialog({
 }) {
   const t = useTranslations("serverManagement");
   const format = useFormatter();
-  const [users, setUsers] = useState<any[]>([]);
-  const [settings, setSettings] = useState<any>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [pendingDeleteUser, setPendingDeleteUser] = useState<any | null>(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<AdminUser | null>(null);
   const [activeTab, setActiveTab] = useState("users");
-  const [auditLog, setAuditLog] = useState<any[]>([]);
-  const [loginAttempts, setLoginAttempts] = useState<any[]>([]);
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
+  const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([]);
   const [auditLoaded, setAuditLoaded] = useState(false);
-  const [storageStats, setStorageStats] = useState<any[]>([]);
+  const [storageStats, setStorageStats] = useState<StorageStat[]>([]);
   const [storageLoaded, setStorageLoaded] = useState(false);
-  const [systemLogs, setSystemLogs] = useState<any[]>([]);
+  const [systemLogs, setSystemLogs] = useState<SystemLogEntry[]>([]);
   const [logsLoaded, setLogsLoaded] = useState(false);
   const [logsCategory, setLogsCategory] = useState<string | undefined>(undefined);
 
@@ -154,6 +161,7 @@ export function ServerManagementDialog({
 
   useEffect(() => {
     if (open) loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleUpdateSettings = async (newData: any) => {
@@ -1542,7 +1550,7 @@ function NotificationsAdminPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const handleGenerate = async () => {
     setGenerating(true);
