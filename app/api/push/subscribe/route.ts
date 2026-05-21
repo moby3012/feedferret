@@ -5,6 +5,9 @@ import { db } from "@/lib/db";
 import { hasPushConfig } from "@/lib/push";
 import { NextResponse } from "next/server";
 
+const VALID_PLATFORMS = ["web", "android", "ios"] as const;
+const VALID_FREQUENCIES = ["instant", "hourly", "daily"] as const;
+
 type IncomingSubscription = {
   endpoint?: string;
   keys?: {
@@ -32,7 +35,7 @@ export async function POST(request: Request) {
       p256dh: subscription.keys.p256dh,
       auth: subscription.keys.auth,
       userAgent: request.headers.get("user-agent"),
-      platform: typeof body.platform === "string" ? body.platform : null,
+      platform: VALID_PLATFORMS.includes(body.platform) ? body.platform : null,
       disabledAt: null,
     },
     create: {
@@ -41,7 +44,7 @@ export async function POST(request: Request) {
       p256dh: subscription.keys.p256dh,
       auth: subscription.keys.auth,
       userAgent: request.headers.get("user-agent"),
-      platform: typeof body.platform === "string" ? body.platform : null,
+      platform: VALID_PLATFORMS.includes(body.platform) ? body.platform : null,
     },
   });
 
@@ -49,7 +52,7 @@ export async function POST(request: Request) {
     where: { id: session.user.id },
     data: {
       pushEnabled: true,
-      pushFrequency: typeof body.frequency === "string" ? body.frequency : undefined,
+      pushFrequency: VALID_FREQUENCIES.includes(body.frequency) ? body.frequency : undefined,
     },
   });
 

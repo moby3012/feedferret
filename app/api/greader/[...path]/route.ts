@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { syncFeed } from "@/lib/rss-sync";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
+import { checkRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import {
   authenticateGReaderRequest,
   buildCursorWhere,
@@ -272,6 +273,8 @@ async function handleMarkAllAsRead(userId: string, form: FormData) {
 export async function GET(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
   try {
     const user = await requireUser(request);
+    const rl = checkRateLimit(getClientIdentifier(request, user.id), RATE_LIMITS.greader);
+    if (!rl.success) return rateLimitResponse(rl);
     const pathParts = (await params).path;
     const path = pathParts.join("/");
     const url = new URL(request.url);
@@ -419,6 +422,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
 export async function POST(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
   try {
     const user = await requireUser(request);
+    const rl = checkRateLimit(getClientIdentifier(request, user.id), RATE_LIMITS.greader);
+    if (!rl.success) return rateLimitResponse(rl);
     const path = (await params).path.join("/");
     const form = await request.formData();
 

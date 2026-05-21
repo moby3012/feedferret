@@ -133,6 +133,20 @@ export const RATE_LIMITS = {
     windowSecs: 60,
     prefix: "internal-api",
   } satisfies RateLimitConfig,
+
+  // Fever compatible API — 120 req/min per user
+  fever: {
+    limit: 120,
+    windowSecs: 60,
+    prefix: "fever",
+  } satisfies RateLimitConfig,
+
+  // Google Reader compatible API — 120 req/min per user
+  greader: {
+    limit: 120,
+    windowSecs: 60,
+    prefix: "greader",
+  } satisfies RateLimitConfig,
 } as const;
 
 /**

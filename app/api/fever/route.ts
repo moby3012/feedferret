@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { checkRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 
 type FeverUser = { id: string; email: string | null };
 
@@ -257,6 +258,9 @@ async function handle(request: Request) {
     if (!user) {
       return NextResponse.json(baseResponse(0));
     }
+
+    const rl = checkRateLimit(getClientIdentifier(request, user.id), RATE_LIMITS.fever);
+    if (!rl.success) return rateLimitResponse(rl);
 
     const result: Record<string, unknown> = { ...baseResponse(1) };
 

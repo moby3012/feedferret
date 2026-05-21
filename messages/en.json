@@ -531,7 +531,10 @@
     "revealSpoilers": "Reveal spoilers",
     "clearSpoilerFlags": "Clear all spoiler flags",
     "clearingSpoilerFlags": "Clearing…",
-    "backToAllArticles": "Back to all articles"
+    "backToAllArticles": "Back to all articles",
+    "feedFallback": "Feed",
+    "labelFallback": "Label",
+    "savedSearchFallback": "Saved Search"
   },
   "articleList": {
     "noArticles": "No articles",
@@ -1121,6 +1124,35 @@
       "levelInfo": "info",
       "levelWarn": "warn",
       "levelError": "error"
+    },
+    "toast": {
+      "failedToLoadServerData": "Failed to load server data",
+      "failedToLoadAuditData": "Failed to load audit data",
+      "failedToLoadStorageStats": "Failed to load storage stats",
+      "failedToLoadSystemLogs": "Failed to load system logs",
+      "settingsSaved": "Settings saved",
+      "failedToUpdateSettings": "Failed to update settings",
+      "testEmailSent": "Test email sent to {email}",
+      "mailTestFailed": "Mail test failed: {error}",
+      "userRoleUpdated": "Updated {email} to {role}",
+      "failedToUpdateUserRole": "Failed to update user role",
+      "userSuspended": "{email} suspended",
+      "userReactivated": "{email} reactivated",
+      "failedToUpdateUserStatus": "Failed to update user status",
+      "userDeleted": "User deleted",
+      "opmlImported": "Imported {count, plural, one {# feed} other {# feeds}} into starter pack",
+      "opmlImportFailed": "Could not import OPML",
+      "invalidImageFile": "Please upload an image file",
+      "logoTooLarge": "Logo must be smaller than 180 KB",
+      "discoveryImported": "Imported {count, plural, one {# new feed} other {# new feeds}}",
+      "discoveryImportFailed": "Import failed",
+      "catalogCleared": "Catalog cleared",
+      "failedToClearCatalog": "Failed to clear catalog",
+      "failedToLoadPushDiagnostics": "Failed to load push diagnostics",
+      "vapidKeysGenerated": "Generated new VAPID key pair",
+      "failedToGenerateKeys": "Could not generate keys",
+      "copied": "Copied {label}",
+      "couldNotCopy": "Could not copy {label}"
     }
   },
   "accessibility": {
@@ -1170,7 +1202,11 @@
     },
     "lastUpdated": "Last updated: May 2026",
     "backToApp": "Back to app",
-    "skipToContent": "Skip to content"
+    "skipToContent": "Skip to content",
+    "articleList": "Article list",
+    "articleReader": "Article reader",
+    "clearSearch": "Clear search",
+    "closeSearch": "Close search"
   },
   "sharedSearch": {
     "title": "Shared FeedFerret search",

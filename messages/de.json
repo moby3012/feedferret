@@ -531,7 +531,10 @@
     "revealSpoilers": "Spoiler anzeigen",
     "clearSpoilerFlags": "Alle Spoiler-Markierungen entfernen",
     "clearingSpoilerFlags": "Wird entfernt…",
-    "backToAllArticles": "Zurück zu allen Artikeln"
+    "backToAllArticles": "Zurück zu allen Artikeln",
+    "feedFallback": "Feed",
+    "labelFallback": "Label",
+    "savedSearchFallback": "Gespeicherte Suche"
   },
   "articleList": {
     "noArticles": "Keine Artikel",
@@ -1121,6 +1124,35 @@
       "levelInfo": "Info",
       "levelWarn": "Warnung",
       "levelError": "Fehler"
+    },
+    "toast": {
+      "failedToLoadServerData": "Serverdaten konnten nicht geladen werden",
+      "failedToLoadAuditData": "Audit-Daten konnten nicht geladen werden",
+      "failedToLoadStorageStats": "Speicherstatistiken konnten nicht geladen werden",
+      "failedToLoadSystemLogs": "Systemlogs konnten nicht geladen werden",
+      "settingsSaved": "Einstellungen gespeichert",
+      "failedToUpdateSettings": "Einstellungen konnten nicht aktualisiert werden",
+      "testEmailSent": "Test-E-Mail gesendet an {email}",
+      "mailTestFailed": "E-Mail-Test fehlgeschlagen: {error}",
+      "userRoleUpdated": "{email} auf {role} aktualisiert",
+      "failedToUpdateUserRole": "Benutzerrolle konnte nicht aktualisiert werden",
+      "userSuspended": "{email} gesperrt",
+      "userReactivated": "{email} reaktiviert",
+      "failedToUpdateUserStatus": "Benutzerstatus konnte nicht aktualisiert werden",
+      "userDeleted": "Benutzer gelöscht",
+      "opmlImported": "{count, plural, one {# Feed} other {# Feeds}} in Starter-Paket importiert",
+      "opmlImportFailed": "OPML konnte nicht importiert werden",
+      "invalidImageFile": "Bitte eine Bilddatei hochladen",
+      "logoTooLarge": "Logo muss kleiner als 180 KB sein",
+      "discoveryImported": "{count, plural, one {# neuen Feed} other {# neue Feeds}} importiert",
+      "discoveryImportFailed": "Import fehlgeschlagen",
+      "catalogCleared": "Katalog geleert",
+      "failedToClearCatalog": "Katalog konnte nicht geleert werden",
+      "failedToLoadPushDiagnostics": "Push-Diagnose konnte nicht geladen werden",
+      "vapidKeysGenerated": "Neues VAPID-Schlüsselpaar generiert",
+      "failedToGenerateKeys": "Schlüssel konnten nicht generiert werden",
+      "copied": "{label} kopiert",
+      "couldNotCopy": "{label} konnte nicht kopiert werden"
     }
   },
   "accessibility": {
@@ -1170,7 +1202,11 @@
     },
     "lastUpdated": "Zuletzt aktualisiert: Mai 2026",
     "backToApp": "Zurück zur App",
-    "skipToContent": "Zum Inhalt springen"
+    "skipToContent": "Zum Inhalt springen",
+    "articleList": "Artikelliste",
+    "articleReader": "Artikelleser",
+    "clearSearch": "Suche leeren",
+    "closeSearch": "Suche schließen"
   },
   "sharedSearch": {
     "title": "Geteilte FeedFerret-Suche",
