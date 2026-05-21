@@ -3,6 +3,7 @@ import type { GlobalSettings } from "@prisma/client";
 import { db } from "@/lib/db";
 import { decryptIfValue } from "@/lib/crypto";
 import { createEmailTranslator } from "@/lib/email-i18n";
+import { writeSystemLog } from "@/lib/system-log";
 
 export type MailProviderId = "smtp" | "resend" | "postmark" | "mailgun" | "sendgrid";
 
@@ -318,50 +319,46 @@ export async function sendSystemEmail({
   const provider = resolveProvider(settings);
   const from = resolveFromAddress(provider, settings);
 
-  if (provider === "smtp") {
-    await sendWithSmtp({ settings: settings as GlobalSettings, to, subject, html, text });
-    return;
+  try {
+    if (provider === "smtp") {
+      await sendWithSmtp({ settings: settings as GlobalSettings, to, subject, html, text });
+    } else if (provider === "resend") {
+      const apiKey = resolveKey(settings?.resendApiKey, process.env.RESEND_API_KEY)!;
+      await sendWithResend({ to, subject, html, text, from, apiKey });
+    } else if (provider === "postmark") {
+      const token = resolveKey(settings?.postmarkServerToken, process.env.POSTMARK_SERVER_TOKEN)!;
+      await sendWithPostmark({
+        to,
+        subject,
+        html,
+        text,
+        from,
+        token,
+        messageStream: settings?.postmarkMessageStream || undefined,
+      });
+    } else if (provider === "mailgun") {
+      const apiKey = resolveKey(settings?.mailgunApiKey, process.env.MAILGUN_API_KEY)!;
+      const domain = settings?.mailgunDomain || process.env.MAILGUN_DOMAIN!;
+      await sendWithMailgun({
+        to,
+        subject,
+        html,
+        text,
+        from,
+        apiKey,
+        domain,
+        baseUrl: settings?.mailgunBaseUrl || undefined,
+      });
+    } else {
+      // sendgrid
+      const apiKey = resolveKey(settings?.sendgridApiKey, process.env.SENDGRID_API_KEY)!;
+      await sendWithSendgrid({ to, subject, html, text, from, apiKey });
+    }
+    await writeSystemLog("info", "mail", "Email sent", { to, subject, provider });
+  } catch (error: any) {
+    await writeSystemLog("error", "mail", error?.message ?? String(error), { to, subject, provider });
+    throw error;
   }
-
-  if (provider === "resend") {
-    const apiKey = resolveKey(settings?.resendApiKey, process.env.RESEND_API_KEY)!;
-    await sendWithResend({ to, subject, html, text, from, apiKey });
-    return;
-  }
-
-  if (provider === "postmark") {
-    const token = resolveKey(settings?.postmarkServerToken, process.env.POSTMARK_SERVER_TOKEN)!;
-    await sendWithPostmark({
-      to,
-      subject,
-      html,
-      text,
-      from,
-      token,
-      messageStream: settings?.postmarkMessageStream || undefined,
-    });
-    return;
-  }
-
-  if (provider === "mailgun") {
-    const apiKey = resolveKey(settings?.mailgunApiKey, process.env.MAILGUN_API_KEY)!;
-    const domain = settings?.mailgunDomain || process.env.MAILGUN_DOMAIN!;
-    await sendWithMailgun({
-      to,
-      subject,
-      html,
-      text,
-      from,
-      apiKey,
-      domain,
-      baseUrl: settings?.mailgunBaseUrl || undefined,
-    });
-    return;
-  }
-
-  // sendgrid
-  const apiKey = resolveKey(settings?.sendgridApiKey, process.env.SENDGRID_API_KEY)!;
-  await sendWithSendgrid({ to, subject, html, text, from, apiKey });
 }
 
 export async function sendSignInEmail({ email, url, locale }: { email: string; url: string; locale?: string }) {

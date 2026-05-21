@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { FeedSource } from "@/lib/rss-data";
@@ -142,6 +143,7 @@ export function RssSidebar({
   hideEmptyFeeds = false,
   hideEmptyLabels = false,
 }: RssSidebarProps) {
+  const t = useTranslations();
   const router = useRouter();
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
@@ -222,8 +224,8 @@ export function RssSidebar({
         toast.info(message);
       }
     } catch {
-      setDiscoveryMessage("Discovery failed. Try pasting a direct RSS/Atom feed URL.");
-      toast.error("Discovery failed — try a direct RSS/Atom URL");
+      setDiscoveryMessage(t("sidebar.errors.discoveryFailedHint"));
+      toast.error(t("sidebar.errors.discoveryFailedToast"));
     } finally {
       setIsDiscovering(false);
     }
@@ -238,10 +240,10 @@ export function RssSidebar({
         categoryId: newFeedCategoryId === "none" ? undefined : newFeedCategoryId,
       });
       if (!result?.success) {
-        toast.error(result?.error || "Could not add feed");
+        toast.error(result?.error || t("sidebar.errors.couldNotAdd"));
         return;
       }
-      toast.success(`Added ${result.feed?.name || title || "feed"}`);
+      toast.success(t("sidebar.feedAdded", { name: result.feed?.name || title || "feed" }));
       if (addFeedTab === "discover") {
         return;
       }
@@ -250,7 +252,7 @@ export function RssSidebar({
       setDiscoveryMessage(null);
       setIsAddFeedOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not add feed");
+      toast.error(err instanceof Error ? err.message : t("sidebar.errors.couldNotAdd"));
     } finally {
       setIsAddingFeed(false);
       setAddingFeedUrl(null);
@@ -259,7 +261,7 @@ export function RssSidebar({
 
   const handleImportStarterPack = async (pack: StarterPack) => {
     if (pack.feeds.length === 0 && !pack.path) {
-      toast.error(`${pack.name} has no feeds to import`);
+      toast.error(t("sidebar.errors.packNoFeeds", { name: pack.name }));
       return;
     }
     setImportingPack(pack.id);
@@ -274,17 +276,19 @@ export function RssSidebar({
       }
       const result = await importOpml.mutateAsync(xml);
       const details = [
-        result.feedsAdded ? `${result.feedsAdded} added` : null,
-        result.feedsUpdated ? `${result.feedsUpdated} updated` : null,
+        result.feedsAdded ? t("sidebar.errors.feedsAdded", { count: result.feedsAdded }) : null,
+        result.feedsUpdated ? t("sidebar.errors.feedsUpdated", { count: result.feedsUpdated }) : null,
       ].filter(Boolean).join(", ");
       if (!result.feedsAdded && !result.feedsUpdated) {
-        toast.info(`${pack.name} did not contain new feeds`);
+        toast.info(t("sidebar.errors.packNoNewFeeds", { name: pack.name }));
+      } else if (details) {
+        toast.success(t("sidebar.errors.packImportedWithDetails", { name: pack.name, details }));
       } else {
-        toast.success(`Imported ${pack.name}${details ? `: ${details}` : ""}`);
+        toast.success(t("sidebar.errors.packImported", { name: pack.name }));
       }
       setIsAddFeedOpen(false);
     } catch (err) {
-      toast.error(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(t("sidebar.errors.importFailedWithError", { error: err instanceof Error ? err.message : String(err) }));
     } finally {
       setImportingPack(null);
     }
@@ -325,11 +329,11 @@ export function RssSidebar({
     .reduce((sum, f) => sum + f.unreadCount, 0);
 
   const navItems = [
-    { id: "all", icon: Home, label: "All Articles", count: totalUnread },
-    ...(starredCount > 0 ? [{ id: "starred", icon: Star, label: "Starred", count: starredCount }] : []),
-    ...(readLaterCount > 0 ? [{ id: "readlater", icon: Bookmark, label: "Read Later", count: readLaterCount }] : []),
+    { id: "all", icon: Home, label: t("sidebar.allArticles"), categoryId: "All", count: totalUnread },
+    ...(starredCount > 0 ? [{ id: "starred", icon: Star, label: t("sidebar.starred"), categoryId: "Starred", count: starredCount }] : []),
+    ...(readLaterCount > 0 ? [{ id: "readlater", icon: Bookmark, label: t("sidebar.readLater"), categoryId: "Read Later", count: readLaterCount }] : []),
     ...(spoilerCount > 0
-      ? [{ id: "spoiler", icon: SpoilerIcon as any, label: "Spoiler", count: spoilerCount }]
+      ? [{ id: "spoiler", icon: SpoilerIcon as any, label: t("sidebar.spoiler"), categoryId: "Spoiler", count: spoilerCount }]
       : []),
   ];
 
@@ -425,14 +429,12 @@ export function RssSidebar({
             className={cn(
               "w-12 h-12 rounded-xl relative transition-all duration-200",
               selectedFeed === null &&
-                selectedCategory === (item.id === "all" ? "All" : item.label) &&
+                selectedCategory === item.categoryId &&
                 "bg-sidebar-accent",
             )}
             onClick={() => {
               onSelectFeed(null);
-              onSelectCategory(
-                item.id === "all" ? "All" : item.label,
-              );
+              onSelectCategory(item.categoryId);
             }}
           >
             <item.icon className="w-5 h-5 text-sidebar-foreground" />
@@ -488,7 +490,7 @@ export function RssSidebar({
             size="icon"
             className="w-8 h-8 rounded-xl shrink-0"
             onClick={() => window.dispatchEvent(new Event('focus-search'))}
-            aria-label="Search articles"
+            aria-label={t("sidebar.searchArticles")}
           >
             <Search className="w-4 h-4" />
           </Button>
@@ -504,16 +506,12 @@ export function RssSidebar({
                 key={item.id}
                 onClick={() => {
                   onSelectFeed(null);
-                  onSelectCategory(
-                    item.id === "all" ? "All" : item.label,
-                  );
+                  onSelectCategory(item.categoryId);
                 }}
                 className={cn(
                   "w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm transition-all",
                   selectedFeed === null &&
-                    (item.id === "all"
-                      ? selectedCategory === "All"
-                      : selectedCategory === item.label)
+                    selectedCategory === item.categoryId
                     ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
@@ -535,7 +533,7 @@ export function RssSidebar({
                 <div className="space-y-1">
                   <div className="px-4 pb-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      Saved Searches
+                      {t("sidebar.savedSearches")}
                     </span>
                   </div>
                   {savedSearches.map((item: any) => (
@@ -566,7 +564,7 @@ export function RssSidebar({
                 <div className="space-y-1">
                   <div className="px-4 pb-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      Labels
+                      {t("sidebar.labels")}
                     </span>
                   </div>
                   {visibleLabels.map((item: any) => (
@@ -604,14 +602,14 @@ export function RssSidebar({
           <div className="space-y-4">
             <div className="flex items-center justify-between px-4">
               <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                Feeds
+                {t("sidebar.feeds")}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
                 className="w-8 h-8 rounded-xl"
                 onClick={() => setIsAddFeedOpen(true)}
-                aria-label="Add feed"
+                aria-label={t("sidebar.addFeed")}
               >
                 <Plus className="w-5 h-5" />
               </Button>
@@ -701,7 +699,7 @@ export function RssSidebar({
                   </Button>
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="top">Manage Feeds</TooltipContent>
+              <TooltipContent side="top">{t("sidebar.manageFeeds")}</TooltipContent>
             </Tooltip>
             {session?.user?.role === "ADMIN" && (
               <Tooltip>
@@ -716,7 +714,7 @@ export function RssSidebar({
                     </Button>
                   </Link>
                 </TooltipTrigger>
-                <TooltipContent side="top">Server Settings</TooltipContent>
+                <TooltipContent side="top">{t("sidebar.serverSettings")}</TooltipContent>
               </Tooltip>
             )}
             <Tooltip>
@@ -741,13 +739,13 @@ export function RssSidebar({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" side="top" className="w-80 rounded-2xl border-border/70 p-2">
                     <div className="flex items-center justify-between px-2 py-1.5">
-                      <p className="text-sm font-semibold">Notifications</p>
+                      <p className="text-sm font-semibold">{t("sidebar.notifications")}</p>
                       {unreadNotifications > 0 && (
                         <button
                           className="hidden sm:inline text-xs text-primary hover:underline"
                           onClick={() => markAllNotificationsRead.mutate()}
                         >
-                          Mark all read
+                          {t("sidebar.markAllRead")}
                         </button>
                       )}
                     </div>
@@ -757,8 +755,8 @@ export function RssSidebar({
                         <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
                           <Bell className="h-4 w-4 text-muted-foreground" />
                         </div>
-                        <p className="text-sm font-medium text-foreground">No notifications</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">Set up keyword alerts to get notified when topics you care about appear.</p>
+                        <p className="text-sm font-medium text-foreground">{t("sidebar.noNotifications")}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{t("sidebar.noNotificationsDescription")}</p>
                       </div>
                     ) : (
                       (notifications as any[]).slice(0, 8).map((notification: any) => {
@@ -807,14 +805,14 @@ export function RssSidebar({
                           className="sm:hidden mt-1 w-full rounded-xl bg-primary/10 px-3 py-3 text-sm font-semibold text-primary active:scale-[0.98] transition-transform"
                           onClick={() => markAllNotificationsRead.mutate()}
                         >
-                          Mark all as read
+                          {t("sidebar.markAllAsRead")}
                         </button>
                       </>
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </TooltipTrigger>
-              <TooltipContent side="top">Notifications</TooltipContent>
+              <TooltipContent side="top">{t("sidebar.notifications")}</TooltipContent>
             </Tooltip>
             {session?.user && (
               <Tooltip>
@@ -828,7 +826,7 @@ export function RssSidebar({
                     <LogOut className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="top">Sign out</TooltipContent>
+                <TooltipContent side="top">{t("sidebar.signOut")}</TooltipContent>
               </Tooltip>
             )}
           </div>
@@ -848,19 +846,19 @@ export function RssSidebar({
           style={{ width: "calc(100vw - 1rem)", maxWidth: "28rem" }}
         >
           <DialogHeader>
-            <DialogTitle>Add Feed</DialogTitle>
+            <DialogTitle>{t("sidebar.addFeedTitle")}</DialogTitle>
           </DialogHeader>
           <Tabs value={addFeedTab} onValueChange={(v) => setAddFeedTab(v as "url" | "discover")} className="w-full min-w-0">
             <TabsList className="grid w-full grid-cols-2 h-9 rounded-xl">
-              <TabsTrigger value="url" className="text-xs rounded-lg">By URL</TabsTrigger>
-              <TabsTrigger value="discover" className="text-xs rounded-lg">Discover</TabsTrigger>
+              <TabsTrigger value="url" className="text-xs rounded-lg">{t("sidebar.byUrl")}</TabsTrigger>
+              <TabsTrigger value="discover" className="text-xs rounded-lg">{t("sidebar.discover")}</TabsTrigger>
             </TabsList>
 
             {/* URL Tab */}
             <TabsContent value="url" className="mt-3 space-y-3">
               <div className="flex gap-1.5">
                 <Input
-                  placeholder="Feed or site URL..."
+                  placeholder={t("sidebar.feedOrSiteUrl")}
                   value={newFeedUrl}
                   onChange={(e) => {
                     setNewFeedUrl(e.target.value);
@@ -878,7 +876,7 @@ export function RssSidebar({
                   className="h-9 px-2 shrink-0"
                   disabled={!newFeedUrl || isDiscovering}
                   onClick={handleDiscover}
-                  title="Find feeds at this URL"
+                  title={t("sidebar.findFeedsAtUrl")}
                 >
                   <Compass className={`w-4 h-4 ${isDiscovering ? "animate-spin" : ""}`} />
                 </Button>
@@ -886,7 +884,7 @@ export function RssSidebar({
 
               {discoveredFeeds.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground font-medium px-0.5">Found feeds</p>
+                  <p className="text-xs text-muted-foreground font-medium px-0.5">{t("sidebar.foundFeeds")}</p>
                   {discoveredFeeds.map((f) => (
                     <div key={f.url} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
                       <Rss className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -897,7 +895,7 @@ export function RssSidebar({
                         onClick={() => handleAddFeed(f.url, f.title)}
                         disabled={isAddingFeed}
                       >
-                        Add
+                        {t("common.add")}
                       </Button>
                     </div>
                   ))}
@@ -915,10 +913,10 @@ export function RssSidebar({
                 onValueChange={setNewFeedCategoryId}
               >
                 <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder="Category" />
+                  <SelectValue placeholder={t("sidebar.categoryPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No Category</SelectItem>
+                  <SelectItem value="none">{t("sidebar.noCategory")}</SelectItem>
                   {allCategories.map((cat: any) => (
                     <SelectItem key={cat.id} value={cat.id}>
                       {cat.name}
@@ -934,7 +932,7 @@ export function RssSidebar({
                   disabled={!newFeedUrl || isAddingFeed}
                   onClick={() => handleAddFeed(newFeedUrl)}
                 >
-                  Add direct URL
+                  {t("sidebar.addDirectUrl")}
                 </Button>
                 <Button
                   size="sm"
@@ -946,13 +944,13 @@ export function RssSidebar({
                     setDiscoveryMessage(null);
                   }}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
               </div>
 
               {/* Starter packs */}
               <div className="pt-1 border-t border-border/40">
-                <p className="text-xs text-muted-foreground font-medium mb-1.5">Starter packs</p>
+                <p className="text-xs text-muted-foreground font-medium mb-1.5">{t("sidebar.starterPacks")}</p>
                 <div className="space-y-1">
                   {starterPacks.map((pack) => (
                     <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
@@ -968,7 +966,7 @@ export function RssSidebar({
                         onClick={() => handleImportStarterPack(pack)}
                       >
                         <Download className={cn("w-3 h-3 me-1", importingPack === pack.id && "animate-bounce")} />
-                        {importingPack === pack.id ? "Importing" : "Import"}
+                        {importingPack === pack.id ? t("sidebar.importing") : t("sidebar.import")}
                       </Button>
                     </div>
                   ))}
@@ -984,10 +982,10 @@ export function RssSidebar({
                   onValueChange={setNewFeedCategoryId}
                 >
                   <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Add to category..." />
+                    <SelectValue placeholder={t("sidebar.addToCategory")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No Category</SelectItem>
+                    <SelectItem value="none">{t("sidebar.noCategory")}</SelectItem>
                     {allCategories.map((cat: any) => (
                       <SelectItem key={cat.id} value={cat.id}>
                         {cat.name}
@@ -1012,25 +1010,25 @@ export function RssSidebar({
     <AlertDialog open={!!feedToDelete} onOpenChange={(open) => !open && setFeedToDelete(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete &ldquo;{feedToDelete?.name}&rdquo;?</AlertDialogTitle>
+          <AlertDialogTitle>{t("sidebar.deleteConfirmTitle")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This will permanently delete the feed and all its articles. This cannot be undone.
+            {t("sidebar.deleteConfirmDescription")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={() => {
               if (!feedToDelete) return;
               deleteFeedMutation.mutate(feedToDelete.id, {
-                onSuccess: () => toast.success(`Deleted ${feedToDelete.name}`),
-                onError: () => toast.error("Could not delete feed. Try again."),
+                onSuccess: () => toast.success(t("sidebar.errors.deleted")),
+                onError: () => toast.error(t("sidebar.errors.couldNotDelete")),
               });
               setFeedToDelete(null);
             }}
           >
-            Delete feed
+            {t("sidebar.deleteFeed")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1049,6 +1047,7 @@ function SortableCategory({
   renderFeedRow,
   onSelectCategory,
 }: any) {
+  const t = useTranslations();
   const {
     attributes,
     listeners,
@@ -1117,7 +1116,7 @@ function SortableCategory({
           </SortableContext>
           {feeds.length === 0 && (
             <p className="text-[10px] text-muted-foreground/50 px-3 py-1 italic">
-              No feeds
+              {t("sidebar.noFeeds")}
             </p>
           )}
         </div>
@@ -1165,6 +1164,7 @@ function SortableFeedItem({ feed, renderFeedRow }: any) {
 }
 
 function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
+  const t = useTranslations();
   return (
     <button
       onClick={onSelect}
@@ -1197,7 +1197,7 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
       </div>
       <span className="flex-1 text-start truncate font-medium">{feed.name}</span>
       {feed.lastStatus === "error" && (
-        <span title={feed.lastError || "Last sync failed"}>
+        <span title={feed.lastError || t("sidebar.lastSyncFailed")}>
           <AlertCircle className={cn("h-3.5 w-3.5 shrink-0 text-destructive", isSelected && "text-primary-foreground/70")} />
         </span>
       )}
@@ -1232,6 +1232,7 @@ function FeedQuickActions({
   onShowHealth: () => void;
   onDelete: () => void;
 }) {
+  const t = useTranslations();
   const websiteUrl = (() => {
     try {
       return new URL(feed.url).origin;
@@ -1260,14 +1261,14 @@ function FeedQuickActions({
           onClick={onRefresh}
         >
           <RefreshCw className="w-4 h-4 me-3" />
-          Refresh feed
+          {t("sidebar.refreshFeed")}
         </DropdownMenuItem>
         <DropdownMenuItem
           className="rounded-xl py-2.5 px-3 text-sm"
           onClick={onMarkRead}
         >
           <CheckCheck className="w-4 h-4 me-3" />
-          Mark all as read
+          {t("sidebar.markAllAsRead")}
         </DropdownMenuItem>
         {websiteUrl && (
           <DropdownMenuItem
@@ -1277,7 +1278,7 @@ function FeedQuickActions({
             }
           >
             <ExternalLink className="w-4 h-4 me-3" />
-            Open website
+            {t("sidebar.openWebsite")}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator className="my-1.5 bg-border/50" />
@@ -1286,14 +1287,14 @@ function FeedQuickActions({
           onClick={onEdit}
         >
           <Pencil className="w-4 h-4 me-3" />
-          Edit feed
+          {t("sidebar.editFeed")}
         </DropdownMenuItem>
         <DropdownMenuItem
           className="rounded-xl py-2.5 px-3 text-sm"
           onClick={onShowHealth}
         >
           <Activity className="w-4 h-4 me-3" />
-          Feed health
+          {t("sidebar.feedHealth")}
         </DropdownMenuItem>
         <DropdownMenuSeparator className="my-1.5 bg-border/50" />
         <DropdownMenuItem
@@ -1301,7 +1302,7 @@ function FeedQuickActions({
           onClick={onDelete}
         >
           <Trash2 className="w-4 h-4 me-3" />
-          Delete feed
+          {t("sidebar.deleteFeed")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1351,12 +1352,13 @@ function FeedRow({
 }
 
 function UncategorizedGroup({ feeds, renderFeedRow }: any) {
+  const t = useTranslations();
   if (feeds.length === 0) return null;
   return (
     <div className="py-2">
       <div className="px-4 py-2">
         <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-          Uncategorized
+          {t("sidebar.uncategorized")}
         </h3>
       </div>
       <div className="ps-4 pe-2 py-1 space-y-0.5">

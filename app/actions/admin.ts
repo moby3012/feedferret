@@ -365,6 +365,15 @@ export async function getLoginAttempts(limit = 100) {
   });
 }
 
+export async function getSystemLogs(limit = 200, category?: string) {
+  await checkAdmin();
+  return db.systemLog.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    where: category ? { category } : undefined,
+  });
+}
+
 export async function getStorageStats() {
   await checkAdmin();
 

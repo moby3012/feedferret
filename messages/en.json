@@ -31,12 +31,15 @@
     "rtlLayoutDescription": "Mirror the entire interface for Arabic, Hebrew, Persian, and other RTL scripts.",
     "hideEmptyFeeds": "Hide empty feeds",
     "hideEmptyFeedsDescription": "Hide feeds and categories with no unread articles from the sidebar.",
+    "hideEmptyLabels": "Hide empty labels",
+    "hideEmptyLabelsDescription": "Hide labels with no unread articles from the sidebar.",
     "language": "Language",
     "languageDescription": "Interface language for the app.",
     "languagePickerLabel": "Select language",
     "userProfile": "User Profile",
     "signedInAs": "Signed in as",
     "signOut": "Sign out",
+    "unknownUser": "Unknown user",
     "back": "Back",
     "viewOptions": {
       "list": "List",
@@ -93,7 +96,11 @@
     "enabling": "Enabling…",
     "disabling": "Disabling…",
     "starting": "Starting…",
-    "greaderWarning": "Google Reader password login is disabled for accounts with 2FA enabled. For SSO flows like Authelia, MFA should be handled by your identity provider."
+    "greaderWarning": "Google Reader password login is disabled for accounts with 2FA enabled. For SSO flows like Authelia, MFA should be handled by your identity provider.",
+    "addToAuthApp": "1. Add this account in your authenticator app",
+    "manualSetupHint": "Use manual setup if your app does not support opening otpauth links directly.",
+    "copied": "{label} copied",
+    "couldNotCopy": "Could not copy {label}"
   },
   "digest": {
     "title": "Email Digest",
@@ -151,6 +158,15 @@
       "hourly": "Hourly summary",
       "daily": "Daily summary",
       "off": "Off"
+    },
+    "toasts": {
+      "couldNotSaveSettings": "Could not save notification settings",
+      "permissionNotGranted": "Notification permission was not granted",
+      "enabled": "Browser notifications enabled",
+      "couldNotEnable": "Could not enable notifications",
+      "disabled": "Notifications disabled for this device",
+      "testSent": "Test notification sent",
+      "couldNotSendTest": "Could not send test notification"
     }
   },
   "apiTokens": {
@@ -183,6 +199,13 @@
       "d30": "30 days",
       "d90": "90 days",
       "y1": "1 year"
+    },
+    "defaultTokenName": "My token",
+    "toasts": {
+      "created": "Token created — copy it now, it won't be shown again",
+      "failedCreate": "Failed to create token",
+      "copied": "Token copied to clipboard",
+      "revoked": "Token \"{name}\" revoked"
     }
   },
   "ai": {
@@ -253,7 +276,34 @@
     "opmlOnly": "OPML only",
     "twoFactorNote": "A note on two-factor authentication",
     "inClientChoose": "In the client, choose",
-    "serverUrl": "as the server URL."
+    "serverUrl": "as the server URL.",
+    "twoFactorNoteBody": "External clients can't prompt for a TOTP code. If you have 2FA on, generate a dedicated API token under Profile → API tokens and use that in place of your password.",
+    "clients": {
+      "reeder5": {
+        "notes": "Add account → FreshRSS → API URL = your FeedFerret base URL + /api/greader."
+      },
+      "netnewswire": {
+        "notes": "Accounts → Add → FreshRSS, then point the API URL at /api/greader."
+      },
+      "readkit": {
+        "notes": "Use the FreshRSS option; the Fever variant is not yet exposed."
+      },
+      "fluentreader": {
+        "notes": "Add a FreshRSS-style service inside Fluent Reader's service settings."
+      },
+      "feedme": {
+        "notes": "Use the “Google Reader API compatible” provider and your /api/greader URL."
+      },
+      "newsplus": {
+        "notes": "Pick the GReader/FreshRSS plugin and point it at /api/greader."
+      },
+      "feedly": {
+        "notes": "Feedly does not connect to self-hosted servers. Export OPML from Feedly and import it via FeedFerret → Manage feeds → Import/Export."
+      },
+      "inoreader": {
+        "notes": "Inoreader is a hosted reader and does not log into FeedFerret. Move feeds via OPML."
+      }
+    }
   },
   "deleteAccount": {
     "title": "Delete Account",
@@ -275,6 +325,7 @@
     "description": "Show instructions for installing FeedFerret as a PWA on your phone or tablet.",
     "iphoneInstructions": "On iPhone/iPad: tap the Share button, then \"Add to Home Screen\".",
     "androidInstructions": "On Android: tap the browser menu, then \"Add to Home Screen\" or \"Install app\".",
+    "showInstructions": "Show instructions",
     "notNow": "Not now",
     "install": "Install",
     "done": "Done",
@@ -424,6 +475,7 @@
     "byUrl": "By URL",
     "discover": "Discover",
     "feedOrSiteUrl": "Feed or site URL",
+    "findFeedsAtUrl": "Find feeds at this URL",
     "foundFeeds": "Found feeds",
     "starterPacks": "Starter packs",
     "deleteConfirmTitle": "Delete feed?",
@@ -441,17 +493,34 @@
     "markAllRead": "Mark all read",
     "noNotifications": "No notifications",
     "noNotificationsHint": "Keyword alerts and rule matches will appear here.",
+    "noNotificationsDescription": "Set up keyword alerts to get notified when topics you care about appear.",
+    "addFeedTitle": "Add Feed",
+    "addDirectUrl": "Add direct URL",
+    "categoryPlaceholder": "Category",
+    "addToCategory": "Add to category...",
+    "import": "Import",
+    "importing": "Importing",
     "searchArticles": "Search articles",
     "lastSyncFailed": "Last sync failed",
     "hideEmptyLabels": "Hide empty labels",
+    "feedAdded": "Added {name}",
     "errors": {
       "noFeedFound": "No feed found at that URL.",
       "discoveryFailed": "Feed discovery failed.",
+      "discoveryFailedHint": "Discovery failed. Try pasting a direct RSS/Atom feed URL.",
+      "discoveryFailedToast": "Discovery failed — try a direct RSS/Atom URL",
       "couldNotAdd": "Could not add feed.",
       "importFailed": "Import failed.",
+      "importFailedWithError": "Import failed: {error}",
       "noPacks": "No starter packs available.",
       "noNewFeeds": "No new feeds to add.",
       "imported": "{count, plural, one {# feed imported} other {# feeds imported}}",
+      "packNoFeeds": "{name} has no feeds to import",
+      "packNoNewFeeds": "{name} did not contain new feeds",
+      "packImported": "Imported {name}",
+      "packImportedWithDetails": "Imported {name}: {details}",
+      "feedsAdded": "{count} added",
+      "feedsUpdated": "{count} updated",
       "deleted": "Feed deleted.",
       "couldNotDelete": "Could not delete feed."
     }
@@ -873,7 +942,8 @@
       "sync": "Sync",
       "discovery": "Discovery",
       "audit": "Audit",
-      "storage": "Storage"
+      "storage": "Storage",
+      "logs": "Logs"
     },
     "users": {
       "searchPlaceholder": "Search users…",
@@ -1034,6 +1104,15 @@
       "labeledArticles": "Label assignments",
       "noData": "No users found.",
       "loading": "Loading storage data…"
+    },
+    "logs": {
+      "title": "System Logs",
+      "empty": "No log entries yet",
+      "refresh": "Refresh",
+      "all": "All",
+      "levelInfo": "info",
+      "levelWarn": "warn",
+      "levelError": "error"
     }
   },
   "accessibility": {

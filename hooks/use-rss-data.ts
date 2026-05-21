@@ -408,6 +408,7 @@ export function useMarkAllAsRead() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["articles"] })
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["labels"] })
         },
     })
 }

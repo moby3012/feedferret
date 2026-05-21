@@ -450,6 +450,18 @@ model AdminAuditLog {
   @@index([createdAt])
 }
 
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String   // "info" | "warn" | "error"
+  category  String   // "mail" | "digest" | "sync"
+  message   String
+  metadata  String?  // JSON string
+  createdAt DateTime @default(now())
+
+  @@index([category, createdAt])
+  @@index([createdAt])
+}
+
 model DiscoveryCatalogFeed {
   id          String   @id @default(cuid())
   url         String   @unique
