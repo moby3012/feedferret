@@ -1177,7 +1177,7 @@
       "dragDrop": "Drag-and-drop feed reordering provides keyboard sensors but screen-reader announcements during drag operations have not been fully validated.",
       "contrast": "Contrast for some muted-foreground decorative text elements may fall below 4.5:1 at certain accent color configurations.",
       "zoom": "The 200%-zoom layout has not been formally audited on all screen combinations.",
-      "i18n": "The application is currently only available in English; internationalization (i18n) is on the roadmap."
+      "i18n": "The application is available in English and German. Further languages can be contributed via the translation files."
     },
     "ongoingWork": {
       "title": "Ongoing Work",

@@ -660,7 +660,7 @@ function PushNotificationSection() {
         await loadStatus();
       }
     },
-    [loadStatus, status?.settings],
+    [loadStatus, status?.settings, t],
   );
 
   const enable = useCallback(async () => {
@@ -697,7 +697,7 @@ function PushNotificationSection() {
     } finally {
       setBusy(false);
     }
-  }, [loadStatus, status, supported]);
+  }, [loadStatus, status, supported, t]);
 
   const disable = useCallback(async () => {
     setBusy(true);
@@ -715,7 +715,7 @@ function PushNotificationSection() {
     } finally {
       setBusy(false);
     }
-  }, [loadStatus]);
+  }, [loadStatus, t]);
 
   const sendTest = useCallback(async () => {
     setBusy(true);
@@ -728,7 +728,7 @@ function PushNotificationSection() {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [t]);
 
   const permission =
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported";
@@ -870,7 +870,7 @@ function TwoFactorSection() {
     } catch {
       toast.error(t("twoFactor.couldNotCopy", { label: label.toLowerCase() }));
     }
-  }, []);
+  }, [t]);
 
   const handleBegin = async () => {
     try {
@@ -1377,7 +1377,7 @@ function ApiTokenSection() {
     } finally {
       setCreating(false);
     }
-  }, [createName, createScope, createExpiry, loadTokens]);
+  }, [createName, createScope, createExpiry, loadTokens, t]);
 
   const handleRevoke = useCallback(async (id: string, name: string) => {
     const res = await fetch(`/api/user/tokens/${id}`, { method: "DELETE" });
@@ -1386,14 +1386,14 @@ function ApiTokenSection() {
       await loadTokens();
       toast.success(t("apiTokens.toasts.revoked", { name }));
     }
-  }, [loadTokens, newTokenId]);
+  }, [loadTokens, newTokenId, t]);
 
   const handleCopy = useCallback(() => {
     if (newRawToken) {
       navigator.clipboard.writeText(newRawToken);
       toast.success(t("apiTokens.toasts.copied"));
     }
-  }, [newRawToken]);
+  }, [newRawToken, t]);
 
   const scopeLabel = (scope: string) => ({ read: t("apiTokens.scopes.read"), write: t("apiTokens.scopes.readWrite"), admin: t("apiTokens.scopes.admin") } as Record<string, string>)[scope] ?? scope;
   const scopeColor = (scope: string): "secondary" | "default" | "destructive" =>

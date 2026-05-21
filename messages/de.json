@@ -1177,7 +1177,7 @@
       "dragDrop": "Drag-and-Drop-Feed-Neuanordnung bietet Tastatursensoren, aber Screen-Reader-Ankündigungen während Drag-Operationen wurden nicht vollständig validiert.",
       "contrast": "Der Kontrast für einige dekorative Textelemente mit gedämpfter Vordergrundfarbe kann bei bestimmten Akzentfarben-Konfigurationen unter 4,5:1 fallen.",
       "zoom": "Das 200%-Zoom-Layout wurde nicht auf allen Bildschirmkombinationen formal geprüft.",
-      "i18n": "Die Anwendung ist derzeit nur auf Englisch verfügbar; Internationalisierung (i18n) ist auf der Roadmap."
+      "i18n": "Die Anwendung ist auf Englisch und Deutsch verfügbar. Weitere Sprachen können über die Übersetzungsdateien beigesteuert werden."
     },
     "ongoingWork": {
       "title": "Laufende Arbeiten",

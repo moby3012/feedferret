@@ -342,7 +342,7 @@ export default function RSSReaderPage() {
       return savedSearches.find((search: any) => search.id === selectedCategory.slice("Search:".length))?.name || t("savedSearchFallback");
     }
     return selectedCategory;
-  }, [selectedFeed, selectedCategory, feeds, labels, savedSearches]);
+  }, [selectedFeed, selectedCategory, feeds, labels, savedSearches, t]);
 
   const markArticleRead = useCallback((article: any) => {
     if (
@@ -698,7 +698,7 @@ export default function RSSReaderPage() {
 
   const sidebarFeeds = feeds.map((f: any) => ({
     ...f,
-    category: f.category?.name || "Uncategorized",
+    category: f.category?.name || t("uncategorized"),
     categoryHideFromAllFeeds: f.category?.hideFromAllFeeds ?? false,
     unreadCount: f._count?.articles || 0,
     icon: f.icon || "📰",
