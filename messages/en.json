@@ -31,6 +31,8 @@
     "rtlLayoutDescription": "Mirror the entire interface for Arabic, Hebrew, Persian, and other RTL scripts.",
     "hideEmptyFeeds": "Hide empty feeds",
     "hideEmptyFeedsDescription": "Hide feeds and categories with no unread articles from the sidebar.",
+    "hideEmptyLabels": "Hide empty labels",
+    "hideEmptyLabelsDescription": "Hide labels with no unread articles from the sidebar.",
     "language": "Language",
     "languageDescription": "Interface language for the app.",
     "languagePickerLabel": "Select language",
@@ -275,6 +277,7 @@
     "description": "Show instructions for installing FeedFerret as a PWA on your phone or tablet.",
     "iphoneInstructions": "On iPhone/iPad: tap the Share button, then \"Add to Home Screen\".",
     "androidInstructions": "On Android: tap the browser menu, then \"Add to Home Screen\" or \"Install app\".",
+    "showInstructions": "Show instructions",
     "notNow": "Not now",
     "install": "Install",
     "done": "Done",
@@ -441,6 +444,13 @@
     "markAllRead": "Mark all read",
     "noNotifications": "No notifications",
     "noNotificationsHint": "Keyword alerts and rule matches will appear here.",
+    "noNotificationsDescription": "Set up keyword alerts to get notified when topics you care about appear.",
+    "addFeedTitle": "Add Feed",
+    "addDirectUrl": "Add direct URL",
+    "categoryPlaceholder": "Category",
+    "addToCategory": "Add to category...",
+    "import": "Import",
+    "importing": "Importing",
     "searchArticles": "Search articles",
     "lastSyncFailed": "Last sync failed",
     "hideEmptyLabels": "Hide empty labels",
@@ -872,7 +882,8 @@
       "sync": "Sync",
       "discovery": "Discovery",
       "audit": "Audit",
-      "storage": "Storage"
+      "storage": "Storage",
+      "logs": "Logs"
     },
     "users": {
       "searchPlaceholder": "Search users…",
@@ -1033,6 +1044,15 @@
       "labeledArticles": "Label assignments",
       "noData": "No users found.",
       "loading": "Loading storage data…"
+    },
+    "logs": {
+      "title": "System Logs",
+      "empty": "No log entries yet",
+      "refresh": "Refresh",
+      "all": "All",
+      "levelInfo": "info",
+      "levelWarn": "warn",
+      "levelError": "error"
     }
   },
   "accessibility": {

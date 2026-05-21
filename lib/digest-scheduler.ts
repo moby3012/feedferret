@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { sendDigestEmail, getDigestArticles } from "@/lib/digest-email";
 import { randomBytes } from "crypto";
 import { logger } from "./logger";
+import { writeSystemLog } from "@/lib/system-log";
 
 function getBaseUrl(): string {
     if (process.env.AUTH_URL) return process.env.AUTH_URL.replace(/\/$/, "");
@@ -118,8 +119,10 @@ export async function runDigestScheduler(): Promise<void> {
             logger.log(
                 `[digest] sent to ${user.email}: ${articles.length} articles`,
             );
+            await writeSystemLog("info", "digest", "Digest sent", { to: user.email, articleCount: articles.length });
         } catch (err) {
             logger.error(`[digest] failed for ${user.email}:`, err);
+            await writeSystemLog("error", "digest", String(err), { to: user.email });
         }
     }
 }

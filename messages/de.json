@@ -31,6 +31,8 @@
     "rtlLayoutDescription": "Gesamte Benutzeroberfläche für Arabisch, Hebräisch, Persisch und andere RTL-Schriften spiegeln.",
     "hideEmptyFeeds": "Leere Feeds ausblenden",
     "hideEmptyFeedsDescription": "Feeds und Kategorien ohne ungelesene Artikel aus der Seitenleiste ausblenden.",
+    "hideEmptyLabels": "Leere Labels ausblenden",
+    "hideEmptyLabelsDescription": "Labels ohne ungelesene Artikel aus der Seitenleiste ausblenden.",
     "language": "Sprache",
     "languageDescription": "Sprache der Benutzeroberfläche.",
     "languagePickerLabel": "Sprache auswählen",
@@ -275,6 +277,7 @@
     "description": "Anleitung zum Installieren von FeedFerret als PWA auf dem Telefon oder Tablet anzeigen.",
     "iphoneInstructions": "Auf iPhone/iPad: Teilen-Schaltfläche tippen, dann 'Zum Home-Bildschirm'.",
     "androidInstructions": "Auf Android: Browser-Menü tippen, dann 'Zum Startbildschirm' oder 'App installieren'.",
+    "showInstructions": "Anleitung anzeigen",
     "notNow": "Nicht jetzt",
     "install": "Installieren",
     "done": "Fertig",
@@ -441,6 +444,13 @@
     "markAllRead": "Alle gelesen",
     "noNotifications": "Keine Benachrichtigungen",
     "noNotificationsHint": "Keyword-Benachrichtigungen und Regel-Treffer erscheinen hier.",
+    "noNotificationsDescription": "Richte Keyword-Alerts ein, um benachrichtigt zu werden, wenn relevante Themen erscheinen.",
+    "addFeedTitle": "Feed hinzufügen",
+    "addDirectUrl": "URL direkt hinzufügen",
+    "categoryPlaceholder": "Kategorie",
+    "addToCategory": "Zu Kategorie hinzufügen...",
+    "import": "Importieren",
+    "importing": "Importiert",
     "searchArticles": "Artikel suchen",
     "lastSyncFailed": "Letzte Synchronisierung fehlgeschlagen",
     "hideEmptyLabels": "Leere Labels ausblenden",
@@ -872,7 +882,8 @@
       "sync": "Synchronisierung",
       "discovery": "Entdecken",
       "audit": "Audit",
-      "storage": "Speicher"
+      "storage": "Speicher",
+      "logs": "Protokoll"
     },
     "users": {
       "searchPlaceholder": "Benutzer suchen…",
@@ -1033,6 +1044,15 @@
       "labeledArticles": "Label-Zuweisungen",
       "noData": "Keine Nutzer gefunden.",
       "loading": "Lade Speicherdaten…"
+    },
+    "logs": {
+      "title": "Systemprotokoll",
+      "empty": "Noch keine Einträge",
+      "refresh": "Aktualisieren",
+      "all": "Alle",
+      "levelInfo": "Info",
+      "levelWarn": "Warnung",
+      "levelError": "Fehler"
     }
   },
   "accessibility": {

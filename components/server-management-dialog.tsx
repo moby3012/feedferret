@@ -45,6 +45,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   HardDrive,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +67,7 @@ import {
   getAdminAuditLog,
   getLoginAttempts,
   getStorageStats,
+  getSystemLogs,
 } from "@/app/actions/admin";
 import { toast } from "sonner";
 import {
@@ -99,6 +101,9 @@ export function ServerManagementDialog({
   const [auditLoaded, setAuditLoaded] = useState(false);
   const [storageStats, setStorageStats] = useState<any[]>([]);
   const [storageLoaded, setStorageLoaded] = useState(false);
+  const [systemLogs, setSystemLogs] = useState<any[]>([]);
+  const [logsLoaded, setLogsLoaded] = useState(false);
+  const [logsCategory, setLogsCategory] = useState<string | undefined>(undefined);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -133,6 +138,16 @@ export function ServerManagementDialog({
       setStorageLoaded(true);
     } catch {
       toast.error("Failed to load storage stats");
+    }
+  };
+
+  const loadSystemLogs = async (category?: string) => {
+    try {
+      const logs = await getSystemLogs(200, category);
+      setSystemLogs(logs);
+      setLogsLoaded(true);
+    } catch {
+      toast.error("Failed to load system logs");
     }
   };
 
@@ -358,6 +373,7 @@ export function ServerManagementDialog({
     { value: "discovery", label: t("tabs.discovery"), icon: <Compass className="w-4 h-4" /> },
     { value: "audit", label: t("tabs.audit"), icon: <Shield className="w-4 h-4" />, onSelect: loadAuditData },
     { value: "storage", label: t("tabs.storage"), icon: <HardDrive className="w-4 h-4" />, onSelect: loadStorageStats },
+    { value: "logs", label: t("tabs.logs"), icon: <FileText className="h-4 w-4" />, onSelect: () => loadSystemLogs(undefined) },
   ];
 
   const shellProps = {

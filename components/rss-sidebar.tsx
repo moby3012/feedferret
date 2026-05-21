@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { FeedSource } from "@/lib/rss-data";
@@ -142,6 +143,7 @@ export function RssSidebar({
   hideEmptyFeeds = false,
   hideEmptyLabels = false,
 }: RssSidebarProps) {
+  const t = useTranslations();
   const router = useRouter();
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
@@ -535,7 +537,7 @@ export function RssSidebar({
                 <div className="space-y-1">
                   <div className="px-4 pb-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      Saved Searches
+                      {t("sidebar.savedSearches")}
                     </span>
                   </div>
                   {savedSearches.map((item: any) => (
@@ -566,7 +568,7 @@ export function RssSidebar({
                 <div className="space-y-1">
                   <div className="px-4 pb-1">
                     <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      Labels
+                      {t("sidebar.labels")}
                     </span>
                   </div>
                   {visibleLabels.map((item: any) => (
@@ -604,7 +606,7 @@ export function RssSidebar({
           <div className="space-y-4">
             <div className="flex items-center justify-between px-4">
               <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                Feeds
+                {t("sidebar.feeds")}
               </span>
               <Button
                 variant="ghost"
@@ -701,7 +703,7 @@ export function RssSidebar({
                   </Button>
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="top">Manage Feeds</TooltipContent>
+              <TooltipContent side="top">{t("sidebar.manageFeeds")}</TooltipContent>
             </Tooltip>
             {session?.user?.role === "ADMIN" && (
               <Tooltip>
@@ -716,7 +718,7 @@ export function RssSidebar({
                     </Button>
                   </Link>
                 </TooltipTrigger>
-                <TooltipContent side="top">Server Settings</TooltipContent>
+                <TooltipContent side="top">{t("sidebar.serverSettings")}</TooltipContent>
               </Tooltip>
             )}
             <Tooltip>
@@ -741,13 +743,13 @@ export function RssSidebar({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" side="top" className="w-80 rounded-2xl border-border/70 p-2">
                     <div className="flex items-center justify-between px-2 py-1.5">
-                      <p className="text-sm font-semibold">Notifications</p>
+                      <p className="text-sm font-semibold">{t("sidebar.notifications")}</p>
                       {unreadNotifications > 0 && (
                         <button
                           className="hidden sm:inline text-xs text-primary hover:underline"
                           onClick={() => markAllNotificationsRead.mutate()}
                         >
-                          Mark all read
+                          {t("sidebar.markAllRead")}
                         </button>
                       )}
                     </div>
@@ -757,8 +759,8 @@ export function RssSidebar({
                         <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
                           <Bell className="h-4 w-4 text-muted-foreground" />
                         </div>
-                        <p className="text-sm font-medium text-foreground">No notifications</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">Set up keyword alerts to get notified when topics you care about appear.</p>
+                        <p className="text-sm font-medium text-foreground">{t("sidebar.noNotifications")}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{t("sidebar.noNotificationsDescription")}</p>
                       </div>
                     ) : (
                       (notifications as any[]).slice(0, 8).map((notification: any) => {
@@ -828,7 +830,7 @@ export function RssSidebar({
                     <LogOut className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="top">Sign out</TooltipContent>
+                <TooltipContent side="top">{t("sidebar.signOut")}</TooltipContent>
               </Tooltip>
             )}
           </div>

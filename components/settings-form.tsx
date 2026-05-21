@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
@@ -70,11 +71,13 @@ import { MobileFloatingBackButton } from "@/components/mobile-floating-back-butt
 import { toast } from "sonner";
 import { SHOW_PWA_INSTALL_PROMPT_EVENT } from "@/components/pwa-install-prompt";
 
-const themeOptions = [
-  { id: "light", label: "Light", icon: Sun },
-  { id: "dark", label: "Dark", icon: Moon },
-  { id: "system", label: "System", icon: Laptop },
-];
+function makeThemeOptions(t: ReturnType<typeof useTranslations>) {
+  return [
+    { id: "light", label: t("settings.themeOptions.light"), icon: Sun },
+    { id: "dark", label: t("settings.themeOptions.dark"), icon: Moon },
+    { id: "system", label: t("settings.themeOptions.system"), icon: Laptop },
+  ];
+}
 
 function normalizeDefaultViewMode(value?: string | null) {
   if (value === "minimal" || value === "magazine" || value === "list") {
@@ -116,11 +119,13 @@ function PrefRow({
 }
 
 export function SettingsForm() {
+  const t = useTranslations();
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const { data: prefs } = useReadingPreferences();
   const updateSettings = useUpdateGlobalSettings();
+  const themeOptions = makeThemeOptions(t);
 
   const update = (data: Parameters<typeof updateSettings.mutate>[0]) =>
     updateSettings.mutate(data);
@@ -134,17 +139,17 @@ export function SettingsForm() {
             size="icon"
             onClick={() => router.back()}
             className="h-11 w-11 rounded-2xl bg-card/70 backdrop-blur-xl border border-border/60 shadow-sm"
-            aria-label="Back"
+            aria-label={t("settings.back")}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <Settings className="h-4 w-4" />
-              FeedFerret
+              {t("settings.breadcrumb")}
             </div>
             <h1 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-              Settings
+              {t("settings.title")}
             </h1>
           </div>
         </header>
@@ -160,9 +165,9 @@ export function SettingsForm() {
                   <Palette className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">Appearance</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("settings.appearance")}</h2>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                    Choose the visual mode.
+                    {t("settings.chooseVisualMode")}
                   </p>
                 </div>
               </div>
@@ -193,30 +198,30 @@ export function SettingsForm() {
           {/* Accent colors */}
           <PrefRow
             icon={Palette}
-            title="Accent colors"
-            description="Primary and secondary accent colors used for highlights and indicators."
+            title={t("settings.accentColors")}
+            description={t("settings.accentColorsDescription")}
           >
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground" htmlFor="accent-color-primary">Primary</label>
+                <label className="text-sm text-muted-foreground" htmlFor="accent-color-primary">{t("settings.primary")}</label>
                 <input
                   id="accent-color-primary"
                   type="color"
                   value={prefs?.accentColor ?? "#5BA4CF"}
                   onChange={(e) => update({ accentColor: e.target.value })}
                   className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
-                  title="Primary accent color"
+                  title={t("settings.primary")}
                 />
               </div>
               <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground" htmlFor="accent-color-secondary">Secondary</label>
+                <label className="text-sm text-muted-foreground" htmlFor="accent-color-secondary">{t("settings.secondary")}</label>
                 <input
                   id="accent-color-secondary"
                   type="color"
                   value={prefs?.secondaryColor ?? "#F0963C"}
                   onChange={(e) => update({ secondaryColor: e.target.value })}
                   className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
-                  title="Secondary accent color"
+                  title={t("settings.secondary")}
                 />
               </div>
               <button
@@ -224,7 +229,7 @@ export function SettingsForm() {
                 onClick={() => update({ accentColor: "#5BA4CF", secondaryColor: "#F0963C" })}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                Reset
+                {t("settings.reset")}
               </button>
               <div
                 className="w-full min-w-[180px] rounded-2xl border border-border/70 p-3 shadow-sm sm:ml-auto sm:w-auto"
@@ -235,9 +240,9 @@ export function SettingsForm() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="space-y-1">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      Preview
+                      {t("settings.preview")}
                     </p>
-                    <p className="text-sm font-medium">App accents</p>
+                    <p className="text-sm font-medium">{t("settings.appAccents")}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span
@@ -257,8 +262,8 @@ export function SettingsForm() {
           {/* Default view mode */}
           <PrefRow
             icon={AlignLeft}
-            title="Default view"
-            description="Article list layout shown by default when opening the app."
+            title={t("settings.defaultView")}
+            description={t("settings.defaultViewDescription")}
           >
             <Select
               value={normalizeDefaultViewMode(prefs?.defaultViewMode)}
@@ -268,9 +273,9 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="list">List</SelectItem>
-                <SelectItem value="magazine">Magazine</SelectItem>
-                <SelectItem value="minimal">Minimal</SelectItem>
+                <SelectItem value="list">{t("settings.viewOptions.list")}</SelectItem>
+                <SelectItem value="magazine">{t("settings.viewOptions.magazine")}</SelectItem>
+                <SelectItem value="minimal">{t("settings.viewOptions.minimal")}</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -278,8 +283,8 @@ export function SettingsForm() {
           {/* Reader width */}
           <PrefRow
             icon={AlignLeft}
-            title="Reader width"
-            description="Maximum width of article content in the reader pane."
+            title={t("settings.readerWidth")}
+            description={t("settings.readerWidthDescription")}
           >
             <Select
               value={prefs?.readerWidth ?? "normal"}
@@ -289,9 +294,9 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="normal">Normal (768px)</SelectItem>
-                <SelectItem value="wide">Wide (1024px)</SelectItem>
-                <SelectItem value="full">Full width</SelectItem>
+                <SelectItem value="normal">{t("settings.widthOptions.normal")}</SelectItem>
+                <SelectItem value="wide">{t("settings.widthOptions.wide")}</SelectItem>
+                <SelectItem value="full">{t("settings.widthOptions.full")}</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -299,8 +304,8 @@ export function SettingsForm() {
           {/* Reader font size */}
           <PrefRow
             icon={ALargeSmall}
-            title="Reader font size"
-            description="Text size in the article reader pane."
+            title={t("settings.readerFontSize")}
+            description={t("settings.readerFontSizeDescription")}
           >
             <Select
               value={prefs?.readerFontSize ?? "medium"}
@@ -310,10 +315,10 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="small">Small</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="large">Large</SelectItem>
-                <SelectItem value="xl">Extra large</SelectItem>
+                <SelectItem value="small">{t("settings.fontSizeOptions.small")}</SelectItem>
+                <SelectItem value="medium">{t("settings.fontSizeOptions.medium")}</SelectItem>
+                <SelectItem value="large">{t("settings.fontSizeOptions.large")}</SelectItem>
+                <SelectItem value="xl">{t("settings.fontSizeOptions.xl")}</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -323,8 +328,8 @@ export function SettingsForm() {
           {/* Default sort order */}
           <PrefRow
             icon={ArrowDownAZ}
-            title="Default sort"
-            description="Default article sort order in all feeds and categories."
+            title={t("settings.defaultSort")}
+            description={t("settings.defaultSortDescription")}
           >
             <Select
               value={prefs?.defaultArticleSort ?? "newest"}
@@ -334,8 +339,8 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="newest">Newest first</SelectItem>
-                <SelectItem value="oldest">Oldest first</SelectItem>
+                <SelectItem value="newest">{t("settings.sortOptions.newest")}</SelectItem>
+                <SelectItem value="oldest">{t("settings.sortOptions.oldest")}</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -343,8 +348,8 @@ export function SettingsForm() {
           {/* Mark-as-read delay */}
           <PrefRow
             icon={Clock}
-            title="Mark as read"
-            description="How long after opening an article it gets marked as read. 'Off' disables auto-mark."
+            title={t("settings.markAsRead")}
+            description={t("settings.markAsReadDescription")}
           >
             <Select
               value={
@@ -364,12 +369,12 @@ export function SettingsForm() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-2xl">
-                <SelectItem value="instant">Instant (1s)</SelectItem>
-                <SelectItem value="5">After 5s</SelectItem>
-                <SelectItem value="15">After 15s</SelectItem>
-                <SelectItem value="30">After 30s</SelectItem>
-                <SelectItem value="60">After 60s</SelectItem>
-                <SelectItem value="off">Off</SelectItem>
+                <SelectItem value="instant">{t("settings.markReadOptions.instant")}</SelectItem>
+                <SelectItem value="5">{t("settings.markReadOptions.after5s")}</SelectItem>
+                <SelectItem value="15">{t("settings.markReadOptions.after15s")}</SelectItem>
+                <SelectItem value="30">{t("settings.markReadOptions.after30s")}</SelectItem>
+                <SelectItem value="60">{t("settings.markReadOptions.after60s")}</SelectItem>
+                <SelectItem value="off">{t("settings.markReadOptions.off")}</SelectItem>
               </SelectContent>
             </Select>
           </PrefRow>
@@ -377,8 +382,8 @@ export function SettingsForm() {
           {/* Mark as read on scroll */}
           <PrefRow
             icon={ScrollText}
-            title="Mark as read while scrolling"
-            description="Articles are automatically marked as read once they scroll out of view."
+            title={t("settings.markAsReadOnScroll")}
+            description={t("settings.markAsReadOnScrollDescription")}
           >
             <Switch
               checked={prefs?.markReadOnScroll ?? false}
@@ -390,8 +395,8 @@ export function SettingsForm() {
           {/* Open original */}
           <PrefRow
             icon={ExternalLink}
-            title="Open original"
-            description="Open original article in new tab when selecting from list."
+            title={t("settings.openOriginal")}
+            description={t("settings.openOriginalDescription")}
           >
             <Switch
               checked={prefs?.openOriginalByDefault ?? false}
@@ -403,8 +408,8 @@ export function SettingsForm() {
           {/* Hide duplicates */}
           <PrefRow
             icon={Layers}
-            title="Hide duplicates"
-            description="When the same article appears in multiple feeds, show it only once (from the first feed that synced it)."
+            title={t("settings.hideDuplicates")}
+            description={t("settings.hideDuplicatesDescription")}
           >
             <Switch
               checked={prefs?.hideDuplicates ?? true}
@@ -416,8 +421,8 @@ export function SettingsForm() {
           {/* RTL layout */}
           <PrefRow
             icon={AlignLeft}
-            title="Right-to-left layout"
-            description="Mirror the entire interface for Arabic, Hebrew, Persian, and other RTL scripts."
+            title={t("settings.rtlLayout")}
+            description={t("settings.rtlLayoutDescription")}
           >
             <Switch
               checked={(prefs?.layoutDirection ?? "ltr") === "rtl"}
@@ -429,8 +434,8 @@ export function SettingsForm() {
           {/* Hide empty feeds */}
           <PrefRow
             icon={EyeOff}
-            title="Hide empty feeds"
-            description="Hide feeds and categories with no unread articles from the sidebar."
+            title={t("settings.hideEmptyFeeds")}
+            description={t("settings.hideEmptyFeedsDescription")}
           >
             <Switch
               checked={prefs?.hideEmptyFeeds ?? false}
@@ -442,8 +447,8 @@ export function SettingsForm() {
           {/* Hide empty labels */}
           <PrefRow
             icon={EyeOff}
-            title="Hide empty labels"
-            description="Hide labels with no unread articles from the sidebar."
+            title={t("settings.hideEmptyLabels")}
+            description={t("settings.hideEmptyLabelsDescription")}
           >
             <Switch
               checked={prefs?.hideEmptyLabels ?? false}
@@ -465,9 +470,9 @@ export function SettingsForm() {
                   <User className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">User Profile</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("settings.userProfile")}</h2>
                   <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                    Signed in as{" "}
+                    {t("settings.signedInAs")}{" "}
                     <span className="font-medium text-foreground">
                       {session?.user?.email || "Unknown user"}
                     </span>
@@ -480,7 +485,7 @@ export function SettingsForm() {
                 className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
               >
                 <LogOut className="me-2 h-4 w-4" />
-                Sign out
+                {t("settings.signOut")}
               </Button>
             </div>
           </section>
@@ -513,8 +518,8 @@ export function SettingsForm() {
           {/* Add to Home Screen */}
           <PrefRow
             icon={Smartphone}
-            title="Add to Home Screen"
-            description="Show instructions for installing FeedFerret as a PWA on your phone or tablet."
+            title={t("pwa.title")}
+            description={t("pwa.description")}
           >
             <Button
               type="button"
@@ -522,27 +527,27 @@ export function SettingsForm() {
               onClick={() => window.dispatchEvent(new Event(SHOW_PWA_INSTALL_PROMPT_EVENT))}
               className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
             >
-              Show instructions
+              {t("pwa.showInstructions")}
             </Button>
           </PrefRow>
 
           <PrefRow
             icon={Keyboard}
-            title="Keyboard shortcuts"
-            description="Desktop keyboard shortcuts for fast navigation without a mouse."
+            title={t("keyboard.title")}
+            description={t("keyboard.description")}
           >
             <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground sm:min-w-80">
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
                 <span className="font-mono text-foreground">j / k</span>
-                <span>Next / previous article</span>
+                <span>{t("keyboard.nextArticle")} / {t("keyboard.previousArticle")}</span>
                 <span className="font-mono text-foreground">n / p</span>
-                <span>Next / previous unread article</span>
+                <span>{t("keyboard.nextUnread")} / {t("keyboard.previousUnread")}</span>
                 <span className="font-mono text-foreground">m / s</span>
-                <span>Toggle read / star</span>
+                <span>{t("keyboard.toggleRead")} / {t("keyboard.toggleStar")}</span>
                 <span className="font-mono text-foreground">/</span>
-                <span>Open search</span>
+                <span>{t("keyboard.focusSearch")}</span>
                 <span className="font-mono text-foreground">?</span>
-                <span>Open shortcut help</span>
+                <span>{t("keyboard.toggleHelp")}</span>
               </div>
             </div>
           </PrefRow>
