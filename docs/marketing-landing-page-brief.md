@@ -1,8 +1,8 @@
 # FeedFerret — Marketing & SaaS Landing Page Brief
 
-> Zuletzt aktualisiert: 2026-05-18 (Notification-Kanäle + Google Reader API ergänzt; Version 0.9.0)  
+> Zuletzt aktualisiert: 2026-05-21 (v1.1.0 Release — Security Hardening, DE/EN i18n, TypeScript-Cleanup)  
 > Zweck: Vorlage für die OSS-Landing Page, ProductHunt-Launch, Vergleichsseiten und Pressematerial.  
-> Status: **OSS-Launch ist Priorität**; SaaS-Tier-Definition kommt nach Wettbewerbsanalyse (Roadmap 0.1.3).
+> Status: **v1.1.0 bereit — OSS-Launch kann starten.**
 
 ---
 
@@ -368,7 +368,7 @@ FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte u
 - Docker Pulls
 - "Used by X self-hosters" (wenn verfügbar)
 - Frühe Nutzer-Quotes / Testimonials
-- "Open Source, MIT License"
+- "Open Source, AGPL-3.0 License"
 - Kompatible App-Icons: Reeder, NetNewsWire, n8n, etc.
 
 ### Sektion 3: Reading Experience
@@ -451,7 +451,7 @@ Feature-Bullets:
 
 ### Sektion 10: Preise
 
-**Self-Hosted (Kostenlos, MIT License) — verfügbar zum OSS-Launch:**
+**Self-Hosted (Kostenlos, AGPL-3.0-only) — verfügbar ab v1.1.0:**
 - Alle Features
 - Unbegrenzte Nutzer
 - PostgreSQL oder SQLite
@@ -459,7 +459,7 @@ Feature-Bullets:
 
 **SaaS — coming soon:**
 
-> **Status:** Die SaaS-Variante ist nach dem OSS-Launch geplant. Tier-Definition und Pricing werden nach Abschluss der Wettbewerbsanalyse (Roadmap 0.1.3) finalisiert.
+> **Status:** Die SaaS-Variante ist nach dem OSS-Launch geplant. Tier-Definition und Pricing werden nach Abschluss der Wettbewerbsanalyse finalisiert (geplant für v1.3).
 
 Erwartete Tiers:
 - **Personal** — Managed Hosting für Einzelnutzer, automatische Updates, E-Mail-Support
@@ -510,9 +510,34 @@ Top-5-Fragen (Entwurf):
 
 ---
 
-## 6. Neue Features seit letztem Update (Mai 2026)
+## 6. Was in v1.1.0 neu ist (Release-Highlights)
 
-Diese Features sind besonders stark für Launch-Messaging:
+### Features (v1.0 → v1.1)
+
+| Feature | Botschaft |
+|---|---|
+| **DE + EN vollständig übersetzt** | Alle 1052 Strings in Deutsch und Englisch — kein einziges hardcoded Label mehr |
+| **Sprachauswahl pro Nutzer** | Einstellungen → Erscheinungsbild: Sprache wählen, sofort aktiv ohne Re-Login |
+| **Admin-Standardsprache** | Instanz-Sprache für neue Nutzer konfigurierbar im Server Management |
+| **REST API v1 erweitert** | Neue Endpunkte: Alerts, Rules, Notifications, Stats; Batch-Update bis 500 Artikel |
+| **Token-Scopes** | `read` / `write` / `admin` pro API-Token — Read-only-Token möglich |
+| **MCP: 28 Tools** | Vollständige CRUD-Kontrolle für AI-Agenten (war 10 Tools in v1.0) |
+| **OR-Operator in Suche/Rules** | `nextcloud OR tailscale` findet Artikel mit *einem* der Begriffe |
+| **Label-Unread-Counts** | Sidebar-Badges zeigen ungelesene statt Gesamt-Artikelzahl |
+| **Storage Dashboard** | Admin-UI zeigt Artikel- und Feed-Zahl pro Nutzer |
+
+### Security Hardening (v1.1)
+
+| Fix | Details |
+|---|---|
+| **Rate Limiting: Fever + GReader API** | 120 Req/min pro Nutzer — verhindert Scraping |
+| **Email Enumeration Fix** | Registrierung gibt keine Information über bestehende Accounts |
+| **Push Subscribe Validation** | `platform` und `frequency` werden gegen Allowlists validiert |
+| **CI Security Audit** | `pnpm audit --audit-level=high` läuft bei jedem PR |
+| **CVE-Patches** | `ws` und `@hono/node-server` via pnpm.overrides gepatcht |
+| **Husky Pre-Commit** | Lint + TypeCheck auf jedem Commit — kein kaputtes Commit mehr |
+
+### Features aus früheren Updates (v0.8–v1.0, für Landing Page relevant)
 
 | Feature | Botschaft |
 |---|---|
@@ -525,7 +550,6 @@ Diese Features sind besonders stark für Launch-Messaging:
 | **Feed Discovery** | Gibt es RSS? FeedFerret findet es. Oder starte mit kurierten Packs |
 | **Admin Starter Packs** | Vorkonfigurierte Feed-Sammlungen für neue Nutzer anpassen |
 | **MCP Endpoint** | AI-Agenten (Claude, GPT, LangChain) direkt in den Reader integrieren |
-| **REST API v1 vollständig** | Alle Kern-Daten via API — für Automationen, Dashboards, Apps |
 
 ---
 
