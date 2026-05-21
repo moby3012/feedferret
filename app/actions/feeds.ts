@@ -1086,6 +1086,23 @@ export async function markAllAsRead(scope?: { feedId?: string | null; category?:
         }
     }
 
+    // Mirror getArticles: for the global "All Articles" / "All" / no-scope view,
+    // exclude feeds/categories marked as hidden from the all-feeds view. Without
+    // this, "Mark all read" on All Articles would silently mark articles from
+    // hidden feeds as read. Category-specific scopes (Starred, Label:, etc.) are
+    // deliberately NOT filtered here — the user explicitly navigated to them.
+    if (!scope?.feedId && (!scope?.category || scope.category === "All" || scope.category === "All Articles")) {
+        where.AND = [...(where.AND || []), {
+            feed: {
+                hideFromAllFeeds: false,
+                OR: [
+                    { categoryId: null },
+                    { category: { hideFromAllFeeds: false } },
+                ],
+            },
+        }];
+    }
+
     await db.article.updateMany({
         where,
         data: { isRead: true, readAt: new Date() },
