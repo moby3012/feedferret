@@ -113,7 +113,7 @@ export function ServerManagementDialog({
       setUsers(allUsers);
       setSettings(globalSettings);
     } catch {
-      toast.error("Failed to load server data");
+      toast.error(t("toast.failedToLoadServerData"));
     } finally {
       setIsLoading(false);
     }
@@ -127,7 +127,7 @@ export function ServerManagementDialog({
       setLoginAttempts(attempts);
       setAuditLoaded(true);
     } catch {
-      toast.error("Failed to load audit data");
+      toast.error(t("toast.failedToLoadAuditData"));
     }
   };
 
@@ -138,7 +138,7 @@ export function ServerManagementDialog({
       setStorageStats(stats);
       setStorageLoaded(true);
     } catch {
-      toast.error("Failed to load storage stats");
+      toast.error(t("toast.failedToLoadStorageStats"));
     }
   };
 
@@ -148,7 +148,7 @@ export function ServerManagementDialog({
       setSystemLogs(logs);
       setLogsLoaded(true);
     } catch {
-      toast.error("Failed to load system logs");
+      toast.error(t("toast.failedToLoadSystemLogs"));
     }
   };
 
@@ -161,9 +161,9 @@ export function ServerManagementDialog({
     try {
       await updateGlobalSettings(newData);
       setSettings((prev: any) => ({ ...prev, ...newData }));
-      toast.success("Settings saved");
+      toast.success(t("toast.settingsSaved"));
     } catch (error: any) {
-      toast.error(error?.message || "Failed to update settings");
+      toast.error(error?.message || t("toast.failedToUpdateSettings"));
     } finally {
       setIsSaving(false);
     }
@@ -174,9 +174,9 @@ export function ServerManagementDialog({
     try {
       const result = await sendTestEmail(settings);
       if (result.success) {
-        toast.success(`Test email sent to ${result.sentTo}`);
+        toast.success(t("toast.testEmailSent", { email: result.sentTo ?? "" }));
       } else {
-        toast.error(`Mail test failed: ${result.error}`);
+        toast.error(t("toast.mailTestFailed", { error: result.error ?? "" }));
       }
     } catch (error: any) {
       toast.error(error.message);
@@ -190,9 +190,9 @@ export function ServerManagementDialog({
     try {
       await updateUserRole(user.id, newRole);
       setUsers(users.map((u) => (u.id === user.id ? { ...u, role: newRole } : u)));
-      toast.success(`Updated ${user.email} to ${newRole}`);
+      toast.success(t("toast.userRoleUpdated", { email: user.email, role: newRole }));
     } catch (error: any) {
-      toast.error(error?.message || "Failed to update user role");
+      toast.error(error?.message || t("toast.failedToUpdateUserRole"));
     }
   };
 
@@ -201,14 +201,14 @@ export function ServerManagementDialog({
       if (user.isActive) {
         await suspendUser(user.id);
         setUsers(users.map((u) => (u.id === user.id ? { ...u, isActive: false } : u)));
-        toast.success(`${user.email} suspended`);
+        toast.success(t("toast.userSuspended", { email: user.email }));
       } else {
         await unsuspendUser(user.id);
         setUsers(users.map((u) => (u.id === user.id ? { ...u, isActive: true } : u)));
-        toast.success(`${user.email} reactivated`);
+        toast.success(t("toast.userReactivated", { email: user.email }));
       }
     } catch {
-      toast.error("Failed to update user status");
+      toast.error(t("toast.failedToUpdateUserStatus"));
     }
   };
 
@@ -216,7 +216,7 @@ export function ServerManagementDialog({
     try {
       await deleteUser(userId);
       setUsers(users.filter((u) => u.id !== userId));
-      toast.success("User deleted");
+      toast.success(t("toast.userDeleted"));
     } catch (error: any) {
       toast.error(error.message);
     }
@@ -323,9 +323,9 @@ export function ServerManagementDialog({
         all.findIndex((candidate) => candidate.xmlUrl.trim().toLowerCase() === feed.xmlUrl.trim().toLowerCase()) === index
       ));
       updatePack(packIndex, { feeds: merged, path: undefined });
-      toast.success(`Imported ${feeds.length} feeds into starter pack`);
+      toast.success(t("toast.opmlImported", { count: feeds.length }));
     } catch (error: any) {
-      toast.error(error?.message || "Could not import OPML");
+      toast.error(error?.message || t("toast.opmlImportFailed"));
     }
   };
   const exportStarterPack = (pack: StarterPack) => {
@@ -351,11 +351,11 @@ export function ServerManagementDialog({
   const handleIconUpload = (file?: File) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast.error("Please upload an image file");
+      toast.error(t("toast.invalidImageFile"));
       return;
     }
     if (file.size > 180_000) {
-      toast.error("Logo must be smaller than 180 KB");
+      toast.error(t("toast.logoTooLarge"));
       return;
     }
     const reader = new FileReader();
@@ -1361,13 +1361,13 @@ function DiscoveryCatalogTab() {
       const data = await res.json();
       if (res.ok) {
         setImportResult(data);
-        toast.success(`Imported ${data.totalAdded} new feeds`);
+        toast.success(t("toast.discoveryImported", { count: data.totalAdded }));
         loadStats();
       } else {
-        toast.error(data.error || "Import failed");
+        toast.error(data.error || t("toast.discoveryImportFailed"));
       }
     } catch (error) {
-      toast.error("Import failed");
+      toast.error(t("toast.discoveryImportFailed"));
     } finally {
       setIsImporting(false);
     }
@@ -1378,12 +1378,12 @@ function DiscoveryCatalogTab() {
     try {
       const res = await fetch("/api/discovery/catalog", { method: "DELETE" });
       if (res.ok) {
-        toast.success("Catalog cleared");
+        toast.success(t("toast.catalogCleared"));
         loadStats();
         setImportResult(null);
       }
     } catch {
-      toast.error("Failed to clear catalog");
+      toast.error(t("toast.failedToClearCatalog"));
     }
   };
 
@@ -1534,7 +1534,7 @@ function NotificationsAdminPanel() {
       })
       .catch((error) => {
         console.error(error);
-        if (!cancelled) toast.error("Failed to load push diagnostics");
+        if (!cancelled) toast.error(t("toast.failedToLoadPushDiagnostics"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1549,9 +1549,9 @@ function NotificationsAdminPanel() {
     try {
       const keys = await generateVapidKeyPair();
       setGenerated(keys);
-      toast.success("Generated new VAPID key pair");
+      toast.success(t("toast.vapidKeysGenerated"));
     } catch (error: any) {
-      toast.error(error?.message || "Could not generate keys");
+      toast.error(error?.message || t("toast.failedToGenerateKeys"));
     } finally {
       setGenerating(false);
     }
@@ -1560,9 +1560,9 @@ function NotificationsAdminPanel() {
   const copy = async (label: string, value: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success(`Copied ${label}`);
+      toast.success(t("toast.copied", { label }));
     } catch {
-      toast.error(`Could not copy ${label}`);
+      toast.error(t("toast.couldNotCopy", { label }));
     }
   };
 

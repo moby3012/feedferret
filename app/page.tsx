@@ -77,6 +77,7 @@ function normalizeViewMode(value?: string | null): ViewMode {
 
 export default function RSSReaderPage() {
   const t = useTranslations("sidebar");
+  const tA11y = useTranslations("accessibility");
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -264,7 +265,7 @@ export default function RSSReaderPage() {
         if (typeof window !== "undefined") {
           localStorage.setItem("lastSync", new Date().toISOString());
         }
-      }).catch(console.error);
+      }).catch(() => {});
     }
   }, [isAuthenticated]);
 
@@ -332,13 +333,13 @@ export default function RSSReaderPage() {
 
   const headerTitle = useMemo(() => {
     if (selectedFeed) {
-      return feeds.find((f: any) => f.id === selectedFeed)?.name || "Feed";
+      return feeds.find((f: any) => f.id === selectedFeed)?.name || t("feedFallback");
     }
     if (selectedCategory.startsWith("Label:")) {
-      return labels.find((label: any) => label.id === selectedCategory.slice("Label:".length))?.name || "Label";
+      return labels.find((label: any) => label.id === selectedCategory.slice("Label:".length))?.name || t("labelFallback");
     }
     if (selectedCategory.startsWith("Search:")) {
-      return savedSearches.find((search: any) => search.id === selectedCategory.slice("Search:".length))?.name || "Saved Search";
+      return savedSearches.find((search: any) => search.id === selectedCategory.slice("Search:".length))?.name || t("savedSearchFallback");
     }
     return selectedCategory;
   }, [selectedFeed, selectedCategory, feeds, labels, savedSearches]);
@@ -469,7 +470,7 @@ export default function RSSReaderPage() {
   }, [refresh]);
 
   const handleMarkAllRead = useCallback(() => {
-    const feedsList = feeds as any[];
+    const feedsList = feeds;
     markAllAsRead.mutate(
       { feedId: selectedFeed, category: selectedFeed ? null : selectedCategory },
       {
@@ -513,7 +514,7 @@ export default function RSSReaderPage() {
   }, [transitionStyle, unreadOnly, selectedFeed, selectedCategory]);
 
   const navigateFeed = useCallback((direction: 1 | -1) => {
-    const feedsList = feeds as any[];
+    const feedsList = feeds;
     if (feedsList.length === 0) return;
     if (!selectedFeed) {
       const target = direction === 1 ? feedsList[0] : feedsList[feedsList.length - 1];
@@ -703,7 +704,7 @@ export default function RSSReaderPage() {
     icon: f.icon || "📰",
   }));
 
-  const selectedFeedData = (feeds as any[]).find((f: any) => f.id === selectedArticle?.feedId);
+  const selectedFeedData = feeds.find((f) => f.id === selectedArticle?.feedId);
   const hideArticleImage = selectedFeedData?.hideArticleImage ?? false;
 
   if (isMobileLayout === null) {
@@ -803,7 +804,7 @@ export default function RSSReaderPage() {
           minSize="20%"
           maxSize="70%"
         >
-          <div role="region" aria-label="Article list" className="relative z-10 flex h-full min-w-[320px] flex-col border-e border-border/60 bg-card/70 backdrop-blur-2xl">
+          <div role="region" aria-label={tA11y("articleList")} className="relative z-10 flex h-full min-w-[320px] flex-col border-e border-border/60 bg-card/70 backdrop-blur-2xl">
             <RssHeader
               title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
               articleCount={filteredArticles.length}
@@ -865,7 +866,7 @@ export default function RSSReaderPage() {
         />
 
         <ResizablePanel id="article-reader" defaultSize="64%" minSize="30%">
-          <div role="region" aria-label="Article reader" className="flex h-full bg-background">
+          <div role="region" aria-label={tA11y("articleReader")} className="flex h-full bg-background">
             <ArticleReader
               article={selectedArticle}
               onToggleStar={handleToggleStar}
@@ -893,7 +894,7 @@ export default function RSSReaderPage() {
 
       {/* Mobile Article List Panel */}
       {isMobileLayout && !selectedArticle && (
-      <div role="region" aria-label="Article list" className="relative z-10 flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-2xl transition-all duration-300 ease-out">
+      <div role="region" aria-label={tA11y("articleList")} className="relative z-10 flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-2xl transition-all duration-300 ease-out">
         <RssHeader
           title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
           articleCount={filteredArticles.length}
@@ -965,7 +966,7 @@ export default function RSSReaderPage() {
 
       {/* Mobile Article Reader Panel */}
       {isMobileLayout && (selectedArticle || isClosingReader) && (
-      <div role="region" aria-label="Article reader" className={`fixed inset-0 z-50 flex bg-background ${isClosingReader ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
+      <div role="region" aria-label={tA11y("articleReader")} className={`fixed inset-0 z-50 flex bg-background ${isClosingReader ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
         <ArticleReader
           article={selectedArticle}
           onToggleStar={handleToggleStar}
@@ -1023,7 +1024,7 @@ export default function RSSReaderPage() {
                     setSearchOpen(false);
                   }
                 }}
-                aria-label={searchQuery ? "Clear search" : "Close search"}
+                aria-label={searchQuery ? tA11y("clearSearch") : tA11y("closeSearch")}
                 className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
               >
                 <XIcon className="w-5 h-5" />
