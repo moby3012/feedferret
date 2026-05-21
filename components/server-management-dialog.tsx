@@ -979,12 +979,13 @@ export function ServerManagementDialog({
                           <Input
                             type="number"
                             min={1}
-                            max={60}
+                            max={1440}
                             className="w-full rounded-2xl bg-background/70 border-border/70 sm:w-40"
                             value={settings?.backgroundSyncIntervalMinutes ?? 5}
-                            onChange={(e) =>
-                              setSettings({ ...settings, backgroundSyncIntervalMinutes: parseInt(e.target.value) || 5 })
-                            }
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value);
+                              setSettings({ ...settings, backgroundSyncIntervalMinutes: Number.isFinite(v) && v >= 1 ? v : 1 });
+                            }}
                           />
                           <p className="text-xs text-muted-foreground">{t("sync.minOneMinute")}</p>
                         </div>

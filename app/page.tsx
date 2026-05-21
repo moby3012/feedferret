@@ -49,7 +49,7 @@ const ssrSafeStorage = {
   setItem: (key: string, value: string) => { if (typeof window !== "undefined") localStorage.setItem(key, value); },
 };
 
-function toUiArticle(a: any) {
+function toUiArticle(a: any, unknownAuthor = "Unknown") {
   const publishedAt = new Date(a.publishedAt);
   return {
     ...a,
@@ -59,7 +59,7 @@ function toUiArticle(a: any) {
     publishedAt: publishedAt.toISOString(),
     readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
     excerpt: a.excerpt || "",
-    author: a.author || "Unknown",
+    author: a.author || unknownAuthor,
     duplicateCount: a._count?.duplicates ?? 0,
     canonicalFeedName: a.canonical?.feed?.name ?? null,
   };
@@ -78,6 +78,7 @@ function normalizeViewMode(value?: string | null): ViewMode {
 export default function RSSReaderPage() {
   const t = useTranslations("sidebar");
   const tA11y = useTranslations("accessibility");
+  const tList = useTranslations("articleList");
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -273,8 +274,9 @@ export default function RSSReaderPage() {
 
   // Transform articles for UI components
   const articles = useMemo(() => {
-    return cachedRawArticles.map(toUiArticle);
-  }, [cachedRawArticles]);
+    const unknownAuthor = tList("unknownAuthor");
+    return cachedRawArticles.map((a) => toUiArticle(a, unknownAuthor));
+  }, [cachedRawArticles, tList]);
 
   const displayArticles = useMemo(() => {
     const byId = new Map<string, any>();
@@ -552,7 +554,7 @@ export default function RSSReaderPage() {
   const handleFetchFullText = useCallback((articleId: string) => {
     fetchFullText.mutate(articleId, {
       onSuccess: (article: any) => {
-        const uiArticle = toUiArticle(article);
+        const uiArticle = toUiArticle(article, tList("unknownAuthor"));
         setSelectedArticleSnapshot(uiArticle);
         setSessionReadArticles((prev) => [
           uiArticle,
@@ -560,12 +562,12 @@ export default function RSSReaderPage() {
         ]);
       },
     });
-  }, [fetchFullText]);
+  }, [fetchFullText, tList]);
 
   const handleSetLabels = useCallback((articleId: string, labelIds: string[]) => {
     setArticleLabels.mutate({ articleId, labelIds }, {
       onSuccess: (article: any) => {
-        const uiArticle = toUiArticle(article);
+        const uiArticle = toUiArticle(article, tList("unknownAuthor"));
         setSelectedArticleSnapshot(uiArticle);
         setSessionReadArticles((prev) => [
           uiArticle,
@@ -573,7 +575,7 @@ export default function RSSReaderPage() {
         ]);
       },
     });
-  }, [setArticleLabels]);
+  }, [setArticleLabels, tList]);
 
   const handleSaveSearch = useCallback(() => {
     const query = searchQuery.trim();
