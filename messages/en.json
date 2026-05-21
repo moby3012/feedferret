@@ -534,7 +534,9 @@
     "backToAllArticles": "Back to all articles",
     "feedFallback": "Feed",
     "labelFallback": "Label",
-    "savedSearchFallback": "Saved Search"
+    "savedSearchFallback": "Saved Search",
+    "feedNavigation": "Feed navigation",
+    "feedActions": "Feed actions"
   },
   "articleList": {
     "noArticles": "No articles",
@@ -754,7 +756,9 @@
       "closeEditor": "Close editor",
       "editRule": "Edit rule",
       "saveRule": "Save rule",
-      "saveChanges": "Save changes"
+      "saveChanges": "Save changes",
+      "feedScope": "Feed · {name}",
+      "categoryScope": "Category · {name}"
     },
     "alerts": {
       "keywordAlerts": "Keyword alerts",
@@ -845,7 +849,8 @@
       "dataExported": "Data exported",
       "sharingEnabled": "Sharing enabled",
       "sharingDisabled": "Sharing disabled"
-    }
+    },
+    "categorySettings": "Category Settings"
   },
   "feedEdit": {
     "authTab": "Authentication",

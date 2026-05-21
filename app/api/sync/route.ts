@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { syncAllFeeds, syncUserFeeds } from "@/lib/rss-sync";
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
+import { logger } from "@/lib/logger";
 
 // Background sync state to prevent concurrent syncs
 let lastSyncTime = 0;
@@ -46,7 +47,8 @@ export async function GET(request: Request) {
             results: results.map(r => ({ feed: r.feed, success: r.success, count: r.count }))
         });
     } catch (error) {
-        return NextResponse.json({ error: String(error) }, { status: 500 });
+        logger.error("[sync/GET]", error);
+        return NextResponse.json({ error: "Sync failed" }, { status: 500 });
     } finally {
         isSyncing = false;
     }
@@ -81,7 +83,8 @@ export async function POST(request: Request) {
             results: results.map(r => ({ feed: r.feed, success: r.success, skipped: r.skipped, count: r.count }))
         });
     } catch (error) {
-        return NextResponse.json({ error: String(error) }, { status: 500 });
+        logger.error("[sync/POST]", error);
+        return NextResponse.json({ error: "Sync failed" }, { status: 500 });
     } finally {
         isSyncing = false;
     }

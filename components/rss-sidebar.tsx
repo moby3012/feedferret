@@ -451,7 +451,7 @@ export function RssSidebar({
 
   return (
     <>
-    <aside role="navigation" aria-label="Feed navigation" className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-e border-sidebar-border/70 flex flex-col overflow-hidden">
+    <aside role="navigation" aria-label={t("sidebar.feedNavigation")} className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-e border-sidebar-border/70 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">
@@ -1245,7 +1245,7 @@ function FeedQuickActions({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          aria-label="Feed actions"
+          aria-label={t("sidebar.feedActions")}
           onClick={(e) => e.stopPropagation()}
           className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/80 hover:text-foreground hover:bg-sidebar-accent/60 transition-colors"
         >
