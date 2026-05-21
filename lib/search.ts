@@ -1,5 +1,14 @@
 import { db } from "./db";
 
+// PostgreSQL's LIKE is case-sensitive; Prisma supports mode:'insensitive' (ILIKE) there.
+// SQLite's LIKE is already case-insensitive for ASCII and does NOT support mode:'insensitive'.
+const isPostgres = (process.env.DATABASE_PROVIDER ?? "sqlite").toLowerCase().startsWith("post");
+function ci(value: string) {
+    return isPostgres
+        ? ({ contains: value, mode: "insensitive" as const })
+        : ({ contains: value });
+}
+
 export function tokenizeSearch(query: string) {
     const tokens: string[] = [];
     const re = /"([^"]+)"|'([^']+)'|(\S+)/g;
@@ -48,32 +57,32 @@ function processGroupTokens(userId: string, tokens: string[]): object {
                     some: {
                         label: {
                             userId,
-                            name: { contains: token.slice(1) },
+                            name: ci(token.slice(1)),
                         },
                     },
                 },
             };
         } else if (hasField) {
             if (["author", "by"].includes(key)) {
-                condition = { author: { contains: value } };
+                condition = { author: ci(value) };
             } else if (["intitle", "title"].includes(key)) {
-                condition = { title: { contains: value } };
+                condition = { title: ci(value) };
             } else if (["intext", "text", "content"].includes(key)) {
                 condition = {
                     OR: [
-                        { content: { contains: value } },
-                        { excerpt: { contains: value } },
+                        { content: ci(value) },
+                        { excerpt: ci(value) },
                     ],
                 };
             } else if (["inurl", "url", "link"].includes(key)) {
-                condition = { link: { contains: value } };
+                condition = { link: ci(value) };
             } else if (["feed", "f"].includes(key)) {
                 condition = {
                     feed: {
                         OR: [
                             { id: value },
-                            { name: { contains: value } },
-                            { url: { contains: value } },
+                            { name: ci(value) },
+                            { url: ci(value) },
                         ],
                     },
                 };
@@ -83,7 +92,7 @@ function processGroupTokens(userId: string, tokens: string[]): object {
                         category: {
                             OR: [
                                 { id: value },
-                                { name: { contains: value } },
+                                { name: ci(value) },
                             ],
                         },
                     },
@@ -96,7 +105,7 @@ function processGroupTokens(userId: string, tokens: string[]): object {
                                 userId,
                                 OR: [
                                     { id: value },
-                                    { name: { contains: value } },
+                                    { name: ci(value) },
                                 ],
                             },
                         },
@@ -132,13 +141,13 @@ function processGroupTokens(userId: string, tokens: string[]): object {
     for (const term of freeText) {
         and.push({
             OR: [
-                { title: { contains: term } },
-                { content: { contains: term } },
-                { excerpt: { contains: term } },
-                { author: { contains: term } },
-                { link: { contains: term } },
-                { feed: { name: { contains: term } } },
-                { labels: { some: { label: { name: { contains: term }, userId } } } },
+                { title: ci(term) },
+                { content: ci(term) },
+                { excerpt: ci(term) },
+                { author: ci(term) },
+                { link: ci(term) },
+                { feed: { name: ci(term) } },
+                { labels: { some: { label: { name: ci(term), userId } } } },
             ],
         });
     }
