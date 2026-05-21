@@ -1161,6 +1161,86 @@ export function ServerManagementDialog({
                     </ScrollArea>
                   </div>
                 </TabsContent>
+
+                {/* ── SYSTEM LOGS ── */}
+                <TabsContent value="logs" className="h-full mt-0 focus-visible:outline-none">
+                  <div className="px-6 sm:px-8 flex flex-col h-full">
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap gap-2">
+                        {([undefined, "mail", "digest", "sync"] as const).map((cat) => (
+                          <Button
+                            key={cat ?? "all"}
+                            size="sm"
+                            variant={logsCategory === cat ? "default" : "outline"}
+                            className="rounded-2xl"
+                            onClick={() => {
+                              setLogsCategory(cat);
+                              loadSystemLogs(cat);
+                            }}
+                          >
+                            {cat === undefined ? t("logs.all") : cat}
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-2xl gap-2"
+                        onClick={() => loadSystemLogs(logsCategory)}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        {t("logs.refresh")}
+                      </Button>
+                    </div>
+                    <ScrollArea className="flex-1">
+                      {!logsLoaded ? (
+                        <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        </div>
+                      ) : systemLogs.length === 0 ? (
+                        <Empty className="border-0">
+                          <EmptyMedia variant="icon"><FileText className="size-5" /></EmptyMedia>
+                          <EmptyContent>
+                            <EmptyTitle>{t("logs.empty")}</EmptyTitle>
+                          </EmptyContent>
+                        </Empty>
+                      ) : (
+                        <div className="pb-8">
+                          <div className="rounded-2xl border border-border/60 overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/40">
+                                <tr>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground whitespace-nowrap">Time</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">Level</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">Category</th>
+                                  <th className="text-start px-4 py-2 font-medium text-muted-foreground">Message</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {systemLogs.map((entry, i) => (
+                                  <tr key={entry.id} className={cn("border-t border-border/40", i % 2 === 0 ? "" : "bg-muted/20")}>
+                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap text-xs">{new Date(entry.createdAt).toLocaleString()}</td>
+                                    <td className="px-4 py-2">
+                                      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", {
+                                        "bg-blue-500/15 text-blue-600": entry.level === "info",
+                                        "bg-amber-500/15 text-amber-600": entry.level === "warn",
+                                        "bg-destructive/15 text-destructive": entry.level === "error",
+                                      })}>
+                                        {entry.level === "info" ? t("logs.levelInfo") : entry.level === "warn" ? t("logs.levelWarn") : t("logs.levelError")}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2 text-muted-foreground">{entry.category}</td>
+                                    <td className="px-4 py-2 truncate max-w-[300px]">{entry.message}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+                </TabsContent>
               </>
             )}
           </div>
