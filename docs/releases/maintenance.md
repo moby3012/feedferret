@@ -8,7 +8,6 @@
 ## Operations — Immediate (Post-Launch)
 
 - [ ] **Mozilla Observatory score** — run `https://observatory.mozilla.org` against the production URL; target grade ≥ B+. The current CSP includes `unsafe-inline` and `unsafe-eval` in `script-src` (required by Next.js App Router's runtime without nonce configuration). If the score falls below B+, investigate nonce-based CSP as the fix — see the Security section below.
-- [ ] **Sentry setup** — install `@sentry/nextjs`, add `SENTRY_DSN` to `.env.example` with a placeholder comment, wire into `lib/logger.ts` so `logger.error()` calls forward to Sentry in production. Add `SENTRY_AUTH_TOKEN` to the GitHub Actions environment for source-map upload.
 - [ ] **Google Reader API device tests** — manual verification session with each supported client. Test: add server, sync, mark-read, star, oldest-first view.
   - [ ] Reeder (macOS)
   - [ ] Reeder (iOS)

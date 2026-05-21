@@ -112,12 +112,6 @@ Rate limiting already fires before auth, so brute-force is already constrained. 
 
 ---
 
-### ⚪ Error logging — raw request data to Sentry
-
-Once Sentry is wired (v1.3), ensure request bodies containing passwords, tokens, or 2FA codes are scrubbed before forwarding to Sentry. Implement a `beforeSend` filter.
-
----
-
 ## 2. Components & TypeScript
 
 ### ✅ FIXED — No error boundaries anywhere
@@ -195,7 +189,7 @@ Background sync errors are now suppressed with `.catch(() => {})`. The lazy sync
 ### ⚪ Debug `console.error` in server-management-dialog
 
 **File:** `components/server-management-dialog.tsx` · Line 1536  
-`console.error(error)` before a toast is acceptable, but should route through `logger.error()` for consistency and future Sentry capture.
+`console.error(error)` before a toast is acceptable, but should route through `logger.error()` for consistency.
 
 ---
 

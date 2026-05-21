@@ -13,7 +13,6 @@ Effort scale: **S** < 1 day · **M** 1–3 days · **L** 1–2 weeks · **XL** 2
 | **API Token Scopes** | ✅ Done in v1.1 — `read`/`write`/`admin` enforced | M | — |
 | **`prefers-contrast: more` Support** | ✅ Done | S | — |
 | **Accessibility Statement Page** | ✅ Done | S | — |
-| **Sentry Error Monitoring** | Install `@sentry/nextjs`, wire into `lib/logger.ts`, add `SENTRY_DSN` to `.env.example`. | M | v1.3 |
 | **Fever API Compatibility** | Implement the Fever API protocol alongside Google Reader API. Targets NetNewsWire and other Fever clients. | M | v1.3 |
 | **Telegram Inline Buttons** | "Mark as read" + "Open" reply buttons on Telegram alert messages via Bot API inline keyboard. Requires switching to webhook mode. | M | v1.3 |
 | **Full Zod Schemas for Server Actions** | Replace ad-hoc validation in `app/actions/` with explicit `z.object()` schemas. No behaviour change — defensive hardening. | M | v1.3 |
