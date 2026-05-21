@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [1.1.1] — 2026-05-21 — Post-Release Patch
+
+Fixes found during release testing.
+
+### Fixed
+
+- **Empty feed scroll navigation** — Hovering over an empty feed and scrolling the mouse wheel now correctly advances to the next/previous feed. Previously the empty-state rendered outside `<ScrollArea>`, leaving `scrollRoot` null so the wheel handler never attached.
+- **Overscroll threshold** — Raised from 280 → 500 px accumulated `deltaY` before a feed switch fires, preventing accidental feed jumps when scrolling to the last article normally.
+- **Label unread badges** — Three gaps caused badges to show stale counts:
+  - `useLabels` now refetches every 60 s (same cadence as feeds) so badges self-correct in the background.
+  - Toggling an individual article read/unread now optimistically adjusts the badge for every label the article belongs to, and invalidates `["labels"]` on success.
+  - "Mark all read" on a label scope now optimistically zeros that label's badge immediately instead of waiting for the server round-trip.
+- **Search input padding** — Changed `px-0` → `px-2` on the search dialog input so typed text no longer clips against the element boundary.
+- **Case-insensitive search** — All `contains` queries in `lib/search.ts` now use `mode: 'insensitive'` on PostgreSQL (ILIKE) and plain LIKE on SQLite (already case-insensitive for ASCII). Searching `wordpress`, `WordPress`, or `WORDPRESS` returns identical results.
+- **Lockfile / CI** — Regenerated `pnpm-lock.yaml` to reflect `ws` and `@hono/node-server` overrides added in v1.1.0; fixes `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` in CI and Coolify.
+
+---
+
 ## [1.1.0] — 2026-05-21 — Internationalization, Full API Coverage, Security Hardening & UX Polish
 
 ### Internationalization (i18n)
