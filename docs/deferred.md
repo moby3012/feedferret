@@ -83,17 +83,17 @@ This document lists features that were **explicitly considered but not implement
 
 All German translations were produced without a native-speaker review pass. Machine-assisted translation may contain unnatural phrasing, incorrect case (Dativ/Akkusativ), or compound noun errors. A community review PR is welcome — see `docs/contributing-translations.md`.
 
-### Date/Time Formatting Not Yet via next-intl
+### ~~Date/Time Formatting Not Yet via next-intl~~ — ✅ Fixed in v1.1.1
 
-Some date strings still use `toLocaleString()` / `toLocaleDateString()` directly (e.g., article publish dates in the reader, shared search page). These should use next-intl's `useFormatter` or `format.dateTime()` for consistent locale-aware output (e.g., German: `12.05.2026`, not `5/12/2026`). Tracked for v1.2.
+All remaining `toLocaleString()` / `toLocaleDateString()` calls in `settings-form.tsx`, `server-management-dialog.tsx`, and `lib/digest-email.ts` have been replaced with `format.dateTime()` (client components) and `Intl.DateTimeFormat` (server-side email). The `calendar.tsx` data attribute and react-day-picker formatter callback are intentionally left as-is (DOM attribute / library internals).
 
 ### RTL: Swipe Gesture Direction
 
 Under `dir="rtl"`, swipe-left and swipe-right navigation gestures are not inverted. A user expecting RTL swipe conventions will find the direction backwards. Tracked for v1.2 alongside the gesture animation work.
 
-### Token `admin` Scope Not Enforced on Admin Actions
+### ~~Token `admin` Scope Not Enforced on Admin Actions~~ — ✅ Already enforced
 
-The `admin` scope is defined and selectable in the UI, but no endpoints currently require it — all write operations accept `write` scope. Admin-level operations (e.g., sync triggers, server settings) currently accept `write`. This will be tightened in a follow-up once the admin endpoint surface is fully defined.
+`app/api/v1/[...path]/route.ts` correctly requires `admin` scope for `/admin`, `/users`, and write operations on `/settings` and `/starter-packs`. Non-v1 internal API routes use session auth (no token scope applies). No action needed.
 
 ---
 

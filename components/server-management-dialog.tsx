@@ -1220,7 +1220,7 @@ export function ServerManagementDialog({
                               <tbody>
                                 {systemLogs.map((entry, i) => (
                                   <tr key={entry.id} className={cn("border-t border-border/40", i % 2 === 0 ? "" : "bg-muted/20")}>
-                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap text-xs">{new Date(entry.createdAt).toLocaleString()}</td>
+                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap text-xs">{format.dateTime(new Date(entry.createdAt), { dateStyle: "medium", timeStyle: "short" })}</td>
                                     <td className="px-4 py-2">
                                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", {
                                         "bg-blue-500/15 text-blue-600": entry.level === "info",
