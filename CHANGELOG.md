@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
-## [1.1.0] — 2026-05-20 — Internationalization, Full API Coverage & UX Polish
+## [1.1.0] — 2026-05-21 — Internationalization, Full API Coverage, Security Hardening & UX Polish
 
 ### Internationalization (i18n)
 
@@ -46,6 +46,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 - **Storage dashboard** — new "Storage" tab in Server Management shows per-user article/feed/AI-summary counts, sorted by article count descending. Foundation for future quota enforcement.
 - **Public saved search kill-switch** — `GlobalSettings.disablePublicSharedSearches` toggle in Server Management → Registrations. Already active: shared search page returns 404 when disabled.
+
+### Security Hardening (Pre-Release Audit — PRs #77–80)
+
+- **Rate limiting — Fever API** — `checkRateLimit` with 120 req/min per user applied after authentication. Prevents article scraping and ID enumeration.
+- **Rate limiting — Google Reader API** — same `checkRateLimit` guard in both GET and POST handlers.
+- **Email enumeration fix** — `/api/register` now returns a generic `Registration failed` response for existing accounts instead of `User already exists`.
+- **Push subscribe input validation** — `platform` and `pushFrequency` validated against explicit allowlists before DB write. Arbitrary strings no longer accepted.
+- **Sync error leakage** — `/api/sync` catch blocks replaced `String(error)` in response body with generic `"Sync failed"`. Raw exception messages no longer reach clients.
+- **`pnpm audit --audit-level=high`** added as a CI step; fails the build on any high-severity vulnerability.
+- **`pnpm.overrides`** — `ws>=8.20.1` and `@hono/node-server>=1.19.13` patched via overrides to resolve moderate dev-dependency CVEs.
+- **Husky pre-commit hook** — made executable; `lint-staged` now runs ESLint + TypeScript on every commit.
+- **ESLint config** — `.claude/` worktree directory excluded to prevent false positives in container environments.
+
+### TypeScript & Code Quality (PRs #78–79)
+
+- **`as any` elimination** — removed all `as any` casts in `app/page.tsx` (3 instances), `components/feed-management.tsx` (7 instances), and `components/server-management-dialog.tsx` (all typed with Prisma-derived types via `Awaited<ReturnType<...>>`).
+- **`useCallback`/`useMemo` deps** — exhaustive-deps ESLint violations fixed across `settings-form.tsx`, `server-management-dialog.tsx`, and `app/page.tsx`.
+- **`.catch(console.error)` cleanup** — replaced with `.catch(() => {})` for intentional fire-and-forget operations; server-side errors already logged by the route handler.
+
+### i18n Completions (PRs #77–80)
+
+- **Server management toasts** — all 28+ hardcoded English toast messages in `server-management-dialog.tsx` replaced with `useTranslations("serverManagement.toast")` keys. Admins on DE locales now see translated feedback.
+- **Author fallback** — `"Unknown"` author → `tList("unknownAuthor")` (`"Unbekannt"` in DE).
+- **Header fallbacks** — `"Feed"`, `"Label"`, `"Saved Search"` → `t("feedFallback")`, `t("labelFallback")`, `t("savedSearchFallback")`.
+- **ARIA region labels** — `aria-label="Article list"`, `"Article reader"`, `"Clear search"`, `"Close search"` all translated via `useTranslations("accessibility")`.
+- **Sidebar ARIA** — `aria-label` on sidebar `<aside>` and feed action buttons translated via `t("sidebar.feedNavigation")`, `t("sidebar.feedActions")`.
+- **Feed management scope labels** — rule scope selects now render `t("rules.feedScope", { name })` and `t("rules.categoryScope", { name })` instead of template literals.
+- **Final translation count: 1052 keys** in `de.json`.
 
 ### Tests
 
