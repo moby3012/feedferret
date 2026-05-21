@@ -168,7 +168,10 @@ export function ArticleList({
     const dx = touch.clientX - start.x;
     const dy = touch.clientY - start.y;
     if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
-    if (dx < 0) onSwipeNextFeed?.();
+    
+    const isRtl = typeof document !== "undefined" && document.documentElement.getAttribute("dir") === "rtl";
+    const goNext = isRtl ? dx > 0 : dx < 0;
+    if (goNext) onSwipeNextFeed?.();
     else onSwipePreviousFeed?.();
   };
   const [visibleCount, setVisibleCount] = useState(pageSize ?? 30);
@@ -511,12 +514,25 @@ function ArticlePreview({
     setSwipeActive(false);
     setSwipeOffset(0);
     if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dy) > Math.abs(dx) * 0.75) return;
-    if (dx > 0) onToggleRead?.(article.id);
-    else onToggleStar?.(article.id);
+    
+    const isRtl = typeof document !== "undefined" && document.documentElement.getAttribute("dir") === "rtl";
+    if (dx > 0) {
+      if (isRtl) onToggleStar?.(article.id);
+      else onToggleRead?.(article.id);
+    } else {
+      if (isRtl) onToggleRead?.(article.id);
+      else onToggleStar?.(article.id);
+    }
   };
 
   const swipeReady = Math.abs(swipeOffset) >= SWIPE_THRESHOLD;
-  const swipeRevealDir: "read" | "star" | null = swipeOffset > 12 ? "read" : swipeOffset < -12 ? "star" : null;
+  const isRtl = typeof document !== "undefined" && document.documentElement.getAttribute("dir") === "rtl";
+  const swipeRevealDir: "read" | "star" | null =
+    swipeOffset > 12
+      ? (isRtl ? "star" : "read")
+      : swipeOffset < -12
+      ? (isRtl ? "read" : "star")
+      : null;
   const swipeStyle: React.CSSProperties = {
     transform: swipeOffset !== 0 ? `translateX(${swipeOffset}px)` : undefined,
     transition: swipeActive ? "none" : "transform 220ms cubic-bezier(0.16, 1, 0.3, 1)",

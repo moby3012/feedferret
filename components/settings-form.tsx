@@ -13,6 +13,7 @@ import {
   Copy,
   ExternalLink,
   Key,
+  Languages,
   Laptop,
   Layers,
   LogOut,
@@ -54,6 +55,7 @@ import {
 import { deleteOwnAccount } from "@/app/actions/account";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useFormatter } from "next-intl";
 import {
   Select,
   SelectContent,
@@ -62,7 +64,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useReadingPreferences, useUpdateGlobalSettings, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
+import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
 import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -126,6 +128,7 @@ export function SettingsForm() {
   const { data: prefs } = useReadingPreferences();
   const updateSettings = useUpdateGlobalSettings();
   const themeOptions = makeThemeOptions(t);
+  const updateUiLang = useUpdateUiLanguage();
 
   const update = (data: Parameters<typeof updateSettings.mutate>[0]) =>
     updateSettings.mutate(data);
@@ -429,6 +432,30 @@ export function SettingsForm() {
               onCheckedChange={(checked) => update({ layoutDirection: checked ? "rtl" : "ltr" })}
               className="h-7 w-12"
             />
+          </PrefRow>
+
+          {/* Language */}
+          <PrefRow
+            icon={Languages}
+            title="Language"
+            description="Interface language for the app. Takes effect after navigating away and back."
+          >
+            <Select
+              value={prefs?.uiLanguage ?? "en"}
+              onValueChange={(locale) => {
+                updateUiLang.mutate(locale, {
+                  onSuccess: () => router.refresh(),
+                });
+              }}
+            >
+              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-2xl">
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="de">Deutsch</SelectItem>
+              </SelectContent>
+            </Select>
           </PrefRow>
 
           {/* Hide empty feeds */}
@@ -1013,6 +1040,7 @@ function DigestSection() {
   const { data: instance, loading: instanceLoading } = useInstance();
   const updateDigest = useUpdateDigestSettings();
   const sendTest = useSendTestDigest();
+  const format = useFormatter();
 
   if (!digest) return null;
   // Hide entirely if instance has no mail configured (#5)
@@ -1310,6 +1338,7 @@ function ApiTokenSection() {
   const [createScope, setCreateScope] = useState("write");
   const [createExpiry, setCreateExpiry] = useState("never");
   const [creating, setCreating] = useState(false);
+  const format = useFormatter();
 
   const loadTokens = useCallback(async () => {
     const res = await fetch("/api/user/tokens");

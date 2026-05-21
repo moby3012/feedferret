@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
+import { updateUiLanguage } from "@/app/actions/locale"
 import { toast } from "sonner"
 
 export function useFeeds(enabled = true) {
@@ -336,8 +337,41 @@ export function useUpdateGlobalSettings() {
     return useMutation({
         mutationFn: (data: Parameters<typeof updateGlobalSettings>[0]) =>
             updateGlobalSettings(data),
+        onMutate: async (data) => {
+            await queryClient.cancelQueries({ queryKey: ["reading-preferences"] })
+            const prev = queryClient.getQueryData(["reading-preferences"])
+            queryClient.setQueryData(["reading-preferences"], (old: any) =>
+                old ? { ...old, ...data } : old,
+            )
+            return { prev }
+        },
+        onError: (_err, _vars, context) => {
+            if (context?.prev !== undefined) {
+                queryClient.setQueryData(["reading-preferences"], context.prev)
+            }
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["reading-preferences"] })
+        },
+    })
+}
+
+export function useUpdateUiLanguage() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (locale: string) => updateUiLanguage(locale),
+        onMutate: async (locale) => {
+            await queryClient.cancelQueries({ queryKey: ["reading-preferences"] })
+            const prev = queryClient.getQueryData(["reading-preferences"])
+            queryClient.setQueryData(["reading-preferences"], (old: any) =>
+                old ? { ...old, uiLanguage: locale } : old,
+            )
+            return { prev }
+        },
+        onError: (_err, _vars, context) => {
+            if (context?.prev !== undefined) {
+                queryClient.setQueryData(["reading-preferences"], context.prev)
+            }
         },
     })
 }

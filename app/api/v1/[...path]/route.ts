@@ -720,6 +720,17 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
     return res;
   };
 
+  // Enforce admin scope and role for administrative paths
+  const isAdminPath = path[0] === "admin" || path[0] === "users" ||
+    ((path[0] === "settings" || path[0] === "starter-packs") && isWriteMethod);
+  if (isAdminPath) {
+    const se = scopeError(user, "admin");
+    if (se) return withRl(se);
+    if (user.role !== "ADMIN") {
+      return withRl(apiError("Admin role required", 403));
+    }
+  }
+
   let res: Response;
   try {
     if (method === "GET" && path[0] === "me" && path.length === 1) res = NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role, tokenScope: user.tokenScope ?? "session" });

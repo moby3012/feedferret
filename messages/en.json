@@ -783,6 +783,7 @@
       "ntfyNotification": "ntfy notification",
       "attachLabel": "Attach label",
       "removeLabel": "Remove label",
+      "createNewLabel": "Create new label…",
       "webhook": "Webhook"
     },
     "webhooks": {

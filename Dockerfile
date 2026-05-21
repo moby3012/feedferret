@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y openssl ca-certificates curl && rm -rf 
 # Adds native build tools needed for packages that compile C extensions.
 FROM base-runtime AS base-build
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
-RUN npm install -g pnpm@11.0.8
+RUN npm install -g pnpm@9.14.2
 ENV CI=true
 
 # ── deps ──────────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ ENV DATABASE_URL=postgresql://feedferret:feedferret-change-me@postgres:5432/feed
 ENV DATABASE_PROVIDER=postgresql
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN npm install -g pnpm@11.0.8
+RUN npm install -g pnpm@9.14.2
 
 RUN groupadd --system --gid 1001 nodejs
 RUN useradd --system --uid 1001 -g nodejs nextjs

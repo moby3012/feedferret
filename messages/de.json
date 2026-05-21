@@ -783,6 +783,7 @@
       "ntfyNotification": "ntfy-Benachrichtigung",
       "attachLabel": "Label anhängen",
       "removeLabel": "Label entfernen",
+      "createNewLabel": "Neues Label erstellen…",
       "webhook": "Webhook"
     },
     "webhooks": {

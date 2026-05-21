@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useTranslations, useFormatter } from "next-intl";
 import {
   useFeeds,
   useDeleteFeed,
@@ -132,6 +132,7 @@ const ADD_WEBHOOK_TOKEN = "__add_webhook__";
 // Sentinel values for the label pickers — never stored; resolved to label:${id} / remove_label:${id}
 const PICK_LABEL_TOKEN = "__pick_label__";
 const REMOVE_LABEL_TOKEN = "__remove_label__";
+const CREATE_LABEL_TOKEN = "__create_label__";
 
 function catalogForTrigger(catalog: ActionCatalogItem[], trigger: "article" | "feed_error"): ActionCatalogItem[] {
   if (trigger !== "feed_error") return catalog;
@@ -230,6 +231,9 @@ function ActionListEditor({
 }) {
   const t = useTranslations("feedManagement");
   const [pendingLabelToken, setPendingLabelToken] = useState<typeof PICK_LABEL_TOKEN | typeof REMOVE_LABEL_TOKEN | null>(null);
+  const [creatingLabel, setCreatingLabel] = useState(false);
+  const [newLabelNameInput, setNewLabelNameInput] = useState("");
+  const createLabelMutation = useCreateLabel();
 
   const reorderable = (mover: (arr: string[]) => string[]) => {
     const next = mover(value);
@@ -349,8 +353,14 @@ function ActionListEditor({
           </div>
         );
       })}
-      {pendingLabelToken && (
-        <Select value="" onValueChange={resolveLabelPick}>
+      {pendingLabelToken && !creatingLabel && (
+        <Select value="" onValueChange={(val) => {
+          if (val === CREATE_LABEL_TOKEN) {
+            setCreatingLabel(true);
+          } else {
+            resolveLabelPick(val);
+          }
+        }}>
           <SelectTrigger className="rounded-xl h-10 border-primary/50">
             <SelectValue placeholder={
               pendingLabelToken === PICK_LABEL_TOKEN
@@ -359,11 +369,71 @@ function ActionListEditor({
             } />
           </SelectTrigger>
           <SelectContent>
+            {pendingLabelToken === PICK_LABEL_TOKEN && (
+              <SelectItem value={CREATE_LABEL_TOKEN} className="text-primary font-medium">
+                {t("actions.createNewLabel")}
+              </SelectItem>
+            )}
             {(labels ?? []).map((lbl: any) => (
               <SelectItem key={lbl.id} value={lbl.id}>{lbl.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
+      )}
+      {pendingLabelToken === PICK_LABEL_TOKEN && creatingLabel && (
+        <div className="flex gap-2">
+          <Input
+            placeholder={t("labels.newLabelPlaceholder")}
+            value={newLabelNameInput}
+            onChange={(e) => setNewLabelNameInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newLabelNameInput.trim()) {
+                e.preventDefault();
+                createLabelMutation.mutateAsync({ name: newLabelNameInput.trim() }).then((lbl) => {
+                  resolveLabelPick(lbl.id);
+                  setCreatingLabel(false);
+                  setNewLabelNameInput("");
+                }).catch(() => {});
+              }
+              if (e.key === "Escape") {
+                setCreatingLabel(false);
+                setNewLabelNameInput("");
+                setPendingLabelToken(null);
+              }
+            }}
+            className="rounded-xl h-10 flex-1"
+            autoFocus
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="default"
+            className="rounded-xl shrink-0"
+            disabled={!newLabelNameInput.trim() || createLabelMutation.isPending}
+            onClick={() => {
+              createLabelMutation.mutateAsync({ name: newLabelNameInput.trim() }).then((lbl) => {
+                resolveLabelPick(lbl.id);
+                setCreatingLabel(false);
+                setNewLabelNameInput("");
+              }).catch(() => {});
+            }}
+          >
+            {t("labels.addLabel")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="rounded-xl shrink-0"
+            onClick={() => {
+              setCreatingLabel(false);
+              setNewLabelNameInput("");
+              setPendingLabelToken(null);
+            }}
+          >
+            ×
+          </Button>
+        </div>
       )}
       {!pendingLabelToken && available.length > 0 && (
         <Select value="" onValueChange={addAction}>
@@ -686,6 +756,7 @@ export function FeedManagement({
   pageMode?: boolean;
 }) {
   const t = useTranslations("feedManagement");
+  const format = useFormatter();
   const { data: feeds = [] } = useFeeds();
   const deleteFeed = useDeleteFeed();
   const updateFeed = useUpdateFeed();
@@ -1012,7 +1083,7 @@ export function FeedManagement({
                                       <span>
                                         {t("feeds.lastSync")}{" "}
                                         {feed.lastFetchedAt
-                                          ? new Date(feed.lastFetchedAt).toLocaleString()
+                                          ? format.dateTime(new Date(feed.lastFetchedAt), { dateStyle: "medium", timeStyle: "short" })
                                           : t("feeds.never")}
                                       </span>
                                       {feed.lastStatus === "error" && (
@@ -1367,7 +1438,7 @@ export function FeedManagement({
                               <span>{feed.articleCount} {t("health.articles")}</span>
                               <span>{feed.unreadCount} {t("health.unread")}</span>
                               <span>{feed.avgArticlesPerDay != null ? `${feed.avgArticlesPerDay}${t("health.perDay")}` : "—"}</span>
-                              <span>{t("health.sync")} {feed.lastFetchedAt ? new Date(feed.lastFetchedAt).toLocaleString() : t("feeds.never")}</span>
+                              <span>{t("health.sync")} {feed.lastFetchedAt ? format.dateTime(new Date(feed.lastFetchedAt), { dateStyle: "medium", timeStyle: "short" }) : t("feeds.never")}</span>
                               <span>{t("health.retention")} {feed.retentionDays || t("health.default")} {t("health.days")}</span>
                             </div>
                             {feed.lastError && (
@@ -2539,7 +2610,7 @@ export function FeedManagement({
                                         ...(actions.includes("notify_email") ? ["email"] : []),
                                       ].join(" + ")
                                     }
-                                    {alert.lastTriggeredAt ? ` · last: ${new Date(alert.lastTriggeredAt).toLocaleString()}` : ""}
+                                    {alert.lastTriggeredAt ? ` · last: ${format.dateTime(new Date(alert.lastTriggeredAt), { dateStyle: "medium", timeStyle: "short" })}` : ""}
                                   </p>
                                   </div>
                                 </div>
@@ -2611,7 +2682,7 @@ export function FeedManagement({
                                       >
                                         <span className="block truncate">{n.body}</span>
                                         <span className="text-[10px] text-muted-foreground">
-                                          {new Date(n.createdAt).toLocaleString()}
+                                          {format.dateTime(new Date(n.createdAt), { dateStyle: "medium", timeStyle: "short" })}
                                         </span>
                                       </button>
                                     ))}

@@ -44,6 +44,7 @@ export async function getReadingPreferences() {
       layoutDirection: true,
       hideEmptyFeeds: true,
       hideEmptyLabels: true,
+      uiLanguage: true,
     },
   });
   return {
@@ -60,6 +61,7 @@ export async function getReadingPreferences() {
     layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
     hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
     hideEmptyLabels: user?.hideEmptyLabels ?? false,
+    uiLanguage: user?.uiLanguage ?? "en",
   };
 }
 

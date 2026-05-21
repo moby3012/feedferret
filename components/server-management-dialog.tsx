@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useTranslations } from "next-intl";
+import { useTranslations, useFormatter } from "next-intl";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -89,6 +89,7 @@ export function ServerManagementDialog({
   pageMode?: boolean;
 }) {
   const t = useTranslations("serverManagement");
+  const format = useFormatter();
   const [users, setUsers] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -1045,7 +1046,7 @@ export function ServerManagementDialog({
                               <tbody>
                                 {auditLog.map((entry, i) => (
                                   <tr key={entry.id} className={cn("border-t border-border/40", i % 2 === 0 ? "" : "bg-muted/20")}>
-                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{new Date(entry.createdAt).toLocaleString()}</td>
+                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{format.dateTime(new Date(entry.createdAt), { dateStyle: "medium", timeStyle: "short" })}</td>
                                     <td className="px-4 py-2 truncate max-w-[140px]">{entry.actor?.name || entry.actor?.email || "—"}</td>
                                     <td className="px-4 py-2">
                                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", {
@@ -1086,7 +1087,7 @@ export function ServerManagementDialog({
                               <tbody>
                                 {loginAttempts.map((attempt, i) => (
                                   <tr key={attempt.id} className={cn("border-t border-border/40", i % 2 === 0 ? "" : "bg-muted/20")}>
-                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{new Date(attempt.createdAt).toLocaleString()}</td>
+                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{format.dateTime(new Date(attempt.createdAt), { dateStyle: "medium", timeStyle: "short" })}</td>
                                     <td className="px-4 py-2 truncate max-w-[180px]">{attempt.email}</td>
                                     <td className="px-4 py-2">
                                       {attempt.success ? (
@@ -1144,17 +1145,17 @@ export function ServerManagementDialog({
                                     <div className="font-medium truncate">{stat.name || stat.email}</div>
                                     {stat.name && <div className="text-xs text-muted-foreground truncate">{stat.email}</div>}
                                   </div>
-                                  <div className="text-right tabular-nums">{stat.articles.toLocaleString()}</div>
-                                  <div className="text-right tabular-nums">{stat.feeds.toLocaleString()}</div>
-                                  <div className="text-right tabular-nums">{stat.aiSummaries.toLocaleString()}</div>
+                                  <div className="text-right tabular-nums">{format.number(stat.articles)}</div>
+                                  <div className="text-right tabular-nums">{format.number(stat.feeds)}</div>
+                                  <div className="text-right tabular-nums">{format.number(stat.aiSummaries)}</div>
                                 </div>
                               ))}
                           </div>
                           <div className="mt-4 rounded-2xl border border-border/40 bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
                             <strong>Total:</strong>{" "}
-                            {storageStats.reduce((s, r) => s + r.articles, 0).toLocaleString()} {t("storage.articles").toLowerCase()} ·{" "}
-                            {storageStats.reduce((s, r) => s + r.feeds, 0).toLocaleString()} {t("storage.feeds").toLowerCase()} ·{" "}
-                            {storageStats.reduce((s, r) => s + r.aiSummaries, 0).toLocaleString()} {t("storage.aiSummaries").toLowerCase()}
+                            {format.number(storageStats.reduce((s, r) => s + r.articles, 0))} {t("storage.articles").toLowerCase()} ·{" "}
+                            {format.number(storageStats.reduce((s, r) => s + r.feeds, 0))} {t("storage.feeds").toLowerCase()} ·{" "}
+                            {format.number(storageStats.reduce((s, r) => s + r.aiSummaries, 0))} {t("storage.aiSummaries").toLowerCase()}
                           </div>
                         </div>
                       )}
