@@ -292,7 +292,7 @@ export function ArticleList({
     let accum = 0;
     let lastFire = 0;
     const COOLDOWN = 1200;
-    const THRESHOLD = 280;
+    const THRESHOLD = 500;
 
     const fire = (dir: 1 | -1) => {
       const now = Date.now();
@@ -361,25 +361,6 @@ export function ArticleList({
     );
   }
 
-  if (articles.length === 0) {
-    return (
-      <div
-        key={filterKey ?? "empty"}
-        onTouchStart={handleBgSwipeStart}
-        onTouchEnd={handleBgSwipeEnd}
-        className={cn("flex-1 flex items-center justify-center p-4", transitionClass)}
-      >
-        <Empty className="border-0">
-          <EmptyMedia variant="icon"><Circle className="size-6" /></EmptyMedia>
-          <EmptyContent>
-            <EmptyTitle>{t("noArticles")}</EmptyTitle>
-            <EmptyDescription>{t("noArticlesDescription")}</EmptyDescription>
-          </EmptyContent>
-        </Empty>
-      </div>
-    );
-  }
-
   return (
     <ScrollArea
       key={filterKey ?? "default"}
@@ -401,42 +382,57 @@ export function ArticleList({
           </div>
         </div>
       )}
-      <div
-        ref={contentRef}
-        style={{
-          transform: pullDistance > 0 ? `translateY(${pullDistance}px)` : undefined,
-          transition: isPulling ? "none" : "transform 180ms ease",
-        }}
-        className={cn(
-          "p-3 pb-28 lg:pb-3 space-y-2.5",
-          viewMode === "magazine" &&
-            "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 space-y-0",
-        )}
-      >
-        {visibleArticles.map((article, index) => (
-          <ArticlePreview
-            key={article.id}
-            article={article}
-            isSelected={selectedArticle?.id === article.id}
-            onClick={() => onSelectArticle(article)}
-            onToggleRead={onToggleRead}
-            onToggleStar={onToggleStar}
-            onToggleReadLater={onToggleReadLater}
-            onReleaseSpoiler={onReleaseSpoiler}
-            index={index}
-            viewMode={viewMode}
-            markReadOnScroll={markReadOnScroll}
-            onMarkRead={onMarkRead}
-            scrollRoot={scrollRoot}
-          />
-        ))}
-        {hasMore && (
-          <div ref={sentinelRef} className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-            <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin me-2" />
-            {t("loadingMore")}
-          </div>
-        )}
-      </div>
+      {articles.length === 0 ? (
+        <div
+          ref={contentRef}
+          className="flex items-center justify-center p-4 py-20"
+        >
+          <Empty className="border-0">
+            <EmptyMedia variant="icon"><Circle className="size-6" /></EmptyMedia>
+            <EmptyContent>
+              <EmptyTitle>{t("noArticles")}</EmptyTitle>
+              <EmptyDescription>{t("noArticlesDescription")}</EmptyDescription>
+            </EmptyContent>
+          </Empty>
+        </div>
+      ) : (
+        <div
+          ref={contentRef}
+          style={{
+            transform: pullDistance > 0 ? `translateY(${pullDistance}px)` : undefined,
+            transition: isPulling ? "none" : "transform 180ms ease",
+          }}
+          className={cn(
+            "p-3 pb-28 lg:pb-3 space-y-2.5",
+            viewMode === "magazine" &&
+              "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 space-y-0",
+          )}
+        >
+          {visibleArticles.map((article, index) => (
+            <ArticlePreview
+              key={article.id}
+              article={article}
+              isSelected={selectedArticle?.id === article.id}
+              onClick={() => onSelectArticle(article)}
+              onToggleRead={onToggleRead}
+              onToggleStar={onToggleStar}
+              onToggleReadLater={onToggleReadLater}
+              onReleaseSpoiler={onReleaseSpoiler}
+              index={index}
+              viewMode={viewMode}
+              markReadOnScroll={markReadOnScroll}
+              onMarkRead={onMarkRead}
+              scrollRoot={scrollRoot}
+            />
+          ))}
+          {hasMore && (
+            <div ref={sentinelRef} className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+              <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin me-2" />
+              {t("loadingMore")}
+            </div>
+          )}
+        </div>
+      )}
     </ScrollArea>
   );
 }
