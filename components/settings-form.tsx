@@ -1035,12 +1035,12 @@ const DAYS = [
 
 function DigestSection() {
   const t = useTranslations();
+  const format = useFormatter();
   const { data: digest } = useDigestSettings();
   const { data: feedsData } = useFeeds();
   const { data: instance, loading: instanceLoading } = useInstance();
   const updateDigest = useUpdateDigestSettings();
   const sendTest = useSendTestDigest();
-  const format = useFormatter();
 
   if (!digest) return null;
   // Hide entirely if instance has no mail configured (#5)
@@ -1073,7 +1073,7 @@ function DigestSection() {
             <p className="text-sm font-medium">{t("digest.enableDigestEmails")}</p>
             {digest.digestLastSentAt && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                {t("digest.lastSent")}: {new Date(digest.digestLastSentAt).toLocaleString()}
+                {t("digest.lastSent")}: {format.dateTime(new Date(digest.digestLastSentAt), { dateStyle: "medium", timeStyle: "short" })}
               </p>
             )}
           </div>
@@ -1327,6 +1327,7 @@ function DeleteAccountSection() {
 
 function ApiTokenSection() {
   const t = useTranslations();
+  const format = useFormatter();
   const [tokens, setTokens] = useState<Array<{
     id: string; name: string; scope: string; expiresAt: string | null; lastUsedAt: string | null; createdAt: string;
   }>>([]);
@@ -1338,7 +1339,6 @@ function ApiTokenSection() {
   const [createScope, setCreateScope] = useState("write");
   const [createExpiry, setCreateExpiry] = useState("never");
   const [creating, setCreating] = useState(false);
-  const format = useFormatter();
 
   const loadTokens = useCallback(async () => {
     const res = await fetch("/api/user/tokens");
@@ -1484,11 +1484,11 @@ function ApiTokenSection() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium truncate">{tok.name}</span>
                   <Badge variant={scopeColor(tok.scope)} className="text-[10px] h-4 px-1.5">{scopeLabel(tok.scope)}</Badge>
-                  {tok.expiresAt && <span className="text-[11px] text-muted-foreground">{t("apiTokens.expires")} {new Date(tok.expiresAt).toLocaleDateString()}</span>}
+                  {tok.expiresAt && <span className="text-[11px] text-muted-foreground">{t("apiTokens.expires")} {format.dateTime(new Date(tok.expiresAt), { dateStyle: "medium" })}</span>}
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {t("apiTokens.created")} {new Date(tok.createdAt).toLocaleDateString()}
-                  {tok.lastUsedAt ? ` · ${t("apiTokens.lastUsed")} ${new Date(tok.lastUsedAt).toLocaleDateString()}` : ` · ${t("apiTokens.neverUsed")}`}
+                  {t("apiTokens.created")} {format.dateTime(new Date(tok.createdAt), { dateStyle: "medium" })}
+                  {tok.lastUsedAt ? ` · ${t("apiTokens.lastUsed")} ${format.dateTime(new Date(tok.lastUsedAt), { dateStyle: "medium" })}` : ` · ${t("apiTokens.neverUsed")}`}
                 </p>
               </div>
               <Button

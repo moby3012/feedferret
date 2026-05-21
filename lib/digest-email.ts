@@ -49,7 +49,7 @@ function buildHtml(opts: DigestEmailOptions): string {
       <tr>
         <td style="padding:16px 0;border-bottom:1px solid #e5e7eb;">
           <div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-family:sans-serif;">
-            ${escapeHtml(a.feedIcon ?? "📰")} ${escapeHtml(a.feedName)} &nbsp;·&nbsp; ${new Date(a.publishedAt).toLocaleDateString(locale ?? "en", { month: "short", day: "numeric" })}
+            ${escapeHtml(a.feedIcon ?? "📰")} ${escapeHtml(a.feedName)} &nbsp;·&nbsp; ${new Intl.DateTimeFormat(locale ?? "en", { month: "short", day: "numeric" }).format(new Date(a.publishedAt))}
           </div>
           <a href="${escapeHtml(a.link)}" style="font-size:16px;font-weight:600;color:#111827;text-decoration:none;line-height:1.4;font-family:sans-serif;">
             ${escapeHtml(a.title)}
@@ -121,7 +121,7 @@ function buildText(opts: DigestEmailOptions): string {
   ];
   for (const a of articles) {
     lines.push(`${a.title}`);
-    lines.push(`${a.feedName} · ${new Date(a.publishedAt).toLocaleDateString(locale ?? "en")}`);
+    lines.push(`${a.feedName} · ${new Intl.DateTimeFormat(locale ?? "en", { dateStyle: "medium" }).format(new Date(a.publishedAt))}`);
     lines.push(a.link);
     if (a.aiSummary) {
       lines.push(`[AI] ${a.aiSummary}`);

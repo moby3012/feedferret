@@ -6,18 +6,21 @@ Effort scale: **S** < 1 day · **M** 1–3 days · **L** 1–2 weeks · **XL** 2
 
 ---
 
-| Feature | Description | Effort |
-|---|---|---|
-| **Saved Search Admin Policy** | ✅ Done in v1.1 | S |
-| **Batch API Endpoints** | ✅ Done in v1.1 — `POST /api/v1/articles/batch` with 8 actions, max 500 IDs, write-scope required. | S |
-| **API Token Scopes** | ✅ Done in v1.1 — `read`/`write`/`admin` enforced per endpoint in `lib/api-auth.ts`. UI scope picker was already in settings-form. | M |
-| **WebSub / PubSubHubbub** | Subscribe to WebSub hubs declared in feed `<link rel="hub">` tags. Enables instant article delivery for feeds that advertise a hub, eliminating polling latency. Requires a public callback URL. | L |
-| **Offline-First Mutations** | Queue mark-read and star actions in IndexedDB when the network is unavailable. Sync the queue on reconnect using a Service Worker background sync event. Requires no UI change — the actions appear to succeed immediately. | L |
-| **Website Scraping Feeds** | Subscribe to any HTML page without an RSS feed. User provides a URL and a CSS or XPath selector targeting the list of items. FeedFerret polls the page, extracts items, and presents them as a synthetic feed. | L |
-| **Team Shares / Collaboration** | Share a feed or category with another registered user on the same instance. The recipient sees the feed in read-only mode in their own sidebar. Requires a `SharedFeed` join table and invitation flow. | XL |
-| **Native iOS / Android App** | Capacitor or React Native wrapper around the existing web UI. Enables push notifications via APNs/FCM, better offline support, and App Store presence. | XL |
-| **Fever API Compatibility** | Implement the Fever API protocol alongside the existing Google Reader API. Targets NetNewsWire users and clients that support Fever but not Google Reader. | M |
-| **Telegram Inline Buttons** | Add "Mark as read" and "Open" reply buttons to Telegram keyword alert messages using the Telegram Bot API inline keyboard. Requires a webhook-mode bot (polling already used for send; webhook mode needed for receiving button presses). | M |
-| **`prefers-contrast: more` Support** | ✅ Done | S |
-| **Accessibility Statement Page** | ✅ Done | S |
-| **Tier 2 Categories (Nested)** | Allow 2–3 levels of nested categories (e.g. Tech → Frontend → React). The DB schema already supports `parentId` on Category. Work needed: UI tree rendering for multi-level nesting, property inheritance (e.g. `hideFromAllFeeds`, `updateFrequency`) cascades from parent → child categories, sidebar expansion for deep trees, OPML import/export for nested outlines. Consider max depth of 3 to avoid UI complexity. | L |
+| Feature | Description | Effort | Target |
+|---|---|---|---|
+| **Saved Search Admin Policy** | ✅ Done in v1.1 | S | — |
+| **Batch API Endpoints** | ✅ Done in v1.1 — `POST /api/v1/articles/batch` | S | — |
+| **API Token Scopes** | ✅ Done in v1.1 — `read`/`write`/`admin` enforced | M | — |
+| **`prefers-contrast: more` Support** | ✅ Done | S | — |
+| **Accessibility Statement Page** | ✅ Done | S | — |
+| **Sentry Error Monitoring** | Install `@sentry/nextjs`, wire into `lib/logger.ts`, add `SENTRY_DSN` to `.env.example`. | M | v1.3 |
+| **Fever API Compatibility** | Implement the Fever API protocol alongside Google Reader API. Targets NetNewsWire and other Fever clients. | M | v1.3 |
+| **Telegram Inline Buttons** | "Mark as read" + "Open" reply buttons on Telegram alert messages via Bot API inline keyboard. Requires switching to webhook mode. | M | v1.3 |
+| **Full Zod Schemas for Server Actions** | Replace ad-hoc validation in `app/actions/` with explicit `z.object()` schemas. No behaviour change — defensive hardening. | M | v1.3 |
+| **Tier 2 Categories (Nested)** | Sidebar tree rendering, parent picker in Feed Management, setting inheritance, OPML nesting. DB schema (`parentId`) already ready. Max depth: 2. | L | v1.3 |
+| **WebSub / PubSubHubbub** | Subscribe to WebSub hubs declared in feed `<link rel="hub">` tags. Requires a public callback URL. | L | backlog |
+| **Offline-First Mutations** | Queue mark-read/star in IndexedDB; sync on reconnect via Service Worker background sync. | L | backlog |
+| **Website Scraping Feeds** | Subscribe to any HTML page via CSS/XPath selector. | L | backlog |
+| **Team Shares / Collaboration** | Share feeds/categories with other users on the same instance. Requires `SharedFeed` join table and invitation flow. | XL | backlog |
+| **Native iOS / Android App** | Capacitor wrapper with APNs/FCM push notifications. | XL | v2.0 |
+| **Podcast Feeds & Audio Player** | Podcast parsing, persistent audio player, episode queue, TTS. | XL | v2.0 |
