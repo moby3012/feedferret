@@ -552,7 +552,8 @@
     "star": "Star",
     "markAsUnread": "Mark as unread",
     "markAsRead": "Mark as read",
-    "alsoIn": "Also in"
+    "alsoIn": "Also in",
+    "unknownAuthor": "Unknown"
   },
   "articleReader": {
     "selectArticle": "Select an article",

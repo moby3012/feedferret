@@ -463,7 +463,7 @@ const WEBHOOK_VARIABLE_TOKENS: string[] = [
   "{{feed_url}}",
   "{{error}}",
 ];
-const WEBHOOK_VARIABLE_DESC_KEYS: string[] = [
+const WEBHOOK_VARIABLE_DESC_KEYS = [
   "event",
   "ruleName",
   "timestamp",
@@ -473,7 +473,7 @@ const WEBHOOK_VARIABLE_DESC_KEYS: string[] = [
   "feedName",
   "feedUrl",
   "error",
-];
+] as const;
 
 function WebhookActionConfig({
   value,
@@ -558,7 +558,7 @@ function WebhookActionConfig({
               {WEBHOOK_VARIABLE_TOKENS.map((token, idx) => (
                 <li key={token}>
                   <code className="bg-background/80 rounded px-1 font-mono">{token}</code>{" "}
-                  <span className="text-muted-foreground">— {t(`webhooks.${WEBHOOK_VARIABLE_DESC_KEYS[idx]}` as any)}</span>
+                  <span className="text-muted-foreground">— {t(`webhooks.${WEBHOOK_VARIABLE_DESC_KEYS[idx]}`)}</span>
                 </li>
               ))}
             </ul>
@@ -808,7 +808,7 @@ export function FeedManagement({
   const feedsByCategory = useMemo(() => {
     const groups: Record<string, any[]> = {};
     const uncategorized: any[] = [];
-    (feeds as any[]).forEach((feed) => {
+    feeds.forEach((feed) => {
       if (feed.categoryId) {
         if (!groups[feed.categoryId]) groups[feed.categoryId] = [];
         groups[feed.categoryId].push(feed);
@@ -878,7 +878,7 @@ export function FeedManagement({
   // Initialize all categories as expanded when categories load
   useEffect(() => {
     if (categories.length > 0) {
-      setExpandedCategories(new Set([...categories.map((c: any) => c.id), "__uncategorized__"]));
+      setExpandedCategories(new Set([...categories.map((c) => c.id), "__uncategorized__"]));
     }
   }, [categories.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -888,7 +888,7 @@ export function FeedManagement({
   useEffect(() => {
     if (!highlightFeedId || feeds.length === 0) return;
     setActiveTab("feeds");
-    const feed = (feeds as any[]).find((f) => f.id === highlightFeedId);
+    const feed = feeds.find((f) => f.id === highlightFeedId);
     const groupId = feed?.categoryId ?? "__uncategorized__";
     setExpandedCategories((prev) => {
       const next = new Set(prev);
@@ -1799,10 +1799,10 @@ export function FeedManagement({
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="all">{newRuleTrigger === "feed_error" ? t("rules.anyFeed") : t("rules.allArticles")}</SelectItem>
-                              {feeds.map((feed: any) => (
+                              {feeds.map((feed) => (
                                 <SelectItem key={`scope-feed-${feed.id}`} value={`feed:${feed.id}`}>Feed · {feed.name}</SelectItem>
                               ))}
-                              {(categories as any[]).map((c: any) => (
+                              {categories.map((c) => (
                                 <SelectItem key={`scope-cat-${c.id}`} value={`category:${c.id}`}>Category · {c.name}</SelectItem>
                               ))}
                             </SelectContent>
@@ -1970,12 +1970,12 @@ export function FeedManagement({
                           if (!s || s === "all") return null;
                           if (s.startsWith("feed:")) {
                             const fid = s.slice("feed:".length);
-                            const f = (feeds as any[]).find((x) => x.id === fid);
+                            const f = feeds.find((x) => x.id === fid);
                             return `Feed · ${f?.name ?? "?"}`;
                           }
                           if (s.startsWith("category:")) {
                             const cid = s.slice("category:".length);
-                            const c = (categories as any[]).find((x) => x.id === cid);
+                            const c = categories.find((x) => x.id === cid);
                             return `Category · ${c?.name ?? "?"}`;
                           }
                           return s;
@@ -2149,10 +2149,10 @@ export function FeedManagement({
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="all">{editRuleTrigger === "feed_error" ? t("rules.anyFeed") : t("rules.allArticles")}</SelectItem>
-                                      {feeds.map((feed: any) => (
+                                      {feeds.map((feed) => (
                                         <SelectItem key={`edit-scope-feed-${feed.id}`} value={`feed:${feed.id}`}>Feed · {feed.name}</SelectItem>
                                       ))}
-                                      {(categories as any[]).map((c: any) => (
+                                      {categories.map((c) => (
                                         <SelectItem key={`edit-scope-cat-${c.id}`} value={`category:${c.id}`}>Category · {c.name}</SelectItem>
                                       ))}
                                     </SelectContent>
