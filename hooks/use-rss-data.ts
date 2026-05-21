@@ -53,6 +53,9 @@ export function useLabels(enabled = true) {
         queryKey: ["labels"],
         queryFn: () => getLabels(),
         enabled,
+        refetchInterval: 60_000,
+        refetchIntervalInBackground: false,
+        staleTime: 15_000,
     })
 }
 
@@ -92,13 +95,15 @@ export function useToggleRead() {
             const feedsSnapshot = queryClient.getQueryData<any[]>(["feeds"])
             const readAt = isRead ? new Date() : null
 
-            // Find the article in any cached list to know which feed to update
+            // Find the article in any cached list to know its feed and labels
             let affectedFeedId: string | undefined
+            let articleLabelIds: string[] = []
             for (const [, old] of snapshots) {
                 if (!Array.isArray(old)) continue
                 const hit = old.find((a: any) => a.id === articleId)
                 if (hit) {
                     affectedFeedId = hit.feedId ?? hit.feed?.id
+                    articleLabelIds = (hit.labels ?? []).map((l: any) => l.labelId ?? l.label?.id).filter(Boolean)
                     break
                 }
             }
@@ -121,7 +126,18 @@ export function useToggleRead() {
                 }))
             }
 
-            return { snapshots, feedsSnapshot }
+            // Optimistically adjust label unread counts
+            const labelsSnapshot = queryClient.getQueryData<any[]>(["labels"])
+            if (articleLabelIds.length > 0 && Array.isArray(labelsSnapshot)) {
+                const delta = isRead ? -1 : 1
+                queryClient.setQueryData(["labels"], labelsSnapshot.map((l: any) =>
+                    articleLabelIds.includes(l.id)
+                        ? { ...l, _count: { ...l._count, articles: Math.max(0, (l._count?.articles ?? 0) + delta) } }
+                        : l
+                ))
+            }
+
+            return { snapshots, feedsSnapshot, labelsSnapshot }
         },
         onError: (_error, _variables, context) => {
             context?.snapshots?.forEach(([queryKey, data]) => {
@@ -130,9 +146,13 @@ export function useToggleRead() {
             if (context?.feedsSnapshot) {
                 queryClient.setQueryData(["feeds"], context.feedsSnapshot)
             }
+            if (context?.labelsSnapshot) {
+                queryClient.setQueryData(["labels"], context.labelsSnapshot)
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["labels"] })
         },
     })
 }
@@ -383,26 +403,43 @@ export function useMarkAllAsRead() {
         onMutate: async (scope) => {
             await queryClient.cancelQueries({ queryKey: ["feeds"] })
             const feedsSnapshot = queryClient.getQueryData<any[]>(["feeds"])
-            if (!Array.isArray(feedsSnapshot)) return { feedsSnapshot }
-            // Optimistic: zero unread on the affected feed(s) so badge updates instantly (#19)
-            const next = feedsSnapshot.map((f: any) => {
-                if (scope?.feedId) {
-                    if (f.id !== scope.feedId) return f
-                    return { ...f, _count: { ...(f._count || {}), articles: 0 } }
+            if (Array.isArray(feedsSnapshot)) {
+                // Optimistic: zero unread on the affected feed(s) so badge updates instantly (#19)
+                const next = feedsSnapshot.map((f: any) => {
+                    if (scope?.feedId) {
+                        if (f.id !== scope.feedId) return f
+                        return { ...f, _count: { ...(f._count || {}), articles: 0 } }
+                    }
+                    if (!scope?.feedId && !scope?.category) {
+                        return { ...f, _count: { ...(f._count || {}), articles: 0 } }
+                    }
+                    // Category-scoped: cannot reliably know which feeds belong without the
+                    // category map here, so fall back to invalidation in onSuccess.
+                    return f
+                })
+                queryClient.setQueryData(["feeds"], next)
+            }
+
+            // Optimistic: zero the label badge immediately when marking a label scope as read
+            let labelsSnapshot: any[] | undefined
+            if (scope?.category?.startsWith("Label:")) {
+                const labelId = scope.category.slice("Label:".length)
+                labelsSnapshot = queryClient.getQueryData<any[]>(["labels"])
+                if (Array.isArray(labelsSnapshot)) {
+                    queryClient.setQueryData(["labels"], labelsSnapshot.map((l: any) =>
+                        l.id === labelId ? { ...l, _count: { ...l._count, articles: 0 } } : l
+                    ))
                 }
-                if (!scope?.feedId && !scope?.category) {
-                    return { ...f, _count: { ...(f._count || {}), articles: 0 } }
-                }
-                // Category-scoped: cannot reliably know which feeds belong without the
-                // category map here, so fall back to invalidation in onSuccess.
-                return f
-            })
-            queryClient.setQueryData(["feeds"], next)
-            return { feedsSnapshot }
+            }
+
+            return { feedsSnapshot, labelsSnapshot }
         },
         onError: (_error, _variables, context) => {
             if (context?.feedsSnapshot) {
                 queryClient.setQueryData(["feeds"], context.feedsSnapshot)
+            }
+            if (context?.labelsSnapshot) {
+                queryClient.setQueryData(["labels"], context.labelsSnapshot)
             }
         },
         onSuccess: () => {
