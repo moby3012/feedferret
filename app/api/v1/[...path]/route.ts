@@ -801,7 +801,8 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
     }
   } catch (error) {
     logger.error("[api/v1]", error);
-    res = apiError(error instanceof Error ? error.message : String(error), 500);
+    logger.error("[api/v1] unhandled error", error);
+    res = apiError("Internal server error", 500);
   }
 
   return withRl(res);

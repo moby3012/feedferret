@@ -385,12 +385,15 @@ export async function sendSignInEmail({ email, url, locale }: { email: string; u
 export async function sendTestSystemEmail(
   to: string,
   overrideSettings?: Partial<GlobalSettings> | null,
+  locale = "en",
 ) {
+  const t = createEmailTranslator(locale);
+  const body = t("emailAuth.testBody");
   await sendSystemEmail({
     to,
-    subject: "FeedFerret mail provider test",
-    text: "If you received this message, your FeedFerret email provider is configured correctly.",
-    html: "<b>If you received this message, your FeedFerret email provider is configured correctly.</b>",
+    subject: t("emailAuth.testSubject"),
+    text: body,
+    html: `<b>${body}</b>`,
     overrideSettings,
   });
 }

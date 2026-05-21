@@ -302,12 +302,13 @@ export async function sendTestEmail(config: Record<string, unknown>) {
 
   const provider = String(testSettings.mailProvider || "smtp");
 
+  const adminUser = await db.user.findUnique({ where: { id: session.user.id }, select: { uiLanguage: true } });
   try {
-    await sendTestSystemEmail(session.user.email, {
-      ...testSettings,
-      mailServiceEnabled: true,
-      mailProvider: provider,
-    });
+    await sendTestSystemEmail(
+      session.user.email,
+      { ...testSettings, mailServiceEnabled: true, mailProvider: provider },
+      adminUser?.uiLanguage ?? "en",
+    );
     return { success: true, sentTo: session.user.email };
   } catch (error: any) {
     logger.error("Mail provider test failed:", error);

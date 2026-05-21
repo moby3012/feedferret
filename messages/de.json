@@ -167,7 +167,9 @@
       "disabled": "Benachrichtigungen für dieses Gerät deaktiviert",
       "testSent": "Testbenachrichtigung gesendet",
       "couldNotSendTest": "Testbenachrichtigung konnte nicht gesendet werden"
-    }
+    },
+    "testTitle": "FeedFerret-Testbenachrichtigung",
+    "testBody": "Dies ist ein Test von deiner FeedFerret-Instanz. Benachrichtigungen funktionieren korrekt."
   },
   "apiTokens": {
     "title": "API-Token",
@@ -523,7 +525,13 @@
       "feedsUpdated": "{count} aktualisiert",
       "deleted": "Feed gelöscht.",
       "couldNotDelete": "Feed konnte nicht gelöscht werden."
-    }
+    },
+    "spoilerAhead": "Spoiler-Inhalte voraus",
+    "spoilerDescription": "Diese Artikel wurden durch deine Regeln als Spoiler markiert und bewusst aus allen anderen Ansichten ausgeblendet. Öffne sie nur, wenn du bereit bist.",
+    "revealSpoilers": "Spoiler anzeigen",
+    "clearSpoilerFlags": "Alle Spoiler-Markierungen entfernen",
+    "clearingSpoilerFlags": "Wird entfernt…",
+    "backToAllArticles": "Zurück zu allen Artikeln"
   },
   "articleList": {
     "noArticles": "Keine Artikel",
@@ -1161,7 +1169,8 @@
       "eslint": "eslint-plugin-jsx-a11y — statische Analyse für Barrierefreiheitsprobleme"
     },
     "lastUpdated": "Zuletzt aktualisiert: Mai 2026",
-    "backToApp": "Zurück zur App"
+    "backToApp": "Zurück zur App",
+    "skipToContent": "Zum Inhalt springen"
   },
   "sharedSearch": {
     "title": "Geteilte FeedFerret-Suche",
@@ -1188,6 +1197,8 @@
     "signInSubject": "Anmeldung bei {host}",
     "signInBody": "Klicke auf den Button, um dich bei deinem FeedFerret-Konto anzumelden. Dieser Link läuft in 24 Stunden ab.",
     "signInButton": "Anmelden",
-    "signInIgnore": "Wenn du diese E-Mail nicht angefordert hast, kannst du sie ignorieren."
+    "signInIgnore": "Wenn du diese E-Mail nicht angefordert hast, kannst du sie ignorieren.",
+    "testSubject": "FeedFerret E-Mail-Provider-Test",
+    "testBody": "Wenn du diese Nachricht erhalten hast, ist dein FeedFerret-E-Mail-Provider korrekt konfiguriert."
   }
 }

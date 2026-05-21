@@ -12,14 +12,14 @@ concurrency:
 
 jobs:
   lint-typecheck-build:
-    name: Lint · Type-Check · Build
+    name: Lint · Type-Check · Test · Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 11.0.8
+          version: 9.14.2
 
       - uses: actions/setup-node@v4
         with:
@@ -40,6 +40,12 @@ jobs:
 
       - name: Type-check
         run: npx tsc --noEmit
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Translations
+        run: pnpm run translations:check
 
       - name: Build
         run: pnpm run build

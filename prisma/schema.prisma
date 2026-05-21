@@ -167,6 +167,7 @@ model Notification {
   @@index([articleId])
   @@index([alertId])
   @@index([ruleId])
+  @@index([feedId])
 }
 
 model GReaderPreference {
@@ -198,6 +199,7 @@ model Account {
   session_state      String?
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
@@ -206,6 +208,7 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
 }
 
 model VerificationToken {
@@ -231,6 +234,8 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, name, parentId])
+  @@index([userId])
+  @@index([parentId])
 }
 
 model Feed {
@@ -277,6 +282,8 @@ model Feed {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, url])
+  @@index([userId])
+  @@index([categoryId])
 }
 
 model Article {
@@ -322,6 +329,7 @@ model Article {
   @@index([userId, isSpoiler, publishedAt])
   @@index([userId, readAt])
   @@index([feedId, publishedAt])
+  @@index([spoilerRuleId])
 }
 
 model Label {

@@ -9,7 +9,7 @@ import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { SessionProvider } from "next-auth/react";
 import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
+import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import "./globals.css";
 
 const APP_DESCRIPTION =
@@ -67,6 +67,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const locale = await getLocale();
+  const t = await getTranslations("accessibility");
   const messages = await getMessages();
 
   return (
@@ -76,7 +77,7 @@ export default async function RootLayout({
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:start-4 focus:z-[9999] focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-lg focus:outline-none"
         >
-          Skip to content
+          {t("skipToContent")}
         </a>
         <NextIntlClientProvider messages={messages}>
           <SessionProvider>

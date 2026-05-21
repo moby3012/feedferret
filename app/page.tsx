@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
 import readingTime from "reading-time";
 import { RssSidebar } from "@/components/rss-sidebar";
@@ -75,6 +76,7 @@ function normalizeViewMode(value?: string | null): ViewMode {
 }
 
 export default function RSSReaderPage() {
+  const t = useTranslations("sidebar");
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -180,10 +182,9 @@ export default function RSSReaderPage() {
           <SpoilerIcon className="h-8 w-8" />
         </div>
         <div className="space-y-2">
-          <h3 className="text-xl font-semibold tracking-tight">Spoiler content ahead</h3>
+          <h3 className="text-xl font-semibold tracking-tight">{t("spoilerAhead")}</h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            These articles have been flagged by your rules as spoilers and are kept out of every
-            other view on purpose. Reveal only when you&apos;re ready to see them.
+            {t("spoilerDescription")}
           </p>
         </div>
         <div className="flex flex-col items-center gap-2">
@@ -192,7 +193,7 @@ export default function RSSReaderPage() {
             onClick={() => setSpoilerRevealed(true)}
             className="rounded-2xl bg-amber-500 px-6 py-3 text-sm font-semibold text-amber-50 shadow-sm hover:bg-amber-600 active:scale-[0.98] transition-all"
           >
-            Reveal spoilers
+            {t("revealSpoilers")}
           </button>
           <button
             type="button"
@@ -204,7 +205,7 @@ export default function RSSReaderPage() {
             disabled={releaseAllSpoilers.isPending}
             className="text-xs text-amber-600 hover:text-amber-700 disabled:opacity-50"
           >
-            {releaseAllSpoilers.isPending ? "Clearing…" : "Clear all spoiler flags"}
+            {releaseAllSpoilers.isPending ? t("clearingSpoilerFlags") : t("clearSpoilerFlags")}
           </button>
           <button
             type="button"

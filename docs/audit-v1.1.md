@@ -2,7 +2,7 @@
 
 > Conducted: 2026-05-21  
 > Scope: Security, components, infrastructure, i18n, dependencies  
-> Status: **Release blocker items marked 🔴 — must fix before tagging v1.1.0**
+> Status: **All 9 blockers resolved 2026-05-21 — v1.1.0 ready to tag**
 
 ---
 
@@ -12,17 +12,17 @@ Four parallel audits were run across the full codebase. Findings are grouped by 
 
 | Domain | 🔴 Blocker | 🟡 Important | ⚪ Low |
 |---|---|---|---|
-| Security | 2 | 6 | 5 |
-| Components & TypeScript | 1 | 4 | 3 |
-| Infrastructure & Build | 3 | 6 | 3 |
-| i18n & Translations | 3 | 8 | 2 |
-| **Total** | **9** | **24** | **13** |
+| Security | 0 ✅ | 6 | 5 |
+| Components & TypeScript | 0 ✅ | 4 | 3 |
+| Infrastructure & Build | 0 ✅ | 6 | 3 |
+| i18n & Translations | 0 ✅ | 8 | 2 |
+| **Total** | **0 (all fixed)** | **24** | **13** |
 
 ---
 
 ## 1. Security
 
-### 🔴 BLOCKER — Sync secret timing-safe comparison
+### ✅ FIXED — Sync secret timing-safe comparison
 
 **File:** `app/api/sync/route.ts` · Lines 15–19  
 The comparison `authHeader !== \`Bearer ${process.env.SYNC_SECRET}\`` uses standard string equality, which is vulnerable to timing attacks.
@@ -38,7 +38,7 @@ if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expecte
 
 ---
 
-### 🔴 BLOCKER — API v1 error message leaks internal details
+### ✅ FIXED — API v1 error message leaks internal details
 
 **File:** `app/api/v1/[...path]/route.ts` · Line 804  
 `apiError(error instanceof Error ? error.message : String(error), 500)` returns raw exception messages to clients. Prisma errors include table names, column names, and constraint details.
@@ -120,7 +120,7 @@ Once Sentry is wired (v1.3), ensure request bodies containing passwords, tokens,
 
 ## 2. Components & TypeScript
 
-### 🔴 BLOCKER — No error boundaries anywhere
+### ✅ FIXED — No error boundaries anywhere
 
 **Files:** `app/layout.tsx`, `app/page.tsx`, all components  
 The entire app has no `error.tsx` or `<ErrorBoundary>` at any level. Any unhandled component throw produces a white screen with no fallback UI and no error reporting.
@@ -198,7 +198,7 @@ Background sync errors are silently discarded to the browser console. Route thro
 
 ## 3. Infrastructure & Build
 
-### 🔴 BLOCKER — Tests and translations NOT in CI
+### ✅ FIXED — Tests and translations NOT in CI
 
 **File:** `.github/workflows/ci.yml`  
 CI runs lint + typecheck + build only. Two critical checks are completely absent:
@@ -216,7 +216,7 @@ PRs can currently merge with broken tests or missing translation keys.
 
 ---
 
-### 🔴 BLOCKER — pnpm version mismatch across environments
+### ✅ FIXED — pnpm version mismatch across environments
 
 | Location | Version |
 |---|---|
@@ -229,7 +229,7 @@ CI generates a `pnpm-lock.yaml` with v11 format. The Dockerfile installs v9 and 
 
 ---
 
-### 🔴 BLOCKER — Missing DB indexes on high-traffic queries
+### ✅ FIXED — Missing DB indexes on high-traffic queries
 
 The following foreign keys have no index and will cause full table scans at scale:
 
@@ -329,7 +329,7 @@ When a user is deleted, their `LoginAttempt` records become orphaned with `userI
 
 ## 4. i18n & Translations
 
-### 🔴 BLOCKER — Test email and push notification test not translated
+### ✅ FIXED — Test email and push notification test not translated
 
 **Files:** `lib/mail.ts` · Lines 391–393; `app/actions/settings.ts` · Line 443
 
@@ -346,14 +346,14 @@ body:    "This is a test from your FeedFerret instance. Notifications are workin
 
 ---
 
-### 🔴 BLOCKER — "Skip to content" skip link hardcoded
+### ✅ FIXED — "Skip to content" skip link hardcoded
 
 **File:** `app/layout.tsx` · Line 79  
 The accessibility skip link reads `"Skip to content"` in hardcoded English for all locales including German. This is the first element a screen reader encounters on every page.
 
 ---
 
-### 🔴 BLOCKER — Spoiler section UI strings hardcoded
+### ✅ FIXED — Spoiler section UI strings hardcoded
 
 **File:** `app/page.tsx` · Lines 207, 183, 185–186  
 - `"Clearing…"` / `"Clear all spoiler flags"` — button labels  
