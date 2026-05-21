@@ -167,7 +167,9 @@
       "disabled": "Notifications disabled for this device",
       "testSent": "Test notification sent",
       "couldNotSendTest": "Could not send test notification"
-    }
+    },
+    "testTitle": "FeedFerret test notification",
+    "testBody": "This is a test from your FeedFerret instance. Notifications are working correctly."
   },
   "apiTokens": {
     "title": "API Tokens",
@@ -523,7 +525,13 @@
       "feedsUpdated": "{count} updated",
       "deleted": "Feed deleted.",
       "couldNotDelete": "Could not delete feed."
-    }
+    },
+    "spoilerAhead": "Spoiler content ahead",
+    "spoilerDescription": "These articles have been flagged by your rules as spoilers and are kept out of every other view on purpose. Reveal only when you're ready to see them.",
+    "revealSpoilers": "Reveal spoilers",
+    "clearSpoilerFlags": "Clear all spoiler flags",
+    "clearingSpoilerFlags": "Clearing…",
+    "backToAllArticles": "Back to all articles"
   },
   "articleList": {
     "noArticles": "No articles",
@@ -1161,7 +1169,8 @@
       "eslint": "eslint-plugin-jsx-a11y — static analysis for accessibility issues"
     },
     "lastUpdated": "Last updated: May 2026",
-    "backToApp": "Back to app"
+    "backToApp": "Back to app",
+    "skipToContent": "Skip to content"
   },
   "sharedSearch": {
     "title": "Shared FeedFerret search",
@@ -1188,6 +1197,8 @@
     "signInSubject": "Sign in to {host}",
     "signInBody": "Click the button below to sign in to your FeedFerret account. This link will expire in 24 hours.",
     "signInButton": "Sign in",
-    "signInIgnore": "If you didn't request this email, you can safely ignore it."
+    "signInIgnore": "If you didn't request this email, you can safely ignore it.",
+    "testSubject": "FeedFerret mail provider test",
+    "testBody": "If you received this message, your FeedFerret email provider is configured correctly."
   }
 }

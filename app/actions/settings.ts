@@ -429,6 +429,7 @@ export async function testNotificationChannel(
       telegramBotToken: true, telegramChatId: true,
       gotifyUrl: true, gotifyToken: true,
       ntfyUrl: true, ntfyToken: true,
+      uiLanguage: true,
     },
   });
 
@@ -438,9 +439,11 @@ export async function testNotificationChannel(
     sendNtfyNotification,
   } = await import("@/lib/notification-channels");
 
+  const { getTranslations } = await import("next-intl/server");
+  const tPush = await getTranslations({ locale: user?.uiLanguage ?? "en", namespace: "push" });
   const testPayload = {
-    title: "FeedFerret test notification",
-    body: "This is a test from your FeedFerret instance. Notifications are working correctly.",
+    title: tPush("testTitle"),
+    body: tPush("testBody"),
   };
 
   try {

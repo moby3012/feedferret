@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/auth";
 import { syncAllFeeds, syncUserFeeds } from "@/lib/rss-sync";
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 
 // Background sync state to prevent concurrent syncs
 let lastSyncTime = 0;
@@ -13,8 +14,11 @@ export async function GET(request: Request) {
     
     // Check SYNC_SECRET if configured
     if (process.env.SYNC_SECRET) {
-        if (!authHeader || authHeader !== `Bearer ${process.env.SYNC_SECRET}`) {
-            return NextResponse.json({ error: "Unauthorized - configure SYNC_SECRET env var" }, { status: 401 });
+        const expected = Buffer.from(`Bearer ${process.env.SYNC_SECRET}`);
+        const actual   = Buffer.from(authHeader ?? "");
+        const valid = actual.length === expected.length && timingSafeEqual(actual, expected);
+        if (!valid) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
     }
 
