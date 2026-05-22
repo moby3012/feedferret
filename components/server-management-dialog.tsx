@@ -619,6 +619,32 @@ export function ServerManagementDialog({
                                 <SettingsField label={t("email.smtpPassword")} placeholder="••••••••" field="smtpPassword" settings={settings} setSettings={setSettings} type="password" isSecret />
                               </div>
                               <SettingsField label={t("email.smtpFromEmail")} placeholder="noreply@feedferret.cloud" field="smtpFrom" settings={settings} setSettings={setSettings} />
+                              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                  <Label>{t("email.smtpSecurity")}</Label>
+                                  <Select
+                                    value={settings.smtpSecure ?? "auto"}
+                                    onValueChange={(val) => setSettings({ ...settings, smtpSecure: val === "auto" ? null : val })}
+                                  >
+                                    <SelectTrigger className="rounded-2xl bg-background/70 border-border/70">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-2xl">
+                                      <SelectItem value="auto">{t("email.smtpSecureAuto")}</SelectItem>
+                                      <SelectItem value="ssl">{t("email.smtpSecureSsl")}</SelectItem>
+                                      <SelectItem value="starttls">{t("email.smtpSecureStarttls")}</SelectItem>
+                                      <SelectItem value="plain">{t("email.smtpSecurePlain")}</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="flex items-center gap-3 pt-7">
+                                  <Switch
+                                    checked={settings.smtpRejectUnauthorized === false}
+                                    onCheckedChange={(checked) => setSettings({ ...settings, smtpRejectUnauthorized: checked ? false : null })}
+                                  />
+                                  <Label>{t("email.smtpAllowSelfSigned")}</Label>
+                                </div>
+                              </div>
                             </>
                           )}
 

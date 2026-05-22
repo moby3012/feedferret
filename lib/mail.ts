@@ -121,6 +121,37 @@ async function assertMailEnabled(settings?: Partial<GlobalSettings> | null) {
   }
 }
 
+function resolveSmtpTransportOptions(
+  port: number,
+  secureMode: string | null | undefined,
+  rejectUnauthorized: boolean | null | undefined,
+): { secure: boolean; requireTLS?: boolean; tls?: { rejectUnauthorized: boolean } } {
+  let secure: boolean;
+  let requireTLS: boolean | undefined;
+
+  switch (secureMode) {
+    case "ssl":
+      secure = true;
+      break;
+    case "starttls":
+      secure = false;
+      requireTLS = true;
+      break;
+    case "plain":
+      secure = false;
+      requireTLS = false;
+      break;
+    default:
+      secure = port === 465;
+  }
+
+  return {
+    secure,
+    ...(requireTLS !== undefined ? { requireTLS } : {}),
+    ...(rejectUnauthorized === false ? { tls: { rejectUnauthorized: false } } : {}),
+  };
+}
+
 async function sendWithSmtp({
   settings,
   to,
@@ -128,7 +159,7 @@ async function sendWithSmtp({
   html,
   text,
 }: {
-  settings: Pick<GlobalSettings, "smtpHost" | "smtpPort" | "smtpUser" | "smtpPassword" | "smtpFrom">;
+  settings: Pick<GlobalSettings, "smtpHost" | "smtpPort" | "smtpUser" | "smtpPassword" | "smtpFrom" | "smtpSecure" | "smtpRejectUnauthorized">;
   to: string;
   subject: string;
   html: string;
@@ -138,13 +169,15 @@ async function sendWithSmtp({
     throw new Error("SMTP is not fully configured");
   }
 
+  const smtpPassword = decryptIfValue(settings.smtpPassword);
+  const tlsOpts = resolveSmtpTransportOptions(settings.smtpPort, settings.smtpSecure, settings.smtpRejectUnauthorized);
   const transporter = nodemailer.createTransport({
     host: settings.smtpHost,
     port: settings.smtpPort,
-    secure: settings.smtpPort === 465,
+    ...tlsOpts,
     auth:
-      settings.smtpUser && settings.smtpPassword
-        ? { user: settings.smtpUser, pass: settings.smtpPassword }
+      settings.smtpUser && smtpPassword
+        ? { user: settings.smtpUser, pass: smtpPassword }
         : undefined,
   });
 
