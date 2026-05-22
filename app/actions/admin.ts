@@ -80,6 +80,13 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
     const port = Number(data.smtpPort);
     next.smtpPort = Number.isFinite(port) && port > 0 ? port : null;
   }
+  if ("smtpSecure" in data) {
+    const val = String(data.smtpSecure || "").trim();
+    next.smtpSecure = ["ssl", "starttls", "plain"].includes(val) ? val : null;
+  }
+  if ("smtpRejectUnauthorized" in data) {
+    next.smtpRejectUnauthorized = data.smtpRejectUnauthorized === false ? false : null;
+  }
 
   // Resend
   if ("resendFromEmail" in data) next.resendFromEmail = String(data.resendFromEmail || "").trim() || null;

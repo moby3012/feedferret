@@ -378,11 +378,13 @@ model GlobalSettings {
   mailServiceEnabled   Boolean  @default(false)
   mailProvider        String   @default("smtp")
   // SMTP config
-  smtpHost            String?
-  smtpPort            Int?
-  smtpUser            String?
-  smtpPassword        String?
-  smtpFrom            String?
+  smtpHost                 String?
+  smtpPort                 Int?
+  smtpUser                 String?
+  smtpPassword             String?
+  smtpFrom                 String?
+  smtpSecure               String?
+  smtpRejectUnauthorized   Boolean?
   // API mail providers (values encrypted at rest)
   resendApiKey        String?
   resendFromEmail     String?
