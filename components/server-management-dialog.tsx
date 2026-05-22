@@ -1081,7 +1081,7 @@ export function ServerManagementDialog({
                               <tbody>
                                 {auditLog.map((entry, i) => (
                                   <tr key={entry.id} className={cn("border-t border-border/40", i % 2 === 0 ? "" : "bg-muted/20")}>
-                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{format.dateTime(new Date(entry.createdAt), { dateStyle: "medium", timeStyle: "short" })}</td>
+                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{new Date(entry.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</td>
                                     <td className="px-4 py-2 truncate max-w-[140px]">{entry.actor?.name || entry.actor?.email || "—"}</td>
                                     <td className="px-4 py-2">
                                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", {
@@ -1122,7 +1122,7 @@ export function ServerManagementDialog({
                               <tbody>
                                 {loginAttempts.map((attempt, i) => (
                                   <tr key={attempt.id} className={cn("border-t border-border/40", i % 2 === 0 ? "" : "bg-muted/20")}>
-                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{format.dateTime(new Date(attempt.createdAt), { dateStyle: "medium", timeStyle: "short" })}</td>
+                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{new Date(attempt.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</td>
                                     <td className="px-4 py-2 truncate max-w-[180px]">{attempt.email}</td>
                                     <td className="px-4 py-2">
                                       {attempt.success ? (
@@ -1255,7 +1255,7 @@ export function ServerManagementDialog({
                               <tbody>
                                 {systemLogs.map((entry, i) => (
                                   <tr key={entry.id} className={cn("border-t border-border/40", i % 2 === 0 ? "" : "bg-muted/20")}>
-                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap text-xs">{format.dateTime(new Date(entry.createdAt), { dateStyle: "medium", timeStyle: "short" })}</td>
+                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap text-xs">{new Date(entry.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</td>
                                     <td className="px-4 py-2">
                                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", {
                                         "bg-blue-500/15 text-blue-600": entry.level === "info",
