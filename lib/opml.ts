@@ -85,8 +85,8 @@ export async function parseOpml(xml: string): Promise<OpmlOutline[]> {
         return outline;
     };
 
-    return Array.from(body.children)
-        .filter(el => el.tagName.toLowerCase() === "outline")
+    return Array.from<Element>(body.children)
+        .filter((el: Element) => el.tagName.toLowerCase() === "outline")
         .map(parseOutline);
 }
 

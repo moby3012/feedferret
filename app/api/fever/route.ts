@@ -41,7 +41,7 @@ async function getGroups(userId: string) {
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
-  return categories.map((c) => ({ id: c.id, title: c.name }));
+  return categories.map((c: { id: string; name: string }) => ({ id: c.id, title: c.name }));
 }
 
 async function getFeedsAndGroups(userId: string) {
@@ -51,7 +51,7 @@ async function getFeedsAndGroups(userId: string) {
     orderBy: { name: "asc" },
   });
 
-  const feverFeeds = feeds.map((f) => ({
+  const feverFeeds = feeds.map((f: { id: string; name: string; url: string; htmlUrl: string | null; lastFetchedAt: Date | null; categoryId: string | null }) => ({
     id: f.id,
     favicon_id: f.id,
     title: f.name,
@@ -130,7 +130,7 @@ async function getItems(
     },
   });
 
-  return articles.map((a) => ({
+  return articles.map((a: { id: string; feedId: string; title: string | null; author: string | null; content: string | null; link: string | null; isStarred: boolean; isRead: boolean; publishedAt: Date }) => ({
     id: a.id,
     feed_id: a.feedId,
     title: a.title,
@@ -150,7 +150,7 @@ async function getUnreadIds(userId: string): Promise<string> {
     orderBy: { publishedAt: "desc" },
     take: 10_000,
   });
-  return articles.map((a) => a.id).join(",");
+  return articles.map((a: { id: string }) => a.id).join(",");
 }
 
 async function getSavedIds(userId: string): Promise<string> {
@@ -160,7 +160,7 @@ async function getSavedIds(userId: string): Promise<string> {
     orderBy: { publishedAt: "desc" },
     take: 10_000,
   });
-  return articles.map((a) => a.id).join(",");
+  return articles.map((a: { id: string }) => a.id).join(",");
 }
 
 async function handleMark(

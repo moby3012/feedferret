@@ -397,12 +397,13 @@ export async function getStorageStats() {
     db.articleLabel.groupBy({ by: ["userId"], _count: { _all: true } }),
   ]);
 
-  const articleMap = new Map(articleCounts.map((r) => [r.userId, r._count._all]));
-  const feedMap = new Map(feedCounts.map((r) => [r.userId, r._count._all]));
-  const summaryMap = new Map(summaryCount.map((r) => [r.userId, r._count._all]));
-  const labelMap = new Map(labelCounts.map((r) => [r.userId, r._count._all]));
+  type UserCount = { userId: string; _count: { _all: number } };
+  const articleMap = new Map(articleCounts.map((r: UserCount) => [r.userId, r._count._all]));
+  const feedMap = new Map(feedCounts.map((r: UserCount) => [r.userId, r._count._all]));
+  const summaryMap = new Map(summaryCount.map((r: UserCount) => [r.userId, r._count._all]));
+  const labelMap = new Map(labelCounts.map((r: UserCount) => [r.userId, r._count._all]));
 
-  return users.map((u) => ({
+  return users.map((u: { id: string; name: string | null; email: string | null }) => ({
     id: u.id,
     name: u.name,
     email: u.email,

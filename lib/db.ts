@@ -30,7 +30,7 @@ function createAdapter() {
   return new PrismaPg(new pg.Pool({ connectionString: url }));
 }
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 const createDb = () =>
   new PrismaClient({

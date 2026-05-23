@@ -216,13 +216,13 @@ export async function setArticleLabels(articleId: string, labelIds: string[]) {
         },
         select: { id: true },
     });
-    const allowedIds = labels.map((label) => label.id);
+    const allowedIds = labels.map((label: { id: string }) => label.id);
 
     await db.$transaction([
         db.articleLabel.deleteMany({
             where: { articleId, userId: session.user.id },
         }),
-        ...allowedIds.map((labelId) =>
+        ...allowedIds.map((labelId: string) =>
             db.articleLabel.create({
                 data: {
                     articleId,
@@ -435,14 +435,14 @@ export async function getFeedHealth() {
         where: { userId: session.user.id, isRead: false },
         _count: { _all: true },
     });
-    const unreadByFeed = new Map(unreadCounts.map((item) => [item.feedId, item._count._all]));
+    const unreadByFeed = new Map(unreadCounts.map((item: { feedId: string; _count: { _all: number } }) => [item.feedId, item._count._all]));
 
     const duplicateCounts = await db.article.groupBy({
         by: ["feedId"],
         where: { userId: session.user.id, isDuplicate: true, duplicateOf: { not: null } },
         _count: { _all: true },
     });
-    const duplicateByFeed = new Map(duplicateCounts.map((item) => [item.feedId, item._count._all]));
+    const duplicateByFeed = new Map(duplicateCounts.map((item: { feedId: string; _count: { _all: number } }) => [item.feedId, item._count._all]));
 
     // Oldest article per feed for avgArticlesPerDay calculation
     const oldestByFeed = await db.article.groupBy({
@@ -451,7 +451,7 @@ export async function getFeedHealth() {
         _min: { publishedAt: true },
         _count: { _all: true },
     });
-    const oldestMap = new Map(oldestByFeed.map((item) => [item.feedId, item._min.publishedAt]));
+    const oldestMap = new Map(oldestByFeed.map((item: { feedId: string; _min: { publishedAt: Date | null } }) => [item.feedId, item._min.publishedAt]));
 
     return feeds.map((feed) => {
         const oldest = oldestMap.get(feed.id);
@@ -519,7 +519,7 @@ export async function applyRetentionPolicies(dryRun = false) {
             deleted += toDelete.length;
         } else {
             const result = await db.article.deleteMany({
-                where: { id: { in: toDelete.map((a) => a.id) } },
+                where: { id: { in: toDelete.map((a: { id: string }) => a.id) } },
             });
             deleted += result.count;
         }
@@ -791,7 +791,7 @@ export async function exportUserData() {
         {
             exportedAt: new Date().toISOString(),
             version: 1,
-            feeds: feeds.map((f) => ({
+            feeds: feeds.map((f: { name: string; url: string; category?: { name: string } | null; icon: string | null; updateFrequency: number | null; retentionDays: number | null }) => ({
                 name: f.name,
                 url: f.url,
                 category: f.category?.name ?? null,
@@ -799,9 +799,9 @@ export async function exportUserData() {
                 updateFrequency: f.updateFrequency,
                 retentionDays: f.retentionDays,
             })),
-            labels: labels.map((l) => ({ name: l.name, color: l.color })),
-            savedSearches: savedSearches.map((s) => ({ name: s.name, query: s.query })),
-            autoReadRules: autoReadRules.map((r) => ({
+            labels: labels.map((l: { name: string; color: string | null }) => ({ name: l.name, color: l.color })),
+            savedSearches: savedSearches.map((s: { name: string; query: string }) => ({ name: s.name, query: s.query })),
+            autoReadRules: autoReadRules.map((r: { name: string; query: string; action: string; enabled: boolean }) => ({
                 name: r.name,
                 query: r.query,
                 action: r.action,
@@ -986,8 +986,8 @@ export async function fetchFullText(articleId: string) {
     const dom = new JSDOM(html, { url: article.link });
     const document = dom.window.document;
 
-    document.querySelectorAll("script, style, nav, footer, header, aside, form, iframe, noscript, svg").forEach((node) => node.remove());
-    document.querySelectorAll("a[href], img[src]").forEach((node) => {
+    document.querySelectorAll("script, style, nav, footer, header, aside, form, iframe, noscript, svg").forEach((node: Element) => node.remove());
+    document.querySelectorAll("a[href], img[src]").forEach((node: Element) => {
         const attr = node instanceof dom.window.HTMLImageElement ? "src" : "href";
         const value = node.getAttribute(attr);
         if (!value) return;
@@ -1009,11 +1009,11 @@ export async function fetchFullText(articleId: string) {
     ];
 
     const candidates = selectors
-        .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
-        .concat(Array.from(document.body.children));
+        .flatMap((selector) => Array.from<Element>(document.querySelectorAll(selector)))
+        .concat(Array.from<Element>(document.body.children));
 
     const best = candidates
-        .map((element) => ({
+        .map((element: Element) => ({
             element,
             score:
                 (element.textContent?.trim().length || 0) +
@@ -1628,9 +1628,9 @@ export async function previewFeedExtraction(feedId: string, articleUrl: string) 
         ".post",
         ".entry",
     ]
-        .flatMap((s) => Array.from(document.querySelectorAll(s)))
-        .concat(Array.from(document.body.children))
-        .map((el) => {
+        .flatMap((s) => Array.from<Element>(document.querySelectorAll(s)))
+        .concat(Array.from<Element>(document.body.children))
+        .map((el: Element) => {
             const text = plainText(el);
             return {
                 el,
