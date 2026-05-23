@@ -101,7 +101,7 @@ export async function GET(request: Request) {
         take: 100,
       });
 
-      const feeds = catalogResults.map((item) => ({
+      const feeds = catalogResults.map((item: { url: string; title: string | null; description: string | null; iconUrl: string | null }) => ({
         url: item.url,
         title: item.title,
         description: item.description,

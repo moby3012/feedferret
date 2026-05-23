@@ -221,10 +221,10 @@ async function autoFetchFullTextForArticles(
                     ? feed.fullTextRemoveSelectors.split(",").map((s) => s.trim()).filter(Boolean)
                     : []),
             ];
-            document.querySelectorAll(removeSelectors.join(",")).forEach((n) => n.remove());
+            document.querySelectorAll(removeSelectors.join(",")).forEach((n: Element) => n.remove());
 
             // Resolve relative URLs
-            document.querySelectorAll("a[href], img[src]").forEach((node) => {
+            document.querySelectorAll("a[href], img[src]").forEach((node: Element) => {
                 const attr = node instanceof dom.window.HTMLImageElement ? "src" : "href";
                 const value = node.getAttribute(attr);
                 if (!value) return;
@@ -237,10 +237,10 @@ async function autoFetchFullTextForArticles(
             }
             if (!best) {
                 const candidates = ["article", "main", "[role='main']", ".post-content", ".entry-content", ".article-content", ".content"]
-                    .flatMap((s) => Array.from(document.querySelectorAll(s)))
-                    .concat(Array.from(document.body.children));
+                    .flatMap((s) => Array.from<Element>(document.querySelectorAll(s)))
+                    .concat(Array.from<Element>(document.body.children));
                 best = candidates
-                    .map((el) => ({
+                    .map((el: Element) => ({
                         el,
                         score: (el.textContent?.trim().length || 0) + el.querySelectorAll("p").length * 250 - el.querySelectorAll("a").length * 20,
                     }))

@@ -19,7 +19,7 @@ function detectLocale(request: NextRequest): string {
   return DEFAULT_LOCALE;
 }
 
-export default auth((request) => {
+export default auth((request: NextRequest) => {
   const locale = detectLocale(request);
   const response = NextResponse.next();
   const current = request.cookies.get('locale')?.value;

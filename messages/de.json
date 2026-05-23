@@ -77,6 +77,13 @@
     "languageOptions": {
       "en": "English",
       "de": "Deutsch"
+    },
+    "tabs": {
+      "appearance": "Darstellung",
+      "reading": "Lesen",
+      "account": "Konto",
+      "notifications": "Benachrichtigungen",
+      "integrations": "Integrationen"
     }
   },
   "twoFactor": {

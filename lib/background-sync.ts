@@ -4,7 +4,7 @@ import { flushDueNotifications } from "./notifications";
 import { logger } from "./logger";
 
 type SchedulerState = {
-    timer: NodeJS.Timeout | null;
+    timer: ReturnType<typeof setTimeout> | null;
     running: boolean;
     lastRun: number;
     lastError: string | null;

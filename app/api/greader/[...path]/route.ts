@@ -315,7 +315,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
       });
 
       return NextResponse.json({
-        subscriptions: feeds.map((feed) => ({
+        subscriptions: feeds.map((feed: { id: string; url: string; name: string; category: { name: string } | null }) => ({
           id: `feed/${feed.url}`,
           title: feed.name,
           categories: feed.category
@@ -350,7 +350,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
         db.article.groupBy({ by: ["feedId"], where: { userId: user.id, isRead: false }, _count: { _all: true } }),
         countUnreadByGReaderTag(user.id),
       ]);
-      const feedCountMap = new Map(feedCounts.map((item) => [item.feedId, item._count._all]));
+      const feedCountMap = new Map(feedCounts.map((item: { feedId: string; _count: { _all: number } }) => [item.feedId, item._count._all]));
 
       // Newest-per-feed timestamps (for per-feed newestItemTimestampUsec)
       const newestPerFeed = await db.article.groupBy({
@@ -358,7 +358,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
         where: { userId: user.id, isRead: false },
         _max: { publishedAt: true },
       });
-      const newestFeedMap = new Map(newestPerFeed.map((r) => [r.feedId, r._max.publishedAt]));
+      const newestFeedMap = new Map(newestPerFeed.map((r: { feedId: string; _max: { publishedAt: Date | null } }) => [r.feedId, r._max.publishedAt]));
 
       return NextResponse.json({
         max: 1000,
@@ -377,7 +377,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
               ? String(newestStarredUnread.publishedAt.getTime() * 1000)
               : "0",
           },
-          ...feeds.map((feed) => ({
+          ...feeds.map((feed: { id: string; url: string }) => ({
             id: `feed/${feed.url}`,
             count: feedCountMap.get(feed.id) || 0,
             newestItemTimestampUsec: newestFeedMap.get(feed.id)

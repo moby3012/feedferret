@@ -87,9 +87,9 @@ All German translations were produced without a native-speaker review pass. Mach
 
 All remaining `toLocaleString()` / `toLocaleDateString()` calls in `settings-form.tsx`, `server-management-dialog.tsx`, and `lib/digest-email.ts` have been replaced with `format.dateTime()` (client components) and `Intl.DateTimeFormat` (server-side email). The `calendar.tsx` data attribute and react-day-picker formatter callback are intentionally left as-is (DOM attribute / library internals).
 
-### RTL: Swipe Gesture Direction
+### ~~RTL: Swipe Gesture Direction~~ — ✅ Already implemented
 
-Under `dir="rtl"`, swipe-left and swipe-right navigation gestures are not inverted. A user expecting RTL swipe conventions will find the direction backwards. Tracked for v1.2 alongside the gesture animation work.
+All three swipe handlers (`rss-header.tsx`, `article-list.tsx` background and per-article) already detect `document.documentElement.getAttribute("dir") === "rtl"` and invert swipe direction accordingly. No action needed.
 
 ### ~~Token `admin` Scope Not Enforced on Admin Actions~~ — ✅ Already enforced
 

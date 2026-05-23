@@ -203,10 +203,10 @@ async function callTool(user: ApiUser, name: string, args: any) {
       if (!article) throw new Error("Article not found");
       const labelIds: string[] = Array.isArray(args.labelIds) ? args.labelIds.filter((id: unknown) => typeof id === "string") : [];
       const validLabels = await db.label.findMany({ where: { userId: user.id, id: { in: labelIds } }, select: { id: true } });
-      const validLabelIds = validLabels.map((l) => l.id);
+      const validLabelIds = validLabels.map((l: { id: string }) => l.id);
       await db.$transaction([
         db.articleLabel.deleteMany({ where: { userId: user.id, articleId } }),
-        ...validLabelIds.map((labelId) => db.articleLabel.create({ data: { userId: user.id, articleId, labelId } })),
+        ...validLabelIds.map((labelId: string) => db.articleLabel.create({ data: { userId: user.id, articleId, labelId } })),
       ]);
       return { updated: true, articleId, labelIds: validLabelIds };
     }
@@ -218,7 +218,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       const action = String(args.action);
       if (!["read", "unread", "star", "unstar"].includes(action)) throw new Error("action must be one of: read, unread, star, unstar");
       const owned = await db.article.findMany({ where: { id: { in: ids }, userId: user.id }, select: { id: true } });
-      const ownedIds = owned.map((a) => a.id);
+      const ownedIds = owned.map((a: { id: string }) => a.id);
       if (ownedIds.length === 0) throw new Error("No matching articles found");
       let data: any = {};
       if (action === "read") { data = { isRead: true, readAt: new Date() }; }

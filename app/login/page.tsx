@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { signIn, useSession } from "next-auth/react";
@@ -59,7 +59,7 @@ export default function LoginPage() {
     init();
   }, [status, router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
     setErrorIsWarning(false);
