@@ -1115,7 +1115,7 @@ function SortableCategory({
             ))}
           </SortableContext>
           {feeds.length === 0 && (
-            <p className="text-[10px] text-muted-foreground/50 px-3 py-1 italic">
+            <p className="text-xs text-muted-foreground px-3 py-1 italic">
               {t("sidebar.noFeeds")}
             </p>
           )}

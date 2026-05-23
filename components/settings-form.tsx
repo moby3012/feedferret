@@ -69,6 +69,7 @@ import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MobileFloatingBackButton } from "@/components/mobile-floating-back-button";
 import { toast } from "sonner";
 import { SHOW_PWA_INSTALL_PROMPT_EVENT } from "@/components/pwa-install-prompt";
@@ -157,433 +158,458 @@ export function SettingsForm() {
           </div>
         </header>
 
-        <div className="grid gap-5">
-          {/* ── Appearance & Interface ── */}
+        <Tabs defaultValue="appearance" className="w-full">
+          <div className="mb-6 overflow-x-auto pb-1">
+            <TabsList className="w-full">
+              <TabsTrigger value="appearance" className="flex-1 gap-1.5">
+                <Palette className="h-4 w-4 shrink-0" />
+                <span>{t("settings.tabs.appearance")}</span>
+              </TabsTrigger>
+              <TabsTrigger value="reading" className="flex-1 gap-1.5">
+                <ScrollText className="h-4 w-4 shrink-0" />
+                <span>{t("settings.tabs.reading")}</span>
+              </TabsTrigger>
+              <TabsTrigger value="account" className="flex-1 gap-1.5">
+                <User className="h-4 w-4 shrink-0" />
+                <span>{t("settings.tabs.account")}</span>
+              </TabsTrigger>
+              <TabsTrigger value="notifications" className="flex-1 gap-1.5">
+                <Bell className="h-4 w-4 shrink-0" />
+                <span>{t("settings.tabs.notifications")}</span>
+              </TabsTrigger>
+              <TabsTrigger value="integrations" className="flex-1 gap-1.5">
+                <Rss className="h-4 w-4 shrink-0" />
+                <span>{t("settings.tabs.integrations")}</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-          {/* Theme */}
-          <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
-                  <Palette className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("settings.appearance")}</h2>
-                  <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                    {t("settings.chooseVisualMode")}
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-1 rounded-2xl border border-border/70 bg-muted/45 p-1 shadow-inner shadow-black/[0.02]">
-                {themeOptions.map((option) => {
-                  const Icon = option.icon;
-                  const active = theme === option.id;
-                  return (
-                    <button
-                      key={option.id}
-                      onClick={() => setTheme(option.id)}
-                      className={cn(
-                        "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium transition-all",
-                        active
-                          ? "bg-background text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span className="hidden sm:inline">{option.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
+          {/* ── Tab: Appearance ── */}
+          <TabsContent value="appearance" className="grid gap-5">
 
-          {/* Accent colors */}
-          <PrefRow
-            icon={Palette}
-            title={t("settings.accentColors")}
-            description={t("settings.accentColorsDescription")}
-          >
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground" htmlFor="accent-color-primary">{t("settings.primary")}</label>
-                <input
-                  id="accent-color-primary"
-                  type="color"
-                  value={prefs?.accentColor ?? "#5BA4CF"}
-                  onChange={(e) => update({ accentColor: e.target.value })}
-                  className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
-                  title={t("settings.primary")}
-                />
+            {/* Theme */}
+            <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+              <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+                    <Palette className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("settings.appearance")}</h2>
+                    <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                      {t("settings.chooseVisualMode")}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-1 rounded-2xl border border-border/70 bg-muted/45 p-1 shadow-inner shadow-black/[0.02]">
+                  {themeOptions.map((option) => {
+                    const Icon = option.icon;
+                    const active = theme === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        onClick={() => setTheme(option.id)}
+                        className={cn(
+                          "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium transition-all",
+                          active
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span className="hidden sm:inline">{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground" htmlFor="accent-color-secondary">{t("settings.secondary")}</label>
-                <input
-                  id="accent-color-secondary"
-                  type="color"
-                  value={prefs?.secondaryColor ?? "#F0963C"}
-                  onChange={(e) => update({ secondaryColor: e.target.value })}
-                  className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
-                  title={t("settings.secondary")}
-                />
+            </section>
+
+            {/* Accent colors */}
+            <PrefRow
+              icon={Palette}
+              title={t("settings.accentColors")}
+              description={t("settings.accentColorsDescription")}
+            >
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-muted-foreground" htmlFor="accent-color-primary">{t("settings.primary")}</label>
+                  <input
+                    id="accent-color-primary"
+                    type="color"
+                    value={prefs?.accentColor ?? "#5BA4CF"}
+                    onChange={(e) => update({ accentColor: e.target.value })}
+                    className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
+                    title={t("settings.primary")}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-muted-foreground" htmlFor="accent-color-secondary">{t("settings.secondary")}</label>
+                  <input
+                    id="accent-color-secondary"
+                    type="color"
+                    value={prefs?.secondaryColor ?? "#F0963C"}
+                    onChange={(e) => update({ secondaryColor: e.target.value })}
+                    className="w-10 h-10 rounded-xl border border-border/70 cursor-pointer bg-transparent p-0.5"
+                    title={t("settings.secondary")}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => update({ accentColor: "#5BA4CF", secondaryColor: "#F0963C" })}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {t("settings.reset")}
+                </button>
+                <div
+                  className="w-full min-w-[180px] rounded-2xl border border-border/70 p-3 shadow-sm sm:ml-auto sm:w-auto"
+                  style={{
+                    background: `linear-gradient(135deg, ${(prefs?.accentColor ?? "#5BA4CF")}22 0%, ${(prefs?.secondaryColor ?? "#F0963C")}2a 100%)`,
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        {t("settings.preview")}
+                      </p>
+                      <p className="text-sm font-medium">{t("settings.appAccents")}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-7 w-7 rounded-full border border-white/40 shadow-sm"
+                        style={{ backgroundColor: prefs?.accentColor ?? "#5BA4CF" }}
+                      />
+                      <span
+                        className="h-7 w-7 rounded-full border border-white/40 shadow-sm"
+                        style={{ backgroundColor: prefs?.secondaryColor ?? "#F0963C" }}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => update({ accentColor: "#5BA4CF", secondaryColor: "#F0963C" })}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            </PrefRow>
+
+            {/* Default view mode */}
+            <PrefRow
+              icon={AlignLeft}
+              title={t("settings.defaultView")}
+              description={t("settings.defaultViewDescription")}
+            >
+              <Select
+                value={normalizeDefaultViewMode(prefs?.defaultViewMode)}
+                onValueChange={(v) => update({ defaultViewMode: v })}
               >
-                {t("settings.reset")}
-              </button>
-              <div
-                className="w-full min-w-[180px] rounded-2xl border border-border/70 p-3 shadow-sm sm:ml-auto sm:w-auto"
-                style={{
-                  background: `linear-gradient(135deg, ${(prefs?.accentColor ?? "#5BA4CF")}22 0%, ${(prefs?.secondaryColor ?? "#F0963C")}2a 100%)`,
+                <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">
+                  <SelectItem value="list">{t("settings.viewOptions.list")}</SelectItem>
+                  <SelectItem value="magazine">{t("settings.viewOptions.magazine")}</SelectItem>
+                  <SelectItem value="minimal">{t("settings.viewOptions.minimal")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </PrefRow>
+
+            {/* Reader width */}
+            <PrefRow
+              icon={AlignLeft}
+              title={t("settings.readerWidth")}
+              description={t("settings.readerWidthDescription")}
+            >
+              <Select
+                value={prefs?.readerWidth ?? "normal"}
+                onValueChange={(v) => update({ readerWidth: v })}
+              >
+                <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">
+                  <SelectItem value="normal">{t("settings.widthOptions.normal")}</SelectItem>
+                  <SelectItem value="wide">{t("settings.widthOptions.wide")}</SelectItem>
+                  <SelectItem value="full">{t("settings.widthOptions.full")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </PrefRow>
+
+            {/* Reader font size */}
+            <PrefRow
+              icon={ALargeSmall}
+              title={t("settings.readerFontSize")}
+              description={t("settings.readerFontSizeDescription")}
+            >
+              <Select
+                value={prefs?.readerFontSize ?? "medium"}
+                onValueChange={(v) => update({ readerFontSize: v })}
+              >
+                <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">
+                  <SelectItem value="small">{t("settings.fontSizeOptions.small")}</SelectItem>
+                  <SelectItem value="medium">{t("settings.fontSizeOptions.medium")}</SelectItem>
+                  <SelectItem value="large">{t("settings.fontSizeOptions.large")}</SelectItem>
+                  <SelectItem value="xl">{t("settings.fontSizeOptions.xl")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </PrefRow>
+
+          </TabsContent>
+
+          {/* ── Tab: Reading ── */}
+          <TabsContent value="reading" className="grid gap-5">
+
+            {/* Default sort order */}
+            <PrefRow
+              icon={ArrowDownAZ}
+              title={t("settings.defaultSort")}
+              description={t("settings.defaultSortDescription")}
+            >
+              <Select
+                value={prefs?.defaultArticleSort ?? "newest"}
+                onValueChange={(v) => update({ defaultArticleSort: v })}
+              >
+                <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">
+                  <SelectItem value="newest">{t("settings.sortOptions.newest")}</SelectItem>
+                  <SelectItem value="oldest">{t("settings.sortOptions.oldest")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </PrefRow>
+
+            {/* Mark-as-read delay */}
+            <PrefRow
+              icon={Clock}
+              title={t("settings.markAsRead")}
+              description={t("settings.markAsReadDescription")}
+            >
+              <Select
+                value={
+                  prefs?.markReadAfterDelaySecs === 0
+                    ? "off"
+                    : prefs?.markReadAfterDelaySecs === null || prefs?.markReadAfterDelaySecs === undefined
+                    ? "instant"
+                    : String(prefs.markReadAfterDelaySecs)
+                }
+                onValueChange={(v) =>
+                  update({
+                    markReadAfterDelaySecs: v === "off" ? 0 : v === "instant" ? null : parseInt(v),
+                  })
+                }
+              >
+                <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">
+                  <SelectItem value="instant">{t("settings.markReadOptions.instant")}</SelectItem>
+                  <SelectItem value="5">{t("settings.markReadOptions.after5s")}</SelectItem>
+                  <SelectItem value="15">{t("settings.markReadOptions.after15s")}</SelectItem>
+                  <SelectItem value="30">{t("settings.markReadOptions.after30s")}</SelectItem>
+                  <SelectItem value="60">{t("settings.markReadOptions.after60s")}</SelectItem>
+                  <SelectItem value="off">{t("settings.markReadOptions.off")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </PrefRow>
+
+            {/* Mark as read on scroll */}
+            <PrefRow
+              icon={ScrollText}
+              title={t("settings.markAsReadOnScroll")}
+              description={t("settings.markAsReadOnScrollDescription")}
+            >
+              <Switch
+                checked={prefs?.markReadOnScroll ?? false}
+                onCheckedChange={(checked) => update({ markReadOnScroll: checked })}
+                className="h-7 w-12"
+              />
+            </PrefRow>
+
+            {/* Open original */}
+            <PrefRow
+              icon={ExternalLink}
+              title={t("settings.openOriginal")}
+              description={t("settings.openOriginalDescription")}
+            >
+              <Switch
+                checked={prefs?.openOriginalByDefault ?? false}
+                onCheckedChange={(checked) => update({ openOriginalByDefault: checked })}
+                className="h-7 w-12"
+              />
+            </PrefRow>
+
+            {/* Hide duplicates */}
+            <PrefRow
+              icon={Layers}
+              title={t("settings.hideDuplicates")}
+              description={t("settings.hideDuplicatesDescription")}
+            >
+              <Switch
+                checked={prefs?.hideDuplicates ?? true}
+                onCheckedChange={(checked) => update({ hideDuplicates: checked })}
+                className="h-7 w-12"
+              />
+            </PrefRow>
+
+            {/* RTL layout */}
+            <PrefRow
+              icon={AlignLeft}
+              title={t("settings.rtlLayout")}
+              description={t("settings.rtlLayoutDescription")}
+            >
+              <Switch
+                checked={(prefs?.layoutDirection ?? "ltr") === "rtl"}
+                onCheckedChange={(checked) => update({ layoutDirection: checked ? "rtl" : "ltr" })}
+                className="h-7 w-12"
+              />
+            </PrefRow>
+
+            {/* Language */}
+            <PrefRow
+              icon={Languages}
+              title="Language"
+              description="Interface language for the app. Takes effect after navigating away and back."
+            >
+              <Select
+                value={prefs?.uiLanguage ?? "en"}
+                onValueChange={(locale) => {
+                  updateUiLang.mutate(locale, {
+                    onSuccess: () => router.refresh(),
+                  });
                 }}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      {t("settings.preview")}
+                <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">
+                  <SelectItem value="en">English</SelectItem>
+                  <SelectItem value="de">Deutsch</SelectItem>
+                </SelectContent>
+              </Select>
+            </PrefRow>
+
+            {/* Hide empty feeds */}
+            <PrefRow
+              icon={EyeOff}
+              title={t("settings.hideEmptyFeeds")}
+              description={t("settings.hideEmptyFeedsDescription")}
+            >
+              <Switch
+                checked={prefs?.hideEmptyFeeds ?? false}
+                onCheckedChange={(checked) => update({ hideEmptyFeeds: checked })}
+                className="h-7 w-12"
+              />
+            </PrefRow>
+
+            {/* Hide empty labels */}
+            <PrefRow
+              icon={EyeOff}
+              title={t("settings.hideEmptyLabels")}
+              description={t("settings.hideEmptyLabelsDescription")}
+            >
+              <Switch
+                checked={prefs?.hideEmptyLabels ?? false}
+                onCheckedChange={(checked) => update({ hideEmptyLabels: checked })}
+                className="h-7 w-12"
+              />
+            </PrefRow>
+
+          </TabsContent>
+
+          {/* ── Tab: Account ── */}
+          <TabsContent value="account" className="grid gap-5">
+
+            {/* User Profile */}
+            <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+              <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <User className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("settings.userProfile")}</h2>
+                    <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                      {t("settings.signedInAs")}{" "}
+                      <span className="font-medium text-foreground">
+                        {session?.user?.email || t("settings.unknownUser")}
+                      </span>
                     </p>
-                    <p className="text-sm font-medium">{t("settings.appAccents")}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="h-7 w-7 rounded-full border border-white/40 shadow-sm"
-                      style={{ backgroundColor: prefs?.accentColor ?? "#5BA4CF" }}
-                    />
-                    <span
-                      className="h-7 w-7 rounded-full border border-white/40 shadow-sm"
-                      style={{ backgroundColor: prefs?.secondaryColor ?? "#F0963C" }}
-                    />
                   </div>
                 </div>
+                <Button
+                  variant="outline"
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
+                >
+                  <LogOut className="me-2 h-4 w-4" />
+                  {t("settings.signOut")}
+                </Button>
               </div>
-            </div>
-          </PrefRow>
+            </section>
 
-          {/* Default view mode */}
-          <PrefRow
-            icon={AlignLeft}
-            title={t("settings.defaultView")}
-            description={t("settings.defaultViewDescription")}
-          >
-            <Select
-              value={normalizeDefaultViewMode(prefs?.defaultViewMode)}
-              onValueChange={(v) => update({ defaultViewMode: v })}
+            {/* Two-factor authentication */}
+            <TwoFactorSection />
+
+            {/* API Access */}
+            <ApiTokenSection />
+
+            {/* Add to Home Screen */}
+            <PrefRow
+              icon={Smartphone}
+              title={t("pwa.title")}
+              description={t("pwa.description")}
             >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                <SelectItem value="list">{t("settings.viewOptions.list")}</SelectItem>
-                <SelectItem value="magazine">{t("settings.viewOptions.magazine")}</SelectItem>
-                <SelectItem value="minimal">{t("settings.viewOptions.minimal")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </PrefRow>
-
-          {/* Reader width */}
-          <PrefRow
-            icon={AlignLeft}
-            title={t("settings.readerWidth")}
-            description={t("settings.readerWidthDescription")}
-          >
-            <Select
-              value={prefs?.readerWidth ?? "normal"}
-              onValueChange={(v) => update({ readerWidth: v })}
-            >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                <SelectItem value="normal">{t("settings.widthOptions.normal")}</SelectItem>
-                <SelectItem value="wide">{t("settings.widthOptions.wide")}</SelectItem>
-                <SelectItem value="full">{t("settings.widthOptions.full")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </PrefRow>
-
-          {/* Reader font size */}
-          <PrefRow
-            icon={ALargeSmall}
-            title={t("settings.readerFontSize")}
-            description={t("settings.readerFontSizeDescription")}
-          >
-            <Select
-              value={prefs?.readerFontSize ?? "medium"}
-              onValueChange={(v) => update({ readerFontSize: v })}
-            >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                <SelectItem value="small">{t("settings.fontSizeOptions.small")}</SelectItem>
-                <SelectItem value="medium">{t("settings.fontSizeOptions.medium")}</SelectItem>
-                <SelectItem value="large">{t("settings.fontSizeOptions.large")}</SelectItem>
-                <SelectItem value="xl">{t("settings.fontSizeOptions.xl")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </PrefRow>
-
-          {/* ── Reading Behaviour ── */}
-
-          {/* Default sort order */}
-          <PrefRow
-            icon={ArrowDownAZ}
-            title={t("settings.defaultSort")}
-            description={t("settings.defaultSortDescription")}
-          >
-            <Select
-              value={prefs?.defaultArticleSort ?? "newest"}
-              onValueChange={(v) => update({ defaultArticleSort: v })}
-            >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                <SelectItem value="newest">{t("settings.sortOptions.newest")}</SelectItem>
-                <SelectItem value="oldest">{t("settings.sortOptions.oldest")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </PrefRow>
-
-          {/* Mark-as-read delay */}
-          <PrefRow
-            icon={Clock}
-            title={t("settings.markAsRead")}
-            description={t("settings.markAsReadDescription")}
-          >
-            <Select
-              value={
-                prefs?.markReadAfterDelaySecs === 0
-                  ? "off"
-                  : prefs?.markReadAfterDelaySecs === null || prefs?.markReadAfterDelaySecs === undefined
-                  ? "instant"
-                  : String(prefs.markReadAfterDelaySecs)
-              }
-              onValueChange={(v) =>
-                update({
-                  markReadAfterDelaySecs: v === "off" ? 0 : v === "instant" ? null : parseInt(v),
-                })
-              }
-            >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                <SelectItem value="instant">{t("settings.markReadOptions.instant")}</SelectItem>
-                <SelectItem value="5">{t("settings.markReadOptions.after5s")}</SelectItem>
-                <SelectItem value="15">{t("settings.markReadOptions.after15s")}</SelectItem>
-                <SelectItem value="30">{t("settings.markReadOptions.after30s")}</SelectItem>
-                <SelectItem value="60">{t("settings.markReadOptions.after60s")}</SelectItem>
-                <SelectItem value="off">{t("settings.markReadOptions.off")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </PrefRow>
-
-          {/* Mark as read on scroll */}
-          <PrefRow
-            icon={ScrollText}
-            title={t("settings.markAsReadOnScroll")}
-            description={t("settings.markAsReadOnScrollDescription")}
-          >
-            <Switch
-              checked={prefs?.markReadOnScroll ?? false}
-              onCheckedChange={(checked) => update({ markReadOnScroll: checked })}
-              className="h-7 w-12"
-            />
-          </PrefRow>
-
-          {/* Open original */}
-          <PrefRow
-            icon={ExternalLink}
-            title={t("settings.openOriginal")}
-            description={t("settings.openOriginalDescription")}
-          >
-            <Switch
-              checked={prefs?.openOriginalByDefault ?? false}
-              onCheckedChange={(checked) => update({ openOriginalByDefault: checked })}
-              className="h-7 w-12"
-            />
-          </PrefRow>
-
-          {/* Hide duplicates */}
-          <PrefRow
-            icon={Layers}
-            title={t("settings.hideDuplicates")}
-            description={t("settings.hideDuplicatesDescription")}
-          >
-            <Switch
-              checked={prefs?.hideDuplicates ?? true}
-              onCheckedChange={(checked) => update({ hideDuplicates: checked })}
-              className="h-7 w-12"
-            />
-          </PrefRow>
-
-          {/* RTL layout */}
-          <PrefRow
-            icon={AlignLeft}
-            title={t("settings.rtlLayout")}
-            description={t("settings.rtlLayoutDescription")}
-          >
-            <Switch
-              checked={(prefs?.layoutDirection ?? "ltr") === "rtl"}
-              onCheckedChange={(checked) => update({ layoutDirection: checked ? "rtl" : "ltr" })}
-              className="h-7 w-12"
-            />
-          </PrefRow>
-
-          {/* Language */}
-          <PrefRow
-            icon={Languages}
-            title="Language"
-            description="Interface language for the app. Takes effect after navigating away and back."
-          >
-            <Select
-              value={prefs?.uiLanguage ?? "en"}
-              onValueChange={(locale) => {
-                updateUiLang.mutate(locale, {
-                  onSuccess: () => router.refresh(),
-                });
-              }}
-            >
-              <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="de">Deutsch</SelectItem>
-              </SelectContent>
-            </Select>
-          </PrefRow>
-
-          {/* Hide empty feeds */}
-          <PrefRow
-            icon={EyeOff}
-            title={t("settings.hideEmptyFeeds")}
-            description={t("settings.hideEmptyFeedsDescription")}
-          >
-            <Switch
-              checked={prefs?.hideEmptyFeeds ?? false}
-              onCheckedChange={(checked) => update({ hideEmptyFeeds: checked })}
-              className="h-7 w-12"
-            />
-          </PrefRow>
-
-          {/* Hide empty labels */}
-          <PrefRow
-            icon={EyeOff}
-            title={t("settings.hideEmptyLabels")}
-            description={t("settings.hideEmptyLabelsDescription")}
-          >
-            <Switch
-              checked={prefs?.hideEmptyLabels ?? false}
-              onCheckedChange={(checked) => update({ hideEmptyLabels: checked })}
-              className="h-7 w-12"
-            />
-          </PrefRow>
-
-          {/* Sync with external readers */}
-          <SyncTutorialSection />
-
-          {/* ── Account & Security ── */}
-
-          {/* User Profile */}
-          <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <User className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("settings.userProfile")}</h2>
-                  <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                    {t("settings.signedInAs")}{" "}
-                    <span className="font-medium text-foreground">
-                      {session?.user?.email || t("settings.unknownUser")}
-                    </span>
-                  </p>
-                </div>
-              </div>
               <Button
+                type="button"
                 variant="outline"
-                onClick={() => signOut({ callbackUrl: "/" })}
+                onClick={() => window.dispatchEvent(new Event(SHOW_PWA_INSTALL_PROMPT_EVENT))}
                 className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
               >
-                <LogOut className="me-2 h-4 w-4" />
-                {t("settings.signOut")}
+                {t("pwa.showInstructions")}
               </Button>
-            </div>
-          </section>
+            </PrefRow>
 
-          {/* Two-factor authentication */}
-          <TwoFactorSection />
-
-          {/* API Access */}
-          <ApiTokenSection />
-
-          {/* ── Integrations & Notifications ── */}
-
-          {/* Browser notifications – hidden when server not configured (#13) */}
-          <PushNotificationSection />
-
-          {/* Digest Email – hidden when mail not configured (#13, handled inside) */}
-          <DigestSection />
-
-          {/* External notification channels: Telegram, Gotify, ntfy */}
-          <NotificationChannelsSection />
-
-          {/* AI Summaries */}
-          <AiSummarySection />
-
-          {/* Outbound webhooks live alongside Rules & Alerts now —
-              see Manage feeds → Rules & Alerts. */}
-
-          {/* ── Device & Misc ── */}
-
-          {/* Add to Home Screen */}
-          <PrefRow
-            icon={Smartphone}
-            title={t("pwa.title")}
-            description={t("pwa.description")}
-          >
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => window.dispatchEvent(new Event(SHOW_PWA_INSTALL_PROMPT_EVENT))}
-              className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
+            {/* Keyboard shortcuts */}
+            <PrefRow
+              icon={Keyboard}
+              title={t("keyboard.title")}
+              description={t("keyboard.description")}
             >
-              {t("pwa.showInstructions")}
-            </Button>
-          </PrefRow>
-
-          <PrefRow
-            icon={Keyboard}
-            title={t("keyboard.title")}
-            description={t("keyboard.description")}
-          >
-            <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground sm:min-w-80">
-              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                <span className="font-mono text-foreground">j / k</span>
-                <span>{t("keyboard.nextArticle")} / {t("keyboard.previousArticle")}</span>
-                <span className="font-mono text-foreground">n / p</span>
-                <span>{t("keyboard.nextUnread")} / {t("keyboard.previousUnread")}</span>
-                <span className="font-mono text-foreground">m / s</span>
-                <span>{t("keyboard.toggleRead")} / {t("keyboard.toggleStar")}</span>
-                <span className="font-mono text-foreground">/</span>
-                <span>{t("keyboard.focusSearch")}</span>
-                <span className="font-mono text-foreground">?</span>
-                <span>{t("keyboard.toggleHelp")}</span>
+              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground sm:min-w-80">
+                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                  <span className="font-mono text-foreground">j / k</span>
+                  <span>{t("keyboard.nextArticle")} / {t("keyboard.previousArticle")}</span>
+                  <span className="font-mono text-foreground">n / p</span>
+                  <span>{t("keyboard.nextUnread")} / {t("keyboard.previousUnread")}</span>
+                  <span className="font-mono text-foreground">m / s</span>
+                  <span>{t("keyboard.toggleRead")} / {t("keyboard.toggleStar")}</span>
+                  <span className="font-mono text-foreground">/</span>
+                  <span>{t("keyboard.focusSearch")}</span>
+                  <span className="font-mono text-foreground">?</span>
+                  <span>{t("keyboard.toggleHelp")}</span>
+                </div>
               </div>
-            </div>
-          </PrefRow>
+            </PrefRow>
 
-          {/* ── Danger Zone ── */}
+            {/* Danger Zone: Delete Account */}
+            <DeleteAccountSection />
 
-          {/* GDPR Account Deletion */}
-          <DeleteAccountSection />
-        </div>
+          </TabsContent>
+
+          {/* ── Tab: Notifications ── */}
+          <TabsContent value="notifications" className="grid gap-5">
+            <PushNotificationSection />
+            <DigestSection />
+            <NotificationChannelsSection />
+          </TabsContent>
+
+          {/* ── Tab: Integrations ── */}
+          <TabsContent value="integrations" className="grid gap-5">
+            <AiSummarySection />
+            <SyncTutorialSection />
+          </TabsContent>
+
+        </Tabs>
       </div>
       <MobileFloatingBackButton fallbackHref="/" />
     </main>

@@ -69,5 +69,5 @@ Identified via `pnpm outdated`; not yet scheduled. Each will need its own dedica
 ## Security — Ongoing
 
 - [ ] **CSP `unsafe-inline` / `unsafe-eval` cleanup** — requires nonce-based CSP configuration in Next.js. Blocked until Next.js provides a stable nonce API in the App Router (track upstream). When implemented, remove `unsafe-inline` from `script-src` and validate with Mozilla Observatory.
-- [x] **Token expiry configuration** — currently API tokens do not expire. Add an optional `expiresAt` field to the `ApiToken` table. Settings UI: expiry duration picker (never / 30 d / 90 d / 1 y). Tokens past `expiresAt` return HTTP 401.
+- [x] **Token expiry configuration** — `expiresAt` field on `ApiToken`, expiry picker (never / 30 d / 90 d / 1 y) in Settings → Account, and display of expiry date in token list are all implemented. HTTP 401 on expired tokens enforced at middleware level.
 - [ ] **Full Zod schemas for all server actions** — large refactor; own PR. Currently some server actions validate inputs with ad-hoc checks. Replace with explicit `z.object()` schemas at every action entry point. No behavior change — pure defensive hardening. (partial: addFeed ✓)
