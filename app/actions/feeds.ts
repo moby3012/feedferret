@@ -670,19 +670,25 @@ export async function getArticles(feedId?: string | null, category?: string, sea
     let orderBy: any = { publishedAt: "desc" };
     let isSpoilerCategory = false;
 
+    const isSearching = !!search?.trim();
+
     if (feedId) {
         where.feedId = feedId;
     } else if (!category || category === "All" || category === "All Articles") {
-        // Exclude feeds and categories marked as hidden from all feeds view
-        where.AND = [...(where.AND || []), {
-            feed: {
-                hideFromAllFeeds: false,
-                OR: [
-                    { categoryId: null },
-                    { category: { hideFromAllFeeds: false } },
-                ],
-            },
-        }];
+        // Exclude feeds and categories marked as hidden from all feeds view.
+        // Skip this exclusion while searching: global search is expected to span
+        // every feed the user owns, including ones hidden from the default view.
+        if (!isSearching) {
+            where.AND = [...(where.AND || []), {
+                feed: {
+                    hideFromAllFeeds: false,
+                    OR: [
+                        { categoryId: null },
+                        { category: { hideFromAllFeeds: false } },
+                    ],
+                },
+            }];
+        }
     } else if (category !== "All" && category !== "All Articles") {
         if (category === "Starred") {
             where.isStarred = true;
