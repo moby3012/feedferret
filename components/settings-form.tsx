@@ -69,7 +69,8 @@ import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
 import { MobileFloatingBackButton } from "@/components/mobile-floating-back-button";
 import { toast } from "sonner";
 import { SHOW_PWA_INSTALL_PROMPT_EVENT } from "@/components/pwa-install-prompt";
@@ -134,6 +135,16 @@ export function SettingsForm() {
   const update = (data: Parameters<typeof updateSettings.mutate>[0]) =>
     updateSettings.mutate(data);
 
+  const [activeTab, setActiveTab] = useState("appearance");
+
+  const tabOptions = [
+    { value: "appearance", label: t("settings.tabs.appearance"), icon: <Palette className="h-4 w-4 shrink-0" /> },
+    { value: "reading", label: t("settings.tabs.reading"), icon: <ScrollText className="h-4 w-4 shrink-0" /> },
+    { value: "account", label: t("settings.tabs.account"), icon: <User className="h-4 w-4 shrink-0" /> },
+    { value: "notifications", label: t("settings.tabs.notifications"), icon: <Bell className="h-4 w-4 shrink-0" /> },
+    { value: "integrations", label: t("settings.tabs.integrations"), icon: <Rss className="h-4 w-4 shrink-0" /> },
+  ];
+
   return (
     <main className="min-h-dvh app-chrome text-foreground overflow-x-hidden">
       <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-6">
@@ -158,31 +169,14 @@ export function SettingsForm() {
           </div>
         </header>
 
-        <Tabs defaultValue="appearance" className="w-full">
-          <div className="mb-6 overflow-x-auto pb-1">
-            <TabsList className="w-full">
-              <TabsTrigger value="appearance" className="flex-1 gap-1.5">
-                <Palette className="h-4 w-4 shrink-0" />
-                <span>{t("settings.tabs.appearance")}</span>
-              </TabsTrigger>
-              <TabsTrigger value="reading" className="flex-1 gap-1.5">
-                <ScrollText className="h-4 w-4 shrink-0" />
-                <span>{t("settings.tabs.reading")}</span>
-              </TabsTrigger>
-              <TabsTrigger value="account" className="flex-1 gap-1.5">
-                <User className="h-4 w-4 shrink-0" />
-                <span>{t("settings.tabs.account")}</span>
-              </TabsTrigger>
-              <TabsTrigger value="notifications" className="flex-1 gap-1.5">
-                <Bell className="h-4 w-4 shrink-0" />
-                <span>{t("settings.tabs.notifications")}</span>
-              </TabsTrigger>
-              <TabsTrigger value="integrations" className="flex-1 gap-1.5">
-                <Rss className="h-4 w-4 shrink-0" />
-                <span>{t("settings.tabs.integrations")}</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <ResponsiveTabsNav
+            value={activeTab}
+            onValueChange={setActiveTab}
+            options={tabOptions}
+            className="mb-6"
+            triggerClassName="gap-1.5"
+          />
 
           {/* ── Tab: Appearance ── */}
           <TabsContent value="appearance" className="grid gap-5">
