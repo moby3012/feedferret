@@ -1227,6 +1227,18 @@
     "clearSearch": "Clear search",
     "closeSearch": "Close search"
   },
+  "searchResults": {
+    "title": "Search results",
+    "resultsCount": "{count, plural, =0 {No matches} one {# match} other {# matches}}",
+    "unreadCount": "{count} unread",
+    "editQuery": "Edit search",
+    "closeSearch": "Close search",
+    "backToFeed": "Back to feed",
+    "saveSearch": "Save search",
+    "emptyTitle": "No articles found",
+    "emptyDescription": "Try different keywords or operators like author:, intitle:, is:unread.",
+    "operatorHint": "Tip: intitle:AI is:unread"
+  },
   "sharedSearch": {
     "title": "Shared FeedFerret search",
     "rssFeed": "RSS feed",
