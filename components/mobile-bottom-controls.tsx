@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
+  ArrowLeft,
   CheckCheck,
   PanelLeft,
+  Pencil,
   RefreshCw,
   Search,
   X,
@@ -23,6 +25,9 @@ interface MobileBottomControlsProps {
   onSearchChange: (query: string) => void;
   onMarkAllRead?: () => void;
   isMarkingAllRead?: boolean;
+  isSearchActive?: boolean;
+  onCloseSearch?: () => void;
+  onEditSearch?: () => void;
 }
 
 const mobileButtonClass =
@@ -38,9 +43,65 @@ export function MobileBottomControls({
   onSearchChange,
   onMarkAllRead,
   isMarkingAllRead,
+  isSearchActive,
+  onCloseSearch,
+  onEditSearch,
 }: MobileBottomControlsProps) {
   const t = useTranslations();
-  const [searchOpen, setSearchOpen] = useState(!!searchQuery);
+  const [searchOpen, setSearchOpen] = useState(!!searchQuery && !isSearchActive);
+
+  if (isSearchActive) {
+    return (
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+        <nav className="pointer-events-auto flex h-16 items-center gap-1.5 rounded-[2rem] border border-border/70 bg-background/90 px-2 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-12 flex-1 rounded-2xl px-3 text-sm font-semibold text-foreground bg-muted/70 active:scale-[0.98] transition-all"
+            onClick={() => onCloseSearch?.()}
+            aria-label={t("searchResults.closeSearch")}
+          >
+            <ArrowLeft className="me-2 h-5 w-5" />
+            {t("searchResults.backToFeed")}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(mobileButtonClass, isMarkingAllRead && "text-accent")}
+            disabled={isMarkingAllRead}
+            onClick={() => onMarkAllRead?.()}
+            aria-label={t("sidebar.markAllAsRead")}
+            title={t("sidebar.markAllAsRead")}
+          >
+            <CheckCheck className={cn("h-5 w-5", isMarkingAllRead && "animate-pulse")} />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={mobileButtonClass}
+            onClick={() => onEditSearch?.()}
+            aria-label={t("searchResults.editQuery")}
+            title={t("searchResults.editQuery")}
+          >
+            <Pencil className="h-5 w-5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-12 w-12 shrink-0 rounded-2xl bg-accent text-accent-foreground shadow-lg shadow-accent/30 active:scale-95"
+            onClick={() => onCloseSearch?.()}
+            aria-label={t("searchResults.closeSearch")}
+            title={t("searchResults.closeSearch")}
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </nav>
+      </div>
+    );
+  }
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">

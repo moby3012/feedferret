@@ -1220,6 +1220,18 @@
     "clearSearch": "Suche leeren",
     "closeSearch": "Suche schließen"
   },
+  "searchResults": {
+    "title": "Suchergebnisse",
+    "resultsCount": "{count, plural, =0 {Keine Treffer} one {# Treffer} other {# Treffer}}",
+    "unreadCount": "{count} ungelesen",
+    "editQuery": "Suche bearbeiten",
+    "closeSearch": "Suche schließen",
+    "backToFeed": "Zurück zum Feed",
+    "saveSearch": "Suche speichern",
+    "emptyTitle": "Keine Artikel gefunden",
+    "emptyDescription": "Versuche andere Stichwörter oder Operatoren wie author:, intitle:, is:unread.",
+    "operatorHint": "Tipp: intitle:KI is:unread"
+  },
   "sharedSearch": {
     "title": "Geteilte FeedFerret-Suche",
     "rssFeed": "RSS-Feed",

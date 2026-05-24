@@ -10,6 +10,7 @@ import { ArticleReader } from "@/components/article-reader";
 import { RssHeader, ViewMode } from "@/components/rss-header";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { MobileBottomControls } from "@/components/mobile-bottom-controls";
+import { SearchResultsView } from "@/components/search-results-view";
 import {
   useFeeds,
   useArticles,
@@ -585,6 +586,17 @@ export default function RSSReaderPage() {
     createSavedSearch.mutate({ name: name.trim(), query });
   }, [createSavedSearch, searchQuery]);
 
+  const handleCloseSearch = useCallback(() => {
+    setSearchQuery("");
+    setSearchOpen(false);
+    setSelectedArticleId(null);
+    setSelectedArticleSnapshot(null);
+  }, []);
+
+  const handleEditSearch = useCallback(() => {
+    setSearchOpen(true);
+  }, []);
+
   // Use refs for keyboard navigation to avoid stale closures
   const filteredArticlesRef = useRef(filteredArticles);
   const selectedArticleIdRef = useRef(selectedArticleId);
@@ -807,8 +819,149 @@ export default function RSSReaderPage() {
           maxSize="70%"
         >
           <div role="region" aria-label={tA11y("articleList")} className="relative z-10 flex h-full min-w-[320px] flex-col border-e border-border/60 bg-card/70 backdrop-blur-2xl">
+            {isSearchActive ? (
+              <SearchResultsView
+                searchQuery={searchQuery}
+                articles={filteredArticles}
+                selectedArticle={selectedArticle}
+                isLoading={articlesLoading}
+                unreadCount={filteredArticles.filter((a: any) => !a.isRead).length}
+                onCloseSearch={handleCloseSearch}
+                onEditSearch={handleEditSearch}
+                onSaveSearch={handleSaveSearch}
+                onSelectArticle={handleSelectArticle}
+                onToggleRead={handleToggleRead}
+                onToggleStar={handleToggleStar}
+                onToggleReadLater={handleToggleReadLater}
+                onMarkRead={(articleId) => {
+                  const article = displayArticles.find((a: any) => a.id === articleId);
+                  if (article) markArticleRead(article);
+                }}
+                markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
+                filterKey={`search|${searchQuery}|${sortOrder}`}
+                transitionStyle={transitionStyle}
+              />
+            ) : (
+              <>
+                <RssHeader
+                  title={headerTitle}
+                  articleCount={filteredArticles.length}
+                  unreadCount={unreadCount}
+                  viewMode={viewMode}
+                  onViewModeChange={setViewMode}
+                  onToggleSidebar={() => setSidebarOpen(true)}
+                  onRefresh={handleRefresh}
+                  isRefreshing={articlesLoading || refresh.isPending}
+                  unreadOnly={unreadOnly}
+                  onToggleUnreadOnly={toggleUnreadOnly}
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  onMarkAllRead={handleMarkAllRead}
+                  isMarkingAllRead={markAllAsRead.isPending}
+                  onSaveSearch={handleSaveSearch}
+                  onShowShortcuts={() => setShortcutsOpen(true)}
+                  sortOrder={sortOrder}
+                  onToggleSort={handleToggleSort}
+                  onSwipeNextFeed={() => navigateFeed(1)}
+                  onSwipePreviousFeed={() => navigateFeed(-1)}
+                />
+                {isOffline && hasOfflineSnapshot && (
+                  <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
+                    Offline mode: showing cached articles from this device.
+                  </div>
+                )}
+                {isSpoilerCategory && !spoilerRevealed ? spoilerGate : (
+                  <ArticleList
+                    articles={filteredArticles}
+                    selectedArticle={selectedArticle}
+                    onSelectArticle={handleSelectArticle}
+                    onToggleRead={handleToggleRead}
+                    onToggleStar={handleToggleStar}
+                    onToggleReadLater={handleToggleReadLater}
+                    onReleaseSpoiler={isSpoilerCategory ? (articleId) => releaseArticleSpoiler.mutate(articleId) : undefined}
+                    viewMode={viewMode}
+                    isLoading={articlesLoading}
+                    markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
+                    filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
+                    transitionStyle={transitionStyle}
+                    onMarkRead={(articleId) => {
+                      const article = displayArticles.find((a: any) => a.id === articleId);
+                      if (article) markArticleRead(article);
+                    }}
+                    onOverscrollPastEnd={() => navigateFeed(1)}
+                    onOverscrollPastTop={() => navigateFeed(-1)}
+                    onSwipeNextFeed={() => navigateFeed(1)}
+                    onSwipePreviousFeed={() => navigateFeed(-1)}
+                    scrollBackToId={lastClosedArticleId}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle
+          withHandle
+          className="bg-border/40 transition-colors hover:bg-accent/35"
+        />
+
+        <ResizablePanel id="article-reader" defaultSize="64%" minSize="30%">
+          <div role="region" aria-label={tA11y("articleReader")} className="flex h-full bg-background">
+            <ArticleReader
+              article={selectedArticle}
+              onToggleStar={handleToggleStar}
+              onToggleReadLater={handleToggleReadLater}
+              onToggleRead={handleToggleRead}
+              onFetchFullText={handleFetchFullText}
+              isFetchingFullText={fetchFullText.isPending}
+              labels={labels}
+              onSetLabels={handleSetLabels}
+              onBack={handleCloseArticle}
+              onOpenFeed={handleOpenArticleFeed}
+              showBackButton={!!selectedArticle}
+              onPreviousArticle={() => handleSelectAdjacentArticle(-1)}
+              onNextArticle={() => handleSelectAdjacentArticle(1)}
+              hasPreviousArticle={selectedArticleIndex > 0}
+              hasNextArticle={selectedArticleIndex >= 0 && selectedArticleIndex < filteredArticles.length - 1}
+              readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
+              readerFontSize={(readingPrefs?.readerFontSize ?? "medium") as "small" | "medium" | "large" | "xl"}
+              hideArticleImage={hideArticleImage}
+            />
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+      )}
+
+      {/* Mobile Article List Panel */}
+      {isMobileLayout && !selectedArticle && (
+      <div role="region" aria-label={tA11y("articleList")} className="relative z-10 flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-2xl transition-all duration-300 ease-out">
+        {isSearchActive ? (
+          <SearchResultsView
+            searchQuery={searchQuery}
+            articles={filteredArticles}
+            selectedArticle={selectedArticle}
+            isLoading={articlesLoading}
+            unreadCount={filteredArticles.filter((a: any) => !a.isRead).length}
+            onCloseSearch={handleCloseSearch}
+            onEditSearch={handleEditSearch}
+            onSaveSearch={handleSaveSearch}
+            onSelectArticle={handleSelectArticle}
+            onToggleRead={handleToggleRead}
+            onToggleStar={handleToggleStar}
+            onToggleReadLater={handleToggleReadLater}
+            onMarkRead={(articleId) => {
+              const article = displayArticles.find((a: any) => a.id === articleId);
+              if (article) markArticleRead(article);
+            }}
+            markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
+            filterKey={`search|${searchQuery}|${sortOrder}`}
+            transitionStyle={transitionStyle}
+            isMobile
+          />
+        ) : (
+          <>
             <RssHeader
-              title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
+              title={headerTitle}
               articleCount={filteredArticles.length}
               unreadCount={unreadCount}
               viewMode={viewMode}
@@ -852,6 +1005,9 @@ export default function RSSReaderPage() {
                   const article = displayArticles.find((a: any) => a.id === articleId);
                   if (article) markArticleRead(article);
                 }}
+                enablePullToRefresh
+                isRefreshing={articlesLoading || refresh.isPending}
+                onPullToRefresh={handleRefresh}
                 onOverscrollPastEnd={() => navigateFeed(1)}
                 onOverscrollPastTop={() => navigateFeed(-1)}
                 onSwipeNextFeed={() => navigateFeed(1)}
@@ -859,98 +1015,7 @@ export default function RSSReaderPage() {
                 scrollBackToId={lastClosedArticleId}
               />
             )}
-          </div>
-        </ResizablePanel>
-
-        <ResizableHandle
-          withHandle
-          className="bg-border/40 transition-colors hover:bg-accent/35"
-        />
-
-        <ResizablePanel id="article-reader" defaultSize="64%" minSize="30%">
-          <div role="region" aria-label={tA11y("articleReader")} className="flex h-full bg-background">
-            <ArticleReader
-              article={selectedArticle}
-              onToggleStar={handleToggleStar}
-              onToggleReadLater={handleToggleReadLater}
-              onToggleRead={handleToggleRead}
-              onFetchFullText={handleFetchFullText}
-              isFetchingFullText={fetchFullText.isPending}
-              labels={labels}
-              onSetLabels={handleSetLabels}
-              onBack={handleCloseArticle}
-              onOpenFeed={handleOpenArticleFeed}
-              showBackButton={!!selectedArticle}
-              onPreviousArticle={() => handleSelectAdjacentArticle(-1)}
-              onNextArticle={() => handleSelectAdjacentArticle(1)}
-              hasPreviousArticle={selectedArticleIndex > 0}
-              hasNextArticle={selectedArticleIndex >= 0 && selectedArticleIndex < filteredArticles.length - 1}
-              readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
-              readerFontSize={(readingPrefs?.readerFontSize ?? "medium") as "small" | "medium" | "large" | "xl"}
-              hideArticleImage={hideArticleImage}
-            />
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-      )}
-
-      {/* Mobile Article List Panel */}
-      {isMobileLayout && !selectedArticle && (
-      <div role="region" aria-label={tA11y("articleList")} className="relative z-10 flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-2xl transition-all duration-300 ease-out">
-        <RssHeader
-          title={searchQuery ? `Search: "${searchQuery}"` : headerTitle}
-          articleCount={filteredArticles.length}
-          unreadCount={unreadCount}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          onToggleSidebar={() => setSidebarOpen(true)}
-          onRefresh={handleRefresh}
-          isRefreshing={articlesLoading || refresh.isPending}
-          unreadOnly={unreadOnly}
-          onToggleUnreadOnly={toggleUnreadOnly}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          onMarkAllRead={handleMarkAllRead}
-          isMarkingAllRead={markAllAsRead.isPending}
-          onSaveSearch={handleSaveSearch}
-          onShowShortcuts={() => setShortcutsOpen(true)}
-          sortOrder={sortOrder}
-          onToggleSort={handleToggleSort}
-          onSwipeNextFeed={() => navigateFeed(1)}
-          onSwipePreviousFeed={() => navigateFeed(-1)}
-        />
-        {isOffline && hasOfflineSnapshot && (
-          <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
-            Offline mode: showing cached articles from this device.
-          </div>
-        )}
-        {isSpoilerCategory && !spoilerRevealed ? spoilerGate : (
-          <ArticleList
-            articles={filteredArticles}
-            selectedArticle={selectedArticle}
-            onSelectArticle={handleSelectArticle}
-            onToggleRead={handleToggleRead}
-            onToggleStar={handleToggleStar}
-            onToggleReadLater={handleToggleReadLater}
-            onReleaseSpoiler={isSpoilerCategory ? (articleId) => releaseArticleSpoiler.mutate(articleId) : undefined}
-            viewMode={viewMode}
-            isLoading={articlesLoading}
-            markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
-            filterKey={`${unreadOnly ? "unread" : "all"}|${selectedFeed ?? "_"}|${selectedCategory}|${sortOrder}`}
-            transitionStyle={transitionStyle}
-            onMarkRead={(articleId) => {
-              const article = displayArticles.find((a: any) => a.id === articleId);
-              if (article) markArticleRead(article);
-            }}
-            enablePullToRefresh
-            isRefreshing={articlesLoading || refresh.isPending}
-            onPullToRefresh={handleRefresh}
-            onOverscrollPastEnd={() => navigateFeed(1)}
-            onOverscrollPastTop={() => navigateFeed(-1)}
-            onSwipeNextFeed={() => navigateFeed(1)}
-            onSwipePreviousFeed={() => navigateFeed(-1)}
-            scrollBackToId={lastClosedArticleId}
-          />
+          </>
         )}
         <MobileBottomControls
           unreadOnly={unreadOnly}
@@ -962,6 +1027,9 @@ export default function RSSReaderPage() {
           onSearchChange={setSearchQuery}
           onMarkAllRead={handleMarkAllRead}
           isMarkingAllRead={markAllAsRead.isPending}
+          isSearchActive={isSearchActive}
+          onCloseSearch={handleCloseSearch}
+          onEditSearch={handleEditSearch}
         />
       </div>
       )}
