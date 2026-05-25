@@ -54,6 +54,9 @@ model User {
   digestLookbackHours     Int?                          // null = since last sent; else fixed window in hours
   digestGroupByFeed       Boolean   @default(false)     // group articles by feed in the email
   digestAiSummary         String    @default("none")    // "none" | "per_feed" | "full"
+  digestSkipFeatured      Boolean   @default(false)     // skip articles already sent in a previous digest
+  digestLabelIds          String?                       // JSON array of label IDs, null = no label filter
+  digestPausedUntil       DateTime?                     // pause digest until this date
   digestLastSentAt        DateTime?
   digestUnsubscribeToken  String?   @unique
   pushEnabled             Boolean   @default(false)
@@ -325,6 +328,7 @@ model Article {
   labels      ArticleLabel[]
   aiSummary      String?
   aiSummarizedAt DateTime?
+  digestedAt     DateTime?                              // set when article is sent in a digest
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, feedId, dedupeKey])
@@ -336,6 +340,7 @@ model Article {
   @@index([userId, readAt])
   @@index([feedId, publishedAt])
   @@index([spoilerRuleId])
+  @@index([userId, digestedAt])
 }
 
 model Label {

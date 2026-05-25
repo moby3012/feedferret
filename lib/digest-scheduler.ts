@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { sendDigestEmail, getDigestArticles, type DigestArticle } from "@/lib/digest-email";
-import { generateDigestSummary, type AiProvider } from "@/lib/ai-summary";
+import { sendDigestEmail, getDigestArticles, markArticlesAsDigested, type DigestArticle } from "@/lib/digest-email";
+import { generateDigestSummary, generateDigestSubject, type AiProvider } from "@/lib/ai-summary";
 import { decryptIfValue } from "@/lib/crypto";
 import { randomBytes } from "crypto";
 import { logger } from "./logger";
@@ -39,7 +39,10 @@ function shouldSendNow(user: {
     digestHour: number;
     digestTimezone: string;
     digestLastSentAt: Date | null;
+    digestPausedUntil: Date | null;
 }): boolean {
+    if (user.digestPausedUntil && user.digestPausedUntil > new Date()) return false;
+
     const { hour: currentHour, day: currentDay } = getHourAndDayInTimezone(user.digestTimezone);
 
     if (currentHour !== user.digestHour) return false;
@@ -48,7 +51,6 @@ function shouldSendNow(user: {
         const targetDay = user.digestDayOfWeek ?? 1;
         if (currentDay !== targetDay) return false;
     } else if (user.digestFrequency === "weekdays") {
-        // Mon (1) … Fri (5)
         if (currentDay === 0 || currentDay === 6) return false;
     }
 
@@ -63,7 +65,7 @@ function shouldSendNow(user: {
     return false;
 }
 
-async function buildAiSummaries(
+async function buildAiExtras(
     user: {
         id: string;
         aiProvider: string | null;
@@ -74,14 +76,12 @@ async function buildAiSummaries(
         digestAiSummary: string;
     },
     articles: DigestArticle[],
-): Promise<{ overall: string | null; perFeed: Record<string, string> }> {
+): Promise<{ overall: string | null; perFeed: Record<string, string>; subject: string | null }> {
     const mode = user.digestAiSummary;
-    if (mode === "none" || articles.length === 0) return { overall: null, perFeed: {} };
-
     const provider = user.aiProvider as AiProvider | null;
-    if (!provider) return { overall: null, perFeed: {} };
+    if (!provider) return { overall: null, perFeed: {}, subject: null };
     const decryptedKey = decryptIfValue(user.aiApiKey);
-    if (provider !== "ollama" && !decryptedKey) return { overall: null, perFeed: {} };
+    if (provider !== "ollama" && !decryptedKey) return { overall: null, perFeed: {}, subject: null };
 
     const aiConfig = {
         provider,
@@ -91,25 +91,25 @@ async function buildAiSummaries(
         language: user.aiSummaryLanguage,
     };
 
+    let overall: string | null = null;
+    const perFeed: Record<string, string> = {};
+    let subject: string | null = null;
+
     try {
-        if (mode === "full") {
-            const summary = await generateDigestSummary(
+        if (mode === "full" && articles.length > 0) {
+            overall = await generateDigestSummary(
                 articles.map((a) => ({ title: a.title, excerpt: a.excerpt, feedName: a.feedName })),
                 "full",
                 aiConfig,
-            );
-            return { overall: summary || null, perFeed: {} };
-        }
-
-        if (mode === "per_feed") {
+            ) || null;
+        } else if (mode === "per_feed" && articles.length > 0) {
             const grouped = new Map<string, DigestArticle[]>();
             for (const a of articles) {
                 if (!grouped.has(a.feedId)) grouped.set(a.feedId, []);
                 grouped.get(a.feedId)!.push(a);
             }
-            const perFeed: Record<string, string> = {};
             for (const [feedId, group] of grouped) {
-                if (group.length < 2) continue; // skip single-article feeds
+                if (group.length < 2) continue;
                 try {
                     const s = await generateDigestSummary(
                         group.map((a) => ({ title: a.title, excerpt: a.excerpt, feedName: a.feedName })),
@@ -121,14 +121,21 @@ async function buildAiSummaries(
                     logger.error(`[digest] per-feed AI summary failed for feed ${feedId}:`, err);
                 }
             }
-            return { overall: null, perFeed };
+        }
+
+        // AI subject line whenever AI is active (any mode except "none")
+        if (mode !== "none" && articles.length > 0) {
+            subject = await generateDigestSubject(
+                articles.map((a) => ({ title: a.title, excerpt: a.excerpt, feedName: a.feedName })),
+                aiConfig,
+            ) || null;
         }
     } catch (err) {
-        logger.error("[digest] AI summary failed:", err);
+        logger.error("[digest] AI summary/subject failed:", err);
         await writeSystemLog("warn", "digest", `AI summary failed: ${String(err)}`, { userId: user.id });
     }
 
-    return { overall: null, perFeed: {} };
+    return { overall, perFeed, subject };
 }
 
 function resolveSinceDate(
@@ -165,11 +172,14 @@ export async function runDigestScheduler(): Promise<void> {
             digestTimezone: true,
             digestScope: true,
             digestFeedIds: true,
+            digestLabelIds: true,
             digestMaxArticles: true,
             digestMinArticles: true,
             digestLookbackHours: true,
             digestGroupByFeed: true,
             digestAiSummary: true,
+            digestSkipFeatured: true,
+            digestPausedUntil: true,
             digestLastSentAt: true,
             digestUnsubscribeToken: true,
             aiProvider: true,
@@ -179,6 +189,8 @@ export async function runDigestScheduler(): Promise<void> {
             aiSummaryLanguage: true,
         },
     });
+
+    const baseUrl = getBaseUrl();
 
     for (const user of users) {
         if (!user.email) continue;
@@ -194,9 +206,8 @@ export async function runDigestScheduler(): Promise<void> {
                 });
             }
 
-            const feedIds: string[] | null = user.digestFeedIds
-                ? JSON.parse(user.digestFeedIds)
-                : null;
+            const feedIds: string[] | null = user.digestFeedIds ? JSON.parse(user.digestFeedIds) : null;
+            const labelIds: string[] | null = user.digestLabelIds ? JSON.parse(user.digestLabelIds) : null;
 
             const since = resolveSinceDate(user.digestLookbackHours, user.digestLastSentAt, user.digestFrequency);
 
@@ -206,10 +217,10 @@ export async function runDigestScheduler(): Promise<void> {
                 feedIds,
                 since,
                 user.digestMaxArticles,
+                { skipFeatured: user.digestSkipFeatured, labelIds },
             );
 
             if (articles.length < Math.max(1, user.digestMinArticles)) {
-                // Still update lastSentAt to avoid re-evaluating endlessly within the same hour
                 await db.user.update({
                     where: { id: user.id },
                     data: { digestLastSentAt: new Date() },
@@ -217,18 +228,22 @@ export async function runDigestScheduler(): Promise<void> {
                 continue;
             }
 
-            const { overall, perFeed } = await buildAiSummaries(user, articles);
+            const { overall, perFeed, subject } = await buildAiExtras(user, articles);
+
+            const unsubscribeUrl = `${baseUrl}/api/digest/unsubscribe?token=${token}`;
 
             await sendDigestEmail({
                 to: user.email,
                 userName: user.name,
                 articles,
                 unsubscribeToken: token,
-                baseUrl: getBaseUrl(),
+                baseUrl,
                 locale: user.uiLanguage ?? "en",
                 groupByFeed: user.digestGroupByFeed,
                 overallSummary: overall,
                 feedSummaries: perFeed,
+                aiSubject: subject,
+                unsubscribeUrl,
             });
 
             await db.user.update({
@@ -236,9 +251,11 @@ export async function runDigestScheduler(): Promise<void> {
                 data: { digestLastSentAt: new Date() },
             });
 
-            logger.log(
-                `[digest] sent to ${user.email}: ${articles.length} articles`,
-            );
+            if (user.digestSkipFeatured) {
+                await markArticlesAsDigested(articles.map((a) => a.id));
+            }
+
+            logger.log(`[digest] sent to ${user.email}: ${articles.length} articles`);
             await writeSystemLog("info", "digest", "Digest sent", { to: user.email, articleCount: articles.length });
         } catch (err) {
             logger.error(`[digest] failed for ${user.email}:`, err);

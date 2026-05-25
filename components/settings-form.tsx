@@ -64,7 +64,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, useFeeds, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
+import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, usePreviewDigest, useFeeds, useLabels, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
 import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -1111,18 +1111,28 @@ function DigestSection() {
   const format = useFormatter();
   const { data: digest } = useDigestSettings();
   const { data: feedsData } = useFeeds();
+  const { data: labelsData } = useLabels();
   const { data: instance, loading: instanceLoading } = useInstance();
   const updateDigest = useUpdateDigestSettings();
   const sendTest = useSendTestDigest();
+  const preview = usePreviewDigest();
 
   if (!digest) return null;
   // Hide entirely if instance has no mail configured (#5)
   if (!instanceLoading && instance && !instance.capabilities.mail) return null;
 
   const feeds = feedsData ?? [];
+  const labels = labelsData ?? [];
+
+  const isPaused = !!digest.digestPausedUntil && new Date(digest.digestPausedUntil) > new Date();
 
   function update(data: Parameters<typeof updateDigest.mutate>[0]) {
     updateDigest.mutate(data);
+  }
+
+  function pauseUntil(days: number | null) {
+    const until = days === null ? new Date(9999, 0, 1) : new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    update({ digestPausedUntil: until });
   }
 
   return (
@@ -1417,8 +1427,116 @@ function DigestSection() {
               </div>
             )}
 
-            {/* Send test */}
-            <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center">
+            {/* Label filter */}
+            {labels.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {t("digest.labelFilter")}{" "}
+                  <span className="normal-case font-normal">({t("digest.labelFilterHint")})</span>
+                </label>
+                <div className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-background/50 p-3 min-h-[48px]">
+                  {labels.map((label: any) => {
+                    const selected = digest.digestLabelIds.includes(label.id);
+                    return (
+                      <button
+                        key={label.id}
+                        type="button"
+                        onClick={() => {
+                          const next = selected
+                            ? digest.digestLabelIds.filter((id: string) => id !== label.id)
+                            : [...digest.digestLabelIds, label.id];
+                          update({ digestLabelIds: next });
+                        }}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-medium transition-all",
+                          selected
+                            ? "bg-accent text-accent-foreground"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                        )}
+                      >
+                        <span
+                          className="h-2 w-2 rounded-full shrink-0"
+                          style={{ background: label.color }}
+                        />
+                        {label.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Skip already-featured articles */}
+            <div className="flex items-start justify-between rounded-2xl border border-border/70 bg-background/50 p-4">
+              <div className="pr-3">
+                <p className="text-sm font-medium">{t("digest.skipFeatured")}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("digest.skipFeaturedHint")}</p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={digest.digestSkipFeatured}
+                onClick={() => update({ digestSkipFeatured: !digest.digestSkipFeatured })}
+                className={cn(
+                  "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                  digest.digestSkipFeatured ? "bg-primary" : "bg-muted",
+                )}
+              >
+                <span
+                  className={cn(
+                    "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200",
+                    digest.digestSkipFeatured ? "translate-x-5" : "translate-x-0",
+                  )}
+                />
+              </button>
+            </div>
+
+            {/* Pause */}
+            <div className="rounded-2xl border border-border/70 bg-background/50 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">{isPaused ? `${t("digest.pauseUntil")}: ${format.dateTime(new Date(digest.digestPausedUntil!), { dateStyle: "medium" })}` : t("digest.pauseDigest")}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t("digest.pauseDigestHint")}</p>
+                </div>
+                {isPaused ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-xl shrink-0"
+                    onClick={() => update({ digestPausedUntil: null })}
+                  >
+                    {t("digest.resumeDigest")}
+                  </Button>
+                ) : (
+                  <Select onValueChange={(v) => {
+                    const map: Record<string, number | null> = { tomorrow: 1, "3days": 3, "1week": 7, "2weeks": 14, indefinite: null };
+                    pauseUntil(map[v] ?? 7);
+                  }}>
+                    <SelectTrigger className="rounded-xl border-border/70 bg-background/70 h-9 w-auto min-w-[130px] shrink-0">
+                      <SelectValue placeholder={t("digest.pauseDigest")} />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="tomorrow">{t("digest.pauseOptions.tomorrow")}</SelectItem>
+                      <SelectItem value="3days">{t("digest.pauseOptions.3days")}</SelectItem>
+                      <SelectItem value="1week">{t("digest.pauseOptions.1week")}</SelectItem>
+                      <SelectItem value="2weeks">{t("digest.pauseOptions.2weeks")}</SelectItem>
+                      <SelectItem value="indefinite">{t("digest.pauseOptions.indefinite")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </div>
+
+            {/* Preview + Send test */}
+            <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-start">
+              <Button
+                variant="outline"
+                onClick={() => preview.mutate()}
+                disabled={preview.isPending}
+                className="rounded-2xl h-10"
+              >
+                <Mail className="w-4 h-4 me-2" />
+                {preview.isPending ? t("digest.previewing") : t("digest.preview")}
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => sendTest.mutate()}
@@ -1428,9 +1546,21 @@ function DigestSection() {
                 <Send className="w-4 h-4 me-2" />
                 {sendTest.isPending ? t("digest.sending") : t("digest.sendTestDigest")}
               </Button>
-              <p className="text-xs text-muted-foreground">
-                {t("digest.testDigestHint")}
-              </p>
+              <div className="flex flex-col gap-0.5 justify-center">
+                {preview.data && (
+                  <p className={cn("text-sm font-medium", preview.data.wouldSend ? "text-foreground" : "text-destructive")}>
+                    {preview.data.articleCount === 0
+                      ? t("digest.previewEmpty")
+                      : !preview.data.wouldSend
+                        ? t("digest.previewWouldSkip")
+                        : `${t("digest.previewResult", { count: preview.data.articleCount })} ${t("digest.previewFeeds", { count: preview.data.feedBreakdown.length })}`
+                    }
+                  </p>
+                )}
+                {!preview.data && (
+                  <p className="text-xs text-muted-foreground">{t("digest.testDigestHint")}</p>
+                )}
+              </div>
             </div>
           </>
         )}

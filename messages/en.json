@@ -169,7 +169,28 @@
       "none": "Off",
       "perFeed": "Per feed",
       "full": "Overall summary"
-    }
+    },
+    "skipFeatured": "Skip already-sent articles",
+    "skipFeaturedHint": "Articles that appeared in a previous digest will not be repeated, even within a fixed lookback window.",
+    "labelFilter": "Label filter",
+    "labelFilterHint": "leave empty to include all labels",
+    "pauseDigest": "Pause digest",
+    "pauseDigestHint": "Temporarily suspend digest emails without losing your settings.",
+    "pauseUntil": "Paused until",
+    "pauseOptions": {
+      "tomorrow": "Tomorrow",
+      "3days": "3 days",
+      "1week": "1 week",
+      "2weeks": "2 weeks",
+      "indefinite": "Indefinitely"
+    },
+    "resumeDigest": "Resume digest",
+    "preview": "Preview",
+    "previewing": "Checking…",
+    "previewResult": "{count, plural, one {# article would be included} other {# articles would be included}}",
+    "previewEmpty": "No articles match your current settings.",
+    "previewWouldSkip": "Below the minimum threshold — digest would be skipped.",
+    "previewFeeds": "{count, plural, one {from # feed} other {from # feeds}}"
   },
   "push": {
     "title": "Browser notifications",
