@@ -221,18 +221,29 @@ function appendArticleLines(lines: string[], a: DigestArticle, _t: (k: string, v
   lines.push("");
 }
 
-export async function sendDigestEmail(opts: DigestEmailOptions): Promise<void> {
+export async function sendDigestEmail(
+  opts: DigestEmailOptions & { aiSubject?: string | null; unsubscribeUrl?: string },
+): Promise<void> {
   const t = createEmailTranslator(opts.locale ?? "en");
   const count = opts.articles.length;
-  const subject = count === 0
+  const defaultSubject = count === 0
     ? t("emailDigest.subjectNothingNew")
     : t("emailDigest.subject", { count });
+  const subject = (opts.aiSubject && opts.aiSubject.trim()) ? opts.aiSubject.trim() : defaultSubject;
+
+  const extraHeaders: Record<string, string> | undefined = opts.unsubscribeUrl
+    ? {
+        "List-Unsubscribe": `<${opts.unsubscribeUrl}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      }
+    : undefined;
 
   await sendSystemEmail({
     to: opts.to,
     subject,
     html: buildHtml(opts),
     text: buildText(opts),
+    extraHeaders,
   });
 }
 
@@ -242,6 +253,7 @@ export async function getDigestArticles(
   feedIds: string[] | null,
   since: Date,
   limit: number = 20,
+  opts: { skipFeatured?: boolean; labelIds?: string[] | null } = {},
 ): Promise<DigestArticle[]> {
   const scopeFilter: Record<string, unknown> =
     scope === "unread"
@@ -252,12 +264,19 @@ export async function getDigestArticles(
           ? { isReadLater: true }
           : {};
 
+  const labelFilter =
+    opts.labelIds && opts.labelIds.length > 0
+      ? { labels: { some: { labelId: { in: opts.labelIds } } } }
+      : {};
+
   const articles = await db.article.findMany({
     where: {
       userId,
       publishedAt: { gte: since },
       ...(feedIds && feedIds.length > 0 ? { feedId: { in: feedIds } } : {}),
+      ...(opts.skipFeatured ? { digestedAt: null } : {}),
       ...scopeFilter,
+      ...labelFilter,
     },
     orderBy: { publishedAt: "desc" },
     take: Math.max(1, Math.min(200, limit)),
@@ -286,4 +305,12 @@ export async function getDigestArticles(
     feedName: a.feed.name,
     feedIcon: a.feed.icon,
   }));
+}
+
+export async function markArticlesAsDigested(articleIds: string[]): Promise<void> {
+  if (articleIds.length === 0) return;
+  await db.article.updateMany({
+    where: { id: { in: articleIds } },
+    data: { digestedAt: new Date() },
+  });
 }

@@ -68,6 +68,23 @@ export async function generateDigestSummary(
   return runPrompt(prompt, config);
 }
 
+export async function generateDigestSubject(
+  articles: DigestSummaryArticle[],
+  config: AiConfig,
+): Promise<string> {
+  if (articles.length === 0) return "";
+  const titles = articles
+    .slice(0, 8)
+    .map((a) => a.title)
+    .join("\n");
+  const langInstruction =
+    !config.language || config.language === "same"
+      ? "Write the subject in the same language as the article titles."
+      : `Write the subject in ${config.language}.`;
+  const prompt = `Generate a concise email subject line (maximum 70 characters) for a reading digest containing the following article titles. Capture the 1–2 most interesting themes. Do not use quotes. Do not include the word "digest". ${langInstruction}\n\nTitles:\n${titles}`;
+  return runPrompt(prompt, config);
+}
+
 async function runPrompt(prompt: string, config: AiConfig): Promise<string> {
   switch (config.provider) {
     case "openai":

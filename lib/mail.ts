@@ -158,12 +158,14 @@ async function sendWithSmtp({
   subject,
   html,
   text,
+  extraHeaders,
 }: {
   settings: Pick<GlobalSettings, "smtpHost" | "smtpPort" | "smtpUser" | "smtpPassword" | "smtpFrom" | "smtpSecure" | "smtpRejectUnauthorized">;
   to: string;
   subject: string;
   html: string;
   text: string;
+  extraHeaders?: Record<string, string>;
 }) {
   if (!settings.smtpHost || !settings.smtpPort || !settings.smtpFrom) {
     throw new Error("SMTP is not fully configured");
@@ -187,6 +189,7 @@ async function sendWithSmtp({
     subject,
     html,
     text,
+    ...(extraHeaders ? { headers: extraHeaders } : {}),
   });
 }
 
@@ -197,6 +200,7 @@ async function sendWithResend({
   text,
   from,
   apiKey,
+  extraHeaders,
 }: {
   to: string;
   subject: string;
@@ -204,6 +208,7 @@ async function sendWithResend({
   text: string;
   from: string;
   apiKey: string;
+  extraHeaders?: Record<string, string>;
 }) {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -211,7 +216,7 @@ async function sendWithResend({
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ from, to: [to], subject, html, text }),
+    body: JSON.stringify({ from, to: [to], subject, html, text, headers: extraHeaders }),
   });
 
   if (!response.ok) {
@@ -227,6 +232,7 @@ async function sendWithPostmark({
   from,
   token,
   messageStream,
+  extraHeaders,
 }: {
   to: string;
   subject: string;
@@ -235,7 +241,11 @@ async function sendWithPostmark({
   from: string;
   token: string;
   messageStream?: string;
+  extraHeaders?: Record<string, string>;
 }) {
+  const headers = extraHeaders
+    ? Object.entries(extraHeaders).map(([Name, Value]) => ({ Name, Value }))
+    : undefined;
   const response = await fetch("https://api.postmarkapp.com/email", {
     method: "POST",
     headers: {
@@ -250,6 +260,7 @@ async function sendWithPostmark({
       HtmlBody: html,
       TextBody: text,
       MessageStream: messageStream || process.env.POSTMARK_MESSAGE_STREAM || "outbound",
+      ...(headers ? { Headers: headers } : {}),
     }),
   });
 
@@ -267,6 +278,7 @@ async function sendWithMailgun({
   apiKey,
   domain,
   baseUrl,
+  extraHeaders,
 }: {
   to: string;
   subject: string;
@@ -276,9 +288,15 @@ async function sendWithMailgun({
   apiKey: string;
   domain: string;
   baseUrl?: string;
+  extraHeaders?: Record<string, string>;
 }) {
   const url = `${baseUrl || process.env.MAILGUN_BASE_URL || "https://api.mailgun.net"}/v3/${domain}/messages`;
   const body = new URLSearchParams({ from, to, subject, html, text });
+  if (extraHeaders) {
+    for (const [k, v] of Object.entries(extraHeaders)) {
+      body.append(`h:${k}`, v);
+    }
+  }
 
   const response = await fetch(url, {
     method: "POST",
@@ -301,6 +319,7 @@ async function sendWithSendgrid({
   text,
   from,
   apiKey,
+  extraHeaders,
 }: {
   to: string;
   subject: string;
@@ -308,6 +327,7 @@ async function sendWithSendgrid({
   text: string;
   from: string;
   apiKey: string;
+  extraHeaders?: Record<string, string>;
 }) {
   const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
@@ -323,6 +343,7 @@ async function sendWithSendgrid({
         { type: "text/plain", value: text },
         { type: "text/html", value: html },
       ],
+      ...(extraHeaders ? { headers: extraHeaders } : {}),
     }),
   });
 
@@ -337,12 +358,14 @@ export async function sendSystemEmail({
   html,
   text,
   overrideSettings,
+  extraHeaders,
 }: {
   to: string;
   subject: string;
   html: string;
   text: string;
   overrideSettings?: Partial<GlobalSettings> | null;
+  extraHeaders?: Record<string, string>;
 }) {
   const storedSettings = await getStoredSettings();
   const settings = { ...storedSettings, ...overrideSettings } as GlobalSettings | null;
@@ -354,10 +377,10 @@ export async function sendSystemEmail({
 
   try {
     if (provider === "smtp") {
-      await sendWithSmtp({ settings: settings as GlobalSettings, to, subject, html, text });
+      await sendWithSmtp({ settings: settings as GlobalSettings, to, subject, html, text, extraHeaders });
     } else if (provider === "resend") {
       const apiKey = resolveKey(settings?.resendApiKey, process.env.RESEND_API_KEY)!;
-      await sendWithResend({ to, subject, html, text, from, apiKey });
+      await sendWithResend({ to, subject, html, text, from, apiKey, extraHeaders });
     } else if (provider === "postmark") {
       const token = resolveKey(settings?.postmarkServerToken, process.env.POSTMARK_SERVER_TOKEN)!;
       await sendWithPostmark({
@@ -368,6 +391,7 @@ export async function sendSystemEmail({
         from,
         token,
         messageStream: settings?.postmarkMessageStream || undefined,
+        extraHeaders,
       });
     } else if (provider === "mailgun") {
       const apiKey = resolveKey(settings?.mailgunApiKey, process.env.MAILGUN_API_KEY)!;
@@ -381,11 +405,12 @@ export async function sendSystemEmail({
         apiKey,
         domain,
         baseUrl: settings?.mailgunBaseUrl || undefined,
+        extraHeaders,
       });
     } else {
       // sendgrid
       const apiKey = resolveKey(settings?.sendgridApiKey, process.env.SENDGRID_API_KEY)!;
-      await sendWithSendgrid({ to, subject, html, text, from, apiKey });
+      await sendWithSendgrid({ to, subject, html, text, from, apiKey, extraHeaders });
     }
     await writeSystemLog("info", "mail", "Email sent", { to, subject, provider });
   } catch (error: any) {

@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
-import { sendDigestEmail, getDigestArticles } from "@/lib/digest-email";
+import { sendDigestEmail, getDigestArticles, markArticlesAsDigested } from "@/lib/digest-email";
 import { buildOtpAuthUri, generateTotpSecret, verifyTotpToken } from "@/lib/totp";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import type { AiProvider } from "@/lib/ai-summary";
@@ -205,6 +205,9 @@ export async function getDigestSettings() {
       digestLookbackHours: true,
       digestGroupByFeed: true,
       digestAiSummary: true,
+      digestSkipFeatured: true,
+      digestLabelIds: true,
+      digestPausedUntil: true,
       digestLastSentAt: true,
       aiProvider: true,
       aiApiKey: true,
@@ -221,11 +224,14 @@ export async function getDigestSettings() {
     digestTimezone: user?.digestTimezone ?? "UTC",
     digestScope: user?.digestScope ?? "unread",
     digestFeedIds: user?.digestFeedIds ? (JSON.parse(user.digestFeedIds) as string[]) : [],
+    digestLabelIds: user?.digestLabelIds ? (JSON.parse(user.digestLabelIds) as string[]) : [],
     digestMaxArticles: user?.digestMaxArticles ?? 20,
     digestMinArticles: user?.digestMinArticles ?? 1,
     digestLookbackHours: user?.digestLookbackHours ?? null,
     digestGroupByFeed: user?.digestGroupByFeed ?? false,
     digestAiSummary: user?.digestAiSummary ?? "none",
+    digestSkipFeatured: user?.digestSkipFeatured ?? false,
+    digestPausedUntil: user?.digestPausedUntil ?? null,
     digestLastSentAt: user?.digestLastSentAt ?? null,
     aiConfigured,
   };
@@ -239,11 +245,14 @@ export async function updateDigestSettings(data: {
   digestTimezone?: string;
   digestScope?: string;
   digestFeedIds?: string[];
+  digestLabelIds?: string[];
   digestMaxArticles?: number;
   digestMinArticles?: number;
   digestLookbackHours?: number | null;
   digestGroupByFeed?: boolean;
   digestAiSummary?: string;
+  digestSkipFeatured?: boolean;
+  digestPausedUntil?: Date | null;
 }) {
   const session = await requireUser();
 
@@ -252,6 +261,10 @@ export async function updateDigestSettings(data: {
   if (data.digestFeedIds !== undefined) {
     updateData.digestFeedIds =
       data.digestFeedIds.length > 0 ? JSON.stringify(data.digestFeedIds) : null;
+  }
+  if (data.digestLabelIds !== undefined) {
+    updateData.digestLabelIds =
+      data.digestLabelIds.length > 0 ? JSON.stringify(data.digestLabelIds) : null;
   }
 
   if (data.digestMaxArticles !== undefined) {
@@ -297,6 +310,130 @@ export async function updateDigestSettings(data: {
   revalidatePath("/settings");
 }
 
+export async function previewDigest() {
+  const session = await requireUser();
+
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      digestScope: true,
+      digestFeedIds: true,
+      digestLabelIds: true,
+      digestMaxArticles: true,
+      digestMinArticles: true,
+      digestLookbackHours: true,
+      digestLastSentAt: true,
+      digestFrequency: true,
+      digestSkipFeatured: true,
+    },
+  });
+
+  if (!user) throw new Error("Unauthorized");
+
+  const feedIds: string[] | null = user.digestFeedIds ? JSON.parse(user.digestFeedIds) : null;
+  const labelIds: string[] | null = user.digestLabelIds ? JSON.parse(user.digestLabelIds) : null;
+
+  const lookbackHours = user.digestLookbackHours;
+  let since: Date;
+  if (lookbackHours && lookbackHours > 0) {
+    since = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
+  } else if (user.digestLastSentAt) {
+    since = user.digestLastSentAt;
+  } else {
+    const fallback = user.digestFrequency === "weekly" ? 7 * 24 : 24;
+    since = new Date(Date.now() - fallback * 60 * 60 * 1000);
+  }
+
+  const articles = await getDigestArticles(
+    session.user.id,
+    user.digestScope,
+    feedIds,
+    since,
+    user.digestMaxArticles,
+    { skipFeatured: user.digestSkipFeatured, labelIds },
+  );
+
+  const feedBreakdown = Object.values(
+    articles.reduce<Record<string, { feedName: string; count: number }>>((acc, a) => {
+      if (!acc[a.feedId]) acc[a.feedId] = { feedName: a.feedName, count: 0 };
+      acc[a.feedId].count++;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b.count - a.count);
+
+  return {
+    articleCount: articles.length,
+    wouldSend: articles.length >= Math.max(1, user.digestMinArticles),
+    feedBreakdown,
+    since,
+  };
+}
+
+async function buildAiSummariesForTest(
+  user: {
+    aiProvider: string | null;
+    aiApiKey: string | null;
+    aiModel: string | null;
+    aiOllamaBaseUrl: string | null;
+    aiSummaryLanguage: string;
+    digestAiSummary: string;
+  },
+  articles: Awaited<ReturnType<typeof getDigestArticles>>,
+): Promise<{ overallSummary: string | null; feedSummaries: Record<string, string>; aiSubject: string | null }> {
+  const provider = user.aiProvider as AiProvider | null;
+  const decryptedKey = decryptIfValue(user.aiApiKey);
+  const aiUsable = !!provider && (provider === "ollama" || !!decryptedKey);
+
+  if (!aiUsable || user.digestAiSummary === "none" || articles.length === 0) {
+    return { overallSummary: null, feedSummaries: {}, aiSubject: null };
+  }
+
+  const { generateDigestSummary, generateDigestSubject } = await import("@/lib/ai-summary");
+  const aiConfig = {
+    provider: provider!,
+    apiKey: decryptedKey,
+    model: user.aiModel,
+    ollamaBaseUrl: user.aiOllamaBaseUrl,
+    language: user.aiSummaryLanguage,
+  };
+
+  let overallSummary: string | null = null;
+  const feedSummaries: Record<string, string> = {};
+  let aiSubject: string | null = null;
+
+  try {
+    if (user.digestAiSummary === "full") {
+      overallSummary = await generateDigestSummary(
+        articles.map((a) => ({ title: a.title, excerpt: a.excerpt, feedName: a.feedName })),
+        "full",
+        aiConfig,
+      ) || null;
+    } else if (user.digestAiSummary === "per_feed") {
+      const grouped = new Map<string, typeof articles>();
+      for (const a of articles) {
+        if (!grouped.has(a.feedId)) grouped.set(a.feedId, []);
+        grouped.get(a.feedId)!.push(a);
+      }
+      for (const [feedId, group] of grouped) {
+        if (group.length < 2) continue;
+        try {
+          feedSummaries[feedId] = await generateDigestSummary(
+            group.map((a) => ({ title: a.title, excerpt: a.excerpt, feedName: a.feedName })),
+            "per_feed",
+            aiConfig,
+          );
+        } catch { /* ignore */ }
+      }
+    }
+    aiSubject = await generateDigestSubject(
+      articles.map((a) => ({ title: a.title, excerpt: a.excerpt, feedName: a.feedName })),
+      aiConfig,
+    ) || null;
+  } catch { /* ignore */ }
+
+  return { overallSummary, feedSummaries, aiSubject };
+}
+
 export async function sendTestDigest() {
   const session = await requireUser();
   if (!session.user.email) throw new Error("Unauthorized");
@@ -308,10 +445,12 @@ export async function sendTestDigest() {
       email: true,
       digestScope: true,
       digestFeedIds: true,
+      digestLabelIds: true,
       digestMaxArticles: true,
       digestLookbackHours: true,
       digestGroupByFeed: true,
       digestAiSummary: true,
+      digestSkipFeatured: true,
       digestUnsubscribeToken: true,
       aiProvider: true,
       aiApiKey: true,
@@ -333,6 +472,7 @@ export async function sendTestDigest() {
   }
 
   const feedIds: string[] | null = user.digestFeedIds ? JSON.parse(user.digestFeedIds) : null;
+  const labelIds: string[] | null = user.digestLabelIds ? JSON.parse(user.digestLabelIds) : null;
   const lookbackHours = user.digestLookbackHours ?? 7 * 24;
   const since = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
   const articles = await getDigestArticles(
@@ -341,55 +481,12 @@ export async function sendTestDigest() {
     feedIds,
     since,
     user.digestMaxArticles,
+    { skipFeatured: user.digestSkipFeatured, labelIds },
   );
   const baseUrl = process.env.AUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+  const unsubscribeUrl = `${baseUrl}/api/digest/unsubscribe?token=${token}`;
 
-  // AI summaries (best-effort; ignore failures in test)
-  let overallSummary: string | null = null;
-  const feedSummaries: Record<string, string> = {};
-  const provider = user.aiProvider as AiProvider | null;
-  const decryptedKey = decryptIfValue(user.aiApiKey);
-  const aiUsable = !!provider && (provider === "ollama" || !!decryptedKey);
-
-  if (aiUsable && user.digestAiSummary !== "none" && articles.length > 0) {
-    const { generateDigestSummary } = await import("@/lib/ai-summary");
-    const aiConfig = {
-      provider: provider!,
-      apiKey: decryptedKey,
-      model: user.aiModel,
-      ollamaBaseUrl: user.aiOllamaBaseUrl,
-      language: user.aiSummaryLanguage,
-    };
-    try {
-      if (user.digestAiSummary === "full") {
-        overallSummary = await generateDigestSummary(
-          articles.map((a) => ({ title: a.title, excerpt: a.excerpt, feedName: a.feedName })),
-          "full",
-          aiConfig,
-        );
-      } else if (user.digestAiSummary === "per_feed") {
-        const grouped = new Map<string, typeof articles>();
-        for (const a of articles) {
-          if (!grouped.has(a.feedId)) grouped.set(a.feedId, []);
-          grouped.get(a.feedId)!.push(a);
-        }
-        for (const [feedId, group] of grouped) {
-          if (group.length < 2) continue;
-          try {
-            feedSummaries[feedId] = await generateDigestSummary(
-              group.map((a) => ({ title: a.title, excerpt: a.excerpt, feedName: a.feedName })),
-              "per_feed",
-              aiConfig,
-            );
-          } catch {
-            // ignore per-feed errors during test
-          }
-        }
-      }
-    } catch {
-      // ignore overall AI errors during test
-    }
-  }
+  const { overallSummary, feedSummaries, aiSubject } = await buildAiSummariesForTest(user, articles);
 
   await sendDigestEmail({
     to: user.email,
@@ -400,6 +497,8 @@ export async function sendTestDigest() {
     groupByFeed: user.digestGroupByFeed,
     overallSummary,
     feedSummaries,
+    aiSubject,
+    unsubscribeUrl,
   });
 
   return { sent: true, articleCount: articles.length };

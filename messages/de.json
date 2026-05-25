@@ -169,7 +169,28 @@
       "none": "Aus",
       "perFeed": "Pro Feed",
       "full": "Gesamtzusammenfassung"
-    }
+    },
+    "skipFeatured": "Bereits gesendete Artikel überspringen",
+    "skipFeaturedHint": "Artikel, die bereits in einem früheren Digest enthalten waren, werden nicht wiederholt – auch nicht bei festem Zeitfenster.",
+    "labelFilter": "Label-Filter",
+    "labelFilterHint": "leer lassen für alle Labels",
+    "pauseDigest": "Digest pausieren",
+    "pauseDigestHint": "Digest-E-Mails vorübergehend unterbrechen, ohne die Einstellungen zu verlieren.",
+    "pauseUntil": "Pausiert bis",
+    "pauseOptions": {
+      "tomorrow": "Morgen",
+      "3days": "3 Tage",
+      "1week": "1 Woche",
+      "2weeks": "2 Wochen",
+      "indefinite": "Unbegrenzt"
+    },
+    "resumeDigest": "Digest fortsetzen",
+    "preview": "Vorschau",
+    "previewing": "Prüfe…",
+    "previewResult": "{count, plural, one {# Artikel würde einbezogen} other {# Artikel würden einbezogen}}",
+    "previewEmpty": "Keine Artikel entsprechen deinen aktuellen Einstellungen.",
+    "previewWouldSkip": "Unter dem Mindestschwellwert – Digest würde übersprungen.",
+    "previewFeeds": "{count, plural, one {aus # Feed} other {aus # Feeds}}"
   },
   "push": {
     "title": "Browser-Benachrichtigungen",
