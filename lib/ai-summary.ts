@@ -25,6 +25,50 @@ function buildPrompt(content: string, language: string | null | undefined) {
 
 export async function generateSummary(rawContent: string, config: AiConfig): Promise<string> {
   const prompt = buildPrompt(rawContent, config.language);
+  return runPrompt(prompt, config);
+}
+
+export interface DigestSummaryArticle {
+  title: string;
+  excerpt?: string | null;
+  feedName?: string | null;
+}
+
+function buildDigestPrompt(
+  articles: DigestSummaryArticle[],
+  mode: "full" | "per_feed",
+  language: string | null | undefined,
+): string {
+  const langInstruction =
+    !language || language === "same"
+      ? "Respond in the same language the articles are written in."
+      : `Respond in ${language}.`;
+
+  const lines = articles.map((a, i) => {
+    const head = a.feedName ? `[${a.feedName}] ${a.title}` : a.title;
+    const excerpt = a.excerpt ? stripHtml(a.excerpt).slice(0, 400) : "";
+    return `${i + 1}. ${head}${excerpt ? `\n   ${excerpt}` : ""}`;
+  });
+
+  const intro =
+    mode === "full"
+      ? `Below is a list of ${articles.length} article${articles.length === 1 ? "" : "s"} collected for an email digest. Write a concise overview (3–6 sentences) that captures the main themes and noteworthy items across all of them. Highlight what is most important or interesting. Do not list every single article — synthesize.`
+      : `Below is a list of ${articles.length} article${articles.length === 1 ? "" : "s"} from a single news feed. Write a concise summary (2–4 sentences) that captures the key topics and highlights. Do not enumerate each article — synthesize the themes.`;
+
+  return `${intro} ${langInstruction}\n\nArticles:\n${lines.join("\n")}`;
+}
+
+export async function generateDigestSummary(
+  articles: DigestSummaryArticle[],
+  mode: "full" | "per_feed",
+  config: AiConfig,
+): Promise<string> {
+  if (articles.length === 0) return "";
+  const prompt = buildDigestPrompt(articles, mode, config.language);
+  return runPrompt(prompt, config);
+}
+
+async function runPrompt(prompt: string, config: AiConfig): Promise<string> {
   switch (config.provider) {
     case "openai":
       return summarizeOpenAI(prompt, config);

@@ -116,16 +116,29 @@
     "lastSent": "Zuletzt gesendet",
     "frequency": "Häufigkeit",
     "day": "Tag",
-    "hour": "Uhrzeit (UTC)",
+    "hour": "Uhrzeit",
+    "timezone": "Zeitzone",
+    "timezoneHint": "Wird zur Auslegung der Digest-Uhrzeit verwendet.",
     "include": "Einbeziehen",
     "feedFilter": "Feed-Filter",
     "feedFilterHint": "leer lassen für alle Feeds",
+    "maxArticles": "Max. Artikel",
+    "minArticles": "Min. Artikel",
+    "minArticlesHint": "Digest überspringen, wenn weniger Artikel vorhanden sind.",
+    "lookback": "Artikelzeitraum",
+    "lookbackHint": "Zeitfenster, aus dem Artikel geholt werden. \"Seit letztem Digest\" sendet nur neue Artikel seit dem letzten Versand.",
+    "groupByFeed": "Nach Feed gruppieren",
+    "groupByFeedHint": "Artikel pro Feed gruppieren statt chronologisch zu mischen.",
+    "aiSummary": "KI-Zusammenfassung",
+    "aiSummaryHint": "Erstellt eine Zusammenfassung mit deinem konfigurierten KI-Anbieter. Fügt einen kurzen Überblick am Anfang des Digests hinzu.",
+    "aiNotConfigured": "Konfiguriere oben einen KI-Anbieter, um Digest-Zusammenfassungen zu aktivieren.",
     "sendTestDigest": "Test-Digest jetzt senden",
     "sending": "Wird gesendet…",
-    "testDigestHint": "Sendet an deine Konto-E-Mail mit Artikeln der letzten 7 Tage.",
+    "testDigestHint": "Sendet an deine Konto-E-Mail mit deinen aktuellen Digest-Einstellungen.",
     "frequencies": {
       "daily": "Täglich",
-      "weekly": "Wöchentlich"
+      "weekly": "Wöchentlich",
+      "weekdays": "Werktags (Mo–Fr)"
     },
     "days": {
       "sunday": "Sonntag",
@@ -141,6 +154,21 @@
       "allNew": "Alle neuen",
       "starred": "Markierte",
       "readLater": "Später lesen"
+    },
+    "lookbackOptions": {
+      "sinceLast": "Seit letztem Digest",
+      "h6": "Letzte 6 Stunden",
+      "h12": "Letzte 12 Stunden",
+      "h24": "Letzte 24 Stunden",
+      "h48": "Letzte 48 Stunden",
+      "d7": "Letzte 7 Tage",
+      "d14": "Letzte 14 Tage",
+      "d30": "Letzte 30 Tage"
+    },
+    "aiSummaryModes": {
+      "none": "Aus",
+      "perFeed": "Pro Feed",
+      "full": "Gesamtzusammenfassung"
     }
   },
   "push": {
@@ -1254,6 +1282,8 @@
     "greetingGeneric": "Hallo",
     "articleCount": "{count, plural, one {Hier ist # Artikel aus deinen Feeds.} other {Hier sind # Artikel aus deinen Feeds.}}",
     "aiSummary": "✦ KI-Zusammenfassung",
+    "overallSummary": "✦ Digest-Zusammenfassung",
+    "feedSummary": "✦ Feed-Zusammenfassung",
     "openApp": "FeedFerret öffnen →",
     "footer": "Du erhältst diese E-Mail, weil du E-Mail-Digests in FeedFerret aktiviert hast.",
     "unsubscribe": "Abmelden",

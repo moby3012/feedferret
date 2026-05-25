@@ -1053,6 +1053,59 @@ const DAYS = [
   { value: "6", key: "digest.days.saturday" },
 ] as const;
 
+const LOOKBACK_OPTIONS = [
+  { value: "since_last", hours: null, key: "digest.lookbackOptions.sinceLast" },
+  { value: "6", hours: 6, key: "digest.lookbackOptions.h6" },
+  { value: "12", hours: 12, key: "digest.lookbackOptions.h12" },
+  { value: "24", hours: 24, key: "digest.lookbackOptions.h24" },
+  { value: "48", hours: 48, key: "digest.lookbackOptions.h48" },
+  { value: "168", hours: 168, key: "digest.lookbackOptions.d7" },
+  { value: "336", hours: 336, key: "digest.lookbackOptions.d14" },
+  { value: "720", hours: 720, key: "digest.lookbackOptions.d30" },
+] as const;
+
+const ARTICLE_COUNT_OPTIONS = [5, 10, 15, 20, 30, 50, 75, 100];
+
+function getCommonTimezones(): string[] {
+  const common = [
+    "UTC",
+    "Europe/London",
+    "Europe/Berlin",
+    "Europe/Paris",
+    "Europe/Madrid",
+    "Europe/Rome",
+    "Europe/Amsterdam",
+    "Europe/Stockholm",
+    "Europe/Warsaw",
+    "Europe/Moscow",
+    "Europe/Istanbul",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Toronto",
+    "America/Sao_Paulo",
+    "America/Mexico_City",
+    "Asia/Tokyo",
+    "Asia/Shanghai",
+    "Asia/Singapore",
+    "Asia/Hong_Kong",
+    "Asia/Seoul",
+    "Asia/Kolkata",
+    "Asia/Dubai",
+    "Australia/Sydney",
+    "Australia/Melbourne",
+    "Pacific/Auckland",
+    "Africa/Johannesburg",
+    "Africa/Cairo",
+  ];
+  try {
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (browserTz && !common.includes(browserTz)) common.unshift(browserTz);
+  } catch {}
+  return common;
+}
+
 function DigestSection() {
   const t = useTranslations();
   const format = useFormatter();
@@ -1117,7 +1170,7 @@ function DigestSection() {
 
         {digest.digestEnabled && (
           <>
-            {/* Frequency */}
+            {/* Frequency / Day / Hour / Timezone */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-frequency-select">{t("digest.frequency")}</label>
@@ -1130,6 +1183,7 @@ function DigestSection() {
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
                     <SelectItem value="daily">{t("digest.frequencies.daily")}</SelectItem>
+                    <SelectItem value="weekdays">{t("digest.frequencies.weekdays")}</SelectItem>
                     <SelectItem value="weekly">{t("digest.frequencies.weekly")}</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1168,14 +1222,37 @@ function DigestSection() {
                   <SelectContent className="rounded-2xl">
                     {Array.from({ length: 24 }, (_, i) => (
                       <SelectItem key={i} value={String(i)}>
-                        {String(i).padStart(2, "0")}:00 UTC
+                        {String(i).padStart(2, "0")}:00
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Scope */}
+              {/* Timezone */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-timezone-select">{t("digest.timezone")}</label>
+                <Select
+                  value={digest.digestTimezone}
+                  onValueChange={(v) => update({ digestTimezone: v })}
+                >
+                  <SelectTrigger id="digest-timezone-select" className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl max-h-72">
+                    {getCommonTimezones().map((tz) => (
+                      <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                    ))}
+                    {!getCommonTimezones().includes(digest.digestTimezone) && (
+                      <SelectItem value={digest.digestTimezone}>{digest.digestTimezone}</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Scope / Lookback / Max / Min */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-scope-select">{t("digest.include")}</label>
                 <Select
@@ -1192,6 +1269,114 @@ function DigestSection() {
                     <SelectItem value="readlater">{t("digest.scope.readLater")}</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-lookback-select">{t("digest.lookback")}</label>
+                <Select
+                  value={digest.digestLookbackHours === null ? "since_last" : String(digest.digestLookbackHours)}
+                  onValueChange={(v) => {
+                    const opt = LOOKBACK_OPTIONS.find((o) => o.value === v);
+                    update({ digestLookbackHours: opt ? opt.hours : null });
+                  }}
+                >
+                  <SelectTrigger id="digest-lookback-select" className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    {LOOKBACK_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{t(o.key)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-max-select">{t("digest.maxArticles")}</label>
+                <Select
+                  value={String(digest.digestMaxArticles)}
+                  onValueChange={(v) => update({ digestMaxArticles: parseInt(v) })}
+                >
+                  <SelectTrigger id="digest-max-select" className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    {ARTICLE_COUNT_OPTIONS.map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-min-select">{t("digest.minArticles")}</label>
+                <Select
+                  value={String(digest.digestMinArticles)}
+                  onValueChange={(v) => update({ digestMinArticles: parseInt(v) })}
+                >
+                  <SelectTrigger id="digest-min-select" className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    {[1, 3, 5, 10, 20].map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground -mt-2">
+              {t("digest.lookbackHint")} {t("digest.minArticlesHint")}
+            </p>
+
+            {/* Group by feed + AI summary */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex items-start justify-between rounded-2xl border border-border/70 bg-background/50 p-4">
+                <div className="pr-3">
+                  <p className="text-sm font-medium">{t("digest.groupByFeed")}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t("digest.groupByFeedHint")}</p>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={digest.digestGroupByFeed}
+                  onClick={() => update({ digestGroupByFeed: !digest.digestGroupByFeed })}
+                  className={cn(
+                    "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                    digest.digestGroupByFeed ? "bg-primary" : "bg-muted",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200",
+                      digest.digestGroupByFeed ? "translate-x-5" : "translate-x-0",
+                    )}
+                  />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-1.5 rounded-2xl border border-border/70 bg-background/50 p-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-accent" />
+                  <label className="text-sm font-medium" htmlFor="digest-ai-select">{t("digest.aiSummary")}</label>
+                </div>
+                <Select
+                  value={digest.digestAiSummary}
+                  onValueChange={(v) => update({ digestAiSummary: v })}
+                  disabled={!digest.aiConfigured}
+                >
+                  <SelectTrigger id="digest-ai-select" className="rounded-xl border-border/70 bg-background/70 h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="none">{t("digest.aiSummaryModes.none")}</SelectItem>
+                    <SelectItem value="full">{t("digest.aiSummaryModes.full")}</SelectItem>
+                    <SelectItem value="per_feed">{t("digest.aiSummaryModes.perFeed")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {digest.aiConfigured ? t("digest.aiSummaryHint") : t("digest.aiNotConfigured")}
+                </p>
               </div>
             </div>
 
