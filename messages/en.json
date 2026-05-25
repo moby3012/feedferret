@@ -116,16 +116,29 @@
     "lastSent": "Last sent",
     "frequency": "Frequency",
     "day": "Day",
-    "hour": "Hour (UTC)",
+    "hour": "Hour",
+    "timezone": "Timezone",
+    "timezoneHint": "Used to interpret the digest hour.",
     "include": "Include",
     "feedFilter": "Feed filter",
     "feedFilterHint": "leave empty for all feeds",
+    "maxArticles": "Max articles",
+    "minArticles": "Min articles",
+    "minArticlesHint": "Skip the digest if fewer articles are available.",
+    "lookback": "Article window",
+    "lookbackHint": "Time range to pull articles from. \"Since last digest\" only sends new articles since the previous run.",
+    "groupByFeed": "Group by feed",
+    "groupByFeedHint": "Organize articles under each feed instead of a chronological list.",
+    "aiSummary": "AI summary",
+    "aiSummaryHint": "Generate a summary using your configured AI provider. Adds a short overview at the top of the digest.",
+    "aiNotConfigured": "Configure an AI provider above to enable digest summaries.",
     "sendTestDigest": "Send test digest now",
     "sending": "Sending…",
-    "testDigestHint": "Sends to your account email using the last 7 days of articles.",
+    "testDigestHint": "Sends to your account email using your current digest settings.",
     "frequencies": {
       "daily": "Daily",
-      "weekly": "Weekly"
+      "weekly": "Weekly",
+      "weekdays": "Weekdays (Mon–Fri)"
     },
     "days": {
       "sunday": "Sunday",
@@ -141,6 +154,21 @@
       "allNew": "All new",
       "starred": "Starred",
       "readLater": "Read Later"
+    },
+    "lookbackOptions": {
+      "sinceLast": "Since last digest",
+      "h6": "Last 6 hours",
+      "h12": "Last 12 hours",
+      "h24": "Last 24 hours",
+      "h48": "Last 48 hours",
+      "d7": "Last 7 days",
+      "d14": "Last 14 days",
+      "d30": "Last 30 days"
+    },
+    "aiSummaryModes": {
+      "none": "Off",
+      "perFeed": "Per feed",
+      "full": "Overall summary"
     }
   },
   "push": {
@@ -1254,6 +1282,8 @@
     "greetingGeneric": "Hi there",
     "articleCount": "{count, plural, one {Here is # article from your feeds.} other {Here are # articles from your feeds.}}",
     "aiSummary": "✦ AI summary",
+    "overallSummary": "✦ Digest summary",
+    "feedSummary": "✦ Feed summary",
     "openApp": "Open FeedFerret →",
     "footer": "You're receiving this because you enabled email digests in FeedFerret.",
     "unsubscribe": "Unsubscribe",

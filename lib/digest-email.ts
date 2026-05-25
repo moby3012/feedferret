@@ -9,6 +9,7 @@ export interface DigestArticle {
   excerpt: string | null;
   author: string | null;
   publishedAt: Date;
+  feedId: string;
   feedName: string;
   feedIcon: string | null;
   aiSummary: string | null;
@@ -21,6 +22,9 @@ export interface DigestEmailOptions {
   unsubscribeToken: string;
   baseUrl: string;
   locale?: string;
+  groupByFeed?: boolean;
+  overallSummary?: string | null;
+  feedSummaries?: Record<string, string>;
 }
 
 function escapeHtml(value: string): string {
@@ -32,20 +36,13 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function buildHtml(opts: DigestEmailOptions): string {
-  const { userName, articles, unsubscribeToken, baseUrl, locale } = opts;
-  const t = createEmailTranslator(locale ?? "en");
-  const unsubUrl = `${baseUrl}/api/digest/unsubscribe?token=${unsubscribeToken}`;
-  const greeting = userName ? t("emailDigest.greeting", { name: userName }) : t("emailDigest.greetingGeneric");
-
-  const articleRows = articles
-    .map((a) => {
-      const blurb = a.aiSummary
-        ? `<p style="margin:6px 0 0;font-size:14px;color:#374151;line-height:1.6;font-family:sans-serif;white-space:pre-wrap;">${escapeHtml(a.aiSummary)}</p><div style="margin-top:4px;font-size:11px;color:#9ca3af;font-family:sans-serif;">${escapeHtml(t("emailDigest.aiSummary"))}</div>`
-        : a.excerpt
-          ? `<p style="margin:6px 0 0;font-size:14px;color:#6b7280;line-height:1.6;font-family:sans-serif;">${escapeHtml(a.excerpt.slice(0, 200))}${a.excerpt.length > 200 ? "…" : ""}</p>`
-          : "";
-      return `
+function renderArticleRow(a: DigestArticle, t: (k: string, v?: Record<string, string | number>) => string, locale: string | undefined): string {
+  const blurb = a.aiSummary
+    ? `<p style="margin:6px 0 0;font-size:14px;color:#374151;line-height:1.6;font-family:sans-serif;white-space:pre-wrap;">${escapeHtml(a.aiSummary)}</p><div style="margin-top:4px;font-size:11px;color:#9ca3af;font-family:sans-serif;">${escapeHtml(t("emailDigest.aiSummary"))}</div>`
+    : a.excerpt
+      ? `<p style="margin:6px 0 0;font-size:14px;color:#6b7280;line-height:1.6;font-family:sans-serif;">${escapeHtml(a.excerpt.slice(0, 200))}${a.excerpt.length > 200 ? "…" : ""}</p>`
+      : "";
+  return `
       <tr>
         <td style="padding:16px 0;border-bottom:1px solid #e5e7eb;">
           <div style="font-size:11px;color:#9ca3af;margin-bottom:4px;font-family:sans-serif;">
@@ -58,8 +55,68 @@ function buildHtml(opts: DigestEmailOptions): string {
           ${a.author ? `<div style="margin-top:6px;font-size:12px;color:#9ca3af;font-family:sans-serif;">By ${escapeHtml(a.author)}</div>` : ""}
         </td>
       </tr>`;
-    })
-    .join("");
+}
+
+function renderOverallSummary(text: string, t: (k: string, v?: Record<string, string | number>) => string): string {
+  return `
+        <tr>
+          <td style="padding:0 32px 16px;">
+            <div style="background:linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%);border:1px solid #e0e7ff;border-radius:12px;padding:16px 18px;font-family:sans-serif;">
+              <div style="font-size:11px;font-weight:600;color:#6366f1;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">
+                ${escapeHtml(t("emailDigest.overallSummary"))}
+              </div>
+              <p style="margin:0;font-size:14px;color:#1f2937;line-height:1.65;white-space:pre-wrap;">
+                ${escapeHtml(text)}
+              </p>
+            </div>
+          </td>
+        </tr>`;
+}
+
+function renderFeedHeader(feedName: string, feedIcon: string | null, summary: string | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
+  const summaryBlock = summary
+    ? `<div style="margin-top:8px;padding:10px 12px;background:#f5f3ff;border-left:3px solid #8b5cf6;border-radius:6px;">
+         <div style="font-size:10px;font-weight:600;color:#7c3aed;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">${escapeHtml(t("emailDigest.feedSummary"))}</div>
+         <p style="margin:0;font-size:13px;color:#374151;line-height:1.6;white-space:pre-wrap;">${escapeHtml(summary)}</p>
+       </div>`
+    : "";
+  return `
+      <tr>
+        <td style="padding:18px 0 6px;border-bottom:2px solid #d1d5db;">
+          <div style="font-size:14px;font-weight:700;color:#111827;font-family:sans-serif;">
+            ${escapeHtml(feedIcon ?? "📰")} ${escapeHtml(feedName)}
+          </div>
+          ${summaryBlock}
+        </td>
+      </tr>`;
+}
+
+function buildHtml(opts: DigestEmailOptions): string {
+  const { userName, articles, unsubscribeToken, baseUrl, locale, groupByFeed, overallSummary, feedSummaries } = opts;
+  const t = createEmailTranslator(locale ?? "en");
+  const unsubUrl = `${baseUrl}/api/digest/unsubscribe?token=${unsubscribeToken}`;
+  const greeting = userName ? t("emailDigest.greeting", { name: userName }) : t("emailDigest.greetingGeneric");
+
+  let articleSection = "";
+  if (groupByFeed) {
+    const groups = new Map<string, DigestArticle[]>();
+    for (const a of articles) {
+      const key = a.feedId;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(a);
+    }
+    const rows: string[] = [];
+    for (const [feedId, group] of groups) {
+      const first = group[0];
+      rows.push(renderFeedHeader(first.feedName, first.feedIcon, feedSummaries?.[feedId], t));
+      for (const a of group) rows.push(renderArticleRow(a, t, locale));
+    }
+    articleSection = rows.join("");
+  } else {
+    articleSection = articles.map((a) => renderArticleRow(a, t, locale)).join("");
+  }
+
+  const overallSummaryBlock = overallSummary ? renderOverallSummary(overallSummary, t) : "";
 
   return `<!DOCTYPE html>
 <html lang="${locale ?? "en"}">
@@ -80,10 +137,11 @@ function buildHtml(opts: DigestEmailOptions): string {
             <p style="margin:8px 0 0;font-size:15px;color:#374151;">${escapeHtml(t("emailDigest.articleCount", { count: articles.length }))}</p>
           </td>
         </tr>
+        ${overallSummaryBlock}
         <tr>
           <td style="padding:8px 32px 24px;">
             <table width="100%" cellpadding="0" cellspacing="0">
-              ${articleRows}
+              ${articleSection}
             </table>
           </td>
         </tr>
@@ -111,7 +169,7 @@ function buildHtml(opts: DigestEmailOptions): string {
 }
 
 function buildText(opts: DigestEmailOptions): string {
-  const { articles, unsubscribeToken, baseUrl, locale } = opts;
+  const { articles, unsubscribeToken, baseUrl, locale, groupByFeed, overallSummary, feedSummaries } = opts;
   const t = createEmailTranslator(locale ?? "en");
   const unsubUrl = `${baseUrl}/api/digest/unsubscribe?token=${unsubscribeToken}`;
   const lines = [
@@ -119,20 +177,48 @@ function buildText(opts: DigestEmailOptions): string {
     t("emailDigest.articleCount", { count: articles.length }),
     "",
   ];
-  for (const a of articles) {
-    lines.push(`${a.title}`);
-    lines.push(`${a.feedName} · ${new Intl.DateTimeFormat(locale ?? "en", { dateStyle: "medium" }).format(new Date(a.publishedAt))}`);
-    lines.push(a.link);
-    if (a.aiSummary) {
-      lines.push(`[AI] ${a.aiSummary}`);
-    } else if (a.excerpt) {
-      lines.push(a.excerpt.slice(0, 150) + (a.excerpt.length > 150 ? "…" : ""));
-    }
+
+  if (overallSummary) {
+    lines.push(`== ${t("emailDigest.overallSummary")} ==`);
+    lines.push(overallSummary);
     lines.push("");
   }
+
+  if (groupByFeed) {
+    const groups = new Map<string, DigestArticle[]>();
+    for (const a of articles) {
+      const key = a.feedId;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(a);
+    }
+    for (const [feedId, group] of groups) {
+      const first = group[0];
+      lines.push(`-- ${first.feedName} --`);
+      if (feedSummaries?.[feedId]) {
+        lines.push(`[${t("emailDigest.feedSummary")}] ${feedSummaries[feedId]}`);
+        lines.push("");
+      }
+      for (const a of group) appendArticleLines(lines, a, t, locale);
+    }
+  } else {
+    for (const a of articles) appendArticleLines(lines, a, t, locale);
+  }
+
   lines.push(`${t("emailDigest.openApp")} ${baseUrl}`);
   lines.push(`${t("emailDigest.unsubscribe")}: ${unsubUrl}`);
   return lines.join("\n");
+}
+
+function appendArticleLines(lines: string[], a: DigestArticle, _t: (k: string, v?: Record<string, string | number>) => string, locale: string | undefined): void {
+  lines.push(a.title);
+  lines.push(`${a.feedName} · ${new Intl.DateTimeFormat(locale ?? "en", { dateStyle: "medium" }).format(new Date(a.publishedAt))}`);
+  lines.push(a.link);
+  if (a.aiSummary) {
+    lines.push(`[AI] ${a.aiSummary}`);
+  } else if (a.excerpt) {
+    lines.push(a.excerpt.slice(0, 150) + (a.excerpt.length > 150 ? "…" : ""));
+  }
+  lines.push("");
 }
 
 export async function sendDigestEmail(opts: DigestEmailOptions): Promise<void> {
@@ -155,6 +241,7 @@ export async function getDigestArticles(
   scope: string,
   feedIds: string[] | null,
   since: Date,
+  limit: number = 20,
 ): Promise<DigestArticle[]> {
   const scopeFilter: Record<string, unknown> =
     scope === "unread"
@@ -173,7 +260,7 @@ export async function getDigestArticles(
       ...scopeFilter,
     },
     orderBy: { publishedAt: "desc" },
-    take: 20,
+    take: Math.max(1, Math.min(200, limit)),
     select: {
       id: true,
       title: true,
@@ -182,6 +269,7 @@ export async function getDigestArticles(
       author: true,
       publishedAt: true,
       aiSummary: true,
+      feedId: true,
       feed: { select: { name: true, icon: true } },
     },
   });
@@ -194,6 +282,7 @@ export async function getDigestArticles(
     author: a.author,
     publishedAt: a.publishedAt,
     aiSummary: a.aiSummary,
+    feedId: a.feedId,
     feedName: a.feed.name,
     feedIcon: a.feed.icon,
   }));

@@ -43,11 +43,17 @@ model User {
   apiTokens     ApiToken[]
   isActive      Boolean   @default(true)
   digestEnabled           Boolean   @default(false)
-  digestFrequency         String    @default("daily")   // "daily" | "weekly"
+  digestFrequency         String    @default("daily")   // "daily" | "weekly" | "weekdays"
   digestDayOfWeek         Int?                          // 0=Sun … 6=Sat, weekly only
-  digestHour              Int       @default(8)         // UTC hour 0-23
+  digestHour              Int       @default(8)         // hour 0-23, interpreted in digestTimezone
+  digestTimezone          String    @default("UTC")     // IANA timezone, e.g. "Europe/Berlin"
   digestScope             String    @default("unread")  // "unread" | "starred" | "readlater" | "all"
   digestFeedIds           String?                       // JSON array of feed IDs, null = all
+  digestMaxArticles       Int       @default(20)        // upper limit of articles per digest
+  digestMinArticles       Int       @default(1)         // skip send if fewer than this
+  digestLookbackHours     Int?                          // null = since last sent; else fixed window in hours
+  digestGroupByFeed       Boolean   @default(false)     // group articles by feed in the email
+  digestAiSummary         String    @default("none")    // "none" | "per_feed" | "full"
   digestLastSentAt        DateTime?
   digestUnsubscribeToken  String?   @unique
   pushEnabled             Boolean   @default(false)

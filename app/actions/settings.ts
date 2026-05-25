@@ -197,20 +197,37 @@ export async function getDigestSettings() {
       digestFrequency: true,
       digestDayOfWeek: true,
       digestHour: true,
+      digestTimezone: true,
       digestScope: true,
       digestFeedIds: true,
+      digestMaxArticles: true,
+      digestMinArticles: true,
+      digestLookbackHours: true,
+      digestGroupByFeed: true,
+      digestAiSummary: true,
       digestLastSentAt: true,
+      aiProvider: true,
+      aiApiKey: true,
     },
   });
+
+  const aiConfigured = !!user?.aiProvider && (user.aiProvider === "ollama" || !!user.aiApiKey);
 
   return {
     digestEnabled: user?.digestEnabled ?? false,
     digestFrequency: user?.digestFrequency ?? "daily",
     digestDayOfWeek: user?.digestDayOfWeek ?? 1,
     digestHour: user?.digestHour ?? 8,
+    digestTimezone: user?.digestTimezone ?? "UTC",
     digestScope: user?.digestScope ?? "unread",
     digestFeedIds: user?.digestFeedIds ? (JSON.parse(user.digestFeedIds) as string[]) : [],
+    digestMaxArticles: user?.digestMaxArticles ?? 20,
+    digestMinArticles: user?.digestMinArticles ?? 1,
+    digestLookbackHours: user?.digestLookbackHours ?? null,
+    digestGroupByFeed: user?.digestGroupByFeed ?? false,
+    digestAiSummary: user?.digestAiSummary ?? "none",
     digestLastSentAt: user?.digestLastSentAt ?? null,
+    aiConfigured,
   };
 }
 
@@ -219,8 +236,14 @@ export async function updateDigestSettings(data: {
   digestFrequency?: string;
   digestDayOfWeek?: number;
   digestHour?: number;
+  digestTimezone?: string;
   digestScope?: string;
   digestFeedIds?: string[];
+  digestMaxArticles?: number;
+  digestMinArticles?: number;
+  digestLookbackHours?: number | null;
+  digestGroupByFeed?: boolean;
+  digestAiSummary?: string;
 }) {
   const session = await requireUser();
 
@@ -229,6 +252,31 @@ export async function updateDigestSettings(data: {
   if (data.digestFeedIds !== undefined) {
     updateData.digestFeedIds =
       data.digestFeedIds.length > 0 ? JSON.stringify(data.digestFeedIds) : null;
+  }
+
+  if (data.digestMaxArticles !== undefined) {
+    updateData.digestMaxArticles = Math.max(1, Math.min(100, data.digestMaxArticles));
+  }
+  if (data.digestMinArticles !== undefined) {
+    updateData.digestMinArticles = Math.max(1, Math.min(50, data.digestMinArticles));
+  }
+  if (data.digestLookbackHours !== undefined) {
+    updateData.digestLookbackHours =
+      data.digestLookbackHours === null
+        ? null
+        : Math.max(1, Math.min(24 * 60, data.digestLookbackHours));
+  }
+  if (data.digestAiSummary !== undefined) {
+    const allowed = new Set(["none", "per_feed", "full"]);
+    if (!allowed.has(data.digestAiSummary)) {
+      updateData.digestAiSummary = "none";
+    }
+  }
+  if (data.digestFrequency !== undefined) {
+    const allowed = new Set(["daily", "weekly", "weekdays"]);
+    if (!allowed.has(data.digestFrequency)) {
+      delete updateData.digestFrequency;
+    }
   }
 
   if (data.digestEnabled) {
@@ -260,7 +308,16 @@ export async function sendTestDigest() {
       email: true,
       digestScope: true,
       digestFeedIds: true,
+      digestMaxArticles: true,
+      digestLookbackHours: true,
+      digestGroupByFeed: true,
+      digestAiSummary: true,
       digestUnsubscribeToken: true,
+      aiProvider: true,
+      aiApiKey: true,
+      aiModel: true,
+      aiOllamaBaseUrl: true,
+      aiSummaryLanguage: true,
     },
   });
 
@@ -276,9 +333,63 @@ export async function sendTestDigest() {
   }
 
   const feedIds: string[] | null = user.digestFeedIds ? JSON.parse(user.digestFeedIds) : null;
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const articles = await getDigestArticles(session.user.id, user.digestScope, feedIds, since);
+  const lookbackHours = user.digestLookbackHours ?? 7 * 24;
+  const since = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
+  const articles = await getDigestArticles(
+    session.user.id,
+    user.digestScope,
+    feedIds,
+    since,
+    user.digestMaxArticles,
+  );
   const baseUrl = process.env.AUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+
+  // AI summaries (best-effort; ignore failures in test)
+  let overallSummary: string | null = null;
+  const feedSummaries: Record<string, string> = {};
+  const provider = user.aiProvider as AiProvider | null;
+  const decryptedKey = decryptIfValue(user.aiApiKey);
+  const aiUsable = !!provider && (provider === "ollama" || !!decryptedKey);
+
+  if (aiUsable && user.digestAiSummary !== "none" && articles.length > 0) {
+    const { generateDigestSummary } = await import("@/lib/ai-summary");
+    const aiConfig = {
+      provider: provider!,
+      apiKey: decryptedKey,
+      model: user.aiModel,
+      ollamaBaseUrl: user.aiOllamaBaseUrl,
+      language: user.aiSummaryLanguage,
+    };
+    try {
+      if (user.digestAiSummary === "full") {
+        overallSummary = await generateDigestSummary(
+          articles.map((a) => ({ title: a.title, excerpt: a.excerpt, feedName: a.feedName })),
+          "full",
+          aiConfig,
+        );
+      } else if (user.digestAiSummary === "per_feed") {
+        const grouped = new Map<string, typeof articles>();
+        for (const a of articles) {
+          if (!grouped.has(a.feedId)) grouped.set(a.feedId, []);
+          grouped.get(a.feedId)!.push(a);
+        }
+        for (const [feedId, group] of grouped) {
+          if (group.length < 2) continue;
+          try {
+            feedSummaries[feedId] = await generateDigestSummary(
+              group.map((a) => ({ title: a.title, excerpt: a.excerpt, feedName: a.feedName })),
+              "per_feed",
+              aiConfig,
+            );
+          } catch {
+            // ignore per-feed errors during test
+          }
+        }
+      }
+    } catch {
+      // ignore overall AI errors during test
+    }
+  }
 
   await sendDigestEmail({
     to: user.email,
@@ -286,6 +397,9 @@ export async function sendTestDigest() {
     articles,
     unsubscribeToken: token,
     baseUrl,
+    groupByFeed: user.digestGroupByFeed,
+    overallSummary,
+    feedSummaries,
   });
 
   return { sent: true, articleCount: articles.length };
