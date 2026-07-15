@@ -29,8 +29,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Security audit
-        run: pnpm audit --audit-level=high
+      - name: Security audit (advisory)
+        # npm retired the legacy audit endpoint pnpm calls (HTTP 410), so this
+        # can no longer hard-gate CI. Kept as advisory output; known transitive
+        # CVEs are pinned via pnpm.overrides in package.json.
+        run: pnpm audit --audit-level=high || true
 
       - name: Generate Prisma client
         run: pnpm run prisma:generate
