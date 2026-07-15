@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import {
   Dialog,
@@ -9,6 +9,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -102,6 +112,39 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
       sample: string;
     }>;
   } | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [hydrationTick, setHydrationTick] = useState(0);
+  const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
+
+  // Returns a snapshot of every user-editable field (excludes transient/UI-only
+  // state like activeTab, previewUrl, previewResult, and loading flags). Used
+  // both to capture the "last persisted" baseline and to read current values
+  // for the dirty comparison, so the two can never drift out of sync.
+  const getFormValues = () => ({
+    authType,
+    authUsername,
+    authPassword,
+    customUserAgent,
+    updateFrequency,
+    fetchTimeoutSecs,
+    sslVerify,
+    maxSizeKb,
+    fullTextSelector,
+    fullTextRemoveSelectors,
+    fullTextConditions,
+    autoFetchFullText,
+    sourceType,
+    priority,
+    unicityCriteria,
+    unicityCriteriaForced,
+    scraperConfig,
+    httpOptions,
+    filtersActionRead,
+    retentionDays,
+    keepMinArticles,
+    hideFromAllFeeds,
+    hideArticleImage,
+  });
 
   useEffect(() => {
     if (!feed) return;
@@ -131,7 +174,20 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     setHideArticleImage(feed.hideArticleImage ?? false);
     setPreviewResult(null);
     setPreviewUrl("");
+    setShowDiscardConfirm(false);
+    // The field setters above only take effect on the next render, so we can't
+    // snapshot from this closure yet. Bump a tick to trigger the snapshot
+    // effect below once the hydrated values have actually committed.
+    setHydrationTick((tick) => tick + 1);
   }, [feed]);
+
+  // Runs after the hydration effect's state updates have committed, so
+  // getFormValues() here reflects the freshly hydrated fields — this becomes
+  // the "last persisted" baseline for the dirty check.
+  useEffect(() => {
+    initialSnapshotRef.current = getFormValues();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrationTick]);
 
   const handleSave = () => {
     if (!feed) return;
@@ -167,6 +223,10 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
       {
         onSuccess: () => {
           toast.success(t("toasts.saved"));
+          // The just-saved values are now the persisted baseline, so re-snapshot
+          // before closing — otherwise the dialog would (correctly, but
+          // needlessly) look dirty forever after a save.
+          initialSnapshotRef.current = getFormValues();
           onOpenChange(false);
         },
         onError: () => toast.error(t("toasts.failedToSave")),
@@ -187,10 +247,36 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     );
   };
 
+  const isDirty = (() => {
+    const snapshot = initialSnapshotRef.current;
+    if (!snapshot) return false;
+    const current = getFormValues();
+    return (Object.keys(current) as Array<keyof typeof current>).some(
+      (key) => current[key] !== snapshot[key],
+    );
+  })();
+
+  // Radix fires onOpenChange(false) for backdrop clicks, Escape, and the X
+  // button alike, so intercepting it here covers every close path. Opens (and
+  // closes with no unsaved changes) pass straight through unchanged.
+  const handleDialogOpenChange = (next: boolean) => {
+    if (!next && isDirty) {
+      setShowDiscardConfirm(true);
+      return;
+    }
+    onOpenChange(next);
+  };
+
+  const handleDiscardChanges = () => {
+    setShowDiscardConfirm(false);
+    onOpenChange(false);
+  };
+
   if (!feed) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="flex h-[min(92dvh,760px)] w-[calc(100vw-1rem)] max-w-2xl flex-col rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl">
         <DialogHeader className="border-b border-border/60 bg-card/95 px-5 py-5 backdrop-blur-2xl sm:px-8 sm:py-6">
           <DialogTitle className="text-xl font-semibold tracking-[-0.04em] sm:text-2xl">
@@ -610,7 +696,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             <Button
               variant="ghost"
               className="rounded-xl"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleDialogOpenChange(false)}
             >
               {t("buttons.cancel")}
             </Button>
@@ -628,5 +714,28 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
         </Tabs>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
+      <AlertDialogContent className="rounded-3xl border-border/70 bg-background">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("unsavedChanges.title")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("unsavedChanges.description")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel className="rounded-2xl">
+            {t("unsavedChanges.keepEditing")}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={handleDiscardChanges}
+          >
+            {t("unsavedChanges.discardChanges")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

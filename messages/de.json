@@ -1013,6 +1013,12 @@
       "failedToSave": "Feed-Einstellungen konnten nicht gespeichert werden",
       "previewFailed": "Vorschau fehlgeschlagen",
       "selectorApplied": "Selektor angewendet"
+    },
+    "unsavedChanges": {
+      "title": "Nicht gespeicherte Änderungen verwerfen?",
+      "description": "Sie haben nicht gespeicherte Änderungen an den Feed-Einstellungen. Wenn Sie jetzt schließen, gehen diese verloren.",
+      "keepEditing": "Weiter bearbeiten",
+      "discardChanges": "Änderungen verwerfen"
     }
   },
   "serverManagement": {

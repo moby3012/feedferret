@@ -1013,6 +1013,12 @@
       "failedToSave": "Failed to save feed settings",
       "previewFailed": "Preview failed",
       "selectorApplied": "Selector applied"
+    },
+    "unsavedChanges": {
+      "title": "Discard unsaved changes?",
+      "description": "You have unsaved changes to this feed's settings. If you close now, they will be lost.",
+      "keepEditing": "Keep editing",
+      "discardChanges": "Discard changes"
     }
   },
   "serverManagement": {
