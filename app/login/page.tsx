@@ -149,10 +149,10 @@ export default function LoginPage() {
   const hasOAuth = providers.google || providers.github || providers.authelia;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-black text-white selection:bg-zinc-800">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background text-foreground selection:bg-muted">
       <div className="w-full max-w-[400px] relative z-10 animate-scale-in">
         <div className="text-center mb-10 group">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl border border-white/10 bg-zinc-900/50 p-3 mb-6 shadow-2xl transition-transform duration-500 group-hover:scale-105">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl border border-border bg-card p-3 mb-6 shadow-2xl transition-transform duration-500 group-hover:scale-105">
             <Image
               src="/logo.svg"
               alt="FeedFerret"
@@ -161,29 +161,29 @@ export default function LoginPage() {
               className="w-full h-full opacity-90"
             />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">
-            Feed<span className="text-zinc-400">Ferret</span>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Feed<span className="text-muted-foreground">Ferret</span>
           </h1>
-          <p className="text-zinc-500 mt-2 text-sm font-medium tracking-tight">
+          <p className="text-muted-foreground mt-2 text-sm font-medium tracking-tight">
             Minimalist RSS Aggregator
           </p>
         </div>
 
-        <Card className="border-white/5 bg-zinc-950/50 backdrop-blur-xl shadow-2xl overflow-hidden ring-1 ring-white/10">
+        <Card className="border-border bg-card backdrop-blur-xl shadow-2xl overflow-hidden ring-1 ring-border">
           <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-start">
-            <CardTitle className="text-lg font-semibold text-white flex items-center justify-center sm:justify-start gap-2">
-              <LogIn className="w-4 h-4 text-zinc-400" />
+            <CardTitle className="text-lg font-semibold text-foreground flex items-center justify-center sm:justify-start gap-2">
+              <LogIn className="w-4 h-4 text-muted-foreground" />
               {t("signIn")}
             </CardTitle>
           </CardHeader>
           <CardContent className="px-8 pb-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="relative group/input">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-white" />
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors group-focus-within/input:text-foreground" />
                 <Input
                   type="email"
                   placeholder={t("email")}
-                  className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-lg text-sm"
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
@@ -196,11 +196,11 @@ export default function LoginPage() {
                 />
               </div>
               <div className="relative group/input">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-white" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors group-focus-within/input:text-foreground" />
                 <Input
                   type="password"
                   placeholder={t("password")}
-                  className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-lg text-sm"
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
@@ -214,12 +214,12 @@ export default function LoginPage() {
               </div>
               {showOtpField && (
                 <div className="relative group/input">
-                  <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 transition-colors group-focus-within/input:text-white" />
+                  <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors group-focus-within/input:text-foreground" />
                   <Input
                     inputMode="numeric"
                     pattern="[0-9]*"
                     placeholder={t("authenticatorCode")}
-                    className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-600 focus:border-white/20 focus:ring-0 transition-all h-11 rounded-lg text-sm"
+                    className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-lg text-sm"
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     autoFocus
@@ -242,11 +242,11 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full h-11 bg-white hover:bg-zinc-200 text-black font-semibold text-sm rounded-lg transition-all active:scale-[0.98]"
+                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm rounded-lg transition-all active:scale-[0.98]"
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">
-                    <div className="w-3 h-3 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                    <div className="w-3 h-3 border-2 border-muted border-t-primary rounded-full animate-spin" />
                     {t("signingIn")}
                   </span>
                 ) : (
@@ -260,11 +260,11 @@ export default function LoginPage() {
                   variant="outline"
                   disabled={magicLinkSending || magicLinkSent}
                   onClick={handleMagicLink}
-                  className="w-full h-11 bg-white/5 border-white/10 hover:bg-white/10 text-white font-medium text-sm rounded-lg transition-all"
+                  className="w-full h-11 bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground font-medium text-sm rounded-lg transition-all"
                 >
                   {magicLinkSending ? (
                     <span className="flex items-center gap-2">
-                      <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      <div className="w-3 h-3 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin" />
                       {t("sendingLink")}
                     </span>
                   ) : magicLinkSent ? (
@@ -286,10 +286,10 @@ export default function LoginPage() {
               <>
                 <div className="relative my-6">
                   <div className="absolute inset-0 flex items-center">
-                    <Separator className="w-full bg-white/10" />
+                    <Separator className="w-full bg-border" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-[#0c0c0e] px-2 text-zinc-500 font-medium">
+                    <span className="bg-background px-2 text-muted-foreground font-medium">
                       {t("orContinueWith")}
                     </span>
                   </div>
@@ -299,7 +299,7 @@ export default function LoginPage() {
                   {providers.google && (
                     <Button
                       variant="outline"
-                      className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
+                      className="bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("google")}
                     >
                       <GoogleIcon className="w-4 h-4 me-2" />
@@ -309,7 +309,7 @@ export default function LoginPage() {
                   {providers.github && (
                     <Button
                       variant="outline"
-                      className="bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
+                      className="bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("github")}
                     >
                       <GithubIcon className="w-4 h-4 me-2" />
@@ -319,7 +319,7 @@ export default function LoginPage() {
                   {providers.authelia && (
                     <Button
                       variant="outline"
-                      className="sm:col-span-2 bg-white/5 border-white/10 hover:bg-white/10 text-white h-11 rounded-lg"
+                      className="sm:col-span-2 bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground h-11 rounded-lg"
                       onClick={() => handleOAuthSignIn("authelia")}
                     >
                       <Shield className="w-4 h-4 me-2" />
@@ -330,19 +330,19 @@ export default function LoginPage() {
               </>
             )}
           </CardContent>
-          <CardFooter className="flex flex-col space-y-4 border-t border-white/5 pt-6 pb-8 bg-white/[0.02]">
+          <CardFooter className="flex flex-col space-y-4 border-t border-border pt-6 pb-8 bg-muted/30">
             {registrationsEnabled ? (
-              <div className="text-zinc-500 text-xs font-medium text-center w-full">
+              <div className="text-muted-foreground text-xs font-medium text-center w-full">
                 Don&apos;t have an account?{" "}
                 <Link
                   href="/register"
-                  className="text-white hover:underline transition-all"
+                  className="text-foreground hover:underline transition-all"
                 >
                   {t("createAccount")}
                 </Link>
               </div>
             ) : (
-              <div className="text-zinc-600 text-xs font-medium text-center w-full">
+              <div className="text-muted-foreground text-xs font-medium text-center w-full">
                 {t("registrationsDisabled")}
               </div>
             )}
@@ -350,7 +350,7 @@ export default function LoginPage() {
         </Card>
 
         <div className="text-center mt-12 opacity-20">
-          <p className="text-[10px] font-medium tracking-[0.2em] text-white uppercase">
+          <p className="text-xs font-medium tracking-[0.2em] text-foreground uppercase">
             {t("privateSecureNewsFeed")}
           </p>
         </div>

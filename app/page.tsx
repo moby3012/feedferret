@@ -729,7 +729,7 @@ export default function RSSReaderPage() {
 
   if (status === "loading") {
     return (
-      <div className="h-dvh flex items-center justify-center bg-[#05060a]">
+      <div className="h-dvh flex items-center justify-center bg-background">
         <div className="relative w-20 h-20">
           <div className="absolute inset-0 border-4 border-primary/20 rounded-[28%] animate-pulse" />
           <div className="absolute inset-0 border-t-4 border-primary rounded-[28%] animate-spin" />
@@ -751,7 +751,7 @@ export default function RSSReaderPage() {
 
   if (isMobileLayout === null) {
     return (
-      <div className="h-dvh flex items-center justify-center bg-[#05060a]">
+      <div className="h-dvh flex items-center justify-center bg-background">
         <div className="relative w-20 h-20">
           <div className="absolute inset-0 border-4 border-primary/20 rounded-[28%] animate-pulse" />
           <div className="absolute inset-0 border-t-4 border-primary rounded-[28%] animate-spin" />

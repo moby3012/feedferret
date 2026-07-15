@@ -436,30 +436,31 @@ export function RssSidebar({
             className="w-10 h-10 invert dark:invert-0"
           />
         </div>
-        {navItems.map((item) => (
+        {navItems.map((item) => {
+          const isActiveNav = selectedFeed === null && selectedCategory === item.categoryId;
+          return (
           <Button
             key={item.id}
             variant="ghost"
             size="icon"
             className={cn(
               "w-12 h-12 rounded-xl relative transition-all duration-200",
-              selectedFeed === null &&
-                selectedCategory === item.categoryId &&
-                "bg-sidebar-accent",
+              isActiveNav && "bg-sidebar-accent ring-2 ring-sidebar-ring/50",
             )}
             onClick={() => {
               onSelectFeed(null);
               onSelectCategory(item.categoryId);
             }}
           >
-            <item.icon className="w-5 h-5 text-sidebar-foreground" />
+            <item.icon className={cn("w-5 h-5", isActiveNav ? "text-sidebar-accent-foreground" : "text-sidebar-foreground")} />
             {item.count !== null && item.count > 0 && (
               <span className="absolute -top-1 -end-1 w-5 h-5 rounded-full bg-brand/90 text-white text-xs flex items-center justify-center font-semibold shadow-sm">
                 {item.count > 99 ? "99+" : item.count}
               </span>
             )}
           </Button>
-        ))}
+          );
+        })}
       </aside>
     );
   }
@@ -1212,7 +1213,7 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
           <span className="text-xs">{feed.icon || "📰"}</span>
         )}
       </div>
-      <span className="flex-1 text-start truncate font-medium">{feed.name}</span>
+      <span className={cn("flex-1 text-start truncate font-medium", isSelected && "font-semibold")}>{feed.name}</span>
       {feed.lastStatus === "error" && (
         <span title={feed.lastError || t("sidebar.lastSyncFailed")}>
           <AlertCircle className={cn("h-3.5 w-3.5 shrink-0 text-destructive", isSelected && "text-primary-foreground/70")} />

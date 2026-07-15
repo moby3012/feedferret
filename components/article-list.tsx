@@ -657,7 +657,7 @@ function ArticlePreview({
               sizes="(max-width: 640px) 100vw, 400px"
               className="object-cover transition-transform duration-700 hover:scale-110"
             />
-            <div className="absolute top-3 start-3 flex items-center gap-1.5 px-2 py-1 bg-black/50 backdrop-blur-md rounded-lg text-white text-[10px] font-bold">
+            <div className="absolute top-3 start-3 flex items-center gap-1.5 px-2 py-1 bg-background/60 backdrop-blur-md rounded-lg text-foreground text-[10px] font-bold">
               <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={12} />
               {article.feedName}
             </div>
@@ -665,7 +665,7 @@ function ArticlePreview({
         )}
         {!article.imageUrl && (
           <div className="px-4 pt-3">
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-black/10 dark:bg-white/10 rounded-lg text-[10px] font-bold">
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-muted rounded-lg text-[10px] font-bold">
               <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={12} />
               {article.feedName}
             </span>
@@ -679,7 +679,7 @@ function ArticlePreview({
             {article.excerpt}
           </p>
           <div className="flex items-center justify-between pt-2 border-t border-border/50">
-            <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground font-medium">
+            <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground font-medium">
               <Clock className="w-3 h-3" />
               {formatDate(article.publishedAt)}
             </div>

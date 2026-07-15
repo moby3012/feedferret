@@ -55,6 +55,9 @@ export async function POST(request: Request) {
   );
 }
 
+// NOTE: the HTML below is intentionally standalone, light-mode-only inline
+// markup for an email client — it has no access to CSS custom properties or
+// the app's theme, so it does not participate in the semantic-token system.
 async function sendWelcomeEmail(email: string, name?: string | null) {
   const settings = await db.globalSettings.findUnique({ where: { id: "global" } });
   if (!settings?.mailServiceEnabled) return;
