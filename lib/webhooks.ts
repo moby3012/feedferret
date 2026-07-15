@@ -1,4 +1,5 @@
 import { createHmac, randomBytes } from "crypto";
+import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 
 export type WebhookConfig = {
   url: string;
@@ -109,6 +110,9 @@ export async function executeWebhookCall(
   }
 
   try {
+    const allowInternal = await isTrustedFeedFetchingAllowed();
+    await assertSafeFetchUrl(url, { context: "Webhook", allowInternal });
+
     const res = await fetch(url, {
       method,
       headers,

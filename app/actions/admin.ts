@@ -278,7 +278,10 @@ export async function updateGlobalSettings(data: Record<string, unknown>) {
   const session = await auth();
   if (session?.user?.id) {
     await logAdminAction(session.user.id, "settings.update", {
-      metadata: { fields: Object.keys(sanitized) },
+      metadata: {
+        fields: Object.keys(sanitized),
+        ...(sanitized.smtpRejectUnauthorized === false ? { smtpRejectUnauthorized: false } : {}),
+      },
     });
   }
 

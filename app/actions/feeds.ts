@@ -339,6 +339,14 @@ export async function addFeed(url: string, categoryId?: string) {
     const urlError = validateFeedUrl(url);
     if (urlError) return { success: false, error: urlError };
 
+    if (categoryId) {
+        const category = await db.category.findFirst({
+            where: { id: categoryId, userId: session.user.id },
+            select: { id: true },
+        });
+        if (!category) return { success: false, error: "Invalid category" };
+    }
+
     try {
         const remoteFeed = await fetchFeedArticles({ url });
 
@@ -406,6 +414,14 @@ export async function updateFeed(feedId: string, data: {
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+
+    if (data.categoryId) {
+        const category = await db.category.findFirst({
+            where: { id: data.categoryId, userId: session.user.id },
+            select: { id: true },
+        });
+        if (!category) throw new Error("Invalid category");
+    }
 
     await db.feed.update({
         where: { id: feedId, userId: session.user.id },

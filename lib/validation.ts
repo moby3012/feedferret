@@ -44,6 +44,12 @@ export const UpdateFeedSchema = z.object({
   hideArticleImage: z.boolean().optional(),
 });
 
+export const RegisterUserSchema = z.object({
+  email: z.string().email("Must be a valid email address").max(320),
+  password: z.string().min(8, "Password must be at least 8 characters").max(200),
+  name: z.string().max(200).optional(),
+});
+
 export const CreateCategorySchema = z.object({
   name: z.string().min(1).max(100),
   parentId: z.string().optional(),

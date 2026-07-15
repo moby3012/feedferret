@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { hasPushConfig } from "@/lib/push";
+import { assertSafeFetchUrl } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 
 const VALID_PLATFORMS = ["web", "android", "ios"] as const;
@@ -25,6 +26,15 @@ export async function POST(request: Request) {
   const subscription = (body.subscription ?? body) as IncomingSubscription;
 
   if (!subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
+    return NextResponse.json({ error: "Invalid push subscription" }, { status: 400 });
+  }
+
+  try {
+    const url = await assertSafeFetchUrl(subscription.endpoint, { context: "Push endpoint" });
+    if (url.protocol !== "https:") {
+      return NextResponse.json({ error: "Invalid push subscription" }, { status: 400 });
+    }
+  } catch {
     return NextResponse.json({ error: "Invalid push subscription" }, { status: 400 });
   }
 

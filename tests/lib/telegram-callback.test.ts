@@ -1,4 +1,8 @@
 import { describe, it, expect } from "vitest";
+
+// telegram-callback fails closed when AUTH_SECRET is unset; ensure a value for tests.
+process.env.AUTH_SECRET ||= "test-secret-telegram-callback";
+
 import { generateMarkReadUrl, verifyMarkReadUrl } from "../../lib/telegram-callback";
 
 describe("telegram-callback", () => {
