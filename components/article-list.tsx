@@ -38,6 +38,8 @@ function FeedFavicon({ icon, name, size = 16, articleLink }: { icon?: string; na
         alt={name ?? ""}
         width={size}
         height={size}
+        loading="lazy"
+        decoding="async"
         className="rounded-sm object-contain shrink-0"
         style={{ width: size, height: size }}
         onError={() => setFailed(true)}
@@ -575,7 +577,7 @@ function ArticlePreview({
   }, [article.id, article.isRead, markReadOnScroll, onMarkRead, scrollRoot]);
   if (viewMode === "minimal") {
     return (
-      <div className="relative" data-article-id={article.id}>
+      <div className="relative cv-auto-minimal" data-article-id={article.id}>
         {swipeBackdrop}
       <div
         ref={articleRef}
@@ -628,7 +630,7 @@ function ArticlePreview({
 
   if (viewMode === "magazine") {
     return (
-      <div className="relative" data-article-id={article.id}>
+      <div className="relative cv-auto-magazine" data-article-id={article.id}>
         {swipeBackdrop}
       <div
         ref={articleRef}
@@ -654,6 +656,7 @@ function ArticlePreview({
               src={article.imageUrl}
               alt=""
               fill
+              loading="lazy"
               sizes="(max-width: 640px) 100vw, 400px"
               className="object-cover transition-transform duration-700 hover:scale-110"
             />
@@ -721,9 +724,9 @@ function ArticlePreview({
     );
   }
 
-  // Classic View (Default)
+  // Classic View (Default) — also used for "grid" viewMode, which shares this markup.
   return (
-    <div className="relative" data-article-id={article.id}>
+    <div className="relative cv-auto-list" data-article-id={article.id}>
       {swipeBackdrop}
     <div
       ref={articleRef}
@@ -754,6 +757,7 @@ function ArticlePreview({
               src={article.imageUrl || "/placeholder.svg"}
               alt=""
               fill
+              loading="lazy"
               sizes="(max-width: 640px) 96px, 128px"
               className="object-cover transition-transform duration-500 group-hover:scale-105"
             />
