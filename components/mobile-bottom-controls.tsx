@@ -19,6 +19,7 @@ interface MobileBottomControlsProps {
   unreadOnly: boolean;
   onToggleUnreadOnly: () => void;
   onToggleSidebar: () => void;
+  sidebarOpen?: boolean;
   onRefresh: () => void;
   isRefreshing?: boolean;
   searchQuery: string;
@@ -37,6 +38,7 @@ export function MobileBottomControls({
   unreadOnly,
   onToggleUnreadOnly,
   onToggleSidebar,
+  sidebarOpen = false,
   onRefresh,
   isRefreshing,
   searchQuery,
@@ -142,6 +144,7 @@ export function MobileBottomControls({
           className={mobileButtonClass}
           onClick={onToggleSidebar}
           aria-label={t("sidebar.feeds")}
+          aria-expanded={sidebarOpen}
         >
           <PanelLeft className="h-5 w-5" />
         </Button>

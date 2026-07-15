@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import readingTime from "reading-time";
 import { RssSidebar } from "@/components/rss-sidebar";
@@ -19,6 +20,7 @@ import {
   useToggleReadLater,
   useRefresh,
   useMarkAllAsRead,
+  useMarkArticlesAsUnread,
   useFetchFullText,
   useLabels,
   useSavedSearches,
@@ -81,6 +83,7 @@ export default function RSSReaderPage() {
   const t = useTranslations("sidebar");
   const tA11y = useTranslations("accessibility");
   const tList = useTranslations("articleList");
+  const tSearch = useTranslations("searchResults");
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -119,6 +122,7 @@ export default function RSSReaderPage() {
   const toggleStarred = useToggleStarred();
   const toggleReadLater = useToggleReadLater();
   const markAllAsRead = useMarkAllAsRead();
+  const markArticlesAsUnread = useMarkArticlesAsUnread();
   const fetchFullText = useFetchFullText();
   const { data: labels = [] } = useLabels(isAuthenticated);
   const { data: savedSearches = [] } = useSavedSearches(isAuthenticated);
@@ -142,6 +146,7 @@ export default function RSSReaderPage() {
   const [lastClosedArticleId, setLastClosedArticleId] = useState<string | null>(null);
   const deepLinkAppliedRef = useRef(false);
   const articleDeepLinkRef = useRef<string | null>(null);
+  const initialSyncFailedToastShownRef = useRef(false);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
@@ -217,7 +222,7 @@ export default function RSSReaderPage() {
             onClick={() => { setSelectedCategory("All"); setSelectedFeed(null); }}
             className="text-xs text-muted-foreground hover:text-foreground"
           >
-            Take me back
+            {t("takeMeBack")}
           </button>
         </div>
       </div>
@@ -262,16 +267,24 @@ export default function RSSReaderPage() {
   // Auto-sync feeds on page load (lazy sync)
   useEffect(() => {
     if (isAuthenticated) {
-      fetch("/api/sync", { 
+      fetch("/api/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" }
-      }).then(() => {
+      }).then((res) => {
+        if (!res.ok) throw new Error(`Sync request failed (${res.status})`);
         if (typeof window !== "undefined") {
           localStorage.setItem("lastSync", new Date().toISOString());
         }
-      }).catch(() => {});
+      }).catch(() => {
+        // Only surface a toast for the initial load's sync failure — background
+        // refreshes (e.g. re-auth, tab refocus) shouldn't spam the user.
+        if (!initialSyncFailedToastShownRef.current) {
+          initialSyncFailedToastShownRef.current = true;
+          toast.error(t("syncFailedToast"));
+        }
+      });
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, t]);
 
   const { articles: cachedRawArticles, isOffline, hasOfflineSnapshot } = useOfflineArticleCache(rawArticles);
 
@@ -535,16 +548,29 @@ export default function RSSReaderPage() {
     if (idx === -1) return;
     const next = feedsList[(idx + direction + feedsList.length) % feedsList.length];
     if (next && next.id !== selectedFeed) {
-      // Auto-mark all articles in the current feed as read when swiping forward
+      // Auto-mark all articles in the current feed as read when swiping forward.
+      // Offer an "Undo" toast since this can happen accidentally (e.g. a swipe
+      // gesture misfiring) and there's no other confirmation step.
       if (direction === 1) {
-        markAllAsRead.mutate({ feedId: selectedFeed, category: null });
+        markAllAsRead.mutate({ feedId: selectedFeed, category: null }, {
+          onSuccess: (result) => {
+            const ids = result?.ids ?? [];
+            if (ids.length === 0) return;
+            toast(t("undoMarkAllReadMessage", { count: ids.length }), {
+              action: {
+                label: t("undo"),
+                onClick: () => markArticlesAsUnread.mutate(ids),
+              },
+            });
+          },
+        });
       }
       setSelectedFeed(next.id);
       setSelectedCategory("All");
       setSelectedArticleId(null);
       setSelectedArticleSnapshot(null);
     }
-  }, [feeds, selectedFeed, markAllAsRead]);
+  }, [feeds, selectedFeed, markAllAsRead, markArticlesAsUnread, t]);
 
   const handleToggleSort = useCallback(() => {
     setSortOrder((prev) => {
@@ -869,7 +895,7 @@ export default function RSSReaderPage() {
                 />
                 {isOffline && hasOfflineSnapshot && (
                   <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
-                    Offline mode: showing cached articles from this device.
+                    {t("offlineBannerMessage")}
                   </div>
                 )}
                 {isSpoilerCategory && !spoilerRevealed ? spoilerGate : (
@@ -1023,6 +1049,7 @@ export default function RSSReaderPage() {
           unreadOnly={unreadOnly}
           onToggleUnreadOnly={toggleUnreadOnly}
           onToggleSidebar={() => setSidebarOpen(true)}
+          sidebarOpen={sidebarOpen}
           onRefresh={handleRefresh}
           isRefreshing={articlesLoading || refresh.isPending}
           searchQuery={searchQuery}
@@ -1068,7 +1095,7 @@ export default function RSSReaderPage() {
           className="sm:max-w-xl rounded-2xl border-border/60 bg-card/95 backdrop-blur-2xl shadow-2xl p-0 gap-0 overflow-hidden"
         >
           <DialogHeader className="sr-only">
-            <DialogTitle>Search articles</DialogTitle>
+            <DialogTitle>{t("searchArticles")}</DialogTitle>
           </DialogHeader>
           <form
             onSubmit={(e) => {
@@ -1082,7 +1109,7 @@ export default function RSSReaderPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Enter search term — try author:, intitle:, is:unread, label:"
+                placeholder={tSearch("searchPlaceholder")}
                 className="border-0 bg-transparent text-base sm:text-lg font-medium focus-visible:ring-0 focus-visible:ring-offset-0 px-2 h-12 py-0 placeholder:text-muted-foreground/70"
                 autoFocus
                 enterKeyHint="search"
@@ -1104,8 +1131,8 @@ export default function RSSReaderPage() {
             </div>
             <div className="px-5 py-3 text-xs text-muted-foreground">
               {searchQuery.trim()
-                ? `${filteredArticles.length} matches across all feeds (${filteredArticles.filter((a: any) => !a.isRead).length} unread)`
-                : "Search runs globally across every feed. Tip: combine operators like intitle:AI is:unread."}
+                ? `${tSearch("matchesAcrossFeeds", { count: filteredArticles.length })} (${tSearch("unreadCount", { count: filteredArticles.filter((a: any) => !a.isRead).length })})`
+                : tSearch("globalSearchHint")}
             </div>
             <div className="flex flex-col gap-2 px-4 pb-4 sm:flex-row sm:justify-end">
               <button
@@ -1113,7 +1140,7 @@ export default function RSSReaderPage() {
                 onClick={() => setSearchOpen(false)}
                 className="order-2 sm:order-1 rounded-xl border border-border/60 bg-background/60 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
-                Cancel
+                {tSearch("cancel")}
               </button>
               <button
                 type="submit"
@@ -1121,8 +1148,8 @@ export default function RSSReaderPage() {
                 className="order-1 sm:order-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm active:scale-[0.98] transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {searchQuery.trim()
-                  ? `Show ${filteredArticles.length} result${filteredArticles.length === 1 ? "" : "s"}`
-                  : "Enter search term"}
+                  ? tSearch("showResults", { count: filteredArticles.length })
+                  : tSearch("enterSearchTerm")}
               </button>
             </div>
           </form>

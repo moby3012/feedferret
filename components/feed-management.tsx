@@ -164,18 +164,18 @@ function buildActionCatalog(labels: any[], t: (key: string) => string, channels:
   return catalog;
 }
 
-function actionLabel(value: string, catalog: ActionCatalogItem[], labels?: any[]): string {
+function actionLabel(value: string, catalog: ActionCatalogItem[], labels: any[] | undefined, t: (key: string) => string): string {
   const hit = catalog.find((item) => item.value === value);
   if (hit) return hit.label;
   if (value.startsWith("label:")) {
     const id = value.slice("label:".length);
     const lbl = labels?.find((l: any) => l.id === id);
-    return lbl ? `Attach label · ${lbl.name}` : "label (deleted)";
+    return lbl ? `${t("actions.attachLabel")} · ${lbl.name}` : t("actions.labelDeleted");
   }
   if (value.startsWith("remove_label:")) {
     const id = value.slice("remove_label:".length);
     const lbl = labels?.find((l: any) => l.id === id);
-    return lbl ? `Remove label · ${lbl.name}` : "remove label (deleted)";
+    return lbl ? `${t("actions.removeLabel")} · ${lbl.name}` : t("actions.removeLabelDeleted");
   }
   if (value.startsWith("webhook_call:")) return "webhook";
   return value;
@@ -312,7 +312,7 @@ function ActionListEditor({
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground tabular-nums shrink-0">{idx + 1}.</span>
               <span className="flex-1 truncate text-sm font-medium">
-                {isWebhook ? t("webhooks.triggerWebhook") : actionLabel(action, catalog, labels)}
+                {isWebhook ? t("webhooks.triggerWebhook") : actionLabel(action, catalog, labels, t)}
               </span>
               <button
                 type="button"
@@ -2032,7 +2032,7 @@ export function FeedManagement({
                                         key={`${rule.id}-act-${idx}-${a}`}
                                         className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground"
                                       >
-                                        {idx + 1}. {actionLabel(a, catalog, labels)}
+                                        {idx + 1}. {actionLabel(a, catalog, labels, t)}
                                       </span>
                                     ))
                                   )}

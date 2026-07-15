@@ -1575,6 +1575,11 @@ function DeleteAccountSection() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  // The required confirmation phrase and the input placeholder both derive
+  // from this single translation key so the check can never mismatch the
+  // locale shown to the user (see U-5 in the UX audit).
+  const confirmPhrase = t("deleteAccount.confirmPlaceholder");
+  const confirmMatches = confirmText.trim().toLowerCase() === confirmPhrase.trim().toLowerCase();
 
   const handleDelete = async () => {
     setLoading(true);
@@ -1637,7 +1642,7 @@ function DeleteAccountSection() {
               <Input
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                placeholder={t("deleteAccount.confirmPlaceholder")}
+                placeholder={confirmPhrase}
                 className="rounded-2xl border-border/70 bg-background/70"
               />
             </AlertDialogDescription>
@@ -1649,7 +1654,7 @@ function DeleteAccountSection() {
             <AlertDialogAction
               className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDelete}
-              disabled={confirmText !== "delete my account" || loading}
+              disabled={!confirmMatches || loading}
             >
               {loading ? t("deleteAccount.deleting") : t("deleteAccount.deletePermanently")}
             </AlertDialogAction>
@@ -1746,7 +1751,12 @@ function ApiTokenSection() {
             {t("apiTokens.description")}
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowCreate(true)} className="rounded-2xl h-9 shrink-0">
+        <Button
+          size="sm"
+          onClick={() => setShowCreate(true)}
+          className="rounded-2xl h-9 shrink-0"
+          aria-expanded={showCreate}
+        >
           <Plus className="w-4 h-4 me-1" />
           {t("apiTokens.addToken")}
         </Button>

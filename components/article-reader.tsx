@@ -30,6 +30,7 @@ import {
   Tag,
   MoreHorizontal,
   ArrowUp,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -145,10 +146,12 @@ export function ArticleReader({
   const { data: aiSettings } = useAiSettings();
   const aiSummaryEnabled = Boolean(aiSettings?.provider);
   const [localSummary, setLocalSummary] = useState<string | null>(null);
+  const [summarizeFailed, setSummarizeFailed] = useState(false);
   const summarize = useSummarizeArticle();
 
   useEffect(() => {
     setLocalSummary(null);
+    setSummarizeFailed(false);
   }, [article?.id]);
 
   useEffect(() => {
@@ -525,8 +528,15 @@ export function ArticleReader({
                     className="h-7 px-2 text-xs rounded-xl text-muted-foreground hover:text-foreground"
                     disabled={summarize.isPending}
                     onClick={async () => {
-                      const result = await summarize.mutateAsync(article.id);
-                      setLocalSummary(result.summary);
+                      setSummarizeFailed(false);
+                      try {
+                        const result = await summarize.mutateAsync(article.id);
+                        setLocalSummary(result.summary);
+                      } catch {
+                        // Error toast is shown by useSummarizeArticle's onError;
+                        // here we just track state for the inline retry hint.
+                        setSummarizeFailed(true);
+                      }
                     }}
                   >
                     {summarize.isPending ? (
@@ -540,6 +550,10 @@ export function ArticleReader({
                 </div>
                 {summary ? (
                   <p className="mt-2 text-sm leading-relaxed text-foreground/80">{summary}</p>
+                ) : summarizeFailed ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {t("summarizeFailedInline")}
+                  </p>
                 ) : (
                   <p className="mt-2 text-sm text-muted-foreground italic">
                     {t("aiSummaryHint")}
@@ -590,13 +604,23 @@ export function ArticleReader({
               <p className="text-sm text-muted-foreground mb-4">
                 {t("noContentDescription")}
               </p>
+              {isFetchingFullText && (
+                <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground" role="status" aria-live="polite">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t("fetchingFullTextStatus")}
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 <Button
                   onClick={() => onFetchFullText?.(article.id)}
                   disabled={isFetchingFullText}
                   className="rounded-xl"
                 >
-                  <Sparkles className="w-4 h-4 me-2" />
+                  {isFetchingFullText ? (
+                    <Loader2 className="w-4 h-4 me-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 me-2" />
+                  )}
                   {isFetchingFullText ? t("fetching") : t("fetchFullText")}
                 </Button>
                 <Button onClick={openOriginal} variant="outline" className="rounded-xl">

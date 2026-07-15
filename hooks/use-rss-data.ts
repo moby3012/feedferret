@@ -1,7 +1,8 @@
 "use client"
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers } from "@/app/actions/feeds"
+import { useTranslations } from "next-intl"
+import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, markArticlesAsUnread, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers } from "@/app/actions/feeds"
 import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, previewDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
 import { updateUiLanguage } from "@/app/actions/locale"
 import { toast } from "sonner"
@@ -446,6 +447,23 @@ export function useMarkAllAsRead() {
             queryClient.invalidateQueries({ queryKey: ["articles"] })
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
             queryClient.invalidateQueries({ queryKey: ["labels"] })
+        },
+    })
+}
+
+// Powers the "Undo" action on the auto-mark-all-read toast shown when
+// swiping to the next feed (see app/page.tsx navigateFeed).
+export function useMarkArticlesAsUnread() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (articleIds: string[]) => markArticlesAsUnread(articleIds),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["articles"] })
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["labels"] })
+        },
+        onError: () => {
+            toast.error("Could not undo mark-as-read. Try refreshing the page.")
         },
     })
 }
@@ -956,13 +974,14 @@ export function useTestAiConnection() {
 
 export function useSummarizeArticle() {
     const queryClient = useQueryClient()
+    const t = useTranslations("articleReader")
     return useMutation({
         mutationFn: (articleId: string) => summarizeArticle(articleId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["articles"] })
         },
         onError: (err) => {
-            toast.error(err instanceof Error ? err.message : "Summary failed. Check your AI provider settings.")
+            toast.error(err instanceof Error ? err.message : t("summarizeFailed"))
         },
     })
 }
