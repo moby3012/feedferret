@@ -168,6 +168,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-brand: var(--brand);
+  --color-brand-secondary: var(--brand-secondary);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
