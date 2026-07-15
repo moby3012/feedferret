@@ -68,6 +68,7 @@ Full guide including reverse proxy (Nginx, Caddy, Traefik), updates, and backup:
 | GDPR / right to erasure | [`docs/gdpr.md`](docs/gdpr.md) |
 | Roadmap | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 | Design audit TODO (perf/UX/security/visuals) | [`docs/design-audit-todo.md`](docs/design-audit-todo.md) |
+| Design system (radius/icon/modal conventions) | [`docs/design-system.md`](docs/design-system.md) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ---

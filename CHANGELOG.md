@@ -7,11 +7,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-Work merged since v1.1.1 (PRs #88–#102), targeting the next release.
+Work merged since v1.1.1 (PRs #88–#106), targeting the next release.
 
 ### Security
 
-A four-domain design audit (`docs/design-audit-todo.md`) was run and its findings worked through in four tiers (PRs #99–#102). Security fixes (PR #99):
+A four-domain design audit (`docs/design-audit-todo.md`) was run and **all 54 findings resolved** — the four tiers in PRs #99–#102, the deferred features in PRs #104–#106, and the design-system items documented in `docs/design-system.md`. Security fixes (PR #99):
 
 - **SSRF hardening** — auto-read-rule **webhook** actions, **Gotify/Ntfy** notification-channel URLs, and per-user **Ollama** base URLs now go through the same SSRF guard as feed fetching (blocks localhost/private/link-local, re-validates at call time). Previously any authenticated user could make the server issue requests to internal hosts or cloud metadata.
 - **Telegram mark-read links** — HMAC now uses `AUTH_SECRET` (was the never-set `NEXTAUTH_SECRET`, so a guessable open-source constant was always the signing key, allowing forged cross-tenant read/unread writes); verification is constant-time and fails closed when `AUTH_SECRET` is unset. ⚠️ *Local Ollama users:* a default `http://localhost:11434` now requires the admin to opt into internal fetching.
@@ -19,15 +19,19 @@ A four-domain design audit (`docs/design-audit-todo.md`) was run and its finding
 
 ### Added
 
+- **Indexed full-text search** (PR #104) — free-text search is now index-backed: SQLite gets an FTS5 table with the `trigram` tokenizer (substring-equivalent to the old `LIKE`, kept in sync via triggers), PostgreSQL gets `pg_trgm` GIN indexes. Setup is automatic and idempotent at startup; results are never narrower than before (LIKE fallback for <3-char terms or any FTS failure). See `docs/database.md`.
+- **Unsaved-changes warning in the feed-edit dialog** (PR #106) — closing the dialog (backdrop / Escape / X / Cancel) with pending edits now prompts to confirm; a successful save closes without the prompt.
 - **Undo for swipe-to-next-feed mark-all-read** (PR #101) — the auto-mark now shows an Undo toast (backed by a new user-scoped `markArticlesAsUnread` action).
 - **Automatic retention enforcement** (PR #100) — `defaultRetentionDays` / per-feed retention now run daily from the background scheduler (previously only via a manual settings action).
 - **Conditional GET for feed sync** (PR #100) — feeds are re-downloaded only when changed (`If-None-Match` / `If-Modified-Since`; new `Feed.etag` / `Feed.lastModifiedHeader`).
+- **Design system documentation** (`docs/design-system.md`) — formalizes the radius scale, icon-size scale and Dialog/AlertDialog conventions the codebase follows.
 
 ### Changed
 
 - **Settings page split into five themed tabs** (PR #91) — Appearance, Reading, Account, Notifications, Integrations; replaces the previous 2100+-line single scroll page. Mobile uses a Select dropdown via `ResponsiveTabsNav` (PR #92).
 - **Auth pages are now theme-aware** (PR #102) — login / register / setup used hardcoded dark styling and were unusable in light mode; they now use semantic design tokens and render correctly in both themes.
 - **Faster feed sync** (PR #100) — the per-article `findUnique → upsert → findFirst → update` loop is replaced by a batched insert/update path (one `findMany` + `createManyAndReturn` + targeted updates), with identical dedup semantics and 8 new unit tests. GReader bulk tag edits, dynamic-OPML sync and retention were similarly de-N+1'd; `getArticles` no longer serializes the full `Feed` row (incl. `authPassword`) to the client.
+- **Lighter long article lists** (PR #105) — `content-visibility:auto` + lazy images cut the layout/paint cost of long lists without changing the scroll/gesture behavior.
 
 ### Added (email digest & search — earlier in this cycle)
 
