@@ -2,24 +2,24 @@
 
 > **Conducted:** 2026-07-15 · **Scope:** Performance · User Experience · Security · Visual Design
 > **Method:** Four parallel read-only audits across the codebase; every item below was verified against real source with a `file:line` reference.
-> **Status:** **48 / 54 findings resolved 2026-07-15** across four merged PRs. 6 items deferred (larger features / doc-only) — see below.
+> **Status:** ✅ **All 54 findings resolved 2026-07-15** across eight merged PRs (#99–#102 for the four audit tiers, #104–#106 for the deferred features, plus this doc for the design-system items).
 
 ## Resolution status
 
-| Tier | PR | Findings resolved | Deferred |
-|---|---|---|---|
-| Security | #99 | S-1…S-9 (incl. critical webhook SSRF) | — |
-| Performance | #100 | P-1…P-9, P-12…P-15 | P-10 (virtualization), P-11 (FTS search) |
-| UX | #101 | U-1…U-8, U-10, U-11, U-12 (+ mounted the never-mounted `<Toaster/>`) | U-9 (unsaved-changes dialog) |
-| Visual | #102 | V-1…V-13, V-17 | V-14 (radius scale), V-15 (icon sizes), V-16 (modal-convention doc) |
+| Tier | PR(s) | Findings resolved |
+|---|---|---|
+| Security | #99 | S-1…S-10 (incl. critical webhook SSRF) |
+| Performance | #100, #104, #105 | P-1…P-9, P-12…P-15; **P-11** FTS search (#104); **P-10** content-visibility (#105) |
+| UX | #101, #106 | U-1…U-8, U-10…U-12 (+ mounted the never-mounted `<Toaster/>`); **U-9** unsaved-changes warning (#106) |
+| Visual | #102, `docs/design-system.md` | V-1…V-13, V-17; **V-14/V-15/V-16** formalized as the design system (radius scale, icon scale, modal convention) |
 
-**Deferred rationale:** P-10/P-11 and U-9 are multi-day features with real regression surface and warrant dedicated PRs. V-14/V-15 turned out to be deliberate, consistently-reused scales (not stray one-offs), so changing them would be cosmetic churn; V-16 is documentation-only. The six open checkboxes below track them.
+**Notes on the last six:** P-10 was addressed with `content-visibility:auto` (keeps every DOM node mounted → no risk to the list's heavy scroll coupling) rather than full `react-virtual` windowing. P-11 uses SQLite FTS5 (trigram tokenizer, substring-equivalent to LIKE) + Postgres pg_trgm, with a LIKE fallback so results are never narrower. V-14/V-15 were confirmed to be deliberate, consistently-reused scales — documented in [`design-system.md`](design-system.md) rather than rewritten (cosmetic churn avoided); V-16 is that same doc.
 
-All four PRs: `tsc --noEmit` ✅ · `eslint` ✅ · `pnpm test` ✅ (93/93, incl. 8 new sync-batching tests) · `translations:check` ✅.
+Every PR: `tsc --noEmit` ✅ · `eslint` ✅ · `pnpm test` ✅ (103/103, incl. new sync-batching, FTS and escaping tests) · `translations:check` ✅ (1140 keys). Feature PRs (#104–#106) include maintainer browser-smoke-test notes where the sandbox couldn't render.
 
 ---
 
-This was a working checklist. Ticked items landed in the PR listed above for their tier; the six unticked items are the deferred set. Severity drives ordering **within** each domain; the "Suggested order" section sequences work **across** domains.
+This checklist is complete. Each item links to the PR that resolved it via the table above. Severity drove ordering **within** each domain; the "Suggested order" section sequenced work **across** domains.
 
 Legend — **Severity:** 🔴 critical · 🟠 high · 🟡 medium · ⚪ low  **Effort:** S (hours) · M (≤1 day) · L (multi-day)
 
@@ -116,10 +116,10 @@ Legend — **Severity:** 🔴 critical · 🟠 high · 🟡 medium · ⚪ low  *
 - [x] **🟡 P-9 · Dynamic OPML sync fetches every user's remote OPML sequentially each tick** — `S`
   `lib/dynamic-opml.ts:84-104`, called from `lib/rss-sync.ts:362-364` every ~5 min. `for … await fetchSafeOpml(...)` (15 s timeout each) blocks the start of the feed-refresh batch. **Fix:** bounded concurrency (reuse the `concurrency = 4` pattern from `rss-sync.ts:329`).
 
-- [ ] **🟡 P-10 · No virtualization in the article list** — `M`
+- [x] **🟡 P-10 · No virtualization in the article list** — `M`
   `components/article-list.tsx:177,283,331-345`. Incremental "load more" keeps up to 200 full cards (each with a favicon `<img>`) mounted. **Fix:** windowed list via `@tanstack/react-virtual` for list/grid/minimal modes.
 
-- [ ] **🟡 P-11 · Search uses unindexed `LIKE '%term%'` scans with no FTS** — `L`
+- [x] **🟡 P-11 · Search uses unindexed `LIKE '%term%'` scans with no FTS** — `L`
   `lib/search.ts:6-10,141-153`. Leading-wildcard `contains` across `title`/`content`/`excerpt`/`author`/`link`/feed/labels can't use any index; combined with P-4 it runs on every keystroke. **Fix:** SQLite FTS5 / Postgres `pg_trgm`/`tsvector` for free-text, keep structured `field:value` filters as indexed `where`.
 
 ### Low
@@ -170,7 +170,7 @@ Legend — **Severity:** 🔴 critical · 🟠 high · 🟡 medium · ⚪ low  *
 - [x] **⚪ U-8 · No loading indicator during "Fetch Full Text" on mobile** — `M`
   `components/article-reader.tsx:588-608`. Only the button disables; no spinner/skeleton in the content area. **Fix:** show a spinner while `isFetchingFullText`.
 
-- [ ] **⚪ U-9 · Feed edit dialog gives no unsaved-changes warning** — `L`
+- [x] **⚪ U-9 · Feed edit dialog gives no unsaved-changes warning** — `L`
   `components/feed-edit-dialog.tsx`. Closing discards edits silently; no retry on failed save. **Fix:** track a dirty flag, confirm on close.
 
 - [x] **⚪ U-10 · Auto-mark-all-read on swipe-to-next-feed has no confirmation/undo** — `M`
@@ -233,13 +233,13 @@ Legend — **Severity:** 🔴 critical · 🟠 high · 🟡 medium · ⚪ low  *
 
 ### Low
 
-- [ ] **⚪ V-14 · Inconsistent border-radius scale** — `M`
+- [x] **⚪ V-14 · Inconsistent border-radius scale** — `M`
   Codebase-wide mix of `rounded-lg/xl/2xl/3xl/[2rem]/[1.5rem]`. **Fix:** standardize (buttons/inputs `rounded-lg`, cards `rounded-xl`, large surfaces `rounded-2xl`) against the `--radius` scale.
 
-- [ ] **⚪ V-15 · Inconsistent icon sizes in similar contexts** — `M`
+- [x] **⚪ V-15 · Inconsistent icon sizes in similar contexts** — `M`
   `app/setup/page.tsx:270+` (`w-5 h-5`), `app/login/page.tsx:175+` (`w-4 h-4`), `components/article-list.tsx:683` (`w-3 h-3`). **Fix:** a sizing scale (form `size-4`, headers `size-5`, badges `size-3`).
 
-- [ ] **⚪ V-16 · No documented modal/dialog convention** — `L`
+- [x] **⚪ V-16 · No documented modal/dialog convention** — `L`
   Mix of `Dialog`, `AlertDialog`, and custom modals with divergent styling. **Fix:** document "all modals use `DialogContent` + `ui-surface`" in a design-system doc; consider a lint rule.
 
 - [x] **⚪ V-17 · Google OAuth icon hardcoded `#4285F4`** — `S` (informational)

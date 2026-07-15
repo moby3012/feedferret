@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Last updated: 2026-07-15 — v1.1.1 shipped; post-release work (digest expansion, search view, settings tabs, PRs #88–#96) merged to `main`. A full design audit (performance / UX / security / visuals) was run and **48 of 54 findings resolved** across four merged PRs (#99–#102); the 6 deferred items and full status are tracked in [`design-audit-todo.md`](design-audit-todo.md). All of the above is documented in the CHANGELOG "Unreleased" section and feeds into v1.2.
+> Last updated: 2026-07-15 — v1.1.1 shipped; post-release work (digest expansion, search view, settings tabs, PRs #88–#96) merged to `main`. A full design audit (performance / UX / security / visuals) was run and **all 54 findings resolved** across eight merged PRs (#99–#102 for the four tiers, #104–#106 for the deferred features, plus `docs/design-system.md`); full status in [`design-audit-todo.md`](design-audit-todo.md). All documented in the CHANGELOG "Unreleased" section and feeds into v1.2.
 
 This file is the **top-level index**. Each release has its own detailed planning document in [`docs/releases/`](releases/).
 
