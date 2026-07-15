@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { ArrowLeft } from "lucide-react";
 import {
   Dialog,
@@ -107,6 +108,7 @@ export function SettingsPageShell({
   backHref?: string;
   className?: string;
 }) {
+  const t = useTranslations();
   return (
     <Tabs
       value={activeTab}
@@ -140,7 +142,7 @@ export function SettingsPageShell({
       <div className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-6 pb-24 lg:pb-6">
         {children}
       </div>
-      <MobileFloatingBackButton fallbackHref={backHref} />
+      <MobileFloatingBackButton fallbackHref={backHref} label={t("common.back")} />
     </Tabs>
   );
 }

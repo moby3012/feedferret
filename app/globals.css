@@ -219,14 +219,13 @@
 }
 
 @keyframes slide-in-right {
-  from { 
-    opacity: 0; 
-    transform: translateX(-16px);
-  }
-  to { 
-    opacity: 1; 
-    transform: translateX(0);
-  }
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-out-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
 }
 
 @keyframes pulse-gentle {
@@ -257,7 +256,11 @@
   }
 
   .animate-slide-in-right {
-    animation: slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: slide-in-right 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  .animate-slide-out-right {
+    animation: slide-out-right 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
   .animate-pulse-gentle {
@@ -351,24 +354,6 @@
   html.dark {
     color-scheme: dark;
   }
-}
-
-@keyframes slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-.animate-slide-in-right {
-  animation: slide-in-right 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-@keyframes slide-out-right {
-  from { transform: translateX(0); }
-  to { transform: translateX(100%); }
-}
-
-.animate-slide-out-right {
-  animation: slide-out-right 0.24s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 .app-chrome {

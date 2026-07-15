@@ -60,7 +60,7 @@ function FeedFavicon({ icon, name, size = 16, articleLink }: { icon?: string; na
 function ArticleSkeleton({ viewMode = "list" }: { viewMode?: "list" | "grid" | "magazine" | "minimal" }) {
   if (viewMode === "magazine") {
     return (
-      <div className="rounded-xl border border-border/50 bg-card overflow-hidden animate-pulse">
+      <div className="rounded-3xl border border-border/50 bg-card overflow-hidden animate-pulse">
         <div className="h-36 bg-muted" />
         <div className="p-3 space-y-2">
           <div className="h-3 bg-muted rounded w-1/3" />
@@ -72,7 +72,7 @@ function ArticleSkeleton({ viewMode = "list" }: { viewMode?: "list" | "grid" | "
   }
   if (viewMode === "minimal") {
     return (
-      <div className="flex items-center gap-2 px-1 py-1.5 animate-pulse">
+      <div className="rounded-2xl flex items-center gap-2 px-1 py-1.5 animate-pulse">
         <div className="size-3.5 rounded-full bg-muted shrink-0" />
         <div className="h-3.5 bg-muted rounded flex-1" />
         <div className="h-3 bg-muted rounded w-12 shrink-0" />
@@ -80,7 +80,7 @@ function ArticleSkeleton({ viewMode = "list" }: { viewMode?: "list" | "grid" | "
     );
   }
   return (
-    <div className="rounded-xl border border-border/50 bg-card p-3 space-y-2.5 animate-pulse">
+    <div className="rounded-2xl sm:rounded-3xl border border-border/50 bg-card p-3 space-y-2.5 animate-pulse">
       <div className="flex items-center gap-2">
         <div className="size-4 rounded-sm bg-muted shrink-0" />
         <div className="h-3 bg-muted rounded w-24" />
@@ -402,7 +402,7 @@ export function ArticleList({
           ref={contentRef}
           style={{
             transform: pullDistance > 0 ? `translateY(${pullDistance}px)` : undefined,
-            transition: isPulling ? "none" : "transform 180ms ease",
+            transition: isPulling ? "none" : "transform 180ms cubic-bezier(0.16, 1, 0.3, 1)",
           }}
           className={cn(
             "p-3 pb-28 lg:pb-3 space-y-2.5",
@@ -596,14 +596,14 @@ function ArticlePreview({
           "border-s-4",
           isSelected
             ? "bg-accent/10 ring-1 ring-accent/20"
-            : "hover:bg-muted/50",
+            : "hover:bg-card/80",
           !article.isRead ? "border-brand" : "border-transparent",
         )}
       >
         <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={14} />
         {!article.isRead && <CircleDot className="w-3 h-3 text-brand shrink-0" />}
-        <h3 className={cn("flex-1 text-sm truncate", !article.isRead && "font-semibold")}>{article.title}</h3>
-        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+        <h3 className={cn("flex-1 text-sm truncate", !article.isRead ? "font-semibold" : "font-medium text-foreground/75")}>{article.title}</h3>
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
           {formatDate(article.publishedAt)}
         </span>
         {/* Action buttons */}
@@ -646,7 +646,7 @@ function ArticlePreview({
         aria-pressed={isSelected}
         className={cn(
           "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          isSelected && "ring-2 ring-brand border-brand",
+          isSelected && "ring-2 ring-accent border-accent",
           !article.isRead && "ring-1 ring-brand/20",
         )}
       >
@@ -658,7 +658,7 @@ function ArticlePreview({
               fill
               loading="lazy"
               sizes="(max-width: 640px) 100vw, 400px"
-              className="object-cover transition-transform duration-700 hover:scale-110"
+              className="object-cover transition-transform duration-500 hover:scale-105"
             />
             <div className="absolute top-3 start-3 flex items-center gap-1.5 px-2 py-1 bg-background/60 backdrop-blur-md rounded-lg text-foreground text-[10px] font-bold">
               <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={12} />
@@ -675,7 +675,7 @@ function ArticlePreview({
           </div>
         )}
         <div className="p-4 space-y-3">
-          <h3 className={cn("text-lg leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]", article.isRead ? "font-semibold text-foreground/75" : "font-bold")}>
+          <h3 className={cn("text-lg leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]", article.isRead ? "font-medium text-foreground/75" : "font-semibold")}>
             {article.title}
           </h3>
           <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed break-words [overflow-wrap:anywhere]">
@@ -821,7 +821,7 @@ function ArticlePreview({
 
           <h3
             className={cn(
-              "text-[0.98rem] sm:text-[1rem] leading-snug mb-2 line-clamp-2 text-balance transition-colors duration-200 tracking-[-0.015em] break-words [overflow-wrap:anywhere]",
+              "text-[0.98rem] sm:text-[1rem] leading-snug mb-2 line-clamp-2 text-balance transition-colors duration-200 tracking-[-0.02em] break-words [overflow-wrap:anywhere]",
               !article.isRead
                 ? "font-semibold text-foreground"
                 : "font-medium text-foreground/75",

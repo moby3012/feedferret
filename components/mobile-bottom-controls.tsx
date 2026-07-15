@@ -163,7 +163,7 @@ export function MobileBottomControls({
           type="button"
           variant="ghost"
           className={cn(
-            "h-10 min-w-0 flex-1 rounded-2xl px-3 text-xs font-bold uppercase tracking-[0.16em] active:scale-[0.98] transition-all duration-200",
+            "h-10 min-w-0 flex-1 rounded-2xl px-3 text-xs font-bold uppercase tracking-wider active:scale-[0.98] transition-all duration-200",
             unreadOnly
               ? "bg-accent text-accent-foreground shadow-lg shadow-accent/20"
               : "bg-muted/70 text-foreground",

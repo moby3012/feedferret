@@ -257,7 +257,7 @@ export function ArticleReader({
               className="w-12 h-12 invert dark:invert-0"
             />
           </div>
-          <h2 className="text-2xl font-bold text-foreground mb-3 text-balance">
+          <h2 className="text-2xl font-semibold text-foreground mb-3 text-balance">
             {t("selectArticle")}
           </h2>
           <p className="text-lg text-muted-foreground leading-relaxed">
@@ -341,7 +341,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => onToggleStar(article.id)}
             aria-label={article.isStarred ? tList("removeStar") : tList("star")}
             aria-pressed={article.isStarred}
@@ -349,7 +349,7 @@ export function ArticleReader({
           >
             <Star
               className={cn(
-                "w-5 h-5 transition-all duration-300",
+                "w-4 h-4 transition-all duration-300",
                 article.isStarred
                   ? "text-amber-500 fill-amber-500 scale-110"
                   : "text-muted-foreground hover:text-amber-400",
@@ -360,7 +360,7 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className={cn(
-              "w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
+              "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
               article.isReadLater && "bg-accent/10",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
@@ -370,7 +370,7 @@ export function ArticleReader({
           >
             <Bookmark
               className={cn(
-                "w-5 h-5 transition-all duration-300",
+                "w-4 h-4 transition-all duration-300",
                 article.isReadLater
                   ? "text-accent fill-accent scale-110"
                   : "text-muted-foreground hover:text-accent",
@@ -380,65 +380,65 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={() => onToggleRead?.(article.id)}
             aria-label={article.isRead ? tList("markAsUnread") : tList("markAsRead")}
             aria-pressed={article.isRead}
             title={article.isRead ? tList("markAsUnread") : tList("markAsRead")}
           >
             {article.isRead ? (
-              <Circle className="w-5 h-5 text-muted-foreground" />
+              <Circle className="w-4 h-4 text-muted-foreground" />
             ) : (
-              <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
+              <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
             )}
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={shareArticle}
             aria-label={t("share")}
             title={t("share")}
           >
-            <Share2 className="w-5 h-5 text-muted-foreground" />
+            <Share2 className="w-4 h-4 text-muted-foreground" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={openOriginal}
             disabled={!article.link}
             aria-label={t("openOriginal")}
             title={t("openOriginal")}
           >
-            <ExternalLink className="w-5 h-5 text-muted-foreground" />
+            <ExternalLink className="w-4 h-4 text-muted-foreground" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
             onClick={copyLink}
             disabled={!article.link}
             aria-label={t("copyLink")}
             title={t("copyLink")}
           >
-            <Copy className="w-5 h-5 text-muted-foreground" />
+            <Copy className="w-4 h-4 text-muted-foreground" />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="w-11 h-11 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
                 aria-label={t("labels")}
                 title={t("labels")}
               >
-                <Tag className="w-5 h-5 text-muted-foreground" />
+                <Tag className="w-4 h-4 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="w-56 rounded-2xl border-border/70 bg-popover/95 p-2 shadow-2xl backdrop-blur-xl"
+              className="w-56 rounded-2xl p-2"
             >
               <DropdownMenuLabel className="text-xs text-muted-foreground">
                 {t("labels")}
@@ -482,7 +482,7 @@ export function ArticleReader({
         <article aria-labelledby="article-title" className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-28 sm:px-8 sm:py-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">
-            <h1 id="article-title" className="text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.035em] break-words [overflow-wrap:anywhere]">
+            <h1 id="article-title" className="text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.04em] break-words [overflow-wrap:anywhere]">
               {article.title}
             </h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
@@ -572,7 +572,7 @@ export function ArticleReader({
                   alt=""
                   fill
                   sizes="(max-width: 640px) 100vw, 800px"
-                  className="object-cover transition-transform duration-700 hover:scale-105"
+                  className="object-cover transition-transform duration-500 hover:scale-105"
                 />
               </div>
             </figure>
@@ -721,7 +721,7 @@ export function ArticleReader({
             <DropdownMenuContent
               align="end"
               sideOffset={12}
-              className="mb-2 w-64 rounded-3xl border-border/70 bg-popover/95 p-2 shadow-2xl backdrop-blur-xl"
+              className="mb-2 w-64 rounded-3xl p-2"
             >
               <DropdownMenuItem className="rounded-2xl py-3" onClick={scrollReaderToTop}>
                 <ArrowUp className="me-3 h-4 w-4" />
