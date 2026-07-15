@@ -7,21 +7,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-Work merged since v1.1.1 (PRs #88–#96), targeting the next release.
+Work merged since v1.1.1 (PRs #88–#102), targeting the next release.
+
+### Security
+
+A four-domain design audit (`docs/design-audit-todo.md`) was run and its findings worked through in four tiers (PRs #99–#102). Security fixes (PR #99):
+
+- **SSRF hardening** — auto-read-rule **webhook** actions, **Gotify/Ntfy** notification-channel URLs, and per-user **Ollama** base URLs now go through the same SSRF guard as feed fetching (blocks localhost/private/link-local, re-validates at call time). Previously any authenticated user could make the server issue requests to internal hosts or cloud metadata.
+- **Telegram mark-read links** — HMAC now uses `AUTH_SECRET` (was the never-set `NEXTAUTH_SECRET`, so a guessable open-source constant was always the signing key, allowing forged cross-tenant read/unread writes); verification is constant-time and fails closed when `AUTH_SECRET` is unset. ⚠️ *Local Ollama users:* a default `http://localhost:11434` now requires the admin to opt into internal fetching.
+- **Timing-safe comparison** for the internal provisioning API key; **`/api/register`** now rate-limited and zod-validated; web-push `endpoint` validated; `categoryId` ownership verified before attaching to a feed.
 
 ### Added
+
+- **Undo for swipe-to-next-feed mark-all-read** (PR #101) — the auto-mark now shows an Undo toast (backed by a new user-scoped `markArticlesAsUnread` action).
+- **Automatic retention enforcement** (PR #100) — `defaultRetentionDays` / per-feed retention now run daily from the background scheduler (previously only via a manual settings action).
+- **Conditional GET for feed sync** (PR #100) — feeds are re-downloaded only when changed (`If-None-Match` / `If-Modified-Since`; new `Feed.etag` / `Feed.lastModifiedHeader`).
+
+### Changed
+
+- **Settings page split into five themed tabs** (PR #91) — Appearance, Reading, Account, Notifications, Integrations; replaces the previous 2100+-line single scroll page. Mobile uses a Select dropdown via `ResponsiveTabsNav` (PR #92).
+- **Auth pages are now theme-aware** (PR #102) — login / register / setup used hardcoded dark styling and were unusable in light mode; they now use semantic design tokens and render correctly in both themes.
+- **Faster feed sync** (PR #100) — the per-article `findUnique → upsert → findFirst → update` loop is replaced by a batched insert/update path (one `findMany` + `createManyAndReturn` + targeted updates), with identical dedup semantics and 8 new unit tests. GReader bulk tag edits, dynamic-OPML sync and retention were similarly de-N+1'd; `getArticles` no longer serializes the full `Feed` row (incl. `authPassword`) to the client.
+
+### Added (email digest & search — earlier in this cycle)
 
 - **Expanded email digest** (PR #95) — configurable article count with min/max thresholds, fixed lookback windows (6 h–30 d), IANA-timezone-aware scheduling, weekdays frequency, feed-grouped layout, and optional AI summaries (overall or per feed) via the user's configured AI provider.
 - **Digest polish** (PR #96) — deduplication of already-featured articles (`Article.digestedAt` + `digestSkipFeatured` setting), label filter alongside the feed filter, pause mode with duration picker (tomorrow / 3 d / 1 w / 2 w / indefinite), article-count preview with feed breakdown, RFC 8058 `List-Unsubscribe` / `List-Unsubscribe-Post` headers across all mail providers, and AI-generated subject lines when AI summary mode is active.
 - **Dedicated search results view** (PR #93) — new `SearchResultsView` with a header showing the active query, result/unread counts, a prominent close button and an edit-query affordance; mobile bottom controls gain a search-active variant with thumb-reachable actions. New `searchResults` i18n namespace (de/en).
 - **Granular SMTP TLS settings** (PR #89) — new `smtpSecure` (auto/ssl/starttls/plain) and `smtpRejectUnauthorized` fields so admins can explicitly control TLS mode instead of relying on port-based auto-detection.
 
-### Changed
-
-- **Settings page split into five themed tabs** (PR #91) — Appearance, Reading, Account, Notifications, Integrations; replaces the previous 2100+-line single scroll page. Mobile uses a Select dropdown via `ResponsiveTabsNav` (PR #92).
-
 ### Fixed
 
+- **UX / i18n polish** (PR #101) — extracted the remaining hardcoded strings (search modal, spoiler gate, offline banner, rules-action labels) into the i18n message files; search counts use proper ICU plurals; the delete-account confirm phrase now derives from the same translation key as its placeholder (was unsatisfiable for non-English users); summarize failures surface a toast + inline message; the "Fetch Full Text" action shows a spinner; added `aria-expanded`/`aria-label` to settings disclosures, the mobile sidebar toggle and the sidebar category chevron. Also **mounted `<Toaster/>`** — it was never mounted, so every `toast.*` call in the app had been a silent no-op.
+- **Visual token discipline** (PR #102) — restored visible keyboard focus rings on auth inputs and nav-menu links (WCAG 2.4.7); tokenized custom toggle-switch knobs, loading spinners, feed-name badges and the theme-color applier so they render correctly in both themes.
 - **SMTP authentication** (PR #89) — `smtpPassword` was stored AES-encrypted but passed raw to nodemailer, causing 535 auth failures; it is now decrypted before sending.
 - **Search spans hidden feeds** (PR #94) — global search no longer applies the `hideFromAllFeeds` exclusion, so articles in feeds hidden from "All Articles" are findable again. Browsing and mark-all-read keep the exclusion.
 - **Mark-all-read respects hidden feeds** (PR #88) — "Mark all read" in the All Articles scope no longer touches articles from feeds/categories marked `hideFromAllFeeds`.
