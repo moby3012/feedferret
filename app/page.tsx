@@ -709,15 +709,25 @@ export default function RSSReaderPage() {
   }, [handleSelectArticle, handleToggleStar, handleToggleReadLater, handleToggleRead, handleRefresh, handleMarkAllRead, selectedArticleSnapshot, handleSaveSearch]);
 
   useEffect(() => {
-    async function checkSetup() {
-      if (status === "unauthenticated") {
+    if (status !== "unauthenticated") return;
+    let cancelled = false;
+    async function redirectUnauthenticated() {
+      // First run (no account yet) → onboarding; otherwise the session is
+      // missing/expired → send the user to log in instead of leaving them
+      // stranded on an empty feed view. router.replace so the dead-end page
+      // doesn't end up in history.
+      try {
         const hasExistingUsers = await hasUsers();
-        if (!hasExistingUsers) {
-          router.push("/setup");
-        }
+        if (cancelled) return;
+        router.replace(hasExistingUsers ? "/login" : "/setup");
+      } catch {
+        if (!cancelled) router.replace("/login");
       }
     }
-    checkSetup();
+    redirectUnauthenticated();
+    return () => {
+      cancelled = true;
+    };
   }, [status, router]);
 
   useEffect(() => {
@@ -727,7 +737,9 @@ export default function RSSReaderPage() {
     }
   }, [handleKeyDown]);
 
-  if (status === "loading") {
+  // While loading, or while the unauthenticated redirect above is in flight,
+  // show the loader instead of flashing the empty (feed-less) app shell.
+  if (status === "loading" || status === "unauthenticated") {
     return (
       <div className="h-dvh flex items-center justify-center bg-background">
         <div className="relative w-20 h-20">
