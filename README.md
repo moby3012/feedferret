@@ -2,7 +2,7 @@
 
 A self-hosted, multi-user RSS reader with a modern reading experience, power-user automation, and native client compatibility.
 
-> **Self-hosted · Multi-user · PWA · Google Reader API · REST API + MCP · MIT License**
+> **Self-hosted · Multi-user · PWA · Google Reader API · REST API + MCP · AGPL-3.0 License**
 
 ---
 
@@ -67,20 +67,23 @@ Full guide including reverse proxy (Nginx, Caddy, Traefik), updates, and backup:
 | Security | [`docs/security.md`](docs/security.md) |
 | GDPR / right to erasure | [`docs/gdpr.md`](docs/gdpr.md) |
 | Roadmap | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
+| Design audit TODO (perf/UX/security/visuals) | [`docs/design-audit-todo.md`](docs/design-audit-todo.md) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ---
 
 ## 🛠 Tech Stack
 
-Next.js 16 · React 19 · TypeScript 5 · Prisma 5 · PostgreSQL / SQLite · Tailwind CSS v4 · shadcn/ui · Auth.js v5 · TanStack Query
+Next.js 16 · React 19 · TypeScript 6 · Prisma 7 · PostgreSQL / SQLite · Tailwind CSS v4 · shadcn/ui · Auth.js v5 · next-intl · TanStack Query
 
 ---
 
 ## 📊 Status
 
-**v1.0.0** — production ready.  
-`pnpm run build` ✅ · `pnpm run lint` ✅ · `tsc --noEmit` ✅ · CI on every PR ✅
+**v1.1.1** — production ready. English + German UI (i18n via next-intl).  
+`pnpm run build` ✅ · `pnpm run lint` ✅ · `tsc --noEmit` ✅ · `pnpm test` ✅ · CI on every PR ✅
+
+See [`CHANGELOG.md`](CHANGELOG.md) for released changes and the Unreleased section for what's landed since, and [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next (v1.2: Theming & Accessibility).
 
 ---
 
