@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export function MobileFloatingBackButton({
   fallbackHref = "/",
-  label = "Zurück",
+  label = "Back",
 }: {
   fallbackHref?: string;
   label?: string;

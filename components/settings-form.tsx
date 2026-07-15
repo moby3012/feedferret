@@ -606,7 +606,7 @@ export function SettingsForm() {
 
         </Tabs>
       </div>
-      <MobileFloatingBackButton fallbackHref="/" />
+      <MobileFloatingBackButton fallbackHref="/" label={t("common.back")} />
     </main>
   );
 }
