@@ -8,7 +8,7 @@ import {
   parseIntLike,
   parseJsonObject,
 } from "./feed-extraction";
-import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
+import { fetchWithSsrfProtection, isTrustedFeedFetchingAllowed, type ConditionalFetchResult } from "./ssrf";
 import { logger } from "./logger";
 
 export type FeedFetchConfig = {
@@ -24,6 +24,9 @@ export type FeedFetchConfig = {
   maxSizeKb?: number | null;
   scraperConfig?: string | null;
   httpOptions?: string | null;
+  /** Previously-stored conditional-GET headers; when present, sent as If-None-Match / If-Modified-Since. */
+  etag?: string | null;
+  lastModifiedHeader?: string | null;
 };
 
 export type FetchedFeedArticle = {
@@ -43,6 +46,11 @@ export type FetchedFeed = {
   description?: string | null;
   htmlUrl?: string | null;
   articles: FetchedFeedArticle[];
+  /** True when the server responded 304 Not Modified — `articles` will be empty and callers should skip processing. */
+  notModified?: boolean;
+  /** New `ETag`/`Last-Modified` response headers, to be persisted for the next conditional GET. */
+  etag?: string | null;
+  lastModifiedHeader?: string | null;
 };
 
 const parser = new Parser();
@@ -207,10 +215,12 @@ function headersFromFeed(feed: FeedFetchConfig, http: FeedHttpOptions) {
     headers.Authorization = `Basic ${Buffer.from(creds).toString("base64")}`;
   }
   if (http.CURLOPT_COOKIE) headers.Cookie = String(http.CURLOPT_COOKIE);
+  if (feed.etag) headers["If-None-Match"] = feed.etag;
+  if (feed.lastModifiedHeader) headers["If-Modified-Since"] = feed.lastModifiedHeader;
   return headers;
 }
 
-async function fetchText(feed: FeedFetchConfig, accept: string) {
+async function fetchText(feed: FeedFetchConfig, accept: string): Promise<ConditionalFetchResult> {
   const http = parseHttpOptions(feed);
   const timeoutMs = (feed.fetchTimeoutSecs ?? 30) * 1000;
   const maxBytes = feed.maxSizeKb ? feed.maxSizeKb * 1024 : 5 * 1024 * 1024;
@@ -240,7 +250,7 @@ async function fetchText(feed: FeedFetchConfig, accept: string) {
     }
   }
 
-  return fetchTextWithSsrfProtection(feed.url, init, {
+  return fetchWithSsrfProtection(feed.url, init, {
     allowInternal: await isTrustedFeedFetchingAllowed(),
     context: "Feed fetch",
     maxBytes,
@@ -249,13 +259,23 @@ async function fetchText(feed: FeedFetchConfig, accept: string) {
   });
 }
 
-async function fetchRssOrAtom(feed: FeedFetchConfig) {
-  const raw = await fetchText(feed, "application/rss+xml,application/atom+xml,application/xml,text/xml,*/*");
-  const parsed = await parser.parseString(raw);
+const NOT_MODIFIED_FEED: FetchedFeed = { articles: [], notModified: true };
+
+function notModifiedResult(result: Extract<ConditionalFetchResult, { notModified: true }>): FetchedFeed {
+  return { ...NOT_MODIFIED_FEED, etag: result.etag, lastModifiedHeader: result.lastModified };
+}
+
+async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
+  const result = await fetchText(feed, "application/rss+xml,application/atom+xml,application/xml,text/xml,*/*");
+  if (result.notModified) return notModifiedResult(result);
+
+  const parsed = await parser.parseString(result.text);
   return {
     title: parsed.title,
     description: parsed.description,
     htmlUrl: parsed.link,
+    etag: result.etag,
+    lastModifiedHeader: result.lastModified,
     articles: parsed.items.map((item: any) => {
       const content = item.content || item["content:encoded"] || item.summary || item.contentSnippet || "";
       return {
@@ -278,26 +298,46 @@ export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedF
   const scraperConfig = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
 
   if (sourceType === "JSONFeed" || sourceType === "JSON+DotNotation") {
-    const raw = await fetchText(feed, "application/feed+json,application/json,*/*");
-    return buildJsonArticles(JSON.parse(raw), scraperConfig);
+    const result = await fetchText(feed, "application/feed+json,application/json,*/*");
+    if (result.notModified) return notModifiedResult(result);
+    return {
+      ...buildJsonArticles(JSON.parse(result.text), scraperConfig),
+      etag: result.etag,
+      lastModifiedHeader: result.lastModified,
+    };
   }
 
   if (sourceType === "HTML+XPath") {
-    const raw = await fetchText(feed, "text/html,application/xhtml+xml,*/*");
-    return buildXPathArticles(raw, feed.url, scraperConfig, "text/html");
+    const result = await fetchText(feed, "text/html,application/xhtml+xml,*/*");
+    if (result.notModified) return notModifiedResult(result);
+    return {
+      ...buildXPathArticles(result.text, feed.url, scraperConfig, "text/html"),
+      etag: result.etag,
+      lastModifiedHeader: result.lastModified,
+    };
   }
 
   if (sourceType === "XML+XPath") {
-    const raw = await fetchText(feed, "application/xml,text/xml,*/*");
-    return buildXPathArticles(raw, feed.url, scraperConfig, "text/xml");
+    const result = await fetchText(feed, "application/xml,text/xml,*/*");
+    if (result.notModified) return notModifiedResult(result);
+    return {
+      ...buildXPathArticles(result.text, feed.url, scraperConfig, "text/xml"),
+      etag: result.etag,
+      lastModifiedHeader: result.lastModified,
+    };
   }
 
   if (sourceType === "HTML+XPath+JSON+DotNotation") {
-    const raw = await fetchText(feed, "text/html,application/xhtml+xml,*/*");
-    const dom = new JSDOM(raw, { url: feed.url, contentType: "text/html" });
+    const result = await fetchText(feed, "text/html,application/xhtml+xml,*/*");
+    if (result.notModified) return notModifiedResult(result);
+    const dom = new JSDOM(result.text, { url: feed.url, contentType: "text/html" });
     const xpath = new dom.window.XPathEvaluator();
     const jsonText = evaluateString(xpath, scraperConfig.xPathToJson, dom.window.document);
-    return buildJsonArticles(JSON.parse(jsonText), scraperConfig);
+    return {
+      ...buildJsonArticles(JSON.parse(jsonText), scraperConfig),
+      etag: result.etag,
+      lastModifiedHeader: result.lastModified,
+    };
   }
 
   return fetchRssOrAtom(feed);

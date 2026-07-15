@@ -44,6 +44,7 @@ import { hasUsers } from "./actions/onboarding";
 import { useRouter } from "next/navigation";
 import { useAppBadge, useUnreadBadgeCount } from "@/hooks/use-app-badge";
 import { useOfflineArticleCache } from "@/hooks/use-offline-articles";
+import { useDebounce } from "@/hooks/use-debounce";
 
 const ssrSafeStorage = {
   getItem: (key: string) => (typeof window !== "undefined" ? localStorage.getItem(key) : null),
@@ -104,11 +105,12 @@ export default function RSSReaderPage() {
   const isAuthenticated = status === "authenticated";
 
   const { data: feeds = [], isLoading: feedsLoading } = useFeeds(isAuthenticated);
-  const isSearchActive = Boolean(searchQuery.trim());
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const isSearchActive = Boolean(debouncedSearchQuery.trim());
   const { data: rawArticles = [], isLoading: articlesLoading } = useArticles(
     isSearchActive ? null : selectedFeed,
     isSearchActive ? "All Articles" : selectedCategory,
-    searchQuery || undefined,
+    debouncedSearchQuery || undefined,
     isAuthenticated,
   );
 

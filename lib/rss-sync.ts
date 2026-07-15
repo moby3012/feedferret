@@ -1,5 +1,4 @@
 import { db } from "./db";
-import { getEffectiveSettings } from "./settings";
 import { applyAutoReadRules } from "./auto-read-rules";
 import { applyKeywordAlerts } from "./keyword-alerts";
 import { queueNewArticleNotifications } from "./notifications";
@@ -18,6 +17,260 @@ async function getSanitizer() {
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 
+export interface ArticleSyncInput {
+    feedId: string;
+    userId: string;
+    title: string;
+    link: string;
+    externalId: string | null;
+    dedupeKey: string;
+    contentHash: string | null;
+    content: string;
+    excerpt: string;
+    author: string | null;
+    publishedAt: Date;
+    imageUrl?: string | null;
+}
+
+export interface ArticleSyncResult {
+    upsertedIds: string[];
+    createdArticleIds: string[];
+}
+
+// The fields the original per-article `upsert.update` clause overwrote on an existing
+// row. Kept as a single list so the "did anything actually change" comparison and the
+// update payload can't drift apart.
+function updatableFields(article: ArticleSyncInput) {
+    return {
+        title: article.title,
+        link: article.link,
+        externalId: article.externalId,
+        content: article.content,
+        excerpt: article.excerpt,
+        author: article.author,
+        publishedAt: article.publishedAt,
+        imageUrl: article.imageUrl ?? null,
+    };
+}
+
+/**
+ * Folds articles that share a dedupe key within the same batch down to one entry,
+ * mirroring what a sequential `upsert` loop over the same array would leave in the
+ * DB: the first occurrence's identity (id-defining fields: dedupeKey/contentHash) is
+ * kept, but the overwritable fields end up with the *last* occurrence's values,
+ * since each subsequent upsert in the original loop would overwrite them again.
+ * This also sidesteps a `createMany` unique-constraint violation when a feed's
+ * `unicityCriteria` is loose enough to produce duplicate keys within one fetch.
+ */
+function foldByDedupeKey(articles: ArticleSyncInput[]): ArticleSyncInput[] {
+    const order: string[] = [];
+    const byKey = new Map<string, ArticleSyncInput>();
+    for (const article of articles) {
+        const prior = byKey.get(article.dedupeKey);
+        if (!prior) {
+            order.push(article.dedupeKey);
+            byKey.set(article.dedupeKey, article);
+        } else {
+            byKey.set(article.dedupeKey, { ...prior, ...updatableFields(article) });
+        }
+    }
+    return order.map((key) => byKey.get(key)!);
+}
+
+/**
+ * Batches what used to be a per-article `findUnique` -> `upsert` -> cross-feed
+ * `findFirst` -> conditional `update` loop (P-1) into a small, fixed number of
+ * queries regardless of batch size:
+ *  1. one `findMany` to load existing rows for the batch's dedupe keys
+ *  2. one `createManyAndReturn` for genuinely-new articles
+ *  3. individual `update`s only for existing rows whose fetched fields actually
+ *     differ from what's stored (an unconditional overwrite would otherwise just
+ *     rewrite identical data)
+ *  4. one `findMany` over the batch's content hashes for cross-feed duplicate
+ *     detection, resolved in memory, instead of one `findFirst` per new article
+ *
+ * Dedupe semantics are unchanged: the same `userId_feedId_dedupeKey` identifies an
+ * "existing" row, and cross-feed duplicate linking still picks the earliest-created
+ * non-duplicate article sharing a `contentHash` as canonical — including another
+ * article created earlier in this same batch, which the original sequential loop
+ * would also have seen (each iteration's insert was committed, and thus visible,
+ * before the next iteration's duplicate check ran).
+ */
+export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promise<ArticleSyncResult> {
+    if (rawArticles.length === 0) return { upsertedIds: [], createdArticleIds: [] };
+
+    const articles = foldByDedupeKey(rawArticles);
+    const { userId, feedId } = articles[0];
+    const dedupeKeys = articles.map((a) => a.dedupeKey);
+
+    const existingRows = await db.article.findMany({
+        where: { userId, feedId, dedupeKey: { in: dedupeKeys } },
+        select: {
+            id: true,
+            dedupeKey: true,
+            title: true,
+            link: true,
+            externalId: true,
+            content: true,
+            excerpt: true,
+            author: true,
+            publishedAt: true,
+            imageUrl: true,
+        },
+    });
+    const existingByDedupeKey = new Map(
+        existingRows
+            .filter((row) => row.dedupeKey !== null)
+            .map((row) => [row.dedupeKey as string, row] as const),
+    );
+
+    const upsertedIds: string[] = [];
+    const newArticles: ArticleSyncInput[] = [];
+
+    for (const article of articles) {
+        const existing = existingByDedupeKey.get(article.dedupeKey);
+        if (!existing) {
+            newArticles.push(article);
+            continue;
+        }
+
+        upsertedIds.push(existing.id);
+
+        const next = updatableFields(article);
+        const changed =
+            existing.title !== next.title ||
+            existing.link !== next.link ||
+            existing.externalId !== next.externalId ||
+            existing.content !== next.content ||
+            existing.excerpt !== next.excerpt ||
+            existing.author !== next.author ||
+            existing.publishedAt.getTime() !== next.publishedAt.getTime() ||
+            (existing.imageUrl ?? null) !== next.imageUrl;
+
+        if (changed) {
+            await db.article.update({ where: { id: existing.id }, data: next });
+        }
+    }
+
+    const createdArticleIds: string[] = [];
+
+    if (newArticles.length > 0) {
+        // Cross-feed duplicate candidates that existed *before* this batch, queried
+        // up front (before any inserts) so real historical creation order can't get
+        // entangled with same-batch rows that may share an identical DB timestamp.
+        const contentHashes = Array.from(
+            new Set(newArticles.map((a) => a.contentHash).filter((hash): hash is string => !!hash)),
+        );
+        const preExistingCandidates = contentHashes.length > 0
+            ? await db.article.findMany({
+                where: { userId, contentHash: { in: contentHashes }, isDuplicate: false },
+                orderBy: { createdAt: "asc" },
+                select: { id: true, contentHash: true },
+            })
+            : [];
+
+        let created: { id: string; dedupeKey: string | null; contentHash: string | null }[];
+        try {
+            created = await db.article.createManyAndReturn({
+                data: newArticles.map((article) => ({
+                    feedId: article.feedId,
+                    userId: article.userId,
+                    title: article.title,
+                    link: article.link,
+                    externalId: article.externalId,
+                    dedupeKey: article.dedupeKey,
+                    contentHash: article.contentHash,
+                    content: article.content,
+                    excerpt: article.excerpt,
+                    author: article.author,
+                    publishedAt: article.publishedAt,
+                    imageUrl: article.imageUrl ?? null,
+                })),
+                select: { id: true, dedupeKey: true, contentHash: true },
+            });
+        } catch (error) {
+            // A concurrent sync of the same feed could race us on the unique
+            // (userId, feedId, dedupeKey) constraint that `createMany` doesn't
+            // resolve the way `upsert` does. Fall back to per-row upserts for just
+            // this batch of new articles rather than failing the whole sync.
+            logger.warn("[rss-sync] batched article insert conflicted, falling back to per-row upsert:", error);
+            created = [];
+            for (const article of newArticles) {
+                const row = await db.article.upsert({
+                    where: {
+                        userId_feedId_dedupeKey: {
+                            userId: article.userId,
+                            feedId: article.feedId,
+                            dedupeKey: article.dedupeKey,
+                        },
+                    },
+                    update: updatableFields(article),
+                    create: {
+                        feedId: article.feedId,
+                        userId: article.userId,
+                        title: article.title,
+                        link: article.link,
+                        externalId: article.externalId,
+                        dedupeKey: article.dedupeKey,
+                        contentHash: article.contentHash,
+                        content: article.content,
+                        excerpt: article.excerpt,
+                        author: article.author,
+                        publishedAt: article.publishedAt,
+                        imageUrl: article.imageUrl ?? null,
+                    },
+                    select: { id: true, dedupeKey: true, contentHash: true },
+                });
+                created.push(row);
+            }
+        }
+
+        for (const row of created) {
+            upsertedIds.push(row.id);
+            createdArticleIds.push(row.id);
+        }
+
+        // Resolve which article is canonical per content hash: a pre-existing
+        // article always wins (it was necessarily created before "now"); failing
+        // that, the first new article for that hash *in original fetch order*
+        // becomes canonical, matching what the sequential loop would have left as
+        // non-duplicate (the first one processed finds no candidate yet).
+        const canonicalByHash = new Map<string, string>();
+        for (const row of preExistingCandidates) {
+            if (row.contentHash && !canonicalByHash.has(row.contentHash)) {
+                canonicalByHash.set(row.contentHash, row.id);
+            }
+        }
+
+        const createdIdByDedupeKey = new Map(
+            created.filter((row) => row.dedupeKey !== null).map((row) => [row.dedupeKey as string, row.id]),
+        );
+        for (const article of newArticles) {
+            if (!article.contentHash) continue;
+            const createdId = createdIdByDedupeKey.get(article.dedupeKey);
+            if (!createdId) continue;
+            if (!canonicalByHash.has(article.contentHash)) {
+                canonicalByHash.set(article.contentHash, createdId);
+            }
+        }
+
+        for (const article of newArticles) {
+            if (!article.contentHash) continue;
+            const createdId = createdIdByDedupeKey.get(article.dedupeKey);
+            if (!createdId) continue;
+            const canonicalId = canonicalByHash.get(article.contentHash);
+            if (canonicalId && canonicalId !== createdId) {
+                await db.article.update({
+                    where: { id: createdId },
+                    data: { isDuplicate: true, duplicateOf: canonicalId },
+                });
+            }
+        }
+    }
+
+    return { upsertedIds, createdArticleIds };
+}
+
 /**
  * Syncs a single feed for a specific user.
  */
@@ -31,10 +284,31 @@ export async function syncFeed(userId: string, feedId: string) {
     try {
         const remoteFeed = await fetchFeedArticles(feed);
 
+        if (remoteFeed.notModified) {
+            // Conditional GET (P-2): server confirmed nothing changed since our last
+            // fetch, so skip article processing entirely. A 304 response is allowed
+            // to omit ETag/Last-Modified (RFC 7232) — only overwrite our stored
+            // values if the server actually repeated them; otherwise keep what we
+            // have so the next request can still send a conditional GET.
+            await db.feed.update({
+                where: { id: feed.id },
+                data: {
+                    lastFetchedAt: new Date(),
+                    lastStatus: "ok",
+                    lastError: null,
+                    ...(remoteFeed.etag ? { etag: remoteFeed.etag } : {}),
+                    ...(remoteFeed.lastModifiedHeader ? { lastModifiedHeader: remoteFeed.lastModifiedHeader } : {}),
+                },
+            });
+            return { success: true, count: 0, createdArticleIds: [] };
+        }
+
         const feedPatch: any = {
             lastFetchedAt: new Date(),
             lastStatus: "ok",
             lastError: null,
+            etag: remoteFeed.etag ?? null,
+            lastModifiedHeader: remoteFeed.lastModifiedHeader ?? null,
         };
 
         if (!feed.name || feed.name === "New Feed") {
@@ -74,61 +348,7 @@ export async function syncFeed(userId: string, feedId: string) {
             };
         });
 
-        const upsertedIds: string[] = [];
-        const createdArticleIds: string[] = [];
-
-        for (const article of articles) {
-            const where = {
-                userId_feedId_dedupeKey: {
-                    userId: userId,
-                    feedId: feed.id,
-                    dedupeKey: article.dedupeKey,
-                },
-            };
-
-            const existing = await db.article.findUnique({
-                where,
-                select: { id: true },
-            });
-
-            const upserted = await db.article.upsert({
-                where,
-                update: {
-                    title: article.title,
-                    link: article.link,
-                    externalId: article.externalId,
-                    content: article.content,
-                    excerpt: article.excerpt,
-                    author: article.author,
-                    publishedAt: article.publishedAt,
-                    imageUrl: article.imageUrl,
-                },
-                create: article,
-            });
-            upsertedIds.push(upserted.id);
-            if (!existing) {
-                createdArticleIds.push(upserted.id);
-                // Cross-feed duplicate detection for newly created articles
-                if (article.contentHash) {
-                    const canonical = await db.article.findFirst({
-                        where: {
-                            userId: userId,
-                            contentHash: article.contentHash,
-                            id: { not: upserted.id },
-                            isDuplicate: false,
-                        },
-                        orderBy: { createdAt: "asc" },
-                        select: { id: true },
-                    });
-                    if (canonical) {
-                        await db.article.update({
-                            where: { id: upserted.id },
-                            data: { isDuplicate: true, duplicateOf: canonical.id },
-                        });
-                    }
-                }
-            }
-        }
+        const { upsertedIds, createdArticleIds } = await upsertArticleBatch(articles);
 
         await db.feed.update({
             where: { id: feed.id },
@@ -321,8 +541,28 @@ export async function syncUserFeeds(userId: string) {
         logger.error("[rss-sync] dynamic OPML sync failed:", e),
     );
 
+    const user = await db.user.findUnique({
+        where: { id: userId },
+        select: { defaultUpdateFrequency: true },
+    });
+    const userDefaultUpdateFrequency = user?.defaultUpdateFrequency ?? 60;
+
     const feeds = await db.feed.findMany({
         where: { userId },
+        select: {
+            id: true,
+            userId: true,
+            url: true,
+            updateFrequency: true,
+            lastFetchedAt: true,
+            category: {
+                select: {
+                    parentId: true,
+                    updateFrequency: true,
+                    parent: { select: { updateFrequency: true } },
+                },
+            },
+        },
     });
 
     const results = [];
@@ -332,12 +572,15 @@ export async function syncUserFeeds(userId: string) {
         const batch = feeds.slice(i, i + concurrency);
         const batchResults = await Promise.all(
             batch.map(async (feed) => {
-                const settings = await getEffectiveSettings(feed.userId, feed.id);
+                const effectiveUpdateFrequency = computeEffectiveUpdateFrequency(
+                    feed,
+                    userDefaultUpdateFrequency,
+                );
                 const now = new Date();
                 const lastSync = feed.lastFetchedAt || new Date(0);
                 const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
 
-                if (diffMinutes < settings.updateFrequency) {
+                if (diffMinutes < effectiveUpdateFrequency) {
                     return { feed: feed.url, success: true, skipped: true, count: 0 };
                 }
 
@@ -364,7 +607,21 @@ export async function syncAllFeeds() {
     );
 
     const feeds = await db.feed.findMany({
-        include: { user: true },
+        select: {
+            id: true,
+            userId: true,
+            url: true,
+            updateFrequency: true,
+            lastFetchedAt: true,
+            category: {
+                select: {
+                    parentId: true,
+                    updateFrequency: true,
+                    parent: { select: { updateFrequency: true } },
+                },
+            },
+            user: { select: { defaultUpdateFrequency: true } },
+        },
     });
 
     const results = [];
@@ -374,12 +631,15 @@ export async function syncAllFeeds() {
         const batch = feeds.slice(i, i + concurrency);
         const batchResults = await Promise.all(
             batch.map(async (feed) => {
-                const settings = await getEffectiveSettings(feed.userId, feed.id);
+                const effectiveUpdateFrequency = computeEffectiveUpdateFrequency(
+                    feed,
+                    feed.user.defaultUpdateFrequency,
+                );
                 const now = new Date();
                 const lastSync = feed.lastFetchedAt || new Date(0);
                 const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
 
-                if (diffMinutes < settings.updateFrequency) {
+                if (diffMinutes < effectiveUpdateFrequency) {
                     return { feed: feed.url, success: true, skipped: true, count: 0 };
                 }
 
@@ -391,6 +651,56 @@ export async function syncAllFeeds() {
     }
 
     return results;
+}
+
+type FrequencyResolutionFeed = {
+    updateFrequency: number | null;
+    category: {
+        parentId: string | null;
+        updateFrequency: number | null;
+        parent: { updateFrequency: number | null } | null;
+    } | null;
+};
+
+/**
+ * Mirrors `getEffectiveSettings`'s resolution hierarchy (Feed -> Subcategory -> Category ->
+ * User Global -> Site Default) but works off data already loaded in the outer feed query,
+ * so the sync loop doesn't re-fetch each feed's settings.
+ */
+function computeEffectiveUpdateFrequency(
+    feed: FrequencyResolutionFeed,
+    userDefaultUpdateFrequency: number,
+): number {
+    // 1. Feed level
+    if (feed.updateFrequency !== null) {
+        return feed.updateFrequency;
+    }
+
+    // 2. Subcategory level (if category has parent)
+    if (feed.category && feed.category.parentId) {
+        if (feed.category.updateFrequency !== null) {
+            return feed.category.updateFrequency;
+        }
+    }
+
+    // 3. Category level (top-level or parent)
+    if (feed.category) {
+        const topLevelFrequency = feed.category.parentId
+            ? feed.category.parent?.updateFrequency
+            : feed.category.updateFrequency;
+
+        if (topLevelFrequency !== null && topLevelFrequency !== undefined) {
+            return topLevelFrequency;
+        }
+    }
+
+    // 4. User global level
+    if (userDefaultUpdateFrequency) {
+        return userDefaultUpdateFrequency;
+    }
+
+    // 5. Site default
+    return 60;
 }
 
 function buildDedupeKey(

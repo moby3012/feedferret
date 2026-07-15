@@ -136,7 +136,16 @@ async function getOrCreateLabel(userId: string, name: string) {
   return label;
 }
 
-async function applyTagEdit(userId: string, articleId: string, add: string[], remove: string[]) {
+/**
+ * Applies a GReader edit-tag request (read/starred state + label add/remove) to a
+ * batch of articles at once, scoped to `userId`. Preserves the same tag→field mapping
+ * and label dedup semantics as the previous per-article implementation, but replaces
+ * the per-id round trips with one `updateMany` for the read/starred bit and batched
+ * `createMany`/`deleteMany` (keyed on `articleId: { in: ids }`) for labels.
+ */
+async function applyTagEdit(userId: string, ids: string[], add: string[], remove: string[]) {
+  if (ids.length === 0) return;
+
   const updates: Record<string, unknown> = {};
   if (add.includes(GREADER_READ)) {
     updates.isRead = true;
@@ -149,7 +158,7 @@ async function applyTagEdit(userId: string, articleId: string, add: string[], re
   if (add.includes(GREADER_STARRED)) updates.isStarred = true;
   if (remove.includes(GREADER_STARRED)) updates.isStarred = false;
   if (Object.keys(updates).length > 0) {
-    await db.article.update({ where: { id: articleId, userId }, data: updates });
+    await db.article.updateMany({ where: { id: { in: ids }, userId }, data: updates });
   }
 
   for (const tag of add) {
@@ -157,11 +166,20 @@ async function applyTagEdit(userId: string, articleId: string, add: string[], re
     if (!labelName) continue;
     const label = await getOrCreateLabel(userId, labelName);
     if (!label) continue;
-    await db.articleLabel.upsert({
-      where: { articleId_labelId: { articleId, labelId: label.id } },
-      update: { userId },
-      create: { articleId, labelId: label.id, userId },
+
+    // SQLite's `createMany` doesn't support `skipDuplicates`, so exclude
+    // articles that already have this label before inserting the rest.
+    const existing = await db.articleLabel.findMany({
+      where: { articleId: { in: ids }, labelId: label.id, userId },
+      select: { articleId: true },
     });
+    const existingIds = new Set(existing.map((row) => row.articleId));
+    const toCreate = ids.filter((articleId) => !existingIds.has(articleId));
+    if (toCreate.length > 0) {
+      await db.articleLabel.createMany({
+        data: toCreate.map((articleId) => ({ articleId, labelId: label.id, userId })),
+      });
+    }
   }
 
   for (const tag of remove) {
@@ -169,7 +187,7 @@ async function applyTagEdit(userId: string, articleId: string, add: string[], re
     if (!labelName) continue;
     const label = await db.label.findFirst({ where: { userId, name: labelName } });
     if (!label) continue;
-    await db.articleLabel.deleteMany({ where: { articleId, labelId: label.id, userId } });
+    await db.articleLabel.deleteMany({ where: { articleId: { in: ids }, labelId: label.id, userId } });
   }
 }
 
@@ -460,9 +478,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
       const ids = form.getAll("i").map((id) => parseGReaderItemId(String(id)));
       const add = form.getAll("a").map(String);
       const remove = form.getAll("r").map(String);
-      for (const articleId of ids) {
-        await applyTagEdit(user.id, articleId, add, remove);
-      }
+      await applyTagEdit(user.id, ids, add, remove);
       return okResponse();
     }
 
