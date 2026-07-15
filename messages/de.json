@@ -562,6 +562,13 @@
     "lastSyncFailed": "Letzte Synchronisierung fehlgeschlagen",
     "hideEmptyLabels": "Leere Labels ausblenden",
     "feedAdded": "{name} hinzugefügt",
+    "expandCategory": "{name} aufklappen",
+    "collapseCategory": "{name} einklappen",
+    "takeMeBack": "Zurückbringen",
+    "offlineBannerMessage": "Offline-Modus: Es werden zwischengespeicherte Artikel von diesem Gerät angezeigt.",
+    "syncFailedToast": "Synchronisierung fehlgeschlagen. Bitte die Verbindung prüfen und erneut versuchen.",
+    "undoMarkAllReadMessage": "{count, plural, one {# Artikel als gelesen markiert} other {# Artikel als gelesen markiert}}",
+    "undo": "Rückgängig",
     "errors": {
       "noFeedFound": "Unter dieser URL wurde kein Feed gefunden.",
       "discoveryFailed": "Feed-Erkennung fehlgeschlagen.",
@@ -639,7 +646,10 @@
     "moreActions": "Weitere Aktionen",
     "previousArticle": "Vorheriger Artikel",
     "backToList": "Zurück zur Liste",
-    "nextArticle": "Nächster Artikel"
+    "nextArticle": "Nächster Artikel",
+    "summarizeFailed": "Zusammenfassung fehlgeschlagen. Bitte die KI-Anbieter-Einstellungen prüfen.",
+    "summarizeFailedInline": "Zusammenfassung fehlgeschlagen — bitte erneut versuchen.",
+    "fetchingFullTextStatus": "Volltext des Artikels wird abgerufen…"
   },
   "rssHeader": {
     "lastSynced": "Zuletzt synchronisiert",
@@ -856,7 +866,9 @@
       "attachLabel": "Label anhängen",
       "removeLabel": "Label entfernen",
       "createNewLabel": "Neues Label erstellen…",
-      "webhook": "Webhook"
+      "webhook": "Webhook",
+      "labelDeleted": "Label (gelöscht)",
+      "removeLabelDeleted": "Label entfernen (gelöscht)"
     },
     "webhooks": {
       "triggerWebhook": "Webhook auslösen",
@@ -1286,7 +1298,13 @@
     "saveSearch": "Suche speichern",
     "emptyTitle": "Keine Artikel gefunden",
     "emptyDescription": "Versuche andere Stichwörter oder Operatoren wie author:, intitle:, is:unread.",
-    "operatorHint": "Tipp: intitle:KI is:unread"
+    "operatorHint": "Tipp: intitle:KI is:unread",
+    "searchPlaceholder": "Suchbegriff eingeben — z. B. author:, intitle:, is:unread, label:",
+    "globalSearchHint": "Die Suche läuft global über alle Feeds. Tipp: Operatoren kombinieren wie intitle:KI is:unread.",
+    "matchesAcrossFeeds": "{count, plural, =0 {Keine Treffer in allen Feeds} one {# Treffer in allen Feeds} other {# Treffer in allen Feeds}}",
+    "cancel": "Abbrechen",
+    "showResults": "{count, plural, one {# Ergebnis anzeigen} other {# Ergebnisse anzeigen}}",
+    "enterSearchTerm": "Suchbegriff eingeben"
   },
   "sharedSearch": {
     "title": "Geteilte FeedFerret-Suche",

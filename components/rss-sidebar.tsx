@@ -1105,6 +1105,8 @@ function SortableCategory({
         <button
           onClick={onToggle}
           className="p-1 rounded hover:bg-muted transition-colors"
+          aria-expanded={expanded}
+          aria-label={expanded ? t("sidebar.collapseCategory", { name: category.name }) : t("sidebar.expandCategory", { name: category.name })}
         >
           <ChevronDown
             className={cn(

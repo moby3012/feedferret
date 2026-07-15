@@ -562,6 +562,13 @@
     "lastSyncFailed": "Last sync failed",
     "hideEmptyLabels": "Hide empty labels",
     "feedAdded": "Added {name}",
+    "expandCategory": "Expand {name}",
+    "collapseCategory": "Collapse {name}",
+    "takeMeBack": "Take me back",
+    "offlineBannerMessage": "Offline mode: showing cached articles from this device.",
+    "syncFailedToast": "Sync failed. Check your connection and try again.",
+    "undoMarkAllReadMessage": "{count, plural, one {Marked # article as read} other {Marked # articles as read}}",
+    "undo": "Undo",
     "errors": {
       "noFeedFound": "No feed found at that URL.",
       "discoveryFailed": "Feed discovery failed.",
@@ -639,7 +646,10 @@
     "moreActions": "More actions",
     "previousArticle": "Previous article",
     "backToList": "Back to list",
-    "nextArticle": "Next article"
+    "nextArticle": "Next article",
+    "summarizeFailed": "Summary failed. Check your AI provider settings.",
+    "summarizeFailedInline": "Summary failed — try again.",
+    "fetchingFullTextStatus": "Fetching full article text…"
   },
   "rssHeader": {
     "lastSynced": "Last synced",
@@ -856,7 +866,9 @@
       "attachLabel": "Attach label",
       "removeLabel": "Remove label",
       "createNewLabel": "Create new label…",
-      "webhook": "Webhook"
+      "webhook": "Webhook",
+      "labelDeleted": "label (deleted)",
+      "removeLabelDeleted": "remove label (deleted)"
     },
     "webhooks": {
       "triggerWebhook": "Trigger a webhook",
@@ -1286,7 +1298,13 @@
     "saveSearch": "Save search",
     "emptyTitle": "No articles found",
     "emptyDescription": "Try different keywords or operators like author:, intitle:, is:unread.",
-    "operatorHint": "Tip: intitle:AI is:unread"
+    "operatorHint": "Tip: intitle:AI is:unread",
+    "searchPlaceholder": "Enter search term — try author:, intitle:, is:unread, label:",
+    "globalSearchHint": "Search runs globally across every feed. Tip: combine operators like intitle:AI is:unread.",
+    "matchesAcrossFeeds": "{count, plural, =0 {No matches across all feeds} one {# match across all feeds} other {# matches across all feeds}}",
+    "cancel": "Cancel",
+    "showResults": "{count, plural, one {Show # result} other {Show # results}}",
+    "enterSearchTerm": "Enter search term"
   },
   "sharedSearch": {
     "title": "Shared FeedFerret search",

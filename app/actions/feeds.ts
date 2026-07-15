@@ -1080,12 +1080,45 @@ export async function markAllAsRead(scope?: { feedId?: string | null; category?:
         }];
     }
 
-    await db.article.updateMany({
+    // Capture the affected article ids before the bulk update so callers can
+    // offer an "undo" (re-mark as unread) without needing to re-derive the
+    // same scope/where clause.
+    const affected = await db.article.findMany({
         where,
-        data: { isRead: true, readAt: new Date() },
+        select: { id: true },
+    });
+    const ids = affected.map((a) => a.id);
+
+    if (ids.length > 0) {
+        await db.article.updateMany({
+            where: { id: { in: ids }, userId: session.user.id },
+            data: { isRead: true, readAt: new Date() },
+        });
+    }
+
+    revalidatePath("/");
+
+    return { ids };
+}
+
+/**
+ * Re-mark a specific set of articles as unread. Used to power "undo" for
+ * bulk mark-all-read actions (e.g. auto-mark-as-read on swipe-to-next-feed).
+ */
+export async function markArticlesAsUnread(articleIds: string[]) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    if (!Array.isArray(articleIds) || articleIds.length === 0) return { count: 0 };
+
+    const result = await db.article.updateMany({
+        where: { id: { in: articleIds }, userId: session.user.id },
+        data: { isRead: false, readAt: null },
     });
 
     revalidatePath("/");
+
+    return { count: result.count };
 }
 
 // ─── Auto-Read Rules ────────────────────────────────────────────────────────
