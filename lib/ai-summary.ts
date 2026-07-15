@@ -1,3 +1,5 @@
+import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+
 export type AiProvider = "openai" | "anthropic" | "ollama" | "gemini" | "openrouter";
 
 export type AiConfig = {
@@ -152,6 +154,14 @@ async function summarizeAnthropic(prompt: string, config: AiConfig): Promise<str
 async function summarizeOllama(prompt: string, config: AiConfig): Promise<string> {
   const base = (config.ollamaBaseUrl || "http://localhost:11434").replace(/\/$/, "");
   const model = config.model || "llama3";
+
+  const allowInternal = await isTrustedFeedFetchingAllowed();
+  try {
+    await assertSafeFetchUrl(base, { context: "Ollama", allowInternal });
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : "Ollama base URL is not allowed");
+  }
+
   const res = await fetch(`${base}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

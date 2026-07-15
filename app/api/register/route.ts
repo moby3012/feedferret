@@ -2,19 +2,26 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
+import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
+import { RegisterUserSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-    try {
-        const { name, email, password } = await req.json();
+    const identifier = getClientIdentifier(req);
+    const rateLimitResult = checkRateLimit(identifier, RATE_LIMITS.authSignIn);
+    if (!rateLimitResult.success) return rateLimitResponse(rateLimitResult);
 
-        if (!email || !password) {
+    try {
+        const body = await req.json().catch(() => ({}));
+        const parsed = RegisterUserSchema.safeParse(body);
+        if (!parsed.success) {
             return NextResponse.json(
-                { message: "Missing required fields" },
+                { message: parsed.error.issues[0]?.message ?? "Invalid input" },
                 { status: 400 }
             );
         }
+        const { name, email, password } = parsed.data;
 
         const settings = await db.globalSettings.findUnique({
             where: { id: "global" },

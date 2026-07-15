@@ -1,3 +1,5 @@
+import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+
 export type ChannelPayload = {
   title: string;
   body: string;
@@ -74,6 +76,9 @@ export async function sendGotifyNotification(
   payload: ChannelPayload,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    const allowInternal = await isTrustedFeedFetchingAllowed();
+    await assertSafeFetchUrl(config.url, { context: "Notification channel", allowInternal });
+
     const base = config.url.replace(/\/$/, "");
     const res = await fetch(`${base}/message?token=${encodeURIComponent(config.token)}`, {
       method: "POST",
@@ -101,6 +106,9 @@ export async function sendNtfyNotification(
   payload: ChannelPayload,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    const allowInternal = await isTrustedFeedFetchingAllowed();
+    await assertSafeFetchUrl(config.url, { context: "Notification channel", allowInternal });
+
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "X-Title": payload.title,
