@@ -46,15 +46,12 @@ export function ResponsiveTabsNav({
           </SelectContent>
         </Select>
       </div>
-      <TabsList className="hidden h-auto max-w-full flex-wrap justify-start gap-1 bg-muted/45 p-1 rounded-2xl border border-border/60 shadow-inner shadow-black/[0.02] sm:inline-flex">
+      <TabsList className="ui-segmented-surface hidden h-auto max-w-full flex-wrap justify-start gap-1 rounded-2xl border p-1 sm:inline-flex">
         {options.map((option) => (
           <TabsTrigger
             key={option.value}
             value={option.value}
-            className={cn(
-              "rounded-xl px-4 py-2.5 data-[state=active]:bg-background data-[state=active]:shadow-sm",
-              triggerClassName,
-            )}
+            className={cn("rounded-xl px-4 py-2.5", triggerClassName)}
           >
             {option.icon}
             {option.label}

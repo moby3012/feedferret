@@ -107,7 +107,10 @@
     "addToAuthApp": "1. Füge dieses Konto in deiner Authentifizierungs-App hinzu",
     "manualSetupHint": "Verwende die manuelle Einrichtung, wenn deine App das Öffnen von otpauth-Links nicht unterstützt.",
     "copied": "{label} kopiert",
-    "couldNotCopy": "{label} konnte nicht kopiert werden"
+    "couldNotCopy": "{label} konnte nicht kopiert werden",
+    "beginSetupFailed": "2FA-Einrichtung konnte nicht gestartet werden. Bitte versuche es erneut.",
+    "enableFailed": "2FA konnte nicht aktiviert werden. Überprüfe den Code und versuche es erneut.",
+    "disableFailed": "2FA konnte nicht deaktiviert werden. Überprüfe den Code und versuche es erneut."
   },
   "digest": {
     "title": "E-Mail-Digest",
