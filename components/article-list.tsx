@@ -60,7 +60,7 @@ function FeedFavicon({ icon, name, size = 16, articleLink }: { icon?: string; na
 function ArticleSkeleton({ viewMode = "list" }: { viewMode?: "list" | "grid" | "magazine" | "minimal" }) {
   if (viewMode === "magazine") {
     return (
-      <div className="rounded-3xl border border-border/50 bg-card overflow-hidden animate-pulse">
+      <div className="rounded-xl border border-border/50 bg-card overflow-hidden animate-pulse">
         <div className="h-36 bg-muted" />
         <div className="p-3 space-y-2">
           <div className="h-3 bg-muted rounded w-1/3" />
@@ -72,7 +72,7 @@ function ArticleSkeleton({ viewMode = "list" }: { viewMode?: "list" | "grid" | "
   }
   if (viewMode === "minimal") {
     return (
-      <div className="rounded-2xl flex items-center gap-2 px-1 py-1.5 animate-pulse">
+      <div className="rounded-xl flex items-center gap-2 px-1 py-1.5 animate-pulse">
         <div className="size-3.5 rounded-full bg-muted shrink-0" />
         <div className="h-3.5 bg-muted rounded flex-1" />
         <div className="h-3 bg-muted rounded w-12 shrink-0" />
@@ -80,7 +80,7 @@ function ArticleSkeleton({ viewMode = "list" }: { viewMode?: "list" | "grid" | "
     );
   }
   return (
-    <div className="rounded-2xl sm:rounded-3xl border border-border/50 bg-card p-3 space-y-2.5 animate-pulse">
+    <div className="rounded-xl border border-border/50 bg-card p-3 space-y-2.5 animate-pulse">
       <div className="flex items-center gap-2">
         <div className="size-4 rounded-sm bg-muted shrink-0" />
         <div className="h-3 bg-muted rounded w-24" />
@@ -542,14 +542,14 @@ function ArticlePreview({
       aria-hidden="true"
       className={cn(
         "pointer-events-none absolute inset-0 flex items-center rounded-2xl px-5",
-        swipeRevealDir === "read" ? "justify-start bg-emerald-500/15 text-emerald-500" : "justify-end bg-amber-500/15 text-amber-500",
+        swipeRevealDir === "read" ? "justify-start bg-emerald-500/15 text-emerald-500" : "justify-end bg-brand-secondary/15 text-brand-secondary",
       )}
       style={{ opacity: Math.min(1, Math.abs(swipeOffset) / SWIPE_THRESHOLD) }}
     >
       {swipeRevealDir === "read" ? (
         <CheckCircle2 className={cn("w-6 h-6 transition-transform", swipeReady && "scale-125")} />
       ) : (
-        <Star className={cn("w-6 h-6 transition-transform", swipeReady && "scale-125 fill-amber-500")} />
+        <Star className={cn("w-6 h-6 transition-transform", swipeReady && "scale-125 fill-brand-secondary")} />
       )}
     </div>
   ) : null;
@@ -592,10 +592,10 @@ function ArticlePreview({
         aria-label={`${article.isRead ? "" : "Unread: "}${article.title} — ${article.feedName}`}
         aria-pressed={isSelected}
         className={cn(
-          "px-3 py-2.5 cursor-pointer rounded-2xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden relative focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "px-3 py-2.5 cursor-pointer rounded-xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden relative focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "border-s-4",
           isSelected
-            ? "bg-accent/10 ring-1 ring-accent/20"
+            ? "bg-accent/10 ring-2 ring-accent/40"
             : "hover:bg-card/80",
           !article.isRead ? "border-brand" : "border-transparent",
         )}
@@ -610,10 +610,10 @@ function ArticlePreview({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
-          className={cn("rounded-md p-1 transition-colors shrink-0", article.isStarred ? "text-amber-500" : "text-muted-foreground hover:text-amber-500")}
+          className={cn("rounded-md p-1 transition-colors shrink-0", article.isStarred ? "text-brand-secondary" : "text-muted-foreground hover:text-brand-secondary")}
           aria-label={article.isStarred ? t("removeStar") : t("star")}
         >
-          <Star className={cn("w-3.5 h-3.5", article.isStarred && "fill-amber-500")} />
+          <Star className={cn("w-3.5 h-3.5", article.isStarred && "fill-brand-secondary")} />
         </button>
         <button
           type="button"
@@ -645,8 +645,8 @@ function ArticlePreview({
         aria-label={`${article.isRead ? "" : "Unread: "}${article.title} — ${article.feedName}`}
         aria-pressed={isSelected}
         className={cn(
-          "cursor-pointer rounded-3xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          isSelected && "ring-2 ring-accent border-accent",
+          "cursor-pointer rounded-xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          isSelected && "ring-2 ring-accent/40 border-accent/30 bg-accent/10",
           !article.isRead && "ring-1 ring-brand/20",
         )}
       >
@@ -691,10 +691,10 @@ function ArticlePreview({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
-                className={cn("rounded-md p-1 transition-colors", article.isStarred ? "text-amber-500 hover:bg-amber-500/10" : "text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10")}
+                className={cn("rounded-md p-1 transition-colors", article.isStarred ? "text-brand-secondary hover:bg-brand-secondary/10" : "text-muted-foreground hover:text-brand-secondary hover:bg-brand-secondary/10")}
                 aria-label={article.isStarred ? t("removeStar") : t("star")}
               >
-                <Star className={cn("w-3.5 h-3.5", article.isStarred && "fill-amber-500")} />
+                <Star className={cn("w-3.5 h-3.5", article.isStarred && "fill-brand-secondary")} />
               </button>
               <button
                 type="button"
@@ -741,11 +741,11 @@ function ArticlePreview({
       aria-label={`${article.isRead ? "" : "Unread: "}${article.title} — ${article.feedName}`}
       aria-pressed={isSelected}
       className={cn(
-        "p-3 sm:p-3.5 cursor-pointer rounded-2xl sm:rounded-3xl group border min-w-0 max-w-full overflow-hidden",
+        "p-3 sm:p-3.5 cursor-pointer rounded-xl group border min-w-0 max-w-full overflow-hidden",
         "transition-[opacity,background-color,border-color,box-shadow,transform] duration-200 ease-out",
         "active:scale-[0.995] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isSelected
-          ? "bg-accent/10 border-accent/25 shadow-lg shadow-accent/5"
+          ? "ring-2 ring-accent/40 border-accent/30 bg-accent/10"
           : "border-transparent hover:border-border/70 hover:bg-card/80 hover:shadow-sm",
         !article.isRead ? "bg-card/90 shadow-sm" : "opacity-80",
       )}
@@ -800,10 +800,10 @@ function ArticlePreview({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
-                  className="rounded-lg p-1 hover:bg-amber-500/10 transition-colors"
+                  className="rounded-lg p-1 hover:bg-brand-secondary/10 transition-colors"
                   aria-label={t("removeStar")}
                 >
-                  <Star className="w-4 h-4 text-amber-500 fill-amber-500 transition-transform duration-300 group-hover:scale-110" />
+                  <Star className="w-4 h-4 text-brand-secondary fill-brand-secondary transition-transform duration-300 group-hover:scale-110" />
                 </button>
               )}
               {article.isReadLater && (
@@ -869,7 +869,7 @@ function ArticlePreview({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onToggleStar?.(article.id); }}
-                  className="rounded-lg p-1.5 hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500"
+                  className="rounded-lg p-1.5 hover:bg-brand-secondary/10 text-muted-foreground hover:text-brand-secondary"
                   aria-label={t("star")}
                   title={t("star")}
                 >

@@ -351,8 +351,8 @@ export function ArticleReader({
               className={cn(
                 "w-4 h-4 transition-all duration-300",
                 article.isStarred
-                  ? "text-amber-500 fill-amber-500 scale-110"
-                  : "text-muted-foreground hover:text-amber-400",
+                  ? "text-brand-secondary fill-brand-secondary scale-110"
+                  : "text-muted-foreground hover:text-brand-secondary",
               )}
             />
           </Button>
@@ -673,12 +673,12 @@ export function ArticleReader({
             size="icon"
             className={cn(
               "h-11 flex-1 rounded-2xl active:scale-95",
-              article.isStarred ? "bg-amber-500/10 text-amber-500" : "text-muted-foreground",
+              article.isStarred ? "bg-brand-secondary/10 text-brand-secondary" : "text-muted-foreground",
             )}
             onClick={() => onToggleStar(article.id)}
             aria-label={article.isStarred ? tList("removeStar") : tList("star")}
           >
-            <Star className={cn("h-5 w-5", article.isStarred && "fill-amber-500")} />
+            <Star className={cn("h-5 w-5", article.isStarred && "fill-brand-secondary")} />
           </Button>
           <Button
             type="button"
