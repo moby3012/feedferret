@@ -321,7 +321,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               </div>
 
               {authType === "basic" && (
-                <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-4">
+                <div className="space-y-3 rounded-2xl ui-control-surface border p-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("auth.username")}</Label>
                     <Input
@@ -352,7 +352,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             </TabsContent>
 
             <TabsContent value="behavior" className="mt-0 space-y-5">
-              <div className="flex items-start justify-between gap-4 rounded-2xl border border-border/60 bg-muted/20 p-4">
+              <div className="flex items-start justify-between gap-4 rounded-2xl ui-control-surface border p-4">
                 <div className="space-y-1 min-w-0">
                   <Label className="text-sm font-medium cursor-pointer" htmlFor="hide-from-all">{t("behavior.hideFromAllArticles")}</Label>
                   <p className="text-xs text-muted-foreground">
@@ -366,7 +366,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   className="shrink-0 mt-0.5"
                 />
               </div>
-              <div className="flex items-start justify-between gap-4 rounded-2xl border border-border/60 bg-muted/20 p-4">
+              <div className="flex items-start justify-between gap-4 rounded-2xl ui-control-surface border p-4">
                 <div className="space-y-1 min-w-0">
                   <Label className="text-sm font-medium cursor-pointer" htmlFor="hide-article-image">{t("behavior.hideArticleHeroImage")}</Label>
                   <p className="text-xs text-muted-foreground">
@@ -464,7 +464,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
+              <div className="flex items-center justify-between rounded-2xl ui-control-surface border px-4 py-3">
                 <div>
                   <p className="text-sm font-medium">{t("fetch.verifySslCertificate")}</p>
                   <p className="text-xs text-muted-foreground">{t("fetch.disableOnlyForSelfSigned")}</p>
@@ -476,19 +476,19 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             <TabsContent value="fulltext" className="mt-0 space-y-5">
               <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-2xl bg-primary/10 p-2 text-primary">
-                    <Sparkles className="h-5 w-5" />
+                  <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                    <Sparkles className="size-5" />
                   </div>
                   <div>
-                    <h3 className="font-semibold tracking-[-0.02em]">Scout Studio</h3>
+                    <h3 className="font-semibold tracking-[-0.02em]">{t("fulltext.scoutStudioTitle")}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Guided extraction: paste an article URL, preview the cleaned content, then apply the best selector candidate.
+                      {t("fulltext.scoutStudioDescription")}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
+              <div className="flex items-center justify-between rounded-2xl ui-control-surface border px-4 py-3">
                 <div>
                   <p className="text-sm font-medium">{t("fulltext.autoFetchFullText")}</p>
                   <p className="text-xs text-muted-foreground">{t("fulltext.fetchesOriginalPage")}</p>
@@ -516,7 +516,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 />
               </div>
 
-              <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 space-y-3">
+              <div className="rounded-2xl ui-control-surface border p-4 space-y-3">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   {t("fulltext.testExtraction")}
                 </p>
@@ -535,9 +535,9 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                     onClick={handlePreview}
                   >
                     {previewExtraction.isPending ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="size-4 animate-spin" />
                     ) : (
-                      <Eye className="w-3.5 h-3.5" />
+                      <Eye className="size-4" />
                     )}
                     {t("fulltext.preview")}
                   </Button>
@@ -569,7 +569,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                               </span>
                             </div>
                             <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{candidate.sample}</p>
-                            <div className="mt-2 flex gap-2 text-[10px] text-muted-foreground">
+                            <div className="mt-2 flex gap-2 text-xs text-muted-foreground">
                               <span>{candidate.paragraphCount} {t("fulltext.paragraphs")}</span>
                               <span>{candidate.linkCount} {t("fulltext.links")}</span>
                               {index === 0 && (
@@ -592,7 +592,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             </TabsContent>
 
             <TabsContent value="scout" className="mt-0 space-y-5">
-              <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+              <div className="rounded-2xl ui-control-surface border p-4">
                 <h3 className="font-semibold tracking-[-0.02em]">{t("scout.scoutAdvanced")}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {t("scout.customHandling")}
@@ -643,7 +643,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                     className="rounded-xl h-10 border-border/70 bg-background/70 font-mono text-sm"
                   />
                 </div>
-                <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
+                <div className="flex items-center gap-2 rounded-2xl ui-control-surface border px-4 py-3">
                   <span className="text-sm">{t("scout.forced")}</span>
                   <Switch checked={unicityCriteriaForced} onCheckedChange={setUnicityCriteriaForced} />
                 </div>

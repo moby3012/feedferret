@@ -161,17 +161,17 @@ export default function LoginPage() {
               className="w-full h-full opacity-90"
             />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-bold tracking-[-0.04em] text-foreground">
             Feed<span className="text-muted-foreground">Ferret</span>
           </h1>
           <p className="text-muted-foreground mt-2 text-sm font-medium tracking-tight">
-            Minimalist RSS Aggregator
+            {t("tagline")}
           </p>
         </div>
 
         <Card className="border-border bg-card backdrop-blur-xl shadow-2xl overflow-hidden ring-1 ring-border">
           <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-start">
-            <CardTitle className="text-lg font-semibold text-foreground flex items-center justify-center sm:justify-start gap-2">
+            <CardTitle className="text-lg font-semibold tracking-[-0.02em] text-foreground flex items-center justify-center sm:justify-start gap-2">
               <LogIn className="w-4 h-4 text-muted-foreground" />
               {t("signIn")}
             </CardTitle>
@@ -183,7 +183,7 @@ export default function LoginPage() {
                 <Input
                   type="email"
                   placeholder={t("email")}
-                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-lg text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
@@ -200,7 +200,7 @@ export default function LoginPage() {
                 <Input
                   type="password"
                   placeholder={t("password")}
-                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-lg text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
@@ -219,7 +219,7 @@ export default function LoginPage() {
                     inputMode="numeric"
                     pattern="[0-9]*"
                     placeholder={t("authenticatorCode")}
-                    className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-lg text-sm"
+                    className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     autoFocus
@@ -229,7 +229,7 @@ export default function LoginPage() {
 
               {error && (
                 <div
-                  className={`p-3 rounded-lg text-xs font-medium ${
+                  className={`p-3 rounded-2xl text-xs font-medium ${
                     errorIsWarning
                       ? "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400"
                       : "bg-red-500/10 border border-red-500/20 text-red-400 animate-shake"
@@ -242,7 +242,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm rounded-lg transition-all active:scale-[0.98]"
+                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm rounded-2xl transition-all active:scale-95"
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">
@@ -260,7 +260,7 @@ export default function LoginPage() {
                   variant="outline"
                   disabled={magicLinkSending || magicLinkSent}
                   onClick={handleMagicLink}
-                  className="w-full h-11 bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground font-medium text-sm rounded-lg transition-all"
+                  className="w-full h-11 bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground font-medium text-sm rounded-2xl transition-all"
                 >
                   {magicLinkSending ? (
                     <span className="flex items-center gap-2">
@@ -299,7 +299,7 @@ export default function LoginPage() {
                   {providers.google && (
                     <Button
                       variant="outline"
-                      className="bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground h-11 rounded-lg"
+                      className="bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground h-11 rounded-2xl"
                       onClick={() => handleOAuthSignIn("google")}
                     >
                       <GoogleIcon className="w-4 h-4 me-2" />
@@ -309,7 +309,7 @@ export default function LoginPage() {
                   {providers.github && (
                     <Button
                       variant="outline"
-                      className="bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground h-11 rounded-lg"
+                      className="bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground h-11 rounded-2xl"
                       onClick={() => handleOAuthSignIn("github")}
                     >
                       <GithubIcon className="w-4 h-4 me-2" />
@@ -319,7 +319,7 @@ export default function LoginPage() {
                   {providers.authelia && (
                     <Button
                       variant="outline"
-                      className="sm:col-span-2 bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground h-11 rounded-lg"
+                      className="sm:col-span-2 bg-muted border-border hover:bg-accent hover:text-accent-foreground text-foreground h-11 rounded-2xl"
                       onClick={() => handleOAuthSignIn("authelia")}
                     >
                       <Shield className="w-4 h-4 me-2" />
@@ -333,7 +333,7 @@ export default function LoginPage() {
           <CardFooter className="flex flex-col space-y-4 border-t border-border pt-6 pb-8 bg-muted/30">
             {registrationsEnabled ? (
               <div className="text-muted-foreground text-xs font-medium text-center w-full">
-                Don&apos;t have an account?{" "}
+                {t("noAccountPrefix")}{" "}
                 <Link
                   href="/register"
                   className="text-foreground hover:underline transition-all"

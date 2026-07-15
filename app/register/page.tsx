@@ -90,7 +90,7 @@ export default function RegisterPage() {
               className="w-full h-full opacity-90"
             />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-bold tracking-[-0.04em] text-foreground">
             {t("subtitle")}
           </h1>
           <p className="text-muted-foreground mt-2 text-sm font-medium tracking-tight">
@@ -100,7 +100,7 @@ export default function RegisterPage() {
 
         <Card className="border-border bg-card backdrop-blur-xl shadow-2xl overflow-hidden ring-1 ring-border">
           <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-start">
-            <CardTitle className="text-lg font-semibold text-foreground flex items-center justify-center sm:justify-start gap-2">
+            <CardTitle className="text-lg font-semibold tracking-[-0.02em] text-foreground flex items-center justify-center sm:justify-start gap-2">
               <UserPlus className="w-4 h-4 text-muted-foreground" />
               {t("registration")}
             </CardTitle>
@@ -111,7 +111,7 @@ export default function RegisterPage() {
                 <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within/input:text-foreground transition-colors" />
                 <Input
                   placeholder={t("name")}
-                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-lg text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -122,7 +122,7 @@ export default function RegisterPage() {
                 <Input
                   type="email"
                   placeholder={t("email")}
-                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-lg text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -133,7 +133,7 @@ export default function RegisterPage() {
                 <Input
                   type="password"
                   placeholder={t("password")}
-                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-lg text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -144,7 +144,7 @@ export default function RegisterPage() {
                 <Input
                   type="password"
                   placeholder={t("confirmPassword")}
-                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-lg text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
@@ -152,7 +152,7 @@ export default function RegisterPage() {
               </div>
 
               {error && (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium animate-shake">
+                <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium animate-shake">
                   {error}
                 </div>
               )}
@@ -160,7 +160,7 @@ export default function RegisterPage() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm rounded-lg transition-all active:scale-[0.98]"
+                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm rounded-2xl transition-all active:scale-95"
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">

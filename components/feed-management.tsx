@@ -52,6 +52,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -307,7 +314,7 @@ function ActionListEditor({
         return (
           <div
             key={`${action}-${idx}`}
-            className="rounded-xl border border-border/50 bg-background/60 px-3 py-2 space-y-2"
+            className="ui-control-surface rounded-xl border px-3 py-2 space-y-2"
           >
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground tabular-nums shrink-0">{idx + 1}.</span>
@@ -514,7 +521,7 @@ function WebhookActionConfig({
 
       <button
         type="button"
-        className="text-[11px] text-muted-foreground hover:text-foreground"
+        className="text-xs text-muted-foreground hover:text-foreground"
         onClick={() => setShowAdvanced((v) => !v)}
       >
         {showAdvanced ? t("webhooks.hideAdvanced") : t("webhooks.advanced")}
@@ -523,7 +530,7 @@ function WebhookActionConfig({
       {showAdvanced && (
         <div className="space-y-2 pt-1">
           <div className="space-y-1">
-            <label htmlFor="webhook-body-template" className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("webhooks.bodyTemplate")}</label>
+            <label htmlFor="webhook-body-template" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("webhooks.bodyTemplate")}</label>
             <textarea
               id="webhook-body-template"
               rows={4}
@@ -533,13 +540,13 @@ function WebhookActionConfig({
               className="w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-xs font-mono"
               disabled={value.method === "GET"}
             />
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("webhooks.defaultJsonPayload")}
             </p>
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="webhook-hmac-secret" className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            <label htmlFor="webhook-hmac-secret" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {t("webhooks.hmacSecret")}
             </label>
             <Input
@@ -552,7 +559,7 @@ function WebhookActionConfig({
             />
           </div>
 
-          <div className="rounded-xl border border-border/50 bg-muted/30 p-2 text-[10px] leading-relaxed">
+          <div className="ui-control-surface rounded-xl border p-2 text-xs leading-relaxed">
             <p className="font-medium mb-1 uppercase tracking-wider text-muted-foreground">{t("webhooks.variables")}</p>
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-0.5">
               {WEBHOOK_VARIABLE_TOKENS.map((token, idx) => (
@@ -606,7 +613,7 @@ function SortableCategoryItem({
     <div
       ref={setNodeRef}
       style={style}
-      className="rounded-3xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border"
+      className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div
@@ -651,7 +658,7 @@ function SortableCategoryItem({
           <>
             <div className="min-w-0 flex-1">
               <span className="block font-semibold tracking-[-0.01em]">{cat.name}</span>
-              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 {t("health.sync")} {cat.updateFrequency ? `${cat.updateFrequency} min` : t("health.default")}
               </span>
             </div>
@@ -661,10 +668,10 @@ function SortableCategoryItem({
                 size="icon"
                 variant="ghost"
                 className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground"
-                title="Category settings"
+                title={t("categories.categorySettingsTitle")}
                 onClick={() => { setSyncValue(cat.updateFrequency ? String(cat.updateFrequency) : ""); setSettingsOpen(true); }}
               >
-                <Settings2 className="w-4 h-4" />
+                <Settings2 className="size-4" />
               </Button>
               <Button
                 size="icon"
@@ -697,36 +704,36 @@ function SortableCategoryItem({
       </div>
     </div>
     {/* Category settings dialog (#17) */}
-    {settingsOpen && (
-      <button type="button" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setSettingsOpen(false); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') setSettingsOpen(false); }}>
-        <div role="dialog" aria-modal="true" aria-label={t("categorySettings")} className="w-full max-w-sm rounded-3xl border border-border/70 bg-background p-6 shadow-2xl space-y-4">
+    <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+      <DialogContent className="max-w-sm rounded-[2rem] border border-border/70 bg-background p-6 shadow-2xl">
+        <DialogHeader>
           <div className="flex items-center gap-3">
-            <Folder className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold tracking-tight">{t("categories.categorySettingsTitle")} — {cat.name}</h3>
+            <Folder className="size-5 text-primary" />
+            <DialogTitle className="font-semibold tracking-[-0.02em]">{t("categories.categorySettingsTitle")} — {cat.name}</DialogTitle>
           </div>
-          <div className="space-y-1.5">
-            <label htmlFor="cat-settings-sync-input" className="text-sm font-medium">{t("categories.syncIntervalLabel")}</label>
-            <p className="text-xs text-muted-foreground">{t("categories.leaveEmptyForGlobal")}</p>
-            <Input
-              id="cat-settings-sync-input"
-              type="number"
-              placeholder={t("categories.example")}
-              value={syncValue}
-              onChange={(e) => setSyncValue(e.target.value)}
-              className="h-10 rounded-2xl border-border/70 bg-background/70"
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" className="rounded-2xl" onClick={() => setSettingsOpen(false)}>{t("categories.cancelButton")}</Button>
-            <Button className="rounded-2xl" onClick={() => {
-              const val = parseInt(syncValue);
-              updateCategory.mutate({ categoryId: cat.id, data: { updateFrequency: isNaN(val) ? null : val } });
-              setSettingsOpen(false);
-            }}>{t("categories.saveButton")}</Button>
-          </div>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <label htmlFor="cat-settings-sync-input" className="text-sm font-medium">{t("categories.syncIntervalLabel")}</label>
+          <p className="text-xs text-muted-foreground">{t("categories.leaveEmptyForGlobal")}</p>
+          <Input
+            id="cat-settings-sync-input"
+            type="number"
+            placeholder={t("categories.example")}
+            value={syncValue}
+            onChange={(e) => setSyncValue(e.target.value)}
+            className="h-10 rounded-2xl border-border/70 bg-background/70"
+          />
         </div>
-      </button>
-    )}
+        <DialogFooter className="pt-2">
+          <Button variant="ghost" className="rounded-2xl" onClick={() => setSettingsOpen(false)}>{t("categories.cancelButton")}</Button>
+          <Button className="rounded-2xl" onClick={() => {
+            const val = parseInt(syncValue);
+            updateCategory.mutate({ categoryId: cat.id, data: { updateFrequency: isNaN(val) ? null : val } });
+            setSettingsOpen(false);
+          }}>{t("categories.saveButton")}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }
@@ -756,6 +763,7 @@ export function FeedManagement({
   pageMode?: boolean;
 }) {
   const t = useTranslations("feedManagement");
+  const tc = useTranslations("common");
   const format = useFormatter();
   const { data: feeds = [] } = useFeeds();
   const deleteFeed = useDeleteFeed();
@@ -911,7 +919,7 @@ export function FeedManagement({
       importOpml.mutate(xml, {
         onSuccess: (report) => {
           setLastImportReport(report);
-          toast.success(`Import complete: ${report.feedsAdded} added, ${report.feedsUpdated} updated`);
+          toast.success(t("toasts.importComplete", { added: report.feedsAdded, updated: report.feedsUpdated }));
         },
         onError: () => toast.error(t("toasts.failedToImport")),
       });
@@ -995,7 +1003,7 @@ export function FeedManagement({
             parentId: over.id as string,
           },
         ]);
-        toast.success(`Moved ${activeCategory.name} into ${overCategory.name}`);
+        toast.success(t("toasts.categoryMoved", { category: activeCategory.name, target: overCategory.name }));
         return;
       }
     }
@@ -1051,7 +1059,7 @@ export function FeedManagement({
                           className="flex w-full items-center gap-2 py-1.5 text-start text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <ChevronRight className={cn("w-4 h-4 transition-transform duration-200", expanded && "rotate-90")} />
-                          <Folder className="w-3.5 h-3.5 text-primary" />
+                          <Folder className="size-4 text-primary" />
                           {groupName}
                           <span className="text-xs font-normal text-muted-foreground/60">({groupFeeds.length})</span>
                         </button>
@@ -1079,7 +1087,7 @@ export function FeedManagement({
                                     <div className="truncate text-xs text-muted-foreground">
                                       {feed.url}
                                     </div>
-                                    <div className="mt-0.5 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                                    <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
                                       <span>
                                         {t("feeds.lastSync")}{" "}
                                         {feed.lastFetchedAt
@@ -1121,7 +1129,7 @@ export function FeedManagement({
                                       variant="ghost"
                                       size="sm"
                                       className="h-8 shrink-0 rounded-xl px-2.5 text-muted-foreground transition-all hover:bg-accent"
-                                      title="Feed settings"
+                                      title={t("feeds.settings")}
                                       onClick={() => setEditingFeed(feed)}
                                     >
                                       <Settings2 className="w-4 h-4" />
@@ -1228,7 +1236,7 @@ export function FeedManagement({
               className="h-full mt-0 focus-visible:outline-none"
             >
               <div className="grid h-full gap-6 px-6 py-4 sm:px-8 lg:grid-cols-2">
-                <section className="min-h-0 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
+                <section className="min-h-0 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
                   <div className="mb-5 flex items-center gap-3">
                     <Tag className="h-5 w-5 text-primary" />
                     <div>
@@ -1258,7 +1266,7 @@ export function FeedManagement({
                       {labels.map((label: any) => (
                         <div
                           key={label.id}
-                          className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/60 p-3"
+                          className="ui-control-surface flex items-center gap-3 rounded-2xl border p-3"
                         >
                           <span className="h-3 w-3 rounded-full" style={{ backgroundColor: label.color }} />
                           <span className="flex-1 truncate text-sm font-medium">{label.name}</span>
@@ -1286,7 +1294,7 @@ export function FeedManagement({
                   </ScrollArea>
                 </section>
 
-                <section className="min-h-0 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
+                <section className="min-h-0 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
                   <div className="mb-5 flex items-center gap-3">
                     <Bookmark className="h-5 w-5 text-primary" />
                     <div>
@@ -1308,7 +1316,7 @@ export function FeedManagement({
                         return (
                         <div
                           key={search.id}
-                          className="rounded-2xl border border-border/60 bg-background/60 p-3"
+                          className="ui-control-surface rounded-2xl border p-3"
                         >
                           <div className="flex items-center gap-3">
                             <span className="flex-1 truncate text-sm font-medium">{search.name}</span>
@@ -1336,7 +1344,7 @@ export function FeedManagement({
                           {search.shareToken && (
                             <div className="mt-3 rounded-xl border border-border/50 bg-muted/25 p-2">
                               <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                                <LinkIcon className="h-3.5 w-3.5" />
+                                <LinkIcon className="size-4" />
                                 {t("savedSearches.sharedReadOnlyLink")}
                               </div>
                               <div className="flex flex-wrap gap-1.5">
@@ -1346,18 +1354,18 @@ export function FeedManagement({
                                   className="h-8 rounded-xl"
                                   onClick={() => { navigator.clipboard.writeText(shareUrl); toast.success(t("toasts.sharingEnabled")); }}
                                 >
-                                  <Copy className="me-1.5 h-3.5 w-3.5" />
+                                  <Copy className="me-1.5 size-4" />
                                   {t("savedSearches.copy")}
                                 </Button>
                                 <Button asChild variant="outline" size="sm" className="h-8 rounded-xl">
                                   <a href={shareUrl} target="_blank" rel="noreferrer">
-                                    <ExternalLink className="me-1.5 h-3.5 w-3.5" />
+                                    <ExternalLink className="me-1.5 size-4" />
                                     {t("savedSearches.open")}
                                   </a>
                                 </Button>
                                 <Button asChild variant="outline" size="sm" className="h-8 rounded-xl">
                                   <a href={rssUrl} target="_blank" rel="noreferrer">
-                                    <Rss className="me-1.5 h-3.5 w-3.5" />
+                                    <Rss className="me-1.5 size-4" />
                                     {t("savedSearches.rss")}
                                   </a>
                                 </Button>
@@ -1386,7 +1394,7 @@ export function FeedManagement({
               className="h-full mt-0 focus-visible:outline-none"
             >
               <div className="flex h-full flex-col px-6 py-4 sm:px-8">
-                <div className="mb-5 flex flex-col gap-4 rounded-3xl border border-border/60 bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="mb-5 flex flex-col gap-4 rounded-2xl border border-border/60 bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
                     <Activity className="h-5 w-5 text-primary" />
                     <div>
@@ -1416,7 +1424,7 @@ export function FeedManagement({
                 <ScrollArea className="min-h-0 flex-1">
                   <div className="space-y-3 pb-8 pe-3">
                     {feedHealth.map((feed: any) => (
-                      <div key={feed.id} className="rounded-3xl border border-border/60 bg-card p-4 shadow-sm">
+                      <div key={feed.id} className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-background text-2xl shadow-sm">
                             {feed.icon || "📰"}
@@ -1463,7 +1471,7 @@ export function FeedManagement({
               <div className="space-y-6 py-4 pb-8">
                 <MigrationWizard onUpload={handleImport} isImporting={importOpml.isPending} />
 
-                <div className="space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm">
+                <div className="space-y-4 rounded-2xl border border-border/60 bg-card p-7 shadow-sm">
                   <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em] text-primary">
                     <Upload className="w-6 h-6" />
                     {t("importExport.genericOpmlImport")}
@@ -1513,7 +1521,7 @@ export function FeedManagement({
                   </Label>
                 </div>
 
-                <div className="space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm">
+                <div className="space-y-4 rounded-2xl border border-border/60 bg-card p-7 shadow-sm">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em]">
                       <Download className="w-6 h-6 text-muted-foreground" />
@@ -1571,7 +1579,7 @@ export function FeedManagement({
                   </div>
                 </div>
 
-                <div className="space-y-4 rounded-3xl border border-border/60 bg-card p-7 shadow-sm">
+                <div className="space-y-4 rounded-2xl border border-border/60 bg-card p-7 shadow-sm">
                   <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em]">
                     <Download className="w-6 h-6 text-muted-foreground" />
                     {t("importExport.exportAllDataJson")}
@@ -1628,7 +1636,7 @@ export function FeedManagement({
                         onClick={() => applyAutoReadRulesNow.mutate()}
                         disabled={applyAutoReadRulesNow.isPending}
                       >
-                        <Play className="w-3.5 h-3.5" />
+                        <Play className="size-4" />
                         {t("rules.runNow")}
                       </Button>
                       <Button
@@ -1636,7 +1644,7 @@ export function FeedManagement({
                         className="w-full rounded-xl gap-1.5 sm:w-auto"
                         onClick={() => setShowAddRule(true)}
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        <Plus className="size-4" />
                         {t("rules.addRule")}
                       </Button>
                     </div>
@@ -1786,7 +1794,7 @@ export function FeedManagement({
                                 )
                               }
                             >
-                              <Eye className="w-3.5 h-3.5" />
+                              <Eye className="size-4" />
                               {t("rules.preview")}
                             </Button>
                           </div>
@@ -1812,7 +1820,7 @@ export function FeedManagement({
                           <label className="text-xs font-medium text-muted-foreground">
                             {t("rules.actionsRunInOrder")}
                             {newRuleTrigger === "feed_error" && (
-                              <span className="ms-2 text-[10px] uppercase tracking-wider text-amber-500">notifications &amp; webhooks only</span>
+                              <span className="ms-2 text-xs font-semibold uppercase tracking-wider text-amber-500">{t("rules.notifyWebhookOnly")}</span>
                             )}
                           </label>
                           <ActionListEditor
@@ -1833,7 +1841,7 @@ export function FeedManagement({
                                 checked={newRuleRemoveSpoilerOnDelete}
                                 onCheckedChange={(v) => setNewRuleRemoveSpoilerOnDelete(!!v)}
                               />
-                              <span className="text-xs text-muted-foreground">Remove spoiler flag from all flagged articles when this rule is deleted</span>
+                              <span className="text-xs text-muted-foreground">{t("rules.removeSpoilerOnDeleteLabel")}</span>
                             </label>
                           )}
                         </div>
@@ -1927,10 +1935,10 @@ export function FeedManagement({
                     <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                          {keywordAlerts.length} legacy keyword alert{keywordAlerts.length === 1 ? "" : "s"} found
+                          {t("rules.legacyAlertsFound", { count: keywordAlerts.length })}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Alerts and rules have been merged. Convert your alerts into rules to manage them here.
+                          {t("rules.alertsAndRulesMerged")}
                         </p>
                       </div>
                       <Button
@@ -1939,7 +1947,7 @@ export function FeedManagement({
                         disabled={migrateAlertsToRules.isPending}
                         onClick={() => migrateAlertsToRules.mutate()}
                       >
-                        {migrateAlertsToRules.isPending ? "Migrating…" : t("rules.migrateToRules")}
+                        {migrateAlertsToRules.isPending ? t("rules.migrating") : t("rules.migrateToRules")}
                       </Button>
                     </div>
                   )}
@@ -2003,7 +2011,7 @@ export function FeedManagement({
                                 )}
                                 title={rule.enabled ? t("rules.disableRule") : t("rules.enableRule")}
                               >
-                                <Power className="w-3.5 h-3.5" />
+                                <Power className="size-4" />
                               </button>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-sm truncate">{rule.name}</p>
@@ -2074,7 +2082,7 @@ export function FeedManagement({
                                   }}
                                   title={isEditing ? t("rules.closeEditor") : t("rules.editRule")}
                                 >
-                                  {isEditing ? <X className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+                                  {isEditing ? <X className="size-4" /> : <Pencil className="size-4" />}
                                 </Button>
                                 <Button
                                   size="icon"
@@ -2088,7 +2096,7 @@ export function FeedManagement({
                                     })
                                   }
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="size-4" />
                                 </Button>
                               </div>
                             </div>
@@ -2162,7 +2170,7 @@ export function FeedManagement({
                                   <label className="text-xs font-medium text-muted-foreground">
                                     {t("rules.actionsRunInOrder")}
                                     {editRuleTrigger === "feed_error" && (
-                                      <span className="ms-2 text-[10px] uppercase tracking-wider text-amber-500">notifications &amp; webhooks only</span>
+                                      <span className="ms-2 text-xs font-semibold uppercase tracking-wider text-amber-500">{t("rules.notifyWebhookOnly")}</span>
                                     )}
                                   </label>
                                   <ActionListEditor
@@ -2182,7 +2190,7 @@ export function FeedManagement({
                                         checked={editRuleRemoveSpoilerOnDelete}
                                         onCheckedChange={(v) => setEditRuleRemoveSpoilerOnDelete(!!v)}
                                       />
-                                      <span className="text-xs text-muted-foreground">Remove spoiler flag from all flagged articles when this rule is deleted</span>
+                                      <span className="text-xs text-muted-foreground">{t("rules.removeSpoilerOnDeleteLabel")}</span>
                                     </label>
                                   )}
                                 </div>
@@ -2251,7 +2259,7 @@ export function FeedManagement({
                       </p>
                     </div>
                     <Button size="sm" className="w-full rounded-xl gap-1.5 sm:w-auto" onClick={() => setShowAddAlert(true)}>
-                      <Plus className="w-3.5 h-3.5" />
+                      <Plus className="size-4" />
                       {t("alerts.addAlert")}
                     </Button>
                   </div>
@@ -2259,10 +2267,10 @@ export function FeedManagement({
                   <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
                     <div className="flex items-center gap-2 text-sm font-medium text-amber-400">
                       <Info className="w-4 h-4 shrink-0" />
-                      How alerts work
+                      {t("alerts.howAlertsWork")}
                     </div>
                     <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
-                      <p>Alerts fire whenever a newly synced article matches your query. You&apos;ll see a notification badge in the app. Scope can be limited to a specific feed or category.</p>
+                      <p>{t("alerts.alertsExplanation")}</p>
 
                       <div>
                         <p className="font-medium text-foreground/80 mb-1.5">Examples</p>
@@ -2349,25 +2357,25 @@ export function FeedManagement({
                               )
                             }
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="size-4" />
                             {t("rules.preview")}
                           </Button>
                         </div>
                         <Select value={newAlertScope} onValueChange={setNewAlertScope}>
                           <SelectTrigger className="rounded-xl h-10">
-                            <SelectValue placeholder="Scope" />
+                            <SelectValue placeholder={t("rules.scope")} />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">{t("alerts.allFeeds")}</SelectItem>
                             {feeds.map((feed: any) => (
-                              <SelectItem key={feed.id} value={`feed:${feed.id}`}>Feed: {feed.name}</SelectItem>
+                              <SelectItem key={feed.id} value={`feed:${feed.id}`}>{t("rules.feedScope", { name: feed.name })}</SelectItem>
                             ))}
                             {categories.map((category: any) => (
-                              <SelectItem key={category.id} value={`category:${category.id}`}>Category: {category.name}</SelectItem>
+                              <SelectItem key={category.id} value={`category:${category.id}`}>{t("rules.categoryScope", { name: category.name })}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        <label className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm">
+                        <label className="ui-control-surface flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
                           <input
                             type="checkbox"
                             checked={newAlertPush}
@@ -2375,7 +2383,7 @@ export function FeedManagement({
                           />
                           {t("alerts.sendBrowserPush")}
                         </label>
-                        <label className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm">
+                        <label className="ui-control-surface flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
                           <input
                             type="checkbox"
                             checked={newAlertEmail}
@@ -2589,7 +2597,7 @@ export function FeedManagement({
                                     )}
                                     title={alert.enabled ? t("alerts.disableAlert") : t("alerts.enableAlert")}
                                   >
-                                    <Power className="w-3.5 h-3.5" />
+                                    <Power className="size-4" />
                                   </button>
                                   <Bell className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
                                   <div className="min-w-0 flex-1">
@@ -2597,20 +2605,21 @@ export function FeedManagement({
                                     <p className="font-medium text-sm truncate">{alert.name}</p>
                                     {matchCount > 0 && (
                                       <span className="shrink-0 rounded-full bg-primary/10 text-primary text-[10px] font-medium px-1.5 py-0.5">
-                                        {matchCount} match{matchCount !== 1 ? "es" : ""}
+                                        {t("alerts.matchCount", { count: matchCount })}
                                       </span>
                                     )}
                                   </div>
                                   <p className="text-xs text-muted-foreground font-mono truncate">{alert.query}</p>
-                                  <p className="text-[11px] text-muted-foreground truncate">
-                                    Scope: {alert.scope === "all" ? "all feeds" : alert.scope} · {
-                                      [
-                                        "in-app",
-                                        ...(actions.includes("notify_push") ? ["push"] : []),
-                                        ...(actions.includes("notify_email") ? ["email"] : []),
-                                      ].join(" + ")
-                                    }
-                                    {alert.lastTriggeredAt ? ` · last: ${format.dateTime(new Date(alert.lastTriggeredAt), { dateStyle: "medium", timeStyle: "short" })}` : ""}
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {t("alerts.scopeSummary", {
+                                      scope: alert.scope === "all" ? t("alerts.allFeeds") : alert.scope,
+                                      channels: [
+                                        t("alerts.channelInApp"),
+                                        ...(actions.includes("notify_push") ? [t("alerts.channelPush")] : []),
+                                        ...(actions.includes("notify_email") ? [t("alerts.channelEmail")] : []),
+                                      ].join(" + "),
+                                    })}
+                                    {alert.lastTriggeredAt ? ` · ${t("alerts.lastTriggered", { date: format.dateTime(new Date(alert.lastTriggeredAt), { dateStyle: "medium", timeStyle: "short" }) })}` : ""}
                                   </p>
                                   </div>
                                 </div>
@@ -2622,7 +2631,7 @@ export function FeedManagement({
                                   title={t("alerts.recentMatches")}
                                   onClick={() => setExpandedHistoryId(isHistoryOpen ? null : alert.id)}
                                 >
-                                  <History className="w-3.5 h-3.5" />
+                                  <History className="size-4" />
                                 </Button>
                                 <Button
                                   size="icon"
@@ -2638,7 +2647,7 @@ export function FeedManagement({
                                     setEditAlertEmail(actions.includes("notify_email"));
                                   }}
                                 >
-                                  <Pencil className="w-3.5 h-3.5" />
+                                  <Pencil className="size-4" />
                                 </Button>
                                 <Button
                                   size="sm"
@@ -2647,7 +2656,7 @@ export function FeedManagement({
                                   onClick={() => testKeywordAlert.mutate(alert.id)}
                                   disabled={testKeywordAlert.isPending}
                                 >
-                                  Test
+                                  {t("alerts.testAlert")}
                                 </Button>
                                 <Button
                                   size="icon"
@@ -2655,7 +2664,7 @@ export function FeedManagement({
                                   className="w-7 h-7 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10"
                                   onClick={() => setPendingDelete({ type: "keyword-alert", id: alert.id, name: alert.name })}
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="size-4" />
                                 </Button>
                                 </div>
                               </div>
@@ -2664,7 +2673,7 @@ export function FeedManagement({
                               <div className="border-t border-border/60 px-4 py-3 bg-muted/30">
                                 <p className="text-xs font-medium text-muted-foreground mb-2">{t("alerts.recentMatches")}</p>
                                 {historyLoading ? (
-                                  <p className="text-xs text-muted-foreground">Loading…</p>
+                                  <p className="text-xs text-muted-foreground">{tc("loading")}…</p>
                                 ) : alertHistory.length === 0 ? (
                                   <p className="text-xs text-muted-foreground">{t("alerts.noMatches")}</p>
                                 ) : (
@@ -2681,7 +2690,7 @@ export function FeedManagement({
                                         }}
                                       >
                                         <span className="block truncate">{n.body}</span>
-                                        <span className="text-[10px] text-muted-foreground">
+                                        <span className="text-xs text-muted-foreground">
                                           {format.dateTime(new Date(n.createdAt), { dateStyle: "medium", timeStyle: "short" })}
                                         </span>
                                       </button>
@@ -2714,24 +2723,24 @@ export function FeedManagement({
           <AlertDialogContent className="rounded-3xl border-border/70 bg-background">
             <AlertDialogHeader>
               <AlertDialogTitle>
-                Delete {pendingDelete?.type === "feed"
-                  ? "feed"
+                {pendingDelete?.type === "feed"
+                  ? t("deleteConfirm.titleFeed")
                   : pendingDelete?.type === "category"
-                    ? "category"
+                    ? t("deleteConfirm.titleCategory")
                     : pendingDelete?.type === "label"
-                      ? "label"
+                      ? t("deleteConfirm.titleLabel")
                       : pendingDelete?.type === "auto-read-rule"
-                        ? "rule"
+                        ? t("deleteConfirm.titleRule")
                         : pendingDelete?.type === "keyword-alert"
-                          ? "alert"
-                        : "saved search"}?
+                          ? t("deleteConfirm.titleAlert")
+                        : t("deleteConfirm.titleSavedSearch")}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                “{pendingDelete?.name}” will be removed. This cannot be undone.
+                {t("deleteConfirm.description", { name: pendingDelete?.name ?? "" })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="rounded-2xl">Cancel</AlertDialogCancel>
+              <AlertDialogCancel className="rounded-2xl">{tc("cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={() => {
@@ -2752,7 +2761,7 @@ export function FeedManagement({
                   setPendingDelete(null);
                 }}
               >
-                Delete
+                {tc("delete")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -2886,7 +2895,7 @@ function MigrationWizard({
           <Compass className="w-6 h-6" />
           {t("migration.migrationWizard")}
         </div>
-        <ol className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <ol className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {(["source", "instructions", "upload"] as const).map((s, i) => (
             <li key={s} className="flex items-center gap-1">
               <span
@@ -2962,7 +2971,7 @@ function MigrationWizard({
                 rel="noopener noreferrer"
                 className="order-2 sm:order-1 inline-flex items-center justify-center gap-1.5 rounded-2xl border border-border/60 bg-background px-4 py-2 text-sm font-medium hover:bg-muted/60 transition-colors"
               >
-                {t("migration.openSource")} <ChevronRight className="h-3.5 w-3.5" />
+                {t("migration.openSource")} <ChevronRight className="size-4" />
               </a>
             )}
             <button
