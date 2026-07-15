@@ -1,10 +1,28 @@
-import { describe, it, expect, vi } from "vitest";
-import { tokenizeSearch, parseDateToken, buildAdvancedSearchWhere } from "../../lib/search";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { tokenizeSearch, parseDateToken, buildAdvancedSearchWhere, buildFtsMatchQuery } from "../../lib/search";
+import { db } from "../../lib/db";
 
-// Mock the db module so search.ts can be imported without a real DB connection
-vi.mock("../../lib/db", () => ({ db: {} }));
+// Mock the db module so search.ts can be imported without a real DB connection.
+// getDatabaseProvider mirrors the default (sqlite) so `isPostgres` in lib/search.ts
+// resolves the same way it would in a real dev/test environment.
+vi.mock("../../lib/db", () => ({
+  db: { $queryRawUnsafe: vi.fn() },
+  getDatabaseProvider: () => "sqlite",
+}));
 
 const USER = "user-1";
+
+// Default every test to "article_fts unavailable" so pre-existing tests that
+// don't care about FTS routing deterministically exercise the LIKE fallback
+// path (identical to pre-FTS behavior), regardless of test execution order.
+// Individual tests below override this with mockResolvedValue(Once) to
+// exercise the FTS-hit path instead.
+beforeEach(() => {
+  (db.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>).mockReset();
+  (db.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
+    new Error("article_fts not available in this test")
+  );
+});
 
 // ── tokenizeSearch ────────────────────────────────────────────────────────────
 
@@ -116,6 +134,107 @@ describe("parseDateToken", () => {
   it("is case-insensitive for unit letters", () => {
     const lower = parseDateToken("3D");
     expect(lower).toBeInstanceOf(Date);
+  });
+});
+
+// ── buildFtsMatchQuery ────────────────────────────────────────────────────────
+
+describe("buildFtsMatchQuery", () => {
+  it("wraps a plain term in double quotes", () => {
+    expect(buildFtsMatchQuery("hello")).toBe('"hello"');
+  });
+
+  it("doubles embedded double quotes (FTS5 escaping rule)", () => {
+    expect(buildFtsMatchQuery('say "hi"')).toBe('"say ""hi"""');
+  });
+
+  it("preserves a multi-word phrase, including the space, as one literal", () => {
+    expect(buildFtsMatchQuery("exact phrase")).toBe('"exact phrase"');
+  });
+
+  it("leaves FTS5 syntax characters (colon, hyphen, asterisk) untouched inside the quotes", () => {
+    expect(buildFtsMatchQuery("foo:bar")).toBe('"foo:bar"');
+    expect(buildFtsMatchQuery("baz-qux")).toBe('"baz-qux"');
+    expect(buildFtsMatchQuery("wild*card")).toBe('"wild*card"');
+  });
+
+  it("handles a term that is only double quotes", () => {
+    expect(buildFtsMatchQuery('""')).toBe('""""""');
+  });
+
+  it("handles unicode terms without alteration", () => {
+    expect(buildFtsMatchQuery("über café")).toBe('"über café"');
+  });
+});
+
+// ── buildAdvancedSearchWhere — SQLite FTS routing for free-text terms ─────────
+
+describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
+  const queryRawUnsafeMock = db.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>;
+
+  it("routes a >=3 char free-text term through article_fts and ORs it with the link/feed/label LIKE branches", async () => {
+    queryRawUnsafeMock.mockResolvedValue([{ id: "article-1" }, { id: "article-2" }]);
+
+    const result = await buildAdvancedSearchWhere(USER, "openclaw") as any;
+
+    expect(queryRawUnsafeMock).toHaveBeenCalledWith(
+      expect.stringContaining("article_fts"),
+      '"openclaw"'
+    );
+    expect(result.AND).toHaveLength(1);
+    const [condition] = result.AND;
+    expect(condition.OR).toEqual([
+      { id: { in: ["article-1", "article-2"] } },
+      { link: { contains: "openclaw" } },
+      { feed: { name: { contains: "openclaw" } } },
+      { labels: { some: { label: { name: { contains: "openclaw" }, userId: USER } } } },
+    ]);
+  });
+
+  it("falls back to the full LIKE-based OR list when the FTS query throws (e.g. article_fts missing)", async () => {
+    queryRawUnsafeMock.mockRejectedValue(new Error("no such table: article_fts"));
+
+    const result = await buildAdvancedSearchWhere(USER, "openclaw") as any;
+
+    const [condition] = result.AND;
+    expect(condition.OR).toEqual([
+      { title: { contains: "openclaw" } },
+      { content: { contains: "openclaw" } },
+      { excerpt: { contains: "openclaw" } },
+      { author: { contains: "openclaw" } },
+      { link: { contains: "openclaw" } },
+      { feed: { name: { contains: "openclaw" } } },
+      { labels: { some: { label: { name: { contains: "openclaw" }, userId: USER } } } },
+    ]);
+  });
+
+  it("skips FTS and uses the full LIKE-based OR list for terms shorter than 3 characters", async () => {
+    const result = await buildAdvancedSearchWhere(USER, "ab") as any;
+
+    expect(queryRawUnsafeMock).not.toHaveBeenCalled();
+    const [condition] = result.AND;
+    expect(condition.OR).toEqual([
+      { title: { contains: "ab" } },
+      { content: { contains: "ab" } },
+      { excerpt: { contains: "ab" } },
+      { author: { contains: "ab" } },
+      { link: { contains: "ab" } },
+      { feed: { name: { contains: "ab" } } },
+      { labels: { some: { label: { name: { contains: "ab" }, userId: USER } } } },
+    ]);
+  });
+
+  it("issues one FTS lookup per free-text term and ANDs the results", async () => {
+    queryRawUnsafeMock
+      .mockResolvedValueOnce([{ id: "a1" }])
+      .mockResolvedValueOnce([{ id: "a2" }]);
+
+    const result = await buildAdvancedSearchWhere(USER, "openclaw hermes") as any;
+
+    expect(queryRawUnsafeMock).toHaveBeenCalledTimes(2);
+    expect(result.AND).toHaveLength(2);
+    expect(result.AND[0].OR[0]).toEqual({ id: { in: ["a1"] } });
+    expect(result.AND[1].OR[0]).toEqual({ id: { in: ["a2"] } });
   });
 });
 
