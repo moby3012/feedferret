@@ -5,6 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [Unreleased]
+
+Work merged since v1.1.1 (PRs #88–#96), targeting the next release.
+
+### Added
+
+- **Expanded email digest** (PR #95) — configurable article count with min/max thresholds, fixed lookback windows (6 h–30 d), IANA-timezone-aware scheduling, weekdays frequency, feed-grouped layout, and optional AI summaries (overall or per feed) via the user's configured AI provider.
+- **Digest polish** (PR #96) — deduplication of already-featured articles (`Article.digestedAt` + `digestSkipFeatured` setting), label filter alongside the feed filter, pause mode with duration picker (tomorrow / 3 d / 1 w / 2 w / indefinite), article-count preview with feed breakdown, RFC 8058 `List-Unsubscribe` / `List-Unsubscribe-Post` headers across all mail providers, and AI-generated subject lines when AI summary mode is active.
+- **Dedicated search results view** (PR #93) — new `SearchResultsView` with a header showing the active query, result/unread counts, a prominent close button and an edit-query affordance; mobile bottom controls gain a search-active variant with thumb-reachable actions. New `searchResults` i18n namespace (de/en).
+- **Granular SMTP TLS settings** (PR #89) — new `smtpSecure` (auto/ssl/starttls/plain) and `smtpRejectUnauthorized` fields so admins can explicitly control TLS mode instead of relying on port-based auto-detection.
+
+### Changed
+
+- **Settings page split into five themed tabs** (PR #91) — Appearance, Reading, Account, Notifications, Integrations; replaces the previous 2100+-line single scroll page. Mobile uses a Select dropdown via `ResponsiveTabsNav` (PR #92).
+
+### Fixed
+
+- **SMTP authentication** (PR #89) — `smtpPassword` was stored AES-encrypted but passed raw to nodemailer, causing 535 auth failures; it is now decrypted before sending.
+- **Search spans hidden feeds** (PR #94) — global search no longer applies the `hideFromAllFeeds` exclusion, so articles in feeds hidden from "All Articles" are findable again. Browsing and mark-all-read keep the exclusion.
+- **Mark-all-read respects hidden feeds** (PR #88) — "Mark all read" in the All Articles scope no longer touches articles from feeds/categories marked `hideFromAllFeeds`.
+- **Log timestamps in local timezone** (PR #90) — audit log, login attempts and system log tables now render timestamps in the browser's timezone instead of the server's (usually UTC).
+- **TypeScript strict mode** (PR #91) — resolved all pre-existing implicit-any and type-mismatch errors; `tsc --noEmit` is clean under strict settings.
+- **Sidebar empty-state contrast** (PR #91) — removed 50 % opacity and 10 px font size from the "no feeds" empty-state text.
+
+---
+
 ## [1.1.1] — 2026-05-21 — Post-Release Patch
 
 Fixes found during release testing.

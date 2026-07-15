@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Last updated: 2026-05-21 — v1.1 fully closed, date formatting completed.
+> Last updated: 2026-07-15 — v1.1.1 shipped; post-release work (digest expansion, search view, settings tabs, PRs #88–#96) merged to `main` and documented in the CHANGELOG "Unreleased" section. A full design audit (performance / UX / security / visuals) is tracked in [`design-audit-todo.md`](design-audit-todo.md) and feeds into v1.2.
 
 This file is the **top-level index**. Each release has its own detailed planning document in [`docs/releases/`](releases/).
 
@@ -11,8 +11,8 @@ This file is the **top-level index**. Each release has its own detailed planning
 | Version | Theme | Status | Details |
 |---|---|---|---|
 | **v1.0.0** | Initial public release | ✅ Shipped 2026-05-18 | [`releases/v1.0.md`](releases/v1.0.md) |
-| **v1.1** | i18n + Full API/MCP Coverage + UX Polish | ✅ Shipped 2026-05-20 | [`releases/v1.1-i18n.md`](releases/v1.1-i18n.md) |
-| **v1.2** | Theming & Accessibility | ⬜ Queued | [`releases/v1.2-theming.md`](releases/v1.2-theming.md) |
+| **v1.1** | i18n + Full API/MCP Coverage + UX Polish | ✅ Shipped 2026-05-20 (v1.1.1 patch 2026-05-21) | [`releases/v1.1-i18n.md`](releases/v1.1-i18n.md) |
+| **v1.2** | Theming & Accessibility (+ design-audit findings) | ⬜ Queued | [`releases/v1.2-theming.md`](releases/v1.2-theming.md) · [`design-audit-todo.md`](design-audit-todo.md) |
 | **v1.3** | Feature Backlog Release | ⬜ Queued | [`releases/v1.3.md`](releases/v1.3.md) |
 | **v2.0** | Podcast, Audio & Native Apps | ⬜ Planned | [`releases/v2.md`](releases/v2.md) |
 
