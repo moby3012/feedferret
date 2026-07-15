@@ -107,7 +107,10 @@
     "addToAuthApp": "1. Add this account in your authenticator app",
     "manualSetupHint": "Use manual setup if your app does not support opening otpauth links directly.",
     "copied": "{label} copied",
-    "couldNotCopy": "Could not copy {label}"
+    "couldNotCopy": "Could not copy {label}",
+    "beginSetupFailed": "Could not start 2FA setup. Please try again.",
+    "enableFailed": "Could not enable 2FA. Check the code and try again.",
+    "disableFailed": "Could not disable 2FA. Check the code and try again."
   },
   "digest": {
     "title": "Email Digest",

@@ -407,7 +407,7 @@ export function ServerManagementDialog({
             ) : (
               <>
                 {/* ── USERS ── */}
-                <TabsContent value="users" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="users" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <div className="px-6 sm:px-8 flex flex-col h-full">
                     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <Input
@@ -432,7 +432,7 @@ export function ServerManagementDialog({
                           <div
                             key={user.id}
                             className={cn(
-                              "flex flex-col gap-4 p-4 rounded-3xl border shadow-sm transition-all hover:border-border sm:flex-row sm:items-center",
+                              "flex flex-col gap-4 p-4 rounded-2xl border shadow-sm transition-all hover:border-border sm:flex-row sm:items-center",
                               user.isActive
                                 ? "bg-card border-border/60"
                                 : "bg-muted/30 border-border/40 opacity-70",
@@ -495,10 +495,10 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── ACCESS / REGISTRATIONS ── */}
-                <TabsContent value="registrations" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="registrations" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <ScrollArea className="h-full">
                     <div className="max-w-2xl space-y-8 px-6 py-6 sm:px-8">
-                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.allowNewRegistrations")}</h4>
                         <p className="text-sm text-muted-foreground">
@@ -510,7 +510,7 @@ export function ServerManagementDialog({
                         onCheckedChange={(checked) => handleUpdateSettings({ registrationsEnabled: checked })}
                       />
                     </div>
-                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.require2FA")}</h4>
                         <p className="text-sm text-muted-foreground">
@@ -522,7 +522,7 @@ export function ServerManagementDialog({
                         onCheckedChange={(checked) => handleUpdateSettings({ require2FAForAdmins: checked })}
                       />
                     </div>
-                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.publicSavedSearches")}</h4>
                         <p className="text-sm text-muted-foreground">
@@ -534,7 +534,7 @@ export function ServerManagementDialog({
                         onCheckedChange={(checked) => handleUpdateSettings({ disablePublicSharedSearches: !checked })}
                       />
                     </div>
-                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.defaultUiLanguage")}</h4>
                         <p className="text-sm text-muted-foreground">
@@ -554,7 +554,7 @@ export function ServerManagementDialog({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="p-6 rounded-3xl bg-amber-500/10 border border-amber-500/20 space-y-3">
+                    <div className="p-6 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-3">
                       <div className="flex items-center gap-2 text-amber-500">
                         <AlertCircle className="w-5 h-5" />
                         <h4 className="font-bold">{t("registrations.securityNote")}</h4>
@@ -568,11 +568,11 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── EMAIL ── */}
-                <TabsContent value="email" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="email" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <ScrollArea className="h-full">
                     <div className="px-6 sm:px-8 py-6 space-y-6 max-w-2xl">
                       {/* Enable toggle */}
-                      <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
                           <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("email.mailService")}</h4>
                           <p className="text-sm text-muted-foreground">
@@ -586,7 +586,7 @@ export function ServerManagementDialog({
                       </div>
 
                       {settings?.mailServiceEnabled && (
-                        <div className="grid gap-6 p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
+                        <div className="grid gap-6 p-6 rounded-2xl bg-card border border-border/60 shadow-sm">
                           {/* Provider selection */}
                           <div className="space-y-2">
                             <Label>{t("email.emailProvider")}</Label>
@@ -708,7 +708,7 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── NOTIFICATIONS ── */}
-                <TabsContent value="notifications" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="notifications" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <ScrollArea className="h-full">
                     <div className="px-6 py-6 sm:px-8 max-w-2xl">
                       <NotificationsAdminPanel />
@@ -717,10 +717,10 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── INSTANCE ── */}
-                <TabsContent value="instance" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="instance" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <ScrollArea className="h-full">
                     <div className="px-6 py-6 sm:px-8">
-                  <div className="max-w-2xl grid gap-6 p-6 rounded-3xl bg-card border border-border/60 shadow-sm">
+                  <div className="max-w-2xl grid gap-6 p-6 rounded-2xl bg-card border border-border/60 shadow-sm">
                     <div className="grid gap-3">
                       <Label>{t("instance.sidebarLogo")}</Label>
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -797,7 +797,7 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── STARTER PACKS ── */}
-                <TabsContent value="starter-packs" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="starter-packs" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <ScrollArea className="h-full">
                     <div className="space-y-4 px-6 py-6 sm:px-8">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -836,7 +836,7 @@ export function ServerManagementDialog({
                       )}
 
                       {starterPacks.map((pack, packIndex) => (
-                        <div key={pack.id} className="space-y-4 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
+                        <div key={pack.id} className="space-y-4 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
                           <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
                             <div className="space-y-1.5">
                               <Label>{t("starterPacks.name")}</Label>
@@ -863,7 +863,7 @@ export function ServerManagementDialog({
                                   <ArrowDown className="h-4 w-4" />
                                 </Button>
                               </div>
-                              <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-background/70 px-3 py-2">
+                              <div className="ui-control-surface flex items-center gap-2 rounded-2xl border px-3 py-2">
                                 <span className="text-sm">{t("starterPacks.enabled")}</span>
                                 <Switch checked={pack.enabled} onCheckedChange={(checked) => updatePack(packIndex, { enabled: checked })} />
                               </div>
@@ -900,7 +900,7 @@ export function ServerManagementDialog({
                               <Label>{t("starterPacks.feeds")} ({pack.feeds.length})</Label>
                               <div className="flex flex-wrap gap-2">
                                 <Label className="inline-flex h-9 cursor-pointer items-center rounded-xl border border-border/70 bg-background/70 px-3 text-sm font-medium hover:bg-muted">
-                                  <Upload className="me-1.5 h-3.5 w-3.5" /> {t("starterPacks.importOpml")}
+                                  <Upload className="me-1.5 h-4 w-4" /> {t("starterPacks.importOpml")}
                                   <Input
                                     type="file"
                                     accept=".opml,.xml,text/xml,application/xml"
@@ -912,22 +912,22 @@ export function ServerManagementDialog({
                                   />
                                 </Label>
                                 <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => exportStarterPack(pack)} disabled={pack.feeds.length === 0}>
-                                  <Download className="me-1.5 h-3.5 w-3.5" /> {t("starterPacks.export")}
+                                  <Download className="me-1.5 h-4 w-4" /> {t("starterPacks.export")}
                                 </Button>
                                 <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => addPackFeed(packIndex)}>
-                                  <Plus className="me-1.5 h-3.5 w-3.5" /> {t("starterPacks.addFeed")}
+                                  <Plus className="me-1.5 h-4 w-4" /> {t("starterPacks.addFeed")}
                                 </Button>
                               </div>
                             </div>
                             <div className="space-y-2">
                               {pack.feeds.map((feed, feedIndex) => (
-                                <div key={`${pack.id}-${feedIndex}`} className="grid gap-2 rounded-2xl border border-border/60 bg-background/60 p-3 lg:grid-cols-[auto_1fr_1.4fr_1fr_1fr_auto]">
+                                <div key={`${pack.id}-${feedIndex}`} className="ui-control-surface grid gap-2 rounded-2xl border p-3 lg:grid-cols-[auto_1fr_1.4fr_1fr_1fr_auto]">
                                   <div className="flex gap-1 lg:flex-col">
                                     <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl" disabled={feedIndex === 0} onClick={() => movePackFeed(packIndex, feedIndex, feedIndex - 1)}>
-                                      <ArrowUp className="h-3.5 w-3.5" />
+                                      <ArrowUp className="h-4 w-4" />
                                     </Button>
                                     <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl" disabled={feedIndex === pack.feeds.length - 1} onClick={() => movePackFeed(packIndex, feedIndex, feedIndex + 1)}>
-                                      <ArrowDown className="h-3.5 w-3.5" />
+                                      <ArrowDown className="h-4 w-4" />
                                     </Button>
                                   </div>
                                   <Input
@@ -960,9 +960,12 @@ export function ServerManagementDialog({
                                 </div>
                               ))}
                               {pack.feeds.length === 0 && !pack.path && (
-                                <div className="rounded-2xl border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
-                                  {t("starterPacks.noFeedsYet")}
-                                </div>
+                                <Empty className="rounded-2xl border border-dashed border-border/70 py-6">
+                                  <EmptyMedia variant="icon"><PackagePlus className="size-5" /></EmptyMedia>
+                                  <EmptyContent>
+                                    <EmptyTitle>{t("starterPacks.noFeedsYet")}</EmptyTitle>
+                                  </EmptyContent>
+                                </Empty>
                               )}
                             </div>
                           </div>
@@ -983,10 +986,10 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── SYNC ── */}
-                <TabsContent value="sync" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="sync" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <ScrollArea className="h-full">
                     <div className="max-w-2xl space-y-6 px-6 py-6 sm:px-8">
-                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.backgroundSync")}</h4>
                         <p className="text-sm text-muted-foreground">
@@ -999,7 +1002,7 @@ export function ServerManagementDialog({
                       />
                     </div>
                     {settings?.backgroundSyncEnabled !== false && (
-                      <div className="p-6 rounded-3xl bg-card border border-border/60 shadow-sm space-y-4">
+                      <div className="p-6 rounded-2xl bg-card border border-border/60 shadow-sm space-y-4">
                         <div className="space-y-2">
                           <Label>{t("sync.syncInterval")}</Label>
                           <Input
@@ -1026,7 +1029,7 @@ export function ServerManagementDialog({
                         </div>
                       </div>
                     )}
-                    <div className="flex flex-col gap-4 p-6 rounded-3xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pe-6">
                         <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.trustedInternalFeeds")}</h4>
                         <p className="text-sm text-muted-foreground">
@@ -1039,7 +1042,7 @@ export function ServerManagementDialog({
                       />
                     </div>
                     {settings?.allowInternalFeedUrls && (
-                      <div className="p-6 rounded-3xl bg-destructive/10 border border-destructive/20 space-y-2">
+                      <div className="p-6 rounded-2xl bg-destructive/10 border border-destructive/20 space-y-2">
                         <div className="flex items-center gap-2 text-destructive">
                           <AlertCircle className="w-5 h-5" />
                           <h4 className="font-bold">{t("sync.internalUrlFetching")}</h4>
@@ -1054,12 +1057,12 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── DISCOVERY CATALOG ── */}
-                <TabsContent value="discovery" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="discovery" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <DiscoveryCatalogTab />
                 </TabsContent>
 
                 {/* ── AUDIT LOG ── */}
-                <TabsContent value="audit" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="audit" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <ScrollArea className="h-full">
                     <div className="px-6 sm:px-8 py-6 max-w-4xl space-y-8">
                       {/* Admin Actions */}
@@ -1147,7 +1150,7 @@ export function ServerManagementDialog({
                   </ScrollArea>
                 </TabsContent>
 
-                <TabsContent value="storage" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="storage" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <div className="px-6 sm:px-8 flex flex-col h-full">
                     <div className="mb-4">
                       <p className="text-sm text-muted-foreground">{t("storage.description")}</p>
@@ -1159,7 +1162,12 @@ export function ServerManagementDialog({
                           <span className="text-sm">{t("storage.loading")}</span>
                         </div>
                       ) : storageStats.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-8 text-center">{t("storage.noData")}</p>
+                        <Empty className="border-0 py-8">
+                          <EmptyMedia variant="icon"><HardDrive className="size-5" /></EmptyMedia>
+                          <EmptyContent>
+                            <EmptyTitle>{t("storage.noData")}</EmptyTitle>
+                          </EmptyContent>
+                        </Empty>
                       ) : (
                         <div className="pb-8">
                           <div className="grid grid-cols-5 gap-2 mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -1186,7 +1194,7 @@ export function ServerManagementDialog({
                                 </div>
                               ))}
                           </div>
-                          <div className="mt-4 rounded-2xl border border-border/40 bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                          <div className="ui-control-surface mt-4 rounded-2xl border px-4 py-3 text-xs text-muted-foreground">
                             <strong>Total:</strong>{" "}
                             {format.number(storageStats.reduce((s, r) => s + r.articles, 0))} {t("storage.articles").toLowerCase()} ·{" "}
                             {format.number(storageStats.reduce((s, r) => s + r.feeds, 0))} {t("storage.feeds").toLowerCase()} ·{" "}
@@ -1199,7 +1207,7 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── SYSTEM LOGS ── */}
-                <TabsContent value="logs" className="h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="logs" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
                   <div className="px-6 sm:px-8 flex flex-col h-full">
                     <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex flex-wrap gap-2">
@@ -1224,7 +1232,7 @@ export function ServerManagementDialog({
                         className="rounded-2xl gap-2"
                         onClick={() => loadSystemLogs(logsCategory)}
                       >
-                        <RefreshCw className="h-3.5 w-3.5" />
+                        <RefreshCw className="h-4 w-4" />
                         {t("logs.refresh")}
                       </Button>
                     </div>
@@ -1439,7 +1447,7 @@ function DiscoveryCatalogTab() {
             <span className="text-sm">{t("discovery.loadingStats")}</span>
           </div>
         ) : stats ? (
-          <div className="p-4 rounded-2xl bg-muted/50 border border-border/50">
+          <div className="ui-control-surface p-4 rounded-2xl border">
             <div className="flex items-center justify-between mb-3">
               <span className="font-medium">{t("discovery.catalogStatus")}</span>
               <span className="text-2xl font-bold">{stats.totalFeeds} {t("discovery.feeds")}</span>
@@ -1534,7 +1542,7 @@ function DiscoveryCatalogTab() {
         )}
 
         {/* Info */}
-        <div className="p-4 rounded-2xl bg-muted/30 border border-border/50 text-sm text-muted-foreground">
+        <div className="ui-control-surface p-4 rounded-2xl border text-sm text-muted-foreground">
           <p className="mb-2">
             <strong>{t("discovery.sources")}</strong> awesome-rss-feeds, awesome-tech-rss (GitHub)
           </p>
@@ -1610,7 +1618,7 @@ function NotificationsAdminPanel() {
         </p>
       </div>
 
-      <div className="rounded-3xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-4">
+      <div className="rounded-2xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-4">
         <div className="flex items-start gap-3">
           <div className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
@@ -1634,7 +1642,7 @@ function NotificationsAdminPanel() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-4">
+      <div className="rounded-2xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-4">
         <div className="flex items-start gap-3">
           <KeyRound className="w-5 h-5 text-muted-foreground mt-0.5" />
           <div className="flex-1 space-y-2">
@@ -1663,7 +1671,7 @@ WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
         </div>
 
         {generated && (
-          <div className="rounded-2xl border border-border/60 bg-background/60 p-4 space-y-3">
+          <div className="ui-control-surface rounded-2xl border p-4 space-y-3">
             <div>
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("pushNotifications.publicKeyLabel")}</Label>
               <div className="flex items-center gap-2 mt-1">
@@ -1693,7 +1701,7 @@ WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
         )}
       </div>
 
-      <div className="rounded-3xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-2">
+      <div className="rounded-2xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-2">
         <h4 className="text-sm font-semibold">{t("pushNotifications.pwaAppBadge")}</h4>
         <p className="text-xs text-muted-foreground">
           {t("pushNotifications.badgeDescription")}

@@ -68,7 +68,9 @@ import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, us
 import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Empty, EmptyMedia, EmptyTitle, EmptyContent } from "@/components/ui/empty";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
 import { MobileFloatingBackButton } from "@/components/mobile-floating-back-button";
@@ -105,7 +107,7 @@ function PrefRow({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-4">
           <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
@@ -170,19 +172,20 @@ export function SettingsForm() {
         </header>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <ResponsiveTabsNav
-            value={activeTab}
-            onValueChange={setActiveTab}
-            options={tabOptions}
-            className="mb-6"
-            triggerClassName="gap-1.5"
-          />
+          <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-xl py-3 mb-6">
+            <ResponsiveTabsNav
+              value={activeTab}
+              onValueChange={setActiveTab}
+              options={tabOptions}
+              triggerClassName="gap-1.5"
+            />
+          </div>
 
           {/* ── Tab: Appearance ── */}
-          <TabsContent value="appearance" className="grid gap-5">
+          <TabsContent value="appearance" className="animate-filter-swap grid gap-5">
 
             {/* Theme */}
-            <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+            <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
               <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-4">
                   <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
@@ -195,7 +198,7 @@ export function SettingsForm() {
                     </p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-1 rounded-2xl border border-border/70 bg-muted/45 p-1 shadow-inner shadow-black/[0.02]">
+                <div className="ui-segmented-surface grid grid-cols-3 gap-1 rounded-2xl border p-1">
                   {themeOptions.map((option) => {
                     const Icon = option.icon;
                     const active = theme === option.id;
@@ -203,11 +206,10 @@ export function SettingsForm() {
                       <button
                         key={option.id}
                         onClick={() => setTheme(option.id)}
+                        data-state={active ? "active" : "inactive"}
                         className={cn(
-                          "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-sm font-medium transition-all",
-                          active
-                            ? "bg-background text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground",
+                          "ui-segmented-trigger inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-transparent px-3 text-sm font-medium transition-all",
+                          active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                         )}
                       >
                         <Icon className="h-4 w-4" />
@@ -351,7 +353,7 @@ export function SettingsForm() {
           </TabsContent>
 
           {/* ── Tab: Reading ── */}
-          <TabsContent value="reading" className="grid gap-5">
+          <TabsContent value="reading" className="animate-filter-swap grid gap-5">
 
             {/* Default sort order */}
             <PrefRow
@@ -416,7 +418,6 @@ export function SettingsForm() {
               <Switch
                 checked={prefs?.markReadOnScroll ?? false}
                 onCheckedChange={(checked) => update({ markReadOnScroll: checked })}
-                className="h-7 w-12"
               />
             </PrefRow>
 
@@ -429,7 +430,6 @@ export function SettingsForm() {
               <Switch
                 checked={prefs?.openOriginalByDefault ?? false}
                 onCheckedChange={(checked) => update({ openOriginalByDefault: checked })}
-                className="h-7 w-12"
               />
             </PrefRow>
 
@@ -442,7 +442,6 @@ export function SettingsForm() {
               <Switch
                 checked={prefs?.hideDuplicates ?? true}
                 onCheckedChange={(checked) => update({ hideDuplicates: checked })}
-                className="h-7 w-12"
               />
             </PrefRow>
 
@@ -455,7 +454,6 @@ export function SettingsForm() {
               <Switch
                 checked={(prefs?.layoutDirection ?? "ltr") === "rtl"}
                 onCheckedChange={(checked) => update({ layoutDirection: checked ? "rtl" : "ltr" })}
-                className="h-7 w-12"
               />
             </PrefRow>
 
@@ -492,7 +490,6 @@ export function SettingsForm() {
               <Switch
                 checked={prefs?.hideEmptyFeeds ?? false}
                 onCheckedChange={(checked) => update({ hideEmptyFeeds: checked })}
-                className="h-7 w-12"
               />
             </PrefRow>
 
@@ -505,20 +502,19 @@ export function SettingsForm() {
               <Switch
                 checked={prefs?.hideEmptyLabels ?? false}
                 onCheckedChange={(checked) => update({ hideEmptyLabels: checked })}
-                className="h-7 w-12"
               />
             </PrefRow>
 
           </TabsContent>
 
           {/* ── Tab: Account ── */}
-          <TabsContent value="account" className="grid gap-5">
+          <TabsContent value="account" className="animate-filter-swap grid gap-5">
 
             {/* User Profile */}
-            <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+            <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
               <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
                     <User className="h-5 w-5" />
                   </div>
                   <div>
@@ -592,14 +588,14 @@ export function SettingsForm() {
           </TabsContent>
 
           {/* ── Tab: Notifications ── */}
-          <TabsContent value="notifications" className="grid gap-5">
+          <TabsContent value="notifications" className="animate-filter-swap grid gap-5">
             <PushNotificationSection />
             <DigestSection />
             <NotificationChannelsSection />
           </TabsContent>
 
           {/* ── Tab: Integrations ── */}
-          <TabsContent value="integrations" className="grid gap-5">
+          <TabsContent value="integrations" className="animate-filter-swap grid gap-5">
             <AiSummarySection />
             <SyncTutorialSection />
           </TabsContent>
@@ -760,7 +756,7 @@ function PushNotificationSection() {
   if (!loading && status && !status.configured) return null;
 
   return (
-    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
@@ -802,7 +798,7 @@ function PushNotificationSection() {
         </div>
 
         {status && (
-          <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:grid-cols-2">
+          <div className="ui-control-surface grid gap-4 rounded-[1.5rem] border p-4 sm:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="push-frequency-select">{t("push.frequency")}</label>
               <Select
@@ -820,7 +816,7 @@ function PushNotificationSection() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
+            <div className="ui-control-surface flex items-center justify-between rounded-2xl border px-4 py-3">
               <div>
                 <p className="text-sm font-medium">{t("push.includeArticleTitles")}</p>
                 <p className="text-xs text-muted-foreground">{t("push.includeArticleTitlesDescription")}</p>
@@ -898,7 +894,9 @@ function TwoFactorSection() {
       const result = await beginSetup.mutateAsync();
       setSetupData(result);
       setSetupCode("");
-    } catch {}
+    } catch {
+      toast.error(t("twoFactor.beginSetupFailed"));
+    }
   };
 
   const handleEnable = async () => {
@@ -906,22 +904,26 @@ function TwoFactorSection() {
       await confirmSetup.mutateAsync(setupCode);
       setSetupData(null);
       setSetupCode("");
-    } catch {}
+    } catch {
+      toast.error(t("twoFactor.enableFailed"));
+    }
   };
 
   const handleDisable = async () => {
     try {
       await disableTwoFactor.mutateAsync(disableCode);
       setDisableCode("");
-    } catch {}
+    } catch {
+      toast.error(t("twoFactor.disableFailed"));
+    }
   };
 
   return (
-    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
               <Shield className="h-5 w-5" />
             </div>
             <div>
@@ -948,7 +950,7 @@ function TwoFactorSection() {
         </div>
 
         {setupData && !status?.enabled && (
-          <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:p-5">
+          <div className="ui-control-surface animate-fade-in-up grid gap-4 rounded-[1.5rem] border p-4 sm:p-5">
             <div className="grid gap-2">
               <p className="text-sm font-medium">{t("twoFactor.addToAuthApp")}</p>
               <p className="text-xs text-muted-foreground">
@@ -1007,7 +1009,7 @@ function TwoFactorSection() {
         )}
 
         {status?.enabled && (
-          <div className="grid gap-4 rounded-[1.5rem] border border-border/70 bg-background/60 p-4 sm:p-5">
+          <div className="ui-control-surface animate-fade-in-up grid gap-4 rounded-[1.5rem] border p-4 sm:p-5">
             <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
               <ShieldOff className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
@@ -1137,9 +1139,9 @@ function DigestSection() {
   }
 
   return (
-    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
       <div className="flex items-start gap-4 mb-6">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
           <Mail className="h-5 w-5" />
         </div>
         <div>
@@ -1161,30 +1163,18 @@ function DigestSection() {
               </p>
             )}
           </div>
-          <button
-            role="switch"
-            aria-checked={digest.digestEnabled}
-            onClick={() => update({ digestEnabled: !digest.digestEnabled })}
-            className={cn(
-              "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-              digest.digestEnabled ? "bg-primary" : "bg-muted",
-            )}
-          >
-            <span
-              className={cn(
-                "pointer-events-none inline-block h-5 w-5 rounded-full shadow-sm ring-0 transition-transform duration-200",
-                digest.digestEnabled ? "translate-x-5 bg-primary-foreground" : "translate-x-0 bg-foreground",
-              )}
-            />
-          </button>
+          <Switch
+            checked={digest.digestEnabled}
+            onCheckedChange={(checked) => update({ digestEnabled: checked })}
+          />
         </div>
 
         {digest.digestEnabled && (
-          <>
+          <div className="animate-fade-in-up flex flex-col gap-5">
             {/* Frequency / Day / Hour / Timezone */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-frequency-select">{t("digest.frequency")}</label>
+                <label className="text-sm font-medium" htmlFor="digest-frequency-select">{t("digest.frequency")}</label>
                 <Select
                   value={digest.digestFrequency}
                   onValueChange={(v) => update({ digestFrequency: v })}
@@ -1203,7 +1193,7 @@ function DigestSection() {
               {/* Day of week (weekly only) */}
               {digest.digestFrequency === "weekly" && (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-day-select">{t("digest.day")}</label>
+                  <label className="text-sm font-medium" htmlFor="digest-day-select">{t("digest.day")}</label>
                   <Select
                     value={String(digest.digestDayOfWeek)}
                     onValueChange={(v) => update({ digestDayOfWeek: parseInt(v) })}
@@ -1222,7 +1212,7 @@ function DigestSection() {
 
               {/* Hour */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-hour-select">{t("digest.hour")}</label>
+                <label className="text-sm font-medium" htmlFor="digest-hour-select">{t("digest.hour")}</label>
                 <Select
                   value={String(digest.digestHour)}
                   onValueChange={(v) => update({ digestHour: parseInt(v) })}
@@ -1242,7 +1232,7 @@ function DigestSection() {
 
               {/* Timezone */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-timezone-select">{t("digest.timezone")}</label>
+                <label className="text-sm font-medium" htmlFor="digest-timezone-select">{t("digest.timezone")}</label>
                 <Select
                   value={digest.digestTimezone}
                   onValueChange={(v) => update({ digestTimezone: v })}
@@ -1265,7 +1255,7 @@ function DigestSection() {
             {/* Scope / Lookback / Max / Min */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-scope-select">{t("digest.include")}</label>
+                <label className="text-sm font-medium" htmlFor="digest-scope-select">{t("digest.include")}</label>
                 <Select
                   value={digest.digestScope}
                   onValueChange={(v) => update({ digestScope: v })}
@@ -1283,7 +1273,7 @@ function DigestSection() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-lookback-select">{t("digest.lookback")}</label>
+                <label className="text-sm font-medium" htmlFor="digest-lookback-select">{t("digest.lookback")}</label>
                 <Select
                   value={digest.digestLookbackHours === null ? "since_last" : String(digest.digestLookbackHours)}
                   onValueChange={(v) => {
@@ -1303,7 +1293,7 @@ function DigestSection() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-max-select">{t("digest.maxArticles")}</label>
+                <label className="text-sm font-medium" htmlFor="digest-max-select">{t("digest.maxArticles")}</label>
                 <Select
                   value={String(digest.digestMaxArticles)}
                   onValueChange={(v) => update({ digestMaxArticles: parseInt(v) })}
@@ -1320,7 +1310,7 @@ function DigestSection() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="digest-min-select">{t("digest.minArticles")}</label>
+                <label className="text-sm font-medium" htmlFor="digest-min-select">{t("digest.minArticles")}</label>
                 <Select
                   value={String(digest.digestMinArticles)}
                   onValueChange={(v) => update({ digestMinArticles: parseInt(v) })}
@@ -1343,30 +1333,18 @@ function DigestSection() {
 
             {/* Group by feed + AI summary */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="flex items-start justify-between rounded-2xl border border-border/70 bg-background/50 p-4">
+              <div className="ui-control-surface flex items-start justify-between rounded-2xl border p-4">
                 <div className="pr-3">
                   <p className="text-sm font-medium">{t("digest.groupByFeed")}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{t("digest.groupByFeedHint")}</p>
                 </div>
-                <button
-                  role="switch"
-                  aria-checked={digest.digestGroupByFeed}
-                  onClick={() => update({ digestGroupByFeed: !digest.digestGroupByFeed })}
-                  className={cn(
-                    "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                    digest.digestGroupByFeed ? "bg-primary" : "bg-muted",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "pointer-events-none inline-block h-5 w-5 rounded-full shadow-sm ring-0 transition-transform duration-200",
-                      digest.digestGroupByFeed ? "translate-x-5 bg-primary-foreground" : "translate-x-0 bg-foreground",
-                    )}
-                  />
-                </button>
+                <Switch
+                  checked={digest.digestGroupByFeed}
+                  onCheckedChange={(checked) => update({ digestGroupByFeed: checked })}
+                />
               </div>
 
-              <div className="flex flex-col gap-1.5 rounded-2xl border border-border/70 bg-background/50 p-4">
+              <div className="ui-control-surface flex flex-col gap-1.5 rounded-2xl border p-4">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-accent" />
                   <label className="text-sm font-medium" htmlFor="digest-ai-select">{t("digest.aiSummary")}</label>
@@ -1376,10 +1354,10 @@ function DigestSection() {
                   onValueChange={(v) => update({ digestAiSummary: v })}
                   disabled={!digest.aiConfigured}
                 >
-                  <SelectTrigger id="digest-ai-select" className="rounded-xl border-border/70 bg-background/70 h-9">
+                  <SelectTrigger id="digest-ai-select" className="rounded-2xl border-border/70 bg-background/70 h-9">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="rounded-xl">
+                  <SelectContent className="rounded-2xl">
                     <SelectItem value="none">{t("digest.aiSummaryModes.none")}</SelectItem>
                     <SelectItem value="full">{t("digest.aiSummaryModes.full")}</SelectItem>
                     <SelectItem value="per_feed">{t("digest.aiSummaryModes.perFeed")}</SelectItem>
@@ -1394,11 +1372,11 @@ function DigestSection() {
             {/* Feed filter */}
             {feeds.length > 0 && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <label className="text-sm font-medium">
                   {t("digest.feedFilter")}{" "}
                   <span className="normal-case font-normal">({t("digest.feedFilterHint")})</span>
                 </label>
-                <div className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-background/50 p-3 min-h-[48px]">
+                <div className="ui-control-surface flex flex-wrap gap-2 rounded-2xl border p-3 min-h-[48px]">
                   {feeds.map((feed: any) => {
                     const selected = digest.digestFeedIds.includes(feed.id);
                     return (
@@ -1431,11 +1409,11 @@ function DigestSection() {
             {/* Label filter */}
             {labels.length > 0 && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <label className="text-sm font-medium">
                   {t("digest.labelFilter")}{" "}
                   <span className="normal-case font-normal">({t("digest.labelFilterHint")})</span>
                 </label>
-                <div className="flex flex-wrap gap-2 rounded-2xl border border-border/70 bg-background/50 p-3 min-h-[48px]">
+                <div className="ui-control-surface flex flex-wrap gap-2 rounded-2xl border p-3 min-h-[48px]">
                   {labels.map((label: any) => {
                     const selected = digest.digestLabelIds.includes(label.id);
                     return (
@@ -1468,31 +1446,19 @@ function DigestSection() {
             )}
 
             {/* Skip already-featured articles */}
-            <div className="flex items-start justify-between rounded-2xl border border-border/70 bg-background/50 p-4">
+            <div className="ui-control-surface flex items-start justify-between rounded-2xl border p-4">
               <div className="pr-3">
                 <p className="text-sm font-medium">{t("digest.skipFeatured")}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{t("digest.skipFeaturedHint")}</p>
               </div>
-              <button
-                role="switch"
-                aria-checked={digest.digestSkipFeatured}
-                onClick={() => update({ digestSkipFeatured: !digest.digestSkipFeatured })}
-                className={cn(
-                  "relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                  digest.digestSkipFeatured ? "bg-primary" : "bg-muted",
-                )}
-              >
-                <span
-                  className={cn(
-                    "pointer-events-none inline-block h-5 w-5 rounded-full shadow-sm ring-0 transition-transform duration-200",
-                    digest.digestSkipFeatured ? "translate-x-5 bg-primary-foreground" : "translate-x-0 bg-foreground",
-                  )}
-                />
-              </button>
+              <Switch
+                checked={digest.digestSkipFeatured}
+                onCheckedChange={(checked) => update({ digestSkipFeatured: checked })}
+              />
             </div>
 
             {/* Pause */}
-            <div className="rounded-2xl border border-border/70 bg-background/50 p-4">
+            <div className="ui-control-surface rounded-2xl border p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium">{isPaused ? `${t("digest.pauseUntil")}: ${format.dateTime(new Date(digest.digestPausedUntil!), { dateStyle: "medium" })}` : t("digest.pauseDigest")}</p>
@@ -1563,7 +1529,7 @@ function DigestSection() {
                 )}
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
     </section>
@@ -1601,7 +1567,7 @@ function DeleteAccountSection() {
 
   return (
     <>
-      <section className="rounded-[2rem] border border-destructive/25 bg-destructive/5 p-5 shadow-sm sm:p-6">
+      <section className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
@@ -1741,9 +1707,9 @@ function ApiTokenSection() {
     scope === "read" ? "secondary" : scope === "admin" ? "destructive" : "default";
 
   return (
-    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
       <div className="flex items-start gap-4 mb-5">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
           <Key className="h-5 w-5" />
         </div>
         <div className="flex-1">
@@ -1778,17 +1744,17 @@ function ApiTokenSection() {
       )}
 
       {showCreate && (
-        <div className="mb-4 rounded-2xl border border-border/50 bg-muted/30 p-4 space-y-3">
+        <div className="ui-control-surface mb-4 rounded-2xl border p-4 space-y-3">
           <p className="text-sm font-medium">{t("apiTokens.createNewToken")}</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-1">
-              <label htmlFor="token-name" className="text-xs text-muted-foreground mb-1 block">{t("apiTokens.name")}</label>
-              <Input id="token-name" value={createName} onChange={(e) => setCreateName(e.target.value)} className="h-9 rounded-xl" maxLength={80} />
+              <label htmlFor="token-name" className="text-sm font-medium mb-1 block">{t("apiTokens.name")}</label>
+              <Input id="token-name" value={createName} onChange={(e) => setCreateName(e.target.value)} className="h-9 rounded-2xl" maxLength={80} />
             </div>
             <div>
-              <label htmlFor="token-scope" className="text-xs text-muted-foreground mb-1 block">{t("apiTokens.scope")}</label>
+              <label htmlFor="token-scope" className="text-sm font-medium mb-1 block">{t("apiTokens.scope")}</label>
               <Select value={createScope} onValueChange={setCreateScope}>
-                <SelectTrigger id="token-scope" className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="token-scope" className="h-9 rounded-2xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="read">{t("apiTokens.scopes.read")}</SelectItem>
                   <SelectItem value="write">{t("apiTokens.scopes.readWrite")}</SelectItem>
@@ -1797,9 +1763,9 @@ function ApiTokenSection() {
               </Select>
             </div>
             <div>
-              <label htmlFor="token-expiry" className="text-xs text-muted-foreground mb-1 block">{t("apiTokens.expires")}</label>
+              <label htmlFor="token-expiry" className="text-sm font-medium mb-1 block">{t("apiTokens.expires")}</label>
               <Select value={createExpiry} onValueChange={setCreateExpiry}>
-                <SelectTrigger id="token-expiry" className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="token-expiry" className="h-9 rounded-2xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="never">{t("apiTokens.expiry.never")}</SelectItem>
                   <SelectItem value="30d">{t("apiTokens.expiry.d30")}</SelectItem>
@@ -1821,7 +1787,12 @@ function ApiTokenSection() {
       {loading ? (
         <p className="text-sm text-muted-foreground">{t("apiTokens.loading")}</p>
       ) : tokens.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("apiTokens.noTokens")}</p>
+        <Empty className="border-0 py-8">
+          <EmptyMedia variant="icon"><Key className="size-5" /></EmptyMedia>
+          <EmptyContent>
+            <EmptyTitle>{t("apiTokens.noTokens")}</EmptyTitle>
+          </EmptyContent>
+        </Empty>
       ) : (
         <div className="space-y-2">
           {tokens.map((tok) => (
@@ -1843,7 +1814,7 @@ function ApiTokenSection() {
                 className="h-7 w-7 p-0 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 onClick={() => handleRevoke(tok.id, tok.name)}
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-4 h-4" />
               </Button>
             </div>
           ))}
@@ -1899,9 +1870,9 @@ function AiSummarySection() {
   };
 
   return (
-    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
       <div className="flex items-start gap-4 mb-6">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
@@ -1917,7 +1888,7 @@ function AiSummarySection() {
         <div className="grid gap-1.5">
           <label className="text-sm font-medium" htmlFor="ai-provider-select">{t("ai.provider")}</label>
           <Select value={provider} onValueChange={setProvider}>
-            <SelectTrigger id="ai-provider-select" className="h-10 rounded-xl">
+            <SelectTrigger id="ai-provider-select" className="h-10 rounded-2xl">
               <SelectValue placeholder={t("ai.provider")} />
             </SelectTrigger>
             <SelectContent>
@@ -1945,7 +1916,7 @@ function AiSummarySection() {
               placeholder={ai?.hasApiKey ? t("ai.leaveBlankToKeep") : "sk-..."}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              className="h-10 rounded-xl font-mono text-sm"
+              className="h-10 rounded-2xl font-mono text-sm"
             />
           </div>
         )}
@@ -1958,7 +1929,7 @@ function AiSummarySection() {
               placeholder="http://localhost:11434"
               value={ollamaBaseUrl}
               onChange={(e) => setOllamaBaseUrl(e.target.value)}
-              className="h-10 rounded-xl font-mono text-sm"
+              className="h-10 rounded-2xl font-mono text-sm"
             />
           </div>
         )}
@@ -1980,7 +1951,7 @@ function AiSummarySection() {
               placeholder="optional override"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="h-10 rounded-xl font-mono text-sm"
+              className="h-10 rounded-2xl font-mono text-sm"
             />
           </div>
         )}
@@ -1989,7 +1960,7 @@ function AiSummarySection() {
           <div className="grid gap-1.5">
             <label className="text-sm font-medium" htmlFor="ai-language-select">{t("ai.summaryLanguage")}</label>
             <Select value={language} onValueChange={setLanguage}>
-              <SelectTrigger id="ai-language-select" className="h-10 rounded-xl">
+              <SelectTrigger id="ai-language-select" className="h-10 rounded-2xl">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -2006,7 +1977,7 @@ function AiSummarySection() {
         )}
 
         {provider !== "none" && (
-          <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
+          <div className="ui-control-surface flex items-center justify-between rounded-2xl border px-4 py-3">
             <div>
               <p className="text-sm font-medium">{t("ai.autoSummarize")}</p>
               <p className="text-xs text-muted-foreground">{t("ai.autoSummarizeDescription")}</p>
@@ -2014,7 +1985,6 @@ function AiSummarySection() {
             <Switch
               checked={autoSummarize}
               onCheckedChange={setAutoSummarize}
-              className="h-7 w-12"
             />
           </div>
         )}
@@ -2148,14 +2118,14 @@ function SyncTutorialSection() {
   const apiUrl = `${instanceUrl || "https://your-feedferret"}/api/v1`;
 
   return (
-    <section className="rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className="flex w-full items-start gap-4 text-start"
       >
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
           <Rss className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
@@ -2170,16 +2140,16 @@ function SyncTutorialSection() {
       </button>
 
       {open && (
-        <div className="mt-6 space-y-6">
+        <div className="animate-fade-in-up mt-6 space-y-6">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
+            <div className="ui-control-surface rounded-2xl border p-4">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.greaderEndpoint")}</p>
               <p className="mt-1 break-all text-sm font-mono">{greaderUrl}</p>
               <p className="mt-2 text-xs text-muted-foreground">
                 {t("syncReaders.greaderUsernameHint")}
               </p>
             </div>
-            <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
+            <div className="ui-control-surface rounded-2xl border p-4">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.restApiBase")}</p>
               <p className="mt-1 break-all text-sm font-mono">{apiUrl}</p>
               <p className="mt-2 text-xs text-muted-foreground">
@@ -2192,7 +2162,7 @@ function SyncTutorialSection() {
             {SYNC_CLIENTS.map((client) => (
               <div
                 key={client.name}
-                className="rounded-2xl border border-border/60 bg-background/60 p-4"
+                className="ui-control-surface rounded-2xl border p-4"
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
@@ -2299,7 +2269,7 @@ function NotificationChannelsSection() {
   if (isLoading) return null;
 
   return (
-    <section className="rounded-[2rem] border border-border/65 bg-card/85 shadow-sm backdrop-blur-2xl">
+    <section className="rounded-2xl border border-border/65 bg-card/85 shadow-sm backdrop-blur-2xl">
       <div className="flex items-start gap-4 p-5 sm:p-6">
         <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
           <Bell className="h-5 w-5" />
@@ -2327,16 +2297,24 @@ function NotificationChannelsSection() {
           </div>
           {form.telegramEnabled && (
             <div className="mt-3 space-y-2">
-              <Input
-                placeholder={t("notifications.botTokenPlaceholder")}
-                {...field("telegramBotToken")}
-                className="h-9 font-mono text-xs"
-              />
-              <Input
-                placeholder={t("notifications.chatIdPlaceholder")}
-                {...field("telegramChatId")}
-                className="h-9 font-mono text-xs"
-              />
+              <div className="space-y-1">
+                <Label htmlFor="telegram-bot-token" className="text-sm font-medium">{t("notifications.botTokenPlaceholder")}</Label>
+                <Input
+                  id="telegram-bot-token"
+                  placeholder={t("notifications.botTokenPlaceholder")}
+                  {...field("telegramBotToken")}
+                  className="h-9 font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="telegram-chat-id" className="text-sm font-medium">{t("notifications.chatIdPlaceholder")}</Label>
+                <Input
+                  id="telegram-chat-id"
+                  placeholder={t("notifications.chatIdPlaceholder")}
+                  {...field("telegramChatId")}
+                  className="h-9 font-mono text-xs"
+                />
+              </div>
               <p className="text-xs text-muted-foreground">
                 {t("notifications.telegramHint")}
               </p>
@@ -2368,16 +2346,24 @@ function NotificationChannelsSection() {
           </div>
           {form.gotifyEnabled && (
             <div className="mt-3 space-y-2">
-              <Input
-                placeholder={t("notifications.serverUrlPlaceholder")}
-                {...field("gotifyUrl")}
-                className="h-9 font-mono text-xs"
-              />
-              <Input
-                placeholder={t("notifications.appToken")}
-                {...field("gotifyToken")}
-                className="h-9 font-mono text-xs"
-              />
+              <div className="space-y-1">
+                <Label htmlFor="gotify-server-url" className="text-sm font-medium">{t("notifications.serverUrlPlaceholder")}</Label>
+                <Input
+                  id="gotify-server-url"
+                  placeholder={t("notifications.serverUrlPlaceholder")}
+                  {...field("gotifyUrl")}
+                  className="h-9 font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="gotify-app-token" className="text-sm font-medium">{t("notifications.appToken")}</Label>
+                <Input
+                  id="gotify-app-token"
+                  placeholder={t("notifications.appToken")}
+                  {...field("gotifyToken")}
+                  className="h-9 font-mono text-xs"
+                />
+              </div>
               <Button
                 type="button"
                 size="sm"
@@ -2406,16 +2392,24 @@ function NotificationChannelsSection() {
           </div>
           {form.ntfyEnabled && (
             <div className="mt-3 space-y-2">
-              <Input
-                placeholder={t("notifications.topicUrlPlaceholder")}
-                {...field("ntfyUrl")}
-                className="h-9 font-mono text-xs"
-              />
-              <Input
-                placeholder={t("notifications.tokenOptionalPlaceholder")}
-                {...field("ntfyToken")}
-                className="h-9 font-mono text-xs"
-              />
+              <div className="space-y-1">
+                <Label htmlFor="ntfy-topic-url" className="text-sm font-medium">{t("notifications.topicUrlPlaceholder")}</Label>
+                <Input
+                  id="ntfy-topic-url"
+                  placeholder={t("notifications.topicUrlPlaceholder")}
+                  {...field("ntfyUrl")}
+                  className="h-9 font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="ntfy-token" className="text-sm font-medium">{t("notifications.tokenOptionalPlaceholder")}</Label>
+                <Input
+                  id="ntfy-token"
+                  placeholder={t("notifications.tokenOptionalPlaceholder")}
+                  {...field("ntfyToken")}
+                  className="h-9 font-mono text-xs"
+                />
+              </div>
               <p className="text-xs text-muted-foreground">
                 {t("notifications.ntfyHint")}
               </p>

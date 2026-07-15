@@ -118,12 +118,17 @@ export function SettingsPageShell({
       <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-xl">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
           <Link href={backHref}>
-            <Button variant="ghost" size="icon" className="rounded-xl shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 rounded-2xl bg-card/70 backdrop-blur-xl border border-border/60 shadow-sm shrink-0"
+              aria-label={t("common.back")}
+            >
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-[-0.03em] truncate sm:text-2xl">{title}</h1>
+            <h1 className="text-2xl font-semibold tracking-[-0.04em] truncate sm:text-3xl">{title}</h1>
             {description && (
               <p className="text-sm text-muted-foreground truncate">{description}</p>
             )}
