@@ -155,7 +155,7 @@ function CategoryGrid({
   if (isEmpty) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-center">
-        <Globe className="h-8 w-8 text-muted-foreground/50 mb-2" />
+        <Globe className="size-5 text-muted-foreground/50 mb-2" />
         <p className="text-sm text-muted-foreground">
           {t("catalogEmpty")}
         </p>
@@ -175,15 +175,15 @@ function CategoryGrid({
             key={category.id}
             onClick={() => onSelect(category.id)}
             className={cn(
-              "flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2.5",
-              "hover:bg-muted/60 hover:border-border transition-colors text-start"
+              "ui-control-surface flex items-center gap-2 rounded-xl border px-3 py-2.5",
+              "transition-colors text-start"
             )}
           >
             <span className="text-lg">{category.icon}</span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium truncate">{category.name}</p>
               <p className="text-xs text-muted-foreground">
-                {category.feedCount} feeds
+                {t("feedsInCategory", { count: category.feedCount })}
               </p>
             </div>
           </button>
@@ -294,7 +294,7 @@ function SearchResults({
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-center">
-        <AlertCircle className="h-6 w-6 text-amber-500 mb-2" />
+        <AlertCircle className="size-5 text-amber-500 mb-2" />
         <p className="text-sm text-muted-foreground">{error.message}</p>
       </div>
     );
@@ -353,7 +353,7 @@ function FeedCard({
 }) {
   const t = useTranslations("discovery");
   return (
-    <div className="relative rounded-xl bg-muted/50 px-2.5 py-2 pe-10 overflow-hidden w-full">
+    <div className="ui-control-surface relative rounded-xl border px-2.5 py-2 pe-10 overflow-hidden w-full">
       <div className="flex items-center gap-2 min-w-0">
         {feed.iconUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -392,11 +392,11 @@ function FeedCard({
         title={isSubscribed ? t("alreadyAdded") : t("addFeed")}
       >
         {isAdding ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <Loader2 className="size-4 animate-spin" />
         ) : isSubscribed ? (
-          <Check className="h-3.5 w-3.5" />
+          <Check className="size-4" />
         ) : (
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="size-4" />
         )}
       </Button>
     </div>

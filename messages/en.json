@@ -436,7 +436,9 @@
       "magicLinkSent": "Magic link sent — check your inbox.",
       "unexpectedError": "An unexpected error occurred.",
       "enterEmailFirst": "Enter your email first."
-    }
+    },
+    "tagline": "Minimalist RSS Aggregator",
+    "noAccountPrefix": "Don't have an account?"
   },
   "register": {
     "title": "Create account",
@@ -517,8 +519,13 @@
       "passwordTooShort": "Password must be at least 8 characters.",
       "accountCreationFailed": "Account creation failed. Please try again.",
       "signInFailed": "Sign-in after setup failed. Please sign in manually.",
-      "networkError": "Network error. Please check your connection."
-    }
+      "networkError": "Network error. Please check your connection.",
+      "instanceSaveFailed": "Failed to save instance settings.",
+      "emailSaveFailed": "Failed to save email settings.",
+      "securitySaveFailed": "Failed to save security settings.",
+      "importFailed": "Import failed. You can add feeds manually after setup."
+    },
+    "tagline": "FeedFerret · Self-hosted RSS"
   },
   "sidebar": {
     "allArticles": "All articles",
@@ -678,7 +685,8 @@
     "tryTopics": "Try different keywords or browse topics.",
     "feedsFound": "feeds found",
     "alreadyAdded": "Already added",
-    "addFeed": "Add feed"
+    "addFeed": "Add feed",
+    "feedsInCategory": "{count} feeds"
   },
   "common": {
     "save": "Save",
@@ -827,7 +835,12 @@
       "saveRule": "Save rule",
       "saveChanges": "Save changes",
       "feedScope": "Feed · {name}",
-      "categoryScope": "Category · {name}"
+      "categoryScope": "Category · {name}",
+      "notifyWebhookOnly": "Notifications & webhooks only",
+      "migrating": "Migrating…",
+      "legacyAlertsFound": "{count, plural, one {# legacy keyword alert found} other {# legacy keyword alerts found}}",
+      "alertsAndRulesMerged": "Alerts and rules have been merged. Convert your alerts into rules to manage them here.",
+      "removeSpoilerOnDeleteLabel": "Remove spoiler flag from all flagged articles when this rule is deleted"
     },
     "alerts": {
       "keywordAlerts": "Keyword alerts",
@@ -847,7 +860,16 @@
       "recentMatches": "Recent matches",
       "noMatches": "No matches yet.",
       "disableAlert": "Disable alert",
-      "enableAlert": "Enable alert"
+      "enableAlert": "Enable alert",
+      "howAlertsWork": "How alerts work",
+      "alertsExplanation": "Alerts fire whenever a newly synced article matches your query. You'll see a notification badge in the app. Scope can be limited to a specific feed or category.",
+      "testAlert": "Test",
+      "matchCount": "{count, plural, one {# match} other {# matches}}",
+      "scopeSummary": "Scope: {scope} · {channels}",
+      "channelInApp": "in-app",
+      "channelPush": "push",
+      "channelEmail": "email",
+      "lastTriggered": "last: {date}"
     },
     "actions": {
       "markAsRead": "Mark as read",
@@ -919,9 +941,20 @@
       "failedToImport": "Failed to import feeds",
       "dataExported": "Data exported",
       "sharingEnabled": "Sharing enabled",
-      "sharingDisabled": "Sharing disabled"
+      "sharingDisabled": "Sharing disabled",
+      "importComplete": "Import complete: {added} added, {updated} updated",
+      "categoryMoved": "Moved {category} into {target}"
     },
-    "categorySettings": "Category Settings"
+    "categorySettings": "Category Settings",
+    "deleteConfirm": {
+      "titleFeed": "Delete feed?",
+      "titleCategory": "Delete category?",
+      "titleLabel": "Delete label?",
+      "titleRule": "Delete rule?",
+      "titleAlert": "Delete alert?",
+      "titleSavedSearch": "Delete saved search?",
+      "description": "“{name}” will be removed. This cannot be undone."
+    }
   },
   "feedEdit": {
     "authTab": "Authentication",
@@ -981,7 +1014,9 @@
       "chars": "chars",
       "paragraphs": "paragraphs",
       "links": "links",
-      "recommended": "recommended"
+      "recommended": "recommended",
+      "scoutStudioTitle": "Scout Studio",
+      "scoutStudioDescription": "Guided extraction: paste an article URL, preview the cleaned content, then apply the best selector candidate."
     },
     "scout": {
       "scoutAdvanced": "Scout Studio advanced source controls",

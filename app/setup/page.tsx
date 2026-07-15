@@ -7,6 +7,8 @@ import { signIn } from "next-auth/react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   ShieldCheck,
@@ -130,7 +132,7 @@ export default function SetupPage() {
       await updateGlobalSettings({ instanceName, instanceUrl, onboardingCompleted: false });
       setStep("email");
     } catch (e: any) {
-      setError(e?.message || "Failed to save instance settings");
+      setError(e?.message || t("errors.instanceSaveFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -161,7 +163,7 @@ export default function SetupPage() {
       await updateGlobalSettings(data);
       setStep("security");
     } catch (e: any) {
-      setError(e?.message || "Failed to save email settings");
+      setError(e?.message || t("errors.emailSaveFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -174,7 +176,7 @@ export default function SetupPage() {
       await updateGlobalSettings({ registrationsEnabled, onboardingCompleted: true });
       setStep("starters");
     } catch (e: any) {
-      setError(e?.message || "Failed to save security settings");
+      setError(e?.message || t("errors.securitySaveFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -205,7 +207,7 @@ export default function SetupPage() {
       setImportedCount(total);
       setStep("done");
     } catch (e: any) {
-      setError(e?.message || "Import failed. You can add feeds manually after setup.");
+      setError(e?.message || t("errors.importFailed"));
       setStep("done");
     } finally {
       setIsLoading(false);
@@ -226,7 +228,7 @@ export default function SetupPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-border bg-card p-3 mb-5 shadow-2xl">
             <Image src="/logo.svg" alt="FeedFerret" width={44} height={44} className="w-full h-full opacity-90" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-bold tracking-[-0.04em] text-foreground">
             Feed<span className="text-muted-foreground">Ferret</span> Setup
           </h1>
         </div>
@@ -266,17 +268,17 @@ export default function SetupPage() {
           {step === "account" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
                   <UserPlus className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-foreground">{t("adminAccount")}</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{t("adminAccount")}</h2>
                   <p className="text-xs text-muted-foreground">{t("adminAccountDescription")}</p>
                 </div>
               </div>
               <Input
                 placeholder={t("yourName")}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-xl"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -284,7 +286,7 @@ export default function SetupPage() {
               <Input
                 type="email"
                 placeholder={t("emailAddress")}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-xl"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -292,7 +294,7 @@ export default function SetupPage() {
               <Input
                 type="password"
                 placeholder={t("password")}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-xl"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -300,7 +302,7 @@ export default function SetupPage() {
               <Input
                 type="password"
                 placeholder={t("confirmPassword")}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-xl"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
@@ -308,7 +310,7 @@ export default function SetupPage() {
               <Button
                 onClick={handleCreateAccount}
                 disabled={isLoading}
-                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl mt-2"
+                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl mt-2 active:scale-95"
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">
@@ -328,11 +330,11 @@ export default function SetupPage() {
           {step === "instance" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
                   <Globe className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-foreground">{t("instanceSettings")}</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{t("instanceSettings")}</h2>
                   <p className="text-xs text-muted-foreground">{t("instanceSettingsDescription")}</p>
                 </div>
               </div>
@@ -341,7 +343,7 @@ export default function SetupPage() {
                 <Input
                   id="setup-instance-name"
                   placeholder="FeedFerret"
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-xl"
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
                   value={instanceName}
                   onChange={(e) => setInstanceName(e.target.value)}
                 />
@@ -351,7 +353,7 @@ export default function SetupPage() {
                 <Input
                   id="setup-instance-url"
                   placeholder="https://rss.example.com"
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-xl"
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
                   value={instanceUrl}
                   onChange={(e) => setInstanceUrl(e.target.value)}
                 />
@@ -360,7 +362,7 @@ export default function SetupPage() {
                 <Button variant="ghost" onClick={() => setStep("account")} className="h-11 rounded-xl text-muted-foreground hover:text-foreground">
                   <ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" /> {tCommon("back")}
                 </Button>
-                <Button onClick={handleSaveInstance} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl">
+                <Button onClick={handleSaveInstance} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl active:scale-95">
                   {isLoading ? <div className="w-3 h-3 border-2 border-muted border-t-primary rounded-full animate-spin" /> : <span className="flex items-center gap-2">{t("continue")} <ArrowRight className="w-4 h-4" /></span>}
                 </Button>
               </div>
@@ -371,33 +373,24 @@ export default function SetupPage() {
           {step === "email" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
                   <Mail className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-foreground">{t("emailDelivery")}</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{t("emailDelivery")}</h2>
                   <p className="text-xs text-muted-foreground">{t("emailDeliveryDescription")}</p>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-4 rounded-xl bg-muted border border-border">
-                <span className="text-sm text-foreground/80">{t("enableMailService")}</span>
-                <button
-                  onClick={() => setMailServiceEnabled(!mailServiceEnabled)}
-                  aria-pressed={mailServiceEnabled}
-                  aria-label="Toggle mail service"
-                  className={cn(
-                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                    mailServiceEnabled ? "bg-primary" : "bg-muted",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "inline-block h-4 w-4 rounded-full shadow transition-transform",
-                      mailServiceEnabled ? "translate-x-6 bg-primary-foreground" : "translate-x-1 bg-foreground",
-                    )}
-                  />
-                </button>
+              <div className="ui-control-surface flex items-center justify-between rounded-xl border p-4">
+                <Label htmlFor="setup-mail-service-toggle" className="text-sm font-medium text-foreground/80 cursor-pointer">
+                  {t("enableMailService")}
+                </Label>
+                <Switch
+                  id="setup-mail-service-toggle"
+                  checked={mailServiceEnabled}
+                  onCheckedChange={setMailServiceEnabled}
+                />
               </div>
 
               {mailServiceEnabled && (
@@ -422,19 +415,19 @@ export default function SetupPage() {
                   {mailProvider === "smtp" && (
                     <>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <Input placeholder={t("smtpHost")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-xl text-sm" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
-                        <Input placeholder={t("port")} type="number" className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-xl text-sm" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} />
+                        <Input placeholder={t("smtpHost")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
+                        <Input placeholder={t("port")} type="number" className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} />
                       </div>
-                      <Input placeholder={t("smtpUsername")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-xl text-sm" value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} />
-                      <Input type="password" placeholder={t("smtpPassword")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-xl text-sm" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} />
-                      <Input placeholder={t("smtpFrom")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-xl text-sm" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} />
+                      <Input placeholder={t("smtpUsername")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} />
+                      <Input type="password" placeholder={t("smtpPassword")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} />
+                      <Input placeholder={t("smtpFrom")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} />
                     </>
                   )}
 
                   {mailProvider === "resend" && (
                     <>
-                      <Input type="password" placeholder={t("resendApiKey")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-xl text-sm" value={resendApiKey} onChange={(e) => setResendApiKey(e.target.value)} />
-                      <Input placeholder={t("resendFromEmail")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-xl text-sm" value={resendFromEmail} onChange={(e) => setResendFromEmail(e.target.value)} />
+                      <Input type="password" placeholder={t("resendApiKey")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={resendApiKey} onChange={(e) => setResendApiKey(e.target.value)} />
+                      <Input placeholder={t("resendFromEmail")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={resendFromEmail} onChange={(e) => setResendFromEmail(e.target.value)} />
                     </>
                   )}
                 </>
@@ -447,7 +440,7 @@ export default function SetupPage() {
                 <Button variant="ghost" onClick={() => handleSaveEmail(true)} className="h-11 rounded-xl text-muted-foreground hover:text-foreground gap-1">
                   <SkipForward className="w-4 h-4" /> {t("skip")}
                 </Button>
-                <Button onClick={() => handleSaveEmail(false)} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl">
+                <Button onClick={() => handleSaveEmail(false)} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl active:scale-95">
                   {isLoading ? <div className="w-3 h-3 border-2 border-muted border-t-primary rounded-full animate-spin" /> : <span className="flex items-center gap-2">{t("continue")} <ArrowRight className="w-4 h-4" /></span>}
                 </Button>
               </div>
@@ -458,39 +451,31 @@ export default function SetupPage() {
           {step === "security" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
                   <Lock className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-foreground">{t("accessControl")}</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{t("accessControl")}</h2>
                   <p className="text-xs text-muted-foreground">{t("accessControlDescription")}</p>
                 </div>
               </div>
 
-              <div className="p-5 rounded-xl bg-muted border border-border space-y-3">
+              <div className="ui-control-surface rounded-xl border p-5 space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium text-foreground">{t("allowPublicRegistration")}</p>
+                    <Label htmlFor="setup-registrations-toggle" className="text-sm font-medium text-foreground cursor-pointer">
+                      {t("allowPublicRegistration")}
+                    </Label>
                     <p className="text-xs text-muted-foreground mt-1">
                       {t("allowPublicRegistrationDescription")}
                     </p>
                   </div>
-                  <button
-                    onClick={() => setRegistrationsEnabled(!registrationsEnabled)}
-                    aria-pressed={registrationsEnabled}
-                    aria-label="Toggle public registration"
-                    className={cn(
-                      "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                      registrationsEnabled ? "bg-primary" : "bg-muted",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "inline-block h-4 w-4 rounded-full shadow transition-transform",
-                        registrationsEnabled ? "translate-x-6 bg-primary-foreground" : "translate-x-1 bg-foreground",
-                      )}
-                    />
-                  </button>
+                  <Switch
+                    id="setup-registrations-toggle"
+                    className="shrink-0"
+                    checked={registrationsEnabled}
+                    onCheckedChange={setRegistrationsEnabled}
+                  />
                 </div>
               </div>
 
@@ -502,7 +487,7 @@ export default function SetupPage() {
                 <Button variant="ghost" onClick={() => setStep("email")} className="h-11 rounded-xl text-muted-foreground hover:text-foreground">
                   <ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" /> {tCommon("back")}
                 </Button>
-                <Button onClick={handleSaveSecurity} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl">
+                <Button onClick={handleSaveSecurity} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl active:scale-95">
                   {isLoading ? <div className="w-3 h-3 border-2 border-muted border-t-primary rounded-full animate-spin" /> : <span className="flex items-center gap-2">{t("continue")} <ArrowRight className="w-4 h-4" /></span>}
                 </Button>
               </div>
@@ -513,11 +498,11 @@ export default function SetupPage() {
           {step === "starters" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-foreground">{t("quickStart")}</h2>
+                  <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{t("quickStart")}</h2>
                   <p className="text-xs text-muted-foreground">{t("quickStartDescription")}</p>
                 </div>
               </div>
@@ -554,7 +539,7 @@ export default function SetupPage() {
               <p className="text-xs text-muted-foreground text-center">
                 {selectedPacks.length === 0
                   ? t("nothingSelected")
-                  : `${selectedPacks.length} ${selectedPacks.length === 1 ? t("packSelected") : t("packsSelected")}`}
+                  : t("packsSelected", { count: selectedPacks.length })}
               </p>
 
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
@@ -571,7 +556,7 @@ export default function SetupPage() {
                 <Button
                   onClick={handleImportStarters}
                   disabled={isLoading}
-                  className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl"
+                  className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl active:scale-95"
                 >
                   {isLoading ? (
                     <span className="flex items-center gap-2">
@@ -592,8 +577,8 @@ export default function SetupPage() {
           {step === "done" && (
             <div className="text-center space-y-6">
               <div className="flex flex-col items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted border border-border">
-                  <Check className="w-8 h-8 text-foreground" />
+                <div className="ui-brand-icon flex h-16 w-16 items-center justify-center rounded-2xl">
+                  <Check className="size-8" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-foreground">{t("allSetTitle")}</h2>
@@ -614,7 +599,7 @@ export default function SetupPage() {
 
               <Button
                 onClick={() => router.push(importedCount > 0 ? "/" : "/?addFeed=1")}
-                className="w-full h-12 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl text-base"
+                className="w-full h-12 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl text-base active:scale-95"
               >
                 <Rss className="w-5 h-5 me-2" />
                 {importedCount > 0 ? t("startReading") : t("addFirstFeed")}
@@ -623,8 +608,8 @@ export default function SetupPage() {
           )}
         </div>
 
-        <p className="text-center text-muted-foreground text-xs font-medium tracking-[.15em] uppercase mt-8">
-          FeedFerret · Self-hosted RSS
+        <p className="text-center text-muted-foreground text-xs font-semibold uppercase tracking-wider mt-8">
+          {t("tagline")}
         </p>
       </div>
     </div>
