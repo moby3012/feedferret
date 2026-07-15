@@ -3,6 +3,12 @@ export async function register() {
 
     validateEnvironment();
 
+    // Provisions pg_trgm / FTS5 search acceleration (audit finding P-11).
+    // Idempotent and self-contained: it never throws, so a broken index
+    // setup degrades to unaccelerated search instead of blocking startup.
+    const { ensureSearchIndexes } = await import("./lib/search-indexes");
+    await ensureSearchIndexes();
+
     const { startBackgroundSync } = await import("./lib/background-sync");
     startBackgroundSync();
 }

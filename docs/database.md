@@ -80,6 +80,16 @@ Supported `DATABASE_PROVIDER` values: `postgresql`, `postgres`, `sqlite`, `file`
 
 ---
 
+## Full-text search
+
+Article search (`lib/search.ts`) supports structured operators (`author:`, `intitle:`, `is:unread`, `label:`, date ranges, `OR` groups) plus free-text terms. Free-text terms are accelerated with an index appropriate to the active provider. Setup is automatic and idempotent — it runs once at server startup (`instrumentation.ts` → `ensureSearchIndexes()` in `lib/search-indexes.ts`) and is safe to run on every restart. If it fails for any reason, it logs a warning and search keeps working unaccelerated — a broken index setup never blocks startup or feed sync.
+
+**PostgreSQL:** `CREATE EXTENSION IF NOT EXISTS pg_trgm` plus GIN trigram indexes (`gin_trgm_ops`) on `Article.title`, `.content`, `.excerpt`, and `.author`. This accelerates the existing `ILIKE '%term%'` queries with no change to query logic. Requires the connecting role to have privileges to create the extension (true for the default superuser role in the bundled Docker image; a restricted/managed Postgres role without `CREATE EXTENSION` rights will just log the startup warning and fall back to unaccelerated `ILIKE`).
+
+**SQLite:** an FTS5 virtual table (`article_fts`) using the `trigram` tokenizer (requires SQLite ≥ 3.34, bundled with `better-sqlite3`), kept in sync via `AFTER INSERT/UPDATE/DELETE` triggers on `Article`, with a one-time backfill for pre-existing rows on first setup. The `trigram` tokenizer was specifically chosen because — unlike SQLite's default word-based tokenizers — it matches arbitrary substrings the same way `LIKE '%term%'` does, so switching a term over to the FTS index doesn't change what counts as a match. Two cases still use the original `LIKE`-based query directly, both simply falling back to (never returning less than) the pre-FTS behavior: terms shorter than 3 characters (the trigram tokenizer can't index anything shorter), and any runtime error against `article_fts` (e.g. before the first startup has provisioned it). `link` and feed/label names aren't part of the FTS index, so those always stay on the `LIKE` path and are OR'd together with the FTS match for title/content/excerpt/author.
+
+---
+
 ## Switching providers
 
 There is no automated data migration between providers. To switch:

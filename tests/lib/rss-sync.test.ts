@@ -129,7 +129,7 @@ const db = {
   },
 };
 
-vi.mock("../../lib/db", () => ({ db }));
+vi.mock("../../lib/db", () => ({ db, getDatabaseProvider: () => "sqlite" }));
 
 function seedExisting(row: Partial<FakeArticle> & { userId: string; feedId: string; dedupeKey: string }) {
   const article: FakeArticle = {

@@ -10,6 +10,12 @@ const aliases: Record<string, string> = {
   postgresql: "postgresql",
 };
 
+// Shared provider resolution so other modules (e.g. lib/search.ts, lib/search-indexes.ts)
+// agree with the adapter on whether we're running against SQLite or PostgreSQL.
+export function getDatabaseProvider(): "sqlite" | "postgresql" {
+  return (aliases[(process.env.DATABASE_PROVIDER ?? "sqlite").toLowerCase()] as "sqlite" | "postgresql" | undefined) ?? "sqlite";
+}
+
 function getDatabaseUrl() {
   const url = process.env.DATABASE_URL;
   if (!url) return "file:./dev.db";
