@@ -37,6 +37,9 @@ export async function GET(request: Request) {
         data: { digestEnabled: false },
     });
 
+    // NOTE: intentionally standalone, light-mode-only inline HTML — this page is
+    // rendered outside the app shell (no access to CSS custom properties/theme),
+    // so it does not participate in the light/dark semantic-token system.
     return new NextResponse(
         `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;max-width:500px;margin:auto;background:#f9fafb">
         <div style="background:#fff;padding:32px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.1)">

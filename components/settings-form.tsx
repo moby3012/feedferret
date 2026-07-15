@@ -258,7 +258,8 @@ export function SettingsForm() {
                 <div
                   className="w-full min-w-[180px] rounded-2xl border border-border/70 p-3 shadow-sm sm:ml-auto sm:w-auto"
                   style={{
-                    background: `linear-gradient(135deg, ${(prefs?.accentColor ?? "#5BA4CF")}22 0%, ${(prefs?.secondaryColor ?? "#F0963C")}2a 100%)`,
+                    // color-mix (not hex+alpha concatenation) so the "var(--brand)" fallback works too
+                    background: `linear-gradient(135deg, color-mix(in srgb, ${(prefs?.accentColor ?? "var(--brand)")} 13%, transparent) 0%, color-mix(in srgb, ${(prefs?.secondaryColor ?? "var(--brand-secondary)")} 16%, transparent) 100%)`,
                   }}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -271,11 +272,11 @@ export function SettingsForm() {
                     <div className="flex items-center gap-2">
                       <span
                         className="h-7 w-7 rounded-full border border-white/40 shadow-sm"
-                        style={{ backgroundColor: prefs?.accentColor ?? "#5BA4CF" }}
+                        style={{ backgroundColor: prefs?.accentColor ?? "var(--brand)" }}
                       />
                       <span
                         className="h-7 w-7 rounded-full border border-white/40 shadow-sm"
-                        style={{ backgroundColor: prefs?.secondaryColor ?? "#F0963C" }}
+                        style={{ backgroundColor: prefs?.secondaryColor ?? "var(--brand-secondary)" }}
                       />
                     </div>
                   </div>
@@ -1171,8 +1172,8 @@ function DigestSection() {
           >
             <span
               className={cn(
-                "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200",
-                digest.digestEnabled ? "translate-x-5" : "translate-x-0",
+                "pointer-events-none inline-block h-5 w-5 rounded-full shadow-sm ring-0 transition-transform duration-200",
+                digest.digestEnabled ? "translate-x-5 bg-primary-foreground" : "translate-x-0 bg-foreground",
               )}
             />
           </button>
@@ -1358,8 +1359,8 @@ function DigestSection() {
                 >
                   <span
                     className={cn(
-                      "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200",
-                      digest.digestGroupByFeed ? "translate-x-5" : "translate-x-0",
+                      "pointer-events-none inline-block h-5 w-5 rounded-full shadow-sm ring-0 transition-transform duration-200",
+                      digest.digestGroupByFeed ? "translate-x-5 bg-primary-foreground" : "translate-x-0 bg-foreground",
                     )}
                   />
                 </button>
@@ -1483,8 +1484,8 @@ function DigestSection() {
               >
                 <span
                   className={cn(
-                    "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200",
-                    digest.digestSkipFeatured ? "translate-x-5" : "translate-x-0",
+                    "pointer-events-none inline-block h-5 w-5 rounded-full shadow-sm ring-0 transition-transform duration-200",
+                    digest.digestSkipFeatured ? "translate-x-5 bg-primary-foreground" : "translate-x-0 bg-foreground",
                   )}
                 />
               </button>

@@ -21,7 +21,7 @@ function normalizeHexColor(value: string | null | undefined, fallback: string) {
   return `#${hex.toLowerCase()}`;
 }
 
-function getContrastColor(hex: string) {
+function getContrastColor(hex: string, darkForeground: string) {
   const sanitized = hex.replace("#", "");
   const value = Number.parseInt(sanitized, 16);
   const r = (value >> 16) & 255;
@@ -38,7 +38,11 @@ function getContrastColor(hex: string) {
   const luminance =
     0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
 
-  return luminance > 0.45 ? "#08111d" : "#f8fbff";
+  // "darkForeground" comes from the --brand-foreground token (falls back to the
+  // literal below only if that property is empty). "#f8fbff" has no dedicated
+  // token counterpart — it's the near-white text option used against dark brand
+  // colors — so it stays a literal.
+  return luminance > 0.45 ? darkForeground : "#f8fbff";
 }
 
 export function ThemeColorApplier() {
@@ -48,15 +52,28 @@ export function ThemeColorApplier() {
     if (!prefs) return;
 
     const root = document.documentElement;
-    const accentColor = normalizeHexColor(prefs.accentColor, "#5ba4cf");
-    const secondaryColor = normalizeHexColor(prefs.secondaryColor, "#f0963c");
+    const computed = getComputedStyle(root);
+    // Source defaults from the CSS custom properties so this stays in sync with
+    // app/globals.css; the literals are only a last-resort fallback if the
+    // property is empty (e.g. before stylesheets have loaded).
+    const brandDefault = computed.getPropertyValue("--brand").trim() || "#5ba4cf";
+    const brandSecondaryDefault =
+      computed.getPropertyValue("--brand-secondary").trim() || "#f0963c";
+    const brandForegroundDefault =
+      computed.getPropertyValue("--brand-foreground").trim() || "#08111d";
+
+    const accentColor = normalizeHexColor(prefs.accentColor, brandDefault);
+    const secondaryColor = normalizeHexColor(prefs.secondaryColor, brandSecondaryDefault);
 
     root.style.setProperty("--brand", accentColor);
     root.style.setProperty("--brand-secondary", secondaryColor);
-    root.style.setProperty("--brand-foreground", getContrastColor(accentColor));
+    root.style.setProperty(
+      "--brand-foreground",
+      getContrastColor(accentColor, brandForegroundDefault),
+    );
     root.style.setProperty(
       "--brand-secondary-foreground",
-      getContrastColor(secondaryColor),
+      getContrastColor(secondaryColor, brandForegroundDefault),
     );
 
     // Persisted RTL/LTR preference
