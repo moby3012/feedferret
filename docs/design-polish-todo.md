@@ -5,18 +5,18 @@
 
 ## Status
 
-✅ **Done 2026-07-15** — audited across all four surfaces and implemented in three merged PRs. **34 of 37 items resolved**; 3 remain as backlog (need a design decision, not blind execution — see below).
+✅ **Done 2026-07-15** — audited across all four surfaces and implemented in four merged PRs. **All 37 items resolved.**
 
 | Surface | PR | Status |
 |---|---|---|
-| Reading experience (article-list, article-reader, search-results-view, mobile controls) | #110 | ✅ done (3 items deferred to backlog) |
+| Reading experience (article-list, article-reader, search-results-view, mobile controls) | #110, #115 | ✅ done |
 | Settings + Server-Settings (settings-form, settings-shell, server-management-dialog, tabs) | #111 | ✅ done |
 | Feed management (manage-feeds, feed-management, discovery-panel, feed-edit-dialog) | #112 | ✅ done |
 | Auth/onboarding + UI primitives (login/register/setup, components/ui) | #112 | ✅ done |
 
 **Notable beyond pure styling:** fixed a reduced-motion bug (duplicate reader keyframe, #110); replaced 5 hand-rolled `role=switch` toggles with `<Switch>` and a hand-rolled `role=dialog` overlay with a real `Dialog` (focus-trap/Escape restored, #111/#112); fixed a latent i18n crash-path (`t('packSelected')` for a nonexistent key, #112); localized a hardcoded German back-button label and ~40 other strings. Every PR: `tsc`/`lint`/`translations:check`/`pnpm test` (103/103) green.
 
-**Remaining backlog (3 items, deferred by choice):** the `amber-500`→`--star` token migration, the article-row radius-vs-doc decision, and selected-row visual-weight convergence. These are the three unchecked boxes below — each needs a design call (introduce a token? change the documented scale?) rather than a mechanical swap.
+**Final 3 items (PR #115), once deferred for a design decision, now resolved with the maintainer's calls:** star color → the `--brand-secondary` token; all article rows + skeletons → `rounded-xl`; selected-row state converged to `ring-2 ring-accent/40 border-accent/30 bg-accent/10` across all view modes (with `--brand` reserved for the unread signal).
 
 ---
 
@@ -55,7 +55,7 @@ The single biggest theme in the audit: **the app already ships shared primitives
 ### Color-scheme cohesion
 - [x] **[P1] Selected-article state uses different tokens per view mode** — `S` · `components/article-list.tsx:598` (minimal `ring-accent/20`), `:748` (classic `border-accent/25`), `:649-650` (magazine `ring-brand border-brand`). Magazine reuses `--brand`, which collides with the unread signal → a selected+unread card is indistinguishable from unread. Use `ring-2 ring-accent border-accent` for magazine; reserve `--brand` for unread.
 - [x] **[P2] `hover:bg-muted/50` vs `hover:bg-card/80` for the same unselected-row hover** — `S` · `article-list.tsx:599` vs `:749`. Standardize on `hover:bg-card/80`.
-- [ ] **[P3] Star color `amber-500` is a hardcoded literal (~20+ uses)** — `M` · `article-list.tsx:552,613,616,694,697,806,872,876`, `article-reader.tsx:354,676,681`. Introduce a `--star` token (or reuse `--brand-secondary`) and swap the literals.
+- [x] **[P3] Star color `amber-500` is a hardcoded literal (~20+ uses)** — `M` · `article-list.tsx:552,613,616,694,697,806,872,876`, `article-reader.tsx:354,676,681`. ✅ Done (PR #115): migrated star-semantic `amber-500` to the `--brand-secondary` token (added `--color-brand-secondary` utility); warning ambers left as-is.
 
 ### Typography
 - [x] **[P1] Read/unread title weight differs in every view mode** — `S` · minimal `article-list.tsx:605` (600→400), classic `:826-828` (600→500), magazine `:678` (700→600). Standardize: unread `font-semibold`, read `font-medium text-foreground/75` in all three.
@@ -71,8 +71,8 @@ The single biggest theme in the audit: **the app already ships shared primitives
 
 ### Spacing & rhythm
 - [x] **[P1] Skeletons don't match the radius of the rows they become (shape-pop on load, all 3 modes)** — `S` · skeletons `article-list.tsx:60-95` all `rounded-xl`; real rows `:595` (`rounded-2xl`), `:648` (`rounded-3xl`), `:744` (`rounded-2xl sm:rounded-3xl`). Match skeleton radius to its row.
-- [ ] **[P2] Article-row radii exceed the documented list-row scale** — `M` · `article-list.tsx:595,648,744` are `rounded-2xl`/`3xl` vs documented `rounded-xl`. Decide: pull rows to `rounded-xl`, or update `design-system.md` to note article rows are intentionally card-like. (Cross-ref sidebar feed rows which use `rounded-xl`/`2xl`.)
-- [ ] **[P3] Selected-row visual weight varies a lot across modes** — `M` · classic shadow+border vs minimal faint ring vs magazine heavy double ring. Converge (e.g. `ring-2 ring-accent/40 border-accent/30`).
+- [x] **[P2] Article-row radii exceed the documented list-row scale** — `M` · `article-list.tsx:595,648,744` are `rounded-2xl`/`3xl` vs documented `rounded-xl`. ✅ Done (PR #115): all rows + skeletons unified to `rounded-xl` (matches the documented list-row scale).
+- [x] **[P3] Selected-row visual weight varies a lot across modes** — `M` · classic shadow+border vs minimal faint ring vs magazine heavy double ring. ✅ Done (PR #115): converged to `ring-2 ring-accent/40 border-accent/30 bg-accent/10` across all modes; `--brand` stays the unread signal.
 
 ### Component consistency
 - [x] **[P1] Reader desktop toolbar buttons are bigger than the identical main-header toolbar** — `S` · `article-reader.tsx:316-437` (`w-11 h-11`, `w-5 h-5` icons) vs `rss-header.tsx:132-269` (`w-10 h-10`, `w-4 h-4`). Drop reader header buttons to `w-10 h-10` + `w-4 h-4`.
