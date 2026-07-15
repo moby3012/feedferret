@@ -88,16 +88,26 @@ export async function syncDynamicOpmlCategories(userId?: string) {
   });
 
   const results = [];
-  for (const category of categories) {
-    if (!category.opmlUrl) continue;
-    try {
-      const xml = await fetchSafeOpml(category.opmlUrl);
-      const outlines = await parseOpml(xml);
-      for (const outline of outlines) await importDynamicOutline(category.userId, outline, category.id);
-      results.push({ category: category.name, success: true, count: outlines.length });
-    } catch (error) {
-      logger.error(`[dynamic-opml] failed for ${category.opmlUrl}:`, error);
-      results.push({ category: category.name, success: false, error: String(error) });
+  const concurrency = 4;
+
+  for (let i = 0; i < categories.length; i += concurrency) {
+    const batch = categories.slice(i, i + concurrency);
+    const batchResults = await Promise.all(
+      batch.map(async (category) => {
+        if (!category.opmlUrl) return null;
+        try {
+          const xml = await fetchSafeOpml(category.opmlUrl);
+          const outlines = await parseOpml(xml);
+          for (const outline of outlines) await importDynamicOutline(category.userId, outline, category.id);
+          return { category: category.name, success: true, count: outlines.length };
+        } catch (error) {
+          logger.error(`[dynamic-opml] failed for ${category.opmlUrl}:`, error);
+          return { category: category.name, success: false, error: String(error) };
+        }
+      }),
+    );
+    for (const result of batchResults) {
+      if (result) results.push(result);
     }
   }
   return results;

@@ -1,13 +1,17 @@
 import { syncAllFeeds } from "./rss-sync";
 import { runDigestScheduler } from "./digest-scheduler";
 import { flushDueNotifications } from "./notifications";
+import { applyRetentionPoliciesForAllUsers } from "./retention";
 import { logger } from "./logger";
+
+const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000; // run at most once/day
 
 type SchedulerState = {
     timer: ReturnType<typeof setTimeout> | null;
     running: boolean;
     lastRun: number;
     lastError: string | null;
+    lastRetentionRun: number;
 };
 
 const GLOBAL_KEY = "__feedferret_background_sync__";
@@ -20,6 +24,7 @@ function getState(): SchedulerState {
             running: false,
             lastRun: 0,
             lastError: null,
+            lastRetentionRun: 0,
         } satisfies SchedulerState;
     }
     return g[GLOBAL_KEY] as SchedulerState;
@@ -45,6 +50,19 @@ async function tick() {
         void flushDueNotifications().catch((e) =>
             logger.error("[push-notifications] flush failed:", e),
         );
+
+        // Retention cleanup is expensive relative to a sync tick, so only run it
+        // once/day rather than on every ~5-min tick.
+        if (Date.now() - state.lastRetentionRun >= RETENTION_INTERVAL_MS) {
+            state.lastRetentionRun = Date.now();
+            void applyRetentionPoliciesForAllUsers()
+                .then((r) =>
+                    logger.log(
+                        `[retention] processed ${r.usersProcessed} users, deleted ${r.deleted} articles`,
+                    ),
+                )
+                .catch((e) => logger.error("[retention] run failed:", e));
+        }
     } catch (error) {
         state.lastError = String(error);
         logger.error("[background-sync] tick failed:", error);

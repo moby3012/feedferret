@@ -10,6 +10,10 @@ interface RateLimitEntry {
 
 const store = new Map<string, RateLimitEntry>();
 
+// Safety cap so a flood of distinct identifiers (spoofed IPs, etc.) can't grow the
+// store unbounded between the periodic GC passes below.
+const MAX_STORE_ENTRIES = 50_000;
+
 // Cleanup stale entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
@@ -17,6 +21,22 @@ setInterval(() => {
     if (entry.resetAt < now) store.delete(key);
   }
 }, 5 * 60 * 1000);
+
+/**
+ * Evicts the oldest-inserted entries (Map preserves insertion order) when the store
+ * is at capacity, making room for a new key. This is a cheap mitigation, not a
+ * replacement for a shared/cross-instance store.
+ */
+function evictOldestIfAtCapacity() {
+  if (store.size < MAX_STORE_ENTRIES) return;
+  const excess = store.size - MAX_STORE_ENTRIES + 1;
+  let removed = 0;
+  for (const key of store.keys()) {
+    if (removed >= excess) break;
+    store.delete(key);
+    removed++;
+  }
+}
 
 export interface RateLimitConfig {
   /** Max requests allowed in the window */
@@ -46,6 +66,7 @@ export function checkRateLimit(
 
   // Window expired or no entry → reset
   if (!entry || entry.resetAt < now) {
+    if (!store.has(key)) evictOldestIfAtCapacity();
     entry = { count: 0, resetAt: now + windowMs };
     store.set(key, entry);
   }

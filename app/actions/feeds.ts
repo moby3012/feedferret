@@ -23,6 +23,7 @@ import {
 } from "@/lib/validation";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { buildAdvancedSearchWhere } from "@/lib/search";
+import { applyRetentionPoliciesForUser } from "@/lib/retention";
 import { randomBytes } from "crypto";
 import { decryptIfValue } from "@/lib/crypto";
 import type { AiProvider } from "@/lib/ai-summary";
@@ -491,58 +492,10 @@ export async function applyRetentionPolicies(dryRun = false) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    const user = await db.user.findUnique({
-        where: { id: session.user.id },
-        include: { feeds: true },
-    });
-    if (!user) throw new Error("User not found");
-
-    let deleted = 0;
-    for (const feed of user.feeds) {
-        const retentionDays = feed.retentionDays ?? user.defaultRetentionDays;
-        if (!retentionDays || retentionDays <= 0) continue;
-
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - retentionDays);
-
-        // Candidates: read, not starred, not read-later, no labels, older than cutoff
-        const candidates = await db.article.findMany({
-            where: {
-                userId: user.id,
-                feedId: feed.id,
-                isRead: true,
-                isStarred: false,
-                isReadLater: false,
-                labels: { none: {} },
-                publishedAt: { lt: cutoff },
-            },
-            select: { id: true },
-            orderBy: { publishedAt: "asc" },
-        });
-
-        let toDelete = candidates;
-        if (feed.keepMinArticles && feed.keepMinArticles > 0) {
-            const totalCount = await db.article.count({
-                where: { userId: user.id, feedId: feed.id },
-            });
-            const maxDeletable = Math.max(0, totalCount - feed.keepMinArticles);
-            toDelete = candidates.slice(0, maxDeletable);
-        }
-
-        if (toDelete.length === 0) continue;
-
-        if (dryRun) {
-            deleted += toDelete.length;
-        } else {
-            const result = await db.article.deleteMany({
-                where: { id: { in: toDelete.map((a: { id: string }) => a.id) } },
-            });
-            deleted += result.count;
-        }
-    }
+    const result = await applyRetentionPoliciesForUser(session.user.id, dryRun);
 
     if (!dryRun) revalidatePath("/");
-    return { deleted, dryRun };
+    return result;
 }
 
 export async function addCategory(name: string, parentId?: string) {
@@ -753,7 +706,9 @@ export async function getArticles(feedId?: string | null, category?: string, sea
     return await db.article.findMany({
         where,
         include: {
-            feed: true,
+            feed: {
+                select: { id: true, name: true, icon: true },
+            },
             labels: {
                 include: { label: true },
             },

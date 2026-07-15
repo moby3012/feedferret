@@ -118,11 +118,20 @@ async function readTextWithLimit(response: Response, maxBytes?: number) {
   return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
-export async function fetchTextWithSsrfProtection(
+export type ConditionalFetchResult =
+  | { notModified: true; etag: string | null; lastModified: string | null }
+  | { notModified: false; text: string; etag: string | null; lastModified: string | null };
+
+/**
+ * Same SSRF-protected fetch/redirect loop as `fetchTextWithSsrfProtection`, but surfaces
+ * a 304 response (instead of throwing) along with the response's `ETag`/`Last-Modified`
+ * headers, so callers doing conditional GET (e.g. feed sync) can short-circuit.
+ */
+export async function fetchWithSsrfProtection(
   rawUrl: string,
   init: RequestInit = {},
   options: SafeFetchTextOptions = {},
-) {
+): Promise<ConditionalFetchResult> {
   const maxRedirects = options.maxRedirects ?? 10;
   const timeoutMs = options.timeoutMs ?? 30_000;
   let current = (await assertSafeFetchUrl(rawUrl, options)).toString();
@@ -143,12 +152,32 @@ export async function fetchTextWithSsrfProtection(
         continue;
       }
 
+      const etag = response.headers.get("etag");
+      const lastModified = response.headers.get("last-modified");
+
+      if (response.status === 304) {
+        return { notModified: true, etag, lastModified };
+      }
+
       if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
-      return readTextWithLimit(response, options.maxBytes);
+      const text = await readTextWithLimit(response, options.maxBytes);
+      return { notModified: false, text, etag, lastModified };
     } finally {
       clearTimeout(timer);
     }
   }
 
   throw new Error(`Too many redirects fetching ${rawUrl}`);
+}
+
+export async function fetchTextWithSsrfProtection(
+  rawUrl: string,
+  init: RequestInit = {},
+  options: SafeFetchTextOptions = {},
+): Promise<string> {
+  const result = await fetchWithSsrfProtection(rawUrl, init, options);
+  // No existing caller of this function sends conditional-GET headers, so a 304 here
+  // would be unexpected; preserve the previous "non-2xx throws" behavior for them.
+  if (result.notModified) throw new Error("Fetch failed: 304");
+  return result.text;
 }

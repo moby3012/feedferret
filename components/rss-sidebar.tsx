@@ -32,6 +32,7 @@ import {
   AlertCircle,
   Play,
   Mail,
+  Loader2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -57,7 +58,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DiscoveryPanel } from "@/components/discovery-panel";
+import dynamic from "next/dynamic";
 import {
   Tooltip,
   TooltipContent,
@@ -119,6 +120,20 @@ import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { DEFAULT_STARTER_PACKS, starterPackToOpml, type StarterPack } from "@/lib/starter-packs";
 import { SpoilerIcon } from "@/components/icons/spoiler-icon";
+
+// Lazy-loaded: only rendered inside the "Add feed → Discover" tab, so it doesn't
+// need to be in the initial sidebar bundle.
+const DiscoveryPanel = dynamic(
+  () => import("@/components/discovery-panel").then((m) => m.DiscoveryPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-10 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    ),
+  },
+);
 
 interface RssSidebarProps {
   feeds: FeedSource[];
