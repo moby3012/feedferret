@@ -651,6 +651,8 @@
     "scrollToTop": "Nach oben scrollen",
     "share": "Teilen",
     "copyLink": "Link kopieren",
+    "copyAsMarkdown": "Als Markdown kopieren",
+    "copiedAsMarkdown": "Als Markdown kopiert",
     "labels": "Labels",
     "noLabels": "Keine Labels",
     "moreActions": "Weitere Aktionen",
@@ -1380,5 +1382,26 @@
     "signInIgnore": "Wenn du diese E-Mail nicht angefordert hast, kannst du sie ignorieren.",
     "testSubject": "FeedFerret E-Mail-Provider-Test",
     "testBody": "Wenn du diese Nachricht erhalten hast, ist dein FeedFerret-E-Mail-Provider korrekt konfiguriert."
+  },
+  "commandPalette": {
+    "title": "Befehlspalette",
+    "description": "Nach einem Befehl, Feed, einer Kategorie oder einem Label suchen.",
+    "placeholder": "Befehl eingeben oder suchen…",
+    "empty": "Keine Ergebnisse gefunden.",
+    "groups": {
+      "actions": "Aktionen",
+      "feeds": "Feeds",
+      "categories": "Kategorien",
+      "labels": "Labels"
+    },
+    "actions": {
+      "refresh": "Alle Feeds aktualisieren",
+      "markAllRead": "Alle als gelesen markieren",
+      "focusSearch": "Suche fokussieren",
+      "addFeed": "Feed hinzufügen",
+      "openSettings": "Einstellungen öffnen",
+      "toggleTheme": "Visuellen Modus wechseln",
+      "shortcuts": "Tastaturkürzel"
+    }
   }
 }

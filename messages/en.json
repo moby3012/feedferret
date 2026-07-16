@@ -651,6 +651,8 @@
     "scrollToTop": "Scroll to top",
     "share": "Share",
     "copyLink": "Copy link",
+    "copyAsMarkdown": "Copy as Markdown",
+    "copiedAsMarkdown": "Copied as Markdown",
     "labels": "Labels",
     "noLabels": "No labels",
     "moreActions": "More actions",
@@ -1380,5 +1382,26 @@
     "signInIgnore": "If you didn't request this email, you can safely ignore it.",
     "testSubject": "FeedFerret mail provider test",
     "testBody": "If you received this message, your FeedFerret email provider is configured correctly."
+  },
+  "commandPalette": {
+    "title": "Command palette",
+    "description": "Search for a command, feed, category, or label.",
+    "placeholder": "Type a command or search…",
+    "empty": "No results found.",
+    "groups": {
+      "actions": "Actions",
+      "feeds": "Feeds",
+      "categories": "Categories",
+      "labels": "Labels"
+    },
+    "actions": {
+      "refresh": "Refresh all feeds",
+      "markAllRead": "Mark all as read",
+      "focusSearch": "Focus search",
+      "addFeed": "Add feed",
+      "openSettings": "Open settings",
+      "toggleTheme": "Toggle theme",
+      "shortcuts": "Keyboard shortcuts"
+    }
   }
 }
