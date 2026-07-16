@@ -1,6 +1,7 @@
 # Feed Intelligence — Project Plan
 
 > **Status:** Research & planning (2026-07-16). No code yet — this is the thinking document.
+> **→ Actionable milestone TODO:** [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md).
 > **Mission:** make FeedFerret great at *getting the actual content*. Two phases:
 > 1. **Auto full-text** — automatically de-truncate partial feeds and render the full article as clean, well-typeset content ("nice markdown") in the reader, with no manual selector work.
 > 2. **Turn anything into a feed** — generate a feed from an arbitrary web page/source that has no RSS.
