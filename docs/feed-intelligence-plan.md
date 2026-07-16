@@ -9,6 +9,15 @@
 
 ---
 
+## Decisions locked (2026-07-16, maintainer)
+
+1. **Content format is user-selectable.** Introduce `Article.contentFormat` and let the user choose **Markdown or HTML** (per feed, with a sensible default; ideally overridable per article). Markdown is the "clean, aligned" path; HTML stays available for people who want the source rendering.
+2. **Deployment is staged, in-process first.** Default everything to **in-process** (no extra services) so minimal/Coolify deployments keep working with zero setup; expose external engines (RSSHub / changedetection.io / Firecrawl / Jina) as **optional, admin-configured connectors**; hosted third-party APIs only as **per-user opt-in** (like AI BYOK). Full rationale in §4b.
+3. **AI extraction is multi-stage by hardness:** (a) **AI selector detection** first — the model proposes a reusable extraction config, user confirms, cheap one-shot; (b) if a site is too inconsistent for stable selectors, fall back to **per-article AI extraction**; (c) also evaluate an **API connector to changedetection.io** for the "any page → feed" monitoring path.
+4. **Scope: "the more the better", delivered in ascending build stages.** We don't have to solve *everything* at once — ship value at each stage (see the staged roadmap in §5), climbing from static-HTML to JS-rendered/anti-bot coverage as effort allows.
+
+---
+
 ## 0. Where we are today (honest inventory)
 
 | Capability | State | Where |
@@ -62,6 +71,7 @@ We currently render sanitized HTML through `prose`. To render Markdown we'd add 
 | **RSSHub** | Node/TS | MIT | 5,000+ curated *routes* (YouTube, Reddit, Bilibili, GitHub releases, Twitter/X, Telegram, …). 41k★. The gold standard for "platform → RSS". | Run as an optional **sidecar service**; let users add an RSSHub route as a feed, or bundle a curated subset. Same language as us. |
 | **RSS-Bridge** | PHP | Unlicense/public-domain | Bridges for sites lacking RSS; community "bridges". | External service only (PHP) — reference for bridge patterns, not embeddable. |
 | **morss** | Python | AGPL-3.0 | Truncated→full-text **and** page→RSS in one. | External service; gets rate-limited by big sites. Concept reference. |
+| **changedetection.io** | Python | Apache-2.0 | Monitors *any* page for changes → notifications **and RSS output**; restock/price processors; **own browser rendering for JS pages**; clean **REST API** (create/update/delete "watches"). 30k★, very active. | ⭐ Strong optional connector for "any page → feed" via change-monitoring; we'd create watches via its API and subscribe to its RSS. Complements RSSHub (generic change-monitoring vs. curated platform routes). Handles JS rendering for us. |
 | **full-text-rss** (FiveFilters) | PHP | dual (GPL/commercial) | The classic "site config" full-text service many readers embed. | Its **site-config format** is a de-facto standard worth supporting/importing. |
 | **Firecrawl** | TS | AGPL-3.0 | Scrape/crawl/**extract** → clean Markdown/JSON, LLM-oriented. 130k★, self-hostable. | Optional external engine for hard/JS-heavy pages; AGPL is fine alongside our AGPL app (self-hosted). |
 | **Jina Reader** (`r.jina.ai`, `reader` repo) + **ReaderLM-v2** | TS + a 1.5B model | Apache-2.0 (oss branch, stateless) | URL → LLM-friendly Markdown; ReaderLM-v2 is a small HTML→Markdown/JSON model. | Optional: hosted `r.jina.ai/<url>` for zero-infra, or self-host the oss reader; ReaderLM as a local model for AI-assisted field mapping. |
@@ -148,28 +158,69 @@ Opt-in "render with headless browser (Playwright) before extract" for SPA sites,
 
 ---
 
+## 4b. Architecture: where does the scraping/extraction run? (the key trade-off)
+
+This is the decision that shapes everything in Phase 2. There are three models; they are **not** mutually exclusive — the recommendation is to layer them.
+
+### Model A — In-process (inside FeedFerret's own Node server)
+Static HTML via `jsdom` + Defuddle/Readability; optionally **Playwright** (Chromium is already provisioned in our infra) for JS-rendered pages.
+
+- **Pros:** zero extra services — one container, one deploy (matches how most self-hosters run us, incl. Coolify/tiny boxes). Everything flows through our existing **SSRF guard**; content never leaves the user's box (privacy). No cross-service auth, no version skew. Same language (Node). Works air-gapped.
+- **Cons:** heavy JS rendering (Playwright) is **RAM/CPU-hungry** and would run *on the same process that serves the app* — a scraping spike can degrade the reader. No giant library of platform scrapers — we'd reinvent RSSHub route-by-route (a losing battle for YouTube/Reddit/X/…). We own and maintain every scraper (fragile, ongoing). Anti-bot/Cloudflare is largely unsolved here.
+- **Best for:** Phase 1 (auto full-text on static HTML) and Tier-A selector page→feed. This is the **default, always-available** layer.
+
+### Model B — Optional sidecar service(s) we self-host (RSSHub / changedetection.io / Firecrawl / Jina-oss), integrated over HTTP
+FeedFerret calls the sidecar's API; if none is configured, those features are simply hidden.
+
+- **Pros:** enormous capability for near-zero build — RSSHub's **5,000+ maintained routes**, changedetection's **any-page→RSS + JS rendering + REST API**, Firecrawl's crawl/extract. **Isolation:** a scraper OOM/crash/hang takes down the sidecar, not the reader. The upstream community maintains the fragile parts. Scales and rate-limits independently. Still fully **self-hosted** (data stays on the user's infrastructure).
+- **Cons:** **more moving parts** — extra containers + docker-compose complexity that minimal deployments won't want (must be strictly optional and degrade gracefully). Mixed languages/ops (RSSHub=Node, changedetection/morss=Python, Firecrawl=AGPL Node). The sidecar itself fetches arbitrary URLs, so it's an **SSRF surface** — we must only reach it via an admin-allowlisted host and keep it network-isolated. Version-skew and "another thing to update."
+- **Best for:** power users who want broad coverage; expose as **admin-configured connectors** ("paste your RSSHub / changedetection.io base URL + API key").
+
+### Model C — Third-party **hosted** APIs (Jina `r.jina.ai`, Firecrawl cloud, changedetection SaaS)
+No infra at all; they handle Cloudflare/JS.
+
+- **Pros:** zero setup, instant, best at anti-bot/JS. Great for the occasional hard page.
+- **Cons:** **not self-hosted** — the article URL and often its content leave the user's server, which cuts against FeedFerret's whole ethos; API keys, per-call cost, rate limits, outages, ToS. 
+- **Best for:** a clearly-labelled **per-user opt-in** (exactly like our AI BYOK model — the user brings their own key and accepts that content leaves their box). Never a default.
+
+### Recommended posture
+**Layer them, default to the least invasive:**
+1. **In-process (Model A) is the baseline** — everyone gets auto full-text + selector page→feed with zero extra setup.
+2. **Optional self-hosted connectors (Model B)** — admins who want RSSHub-scale coverage or changedetection's JS/any-page monitoring point us at their sidecar; hidden if unconfigured.
+3. **Hosted APIs (Model C)** — per-user BYO-key opt-in for the hard cases, flagged "content leaves your server."
+
+This keeps the "5-minute, single-container" promise intact while giving power users a clear upgrade path — and it's exactly the staged build-out the maintainer asked for (see §5).
+
+**On the AI tiers (decision #3):** the same layering applies. Cheapest/most-private first — **(a) AI proposes a reusable selector config once** (in-process LLM call via our BYOK provider; user confirms; then it's plain selector scraping forever after, no per-fetch cost). If a site is too unstable for selectors, **(b) per-article AI extraction** (higher ongoing token cost — opt-in, rate-limited). **changedetection.io** slots in as a Model-B connector for the "monitor any page → feed" path, and can also shoulder JS rendering so we don't have to run Playwright in-process.
+
+---
+
 ## 5. Recommended roadmap (phased, with effort)
 
 | Step | Deliverable | Effort | Depends on |
 |---|---|---|---|
 | **P1.1** | `lib/readability-extract.ts`: Defuddle + Readability-fallback auto-extractor; "Automatic" mode in the full-text flow | **M** | — |
-| **P1.2** | Markdown render path (`markdown-it` → DOMPurify → prose) + `Article.contentFormat`; extract-to-Markdown | **M** | P1.1 |
+| **P1.2** | `Article.contentFormat` (**user-selectable Markdown / HTML**, per feed + per-article override) + Markdown render path (`markdown-it` → DOMPurify → prose); extract-to-Markdown | **M** | P1.1 |
 | **P1.3** | Polish: GFM tables/code/footnotes/math, image handling, per-feed default toggle | **S–M** | P1.2 |
-| **P2.A** | Page→feed builder (generalize Scout Studio to "items from a listing page" + ranked candidates + save as feed) | **M–L** | P1.1 |
-| **P2.B** | RSSHub integration (add-a-route UX; optional self-hosted sidecar) | **S–M** (int.) / **L** (bundle) | — |
-| **P2.C** | AI-assisted selector/config generation (LLM proposes Tier-A config, user confirms) | **M** | P2.A |
-| **P2.D** *(optional)* | Headless-render (Playwright) / external-engine (Firecrawl/Jina) fallback for JS/hard pages | **L** | P2.A |
+| **P2.A** | Page→feed builder (generalize Scout Studio to "items from a listing page" + ranked candidates + save as feed) — **in-process (Model A)** | **M–L** | P1.1 |
+| **P2.C1** | **AI selector detection** (LLM proposes a Tier-A config once, user confirms → plain scraping after) | **M** | P2.A |
+| **P2.B1** | **RSSHub** connector (admin URL; add-a-route UX) — **Model B** | **S–M** | — |
+| **P2.B2** | **changedetection.io** connector (create watches via its REST API → subscribe to its RSS; leans on its JS rendering) — **Model B** | **M** | — |
+| **P2.C2** | **Per-article AI extraction** fallback for sites too unstable for selectors (opt-in, rate-limited) | **M–L** | P2.C1 |
+| **P2.D** *(optional)* | In-process **Playwright** render, or **Firecrawl/Jina** (self-host Model B or BYO-key Model C) for JS/anti-bot pages | **L** | P2.A |
 
-**Suggested first two moves:** ship **P1.1 + P1.2** (the concrete, high-value "auto full-text as clean markdown" the mission asks for first), then **P2.A** (page→feed builder) since it reuses the most of what we already own. RSSHub (P2.B) is the highest coverage-per-effort add after that. AI (P2.C) makes A delightful without betting the reliability on the model.
+**Suggested first moves:** ship **P1.1 + P1.2** (auto full-text as user-selectable clean Markdown — the mission's first ask), then **P2.A + P2.C1** (in-process page→feed builder made delightful by one-shot AI selector detection, all self-hosted). After that, the **Model-B connectors** (P2.B1 RSSHub for platform coverage, P2.B2 changedetection.io for any-page monitoring + JS) are the highest coverage-per-effort. Per-article AI (P2.C2) and heavy rendering (P2.D) are the top of the difficulty ramp — add as demand warrants.
 
 ---
 
-## 6. Open questions for the maintainer
+## 6. Open questions — answered (2026-07-16)
 
-1. **Markdown storage:** OK to introduce `Article.contentFormat` and store extracted content as Markdown, or keep everything HTML and treat "markdown" purely as a rendering/typography goal?
-2. **External services:** willing to run an optional **RSSHub sidecar** (and maybe Firecrawl/Jina) for coverage, or keep everything in-process (limits us to static-HTML + selector scraping)?
-3. **AI budget:** AI-assisted **config generation** (cheap, one-shot) only — or also per-fetch LLM extraction for hard pages (ongoing token cost)?
-4. **Scope of "anything":** are we happy positioning it as "most static/list pages + all RSSHub platforms," or is JS-heavy/anti-bot coverage a hard requirement (→ Playwright/Firecrawl, much heavier)?
+1. **Markdown storage:** ✅ user-selectable Markdown/HTML via `Article.contentFormat` (see Decisions #1).
+2. **External services:** ✅ layered — in-process default, optional self-hosted connectors, per-user hosted opt-in (see §4b + Decisions #2).
+3. **AI budget:** ✅ multi-stage — one-shot AI selector detection first, per-article AI as fallback, changedetection.io connector for monitoring (Decisions #3, §4b).
+4. **Scope:** ✅ "the more the better", delivered in ascending stages (Decisions #4, roadmap §5).
+
+Next: turn P1.1 + P1.2 into a concrete implementation plan (tasks/PRs) and start.
 
 ---
 
