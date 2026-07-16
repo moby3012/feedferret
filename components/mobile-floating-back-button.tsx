@@ -22,7 +22,7 @@ export function MobileFloatingBackButton({
   };
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(1rem,env(safe-area-inset-bottom))] lg:hidden">
       <div className="mx-auto flex max-w-5xl justify-end">
         <Button
           type="button"
