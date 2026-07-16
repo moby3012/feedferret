@@ -497,7 +497,10 @@ export function RssSidebar({
                 aria-live="polite"
                 aria-label={`${totalUnread} unread articles`}
               >
-                {totalUnread} unread
+                <span className={cn("tabular-nums", totalUnread > 0 && "text-brand font-semibold")}>
+                  {totalUnread}
+                </span>{" "}
+                unread
               </p>
             </div>
           </div>
@@ -535,7 +538,7 @@ export function RssSidebar({
                 <item.icon className="w-5 h-5" />
                 <span className="flex-1 text-start">{item.label}</span>
                 {item.count !== null && item.count > 0 && (
-                  <span className="text-xs tabular-nums text-muted-foreground bg-muted px-2 py-0.5 rounded-full font-medium">
+                  <span className="text-xs tabular-nums text-brand bg-muted px-2 py-0.5 rounded-full font-semibold">
                     {item.count}
                   </span>
                 )}
@@ -653,6 +656,7 @@ export function RssSidebar({
                         category={category}
                         feeds={categoryFeeds}
                         selectedFeed={selectedFeed}
+                        selectedCategory={selectedCategory}
                         onSelectFeed={onSelectFeed}
                         expanded={expandedCategories.includes(category.id)}
                         onToggle={() => toggleCategory(category.id)}
@@ -1057,6 +1061,7 @@ function SortableCategory({
   category,
   feeds,
   selectedFeed,
+  selectedCategory,
   onSelectFeed,
   expanded,
   onToggle,
@@ -1083,13 +1088,22 @@ function SortableCategory({
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const isActiveCategory = selectedFeed === null && selectedCategory === category.name;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className="group w-full overflow-hidden"
     >
-      <div className="flex items-center gap-2 px-4 py-2 hover:bg-sidebar-accent/30 rounded-lg transition-colors">
+      <div
+        className={cn(
+          "flex items-center gap-2 px-4 py-2 rounded-lg transition-colors",
+          isActiveCategory
+            ? "border-s-2 border-s-brand"
+            : "hover:bg-sidebar-accent/30",
+        )}
+      >
         <div
           {...attributes}
           {...listeners}
@@ -1099,7 +1113,12 @@ function SortableCategory({
         </div>
         <button
           onClick={() => onSelectCategory?.(category.name)}
-          className="flex-1 flex items-center text-xs font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+          className={cn(
+            "flex-1 flex items-center text-xs font-bold uppercase tracking-wider transition-colors",
+            isActiveCategory
+              ? "text-brand"
+              : "text-muted-foreground hover:text-foreground",
+          )}
         >
           <span>{category.name}</span>
         </button>
@@ -1225,7 +1244,7 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
             "shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums",
             isSelected
               ? "bg-primary-foreground/20 text-primary-foreground"
-              : "bg-brand/15 text-brand",
+              : "bg-brand text-brand-foreground",
           )}
         >
           {feed.unreadCount}

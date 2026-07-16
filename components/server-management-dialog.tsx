@@ -1188,17 +1188,17 @@ export function ServerManagementDialog({
                                     <div className="font-medium truncate">{stat.name || stat.email}</div>
                                     {stat.name && <div className="text-xs text-muted-foreground truncate">{stat.email}</div>}
                                   </div>
-                                  <div className="text-right tabular-nums">{format.number(stat.articles)}</div>
-                                  <div className="text-right tabular-nums">{format.number(stat.feeds)}</div>
-                                  <div className="text-right tabular-nums">{format.number(stat.aiSummaries)}</div>
+                                  <div className="text-right tabular-nums text-brand font-semibold">{format.number(stat.articles)}</div>
+                                  <div className="text-right tabular-nums text-brand font-semibold">{format.number(stat.feeds)}</div>
+                                  <div className="text-right tabular-nums text-brand font-semibold">{format.number(stat.aiSummaries)}</div>
                                 </div>
                               ))}
                           </div>
                           <div className="ui-control-surface mt-4 rounded-2xl border px-4 py-3 text-xs text-muted-foreground">
                             <strong>Total:</strong>{" "}
-                            {format.number(storageStats.reduce((s, r) => s + r.articles, 0))} {t("storage.articles").toLowerCase()} ·{" "}
-                            {format.number(storageStats.reduce((s, r) => s + r.feeds, 0))} {t("storage.feeds").toLowerCase()} ·{" "}
-                            {format.number(storageStats.reduce((s, r) => s + r.aiSummaries, 0))} {t("storage.aiSummaries").toLowerCase()}
+                            <span className="text-brand font-semibold">{format.number(storageStats.reduce((s, r) => s + r.articles, 0))}</span> {t("storage.articles").toLowerCase()} ·{" "}
+                            <span className="text-brand font-semibold">{format.number(storageStats.reduce((s, r) => s + r.feeds, 0))}</span> {t("storage.feeds").toLowerCase()} ·{" "}
+                            <span className="text-brand font-semibold">{format.number(storageStats.reduce((s, r) => s + r.aiSummaries, 0))}</span> {t("storage.aiSummaries").toLowerCase()}
                           </div>
                         </div>
                       )}
