@@ -19,7 +19,7 @@ v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FT
 
 | # | Item | Effort | Status | Source |
 |---|---|---|---|---|
-| 0.1 | Design-polish P3 tail: strip inline `width`/`min-width` from untrusted article HTML; 320px (iPhone SE) pass on tabs + header | S | ⬜ | design-polish-2 |
+| 0.1 | Design-polish P3 tail: strip inline `width`/`min-width` from untrusted article HTML; 320px (iPhone SE) pass on tabs + header | S | ✅ | design-polish-2 |
 | 0.2 | Accessibility **A-4 / A-5** (deferred contrast + remaining sprints) + add **axe-playwright** to CI | M | ⬜ | accessibility-todo, v1.2 |
 | 0.3 | **F4 · Command palette (⌘K)** — `cmdk` already a dep; home for existing shortcuts | S–M | ✅ | feature-ideas |
 | 0.4 | **F3 · Copy article as Markdown** (interim via turndown; reuses M1's stored markdown once shipped) | S | ✅ | feature-ideas |

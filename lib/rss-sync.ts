@@ -9,11 +9,7 @@ import { computeContentHash } from "./content-hash";
 import { decryptIfValue } from "./crypto";
 import type { AiConfig } from "./ai-summary";
 import { logger } from "./logger";
-
-async function getSanitizer() {
-    const { default: DOMPurify } = await import("isomorphic-dompurify");
-    return DOMPurify;
-}
+import { getSanitizer } from "./sanitize-html";
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 
@@ -410,7 +406,7 @@ async function autoFetchFullTextForArticles(
     },
 ) {
     const { JSDOM } = await import("jsdom");
-    const { default: DOMPurify } = await import("isomorphic-dompurify");
+    const DOMPurify = await getSanitizer();
 
     const articles = await db.article.findMany({
         where: { id: { in: articleIds }, userId },
