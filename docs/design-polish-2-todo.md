@@ -6,6 +6,22 @@
 
 ---
 
+## Progress (2026-07-16)
+
+Implementation is running in sequential, individually-merged batches (all touch `app/page.tsx`, so not parallelizable):
+
+| Batch | Scope | Status |
+|---|---|---|
+| 1 · Color foundation | flatten `.ui-*` utilities to solid, contrast token fixes (`--primary`/`--accent`/dark `--accent-foreground`/`--muted-foreground`, new `--link`) | ✅ merged (PR #119) |
+| 2 · Color component sweep | bare `text-accent`/`text-primary` → `text-link`/solid; selected-states off the `/10` wash → `border-s-2 border-accent bg-muted` / solid chips | ✅ merged (PR #120) |
+| 3 · Mobile P1 | bottom-nav bleed-through fix + `safe-area-inset-top` on top bars | 🔄 in progress (branch `claude/polish2-mobile-p1`; edits not yet committed) |
+| 4 · Mobile P2/P3 | touch targets 44px, `min-h-dvh`, manifest colors, tap-highlight reset, drawer safe-area, accent→OS `theme-color` | ⬜ pending |
+| 5 · Article sort | synthetic `publishedAt` for date-less feeds + stable `orderBy` tiebreaker (server + client) | ⬜ pending |
+
+Each batch: verified (`tsc`/`lint`/`pnpm test`; `next build` when CSS changes), own PR, merged, then the relevant checkboxes below get ticked. Remaining work is fully specified in the sections below (file:line + fixes).
+
+---
+
 ## North star
 
 ### A. Color direction — flat, confident, high-contrast
