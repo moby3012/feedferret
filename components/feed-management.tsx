@@ -1112,7 +1112,7 @@ export function FeedManagement({
                                       })
                                     }
                                   >
-                                    <SelectTrigger className="h-8 w-full rounded-xl border-border/70 bg-background/70 shadow-sm text-xs sm:w-32">
+                                    <SelectTrigger className="h-11 w-full rounded-xl border-border/70 bg-background/70 shadow-sm text-xs sm:h-9 sm:w-32">
                                       <SelectValue placeholder={t("feeds.categoryPlaceholder")} />
                                     </SelectTrigger>
                                     <SelectContent className="rounded-2xl border-border/70 shadow-xl">
@@ -1128,7 +1128,7 @@ export function FeedManagement({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-8 shrink-0 rounded-xl px-2.5 text-muted-foreground transition-all hover:bg-accent"
+                                      className="h-11 shrink-0 rounded-xl px-2.5 text-muted-foreground transition-all hover:bg-accent sm:h-9"
                                       title={t("feeds.settings")}
                                       onClick={() => setEditingFeed(feed)}
                                     >
@@ -1138,7 +1138,7 @@ export function FeedManagement({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-8 shrink-0 rounded-xl px-2.5 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive"
+                                      className="h-11 shrink-0 rounded-xl px-2.5 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive sm:h-9"
                                       onClick={() =>
                                         setPendingDelete({ type: "feed", id: feed.id, name: feed.name })
                                       }
@@ -1274,7 +1274,7 @@ export function FeedManagement({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            className="h-11 w-11 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-9 sm:w-9"
                             onClick={() => setPendingDelete({ type: "label", id: label.id, name: label.name })}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1323,7 +1323,7 @@ export function FeedManagement({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 rounded-xl text-muted-foreground hover:bg-accent/10 hover:text-accent"
+                              className="h-11 w-11 rounded-xl text-muted-foreground hover:bg-accent/10 hover:text-accent sm:h-9 sm:w-9"
                               onClick={() => setSavedSearchSharing.mutate({ searchId: search.id, enabled: !search.shareToken })}
                               title={search.shareToken ? t("savedSearches.disableSharing") : t("savedSearches.enableSharing")}
                             >
@@ -1332,7 +1332,7 @@ export function FeedManagement({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                              className="h-11 w-11 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-9 sm:w-9"
                               onClick={() => setPendingDelete({ type: "saved-search", id: search.id, name: search.name })}
                             >
                               <Trash2 className="h-4 w-4" />

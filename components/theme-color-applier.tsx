@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTheme } from "next-themes";
 import { useReadingPreferences } from "@/hooks/use-rss-data";
 
 function normalizeHexColor(value: string | null | undefined, fallback: string) {
@@ -47,6 +48,7 @@ function getContrastColor(hex: string, darkForeground: string) {
 
 export function ThemeColorApplier() {
   const { data: prefs } = useReadingPreferences();
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     if (!prefs) return;
@@ -81,7 +83,24 @@ export function ThemeColorApplier() {
     if (root.getAttribute("dir") !== dir) {
       root.setAttribute("dir", dir);
     }
-  }, [prefs]);
+
+    // Push the personalized accent to the OS chrome (Android status bar /
+    // task-switcher strip) by updating the live theme-color meta(s). layout.tsx
+    // declares one meta per color-scheme media query; update whichever matches
+    // the currently resolved theme so we don't clobber the other scheme's tag.
+    const themeColorMetas = document.querySelectorAll<HTMLMetaElement>(
+      'meta[name="theme-color"]',
+    );
+    if (themeColorMetas.length > 0) {
+      const isDark = resolvedTheme === "dark";
+      const matchingMeta =
+        Array.from(themeColorMetas).find((meta) => {
+          const media = meta.getAttribute("media") || "";
+          return isDark ? media.includes("dark") : media.includes("light");
+        }) ?? themeColorMetas[0];
+      matchingMeta.setAttribute("content", accentColor);
+    }
+  }, [prefs, resolvedTheme]);
 
   return null;
 }
