@@ -193,6 +193,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-brand: var(--brand);
   --color-brand-secondary: var(--brand-secondary);
+  --color-brand-foreground: var(--brand-foreground);
   --color-link: var(--link);
   --color-border: var(--border);
   --color-input: var(--input);
