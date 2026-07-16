@@ -65,6 +65,9 @@ interface FeedEditDialogProps {
     keepMinArticles?: number | null;
     hideFromAllFeeds?: boolean;
     hideArticleImage?: boolean;
+    readerFontSizeOverride?: string | null;
+    readerWidthOverride?: string | null;
+    openOriginalOverride?: boolean | null;
   } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -98,6 +101,9 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const [keepMinArticles, setKeepMinArticles] = useState("");
   const [hideFromAllFeeds, setHideFromAllFeeds] = useState(false);
   const [hideArticleImage, setHideArticleImage] = useState(false);
+  const [readerFontSizeOverride, setReaderFontSizeOverride] = useState("inherit");
+  const [readerWidthOverride, setReaderWidthOverride] = useState("inherit");
+  const [openOriginalOverride, setOpenOriginalOverride] = useState("inherit");
   const [previewUrl, setPreviewUrl] = useState("");
   const [activeTab, setActiveTab] = useState("auth");
   const [previewResult, setPreviewResult] = useState<{
@@ -144,6 +150,9 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     keepMinArticles,
     hideFromAllFeeds,
     hideArticleImage,
+    readerFontSizeOverride,
+    readerWidthOverride,
+    openOriginalOverride,
   });
 
   useEffect(() => {
@@ -172,6 +181,13 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     setKeepMinArticles(feed.keepMinArticles ? String(feed.keepMinArticles) : "");
     setHideFromAllFeeds(feed.hideFromAllFeeds ?? false);
     setHideArticleImage(feed.hideArticleImage ?? false);
+    setReaderFontSizeOverride(feed.readerFontSizeOverride || "inherit");
+    setReaderWidthOverride(feed.readerWidthOverride || "inherit");
+    setOpenOriginalOverride(
+      feed.openOriginalOverride === null || feed.openOriginalOverride === undefined
+        ? "inherit"
+        : feed.openOriginalOverride ? "on" : "off",
+    );
     setPreviewResult(null);
     setPreviewUrl("");
     setShowDiscardConfirm(false);
@@ -218,6 +234,9 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           keepMinArticles: keepMinArticles ? parseInt(keepMinArticles) : null,
           hideFromAllFeeds,
           hideArticleImage,
+          readerFontSizeOverride: readerFontSizeOverride === "inherit" ? null : readerFontSizeOverride,
+          readerWidthOverride: readerWidthOverride === "inherit" ? null : readerWidthOverride,
+          openOriginalOverride: openOriginalOverride === "inherit" ? null : openOriginalOverride === "on",
         },
       },
       {
@@ -379,6 +398,54 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   onCheckedChange={setHideArticleImage}
                   className="shrink-0 mt-0.5"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">{t("reader.fontSizeLabel")}</Label>
+                <Select value={readerFontSizeOverride} onValueChange={setReaderFontSizeOverride}>
+                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    <SelectItem value="inherit">{t("reader.inherit")}</SelectItem>
+                    <SelectItem value="small">{t("reader.fontSizeSmall")}</SelectItem>
+                    <SelectItem value="medium">{t("reader.fontSizeMedium")}</SelectItem>
+                    <SelectItem value="large">{t("reader.fontSizeLarge")}</SelectItem>
+                    <SelectItem value="xl">{t("reader.fontSizeXl")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t("reader.fontSizeDescription")}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">{t("reader.widthLabel")}</Label>
+                <Select value={readerWidthOverride} onValueChange={setReaderWidthOverride}>
+                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    <SelectItem value="inherit">{t("reader.inherit")}</SelectItem>
+                    <SelectItem value="normal">{t("reader.widthNormal")}</SelectItem>
+                    <SelectItem value="wide">{t("reader.widthWide")}</SelectItem>
+                    <SelectItem value="full">{t("reader.widthFull")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t("reader.widthDescription")}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">{t("reader.openOriginalLabel")}</Label>
+                <Select value={openOriginalOverride} onValueChange={setOpenOriginalOverride}>
+                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    <SelectItem value="inherit">{t("reader.inherit")}</SelectItem>
+                    <SelectItem value="on">{t("reader.on")}</SelectItem>
+                    <SelectItem value="off">{t("reader.off")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t("reader.openOriginalDescription")}</p>
               </div>
             </TabsContent>
 

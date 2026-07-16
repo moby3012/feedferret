@@ -981,6 +981,24 @@
       "hideArticleHeroImage": "Artikel-Headerbild ausblenden",
       "suppressHeroImage": "Das Headerbild im Artikel-Reader unterdrücken."
     },
+    "reader": {
+      "inherit": "Erben (globaler Standard)",
+      "fontSizeLabel": "Schriftgröße im Leser",
+      "fontSizeDescription": "Die Schriftgröße für Artikel dieses Feeds überschreiben.",
+      "fontSizeSmall": "Klein",
+      "fontSizeMedium": "Mittel",
+      "fontSizeLarge": "Groß",
+      "fontSizeXl": "Sehr groß",
+      "widthLabel": "Leserbreite",
+      "widthDescription": "Die Breite des Leserbereichs für Artikel dieses Feeds überschreiben.",
+      "widthNormal": "Normal",
+      "widthWide": "Breit",
+      "widthFull": "Volle Breite",
+      "openOriginalLabel": "Original standardmäßig öffnen",
+      "openOriginalDescription": "Überschreiben, ob die Auswahl eines Artikels aus diesem Feed die Originalseite statt des internen Readers öffnet.",
+      "on": "An",
+      "off": "Aus"
+    },
     "retention": {
       "keepDays": "Aufbewahrungsdauer (Tage)",
       "useUserDefault": "Benutzerstandard verwenden",

@@ -413,6 +413,10 @@ export async function updateFeed(feedId: string, data: {
     // Behavior
     hideFromAllFeeds?: boolean;
     hideArticleImage?: boolean;
+    // Per-feed reader defaults (null = inherit the user's global default)
+    readerFontSizeOverride?: string | null;
+    readerWidthOverride?: string | null;
+    openOriginalOverride?: boolean | null;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -425,9 +429,27 @@ export async function updateFeed(feedId: string, data: {
         if (!category) throw new Error("Invalid category");
     }
 
+    const READER_FONT_SIZES = new Set(["small", "medium", "large", "xl"]);
+    const READER_WIDTHS = new Set(["normal", "wide", "full"]);
+
     await db.feed.update({
         where: { id: feedId, userId: session.user.id },
-        data,
+        data: {
+            ...data,
+            ...(data.readerFontSizeOverride !== undefined ? {
+                readerFontSizeOverride: data.readerFontSizeOverride && READER_FONT_SIZES.has(data.readerFontSizeOverride)
+                    ? data.readerFontSizeOverride
+                    : null,
+            } : {}),
+            ...(data.readerWidthOverride !== undefined ? {
+                readerWidthOverride: data.readerWidthOverride && READER_WIDTHS.has(data.readerWidthOverride)
+                    ? data.readerWidthOverride
+                    : null,
+            } : {}),
+            ...(data.openOriginalOverride !== undefined ? {
+                openOriginalOverride: data.openOriginalOverride === null ? null : !!data.openOriginalOverride,
+            } : {}),
+        },
     });
 
     revalidatePath("/");

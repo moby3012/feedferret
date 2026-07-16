@@ -293,6 +293,9 @@ model Feed {
   filtersActionRead        String?
   hideFromAllFeeds         Boolean  @default(false)
   hideArticleImage         Boolean  @default(false)
+  readerFontSizeOverride   String?  // null = inherit user.readerFontSize; else "small"|"medium"|"large"|"xl"
+  readerWidthOverride      String?  // null = inherit user.readerWidth; else "normal"|"wide"|"full"
+  openOriginalOverride     Boolean? // null = inherit user.openOriginalByDefault
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, url])
