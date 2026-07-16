@@ -132,7 +132,7 @@ export function RssHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="w-10 h-10 rounded-xl transition-all duration-200 active:scale-95 text-muted-foreground"
+          className="w-11 h-11 rounded-xl transition-all duration-200 active:scale-95 text-muted-foreground"
           onClick={() => onToggleSort?.()}
           aria-label={sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
           title={sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
@@ -142,7 +142,7 @@ export function RssHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="w-10 h-10 rounded-xl transition-all duration-200 active:scale-95"
+          className="w-11 h-11 rounded-xl transition-all duration-200 active:scale-95"
           onClick={() => {
             const modes: ViewMode[] = ["list", "minimal", "magazine"];
             const idx = modes.indexOf(activeViewMode);

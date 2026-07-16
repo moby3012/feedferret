@@ -221,7 +221,7 @@ export default function SetupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-background text-foreground selection:bg-muted">
+    <div className="min-h-dvh flex items-center justify-center p-4 sm:p-6 bg-background text-foreground selection:bg-muted">
       <div className="w-full max-w-[520px] relative z-10">
         {/* Logo */}
         <div className="text-center mb-8 group">

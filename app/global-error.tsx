@@ -15,7 +15,7 @@ export default function GlobalError({
 
   return (
     <html>
-      <body className="flex flex-col items-center justify-center min-h-screen gap-4 p-8 text-center font-sans">
+      <body className="flex flex-col items-center justify-center min-h-dvh gap-4 p-8 text-center font-sans">
         <h2 className="text-lg font-semibold">Something went wrong</h2>
         <p className="text-sm text-neutral-500 max-w-sm">
           A critical error occurred. Please reload the page.

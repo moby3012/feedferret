@@ -11,7 +11,7 @@ export default async function AccessibilityPage() {
   const t = await getTranslations("accessibility");
 
   return (
-    <main id="main-content" className="min-h-screen bg-background px-4 py-12 sm:px-6 lg:px-8">
+    <main id="main-content" className="min-h-dvh bg-background px-4 py-12 sm:px-6 lg:px-8">
       <article className="mx-auto max-w-3xl prose prose-neutral dark:prose-invert">
         <h1>{t("title")}</h1>
         <p className="lead">
