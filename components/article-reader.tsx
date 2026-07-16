@@ -361,7 +361,7 @@ export function ArticleReader({
             size="icon"
             className={cn(
               "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
-              article.isReadLater && "bg-accent/10",
+              article.isReadLater && "bg-accent",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
             aria-label={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
@@ -372,7 +372,7 @@ export function ArticleReader({
               className={cn(
                 "w-4 h-4 transition-all duration-300",
                 article.isReadLater
-                  ? "text-accent fill-accent scale-110"
+                  ? "text-accent-foreground fill-accent-foreground scale-110"
                   : "text-muted-foreground hover:text-accent",
               )}
             />
@@ -519,7 +519,7 @@ export function ArticleReader({
               <div className="mb-8 rounded-2xl border border-border/60 bg-muted/40 px-5 py-4 animate-fade-in-up">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    <Sparkles className="h-3.5 w-3.5 text-foreground" />
                     {t("aiSummary")}
                   </div>
                   <Button
@@ -673,7 +673,7 @@ export function ArticleReader({
             size="icon"
             className={cn(
               "h-11 flex-1 rounded-2xl active:scale-95",
-              article.isStarred ? "bg-brand-secondary/10 text-brand-secondary" : "text-muted-foreground",
+              article.isStarred ? "text-brand-secondary" : "text-muted-foreground",
             )}
             onClick={() => onToggleStar(article.id)}
             aria-label={article.isStarred ? tList("removeStar") : tList("star")}
@@ -699,12 +699,12 @@ export function ArticleReader({
             size="icon"
             className={cn(
               "h-11 flex-1 rounded-2xl active:scale-95",
-              article.isReadLater ? "bg-accent/10 text-accent" : "text-muted-foreground",
+              article.isReadLater ? "bg-accent text-accent-foreground" : "text-muted-foreground",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
             aria-label={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
           >
-            <Bookmark className={cn("h-5 w-5", article.isReadLater && "fill-accent")} />
+            <Bookmark className={cn("h-5 w-5", article.isReadLater && "fill-accent-foreground")} />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

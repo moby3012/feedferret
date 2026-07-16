@@ -1346,7 +1346,7 @@ function DigestSection() {
 
               <div className="ui-control-surface flex flex-col gap-1.5 rounded-2xl border p-4">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-accent" />
+                  <Sparkles className="w-4 h-4 text-foreground" />
                   <label className="text-sm font-medium" htmlFor="digest-ai-select">{t("digest.aiSummary")}</label>
                 </div>
                 <Select
@@ -1731,7 +1731,7 @@ function ApiTokenSection() {
 
       {newRawToken && (
         <div className="mb-4 rounded-2xl bg-accent/5 border border-accent/20 p-4">
-          <p className="text-xs font-semibold text-accent mb-2 uppercase tracking-wider">
+          <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">
             {t("apiTokens.newTokenWarning")}
           </p>
           <div className="flex items-center gap-2">

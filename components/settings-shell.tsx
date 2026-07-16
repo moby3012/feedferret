@@ -174,7 +174,7 @@ export function SettingsSection({
     >
       <div className="mb-5 flex items-start gap-3">
         {icon ? (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-background text-primary shadow-sm">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-background text-foreground shadow-sm">
             {icon}
           </div>
         ) : null}

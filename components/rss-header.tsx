@@ -166,7 +166,7 @@ export function RssHeader({
           className={cn(
             "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
             unreadOnly
-              ? "text-accent bg-accent/10"
+              ? "bg-accent text-accent-foreground"
               : "text-muted-foreground",
           )}
           onClick={onToggleUnreadOnly}

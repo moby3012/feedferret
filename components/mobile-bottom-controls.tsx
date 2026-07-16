@@ -192,7 +192,7 @@ export function MobileBottomControls({
           size="icon"
           className={cn(
             mobileButtonClass,
-            (searchOpen || searchQuery) && "bg-accent/10 text-accent",
+            (searchOpen || searchQuery) && "bg-accent text-accent-foreground",
           )}
           onClick={() => setSearchOpen((open) => !open)}
           aria-label={t("sidebar.searchArticles")}

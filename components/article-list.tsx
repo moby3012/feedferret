@@ -594,10 +594,8 @@ function ArticlePreview({
         className={cn(
           "px-3 py-2.5 cursor-pointer rounded-xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden relative focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "border-s-4",
-          isSelected
-            ? "bg-accent/10 ring-2 ring-accent/40"
-            : "hover:bg-card/80",
-          !article.isRead ? "border-brand" : "border-transparent",
+          isSelected ? "bg-muted" : "hover:bg-card/80",
+          !article.isRead ? "border-brand" : isSelected ? "border-accent" : "border-transparent",
         )}
       >
         <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={14} />
@@ -618,10 +616,10 @@ function ArticlePreview({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
-          className={cn("rounded-md p-1 transition-colors shrink-0", article.isReadLater ? "text-accent" : "text-muted-foreground hover:text-accent")}
+          className={cn("rounded-md p-1 transition-colors shrink-0", article.isReadLater ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-accent")}
           aria-label={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
         >
-          <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent")} />
+          <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent-foreground")} />
         </button>
       </div>
       </div>
@@ -646,7 +644,7 @@ function ArticlePreview({
         aria-pressed={isSelected}
         className={cn(
           "cursor-pointer rounded-xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          isSelected && "ring-2 ring-accent/40 border-accent/30 bg-accent/10",
+          isSelected && "border-transparent border-s-2 border-s-accent bg-muted",
           !article.isRead && "ring-1 ring-brand/20",
         )}
       >
@@ -699,11 +697,11 @@ function ArticlePreview({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
-                className={cn("rounded-md p-1 transition-colors", article.isReadLater ? "text-accent" : "text-muted-foreground hover:text-accent hover:bg-accent/10")}
+                className={cn("rounded-md p-1 transition-colors", article.isReadLater ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-accent hover:bg-accent/10")}
                 aria-label={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
                 title={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
               >
-                <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent")} />
+                <Bookmark className={cn("w-3.5 h-3.5", article.isReadLater && "fill-accent-foreground")} />
               </button>
               {onReleaseSpoiler && (
                 <button
@@ -745,7 +743,7 @@ function ArticlePreview({
         "transition-[opacity,background-color,border-color,box-shadow,transform] duration-200 ease-out",
         "active:scale-[0.995] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isSelected
-          ? "ring-2 ring-accent/40 border-accent/30 bg-accent/10"
+          ? "border-transparent border-s-2 border-s-accent bg-muted"
           : "border-transparent hover:border-border/70 hover:bg-card/80 hover:shadow-sm",
         !article.isRead ? "bg-card/90 shadow-sm" : "opacity-80",
       )}
@@ -810,10 +808,10 @@ function ArticlePreview({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
-                  className="rounded-lg p-1 hover:bg-accent/10 transition-colors"
+                  className="rounded-lg p-1 bg-accent text-accent-foreground hover:bg-accent/90 transition-colors"
                   aria-label={t("removeFromReadLater")}
                 >
-                  <Bookmark className="w-4 h-4 text-accent fill-accent" />
+                  <Bookmark className="w-4 h-4 fill-accent-foreground" />
                 </button>
               )}
             </div>
@@ -879,11 +877,11 @@ function ArticlePreview({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleReadLater?.(article.id); }}
-                className={cn("rounded-lg p-1.5 transition-colors", article.isReadLater ? "text-accent bg-accent/10" : "text-muted-foreground hover:text-accent hover:bg-accent/10")}
+                className={cn("rounded-lg p-1.5 transition-colors", article.isReadLater ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-accent hover:bg-accent/10")}
                 aria-label={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
                 title={article.isReadLater ? t("removeFromReadLater") : t("saveToReadLater")}
               >
-                <Bookmark className={cn("w-4 h-4", article.isReadLater && "fill-accent")} />
+                <Bookmark className={cn("w-4 h-4", article.isReadLater && "fill-accent-foreground")} />
               </button>
               {onReleaseSpoiler && (
                 <button
