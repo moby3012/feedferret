@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   Circle,
   Copy,
+  FileText,
   Sparkles,
   Tag,
   MoreHorizontal,
@@ -34,6 +35,19 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import TurndownService from "turndown";
+import { gfm } from "turndown-plugin-gfm";
+
+// Lazily-created singleton: only instantiated on first actual use (a user
+// clicking "Copy as Markdown"), never during render/SSR.
+let turndownService: TurndownService | null = null;
+function getTurndownService() {
+  if (!turndownService) {
+    turndownService = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
+    turndownService.use(gfm);
+  }
+  return turndownService;
+}
 
 interface ArticleReaderProps {
   article: Article | null;
@@ -292,6 +306,24 @@ export function ArticleReader({
     await copyLink();
   };
 
+  const copyAsMarkdown = async () => {
+    const lines = [`# ${article.title}`];
+    if (article.link) {
+      lines.push("", `[${article.link}](${article.link})`);
+    }
+    const hasContent = Boolean(article.content?.trim());
+    if (hasContent) {
+      // Interim: converts the already-sanitized article HTML on the fly.
+      // Once M1's markdown pipeline lands (Article.contentFormat), this
+      // should reuse the stored markdown directly instead of re-deriving
+      // it here via turndown.
+      const markdown = getTurndownService().turndown(article.content);
+      lines.push("", markdown);
+    }
+    await navigator.clipboard.writeText(lines.join("\n"));
+    toast.success(t("copiedAsMarkdown"));
+  };
+
   const articleLabelIds = article.labels?.map((item) => item.label.id) || [];
 
 
@@ -423,6 +455,16 @@ export function ArticleReader({
             title={t("copyLink")}
           >
             <Copy className="w-4 h-4 text-muted-foreground" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            onClick={copyAsMarkdown}
+            aria-label={t("copyAsMarkdown")}
+            title={t("copyAsMarkdown")}
+          >
+            <FileText className="w-4 h-4 text-muted-foreground" />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -751,6 +793,10 @@ export function ArticleReader({
               <DropdownMenuItem className="rounded-2xl py-3" onClick={copyLink} disabled={!article.link}>
                 <Copy className="me-3 h-4 w-4" />
                 {t("copyLink")}
+              </DropdownMenuItem>
+              <DropdownMenuItem className="rounded-2xl py-3" onClick={copyAsMarkdown}>
+                <FileText className="me-3 h-4 w-4" />
+                {t("copyAsMarkdown")}
               </DropdownMenuItem>
               {article.link && (!article.content || article.content.length < 900) && (
                 <DropdownMenuItem

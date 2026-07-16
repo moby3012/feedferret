@@ -23,6 +23,7 @@ import {
   useMarkArticlesAsUnread,
   useFetchFullText,
   useLabels,
+  useCategories,
   useSavedSearches,
   useCreateSavedSearch,
   useSetArticleLabels,
@@ -31,6 +32,7 @@ import {
   useReleaseArticleSpoiler,
   useReleaseAllSpoilers,
 } from "@/hooks/use-rss-data";
+import { CommandPalette } from "@/components/command-palette";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -103,7 +105,10 @@ export default function RSSReaderPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [openAddFeed, setOpenAddFeed] = useState(false);
+  // Monotonic counter rather than a boolean so repeated triggers (e.g. from
+  // the command palette) re-fire the effect in RssSidebar even if the
+  // dialog was already opened once before in this session.
+  const [openAddFeed, setOpenAddFeed] = useState(0);
   const [isMobileLayout, setIsMobileLayout] = useState<boolean | null>(null);
   const [isClosingReader, setIsClosingReader] = useState(false);
   const isAuthenticated = status === "authenticated";
@@ -126,6 +131,7 @@ export default function RSSReaderPage() {
   const markArticlesAsUnread = useMarkArticlesAsUnread();
   const fetchFullText = useFetchFullText();
   const { data: labels = [] } = useLabels(isAuthenticated);
+  const { data: categories = [] } = useCategories(isAuthenticated);
   const { data: savedSearches = [] } = useSavedSearches(isAuthenticated);
   const createSavedSearch = useCreateSavedSearch();
   const setArticleLabels = useSetArticleLabels();
@@ -254,7 +260,7 @@ export default function RSSReaderPage() {
     }
 
     if (params.get("addFeed") === "1") {
-      setOpenAddFeed(true);
+      setOpenAddFeed((n) => n + 1);
     }
   }, [status]);
 
@@ -419,6 +425,40 @@ export default function RSSReaderPage() {
     setSelectedArticleSnapshot(null);
     setSidebarOpen(false);
   }, []);
+
+  // Shared feed/category selection logic used by the desktop sidebar, the
+  // mobile drawer, and the command palette so the behavior stays identical
+  // across all three entry points.
+  const handleSelectFeedNav = useCallback((feedId: string | null) => {
+    setSelectedFeed(feedId);
+    setSelectedArticleId(null);
+    setSelectedArticleSnapshot(null);
+    if (feedId) {
+      setSelectedCategory("All");
+      setUnreadOnly(true);
+    }
+  }, []);
+
+  const handleSelectCategoryNav = useCallback((category: string) => {
+    setSelectedCategory(category);
+    setSelectedFeed(null);
+    setSelectedArticleId(null);
+    setSelectedArticleSnapshot(null);
+    const noUnreadFilter = category === "Starred" || category === "Read Later";
+    setUnreadOnly(!noUnreadFilter);
+  }, []);
+
+  const handleSelectLabelNav = useCallback((labelId: string) => {
+    handleSelectCategoryNav(`Label:${labelId}`);
+  }, [handleSelectCategoryNav]);
+
+  const handleOpenAddFeed = useCallback(() => {
+    setOpenAddFeed((n) => n + 1);
+  }, []);
+
+  const handleOpenSettings = useCallback(() => {
+    router.push("/settings");
+  }, [router]);
 
   const handleSelectAdjacentArticle = useCallback((direction: 1 | -1) => {
     const currentIndex = filteredArticlesRef.current.findIndex(
@@ -798,23 +838,8 @@ export default function RSSReaderPage() {
           defaultOpenAddFeed={openAddFeed}
           hideEmptyFeeds={readingPrefs?.hideEmptyFeeds ?? false}
           hideEmptyLabels={readingPrefs?.hideEmptyLabels ?? false}
-          onSelectFeed={(feedId) => {
-            setSelectedFeed(feedId);
-            setSelectedArticleId(null);
-            setSelectedArticleSnapshot(null);
-            if (feedId) {
-              setSelectedCategory("All");
-              setUnreadOnly(true);
-            }
-          }}
-          onSelectCategory={(cat) => {
-            setSelectedCategory(cat);
-            setSelectedFeed(null);
-            setSelectedArticleId(null);
-            setSelectedArticleSnapshot(null);
-            const noUnreadFilter = cat === "Starred" || cat === "Read Later";
-            setUnreadOnly(!noUnreadFilter);
-          }}
+          onSelectFeed={handleSelectFeedNav}
+          onSelectCategory={handleSelectCategoryNav}
         />
       </div>
       )}
@@ -831,22 +856,11 @@ export default function RSSReaderPage() {
             hideEmptyFeeds={readingPrefs?.hideEmptyFeeds ?? false}
             hideEmptyLabels={readingPrefs?.hideEmptyLabels ?? false}
             onSelectFeed={(feedId) => {
-              setSelectedFeed(feedId);
-              setSelectedArticleId(null);
-              setSelectedArticleSnapshot(null);
-              if (feedId) {
-                setSelectedCategory("All");
-                setUnreadOnly(true);
-              }
+              handleSelectFeedNav(feedId);
               setSidebarOpen(false);
             }}
             onSelectCategory={(category) => {
-              setSelectedCategory(category);
-              setSelectedFeed(null);
-              setSelectedArticleId(null);
-              setSelectedArticleSnapshot(null);
-              const noUnreadFilter = category === "Starred" || category === "Read Later";
-              setUnreadOnly(!noUnreadFilter);
+              handleSelectCategoryNav(category);
               setSidebarOpen(false);
             }}
           />
@@ -1181,6 +1195,21 @@ export default function RSSReaderPage() {
       <KeyboardShortcutsDialog
         open={shortcutsOpen}
         onOpenChange={setShortcutsOpen}
+      />
+
+      <CommandPalette
+        feeds={feeds}
+        categories={categories}
+        labels={labels}
+        onRefresh={handleRefresh}
+        onMarkAllRead={handleMarkAllRead}
+        onFocusSearch={handleEditSearch}
+        onAddFeed={handleOpenAddFeed}
+        onOpenSettings={handleOpenSettings}
+        onShowShortcuts={() => setShortcutsOpen(true)}
+        onSelectFeed={handleSelectFeedNav}
+        onSelectCategory={handleSelectCategoryNav}
+        onSelectLabel={handleSelectLabelNav}
       />
     </div>
   );

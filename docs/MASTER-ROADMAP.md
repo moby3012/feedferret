@@ -11,7 +11,7 @@
 - Index: [`ROADMAP.md`](ROADMAP.md)
 
 ## Already shipped (context — not re-listed below)
-v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FTS, sync batching, conditional GET), i18n/UX polish, **design audit (54/54)**, **visual polish rounds 1 & 2** (flat color system + contrast fixes + mobile/PWA + brand highlights), auth-redirect fix, article-sort tiebreaker, tap/​swipe-to-open-original. See `CHANGELOG.md`.
+v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FTS, sync batching, conditional GET), i18n/UX polish, **design audit (54/54)**, **visual polish rounds 1 & 2** (flat color system + contrast fixes + mobile/PWA + brand highlights), auth-redirect fix, article-sort tiebreaker, tap/​swipe-to-open-original, **Phase 0 quick wins** (F4 command palette ⌘K, F3 copy-as-markdown). See `CHANGELOG.md`.
 
 ---
 
@@ -21,11 +21,11 @@ v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FT
 |---|---|---|---|---|
 | 0.1 | Design-polish P3 tail: strip inline `width`/`min-width` from untrusted article HTML; 320px (iPhone SE) pass on tabs + header | S | ⬜ | design-polish-2 |
 | 0.2 | Accessibility **A-4 / A-5** (deferred contrast + remaining sprints) + add **axe-playwright** to CI | M | ⬜ | accessibility-todo, v1.2 |
-| 0.3 | **F4 · Command palette (⌘K)** — `cmdk` already a dep; home for existing shortcuts | S–M | ⬜ | feature-ideas |
-| 0.4 | **F3 · Copy article as Markdown** (trivial after Phase 2 M1; can stub now) | S | ⬜ | feature-ideas |
-| 0.5 | **F1 · "Refresh now" per feed** · **F2 · per-feed reader defaults** | S ea. | ⬜ | feature-ideas |
+| 0.3 | **F4 · Command palette (⌘K)** — `cmdk` already a dep; home for existing shortcuts | S–M | ✅ | feature-ideas |
+| 0.4 | **F3 · Copy article as Markdown** (interim via turndown; reuses M1's stored markdown once shipped) | S | ✅ | feature-ideas |
+| 0.5 | **F1 · "Refresh now" per feed** (already shipped — sidebar feed context menu, `useRefreshFeed`) · **F2 · per-feed reader defaults** | S ea. | 🔄 F1 ✅ / F2 ⬜ | feature-ideas |
 | 0.6 | Deferred small UX: swipe-down-marks-all-read, desktop swipe/drag nav, finger-synced swipe animations, AI-summary auto-save-on-first-generation | S–M ea. | ⬜ | deferred |
-| 0.7 | ❓ Verify **Fever API** status (code exists in `app/api/fever`; site lists it as v1.3 "planned") — if shipped, mark done + device-test; else finish | S | ❓ | v1.3, maintenance |
+| 0.7 | **Fever API** — verified **already shipped** (`app/api/fever/route.ts`: api_key, feeds, feeds_groups, items, mark, etc.); marketing site was stale. Remaining: device-test matrix (tracked under Continuous → Ops). | S | ✅ | v1.3, maintenance |
 
 ---
 
@@ -62,7 +62,7 @@ Source: [`releases/v1.3.md`](releases/v1.3.md).
 - ⬜ **Telegram inline buttons** (mark-read / open) — needs bot webhook mode — **M**
 - ⬜ **PWA background badge** updates without the app open — **M** *(deferred.md)*
 - ⬜ **F10 · Reverse-proxy / trusted-header auth** (`X-Forwarded-User`) — **M**
-- ⬜ (Fever API — see 0.7)
+- ✅ Fever API (verified already shipped — see 0.7; only device-testing remains under Continuous → Ops)
 
 ---
 

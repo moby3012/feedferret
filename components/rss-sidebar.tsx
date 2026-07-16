@@ -142,7 +142,10 @@ interface RssSidebarProps {
   onSelectFeed: (feedId: string | null) => void;
   onSelectCategory: (category: string) => void;
   isCollapsed?: boolean;
-  defaultOpenAddFeed?: boolean;
+  // Monotonically-increasing counter (rather than a boolean) so repeated
+  // requests to open the Add Feed dialog re-fire this component's effect
+  // even if the dialog was already opened once before.
+  defaultOpenAddFeed?: number;
   hideEmptyFeeds?: boolean;
   hideEmptyLabels?: boolean;
 }
@@ -154,7 +157,7 @@ export function RssSidebar({
   onSelectFeed,
   onSelectCategory,
   isCollapsed = false,
-  defaultOpenAddFeed = false,
+  defaultOpenAddFeed = 0,
   hideEmptyFeeds = false,
   hideEmptyLabels = false,
 }: RssSidebarProps) {
