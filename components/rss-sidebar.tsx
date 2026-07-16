@@ -742,7 +742,7 @@ export function RssSidebar({
                       size="icon"
                       className={cn(
                         "h-11 w-11 rounded-xl sm:h-9 sm:w-9 relative",
-                        unreadNotifications ? "text-accent bg-accent/10" : "",
+                        unreadNotifications ? "bg-accent text-accent-foreground" : "",
                       )}
                     >
                       <Bell className="w-4 h-4" />
@@ -758,7 +758,7 @@ export function RssSidebar({
                       <p className="text-sm font-semibold">{t("sidebar.notifications")}</p>
                       {unreadNotifications > 0 && (
                         <button
-                          className="hidden sm:inline text-xs text-primary hover:underline"
+                          className="hidden sm:inline text-xs text-link hover:underline"
                           onClick={() => markAllNotificationsRead.mutate()}
                         >
                           {t("sidebar.markAllRead")}
@@ -818,7 +818,7 @@ export function RssSidebar({
                         <DropdownMenuSeparator className="sm:hidden" />
                         <button
                           type="button"
-                          className="sm:hidden mt-1 w-full rounded-xl bg-primary/10 px-3 py-3 text-sm font-semibold text-primary active:scale-[0.98] transition-transform"
+                          className="sm:hidden mt-1 w-full rounded-xl bg-primary px-3 py-3 text-sm font-semibold text-primary-foreground active:scale-[0.98] transition-transform"
                           onClick={() => markAllNotificationsRead.mutate()}
                         >
                           {t("sidebar.markAllAsRead")}

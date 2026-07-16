@@ -54,7 +54,7 @@ export function SearchResultsView({
     <div className="relative z-10 flex h-full min-w-0 flex-col">
       <header className="relative border-b border-border/60 bg-card/85 backdrop-blur-2xl animate-fade-in">
         <div className="flex items-start gap-3 px-4 pt-4 pb-3 sm:px-5">
-          <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
+          <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
             <SearchIcon className="h-5 w-5" />
           </div>
 

@@ -377,7 +377,7 @@ function ActionListEditor({
           </SelectTrigger>
           <SelectContent>
             {pendingLabelToken === PICK_LABEL_TOKEN && (
-              <SelectItem value={CREATE_LABEL_TOKEN} className="text-primary font-medium">
+              <SelectItem value={CREATE_LABEL_TOKEN} className="text-link font-medium">
                 {t("actions.createNewLabel")}
               </SelectItem>
             )}
@@ -1059,7 +1059,7 @@ export function FeedManagement({
                           className="flex w-full items-center gap-2 py-1.5 text-start text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <ChevronRight className={cn("w-4 h-4 transition-transform duration-200", expanded && "rotate-90")} />
-                          <Folder className="size-4 text-primary" />
+                          <Folder className="size-4 text-foreground" />
                           {groupName}
                           <span className="text-xs font-normal text-muted-foreground/60">({groupFeeds.length})</span>
                         </button>
@@ -1486,7 +1486,7 @@ export function FeedManagement({
                         <span className="rounded-full bg-green-500/10 text-green-600 px-2.5 py-1 font-medium">
                           +{lastImportReport.feedsAdded} {t("importExport.new")}
                         </span>
-                        <span className="rounded-full bg-accent/10 text-accent px-2.5 py-1 font-medium">
+                        <span className="rounded-full bg-accent/10 text-foreground px-2.5 py-1 font-medium">
                           {lastImportReport.feedsUpdated} {t("importExport.alreadyExisted")}
                         </span>
                         <span className="rounded-full bg-muted text-muted-foreground px-2.5 py-1 font-medium">
@@ -1529,7 +1529,7 @@ export function FeedManagement({
                     </div>
                     <div className="flex gap-2 text-xs">
                       <button
-                        className="text-primary hover:underline"
+                        className="text-link hover:underline"
                         onClick={() => setSelectedExportIds(new Set(feeds.map((f: any) => f.id)))}
                       >
                         {t("importExport.selectAll")}
@@ -2006,7 +2006,7 @@ export function FeedManagement({
                                 className={cn(
                                   "shrink-0 rounded-lg p-1.5 transition-colors",
                                   rule.enabled
-                                    ? "text-primary bg-primary/10"
+                                    ? "bg-primary text-primary-foreground"
                                     : "text-muted-foreground/50 bg-muted",
                                 )}
                                 title={rule.enabled ? t("rules.disableRule") : t("rules.enableRule")}
@@ -2022,13 +2022,13 @@ export function FeedManagement({
                                       "text-[10px] px-1.5 py-0.5 rounded-full",
                                       rule.trigger === "feed_error"
                                         ? "bg-amber-500/10 text-amber-600"
-                                        : "bg-primary/10 text-primary",
+                                        : "bg-primary/10 text-foreground",
                                     )}
                                   >
                                     {rule.trigger === "feed_error" ? t("rules.onFeedError") : t("rules.onArticleMatch")}
                                   </span>
                                   {scopeLabel && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-foreground">
                                       {scopeLabel}
                                     </span>
                                   )}
@@ -2593,7 +2593,7 @@ export function FeedManagement({
                                     }
                                     className={cn(
                                       "shrink-0 rounded-lg p-1.5 transition-colors",
-                                      alert.enabled ? "text-primary bg-primary/10" : "text-muted-foreground/50 bg-muted",
+                                      alert.enabled ? "bg-primary text-primary-foreground" : "text-muted-foreground/50 bg-muted",
                                     )}
                                     title={alert.enabled ? t("alerts.disableAlert") : t("alerts.enableAlert")}
                                   >
@@ -2604,7 +2604,7 @@ export function FeedManagement({
                                   <div className="flex min-w-0 items-center gap-2">
                                     <p className="font-medium text-sm truncate">{alert.name}</p>
                                     {matchCount > 0 && (
-                                      <span className="shrink-0 rounded-full bg-primary/10 text-primary text-[10px] font-medium px-1.5 py-0.5">
+                                      <span className="shrink-0 rounded-full bg-primary/10 text-foreground text-[10px] font-medium px-1.5 py-0.5">
                                         {t("alerts.matchCount", { count: matchCount })}
                                       </span>
                                     )}
@@ -2904,7 +2904,7 @@ function MigrationWizard({
                   s === step
                     ? "border-primary bg-primary text-primary-foreground"
                     : step === "upload" || (step === "instructions" && i < 2)
-                      ? "border-primary/60 text-primary"
+                      ? "border-primary/60 text-foreground"
                       : "border-border text-muted-foreground",
                 )}
               >

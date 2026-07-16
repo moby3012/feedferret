@@ -573,7 +573,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                               <span>{candidate.paragraphCount} {t("fulltext.paragraphs")}</span>
                               <span>{candidate.linkCount} {t("fulltext.links")}</span>
                               {index === 0 && (
-                                <span className="inline-flex items-center gap-1 text-primary">
+                                <span className="inline-flex items-center gap-1 text-foreground">
                                   <CheckCircle2 className="h-3 w-3" /> {t("fulltext.recommended")}
                                 </span>
                               )}

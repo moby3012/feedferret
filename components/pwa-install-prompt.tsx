@@ -124,7 +124,7 @@ export function PwaInstallPrompt() {
             <X className="h-4 w-4" />
           </button>
 
-          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-3xl bg-accent/10 text-accent">
+          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-3xl bg-accent text-accent-foreground">
             <Smartphone className="h-7 w-7" />
           </div>
 
@@ -139,11 +139,11 @@ export function PwaInstallPrompt() {
 
           <div className="mt-5 grid gap-3 text-sm text-muted-foreground">
             <div className="flex gap-3 rounded-2xl bg-muted/45 p-3">
-              <Share className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+              <Share className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
               <p>{t("iphoneInstructions")}</p>
             </div>
             <div className="flex gap-3 rounded-2xl bg-muted/45 p-3">
-              <Home className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+              <Home className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
               <p>{t("androidInstructions")}</p>
             </div>
           </div>

@@ -52,7 +52,7 @@ export default async function SharedSearchPage({ params }: { params: Promise<{ t
               </h2>
               <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">{article.excerpt || stripHtml(article.content).slice(0, 240)}</p>
               {article.link && (
-                <a href={article.link} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-accent">
+                <a href={article.link} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-link">
                   {t("openOriginal")} <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               )}

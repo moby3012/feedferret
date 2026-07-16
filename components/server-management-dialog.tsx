@@ -439,14 +439,14 @@ export function ServerManagementDialog({
                             )}
                           >
                             <div className="flex w-full min-w-0 items-center gap-3 sm:flex-1">
-                              <div className="w-10 h-10 shrink-0 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-semibold">
+                              <div className="w-10 h-10 shrink-0 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground font-semibold">
                                 {user.name?.[0] || user.email?.[0]?.toUpperCase()}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="font-semibold truncate flex flex-wrap items-center gap-2 tracking-[-0.01em]">
                                   {user.name || t("users.unnamedUser")}
                                   {user.role === "ADMIN" && (
-                                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">
+                                    <span className="text-[10px] bg-primary/10 text-foreground px-1.5 py-0.5 rounded-full font-bold">
                                       {t("users.adminBadge")}
                                     </span>
                                   )}
@@ -463,7 +463,7 @@ export function ServerManagementDialog({
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className={cn("rounded-lg transition-colors", user.role === "ADMIN" ? "text-primary" : "text-muted-foreground")}
+                                className={cn("rounded-lg transition-colors", user.role === "ADMIN" ? "text-foreground" : "text-muted-foreground")}
                                 onClick={() => handleToggleRole(user)}
                                 title={user.role === "ADMIN" ? t("users.removeAdmin") : t("users.makeAdmin")}
                               >
