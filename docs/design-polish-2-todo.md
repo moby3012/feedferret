@@ -14,11 +14,15 @@ Implementation is running in sequential, individually-merged batches (all touch 
 |---|---|---|
 | 1 · Color foundation | flatten `.ui-*` utilities to solid, contrast token fixes (`--primary`/`--accent`/dark `--accent-foreground`/`--muted-foreground`, new `--link`) | ✅ merged (PR #119) |
 | 2 · Color component sweep | bare `text-accent`/`text-primary` → `text-link`/solid; selected-states off the `/10` wash → `border-s-2 border-accent bg-muted` / solid chips | ✅ merged (PR #120) |
-| 3 · Mobile P1 | bottom-nav bleed-through fix + `safe-area-inset-top` on top bars | 🔄 in progress (branch `claude/polish2-mobile-p1`; edits not yet committed) |
-| 4 · Mobile P2/P3 | touch targets 44px, `min-h-dvh`, manifest colors, tap-highlight reset, drawer safe-area, accent→OS `theme-color` | ⬜ pending |
-| 5 · Article sort | synthetic `publishedAt` for date-less feeds + stable `orderBy` tiebreaker (server + client) | ⬜ pending |
+| 3 · Mobile P1 | bottom-nav bleed-through fix + `safe-area-inset-top` on top bars | ✅ merged (PR #122) |
+| 4 · Mobile P2/P3 | touch targets 44px, `min-h-dvh`, manifest colors, tap-highlight reset, drawer safe-area, accent→OS `theme-color` | ✅ merged (PR #123) |
+| 5 · Article sort | stable `createdAt`+`id` `orderBy` tiebreaker (server + client) so date-less feeds surface newest-first | ✅ merged (PR #124) |
 
-Each batch: verified (`tsc`/`lint`/`pnpm test`; `next build` when CSS changes), own PR, merged, then the relevant checkboxes below get ticked. Remaining work is fully specified in the sections below (file:line + fixes).
+**All five batches merged.** Also shipped alongside: tap-the-headline / swipe-left to open the original article (PR #125).
+
+**Remaining (small P3 nice-to-haves, not blocking):** strip inline `width`/`min-width` from untrusted article HTML in the sanitizer (`article-reader.tsx` `dangerouslySetInnerHTML`); a manual 320px (iPhone SE) pass on `ResponsiveTabsNav` + the rss-header title/icon row.
+
+**Follow-up per maintainer:** re-introduce brand color as deliberate *highlights* on important non-interactive elements (the flattening in batches 1–2 was intentionally cautious; see the refined rule A.1 above) — a light, taste-driven pass, best done against specific elements the maintainer points at.
 
 ---
 
@@ -27,7 +31,7 @@ Each batch: verified (`tsc`/`lint`/`pnpm test`; `next build` when CSS changes), 
 ### A. Color direction — flat, confident, high-contrast
 The app currently derives almost everything from `color-mix(brand …)` tints and stacked gradients, so nearly every surface (cards, inputs, buttons, tabs, icon chips) carries a faint brand wash — nothing reads as a single clean color, and hierarchy collapses. New rules:
 
-1. **Brand color is for interactive/actionable things only** — primary buttons, active nav item, checked switch/checkbox, links, real "selected" states. Everything else (cards, panels, static info boxes, feature-icon chips) is **flat neutral** (`--card`/`--muted`/`--border`, zero brand tint).
+1. **Brand color = interactive OR genuinely important.** Use the two brand colors for interactive/actionable things (primary buttons, active nav, checked controls, links, real "selected" states) **and** to deliberately highlight *important* non-interactive information (unread emphasis, key badges/stats, a section that deserves attention). The rule is **intentional, not austere** — don't tint *everything* (that's the muddiness we removed), but don't be so sparse that nothing stands out either. Neutral (`--card`/`--muted`/`--border`) stays the default for ordinary chrome; brand is the deliberate exception that draws the eye. *(Refined 2026-07-16 per maintainer: earlier "interactive-only" wording was too strict.)*
 2. **Flatten the gradient utilities** to solid fills for interactive/foreground surfaces: `.ui-control-surface` → solid `--background`/`--border`; `.ui-brand-button` → solid `--primary`/`--primary-foreground`; `.ui-segmented-trigger[active]` → one solid color; `.ui-brand-icon` → solid `--accent`/`--accent-foreground`. Keep at most **one** subtle page-level ambiance (`.app-chrome`, reduced to a single low-opacity radial).
 3. **Never use `bg-{primary,accent,brand-secondary}/10…/20` as a persisted "selected" state.** Use a solid `bg-accent text-accent-foreground` chip or a `border-s-2 border-accent bg-muted` indicator. Opacity tints are for transient hover-preview only.
 4. **Never use `text-accent`/`text-primary` as body/link text** on `--background`/`--card`/`--muted` (computed ~1.95–2.2:1 in light — a severe AA fail). Links use a dedicated `--link` token; "active" labels become solid chips.
