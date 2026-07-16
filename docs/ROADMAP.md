@@ -4,6 +4,8 @@
 
 This file is the **top-level index**. Each release has its own detailed planning document in [`docs/releases/`](releases/).
 
+> **📋 Single ordered backlog across everything (releases + Feed Intelligence + feature ideas + quality backlogs): [`MASTER-ROADMAP.md`](MASTER-ROADMAP.md).** Start there for "what to work on next, in order."
+
 ---
 
 ## Release Overview
