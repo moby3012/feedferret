@@ -42,6 +42,9 @@ export const UpdateFeedSchema = z.object({
   priority: z.enum(["important", "main", "category", "feed", "hidden"]).optional(),
   hideFromAllFeeds: z.boolean().optional(),
   hideArticleImage: z.boolean().optional(),
+  readerFontSizeOverride: z.enum(["small", "medium", "large", "xl"]).nullable().optional(),
+  readerWidthOverride: z.enum(["normal", "wide", "full"]).nullable().optional(),
+  openOriginalOverride: z.boolean().nullable().optional(),
 });
 
 export const RegisterUserSchema = z.object({

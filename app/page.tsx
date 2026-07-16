@@ -399,10 +399,12 @@ export default function RSSReaderPage() {
   const handleSelectArticle = useCallback((article: any) => {
     setSelectedArticleId(article.id);
     setSelectedArticleSnapshot(article);
-    if (readingPrefs?.openOriginalByDefault && article.link) {
+    const articleFeed = feeds.find((f: any) => f.id === article.feedId);
+    const openOriginal = articleFeed?.openOriginalOverride ?? readingPrefs?.openOriginalByDefault;
+    if (openOriginal && article.link) {
       window.open(article.link, "_blank", "noopener,noreferrer");
     }
-  }, [readingPrefs?.openOriginalByDefault]);
+  }, [feeds, readingPrefs?.openOriginalByDefault]);
 
   const handleCloseArticle = useCallback(() => {
     setLastClosedArticleId(selectedArticleIdRef.current);
@@ -810,6 +812,8 @@ export default function RSSReaderPage() {
 
   const selectedFeedData = feeds.find((f) => f.id === selectedArticle?.feedId);
   const hideArticleImage = selectedFeedData?.hideArticleImage ?? false;
+  const effectiveReaderWidth = (selectedFeedData?.readerWidthOverride ?? readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full";
+  const effectiveReaderFontSize = (selectedFeedData?.readerFontSizeOverride ?? readingPrefs?.readerFontSize ?? "medium") as "small" | "medium" | "large" | "xl";
 
   if (isMobileLayout === null) {
     return (
@@ -987,8 +991,8 @@ export default function RSSReaderPage() {
               onNextArticle={() => handleSelectAdjacentArticle(1)}
               hasPreviousArticle={selectedArticleIndex > 0}
               hasNextArticle={selectedArticleIndex >= 0 && selectedArticleIndex < filteredArticles.length - 1}
-              readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
-              readerFontSize={(readingPrefs?.readerFontSize ?? "medium") as "small" | "medium" | "large" | "xl"}
+              readerWidth={effectiveReaderWidth}
+              readerFontSize={effectiveReaderFontSize}
               hideArticleImage={hideArticleImage}
             />
           </div>
@@ -1118,7 +1122,8 @@ export default function RSSReaderPage() {
           onNextArticle={() => handleSelectAdjacentArticle(1)}
           hasPreviousArticle={selectedArticleIndex > 0}
           hasNextArticle={selectedArticleIndex >= 0 && selectedArticleIndex < filteredArticles.length - 1}
-          readerWidth={(readingPrefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
+          readerWidth={effectiveReaderWidth}
+          readerFontSize={effectiveReaderFontSize}
           hideArticleImage={hideArticleImage}
         />
       </div>

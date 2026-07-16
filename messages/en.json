@@ -981,6 +981,24 @@
       "hideArticleHeroImage": "Hide article hero image",
       "suppressHeroImage": "Suppress the hero image in the article reader."
     },
+    "reader": {
+      "inherit": "Inherit (global default)",
+      "fontSizeLabel": "Reader font size",
+      "fontSizeDescription": "Override the article font size for this feed.",
+      "fontSizeSmall": "Small",
+      "fontSizeMedium": "Medium",
+      "fontSizeLarge": "Large",
+      "fontSizeXl": "Extra large",
+      "widthLabel": "Reader width",
+      "widthDescription": "Override the reader pane width for this feed.",
+      "widthNormal": "Normal",
+      "widthWide": "Wide",
+      "widthFull": "Full width",
+      "openOriginalLabel": "Open original by default",
+      "openOriginalDescription": "Override whether selecting an article from this feed opens the original page instead of the in-app reader.",
+      "on": "On",
+      "off": "Off"
+    },
     "retention": {
       "keepDays": "Keep days",
       "useUserDefault": "Use user default",
