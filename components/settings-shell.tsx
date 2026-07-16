@@ -115,7 +115,7 @@ export function SettingsPageShell({
       onValueChange={onTabChange}
       className={cn("min-h-screen bg-background flex flex-col", className)}
     >
-      <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-xl">
+      <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-xl pt-[env(safe-area-inset-top)]">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
           <Link href={backHref}>
             <Button

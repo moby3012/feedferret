@@ -282,7 +282,12 @@
   }
 
   .animate-slide-in-right {
-    animation: slide-in-right 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    /* No fill-mode: forwards here on purpose: the animation's resting state is
+       already translateX(0), and a lingering `forwards` transform would make
+       this fixed panel a new containing block for its nested `fixed` children
+       (e.g. the mobile reader's bottom nav), desyncing them from the viewport
+       on iOS/Android when the URL bar shows/hides. */
+    animation: slide-in-right 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .animate-slide-out-right {

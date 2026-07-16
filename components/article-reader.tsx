@@ -310,7 +310,7 @@ export function ArticleReader({
       onTouchEnd={handleTouchEnd}
     >
       {/* Reader Header */}
-      <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border/60 bg-background/80 backdrop-blur-2xl sticky top-0 z-10">
+      <header className="flex items-center justify-between px-4 sm:px-6 pt-[calc(0.75rem_+_env(safe-area-inset-top))] pb-3 border-b border-border/60 bg-background/80 backdrop-blur-2xl sticky top-0 z-10">
         <div className="flex items-center gap-4">
           {showBackButton && (
             <Button
@@ -479,7 +479,7 @@ export function ArticleReader({
 
       {/* Article Content */}
       <ScrollArea className={cn("flex-1 overflow-hidden min-h-0", articleAnimClass)}>
-        <article aria-labelledby="article-title" className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-28 sm:px-8 sm:py-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
+        <article aria-labelledby="article-title" className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] sm:px-8 sm:pt-12 lg:pb-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">
             <h1 id="article-title" className="text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.04em] break-words [overflow-wrap:anywhere]">
@@ -655,7 +655,7 @@ export function ArticleReader({
         </article>
       </ScrollArea>
 
-      <nav className="fixed inset-x-0 bottom-0 z-[60] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-[60] bg-background/95 backdrop-blur-xl pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
         <div className="flex h-16 items-center rounded-[2rem] border border-border/70 bg-background/90 px-1 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
           <Button
             type="button"

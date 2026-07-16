@@ -111,7 +111,7 @@ export function RssHeader({
   };
 
   return (
-    <header className="h-16 flex items-center justify-between px-4 sm:px-5 border-b border-border/60 bg-card/75 backdrop-blur-2xl animate-fade-in relative z-20">
+    <header className="min-h-16 flex items-center justify-between px-4 sm:px-5 pt-[env(safe-area-inset-top)] border-b border-border/60 bg-card/75 backdrop-blur-2xl animate-fade-in relative z-20">
       <div
         className="flex items-center gap-3 min-w-0 flex-1"
         onTouchStart={handleTitleSwipeStart}
