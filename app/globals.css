@@ -6,7 +6,7 @@
   @apply prose prose-neutral dark:prose-invert max-w-none;
   @apply prose-headings:font-bold prose-headings:tracking-tight;
   @apply prose-p:leading-[1.8] prose-p:mb-6 prose-p:text-foreground/90;
-  @apply prose-a:text-accent prose-a:no-underline hover:prose-a:underline;
+  @apply prose-a:text-link prose-a:no-underline hover:prose-a:underline;
   @apply prose-img:rounded-2xl prose-img:shadow-lg prose-img:my-8;
   min-width: 0;
   max-width: 100%;
@@ -85,19 +85,32 @@
   --card-foreground: oklch(0.18 0.012 255);
   --popover: oklch(0.995 0.002 250 / 0.96);
   --popover-foreground: oklch(0.18 0.012 255);
-  --primary: color-mix(in oklab, var(--brand) 88%, white 12%);
+  /* Color-foundation fixes (design-polish-2): darker/more saturated brand
+     fills so brand-on-fill text is text-safe. Computed (OKLCH -> linear
+     sRGB -> WCAG relative luminance): near-black (--brand-foreground,
+     #08111d) on this --primary is ~5.3:1 and on this --accent is ~4.52:1 —
+     both clear AA (4.5:1), so --primary-foreground/--accent-foreground stay
+     near-black in light mode (near-white text on these fills only reaches
+     ~3.4:1/~4.0:1, i.e. worse — near-black is the correct choice here). */
+  --primary: oklch(0.62 0.11 235);
   --primary-foreground: var(--brand-foreground);
   --secondary: oklch(0.94 0.006 250);
   --secondary-foreground: oklch(0.18 0.012 255);
   --muted: oklch(0.93 0.006 250);
-  --muted-foreground: oklch(0.52 0.012 255);
-  --accent: color-mix(in oklab, var(--brand) 76%, white 24%);
+  /* was oklch(0.52 0.012 255); darkened so muted-foreground clears 4.5:1
+     against both --background (~6.6:1) and --muted (~5.8:1). */
+  --muted-foreground: oklch(0.46 0.012 255);
+  --accent: oklch(0.58 0.115 235);
   --accent-foreground: var(--brand-foreground);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.98 0 0);
   --border: oklch(0.88 0.006 250);
   --input: oklch(0.88 0.006 250);
   --ring: color-mix(in oklab, var(--brand) 76%, black 10%);
+  /* Dedicated link color: distinct from --accent/--primary so body/prose
+     links stay text-safe (~5.3:1 on --background) independent of future
+     accent/primary retuning. */
+  --link: oklch(0.5 0.13 235);
   --chart-1: var(--brand);
   --chart-2: var(--brand-secondary);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -126,14 +139,24 @@
   --secondary: oklch(0.24 0.012 255);
   --secondary-foreground: oklch(0.95 0.002 240);
   --muted: oklch(0.24 0.012 255);
-  --muted-foreground: oklch(0.6 0.01 250);
+  /* was oklch(0.6 0.01 250); lightened so muted-foreground clears 4.5:1
+     against --muted (~5.7:1). */
+  --muted-foreground: oklch(0.68 0.01 250);
   --accent: color-mix(in oklab, var(--brand) 72%, black 16%);
-  --accent-foreground: var(--brand-foreground);
+  /* Bug fix: this token previously fell through to --brand-foreground
+     (near-black, #08111d) on a mid-luminance dark accent fill — a
+     computed ~3.1-4.2:1 depending on measurement, i.e. an AA fail/near-fail.
+     Override with a near-white so accent-foreground text (toggle on-state,
+     dropdown/command/calendar focus, segmented buttons) stays legible. */
+  --accent-foreground: oklch(0.97 0.005 250);
   --destructive: oklch(0.5 0.2 25);
   --destructive-foreground: oklch(0.95 0 0);
   --border: oklch(0.29 0.012 255);
   --input: oklch(0.29 0.012 255);
   --ring: color-mix(in oklab, var(--brand) 82%, white 8%);
+  /* Dark counterpart of --link: brighter/lighter for dark backgrounds
+     (~9.2:1 on the dark --background). */
+  --link: oklch(0.75 0.11 235);
   --chart-1: var(--brand);
   --chart-2: var(--brand-secondary);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -170,6 +193,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-brand: var(--brand);
   --color-brand-secondary: var(--brand-secondary);
+  --color-link: var(--link);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -358,91 +382,69 @@
   }
 }
 
+/* Color-foundation flatten (design-polish-2): brand is reserved for
+   interactive/actionable elements (buttons, active nav, links). Static
+   chrome/surfaces are flat neutral, with at most one subtle ambient
+   gradient (.app-chrome) — see docs/design-polish-2-todo.md "North star". */
+
 .app-chrome {
   background:
-    radial-gradient(circle at 12% 8%, color-mix(in oklab, var(--accent) 12%, transparent), transparent 28rem),
-    radial-gradient(circle at 88% 0%, color-mix(in oklab, var(--brand-secondary) 12%, transparent), transparent 24rem),
+    radial-gradient(circle at 12% 8%, color-mix(in oklab, var(--accent) 8%, transparent), transparent 28rem),
     var(--background);
 }
 
 .ui-overlay {
-  background:
-    radial-gradient(circle at 18% 0%, color-mix(in oklab, var(--brand) 18%, transparent), transparent 26rem),
-    radial-gradient(circle at 100% 10%, color-mix(in oklab, var(--brand-secondary) 16%, transparent), transparent 22rem),
-    color-mix(in oklab, var(--background) 14%, black 58%);
+  /* Neutral scrim for dialogs/sheets — no brand tint on a modal backdrop. */
+  background: color-mix(in oklab, black 55%, transparent);
   backdrop-filter: blur(18px) saturate(145%);
 }
 
 .ui-surface {
-  background:
-    linear-gradient(145deg, color-mix(in oklab, var(--brand) 7%, transparent), transparent 38%),
-    linear-gradient(220deg, color-mix(in oklab, var(--brand-secondary) 9%, transparent), transparent 40%),
-    var(--card);
-  border-color: color-mix(in oklab, var(--border) 74%, var(--brand) 26%);
-  box-shadow:
-    0 30px 80px -42px color-mix(in oklab, var(--brand) 26%, black 74%),
-    0 1px 0 color-mix(in oklab, white 30%, transparent) inset;
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow: 0 30px 80px -42px color-mix(in oklab, black 45%, transparent);
   backdrop-filter: blur(28px) saturate(140%);
 }
 
 .ui-floating-surface {
-  background:
-    linear-gradient(155deg, color-mix(in oklab, var(--brand) 10%, transparent), transparent 35%),
-    linear-gradient(220deg, color-mix(in oklab, var(--brand-secondary) 12%, transparent), transparent 38%),
-    var(--popover);
-  border-color: color-mix(in oklab, var(--border) 72%, var(--brand) 28%);
-  box-shadow:
-    0 24px 60px -36px color-mix(in oklab, var(--brand) 24%, black 76%),
-    0 1px 0 color-mix(in oklab, white 24%, transparent) inset;
+  background: var(--popover);
+  border-color: var(--border);
+  box-shadow: 0 24px 60px -36px color-mix(in oklab, black 45%, transparent);
   backdrop-filter: blur(24px) saturate(140%);
 }
 
 .ui-control-surface {
-  background: color-mix(in oklab, var(--background) 92%, var(--brand) 8%);
-  border-color: color-mix(in oklab, var(--border) 74%, var(--brand) 26%);
-  box-shadow:
-    0 1px 0 color-mix(in oklab, white 22%, transparent) inset,
-    0 10px 24px -24px color-mix(in oklab, var(--brand) 35%, black 65%);
+  background: var(--background);
+  border-color: var(--border);
 }
 
 .ui-control-surface:hover {
-  background: color-mix(in oklab, var(--background) 88%, var(--brand) 12%);
+  background: var(--muted);
 }
 
 .ui-segmented-surface {
-  background: color-mix(in oklab, var(--muted) 92%, var(--brand) 8%);
-  border-color: color-mix(in oklab, var(--border) 78%, var(--brand) 22%);
-  box-shadow: inset 0 1px 0 color-mix(in oklab, white 18%, transparent);
+  background: var(--muted);
+  border-color: var(--border);
 }
 
 .ui-segmented-trigger[data-state="active"] {
-  background:
-    linear-gradient(135deg, color-mix(in oklab, var(--brand) 14%, var(--background)) 0%, color-mix(in oklab, var(--brand-secondary) 18%, var(--background)) 100%);
-  border-color: color-mix(in oklab, var(--border) 54%, var(--brand) 46%);
-  box-shadow:
-    0 16px 34px -24px color-mix(in oklab, var(--brand) 42%, black 58%),
-    0 1px 0 color-mix(in oklab, white 20%, transparent) inset;
+  background: var(--background);
+  color: var(--foreground);
 }
 
 .ui-brand-button {
-  background:
-    linear-gradient(135deg, var(--primary) 0%, color-mix(in oklab, var(--brand-secondary) 34%, var(--primary)) 100%);
+  background: var(--primary);
   color: var(--primary-foreground);
-  box-shadow:
-    0 18px 40px -26px color-mix(in oklab, var(--brand) 44%, black 56%),
-    0 1px 0 color-mix(in oklab, white 24%, transparent) inset;
+  box-shadow: 0 4px 12px -6px color-mix(in oklab, black 35%, transparent);
 }
 
 .ui-brand-button:hover {
-  filter: saturate(1.04) brightness(0.99);
+  background: color-mix(in oklab, var(--primary) 90%, black);
 }
 
 .ui-brand-icon {
-  background:
-    linear-gradient(135deg, color-mix(in oklab, var(--brand) 16%, transparent), color-mix(in oklab, var(--brand-secondary) 18%, transparent));
-  color: color-mix(in oklab, var(--brand) 76%, var(--foreground) 24%);
-  border: 1px solid color-mix(in oklab, var(--border) 72%, var(--brand) 28%);
-  box-shadow: 0 12px 28px -24px color-mix(in oklab, var(--brand) 42%, black 58%);
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
 
 .reader-page {
