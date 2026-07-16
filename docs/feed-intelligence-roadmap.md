@@ -147,4 +147,38 @@ Each milestone ships as its own verified PR(s) (`tsc`/`lint`/`test`, `next build
 
 ---
 
+## Post-core feature backlog (queued after M1–M7)
+
+> Appended 2026-07-16. All the ideas from [`feature-ideas.md`](feature-ideas.md), queued behind the core Feed-Intelligence milestones and **sorted by effort, easy → complex**. Tags: 🟦 FreshRSS-parity · 🤖 AI-synergy · ⭐ high value. Two are recommended to pull *forward* (noted inline) because they ride along with core work.
+
+### Tier S — quick wins
+- [ ] **F1** · "Refresh now" per feed (expose a manual force-refresh everywhere) — `S`
+- [ ] **F2** · Per-feed reader defaults (font / width / format override on top of the global prefs) — `S`
+- [ ] **F3** · ⭐ Copy article as Markdown (nearly free once M1 lands) — `S`
+
+### Tier S–M
+- [ ] **F4** · ⭐ Command palette (⌘K / Ctrl-K) — `cmdk` is already a dependency — `S–M` — *recommend pulling forward, alongside M1*
+- [ ] **F5** · Export / "Send to" Obsidian · Wallabag · Readwise · Pocket — `S–M`
+- [ ] **F6** · Auto-mute + notify on persistently-failing feeds (we already track feed health) — `S–M`
+- [ ] **F7** · PWA share-target bookmarklet ("Share → FeedFerret" → starts the page→feed flow) — `S–M`
+
+### Tier M
+- [ ] **F8** · ⭐ 🤖 🟦 AI auto-tagging / classification of incoming articles (prompt → labels on sync) — `M` — *recommend right after M4 (reuses the AI-config plumbing)*
+- [ ] **F9** · 🤖 User-facing reading-stats dashboard (read-over-time, top feeds, streaks, "time saved by AI") — `M`
+- [ ] **F10** · 🟦 Reverse-proxy / trusted-header auth (`X-Forwarded-User`) — `M`
+- [ ] **F11** · Article notes / highlights (annotate passages, searchable) — `M`
+- [ ] **F12** · 🤖 AI "translate this article" (one-click, BYOK) — `M`
+- [ ] **F13** · 🟦 Theme presets + import/export (on top of the accent theming we have) — `M`
+
+### Tier L
+- [ ] **F14** · ⭐ 🟦 WebSub (PubSubHubbub) — real-time push instead of polling — `L`
+- [ ] **F15** · ⭐ 🤖 Newsletter → feed (per-user inbound email address; optional M1 markdown clean-up) — `L`
+- [ ] **F16** · 🤖 AI semantic / "find similar" search (embeddings + vector store) — `L`
+- [ ] **F17** · Podcast / audio + "read aloud" (TTS) — `L` (aligns with the planned v2 audio surface)
+
+### Tier XL
+- [ ] **F18** · 🟦 Extension / event-hook surface — FreshRSS's biggest differentiator. Full plugins are XL; start lighter with an event/hook API on top of our existing webhooks + rules — `XL`
+
+---
+
 *Next action: convert **M1** into concrete PR-sized tasks and start implementation.*
