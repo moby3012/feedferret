@@ -28,7 +28,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ARG DATABASE_URL=postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public
 ARG DATABASE_PROVIDER=postgresql
 ARG AUTH_SECRET
-ARG AUTH_URL
+ARG AUTH_URL=http://localhost:3000
 ARG AUTH_TRUST_HOST
 
 ENV DATABASE_URL=$DATABASE_URL

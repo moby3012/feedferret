@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s · FeedFerret",
   },
   description: APP_DESCRIPTION,
-  metadataBase: new URL(process.env.AUTH_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(process.env.AUTH_URL || "http://localhost:3000"),
   openGraph: {
     type: "website",
     siteName: "FeedFerret",
