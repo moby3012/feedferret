@@ -482,7 +482,20 @@ export function ArticleReader({
         <article aria-labelledby="article-title" className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] sm:px-8 sm:pt-12 lg:pb-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">
-            <h1 id="article-title" className="text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.04em] break-words [overflow-wrap:anywhere]">
+            <h1
+              id="article-title"
+              onClick={() => {
+                // Tapping/clicking the headline opens the original article — but
+                // don't hijack a click that was really the user selecting title text.
+                if (typeof window !== "undefined" && window.getSelection()?.toString()) return;
+                openOriginal();
+              }}
+              title={article.link ? t("openOriginal") : undefined}
+              className={cn(
+                "text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.04em] break-words [overflow-wrap:anywhere]",
+                article.link && "cursor-pointer transition-colors hover:text-link",
+              )}
+            >
               {article.title}
             </h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
