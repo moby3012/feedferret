@@ -28,6 +28,7 @@ import { randomBytes } from "crypto";
 import { decryptIfValue } from "@/lib/crypto";
 import type { AiProvider } from "@/lib/ai-summary";
 import { logger } from "@/lib/logger";
+import { getSanitizer } from "@/lib/sanitize-html";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -964,7 +965,7 @@ export async function fetchFullText(articleId: string) {
         },
     );
     const { JSDOM } = await import("jsdom");
-    const { default: DOMPurify } = await import("isomorphic-dompurify");
+    const DOMPurify = await getSanitizer();
     const dom = new JSDOM(html, { url: article.link });
     const document = dom.window.document;
 
@@ -1599,7 +1600,7 @@ export async function previewFeedExtraction(feedId: string, articleUrl: string) 
         },
     );
     const { JSDOM } = await import("jsdom");
-    const { default: DOMPurify } = await import("isomorphic-dompurify");
+    const DOMPurify = await getSanitizer();
     const dom = new JSDOM(html, { url: articleUrl });
     const document = dom.window.document;
 

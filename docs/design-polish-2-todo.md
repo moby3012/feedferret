@@ -120,8 +120,8 @@ The app currently derives almost everything from `color-mix(brand …)` tints an
 - [ ] **[P3] No `-webkit-tap-highlight-color` reset** — `S` · add `html { -webkit-tap-highlight-color: transparent }` to `globals.css` `@layer base`.
 
 ### Overflow / verification
-- [ ] **[P3] Untrusted article HTML may carry inline `width`/`min-width`** — `M` · `article-reader.tsx:585` `dangerouslySetInnerHTML`. **Fix:** strip inline `width`/`min-width` in the sanitizer rather than relying on CSS overrides.
-- [ ] **[P3] Verify 320px (iPhone SE): `ResponsiveTabsNav` + rss-header title/icon row** — `S` verify · `settings-shell.tsx:77-84`, `rss-header.tsx:120-158`. Ensure tabs `overflow-x-auto` rather than wrap/clip.
+- [x] **[P3] Untrusted article HTML may carry inline `width`/`min-width`** — `M` · **Fixed:** new `lib/sanitize-html.ts` shared `getSanitizer()` registers a one-time DOMPurify `uponSanitizeAttribute` hook that strips the `width`/`min-width` HTML attributes and `width:`/`min-width:` inline-style declarations (keeps `max-width`); all article-HTML sanitize sites in `lib/rss-sync.ts` + `app/actions/feeds.ts` route through it.
+- [x] **[P3] Verify 320px (iPhone SE): `ResponsiveTabsNav` + rss-header title/icon row** — `S` · **Verified OK, no change needed:** `responsive-tabs-nav.tsx` renders a full-width `<Select>` below `sm` (no tab row to clip at 320px); `rss-header.tsx` title uses `min-w-0 flex-1` + `truncate`, mobile icon buttons are `flex-shrink-0` 44px — fits within 320px.
 
 ---
 
