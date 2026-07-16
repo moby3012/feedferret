@@ -60,6 +60,7 @@ function toUiArticle(a: any, unknownAuthor = "Unknown") {
     feedName: a.feed.name,
     feedIcon: a.feed.icon || "",
     publishedAtRaw: publishedAt.getTime(),
+    createdAtRaw: a.createdAt ? new Date(a.createdAt).getTime() : 0,
     publishedAt: publishedAt.toISOString(),
     readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
     excerpt: a.excerpt || "",
@@ -338,10 +339,19 @@ export default function RSSReaderPage() {
       list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
     }
 
-    // Sort AFTER filtering
-    return list.sort((a: any, b: any) =>
-      sortOrder === "oldest" ? a.publishedAtRaw - b.publishedAtRaw : b.publishedAtRaw - a.publishedAtRaw,
-    );
+    // Sort AFTER filtering. Tie-break date-less/equal-timestamp articles by
+    // createdAt then id (mirroring the sort direction) so feeds without a
+    // parseable publishedAt aren't left in arbitrary/oldest-first feed order.
+    return list.sort((a: any, b: any) => {
+      if (a.publishedAtRaw !== b.publishedAtRaw) {
+        return sortOrder === "oldest" ? a.publishedAtRaw - b.publishedAtRaw : b.publishedAtRaw - a.publishedAtRaw;
+      }
+      if ((a.createdAtRaw ?? 0) !== (b.createdAtRaw ?? 0)) {
+        return sortOrder === "oldest" ? a.createdAtRaw - b.createdAtRaw : b.createdAtRaw - a.createdAtRaw;
+      }
+      if (a.id === b.id) return 0;
+      return sortOrder === "oldest" ? (a.id < b.id ? -1 : 1) : (a.id > b.id ? -1 : 1);
+    });
   }, [displayArticles, unreadOnly, readInSession, sortOrder, isSearchActive]);
 
   const selectedArticleIndex = useMemo(

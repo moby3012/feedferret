@@ -636,7 +636,12 @@ export async function getArticles(feedId?: string | null, category?: string, sea
         where.isStarred = filters.isStarred;
     }
 
-    let orderBy: any = { publishedAt: "desc" };
+    // Stable tiebreaker: feeds whose items lack a parseable date all share the
+    // same sync-time fallback publishedAt, so without a secondary sort they'd
+    // fall back to undefined DB order (often oldest-first feed order). createdAt
+    // surfaces newer-synced articles on top; id is the final deterministic key
+    // so the top-N window is consistent across requests.
+    let orderBy: any = [{ publishedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }];
     let isSpoilerCategory = false;
 
     const isSearching = !!search?.trim();
