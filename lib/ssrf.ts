@@ -30,7 +30,7 @@ export async function isTrustedFeedFetchingAllowed() {
 
 function isPrivateIpv4(ip: string) {
   const parts = ip.split(".").map(Number);
-  const [a, b] = parts;
+  const [a, b, c] = parts;
   return (
     a === 0 ||
     a === 10 ||
@@ -39,7 +39,11 @@ function isPrivateIpv4(ip: string) {
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
-    (a === 192 && b === 0) ||
+    // TEST-NET-1 (RFC 5737) — reserved for documentation, never publicly
+    // routed. NOTE: this is 192.0.2.0/24, not all of 192.0.0.0/16 — the rest
+    // of that /16 (e.g. 192.0.78.0/23, allocated to Automattic/WordPress.com)
+    // is ordinary public space and must not be blocked here.
+    (a === 192 && b === 0 && c === 2) ||
     (a === 198 && (b === 18 || b === 19)) ||
     a >= 224
   );
