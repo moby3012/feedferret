@@ -1,10 +1,22 @@
 # Scout Studio
 
-Scout Studio is FeedFerret's guided full-text extraction workflow for feeds and article pages that need more than a standard RSS/Atom fetch.
+Scout Studio is FeedFerret's guided full-text extraction workflow for feeds and article pages that need more than a standard RSS/Atom fetch — including turning a plain listing page (a blog index, forum, or search-results page) that has **no** RSS/Atom feed into one.
 
 ---
 
-## What is Implemented (v1.0.0)
+## What is Implemented
+
+### Create Feed from a Web Page (Add feed → "From web page")
+
+A guided, zero-XPath way to build a feed from any listing page (Feed Intelligence **M3**):
+
+- Paste a listing-page URL and click **Find items**. FeedFerret fetches it (SSRF-safe) and analyses the DOM for the repeating item block.
+- It proposes one or more **ranked candidates**, each validated by running its selectors through the real scraping engine — a candidate only appears if it parses into real, linked items. Ranking uses repetition count, link density, title quality, and field richness, penalising nav/header/footer.
+- Each candidate shows its item count, sample titles, and a live preview of the first parsed items; the strongest is pre-selected.
+- Pick one, give the feed a name, and save. The feed is stored as a normal `HTML+XPath` source (the proposed selectors become its `scraperConfig`), so it re-scrapes on the sync schedule, dedups via the usual unicity keys, and exports/imports through the `ffx:*` OPML extension like any other scraped feed.
+- Nothing is saved until you confirm. If no candidate is found, the panel points to the manual Scout Studio and direct-URL routes.
+
+Under the hood the suggestion engine (`lib/page-feed-suggest.ts`) proposes the config; the existing `buildXPathArticles` engine both validates it and later scrapes it. This is the foundation the AI config proposal (M4) builds on — same config shape, same validation, with the selectors proposed by an LLM instead of heuristics.
 
 ### Guided Full-Text Flow (Feed Settings → Full-Text)
 

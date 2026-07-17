@@ -48,7 +48,7 @@ Source: [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md). North-st
 
 - ✅ **M1** — Auto full-text → **Markdown/HTML-selectable** content (`Article.contentFormat`, Defuddle→Readability engine, markdown-it render, per-feed `fullTextMode`/`defaultContentFormat` + reader render/source toggle) — shipped in 3 slices: PRs **#141** (engine) · **#142** (schema + sync wiring, back-compat) · **#143** (reader render + settings + i18n)
 - ⬜ **M2** — Full-text polish (tables/code/math/images) — **S–M**
-- ⬜ **M3** — Manual **page→feed builder** (extends Scout Studio) — **M–L**
+- ✅ **M3** — Manual **page→feed builder** (paste a listing-page URL → ranked auto-suggested item/field selectors, validated by the real engine → save as an `HTML+XPath` feed that re-scrapes/dedups/OPML-round-trips like any other): PRs **#145** (`lib/page-feed-suggest.ts` engine) · **#146** ("From web page" add-feed flow) · OPML round-trip test + `scout-studio.md` docs
 - ⬜ **M4 ⭐** — **AI config proposal** (fetch→clean→BYOK→validate→preview→accept) — **M**
 - ⬜ **F8 ⭐ · AI auto-tagging/classification** (pull in right after M4 — reuses the AI-config plumbing) — **M**
 - ⬜ **M5** — Optional connectors: **RSSHub** + **changedetection.io** (self-hosted sidecars) — **M ×2**
