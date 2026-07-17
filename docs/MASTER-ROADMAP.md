@@ -46,7 +46,7 @@ Source: [`releases/v1.2-theming.md`](releases/v1.2-theming.md). Effort **L**.
 ## PHASE 2 — Feed Intelligence (core) *(the big new mission; mostly in-process/self-hosted)*
 Source: [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md). North-star: *paste a URL → AI proposes the whole config → confirm.*
 
-- ⬜ **M1** — Auto full-text → **Markdown/HTML-selectable** content (`Article.contentFormat`, Defuddle+Readability, markdown-it render) — **M**
+- ✅ **M1** — Auto full-text → **Markdown/HTML-selectable** content (`Article.contentFormat`, Defuddle→Readability engine, markdown-it render, per-feed `fullTextMode`/`defaultContentFormat` + reader render/source toggle) — shipped in 3 slices: PRs **#141** (engine) · **#142** (schema + sync wiring, back-compat) · **#143** (reader render + settings + i18n)
 - ⬜ **M2** — Full-text polish (tables/code/math/images) — **S–M**
 - ⬜ **M3** — Manual **page→feed builder** (extends Scout Studio) — **M–L**
 - ⬜ **M4 ⭐** — **AI config proposal** (fetch→clean→BYOK→validate→preview→accept) — **M**
