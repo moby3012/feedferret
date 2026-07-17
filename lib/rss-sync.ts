@@ -10,6 +10,8 @@ import { decryptIfValue } from "./crypto";
 import type { AiConfig } from "./ai-summary";
 import { logger } from "./logger";
 import { getSanitizer } from "./sanitize-html";
+import { resolveFullTextMode } from "./full-text-mode";
+import { fetchAndExtractReadable } from "./readability-extract";
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 
@@ -351,9 +353,18 @@ export async function syncFeed(userId: string, feedId: string) {
             data: feedPatch,
         });
 
-        // Auto full-text extraction for newly synced articles
-        if (feed.autoFetchFullText && upsertedIds.length > 0) {
-            await autoFetchFullTextForArticles(userId, upsertedIds, feed);
+        // Auto full-text extraction for newly synced articles. `fullTextMode`
+        // defaults to "off" for every pre-existing row, so it can't be trusted
+        // alone — resolveFullTextMode() falls back to the legacy
+        // `autoFetchFullText` boolean so feeds that already relied on it keep
+        // working unchanged.
+        if (upsertedIds.length > 0) {
+            const mode = resolveFullTextMode(feed);
+            if (mode === "selector") {
+                await autoFetchFullTextForArticles(userId, upsertedIds, feed);
+            } else if (mode === "auto") {
+                await autoFetchFullTextViaEngine(userId, upsertedIds, feed);
+            }
         }
 
         if (createdArticleIds.length > 0) {
@@ -472,10 +483,70 @@ async function autoFetchFullTextForArticles(
 
             await db.article.update({
                 where: { id: article.id, userId },
-                data: { content: sanitized, excerpt: plain.slice(0, 240) },
+                data: { content: sanitized, contentFormat: "html", excerpt: plain.slice(0, 240) },
             });
         } catch (e) {
             logger.warn(`[rss-sync] autoFetchFullText failed for ${article.link}:`, e);
+        }
+    }
+}
+
+// Minimum plain-text length a fetched-and-extracted article body must have to
+// be considered an improvement worth storing, mirroring the threshold the
+// selector-based path (autoFetchFullTextForArticles) uses.
+const MIN_ENGINE_EXTRACTED_TEXT_LENGTH = 400;
+
+/**
+ * "auto" full-text mode: fetches each article's source page and runs it
+ * through the readability extraction engine (Defuddle -> Readability
+ * fallback), storing the result as either HTML or Markdown per the feed's
+ * `defaultContentFormat`. Unlike the selector/heuristic path, this doesn't
+ * use `feed.fullTextSelector` at all — extraction quality comes from the
+ * engine's own content scoring.
+ */
+async function autoFetchFullTextViaEngine(
+    userId: string,
+    articleIds: string[],
+    feed: {
+        defaultContentFormat?: string | null;
+    },
+) {
+    const DOMPurify = await getSanitizer();
+
+    const articles = await db.article.findMany({
+        where: { id: { in: articleIds }, userId },
+        select: { id: true, link: true, content: true },
+    });
+
+    for (const article of articles) {
+        if (!article.link) continue;
+        try {
+            const result = await fetchAndExtractReadable(article.link);
+            if (result.extractedBy === "none" || !result.html) {
+                // Extraction failed to find anything useful — leave the
+                // feed-provided content as-is.
+                continue;
+            }
+
+            const useMarkdown = feed.defaultContentFormat === "markdown";
+            const content = useMarkdown ? result.markdown : result.html;
+            if (!content) continue;
+
+            const plain = DOMPurify.sanitize(result.html, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
+            if (plain.length < MIN_ENGINE_EXTRACTED_TEXT_LENGTH) continue;
+
+            const excerpt = result.excerpt?.trim() || plain.slice(0, 240);
+
+            await db.article.update({
+                where: { id: article.id, userId },
+                data: {
+                    content,
+                    contentFormat: useMarkdown ? "markdown" : "html",
+                    excerpt,
+                },
+            });
+        } catch (e) {
+            logger.warn(`[rss-sync] autoFetchFullTextViaEngine failed for ${article.link}:`, e);
         }
     }
 }
