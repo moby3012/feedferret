@@ -159,7 +159,7 @@ function evaluateContent(xpath: XPathEvaluator, expression: string | undefined, 
   }
 }
 
-function buildXPathArticles(raw: string, feedUrl: string, config: FeedExtractionConfig, contentType: "text/html" | "text/xml"): FetchedFeed {
+export function buildXPathArticles(raw: string, feedUrl: string, config: FeedExtractionConfig, contentType: "text/html" | "text/xml"): FetchedFeed {
   const dom = new JSDOM(raw, { url: feedUrl, contentType });
   const document = dom.window.document;
   const xpath = new dom.window.XPathEvaluator();
