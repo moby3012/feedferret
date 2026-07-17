@@ -71,8 +71,8 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 
 - [x] **M4-T1** *(slice 1, PR #149)* `lib/ai-feed-config.ts` — takes a URL, fetches (SSRF-safe) + Defuddle-cleans the HTML (keep it small/tokens-bounded), sends a structured prompt to the user's BYOK provider (`lib/ai-summary.ts` plumbing), and gets back a **strict JSON config** matching our Scout Studio schema (`{ mode: "fulltext"|"pagefeed", itemSelector?, fields?, fullTextSelector?, confidence, notes }`). — `M`
 - [x] **M4-T2** *(slice 1, PR #149)* **Validate before showing:** run the proposed config through the real extraction engine (M1/M3) server-side, return a **preview** (extracted article / parsed items) alongside the config + a confidence signal. Never save unseen. — `M`
-- [ ] **M4-T3** UX: a single **"✨ Let AI set this up"** button in the add-feed / full-text flow → spinner → shows the preview + an editable summary of what the AI chose → **Accept** (saves the config) or **Edit** (drops into the manual Scout Studio fields, pre-filled). Falls back to manual if no AI key / AI fails. i18n en+de. — `M`
-- [ ] **M4-T4** Guardrails: token/size caps on the page sent to the model; rate-limit (`lib/rate-limit.ts`); clear error states; the AI call is **one-shot config generation** (not per-fetch) — after Accept it's plain selector scraping. — `S`
+- [x] **M4-T3** *(slice 2, PR #155 — add-feed "From web page" flow; the feed-settings full-text entry point is folded into T5)* UX: a single **"✨ Let AI set this up"** button in the add-feed / full-text flow → spinner → shows the preview + an editable summary of what the AI chose → **Accept** (saves the config) or **Edit** (drops into the manual Scout Studio fields, pre-filled). Falls back to manual if no AI key / AI fails. i18n en+de. — `M`
+- [x] **M4-T4** *(slice 1 size caps + slice 2 rate-limit, PRs #149/#150/#155)* Guardrails: token/size caps on the page sent to the model; rate-limit (`lib/rate-limit.ts`); clear error states; the AI call is **one-shot config generation** (not per-fetch) — after Accept it's plain selector scraping. — `S`
 - [ ] **M4-T5** Also offer AI proposal for **M1 truncated-feed full-text** (propose the article-body selector automatically), not just page→feed. — `S`
 - [x] **M4-T6** *(slice 1, PR #149)* Tests (mocked AI returning good/garbage JSON → validation catches garbage; preview path). — `M`
 
@@ -126,7 +126,7 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 | **M1** ✅ | Auto full-text, Markdown/HTML selectable — *shipped, PRs #141–#143* | M | — |
 | **M2** | Full-text polish (tables/code/math/images) | S–M | M1 |
 | **M3** ✅ | Manual page→feed builder — *shipped, PRs #145–#147* | M–L | M1 |
-| **M4 ⭐** 🔄 | **AI proposes the whole config** (paste → accept) — *slice 1 engine shipped (#149); UI pending* | M | M1, M3 |
+| **M4 ⭐** 🔄 | **AI proposes the whole config** (paste → accept) — *engine (#149) + "✨" UX/rate-limit (#155) shipped; remaining: T5 (AI proposal for truncated-feed full-text selectors)* | M | M1, M3 |
 | **M5** | Optional RSSHub + changedetection.io connectors | M (×2) | M3/M4 |
 | **M6** | Per-article AI extraction fallback | M–L | M1, M4 |
 | **M7** | Playwright / Firecrawl / Jina heavy path | L | M3–M5 |
