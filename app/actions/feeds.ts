@@ -1042,6 +1042,7 @@ export async function fetchFullText(articleId: string) {
         where: { id: article.id, userId: session.user.id },
         data: {
             content: sanitized,
+            contentFormat: "html",
             excerpt: plain.slice(0, 240),
         },
         include: {

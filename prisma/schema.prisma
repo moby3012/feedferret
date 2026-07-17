@@ -290,6 +290,8 @@ model Feed {
   fullTextRemoveSelectors  String?
   autoFetchFullText        Boolean   @default(false)
   fullTextConditions       String?
+  fullTextMode             String    @default("off")  // "off" | "auto" | "selector"
+  defaultContentFormat     String    @default("html")  // "html" | "markdown" — preferred stored format for auto full-text
   filtersActionRead        String?
   hideFromAllFeeds         Boolean  @default(false)
   hideArticleImage         Boolean  @default(false)
@@ -317,6 +319,7 @@ model Article {
   canonical    Article?  @relation("ArticleDuplicates", fields: [duplicateOf], references: [id], onDelete: SetNull)
   duplicates   Article[] @relation("ArticleDuplicates")
   content     String
+  contentFormat String @default("html")  // "html" | "markdown" — the format `content` is stored in
   excerpt     String?
   author      String?
   publishedAt DateTime
