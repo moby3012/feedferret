@@ -11,8 +11,8 @@ Goal: WCAG 2.2 AA conformance. Detailed implementation notes per sprint below.
 | A-1 | Motion, Skip Link, ARIA Landmarks, Icon Labels | ✅ Done |
 | A-2 | Screen Reader Live Regions, Focus Management, Semantics | ✅ Done |
 | A-3 | Keyboard Navigation, Feed Cards, Drag-and-Drop | ✅ Done |
-| A-4 | Visuals & Contrast | 🟡 Partial — Font-size slider done (PR #44), contrast audit + 200% zoom pending |
-| A-5 | Tooling: eslint-jsx-a11y ✅, `/accessibility` page ✅, axe-playwright ⬜ | 🟡 Partial |
+| A-4 | Visuals & Contrast | 🟡 Partial — Font-size slider done (PR #44); WCAG AA color-contrast now auto-enforced by the axe CI gate on public pages; contrast audit of authenticated screens + 200% zoom still pending |
+| A-5 | Tooling: eslint-jsx-a11y ✅, `/accessibility` page ✅, `@axe-core/playwright` in CI ✅ (public pages) | 🟡 Partial — authenticated-page coverage pending a seeded test user |
 
 **A-4 and A-5 are scheduled for v1.2 (Theming release).** See [`docs/releases/v1.2-theming.md`](releases/v1.2-theming.md).
 
@@ -63,7 +63,16 @@ All shortcut-triggered actions are also reachable via UI.
 
 ## Sprint A-4: Visuals & Contrast 🟡
 
-### A-4.1 Contrast Audit ⬜ — scheduled v1.2
+### A-4.1 Contrast Audit 🟡 — automated on public pages, manual audit of authenticated screens still scheduled v1.2
+The `@axe-core/playwright` CI gate (see A-5.2 below) now runs axe's `color-contrast`
+check (part of the `wcag2aa`/`wcag21aa` tag set) against every public page on
+every PR, so WCAG AA contrast regressions on `/setup`, `/register`, and
+`/accessibility` fail the build automatically. This does **not** yet cover
+authenticated screens (Home, Feed Management, Server Management, Reader,
+Settings) — those need a seeded test user before they can be added to the
+e2e suite (see A-5.2). A manual/tooling audit of those screens remains
+pending.
+
 Critical areas:
 - `text-muted-foreground` on card backgrounds
 - `text-muted-foreground/40` chips and tags
@@ -94,16 +103,29 @@ Increase border weight, replace translucent surfaces with solid when OS high-con
 ### A-5.1 `eslint-plugin-jsx-a11y` ✅
 Active in `.eslintrc.json`.
 
-### A-5.2 `@axe-core/playwright` in CI ⬜ — scheduled v1.2
-```typescript
-// e2e/accessibility.spec.ts
-import { checkA11y } from 'axe-playwright';
-test('Home page passes axe audit', async ({ page }) => {
-  await page.goto('/');
-  await checkA11y(page);
-});
-```
-Screens: Login, Home, Feed Management, Settings, Reader.
+### A-5.2 `@axe-core/playwright` in CI ✅ (public pages)
+Implemented in [`e2e/accessibility.spec.ts`](../e2e/accessibility.spec.ts) using
+`AxeBuilder` (the maintained `@axe-core/playwright` integration, not the
+older `axe-playwright`/`checkA11y`). Runs in a dedicated `accessibility` job
+in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) on every PR.
+
+Checks WCAG 2.1 A/AA (`wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` tags,
+including `color-contrast`) and fails the build on any `serious`/`critical`
+violation; `minor`/`moderate` findings are logged but not yet gated (that
+threshold can be tightened once the backlog of lower-severity findings is
+cleared).
+
+Screens covered: `/setup`, `/register`, `/accessibility` — the pages an
+unauthenticated visitor actually reaches on a fresh install (see the
+route-discovery comment at the top of the spec file for why `/` and `/login`
+aren't audited separately: both redirect client-side to `/setup` when no
+user exists yet, so there's no distinct page content to check).
+
+**Follow-up (not yet done):** authenticated screens (Home, Feed Management,
+Server Management, Reader, Settings) are NOT covered. That requires CI to
+seed a test user (and a signed-in session) before running the spec — e.g. a
+Prisma seed script plus a Playwright `storageState`/login helper — which is
+out of scope for this pass.
 
 ### A-5.3 `/accessibility` Statement Page ✅
 Public page listing supported features, known gaps, WCAG 2.2 AA goal, and how to report issues.

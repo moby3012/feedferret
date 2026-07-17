@@ -37,6 +37,11 @@ next-env.d.ts
 *.db
 *.db-journal
 
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+
 # AI/Agent working directories (Claude Code internal)
 .ai/
 .agent/

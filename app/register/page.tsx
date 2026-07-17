@@ -181,7 +181,7 @@ export default function RegisterPage() {
               {t("alreadyHaveAccount")}{" "}
               <Link
                 href="/login"
-                className="text-foreground hover:underline transition-all"
+                className="text-foreground underline transition-all"
               >
                 {t("signIn")}
               </Link>

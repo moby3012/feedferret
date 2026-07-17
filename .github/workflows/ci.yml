@@ -61,3 +61,57 @@ jobs:
           AUTH_SECRET: ci-test-secret-minimum-32-chars-long
           AUTH_URL: http://localhost:3000
           NEXTAUTH_URL: http://localhost:3000
+
+  accessibility:
+    name: Accessibility (axe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.14.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm run prisma:generate
+        env:
+          DATABASE_PROVIDER: sqlite
+          DATABASE_URL: file:./dev.db
+
+      - name: Push database schema
+        run: npx prisma db push --schema prisma/schema.generated.prisma --accept-data-loss
+        env:
+          DATABASE_PROVIDER: sqlite
+          DATABASE_URL: file:./dev.db
+
+      - name: Build
+        run: pnpm run build
+        env:
+          DATABASE_PROVIDER: sqlite
+          DATABASE_URL: file:./dev.db
+          AUTH_SECRET: ci-test-secret-minimum-32-chars-long
+          AUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: http://localhost:3000
+
+      - name: Install Playwright browsers
+        # Fresh runner, no ambient browser cache -- unlike local dev, where
+        # PLAYWRIGHT_BROWSERS_PATH points at a pre-installed Chromium.
+        run: npx playwright install --with-deps chromium
+
+      - name: Run accessibility E2E tests
+        run: pnpm run test:e2e
+        env:
+          DATABASE_PROVIDER: sqlite
+          DATABASE_URL: file:./dev.db
+          AUTH_SECRET: ci-test-secret-minimum-32-chars-long
+          AUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: http://localhost:3000
+          CI: true
