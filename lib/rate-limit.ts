@@ -113,6 +113,14 @@ export const RATE_LIMITS = {
     prefix: "url-discover",
   } satisfies RateLimitConfig,
 
+  // AI feed-config proposal: hits the user's BYOK AI provider and fetches a
+  // page, so keep it conservative — 10 req/min per user.
+  aiFeedConfig: {
+    limit: 10,
+    windowSecs: 60,
+    prefix: "ai-feed-config",
+  } satisfies RateLimitConfig,
+
   // Auth: sign-in attempts — 10 per 15 minutes per IP
   authSignIn: {
     limit: 10,

@@ -23,11 +23,13 @@ import {
 } from "@/lib/validation";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { fetchAndSuggestFeedCandidates, type SuggestedFieldConfig } from "@/lib/page-feed-suggest";
+import { buildXPathArticles } from "@/lib/feed-fetcher";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { applyRetentionPoliciesForUser } from "@/lib/retention";
 import { randomBytes } from "crypto";
 import { decryptIfValue } from "@/lib/crypto";
 import type { AiProvider } from "@/lib/ai-summary";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { getSanitizer } from "@/lib/sanitize-html";
 
@@ -497,6 +499,120 @@ export async function createFeedFromPage(input: {
     } catch (error) {
         logger.error("Failed to create feed from page:", error);
         return { success: false, error: "Could not create feed from that page" };
+    }
+}
+
+/**
+ * The AI "Let AI set this up" proposal action (Phase 2 M4, slice 2). Fetches
+ * the page once, hands it to `proposeFeedConfig` (which asks the user's BYOK
+ * AI provider for a scraping config and validates it through the real
+ * extraction engine), and returns a fully serializable result shaped so the
+ * UI can reuse the exact same candidate-card rendering as the heuristic
+ * `suggestFeedFromUrl` path. Never returns raw HTML.
+ */
+export async function proposeAiFeedConfig(url: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const urlError = validateFeedUrl(url);
+    if (urlError) return { success: false as const, error: urlError };
+
+    const rateLimit = checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.aiFeedConfig);
+    if (!rateLimit.success) {
+        return { success: false as const, error: "Too many AI requests. Wait a bit and try again." };
+    }
+
+    const user = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { aiProvider: true, aiApiKey: true, aiModel: true, aiOllamaBaseUrl: true },
+    });
+    if (!user?.aiProvider) {
+        return { success: false as const, error: "AI is not configured. Set up AI in Settings → AI Summaries." };
+    }
+
+    // Captured by the injected fetchHtml below so we can reuse the same fetched
+    // HTML to build a full item preview afterward without fetching the page twice.
+    let fetchedHtml: string | null = null;
+
+    try {
+        const { proposeFeedConfig } = await import("@/lib/ai-feed-config");
+        const { proposal, validation } = await proposeFeedConfig(
+            url,
+            {
+                provider: user.aiProvider as AiProvider,
+                apiKey: decryptIfValue(user.aiApiKey),
+                model: user.aiModel,
+                ollamaBaseUrl: user.aiOllamaBaseUrl,
+            },
+            {
+                fetchHtml: async (u: string) => {
+                    fetchedHtml = await fetchTextWithSsrfProtection(
+                        u,
+                        {},
+                        {
+                            allowInternal: await isTrustedFeedFetchingAllowed(),
+                            context: "AI feed config",
+                            maxBytes: 2 * 1024 * 1024,
+                            maxRedirects: 5,
+                            timeoutMs: 12_000,
+                        },
+                    );
+                    return fetchedHtml;
+                },
+            },
+        );
+
+        if (proposal.mode === "fulltext") {
+            return {
+                success: true as const,
+                mode: "fulltext" as const,
+                notes: proposal.notes ?? null,
+            };
+        }
+
+        if (!validation.ok) {
+            return { success: false as const, error: "The AI couldn't find a working configuration for this page" };
+        }
+
+        let preview: { title: string; link: string; publishedAt: string | null; imageUrl: string | null }[] = [];
+        if (fetchedHtml) {
+            try {
+                const xpath: Record<string, string> = {};
+                for (const [key, value] of Object.entries(proposal.itemConfig)) {
+                    if (value) xpath[key] = value;
+                }
+                const { articles } = buildXPathArticles(fetchedHtml, url, { xpath }, "text/html");
+                preview = articles.slice(0, PAGE_FEED_PREVIEW_CAP).map((article) => ({
+                    title: article.title,
+                    link: article.link,
+                    publishedAt: article.publishedAt ? article.publishedAt.toISOString() : null,
+                    imageUrl: article.imageUrl || null,
+                }));
+            } catch {
+                // Preview is a nice-to-have; the validated itemCount/sampleTitles
+                // already convey that the config works even if this re-derivation fails.
+            }
+        }
+
+        return {
+            success: true as const,
+            mode: "pagefeed" as const,
+            config: proposal.itemConfig,
+            itemCount: validation.itemCount ?? 0,
+            sampleTitles: validation.sampleTitles ?? [],
+            preview,
+            notes: proposal.notes ?? null,
+        };
+    } catch (error) {
+        logger.error("Failed to propose AI feed config:", error);
+        const message = error instanceof Error ? error.message : "";
+        if (message.includes("unreadable config")) {
+            return { success: false as const, error: "The AI returned a response we couldn't understand. Try again." };
+        }
+        if (/Fetch failed|private IP|localhost|only supports http|URL is invalid|too large|Too many redirects/i.test(message)) {
+            return { success: false as const, error: describePageFetchError(error) };
+        }
+        return { success: false as const, error: message || "The AI request failed. Try again." };
     }
 }
 
