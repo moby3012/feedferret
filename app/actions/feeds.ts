@@ -401,6 +401,8 @@ export async function updateFeed(feedId: string, data: {
     fullTextSelector?: string | null;
     fullTextRemoveSelectors?: string | null;
     autoFetchFullText?: boolean;
+    fullTextMode?: string;
+    defaultContentFormat?: string;
     fullTextConditions?: string | null;
     filtersActionRead?: string | null;
     // Scout Studio source options
@@ -431,6 +433,8 @@ export async function updateFeed(feedId: string, data: {
 
     const READER_FONT_SIZES = new Set(["small", "medium", "large", "xl"]);
     const READER_WIDTHS = new Set(["normal", "wide", "full"]);
+    const FULL_TEXT_MODES = new Set(["off", "auto", "selector"]);
+    const CONTENT_FORMATS = new Set(["html", "markdown"]);
 
     await db.feed.update({
         where: { id: feedId, userId: session.user.id },
@@ -448,6 +452,12 @@ export async function updateFeed(feedId: string, data: {
             } : {}),
             ...(data.openOriginalOverride !== undefined ? {
                 openOriginalOverride: data.openOriginalOverride === null ? null : !!data.openOriginalOverride,
+            } : {}),
+            ...(data.fullTextMode !== undefined ? {
+                fullTextMode: FULL_TEXT_MODES.has(data.fullTextMode) ? data.fullTextMode : "off",
+            } : {}),
+            ...(data.defaultContentFormat !== undefined ? {
+                defaultContentFormat: CONTENT_FORMATS.has(data.defaultContentFormat) ? data.defaultContentFormat : "html",
             } : {}),
         },
     });

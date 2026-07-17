@@ -19,6 +19,7 @@ export interface Article {
   link: string
   excerpt: string
   content: string
+  contentFormat?: "html" | "markdown"
   author: string
   publishedAt: string
   publishedAtRaw?: number

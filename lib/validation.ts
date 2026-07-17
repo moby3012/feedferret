@@ -45,6 +45,8 @@ export const UpdateFeedSchema = z.object({
   readerFontSizeOverride: z.enum(["small", "medium", "large", "xl"]).nullable().optional(),
   readerWidthOverride: z.enum(["normal", "wide", "full"]).nullable().optional(),
   openOriginalOverride: z.boolean().nullable().optional(),
+  fullTextMode: z.enum(["off", "auto", "selector"]).optional(),
+  defaultContentFormat: z.enum(["html", "markdown"]).optional(),
 });
 
 export const RegisterUserSchema = z.object({

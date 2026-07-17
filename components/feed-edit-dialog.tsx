@@ -37,6 +37,7 @@ import {
 import { toast } from "sonner";
 import { CheckCircle2, Eye, Loader2, Sparkles } from "lucide-react";
 import { useUpdateFeed, usePreviewFeedExtraction } from "@/hooks/use-rss-data";
+import { resolveFullTextMode, type FullTextMode } from "@/lib/full-text-mode";
 
 interface FeedEditDialogProps {
   feed: {
@@ -53,6 +54,8 @@ interface FeedEditDialogProps {
     fullTextSelector?: string | null;
     fullTextRemoveSelectors?: string | null;
     autoFetchFullText?: boolean;
+    fullTextMode?: string | null;
+    defaultContentFormat?: string | null;
     sourceType?: string | null;
     priority?: string | null;
     unicityCriteria?: string | null;
@@ -89,7 +92,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const [fullTextSelector, setFullTextSelector] = useState("");
   const [fullTextRemoveSelectors, setFullTextRemoveSelectors] = useState("");
   const [fullTextConditions, setFullTextConditions] = useState("");
-  const [autoFetchFullText, setAutoFetchFullText] = useState(false);
+  const [fullTextMode, setFullTextMode] = useState<FullTextMode>("off");
+  const [defaultContentFormat, setDefaultContentFormat] = useState<"html" | "markdown">("html");
   const [sourceType, setSourceType] = useState("rss");
   const [priority, setPriority] = useState("main");
   const [unicityCriteria, setUnicityCriteria] = useState("id");
@@ -138,7 +142,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     fullTextSelector,
     fullTextRemoveSelectors,
     fullTextConditions,
-    autoFetchFullText,
+    fullTextMode,
+    defaultContentFormat,
     sourceType,
     priority,
     unicityCriteria,
@@ -169,7 +174,12 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     setFullTextSelector(feed.fullTextSelector || "");
     setFullTextRemoveSelectors(feed.fullTextRemoveSelectors || "");
     setFullTextConditions(feed.fullTextConditions || "");
-    setAutoFetchFullText(feed.autoFetchFullText ?? false);
+    // Legacy feeds may only have `autoFetchFullText: true` set, with
+    // `fullTextMode` still at its "off" default — resolveFullTextMode()
+    // is the single source of truth for reconciling the two, so the
+    // dialog shows "Custom selector" for those feeds too.
+    setFullTextMode(resolveFullTextMode(feed));
+    setDefaultContentFormat(feed.defaultContentFormat === "markdown" ? "markdown" : "html");
     setSourceType(feed.sourceType || "rss");
     setPriority(feed.priority || "main");
     setUnicityCriteria(feed.unicityCriteria || "id");
@@ -222,7 +232,12 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           fullTextSelector: fullTextSelector.trim() || null,
           fullTextRemoveSelectors: fullTextRemoveSelectors.trim() || null,
           fullTextConditions: fullTextConditions.trim() || null,
-          autoFetchFullText,
+          fullTextMode,
+          // Keep the legacy boolean in lockstep with the new mode so the two
+          // controls never disagree (resolveFullTextMode() otherwise falls
+          // back to this flag for feeds saved before fullTextMode existed).
+          autoFetchFullText: fullTextMode === "selector",
+          defaultContentFormat,
           sourceType,
           priority,
           unicityCriteria: unicityCriteria.trim() || "id",
@@ -555,12 +570,19 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-2xl ui-control-surface border px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium">{t("fulltext.autoFetchFullText")}</p>
-                  <p className="text-xs text-muted-foreground">{t("fulltext.fetchesOriginalPage")}</p>
-                </div>
-                <Switch checked={autoFetchFullText} onCheckedChange={setAutoFetchFullText} />
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">{t("fulltext.fullTextModeLabel")}</Label>
+                <Select value={fullTextMode} onValueChange={(value) => setFullTextMode(value as FullTextMode)}>
+                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    <SelectItem value="off">{t("fulltext.fullTextModeOff")}</SelectItem>
+                    <SelectItem value="auto">{t("fulltext.fullTextModeAuto")}</SelectItem>
+                    <SelectItem value="selector">{t("fulltext.fullTextModeSelector")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t("fulltext.fullTextModeDescription")}</p>
               </div>
 
               <div className="space-y-1.5">
@@ -571,6 +593,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   placeholder={t("fulltext.selectorPlaceholder")}
                   className="rounded-xl h-10 border-border/70 bg-background/70 font-mono text-sm"
                 />
+                <p className="text-xs text-muted-foreground">{t("fulltext.selectorAppliesHint")}</p>
               </div>
 
               <div className="space-y-1.5">
@@ -581,6 +604,20 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   placeholder={t("fulltext.removePlaceholder")}
                   className="rounded-xl h-10 border-border/70 bg-background/70 font-mono text-sm"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">{t("fulltext.contentFormatLabel")}</Label>
+                <Select value={defaultContentFormat} onValueChange={(value) => setDefaultContentFormat(value as "html" | "markdown")}>
+                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl">
+                    <SelectItem value="html">{t("fulltext.contentFormatHtml")}</SelectItem>
+                    <SelectItem value="markdown">{t("fulltext.contentFormatMarkdown")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t("fulltext.contentFormatDescription")}</p>
               </div>
 
               <div className="rounded-2xl ui-control-surface border p-4 space-y-3">

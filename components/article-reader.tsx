@@ -1,8 +1,10 @@
 "use client";
 
 import { useTranslations, useFormatter } from "next-intl";
-import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import Image from "next/image";
+import MarkdownIt from "markdown-it";
+import DOMPurify from "isomorphic-dompurify";
 import { Article } from "@/lib/rss-data";
 import { useAiSettings, useSummarizeArticle } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,7 @@ import {
   Circle,
   Copy,
   FileText,
+  Code2,
   Sparkles,
   Tag,
   MoreHorizontal,
@@ -47,6 +50,16 @@ function getTurndownService() {
     turndownService.use(gfm);
   }
   return turndownService;
+}
+
+// Lazily-created singleton, mirroring getTurndownService() above: only
+// instantiated once markdown-format content actually needs rendering.
+let markdownItService: MarkdownIt | null = null;
+function getMarkdownItService() {
+  if (!markdownItService) {
+    markdownItService = new MarkdownIt({ html: false, linkify: true, typographer: true });
+  }
+  return markdownItService;
 }
 
 interface ArticleReaderProps {
@@ -167,6 +180,36 @@ export function ArticleReader({
     setLocalSummary(null);
     setSummarizeFailed(false);
   }, [article?.id]);
+
+  // Desktop-only toggle between the rendered article body and its raw
+  // Markdown source. Resets to "rendered" whenever the article changes so
+  // the previous article's view choice never leaks into the next one.
+  const [bodyViewMode, setBodyViewMode] = useState<"rendered" | "source">("rendered");
+
+  useEffect(() => {
+    setBodyViewMode("rendered");
+  }, [article?.id]);
+
+  // Content is stored either as sanitized HTML or as Markdown (M1); render
+  // Markdown to HTML client-side and sanitize the result before injecting it.
+  const renderedHtml = useMemo(() => {
+    if (!article?.content) return "";
+    if (article.contentFormat === "markdown") {
+      const rawHtml = getMarkdownItService().render(article.content);
+      return DOMPurify.sanitize(rawHtml, { ADD_ATTR: ["target", "rel"] });
+    }
+    return article.content; // already-sanitized HTML (legacy + html mode)
+  }, [article]);
+
+  // Markdown source view: reuse the stored markdown directly when the
+  // article is already in markdown format, otherwise derive it on the fly
+  // from the sanitized HTML via the same Turndown instance "Copy as Markdown"
+  // uses, so there's only one HTML→Markdown conversion path in this file.
+  const markdownSource = useMemo(() => {
+    if (!article?.content) return "";
+    if (article.contentFormat === "markdown") return article.content;
+    return getTurndownService().turndown(article.content);
+  }, [article]);
 
   useEffect(() => {
     if (!article?.id) return;
@@ -311,14 +354,8 @@ export function ArticleReader({
     if (article.link) {
       lines.push("", `[${article.link}](${article.link})`);
     }
-    const hasContent = Boolean(article.content?.trim());
-    if (hasContent) {
-      // Interim: converts the already-sanitized article HTML on the fly.
-      // Once M1's markdown pipeline lands (Article.contentFormat), this
-      // should reuse the stored markdown directly instead of re-deriving
-      // it here via turndown.
-      const markdown = getTurndownService().turndown(article.content);
-      lines.push("", markdown);
+    if (markdownSource.trim()) {
+      lines.push("", markdownSource);
     }
     await navigator.clipboard.writeText(lines.join("\n"));
     toast.success(t("copiedAsMarkdown"));
@@ -465,6 +502,20 @@ export function ArticleReader({
             title={t("copyAsMarkdown")}
           >
             <FileText className="w-4 h-4 text-muted-foreground" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
+              bodyViewMode === "source" && "bg-accent",
+            )}
+            onClick={() => setBodyViewMode((mode) => (mode === "source" ? "rendered" : "source"))}
+            aria-label={bodyViewMode === "source" ? t("viewRendered") : t("viewMarkdownSource")}
+            aria-pressed={bodyViewMode === "source"}
+            title={bodyViewMode === "source" ? t("viewRendered") : t("viewMarkdownSource")}
+          >
+            <Code2 className={cn("w-4 h-4", bodyViewMode === "source" ? "text-accent-foreground" : "text-muted-foreground")} />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -635,10 +686,16 @@ export function ArticleReader({
 
           {/* Article Body */}
           {article.content && article.content.trim().length > 0 ? (
-            <div
-              className={`animate-fade-in-up animation-delay-200 article-content min-w-0 max-w-full overflow-hidden ${readerFontSizeClass[readerFontSize] ?? readerFontSizeClass.medium}`}
-              dangerouslySetInnerHTML={{ __html: article.content }}
-            />
+            bodyViewMode === "source" ? (
+              <pre className="animate-fade-in-up animation-delay-200 whitespace-pre-wrap break-words rounded-2xl border border-border/70 bg-card/70 p-5 font-mono text-sm leading-relaxed min-w-0 max-w-full overflow-hidden">
+                {markdownSource}
+              </pre>
+            ) : (
+              <div
+                className={`animate-fade-in-up animation-delay-200 article-content min-w-0 max-w-full overflow-hidden ${readerFontSizeClass[readerFontSize] ?? readerFontSizeClass.medium}`}
+                dangerouslySetInnerHTML={{ __html: renderedHtml }}
+              />
+            )
           ) : (
             <div className="animate-fade-in-up animation-delay-200 rounded-3xl border border-border/70 bg-card/70 p-6 text-center">
               <p className="text-sm font-medium text-foreground mb-1">{t("noContent")}</p>
