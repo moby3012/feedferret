@@ -11,6 +11,8 @@ const nextConfig = {
   serverExternalPackages: [
     "jsdom",
     "isomorphic-dompurify",
+    "defuddle",
+    "@mozilla/readability",
     "@prisma/client",
     "@prisma/adapter-better-sqlite3",
     "@prisma/adapter-pg",
