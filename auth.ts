@@ -8,12 +8,12 @@ import bcrypt from "bcryptjs";
 import { verifyTotpToken } from "@/lib/totp";
 import { sendSignInEmail } from "@/lib/mail";
 
-const isBuild =
-  process.env.NEXT_PHASE === "phase-production-build" ||
-  (process.env.NODE_ENV === "production" && !process.env.AUTH_SECRET);
+const isBuild = process.env.NEXT_PHASE === "phase-production-build";
 
 if (isBuild && !process.env.AUTH_SECRET) {
   process.env.AUTH_SECRET = "build-time-secret-only";
+} else if (!isBuild && process.env.NODE_ENV === "production" && !process.env.AUTH_SECRET) {
+  throw new Error("AUTH_SECRET must be set in production — refusing to start with an insecure fallback secret.");
 }
 
 const oauthProviders = [...((authConfig.providers ?? []) as any[])];

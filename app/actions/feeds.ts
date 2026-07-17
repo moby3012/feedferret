@@ -1853,7 +1853,7 @@ export async function summarizeArticle(articleId: string): Promise<{ summary: st
     });
 
     await db.article.update({
-        where: { id: articleId },
+        where: { id: articleId, userId: session.user.id },
         data: { aiSummary: summary, aiSummarizedAt: new Date() },
     });
 

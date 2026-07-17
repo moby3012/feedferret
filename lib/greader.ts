@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { renderMarkdownToHtml } from "@/lib/markdown-render";
 
 export const GREADER_READING_LIST = "user/-/state/com.google/reading-list";
 export const GREADER_READ = "user/-/state/com.google/read";
@@ -11,7 +12,12 @@ export const GREADER_LIKE = "user/-/state/com.google/like";
 export const GREADER_LABEL_PREFIX = "user/-/label/";
 
 function secret() {
-  return process.env.AUTH_SECRET || "feedferret-dev-secret";
+  const value = process.env.AUTH_SECRET;
+  if (value) return value;
+  if (process.env.NEXT_PHASE === "phase-production-build") {
+    return "build-time-secret-only";
+  }
+  throw new Error("AUTH_SECRET must be set for Google Reader API tokens.");
 }
 
 export function createGReaderToken(userId: string) {
@@ -337,8 +343,12 @@ export async function countUnreadByGReaderTag(userId: string) {
   return rows;
 }
 
-export function toGReaderArticle(article: any) {
+export async function toGReaderArticle(article: any) {
   const timestampUsec = new Date(article.publishedAt).getTime() * 1000;
+  const content =
+    article.contentFormat === "markdown" && article.content
+      ? await renderMarkdownToHtml(article.content)
+      : article.content;
   return {
     id: greaderItemId(article.id),
     crawlTimeMsec: String(new Date(article.createdAt).getTime()),
@@ -362,7 +372,7 @@ export function toGReaderArticle(article: any) {
     },
     author: article.author || "",
     summary: { content: article.excerpt || "" },
-    content: { content: article.content || article.excerpt || "" },
+    content: { content: content || article.excerpt || "" },
   };
 }
 

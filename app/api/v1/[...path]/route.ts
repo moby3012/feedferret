@@ -12,13 +12,18 @@ import { generateOpml, parseOpml, scraperConfigFromOutline, httpOptionsFromOutli
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { validateFeedUrl, validateOpml } from "@/lib/validation";
 import { logger } from "@/lib/logger";
+import { renderMarkdownToHtml } from "@/lib/markdown-render";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
   labels: { include: { label: true } },
 } as const;
 
-function articlePayload(article: any) {
+async function articlePayload(article: any) {
+  const content =
+    article.contentFormat === "markdown" && article.content
+      ? await renderMarkdownToHtml(article.content)
+      : article.content;
   return {
     id: article.id,
     feedId: article.feedId,
@@ -26,7 +31,7 @@ function articlePayload(article: any) {
     link: article.link,
     externalId: article.externalId,
     excerpt: article.excerpt,
-    content: article.content,
+    content,
     author: article.author,
     publishedAt: article.publishedAt,
     imageUrl: article.imageUrl,
@@ -128,7 +133,7 @@ async function listArticles(user: ApiUser, request: Request) {
   ]);
 
   return NextResponse.json({
-    items: items.map(articlePayload),
+    items: await Promise.all(items.map(articlePayload)),
     pagination: { limit, offset, total, nextOffset: offset + items.length < total ? offset + items.length : null },
   });
 }
@@ -136,7 +141,7 @@ async function listArticles(user: ApiUser, request: Request) {
 async function getArticle(user: ApiUser, articleId: string) {
   const article = await db.article.findFirst({ where: { id: articleId, userId: user.id }, include: ARTICLE_INCLUDE });
   if (!article) return apiError("Article not found", 404);
-  return NextResponse.json(articlePayload(article));
+  return NextResponse.json(await articlePayload(article));
 }
 
 async function patchArticle(user: ApiUser, articleId: string, request: Request) {
@@ -167,7 +172,7 @@ async function patchArticle(user: ApiUser, articleId: string, request: Request) 
   });
 
   const updated = await db.article.findFirst({ where: { id: articleId, userId: user.id }, include: ARTICLE_INCLUDE });
-  return NextResponse.json(articlePayload(updated));
+  return NextResponse.json(await articlePayload(updated));
 }
 
 async function batchArticles(user: ApiUser, request: Request) {

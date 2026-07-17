@@ -48,6 +48,16 @@ export async function getSanitizer() {
                 data.attrValue = stripWidthFromStyle(data.attrValue);
             }
         });
+
+        // Reverse-tabnabbing protection: any element that keeps a `target`
+        // attribute (e.g. links opened in a new tab) must also carry
+        // rel="noopener noreferrer", regardless of what the source HTML set.
+        DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+            if (node.tagName === "A" && node.getAttribute("target")) {
+                node.setAttribute("rel", "noopener noreferrer");
+            }
+        });
+
         hookRegistered = true;
     }
 

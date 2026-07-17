@@ -18,7 +18,7 @@ import Defuddle from "defuddle";
 import { Readability } from "@mozilla/readability";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { htmlToMarkdown } from "@/lib/html-to-markdown";
-import { fetchTextWithSsrfProtection } from "@/lib/ssrf";
+import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 
 export type ExtractionResult = {
   html: string | null; // sanitized, cleaned article HTML (null if extraction failed)
@@ -156,6 +156,16 @@ export async function extractReadableContent(rawHtml: string, url: string): Prom
  * (including SSRF blocks) are propagated to the caller, not swallowed.
  */
 export async function fetchAndExtractReadable(url: string): Promise<ExtractionResult> {
-  const html = await fetchTextWithSsrfProtection(url);
+  const html = await fetchTextWithSsrfProtection(
+    url,
+    {},
+    {
+      allowInternal: await isTrustedFeedFetchingAllowed(),
+      context: "Full-text",
+      maxBytes: 2 * 1024 * 1024,
+      maxRedirects: 5,
+      timeoutMs: 12_000,
+    },
+  );
   return extractReadableContent(html, url);
 }

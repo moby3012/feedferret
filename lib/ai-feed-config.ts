@@ -16,7 +16,7 @@ import { JSDOM } from "jsdom";
 import { type AiConfig, runAiPrompt } from "./ai-summary";
 import { buildXPathArticles } from "./feed-fetcher";
 import { getSanitizer } from "./sanitize-html";
-import { fetchTextWithSsrfProtection } from "./ssrf";
+import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import type { SuggestedFieldConfig } from "./page-feed-suggest";
 
 export type { SuggestedFieldConfig };
@@ -212,7 +212,21 @@ export async function proposeFeedConfig(
   aiConfig: AiConfig,
   deps?: { fetchHtml?: (u: string) => Promise<string>; runAi?: (prompt: string) => Promise<string> },
 ): Promise<AiFeedConfigResult> {
-  const html = await (deps?.fetchHtml ?? fetchTextWithSsrfProtection)(url);
+  const fetchHtml =
+    deps?.fetchHtml ??
+    (async (u: string) =>
+      fetchTextWithSsrfProtection(
+        u,
+        {},
+        {
+          allowInternal: await isTrustedFeedFetchingAllowed(),
+          context: "AI feed config",
+          maxBytes: 2 * 1024 * 1024,
+          maxRedirects: 5,
+          timeoutMs: 12_000,
+        },
+      ));
+  const html = await fetchHtml(url);
   const prompt = buildFeedConfigPrompt(html, url);
   const raw = await (deps?.runAi ?? ((p: string) => runAiPrompt(p, aiConfig, 800)))(prompt);
 
