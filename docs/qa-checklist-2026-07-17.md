@@ -104,11 +104,19 @@ Everything merged to `main` today, with a manual test checklist. Tick items as y
 
 ---
 
-## 5. M4 — AI config proposal (⚙️ engine only so far — nothing to click yet)
+## 5. M4 — "✨ Let AI set this up" (now clickable — slice 2, PR #155)
 
-Slice 1 (PR #149) landed the **backend engine** (`lib/ai-feed-config.ts`): given a URL + your AI key it asks the model to propose a scraping config, then **validates that proposal through the real extraction engine** before it would ever be shown/saved. It is covered by unit tests and has **no UI yet** — the "✨ Let AI set this up" button is **slice 2**, not built.
+Slice 1 (#149) landed the validated backend engine; slice 2 (#155) adds the button. **Requires a configured AI provider** (Settings → AI Summaries — any BYOK provider, or Ollama without a key).
 
-- [ ] Nothing to manually test in this slice — it's engine + tests only. (Listed here so the checklist reflects reality: M4 is in progress, UI pending.)
+- [ ] **Without** an AI provider configured: Add feed → "From web page" shows only "Find items" — no AI button (correct).
+- [ ] **With** AI configured: a secondary **"✨ Let AI set this up"** button appears next to "Find items".
+- [ ] Paste a static listing page (blog index) → ✨ button → spinner → a candidate card appears with an **"✨ AI" badge**, item count, sample titles and the model's one-line note → adjust name → **Create feed** → feed appears with scraped articles (same create path as the heuristic flow).
+- [ ] Paste a **single-article URL** → ✨ button → info box "This looks like a single article, not a listing" pointing at the site's own feed + automatic full-text (no crash, no bogus candidate).
+- [ ] Paste a bot-blocked page (e.g. the XenForo forum URL) → clear "site blocked automated access" error.
+- [ ] Hammer the ✨ button repeatedly (>10× within a minute) → friendly rate-limit message, no error crash.
+- [ ] The AI note text renders as plain text (no styled/HTML content even if the page tried to inject some).
+
+Still open in M4: **T5** — the same AI proposal for truncated-feed full-text selectors inside feed settings (next slice).
 
 ---
 
