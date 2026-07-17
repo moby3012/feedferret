@@ -60,8 +60,21 @@ function splitHeaderLines(value?: unknown) {
   return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
-function htmlText(value: unknown) {
+/**
+ * xml2js (used by rss-parser) represents an XML element that has BOTH
+ * attributes and text content — e.g. `<category domain="...">Foo</category>`
+ * — as `{ _: "Foo", $: { domain: "..." } }`, and that object has a `null`
+ * prototype. `String()`/template-literal coercion on a null-prototype object
+ * throws "Cannot convert object to primitive value" (no inherited
+ * `toString`/`valueOf`/`Symbol.toPrimitive`), which previously crashed the
+ * whole feed sync. Extract the text node explicitly instead of coercing.
+ */
+export function htmlText(value: unknown) {
   if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    const text = (value as { _?: unknown })._;
+    return typeof text === "string" ? text.trim() : "";
+  }
   return String(value).trim();
 }
 
@@ -82,7 +95,7 @@ function dotGet(input: unknown, path?: string): unknown {
 
 function dateFrom(value: unknown, format?: string) {
   if (!value) return null;
-  const raw = String(value).trim();
+  const raw = htmlText(value);
   if (!raw) return null;
   if (format === "U") {
     const n = Number(raw);
@@ -97,7 +110,7 @@ function firstString(value: unknown) {
   return htmlText(value);
 }
 
-function categoriesFrom(value: unknown) {
+export function categoriesFrom(value: unknown) {
   if (Array.isArray(value)) return value.map(htmlText).filter(Boolean);
   const raw = htmlText(value);
   return raw ? raw.split(",").map((item) => item.trim()).filter(Boolean) : [];
@@ -277,16 +290,23 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
     etag: result.etag,
     lastModifiedHeader: result.lastModified,
     articles: parsed.items.map((item: any) => {
-      const content = item.content || item["content:encoded"] || item.summary || item.contentSnippet || "";
+      // Any of these RSS/Atom fields can come back as an xml2js mixed-content
+      // node (`{ _: text, $: attrs }`, null-prototype) rather than a plain
+      // string whenever the source feed puts an attribute on that element —
+      // routing them through `htmlText` avoids the "Cannot convert object to
+      // primitive value" crash that raw coercion (String()/`+`/`new Date()`
+      // on such a node) throws.
+      const content = htmlText(item.content) || htmlText(item["content:encoded"]) || htmlText(item.summary) || htmlText(item.contentSnippet);
+      const pubDate = htmlText(item.pubDate) || htmlText(item.isoDate);
       return {
-        title: item.title || "Untitled",
-        link: item.link || "",
+        title: htmlText(item.title) || "Untitled",
+        link: htmlText(item.link),
         content,
-        summary: item.summary || item.contentSnippet || null,
-        author: item.creator || item.author || null,
-        publishedAt: item.pubDate ? new Date(item.pubDate) : item.isoDate ? new Date(item.isoDate) : null,
+        summary: htmlText(item.summary) || htmlText(item.contentSnippet) || null,
+        author: htmlText(item.creator) || htmlText(item.author) || null,
+        publishedAt: pubDate ? dateFrom(pubDate) : null,
         imageUrl: extractImageFromHtml(content) || item.enclosure?.url || item["media:content"]?.$?.url || null,
-        externalId: item.guid || item.id || item.link || null,
+        externalId: htmlText(item.guid) || htmlText(item.id) || htmlText(item.link) || null,
         categories: categoriesFrom(item.categories),
       };
     }),

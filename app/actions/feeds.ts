@@ -374,6 +374,41 @@ export async function addFeed(url: string, categoryId?: string) {
 
 const PAGE_FEED_PREVIEW_CAP = 8;
 
+/**
+ * Turns a raw fetch/SSRF error into a message that tells the user WHY we
+ * couldn't read the page, instead of a one-size-fits-all "check the URL".
+ * SSRF-guard errors (private IP, localhost, invalid scheme, too large, too
+ * many redirects) are already clear, safe, self-authored text — pass those
+ * through unchanged. An HTTP status failure gets a status-specific message,
+ * since 401/403/429 almost always means the site's bot/anti-scraping
+ * protection (e.g. a Cloudflare challenge) rejected our request, which is a
+ * very different situation from a broken URL and worth telling users about.
+ */
+function describePageFetchError(error: unknown): string {
+    const message = error instanceof Error ? error.message : "";
+
+    if (/private IP|localhost|only supports http|URL is invalid|too large|Too many redirects/i.test(message)) {
+        return message;
+    }
+
+    const statusMatch = message.match(/Fetch failed: (\d+)/);
+    if (statusMatch) {
+        const status = Number(statusMatch[1]);
+        if (status === 401 || status === 403) {
+            return "This site blocked automated access (it may use bot protection like Cloudflare). We can't read pages protected this way yet.";
+        }
+        if (status === 404) {
+            return "That page doesn't exist (404). Check the URL and try again.";
+        }
+        if (status === 429) {
+            return "This site is rate-limiting requests. Try again in a bit.";
+        }
+        return `The site returned an error (HTTP ${status}). Check the URL and try again.`;
+    }
+
+    return "Could not read that page. Check the URL and try again.";
+}
+
 export async function suggestFeedFromUrl(url: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -400,7 +435,7 @@ export async function suggestFeedFromUrl(url: string) {
         };
     } catch (error) {
         logger.error("Failed to suggest feed candidates from page:", error);
-        return { success: false, error: "Could not read that page. Check the URL and try again." };
+        return { success: false, error: describePageFetchError(error) };
     }
 }
 

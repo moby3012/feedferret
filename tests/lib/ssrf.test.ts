@@ -16,6 +16,8 @@ describe("isPrivateIp — IPv4 private ranges", () => {
   it("blocks 0.0.0.0", () => expect(isPrivateIp("0.0.0.0")).toBe(true));
   it("blocks multicast 224.0.0.1", () => expect(isPrivateIp("224.0.0.1")).toBe(true));
   it("blocks CGNAT 100.64.0.1", () => expect(isPrivateIp("100.64.0.1")).toBe(true));
+  it("blocks TEST-NET-1 192.0.2.1 (RFC 5737)", () => expect(isPrivateIp("192.0.2.1")).toBe(true));
+  it("blocks TEST-NET-1 192.0.2.255", () => expect(isPrivateIp("192.0.2.255")).toBe(true));
 });
 
 describe("isPrivateIp — IPv4 public ranges", () => {
@@ -24,6 +26,14 @@ describe("isPrivateIp — IPv4 public ranges", () => {
   it("allows 93.184.216.34 (example.com)", () => expect(isPrivateIp("93.184.216.34")).toBe(false));
   it("allows 172.15.0.1 (just below RFC 1918 range)", () => expect(isPrivateIp("172.15.255.255")).toBe(false));
   it("allows 172.32.0.1 (just above RFC 1918 range)", () => expect(isPrivateIp("172.32.0.0")).toBe(false));
+  // Regression: a prior bug blocked all of 192.0.0.0/16 (matching on the
+  // second octet only) instead of just 192.0.2.0/24 (TEST-NET-1), which
+  // wrongly rejected real public feeds — e.g. a WordPress.com-hosted blog
+  // resolving into Automattic's 192.0.78.0/23 allocation.
+  it("allows 192.0.78.25 (WordPress.com/Automattic, not TEST-NET-1)", () =>
+    expect(isPrivateIp("192.0.78.25")).toBe(false));
+  it("allows 192.0.1.1 (just below TEST-NET-1)", () => expect(isPrivateIp("192.0.1.1")).toBe(false));
+  it("allows 192.0.3.1 (just above TEST-NET-1)", () => expect(isPrivateIp("192.0.3.1")).toBe(false));
 });
 
 // ── isPrivateIp — IPv6 ────────────────────────────────────────────────────────
