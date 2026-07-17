@@ -848,9 +848,14 @@ export default function RSSReaderPage() {
       </div>
       )}
 
-      {/* Mobile feed picker: bottom drawer keeps navigation in thumb reach. */}
+      {/* Mobile feed picker: bottom drawer keeps navigation in thumb reach.
+          modal={false}: the sidebar hosts dialogs (Add feed, feed settings) whose
+          content portals to <body>, i.e. outside this drawer. A modal vaul drawer
+          traps focus inside itself and yanks it back off those dialogs' text
+          inputs — on iOS that shows the focus ring but suppresses the keyboard.
+          Non-modal disables that focus trap so nested-dialog inputs work. */}
       {isMobileLayout && (
-      <Drawer open={sidebarOpen} onOpenChange={setSidebarOpen} direction="bottom">
+      <Drawer open={sidebarOpen} onOpenChange={setSidebarOpen} direction="bottom" modal={false}>
         <DrawerContent className="h-[86dvh] rounded-t-[2rem] border-border/70 p-0 lg:hidden">
           <RssSidebar
             feeds={sidebarFeeds}
