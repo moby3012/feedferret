@@ -15,7 +15,8 @@ v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FT
 
 ---
 
-## PHASE 0 — Loose ends & quick wins *(do first; small, high-ratio)*
+## PHASE 0 — Loose ends & quick wins ✅ *(COMPLETE 2026-07-17 — PRs #135–#139)*
+> All items done. 0.6's only remaining work (the swipe/gesture trio) was consolidated into **Phase 1** as a single deliberate gesture/animation rework (see below).
 
 | # | Item | Effort | Status | Source |
 |---|---|---|---|---|
@@ -37,7 +38,8 @@ Source: [`releases/v1.2-theming.md`](releases/v1.2-theming.md). Effort **L**.
 - ⬜ **Per-zone color** (sidebar/list/reader/header), HSL sliders + hex, live preview, **inline WCAG contrast checker**, reset-to-preset.
 - ⬜ **Reader typography** (merges part of **F2**): font family incl. OpenDyslexic + Atkinson Hyperlegible, size/line-height/measure/letter-spacing sliders, L/justify align.
 - ⬜ **Layout density** modes + **Zen mode (Z key)** (from marketing site).
-- ⬜ Bundles a11y **A-4/A-5** (see 0.2) + axe CI.
+- ⬜ **Gesture & animation system consolidation** (the deferred swipe trio, gathered here per `deferred.md`'s "full animation system audit"): finger-synced swipe animations (pointer-tracking + spring physics), swipe-down-marks-all-read **with** pull-to-refresh disambiguation + `hideFromAllFeeds` exclusion, desktop pointer-drag feed nav (distinguishable from select/scroll/click). Treat as one deliberate rework of the overloaded touch-gesture layer in `article-list.tsx`, not piecemeal quick wins. Effort **L**, higher risk.
+- 🔄 a11y **A-4/A-5**: axe CI + public-page contrast gate **shipped** (0.2); remaining = authenticated-page axe coverage (needs seeded test user) + 200%-zoom pass.
 
 ---
 
