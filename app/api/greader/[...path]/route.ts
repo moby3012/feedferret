@@ -427,7 +427,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
         title: getGReaderStreamTitle(streamId),
         updated: Math.floor(Date.now() / 1000),
         continuation,
-        items: articles.map(toGReaderArticle),
+        items: await Promise.all(articles.map(toGReaderArticle)),
       });
     }
 
@@ -501,7 +501,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
       return NextResponse.json({
         id: "user/-/state/com.google/reading-list",
         updated: Math.floor(Date.now() / 1000),
-        items: articles.map(toGReaderArticle),
+        items: await Promise.all(articles.map(toGReaderArticle)),
       });
     }
 

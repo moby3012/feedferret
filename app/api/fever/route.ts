@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { checkRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
+import { renderMarkdownToHtml } from "@/lib/markdown-render";
 
 type FeverUser = { id: string; email: string | null };
 
@@ -100,13 +101,13 @@ async function getItems(
   } else if (sinceId) {
     // Use createdAt cursor: since_id is an id string, compare by createdAt
     const pivot = await db.article.findFirst({
-      where: { id: sinceId },
+      where: { id: sinceId, userId },
       select: { createdAt: true },
     });
     if (pivot) where.createdAt = { gt: pivot.createdAt };
   } else if (maxId) {
     const pivot = await db.article.findFirst({
-      where: { id: maxId },
+      where: { id: maxId, userId },
       select: { createdAt: true },
     });
     if (pivot) where.createdAt = { lt: pivot.createdAt };
@@ -122,6 +123,7 @@ async function getItems(
       title: true,
       author: true,
       content: true,
+      contentFormat: true,
       link: true,
       isStarred: true,
       isRead: true,
@@ -130,17 +132,19 @@ async function getItems(
     },
   });
 
-  return articles.map((a: { id: string; feedId: string; title: string | null; author: string | null; content: string | null; link: string | null; isStarred: boolean; isRead: boolean; publishedAt: Date }) => ({
-    id: a.id,
-    feed_id: a.feedId,
-    title: a.title,
-    author: a.author || "",
-    html: a.content,
-    url: a.link,
-    is_saved: a.isStarred ? 1 : 0,
-    is_read: a.isRead ? 1 : 0,
-    created_on_time: Math.floor(a.publishedAt.getTime() / 1000),
-  }));
+  return Promise.all(
+    articles.map(async (a: { id: string; feedId: string; title: string | null; author: string | null; content: string | null; contentFormat: string; link: string | null; isStarred: boolean; isRead: boolean; publishedAt: Date }) => ({
+      id: a.id,
+      feed_id: a.feedId,
+      title: a.title,
+      author: a.author || "",
+      html: a.contentFormat === "markdown" && a.content ? await renderMarkdownToHtml(a.content) : a.content,
+      url: a.link,
+      is_saved: a.isStarred ? 1 : 0,
+      is_read: a.isRead ? 1 : 0,
+      created_on_time: Math.floor(a.publishedAt.getTime() / 1000),
+    })),
+  );
 }
 
 async function getUnreadIds(userId: string): Promise<string> {

@@ -12,7 +12,7 @@
 
 import { JSDOM } from "jsdom";
 import { buildXPathArticles, type FetchedFeedArticle } from "./feed-fetcher";
-import { fetchTextWithSsrfProtection } from "./ssrf";
+import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 
 export type SuggestedFieldConfig = {
   xPathItem: string;
@@ -46,7 +46,7 @@ function xpathLiteral(value: string): string {
 
 /** XPath predicate that matches an element carrying `token` in its class list. */
 function hasClassPredicate(token: string): string {
-  return `contains(concat(' ', normalize-space(@class), ' '), ' ${token} ')`;
+  return `contains(concat(' ', normalize-space(@class), ' '), ${xpathLiteral(` ${token} `)})`;
 }
 
 function classTokens(el: Element): string[] {
@@ -238,6 +238,16 @@ export function suggestFeedCandidates(rawHtml: string, url: string): FeedCandida
 
 /** SSRF-safe wrapper: fetch the URL, then suggest candidates. Fetch errors propagate. */
 export async function fetchAndSuggestFeedCandidates(url: string): Promise<FeedCandidate[]> {
-  const html = await fetchTextWithSsrfProtection(url);
+  const html = await fetchTextWithSsrfProtection(
+    url,
+    {},
+    {
+      allowInternal: await isTrustedFeedFetchingAllowed(),
+      context: "Page feed",
+      maxBytes: 2 * 1024 * 1024,
+      maxRedirects: 5,
+      timeoutMs: 12_000,
+    },
+  );
   return suggestFeedCandidates(html, url);
 }

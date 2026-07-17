@@ -3,9 +3,14 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 const ALGORITHM = "aes-256-gcm";
 
 function getKey(): Buffer {
-  const secret =
-    process.env.AUTH_SECRET ||
-    "feedferret-fallback-key-change-in-production";
+  let secret = process.env.AUTH_SECRET;
+  if (!secret) {
+    if (process.env.NEXT_PHASE === "phase-production-build") {
+      secret = "build-time-secret-only";
+    } else {
+      throw new Error("AUTH_SECRET must be set to encrypt/decrypt secrets.");
+    }
+  }
   return createHash("sha256").update(secret).digest();
 }
 

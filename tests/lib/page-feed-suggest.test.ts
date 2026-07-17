@@ -104,4 +104,34 @@ describe("suggestFeedCandidates", () => {
     expect(Array.isArray(suggestFeedCandidates("<html></html>", "https://example.com"))).toBe(true);
     expect(Array.isArray(suggestFeedCandidates("", "https://example.com"))).toBe(true);
   });
+
+  it("still yields a candidate when the shared class token contains an apostrophe", () => {
+    const APOSTROPHE_CLASS_INDEX = `
+<!DOCTYPE html>
+<html>
+<head><title>Editor's Blog</title></head>
+<body>
+  <main>
+    <div class="posts">
+      <article class="it's-featured">
+        <h2><a href="/posts/first-post">The First Post About Lighthouses</a></h2>
+        <p>Lighthouses have guided sailors safely to shore for centuries, and this post explores their history.</p>
+      </article>
+      <article class="it's-featured">
+        <h2><a href="/posts/second-post">Second Post: Fresnel Lenses Explained</a></h2>
+        <p>The Fresnel lens revolutionized how far a lighthouse beam could travel across open water at night.</p>
+      </article>
+      <article class="it's-featured">
+        <h2><a href="/posts/third-post">Third Post: Keepers and Their Lives</a></h2>
+        <p>Lighthouse keepers led isolated lives, tending the light through storms and long lonely winters.</p>
+      </article>
+    </div>
+  </main>
+</body>
+</html>`;
+
+    const candidates = suggestFeedCandidates(APOSTROPHE_CLASS_INDEX, "https://example.com/blog");
+    expect(candidates.length).toBeGreaterThan(0);
+    expect(candidates[0].itemCount).toBe(3);
+  });
 });
