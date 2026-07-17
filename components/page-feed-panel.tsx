@@ -147,24 +147,27 @@ export function PageFeedPanel({ categoryId, onCreated }: PageFeedPanelProps) {
 
   return (
     <div className="space-y-3">
+      {/* The URL input gets its own full-width row: with the AI button in the
+          action row below, sharing a single row squeezed the input down to a
+          few characters inside the 28rem dialog. */}
+      <Input
+        placeholder={t("urlPlaceholder")}
+        value={url}
+        onChange={(e) => {
+          setUrl(e.target.value);
+          setCandidates(null);
+          setSuggestError(null);
+          setFullTextInfo(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && url.trim()) handleFindItems();
+        }}
+        className="h-9 text-sm w-full"
+      />
       <div className="flex gap-1.5">
-        <Input
-          placeholder={t("urlPlaceholder")}
-          value={url}
-          onChange={(e) => {
-            setUrl(e.target.value);
-            setCandidates(null);
-            setSuggestError(null);
-            setFullTextInfo(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && url.trim()) handleFindItems();
-          }}
-          className="h-9 text-sm flex-1"
-        />
         <Button
           size="sm"
-          className="h-9 px-3 shrink-0"
+          className="h-9 px-3"
           disabled={!url.trim() || isBusy}
           onClick={handleFindItems}
         >
@@ -174,7 +177,7 @@ export function PageFeedPanel({ categoryId, onCreated }: PageFeedPanelProps) {
           <Button
             variant="secondary"
             size="sm"
-            className="h-9 px-3 shrink-0"
+            className="h-9 px-3"
             disabled={!url.trim() || isBusy}
             onClick={handleAiSetup}
           >
