@@ -155,7 +155,6 @@ This ensures clients display correct "last updated" timestamps and know when to 
 
 ## Known limitations
 
-- No Fever API (supported natively only in older NetNewsWire versions; use the GReader path above instead).
 - Each FeedFerret feed belongs to one category — assigning a second folder tag via `subscription/edit` replaces the current category.
 - No content creation/social features (`broadcast`, `like`) — these tags are accepted and silently ignored.
 - OPML import/export is available via the FeedFerret web UI; clients that rely on a GReader `opml` endpoint should use the web UI instead.

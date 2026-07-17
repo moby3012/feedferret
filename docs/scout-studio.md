@@ -74,5 +74,5 @@ These are not yet scheduled to a specific release. See [`docs/releases/backlog.m
 |---|---|---|
 | Visual element picker | Click-to-select UI overlaid on a live article preview | L |
 | JSON/XML item selector assistant | Guided wizard for non-HTML feeds | M |
-| AI-assisted selector suggestions | Use the user's BYOK AI provider to suggest CSS selectors | M |
+| AI-assisted selector suggestions | 🔄 Engine shipped as M4 slice 1 (`lib/ai-feed-config.ts`, PR #149) — UI pending. See [`docs/feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md). | M |
 | Rich candidate warnings | Warnings for weak candidates, duplicate URLs, malformed timestamps, tiny extraction results | S |

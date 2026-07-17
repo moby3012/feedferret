@@ -3,14 +3,16 @@
 Everything merged to `main` today, with a manual test checklist. Tick items as you go; note anything that misbehaves.
 
 ## Automated verification (already green on `main`)
-`pnpm install` ✅ · `prisma:generate` ✅ · `tsc --noEmit` ✅ · `lint` ✅ · `translations:check` (1230 keys, en/de parity) ✅ · `pnpm test` **127/127** ✅ · `next build` ✅ · `test:e2e` axe a11y **3/3** ✅
+`pnpm install` ✅ · `prisma:generate` ✅ · `tsc --noEmit` ✅ · `lint` ✅ · `translations:check` (1230 keys, en/de parity) ✅ · `pnpm test` **138/138** ✅ · `next build` ✅ · `test:e2e` axe a11y **3/3** ✅
 
-## What shipped today (15 PRs)
+## What shipped today (17 PRs)
 - **Phase 0** (#135–#140): command palette, copy-as-markdown, sanitizer hardening, per-feed reader defaults, axe a11y CI gate.
 - **M1** (#141–#144): auto full-text → HTML/Markdown-selectable content + reader rendering.
 - **M3** (#145–#147): "Create feed from a web page" builder.
+- **M4 slice 1** (#148–#149): AI config-proposal engine (backend + tests; no UI yet).
+- **Security & robustness hardening** (#150): full-app audit fixes — see §6.
 
-> Run locally with `pnpm run build && pnpm run start` (or your Docker/Coolify deploy). All of the below is manual UI testing.
+> **To test:** run locally with `pnpm run build && pnpm run start` (or your Docker/Coolify deploy) and open the app in a browser. Everything below is manual UI testing — work top to bottom, tick as you go. Most items are self-contained; where one depends on setup (e.g. a truncated feed), it says so.
 
 ---
 
@@ -99,6 +101,28 @@ Everything merged to `main` today, with a manual test checklist. Tick items as y
 Slice 1 (PR #149) landed the **backend engine** (`lib/ai-feed-config.ts`): given a URL + your AI key it asks the model to propose a scraping config, then **validates that proposal through the real extraction engine** before it would ever be shown/saved. It is covered by unit tests and has **no UI yet** — the "✨ Let AI set this up" button is **slice 2**, not built.
 
 - [ ] Nothing to manually test in this slice — it's engine + tests only. (Listed here so the checklist reflects reality: M4 is in progress, UI pending.)
+
+---
+
+## 6. Security & robustness hardening (#150)
+
+Most of this PR is invisible by design (it closes audit findings). A few items **are** user-observable — verify these; the rest is "nothing should have broken."
+
+### 6.1 Markdown feeds in external clients (was broken, now fixed)
+- [ ] Set a feed to **Full text mode = Automatic, Preferred format = Markdown** (§2.2) and let it sync a full-text article.
+- [ ] Open that same article through an **external client over the Fever or Google Reader API** (e.g. Reeder, NetNewsWire) → the body shows **rendered HTML** (headings, links), **not** raw `# heading` / `**bold**` text. *(Before this PR, markdown feeds reached external clients as raw text.)*
+- [ ] In the FeedFerret web reader the same article still renders correctly (no regression).
+
+### 6.2 Page→feed with awkward class names (was silently dropping candidates)
+- [ ] In the "From web page" builder (§3), a listing page whose repeating items use class names containing an **apostrophe** (e.g. `class="it's-featured"`) still returns candidates instead of an empty result.
+
+### 6.3 Deployment behavior change — `AUTH_SECRET` now fails closed ⚠️ *self-hosters read this*
+- [ ] **Normal case:** with `AUTH_SECRET` set (as documented in Quick Start), the app starts and works exactly as before.
+- [ ] **Misconfiguration case (optional to verify):** starting a **production** deploy with `AUTH_SECRET` **unset** now **refuses to boot** (clear error) instead of silently using an insecure built-in secret. This is intentional — if your existing deploy already sets `AUTH_SECRET` (it should), you'll notice nothing. `next build` still works without it.
+
+### 6.4 Nothing-should-break smoke
+- [ ] External API clients (Fever / Google Reader) still authenticate and sync normally.
+- [ ] "Fetch full text" (manual button) and automatic full-text (§2) still work; extracted articles render, external `target="_blank"` links still open.
 
 ---
 

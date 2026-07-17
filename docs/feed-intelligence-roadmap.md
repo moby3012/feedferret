@@ -20,18 +20,18 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 
 ---
 
-## Milestone M1 — Auto full-text → clean, format-selectable content
+## Milestone M1 — Auto full-text → clean, format-selectable content ✅ *shipped (PRs #141–#143)*
 *Phase 1.1 + 1.2. The mission's first ask.*
 
 **User outcome:** truncated feeds automatically show the full article; the user picks **Markdown (clean/aligned) or HTML** per feed, and can override per article. No selectors needed.
 
-- [ ] **M1-T1** `lib/readability-extract.ts` — automatic extractor: **Defuddle** (primary, on our existing JSDOM) → **Mozilla Readability** fallback when Defuddle returns empty → keep feed summary if both fail. SSRF-safe fetch via `lib/ssrf.ts`. Returns `{ html, markdown, title, byline, excerpt, wordCount, extractedBy }`. — `M`
-- [ ] **M1-T2** Add deps: `defuddle`, `@mozilla/readability`, `markdown-it` (+`markdown-it` plugins as needed), `turndown`(+gfm, as a selector-path MD converter). Confirm they run under our Node/JSDOM + `serverExternalPackages`. — `S`
-- [ ] **M1-T3** Schema: `Article.contentFormat` (`"html" | "markdown"`, default per feed) + `Feed.fullTextMode` (`"off" | "auto" | "selector"`) and `Feed.defaultContentFormat`. Prisma migrate via `db push`. — `S`
-- [ ] **M1-T4** Wire "auto" mode into the existing full-text flow (`lib/feed-fetcher.ts` `autoFetchFullText` / sync path): when `fullTextMode="auto"`, run M1-T1 and store the chosen format. Keep manual per-article "fetch full text" working. — `M`
-- [ ] **M1-T5** Reader render path for Markdown: `markdown-it` → **DOMPurify** (already present) → existing `.article-content` prose. Add a per-article/per-feed **Markdown ⟷ HTML toggle** in the reader UI. Old HTML articles keep rendering (respect `contentFormat`). — `M`
-- [ ] **M1-T6** Settings UX: in Feed Settings, a simple **"Full text: Off / Automatic / Custom selector"** control + **"Preferred format: Markdown / HTML"**. Automatic requires zero further input. i18n en+de. — `M`
-- [ ] **M1-T7** Tests: extractor unit tests (fixture HTML → expected markdown/plain), fallback path, format round-trip; verify sanitization on the markdown→HTML render. — `M`
+- [x] **M1-T1** `lib/readability-extract.ts` — automatic extractor: **Defuddle** (primary, on our existing JSDOM) → **Mozilla Readability** fallback when Defuddle returns empty → keep feed summary if both fail. SSRF-safe fetch via `lib/ssrf.ts`. Returns `{ html, markdown, title, byline, excerpt, wordCount, extractedBy }`. — `M`
+- [x] **M1-T2** Add deps: `defuddle`, `@mozilla/readability`, `markdown-it` (+`markdown-it` plugins as needed), `turndown`(+gfm, as a selector-path MD converter). Confirm they run under our Node/JSDOM + `serverExternalPackages`. — `S`
+- [x] **M1-T3** Schema: `Article.contentFormat` (`"html" | "markdown"`, default per feed) + `Feed.fullTextMode` (`"off" | "auto" | "selector"`) and `Feed.defaultContentFormat`. Prisma migrate via `db push`. — `S`
+- [x] **M1-T4** Wire "auto" mode into the existing full-text flow (`lib/feed-fetcher.ts` `autoFetchFullText` / sync path): when `fullTextMode="auto"`, run M1-T1 and store the chosen format. Keep manual per-article "fetch full text" working. — `M`
+- [x] **M1-T5** Reader render path for Markdown: `markdown-it` → **DOMPurify** (already present) → existing `.article-content` prose. Add a per-article/per-feed **Markdown ⟷ HTML toggle** in the reader UI. Old HTML articles keep rendering (respect `contentFormat`). — `M`
+- [x] **M1-T6** Settings UX: in Feed Settings, a simple **"Full text: Off / Automatic / Custom selector"** control + **"Preferred format: Markdown / HTML"**. Automatic requires zero further input. i18n en+de. — `M`
+- [x] **M1-T7** Tests: extractor unit tests (fixture HTML → expected markdown/plain), fallback path, format round-trip; verify sanitization on the markdown→HTML render. — `M`
 
 **Acceptance:** add a known truncated feed → set Automatic → articles show full clean content; toggling Markdown/HTML re-renders; nothing leaks unsanitized HTML; `tsc`/`lint`/`test`/`build` green. **Deps:** none. **Risk:** extraction quality (mitigated by fallback + M3 manual + M4 AI); storage growth (retention covers it).
 
@@ -49,32 +49,32 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 
 ---
 
-## Milestone M3 — Page → Feed builder (manual, in-process)
+## Milestone M3 — Page → Feed builder (manual, in-process) ✅ *shipped (PRs #145–#147)*
 *Phase 2.A, Model A. The foundation the AI layer (M4) sits on.*
 
 **User outcome:** paste a *listing* page URL (blog index, forum, search results) → mark the repeating item + fields → save as a feed that re-scrapes on schedule. (Works without an AI key.)
 
-- [ ] **M3-T1** Generalize Scout Studio extraction to "**list of items from an arbitrary page**": given a page + an item selector + per-field selectors (title/link/date/summary/image), produce feed items. Reuse the existing XPath/CSS engine in `lib/feed-extraction.ts`. — `M`
-- [ ] **M3-T2** **Ranked candidate suggestion** for the repeating-item container (extend the current Scout Studio ranking: repetition count, structural similarity, link density) + live preview of the parsed items. — `M`
-- [ ] **M3-T3** "**Create feed from a web page**" entry point (new-feed dialog → "This page has no RSS? Build one"): fetch (SSRF-safe) → pick item → map fields → preview → save as a synthetic feed (`sourceType` extension). — `M`
-- [ ] **M3-T4** Persist as a normal feed; re-scrape on the sync schedule; dedup via existing unicity keys; export/import through the `ffx:*` OPML extension (FreshRSS interop). — `M`
-- [ ] **M3-T5** Tests + docs (extend `docs/scout-studio.md`). — `S`
+- [x] **M3-T1** Generalize Scout Studio extraction to "**list of items from an arbitrary page**": given a page + an item selector + per-field selectors (title/link/date/summary/image), produce feed items. Reuse the existing XPath/CSS engine in `lib/feed-extraction.ts`. — `M`
+- [x] **M3-T2** **Ranked candidate suggestion** for the repeating-item container (extend the current Scout Studio ranking: repetition count, structural similarity, link density) + live preview of the parsed items. — `M`
+- [x] **M3-T3** "**Create feed from a web page**" entry point (new-feed dialog → "This page has no RSS? Build one"): fetch (SSRF-safe) → pick item → map fields → preview → save as a synthetic feed (`sourceType` extension). — `M`
+- [x] **M3-T4** Persist as a normal feed; re-scrape on the sync schedule; dedup via existing unicity keys; export/import through the `ffx:*` OPML extension (FreshRSS interop). — `M`
+- [x] **M3-T5** Tests + docs (extend `docs/scout-studio.md`). — `S`
 
 **Acceptance:** turn a real static listing page (e.g. a blog index) into a working, auto-refreshing feed by clicking through the builder. **Deps:** M1-T1 (shared fetch/clean). **Risk:** page structure variety (M4 AI + candidate ranking help); JS-only pages out of scope here (→ M5b/M7).
 
 ---
 
-## Milestone M4 — AI config proposal ⭐ (the north-star UX)
+## Milestone M4 — AI config proposal ⭐ (the north-star UX) 🔄 *slice 1 shipped (#149): engine + validation + tests; UI (T3–T5) pending*
 *Phase 2.C1. "Paste a URL, the AI sets it up."*
 
 **User outcome (with an AI key):** paste any URL → AI analyzes it → **proposes the complete config** (full-text selector for a truncated feed, *or* the item + field selectors for a page→feed) → live preview → user accepts (or tweaks). No selector thinking.
 
-- [ ] **M4-T1** `lib/ai-feed-config.ts` — takes a URL, fetches (SSRF-safe) + Defuddle-cleans the HTML (keep it small/tokens-bounded), sends a structured prompt to the user's BYOK provider (`lib/ai-summary.ts` plumbing), and gets back a **strict JSON config** matching our Scout Studio schema (`{ mode: "fulltext"|"pagefeed", itemSelector?, fields?, fullTextSelector?, confidence, notes }`). — `M`
-- [ ] **M4-T2** **Validate before showing:** run the proposed config through the real extraction engine (M1/M3) server-side, return a **preview** (extracted article / parsed items) alongside the config + a confidence signal. Never save unseen. — `M`
+- [x] **M4-T1** *(slice 1, PR #149)* `lib/ai-feed-config.ts` — takes a URL, fetches (SSRF-safe) + Defuddle-cleans the HTML (keep it small/tokens-bounded), sends a structured prompt to the user's BYOK provider (`lib/ai-summary.ts` plumbing), and gets back a **strict JSON config** matching our Scout Studio schema (`{ mode: "fulltext"|"pagefeed", itemSelector?, fields?, fullTextSelector?, confidence, notes }`). — `M`
+- [x] **M4-T2** *(slice 1, PR #149)* **Validate before showing:** run the proposed config through the real extraction engine (M1/M3) server-side, return a **preview** (extracted article / parsed items) alongside the config + a confidence signal. Never save unseen. — `M`
 - [ ] **M4-T3** UX: a single **"✨ Let AI set this up"** button in the add-feed / full-text flow → spinner → shows the preview + an editable summary of what the AI chose → **Accept** (saves the config) or **Edit** (drops into the manual Scout Studio fields, pre-filled). Falls back to manual if no AI key / AI fails. i18n en+de. — `M`
 - [ ] **M4-T4** Guardrails: token/size caps on the page sent to the model; rate-limit (`lib/rate-limit.ts`); clear error states; the AI call is **one-shot config generation** (not per-fetch) — after Accept it's plain selector scraping. — `S`
 - [ ] **M4-T5** Also offer AI proposal for **M1 truncated-feed full-text** (propose the article-body selector automatically), not just page→feed. — `S`
-- [ ] **M4-T6** Tests (mocked AI returning good/garbage JSON → validation catches garbage; preview path). — `M`
+- [x] **M4-T6** *(slice 1, PR #149)* Tests (mocked AI returning good/garbage JSON → validation catches garbage; preview path). — `M`
 
 **Acceptance:** with a valid AI key, pasting a blog index *or* a truncated-feed article URL yields a correct, preview-backed config the user accepts in one click; with no key, the manual builder (M3) still works. **Deps:** M1, M3. **Risk:** hallucinated/invalid selectors (mitigated by mandatory server-side validation + preview + confirm); provider variance (strict JSON schema + retry/repair); cost (one-shot + caps).
 
@@ -123,10 +123,10 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 
 | Milestone | Delivers | Effort | Gate |
 |---|---|---|---|
-| **M1** | Auto full-text, Markdown/HTML selectable | M | — |
+| **M1** ✅ | Auto full-text, Markdown/HTML selectable — *shipped, PRs #141–#143* | M | — |
 | **M2** | Full-text polish (tables/code/math/images) | S–M | M1 |
-| **M3** | Manual page→feed builder | M–L | M1 |
-| **M4 ⭐** | **AI proposes the whole config** (paste → accept) | M | M1, M3 |
+| **M3** ✅ | Manual page→feed builder — *shipped, PRs #145–#147* | M–L | M1 |
+| **M4 ⭐** 🔄 | **AI proposes the whole config** (paste → accept) — *slice 1 engine shipped (#149); UI pending* | M | M1, M3 |
 | **M5** | Optional RSSHub + changedetection.io connectors | M (×2) | M3/M4 |
 | **M6** | Per-article AI extraction fallback | M–L | M1, M4 |
 | **M7** | Playwright / Firecrawl / Jina heavy path | L | M3–M5 |
@@ -152,12 +152,12 @@ Each milestone ships as its own verified PR(s) (`tsc`/`lint`/`test`, `next build
 > Appended 2026-07-16. All the ideas from [`feature-ideas.md`](feature-ideas.md), queued behind the core Feed-Intelligence milestones and **sorted by effort, easy → complex**. Tags: 🟦 FreshRSS-parity · 🤖 AI-synergy · ⭐ high value. Two are recommended to pull *forward* (noted inline) because they ride along with core work.
 
 ### Tier S — quick wins
-- [ ] **F1** · "Refresh now" per feed (expose a manual force-refresh everywhere) — `S`
-- [ ] **F2** · Per-feed reader defaults (font / width / format override on top of the global prefs) — `S`
-- [ ] **F3** · ⭐ Copy article as Markdown (nearly free once M1 lands) — `S`
+- [x] **F1** · "Refresh now" per feed (expose a manual force-refresh everywhere) — `S` — *shipped, Phase 0*
+- [x] **F2** · Per-feed reader defaults (font / width / format override on top of the global prefs) — `S` — *shipped, Phase 0 (PR #137)*
+- [x] **F3** · ⭐ Copy article as Markdown (nearly free once M1 lands) — `S` — *shipped, Phase 0 (PR #135)*
 
 ### Tier S–M
-- [ ] **F4** · ⭐ Command palette (⌘K / Ctrl-K) — `cmdk` is already a dependency — `S–M` — *recommend pulling forward, alongside M1*
+- [x] **F4** · ⭐ Command palette (⌘K / Ctrl-K) — `cmdk` is already a dependency — `S–M` — *shipped, Phase 0 (PR #135)*
 - [ ] **F5** · Export / "Send to" Obsidian · Wallabag · Readwise · Pocket — `S–M`
 - [ ] **F6** · Auto-mute + notify on persistently-failing feeds (we already track feed health) — `S–M`
 - [ ] **F7** · PWA share-target bookmarklet ("Share → FeedFerret" → starts the page→feed flow) — `S–M`

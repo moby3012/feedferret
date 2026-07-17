@@ -20,7 +20,7 @@ Implementation is running in sequential, individually-merged batches (all touch 
 
 **All five batches merged.** Also shipped alongside: tap-the-headline / swipe-left to open the original article (PR #125).
 
-**Remaining (small P3 nice-to-haves, not blocking):** strip inline `width`/`min-width` from untrusted article HTML in the sanitizer (`article-reader.tsx` `dangerouslySetInnerHTML`); a manual 320px (iPhone SE) pass on `ResponsiveTabsNav` + the rss-header title/icon row.
+**Closed out (Phase 0.1, PR #136):** inline `width`/`min-width` are now stripped from untrusted article HTML by the shared `lib/sanitize-html.ts` `getSanitizer()` hook (keeps `max-width`); the 320px (iPhone SE) pass on `ResponsiveTabsNav` + the rss-header title/icon row was verified OK (see the Overflow / verification section below).
 
 **Follow-up per maintainer:** re-introduce brand color as deliberate *highlights* on important non-interactive elements (the flattening in batches 1–2 was intentionally cautious; see the refined rule A.1 above) — a light, taste-driven pass, best done against specific elements the maintainer points at.
 
