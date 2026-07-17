@@ -599,6 +599,19 @@
       "deleted": "Feed gelöscht.",
       "couldNotDelete": "Feed konnte nicht gelöscht werden."
     },
+    "webpage": {
+      "tabLabel": "Von Webseite",
+      "urlPlaceholder": "Seiten-URL (z. B. ein Blog oder eine Listenseite)",
+      "findItems": "Einträge finden",
+      "itemsFound": "{count, plural, one {# Eintrag gefunden} other {# Einträge gefunden}}",
+      "namePlaceholder": "Feed-Name",
+      "createFeed": "Feed erstellen",
+      "feedCreated": "{name} erstellt",
+      "emptyTitle": "Keine strukturierten Einträge gefunden",
+      "emptyHint": "Auf dieser Seite konnte keine sich wiederholende Liste von Einträgen erkannt werden. Versuche eine direkte RSS/Atom-URL, „Entdecken“ oder füge den Feed manuell hinzu und feile im Scout Studio daran.",
+      "suggestFailed": "Diese Seite konnte nicht gelesen werden. Überprüfe die URL und versuche es erneut.",
+      "createFailed": "Der Feed konnte nicht erstellt werden. Versuche eine andere Auswahl."
+    },
     "spoilerAhead": "Spoiler-Inhalte voraus",
     "spoilerDescription": "Diese Artikel wurden durch deine Regeln als Spoiler markiert und bewusst aus allen anderen Ansichten ausgeblendet. Öffne sie nur, wenn du bereit bist.",
     "revealSpoilers": "Spoiler anzeigen",

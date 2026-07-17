@@ -22,6 +22,7 @@ import {
     CreateFeedSchema,
 } from "@/lib/validation";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
+import { fetchAndSuggestFeedCandidates, type SuggestedFieldConfig } from "@/lib/page-feed-suggest";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { applyRetentionPoliciesForUser } from "@/lib/retention";
 import { randomBytes } from "crypto";
@@ -368,6 +369,99 @@ export async function addFeed(url: string, categoryId?: string) {
     } catch (error) {
         logger.error("Failed to add feed:", error);
         return { success: false, error: "Invalid RSS/Atom feed URL" };
+    }
+}
+
+const PAGE_FEED_PREVIEW_CAP = 8;
+
+export async function suggestFeedFromUrl(url: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const urlError = validateFeedUrl(url);
+    if (urlError) return { success: false, error: urlError };
+
+    try {
+        const candidates = await fetchAndSuggestFeedCandidates(url);
+        return {
+            success: true,
+            candidates: candidates.map((candidate) => ({
+                config: candidate.config,
+                score: candidate.score,
+                itemCount: candidate.itemCount,
+                sampleTitles: candidate.sampleTitles,
+                preview: candidate.previewArticles.slice(0, PAGE_FEED_PREVIEW_CAP).map((article) => ({
+                    title: article.title,
+                    link: article.link,
+                    publishedAt: article.publishedAt ? article.publishedAt.toISOString() : null,
+                    imageUrl: article.imageUrl || null,
+                })),
+            })),
+        };
+    } catch (error) {
+        logger.error("Failed to suggest feed candidates from page:", error);
+        return { success: false, error: "Could not read that page. Check the URL and try again." };
+    }
+}
+
+export async function createFeedFromPage(input: {
+    url: string;
+    config: SuggestedFieldConfig;
+    name?: string;
+    categoryId?: string;
+}) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const urlError = validateFeedUrl(input.url);
+    if (urlError) return { success: false, error: urlError };
+
+    if (!input.config?.xPathItem || !input.config.xPathItem.trim()) {
+        return { success: false, error: "A repeating item selector is required" };
+    }
+
+    if (input.categoryId) {
+        const category = await db.category.findFirst({
+            where: { id: input.categoryId, userId: session.user.id },
+            select: { id: true },
+        });
+        if (!category) return { success: false, error: "Invalid category" };
+    }
+
+    try {
+        const xpath: Record<string, string> = {};
+        for (const [key, value] of Object.entries(input.config)) {
+            if (typeof value === "string" && value.trim()) xpath[key] = value;
+        }
+        const scraperConfig = JSON.stringify({ xpath });
+
+        let name = input.name?.trim();
+        if (!name) {
+            try {
+                name = new URL(input.url).hostname.replace(/^www\./, "");
+            } catch {
+                name = "New Feed";
+            }
+        }
+
+        const feed = await db.feed.create({
+            data: {
+                url: input.url,
+                name,
+                userId: session.user.id,
+                categoryId: input.categoryId,
+                sourceType: "HTML+XPath",
+                scraperConfig,
+                lastStatus: "pending",
+            },
+        });
+
+        await syncFeed(session.user.id, feed.id);
+        revalidatePath("/");
+        return { success: true, feed };
+    } catch (error) {
+        logger.error("Failed to create feed from page:", error);
+        return { success: false, error: "Could not create feed from that page" };
     }
 }
 
