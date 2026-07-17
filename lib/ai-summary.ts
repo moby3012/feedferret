@@ -27,7 +27,7 @@ function buildPrompt(content: string, language: string | null | undefined) {
 
 export async function generateSummary(rawContent: string, config: AiConfig): Promise<string> {
   const prompt = buildPrompt(rawContent, config.language);
-  return runPrompt(prompt, config);
+  return runAiPrompt(prompt, config);
 }
 
 export interface DigestSummaryArticle {
@@ -67,7 +67,7 @@ export async function generateDigestSummary(
 ): Promise<string> {
   if (articles.length === 0) return "";
   const prompt = buildDigestPrompt(articles, mode, config.language);
-  return runPrompt(prompt, config);
+  return runAiPrompt(prompt, config);
 }
 
 export async function generateDigestSubject(
@@ -84,27 +84,27 @@ export async function generateDigestSubject(
       ? "Write the subject in the same language as the article titles."
       : `Write the subject in ${config.language}.`;
   const prompt = `Generate a concise email subject line (maximum 70 characters) for a reading digest containing the following article titles. Capture the 1–2 most interesting themes. Do not use quotes. Do not include the word "digest". ${langInstruction}\n\nTitles:\n${titles}`;
-  return runPrompt(prompt, config);
+  return runAiPrompt(prompt, config);
 }
 
-async function runPrompt(prompt: string, config: AiConfig): Promise<string> {
+export async function runAiPrompt(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
   switch (config.provider) {
     case "openai":
-      return summarizeOpenAI(prompt, config);
+      return summarizeOpenAI(prompt, config, maxTokens);
     case "anthropic":
-      return summarizeAnthropic(prompt, config);
+      return summarizeAnthropic(prompt, config, maxTokens);
     case "ollama":
-      return summarizeOllama(prompt, config);
+      return summarizeOllama(prompt, config, maxTokens);
     case "gemini":
-      return summarizeGemini(prompt, config);
+      return summarizeGemini(prompt, config, maxTokens);
     case "openrouter":
-      return summarizeOpenRouter(prompt, config);
+      return summarizeOpenRouter(prompt, config, maxTokens);
     default:
       throw new Error(`Unknown AI provider: ${(config as any).provider}`);
   }
 }
 
-async function summarizeOpenAI(prompt: string, config: AiConfig): Promise<string> {
+async function summarizeOpenAI(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
   const model = config.model || "gpt-4o-mini";
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -115,7 +115,7 @@ async function summarizeOpenAI(prompt: string, config: AiConfig): Promise<string
     body: JSON.stringify({
       model,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 300,
+      max_tokens: maxTokens,
     }),
     signal: AbortSignal.timeout(30_000),
   });
@@ -127,7 +127,7 @@ async function summarizeOpenAI(prompt: string, config: AiConfig): Promise<string
   return String(data.choices?.[0]?.message?.content ?? "").trim();
 }
 
-async function summarizeAnthropic(prompt: string, config: AiConfig): Promise<string> {
+async function summarizeAnthropic(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
   const model = config.model || "claude-haiku-4-5-20251001";
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -138,7 +138,7 @@ async function summarizeAnthropic(prompt: string, config: AiConfig): Promise<str
     },
     body: JSON.stringify({
       model,
-      max_tokens: 300,
+      max_tokens: maxTokens,
       messages: [{ role: "user", content: prompt }],
     }),
     signal: AbortSignal.timeout(30_000),
@@ -151,7 +151,7 @@ async function summarizeAnthropic(prompt: string, config: AiConfig): Promise<str
   return String(data.content?.[0]?.text ?? "").trim();
 }
 
-async function summarizeOllama(prompt: string, config: AiConfig): Promise<string> {
+async function summarizeOllama(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
   const base = (config.ollamaBaseUrl || "http://localhost:11434").replace(/\/$/, "");
   const model = config.model || "llama3";
 
@@ -169,6 +169,7 @@ async function summarizeOllama(prompt: string, config: AiConfig): Promise<string
       model,
       messages: [{ role: "user", content: prompt }],
       stream: false,
+      options: { num_predict: maxTokens },
     }),
     signal: AbortSignal.timeout(60_000),
   });
@@ -180,7 +181,7 @@ async function summarizeOllama(prompt: string, config: AiConfig): Promise<string
   return String(data.message?.content ?? "").trim();
 }
 
-async function summarizeGemini(prompt: string, config: AiConfig): Promise<string> {
+async function summarizeGemini(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
   const model = config.model || "gemini-1.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey || ""}`;
   const res = await fetch(url, {
@@ -188,7 +189,7 @@ async function summarizeGemini(prompt: string, config: AiConfig): Promise<string
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 300 },
+      generationConfig: { maxOutputTokens: maxTokens },
     }),
     signal: AbortSignal.timeout(30_000),
   });
@@ -201,7 +202,7 @@ async function summarizeGemini(prompt: string, config: AiConfig): Promise<string
 }
 
 // OpenRouter uses OpenAI-compatible chat completions endpoint.
-async function summarizeOpenRouter(prompt: string, config: AiConfig): Promise<string> {
+async function summarizeOpenRouter(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
   const model = config.model || "openai/gpt-4o-mini";
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -214,7 +215,7 @@ async function summarizeOpenRouter(prompt: string, config: AiConfig): Promise<st
     body: JSON.stringify({
       model,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 300,
+      max_tokens: maxTokens,
     }),
     signal: AbortSignal.timeout(30_000),
   });
