@@ -7,9 +7,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-Work merged since v1.1.1 (PRs #88–#106), targeting the next release.
+Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
+
+### Added (2026-07-17 — Feed Intelligence M1/M3/M4 + Phase 0 + a11y CI)
+
+- **Automatic full-text extraction** (PR #141, M1 slice 1) — `lib/readability-extract.ts` runs **Defuddle** (primary) with a **Mozilla Readability** fallback on the existing SSRF-safe fetch/JSDOM pipeline; falls back to the feed's own summary if both fail.
+- **Selectable content format** (PR #142, M1 slice 2) — new `Feed.fullTextMode` (`off`/`auto`/`selector`) and `Feed.defaultContentFormat`/`Article.contentFormat` (`html`/`markdown`). "Auto" mode wires the new extractor into the existing sync path; manual per-article "fetch full text" keeps working unchanged; already-configured selector feeds migrate to `"selector"` mode with no behavior change.
+- **Markdown reader rendering** (PR #143, M1 slice 3) — `markdown-it` → DOMPurify → the existing `.article-content` prose styles; a reader toolbar toggle switches a Markdown article between rendered view and raw source. Feed Settings gained "Full text: Off / Automatic / Custom selector" + "Preferred format: Markdown / HTML" controls (i18n en/de).
+- **"Create feed from a web page" builder** (PRs #145–#147, M3) — paste a listing-page URL (blog index, forum, search results) and FeedFerret proposes ranked, engine-validated candidate item/field selectors (`lib/page-feed-suggest.ts`); accepting saves it as a normal HTML+XPath feed that re-scrapes on schedule, dedups normally, and round-trips through the `ffx:*` OPML extension.
+- **AI feed-config proposal engine** (PR #149, M4 slice 1) — `lib/ai-feed-config.ts`: given a URL, fetches + Defuddle-cleans the page and asks the user's BYOK AI provider to propose a full-text or page→feed config as strict JSON, then **validates it through the real extraction engine** before it would ever be shown. Engine + unit tests only — no UI yet ("✨ Let AI set this up" is slice 2).
+- **Command palette** (⌘K / Ctrl-K) (PR #135, Phase 0 F4) — fuzzy jump-to for feeds/categories/labels/actions (refresh, mark-all-read, focus search, add feed, settings, theme toggle, keyboard shortcuts).
+- **Copy article as Markdown** (PR #135, Phase 0 F3) — toolbar/menu action that copies the article title, link, and body as Markdown via `turndown`.
+- **Per-feed reader defaults** (PR #137, Phase 0 F2) — nullable `Feed.readerFontSizeOverride` / `readerWidthOverride` / `openOriginalOverride` (null = inherit the global default); configurable in the feed-edit dialog's "Reader defaults" block.
+- **Automated accessibility (axe) CI gate** (PR #139, Phase 0 0.2) — `@axe-core/playwright` runs the WCAG 2.1 A/AA rule set against `/setup`, `/register`, `/accessibility` in a dedicated `accessibility` CI job; fails the build on any `serious`/`critical` violation. The `color-contrast` rule is intentionally excluded (Chromium/axe misreads this app's `oklch()` tokens; contrast is guaranteed at the design-token level — see `docs/accessibility-todo.md` A-4.1).
+
+### Security & robustness (PR #150 — full-app audit)
+
+- **`AUTH_SECRET` now fails closed at production runtime** instead of falling back to a hardcoded secret. `auth.ts`, `lib/crypto.ts` and `lib/greader.ts` previously substituted a built-in secret when `AUTH_SECRET` was unset — which let anyone forge Google Reader API tokens for any user and made every "encrypted at rest" credential decryptable with a public key. The build-phase carve-out (`NEXT_PHASE=phase-production-build`) is preserved so `next build` still works.
+- **Size caps on the new full-text/page-feed/AI fetches** (2 MB + timeout/redirect/`allowInternal`), matching every other fetch site — the auto full-text path runs unattended per sync.
+- **Markdown articles render to sanitized HTML before external API delivery** (Fever, v1 REST, Google Reader) via `lib/markdown-render.ts`, so markdown feeds no longer reach third-party clients as raw text.
+- **Fever `since_id`/`max_id` pivot lookups scoped to `userId`**; **`summarizeArticle` update scoped to `userId`**; **page-feed XPath class tokens escaped**; **`rel="noopener noreferrer"` forced** on sanitized anchors with `target`.
+
+### Changed
+
+- **Inline width/min-width stripped from untrusted article HTML** (PR #136, Phase 0 0.1) — a shared `lib/sanitize-html.ts` `getSanitizer()` DOMPurify hook strips `width`/`min-width` attributes and inline styles (keeps `max-width`) across every article-HTML sanitize site, closing a mobile-overflow issue.
+
+### Docs
+
+- Added `docs/feed-intelligence-plan.md`, `docs/feed-intelligence-roadmap.md`, `docs/feature-ideas.md`, `docs/MASTER-ROADMAP.md` (single consolidated ordered backlog) and `docs/qa-checklist-2026-07-17.md` (step-by-step manual test checklist for this batch).
 
 ### Security
+
+Work merged since v1.1.1 (PRs #88–#106):
 
 A four-domain design audit (`docs/design-audit-todo.md`) was run and **all 54 findings resolved** — the four tiers in PRs #99–#102, the deferred features in PRs #104–#106, and the design-system items documented in `docs/design-system.md`. Security fixes (PR #99):
 

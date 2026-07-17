@@ -9,9 +9,10 @@ A self-hosted, multi-user RSS reader with a modern reading experience, power-use
 ## ✨ Features
 
 - **Modern Reader** — multiple layouts, dark mode, configurable width, mobile swipe gestures, PWA install
-- **Power-User Automation** — auto-mark-as-read rules, keyword alerts, outbound webhooks (HMAC-signed), full-text extraction
+- **Feed Intelligence** — automatic full-text extraction (Defuddle → Readability) with clean Markdown or HTML rendering, per feed; build a feed from any web page that has no RSS (paste a listing URL → engine-validated selectors)
+- **Power-User Extras** — ⌘K command palette, copy article as Markdown, per-feed reader defaults, auto-mark-as-read rules, keyword alerts, outbound webhooks (HMAC-signed)
 - **Notifications** — browser push, email digests, Telegram, Gotify, ntfy
-- **Native Client Support** — Google Reader API for Reeder, NetNewsWire, FeedMe, ReadKit
+- **Native Client Support** — Google Reader API (Reeder, NetNewsWire, FeedMe, ReadKit) and Fever API
 - **API-First** — REST API v1 + MCP endpoint for AI agents (Claude, n8n, LangChain)
 - **AI Summaries (BYOK)** — OpenAI, Anthropic, Gemini, OpenRouter, Ollama — keys stored encrypted
 - **Flexible Auth** — local accounts, magic link, Google/GitHub OAuth, Authelia OIDC, TOTP 2FA
@@ -63,10 +64,11 @@ Full guide including reverse proxy (Nginx, Caddy, Traefik), updates, and backup:
 | MCP endpoint (AI agents) | [`docs/mcp.md`](docs/mcp.md) |
 | Google Reader API (Reeder, NNW, FeedMe) | [`docs/google-reader-api.md`](docs/google-reader-api.md) |
 | Outbound webhooks | [`docs/webhooks.md`](docs/webhooks.md) |
-| Full-text extraction (Scout Studio) | [`docs/scout-studio.md`](docs/scout-studio.md) |
+| Full-text extraction & page→feed builder (Scout Studio) | [`docs/scout-studio.md`](docs/scout-studio.md) |
 | Security | [`docs/security.md`](docs/security.md) |
 | GDPR / right to erasure | [`docs/gdpr.md`](docs/gdpr.md) |
-| Roadmap | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
+| Roadmap (consolidated backlog) | [`docs/MASTER-ROADMAP.md`](docs/MASTER-ROADMAP.md) · [`docs/ROADMAP.md`](docs/ROADMAP.md) |
+| Feed Intelligence plan / milestones | [`docs/feed-intelligence-roadmap.md`](docs/feed-intelligence-roadmap.md) |
 | Design audit TODO (perf/UX/security/visuals) | [`docs/design-audit-todo.md`](docs/design-audit-todo.md) |
 | Design system (radius/icon/modal conventions) | [`docs/design-system.md`](docs/design-system.md) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
@@ -75,7 +77,7 @@ Full guide including reverse proxy (Nginx, Caddy, Traefik), updates, and backup:
 
 ## 🛠 Tech Stack
 
-Next.js 16 · React 19 · TypeScript 6 · Prisma 7 · PostgreSQL / SQLite · Tailwind CSS v4 · shadcn/ui · Auth.js v5 · next-intl · TanStack Query
+Next.js 16 · React 19 · TypeScript 6 · Prisma 7 · PostgreSQL / SQLite · Tailwind CSS v4 · shadcn/ui · Auth.js v5 · next-intl · TanStack Query · Defuddle + @mozilla/readability (full-text) · markdown-it / turndown (Markdown)
 
 ---
 
@@ -84,7 +86,7 @@ Next.js 16 · React 19 · TypeScript 6 · Prisma 7 · PostgreSQL / SQLite · Tai
 **v1.1.1** — production ready. English + German UI (i18n via next-intl).  
 `pnpm run build` ✅ · `pnpm run lint` ✅ · `tsc --noEmit` ✅ · `pnpm test` ✅ · CI on every PR ✅
 
-See [`CHANGELOG.md`](CHANGELOG.md) for released changes and the Unreleased section for what's landed since, and [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next (v1.2: Theming & Accessibility).
+See [`CHANGELOG.md`](CHANGELOG.md) for released changes and the Unreleased section for what's landed since (Feed Intelligence M1/M3, M4 slice 1, Phase 0 quick wins, a11y CI gate, security hardening). Next up is the M4 "✨ Let AI set this up" UX, then v1.2 Theming — see [`docs/MASTER-ROADMAP.md`](docs/MASTER-ROADMAP.md) for the consolidated, ordered backlog.
 
 ---
 

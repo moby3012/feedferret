@@ -13,7 +13,7 @@ Effort scale: **S** < 1 day · **M** 1–3 days · **L** 1–2 weeks · **XL** 2
 | **API Token Scopes** | ✅ Done in v1.1 — `read`/`write`/`admin` enforced | M | — |
 | **`prefers-contrast: more` Support** | ✅ Done | S | — |
 | **Accessibility Statement Page** | ✅ Done | S | — |
-| **Fever API Compatibility** | Implement the Fever API protocol alongside Google Reader API. Targets NetNewsWire and other Fever clients. | M | v1.3 |
+| **Fever API Compatibility** | ✅ Done — `app/api/fever/route.ts` (api_key, feeds, items, mark, …), rate-limited. Device-test matrix tracked under maintenance. | M | — |
 | **Telegram Inline Buttons** | "Mark as read" + "Open" reply buttons on Telegram alert messages via Bot API inline keyboard. Requires switching to webhook mode. | M | v1.3 |
 | **Full Zod Schemas for Server Actions** | Replace ad-hoc validation in `app/actions/` with explicit `z.object()` schemas. No behaviour change — defensive hardening. | M | v1.3 |
 | **Tier 2 Categories (Nested)** | Sidebar tree rendering, parent picker in Feed Management, setting inheritance, OPML nesting. DB schema (`parentId`) already ready. Max depth: 2. | L | v1.3 |

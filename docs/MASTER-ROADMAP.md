@@ -1,6 +1,6 @@
 # FeedFerret — Master Roadmap (single source of truth)
 
-> **Consolidated 2026-07-16** from every planning doc + the marketing site (feedferret.org). One ordered backlog to work through top-to-bottom. Duplicates across docs are merged here (noted).
+> **Consolidated 2026-07-16, updated 2026-07-17** from every planning doc + the marketing site (feedferret.org). One ordered backlog to work through top-to-bottom. Duplicates across docs are merged here (noted).
 > **How to use:** this is the *index and ordering*. Detailed task checklists live in the linked source docs — tick them there, keep this file's phase status current.
 > Effort: S (<1d) · M (1–3d) · L (1–2w) · XL (2w+). Status: ✅ done · 🔄 in progress · ⬜ planned · ❓ verify.
 
@@ -100,6 +100,11 @@ Source: [`releases/v2.md`](releases/v2.md). Effort **XL** (ship as independent s
 Source: [`releases/maintenance.md`](releases/maintenance.md), [`releases/testing.md`](releases/testing.md).
 
 - ⬜ **Security:** full **Zod schemas** on all server actions (partial: addFeed ✓); CSP `unsafe-inline`/`unsafe-eval` cleanup (blocked on Next.js nonce API); Mozilla Observatory ≥ B+.
+- ⬜ **Security follow-ups (from the 2026-07-17 full-app audit; #150 fixed the critical/robustness items, these remain):**
+  - **Encrypt notification-channel tokens at rest** — `telegramBotToken` / `gotifyToken` / `ntfyToken` are still stored + returned in plaintext, unlike `aiApiKey`/mail creds. Encrypt via `lib/crypto.ts` and return a masked "configured" indicator. `M`
+  - **Add a real `middleware.ts`** wiring the `auth.config.ts` `authorized()` callback (currently dead code; page access is enforced ad-hoc per page/action — works today but fragile). `M`
+  - **Migrate the manual "Fetch full text" button** (`app/actions/feeds.ts` `fetchFullText`) to the new Defuddle/Readability engine and delete the duplicated heuristic. `M`
+  - **Re-validate redirects on the Ollama chat POST** (`lib/ai-summary.ts` `summarizeOllama`) like other SSRF-guarded fetches. `S`
 - ⬜ **Testing:** expand Vitest (search/validation/token/rate-limit/feed-fetcher) + **Playwright E2E** (login/2FA, onboarding, add-feed→read, OPML round-trip, saved-search share, keyword-alert, account deletion) + CI additions.
 - ⬜ **Ops:** GReader/Fever device-test matrix; backup/restore drill; dependency-upgrade cadence.
 - ⬜ **CI fix already shipped:** `pnpm audit` made advisory (endpoint retired).

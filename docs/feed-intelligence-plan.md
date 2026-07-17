@@ -1,6 +1,6 @@
 # Feed Intelligence — Project Plan
 
-> **Status:** Research & planning (2026-07-16). No code yet — this is the thinking document.
+> **Status:** Original thinking document (2026-07-16). **Since superseded by delivery:** M1 (auto full-text) and M3 (page→feed builder) shipped, M4 slice 1 (AI config engine) shipped — see [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md) for live status. Kept for the rationale/decisions below.
 > **→ Actionable milestone TODO:** [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md).
 > **Mission:** make FeedFerret great at *getting the actual content*. Two phases:
 > 1. **Auto full-text** — automatically de-truncate partial feeds and render the full article as clean, well-typeset content ("nice markdown") in the reader, with no manual selector work.
@@ -29,9 +29,9 @@
 | Article rendering | HTML → DOMPurify → Tailwind `prose` (`.article-content`) | `components/article-reader.tsx`, `app/globals.css` |
 | DOM tooling already in the bundle | `jsdom`, `isomorphic-dompurify` | `package.json` |
 | AI (BYOK: OpenAI/Anthropic/Gemini/OpenRouter/Ollama, encrypted keys) | ✅ shipped | `lib/ai-summary.ts` |
-| **Automatic** (no-selector) readability extraction | ❌ missing | — |
-| HTML → Markdown pipeline | ❌ missing | — |
-| Page → feed (scrape a listing page into items) | ⚠️ partially possible via Scout Studio XPath, but not framed/UX'd as "make a feed from this page" | — |
+| **Automatic** (no-selector) readability extraction | ✅ shipped (M1) | `lib/readability-extract.ts` (Defuddle → Readability) |
+| HTML → Markdown pipeline | ✅ shipped (M1) | `lib/html-to-markdown.ts`, `lib/markdown-render.ts` |
+| Page → feed (scrape a listing page into items) | ✅ shipped (M3) — "Create feed from a web page" builder | `lib/page-feed-suggest.ts`, `components/page-feed-panel.tsx` |
 
 **Takeaway:** the *plumbing* (SSRF-safe fetch, jsdom, per-feed extraction config, AI) is already here. Phase 1 is mostly "add an automatic extractor + a markdown render path." Phase 2 is a genuine new product surface, but a lot of it is an *extension* of Scout Studio + optional external engines.
 

@@ -117,8 +117,9 @@ older `axe-playwright`/`checkA11y`). Runs in a dedicated `accessibility` job
 in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) on every PR.
 
 Checks WCAG 2.1 A/AA (`wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` tags,
-including `color-contrast`) and fails the build on any `serious`/`critical`
-violation; `minor`/`moderate` findings are logged but not yet gated (that
+with `color-contrast` excluded — see A-4.1) and fails the build on any
+`serious`/`critical` violation; `minor`/`moderate` findings are logged but
+not yet gated (that
 threshold can be tightened once the backlog of lower-severity findings is
 cleared).
 
