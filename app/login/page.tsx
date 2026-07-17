@@ -336,7 +336,7 @@ export default function LoginPage() {
                 {t("noAccountPrefix")}{" "}
                 <Link
                   href="/register"
-                  className="text-foreground hover:underline transition-all"
+                  className="text-foreground underline transition-all"
                 >
                   {t("createAccount")}
                 </Link>
