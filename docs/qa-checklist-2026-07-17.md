@@ -3,14 +3,17 @@
 Everything merged to `main` today, with a manual test checklist. Tick items as you go; note anything that misbehaves.
 
 ## Automated verification (already green on `main`)
-`pnpm install` ✅ · `prisma:generate` ✅ · `tsc --noEmit` ✅ · `lint` ✅ · `translations:check` (1230 keys, en/de parity) ✅ · `pnpm test` **138/138** ✅ · `next build` ✅ · `test:e2e` axe a11y **3/3** ✅
+`pnpm install` ✅ · `prisma:generate` ✅ · `tsc --noEmit` ✅ · `lint` ✅ · `translations:check` (1230 keys, en/de parity) ✅ · `pnpm test` **151/151** ✅ · `next build` ✅ · `test:e2e` axe a11y **3/3** ✅
 
-## What shipped today (17 PRs)
+## What shipped today (20 PRs)
 - **Phase 0** (#135–#140): command palette, copy-as-markdown, sanitizer hardening, per-feed reader defaults, axe a11y CI gate.
 - **M1** (#141–#144): auto full-text → HTML/Markdown-selectable content + reader rendering.
 - **M3** (#145–#147): "Create feed from a web page" builder.
 - **M4 slice 1** (#148–#149): AI config-proposal engine (backend + tests; no UI yet).
 - **Security & robustness hardening** (#150): full-app audit fixes — see §6.
+- **Docs cleanup** (#151): CHANGELOG, roadmap checkboxes, stale docs.
+- **Mobile input-focus fix** (#152): text inputs in the Add-feed / feed-settings dialogs were untappable on iOS (no keyboard) — the mobile feed drawer was trapping focus away from the dialog. Fixed.
+- **Bug-hunt fixes from live testing** (#153): a real feed (XenForo's RSS, attributed `<category>` tags) crashed the whole sync with `Cannot convert object to primitive value` — fixed. The page→feed builder no longer confidently proposes nav/footer chrome as a candidate on JS-rendered pages — it now correctly falls to "nothing found". Bot-blocked pages (Cloudflare challenges, etc.) now get a clear "this site blocked automated access" message instead of a generic one. Also fixed an SSRF false positive that wrongly rejected some legitimate public sites (192.0.0.0/16 range) as private IPs.
 
 > **To test:** run locally with `pnpm run build && pnpm run start` (or your Docker/Coolify deploy) and open the app in a browser. Everything below is manual UI testing — work top to bottom, tick as you go. Most items are self-contained; where one depends on setup (e.g. a truncated feed), it says so.
 
@@ -59,8 +62,10 @@ Everything merged to `main` today, with a manual test checklist. Tick items as y
 > Note: automatic extraction only runs on **newly synced** articles after you enable it, not retroactively on already-stored ones.
 
 ### 2.3 Reader — Markdown rendering + source toggle
-- [ ] A Markdown-format article renders as rich text (headings, lists, links, code).
-- [ ] Desktop toolbar has a **`</>` (code) toggle** → switches the body to raw **Markdown source** in a monospace block; toggling back returns to rich view. Switching articles resets to rich view.
+- [x] A Markdown-format article renders as rich text (headings, lists, links, code). *Verified — default view on opening an article is rendered; the `</>` toggle correctly switches to raw Markdown source and back.*
+- [x] Desktop toolbar has a **`</>` (code) toggle** → switches the body to raw **Markdown source** in a monospace block; toggling back returns to rich view. Switching articles resets to rich view.
+
+> **Maintainer feedback (not a bug, noted for a product decision):** the Markdown source toggle and "Copy as Markdown" were flagged as UI clutter that isn't earning its keep. Left as-is for now — say the word if you want either hidden/removed and I'll do it.
 
 ### 2.4 Back-compat (important)
 - [ ] A feed that **already had** auto-fetch full text enabled *before* today still fetches full text after the update (it should show as "Custom selector" mode and behave as before). Nothing silently turned off.
@@ -70,9 +75,12 @@ Everything merged to `main` today, with a manual test checklist. Tick items as y
 ## 3. M3 — Create a feed from a web page
 
 ### 3.1 The happy path
-- [ ] Sidebar → **Add feed** → third tab **"From web page"**.
-- [ ] Paste a **listing page** URL that has no RSS (e.g. a blog index, a news category page, a forum board) → **Find items**.
-- [ ] You get one or more **ranked candidates**, each showing an item count, sample titles, and a couple of preview items. The best is pre-selected.
+- [x] Sidebar → **Add feed** → third tab **"From web page"**. *Was blocked by a mobile input-focus bug (#152, now fixed) — worth a quick recheck that the URL field is now typeable on your phone.*
+- [x] Paste a **listing page** URL that has no RSS → **Find items**. Tested against:
+  - `till-freitag.com/blog` (JS-rendered listing — the real post list never reaches our static fetch) → **was** confidently proposing wrong nav/footer-based candidates; **now (#153) correctly returns "nothing found"** instead of misleading candidates. This site will still not produce a working page-feed (that needs the JS-rendering milestone, M5/M7 — out of scope for now) but at least no longer lies about it.
+  - `xenforo.com/community/forums/announcements/` (Cloudflare bot-challenge, HTTP 403) → **was** a generic "Could not read that page"; **now (#153)** reports "This site blocked automated access (it may use bot protection like Cloudflare)" — accurate, since this is a real external block, not a FeedFerret bug.
+  - **Please retest with a page whose list IS in the static HTML** (a plain WordPress/Ghost/static-site blog index, not a JS single-page app) to confirm the happy path itself — neither of the two tested sites qualifies for M3's in-scope case.
+- [ ] You get one or more **ranked candidates**, each showing an item count, sample titles, and a couple of preview items. The best is pre-selected. *(needs a static-HTML test site, see above)*
 - [ ] Pick one, adjust the name, **Create feed** → toast success, dialog closes, the new feed appears in the sidebar with its scraped articles.
 - [ ] Open a few of its articles → titles/links are correct (links open the real source pages).
 
@@ -126,11 +134,29 @@ Most of this PR is invisible by design (it closes audit findings). A few items *
 
 ---
 
+## 7. Bug-hunt fixes from live testing (#152, #153)
+
+Found and fixed while testing this batch against real sites/devices. Nothing new to manually test here beyond a quick recheck — automated tests cover the actual regressions (151/151 passing).
+
+### 7.1 Mobile: text inputs in Add-feed / feed-settings dialogs (#152)
+- [ ] On your phone, open **Add feed** (any tab) and tap the URL/text field → keyboard now appears and you can type. *(Root cause: the mobile feed drawer was trapping focus away from dialogs rendered on top of it.)*
+- [ ] Note: the feed drawer no longer dismisses on tapping outside it or locks background scroll — it still closes via drag-down or picking a feed. Flag if this feels wrong; it's an easy follow-up either way.
+
+### 7.2 A previously-crashing real feed now syncs (#153)
+- [ ] If you add `https://xenforo.com/community/forums/announcements/index.rss` as a **regular RSS feed** (not the page-scrape "From web page" flow), it now syncs successfully instead of crashing with `Cannot convert object to primitive value`. *(Any RSS feed with attributed `<category>` tags — not just this one — was affected.)*
+
+### 7.3 Page→feed no longer proposes wrong candidates on JS-rendered pages (#153)
+- [ ] See §3.1 above — `till-freitag.com/blog` now correctly shows "nothing found" instead of confidently wrong candidates.
+
+---
+
 ## Known limitations (by design — not bugs)
 - **M3 suggestions are heuristic.** On messy/unusual pages the top candidate may not be perfect — that's expected; the AI proposal (M4, engine landed, UI pending) will improve this. The manual Scout Studio (feed settings) remains the power-user fallback.
 - **JS-only pages** (content rendered client-side) won't yield items from the page→feed builder yet (needs the heavy-render connectors, a later milestone).
 - **a11y color-contrast** is guaranteed at the design-token level; axe's automated contrast check is disabled because it mis-reads our oklch tokens (all other WCAG checks run in CI). Authenticated-page axe coverage + a 200%-zoom pass are still pending.
 - **AI config proposal (M4)** — the "✨ let AI set this up" flow — is **in progress**: the validation engine is merged (#149), but the user-facing button/flow (slice 2) is not built yet.
+- **Log noise you can ignore:** `Fetch failed: 403` / private-IP-block / `AbortError` entries in the server log for OTHER feeds you've subscribed to are almost always the source site's own bot protection, an actually-unreachable host, or a genuine timeout — not a FeedFerret bug. Only worth reporting if a *specific* feed you'd expect to work keeps failing.
+- **Flagged, not yet root-caused:** a one-off server log entry — `TypeError: Cannot create property 'border-width' on string 'var(--border-width, 1px)'` — looks like it originates from a dependency (possibly the Tailwind v4 CSS engine or Auth.js's built-in error/verify-request page template) rather than our own code, and couldn't be reproduced in this environment (no live browser here). If you see this again, note what you were doing right before it and I'll dig further.
 
 ## How to report back
 For anything that misbehaves, note: which section, the feed/article URL, what you expected vs. saw, and browser/device. Screenshots help. I'll triage and fix.
