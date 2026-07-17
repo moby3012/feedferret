@@ -24,7 +24,7 @@ v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FT
 | 0.3 | **F4 · Command palette (⌘K)** — `cmdk` already a dep; home for existing shortcuts | S–M | ✅ | feature-ideas |
 | 0.4 | **F3 · Copy article as Markdown** (interim via turndown; reuses M1's stored markdown once shipped) | S | ✅ | feature-ideas |
 | 0.5 | **F1 · "Refresh now" per feed** (already shipped — sidebar feed context menu, `useRefreshFeed`) · **F2 · per-feed reader defaults** (nullable `Feed.readerFontSizeOverride`/`readerWidthOverride`/`openOriginalOverride`, null=inherit; Feed-Edit dialog "Reader defaults" block; reader resolves `feed.override ?? user default`) | S ea. | ✅ | feature-ideas |
-| 0.6 | Deferred small UX: swipe-down-marks-all-read, desktop swipe/drag nav, finger-synced swipe animations, AI-summary auto-save-on-first-generation | S–M ea. | ⬜ | deferred |
+| 0.6 | Deferred small UX. **AI-summary auto-save-on-first-generation = already implemented** (per `deferred.md`; no action). Remaining = the three **swipe/gesture** items (swipe-down-marks-all-read, desktop swipe/drag nav, finger-synced swipe animations) — deferred doc flags these **complex + significant risk** (gesture disambiguation vs pull-to-refresh); handle deliberately, not as a cheap quick win. | M ea. (risk) | ⬜ (gestures only) | deferred |
 | 0.7 | **Fever API** — verified **already shipped** (`app/api/fever/route.ts`: api_key, feeds, feeds_groups, items, mark, etc.); marketing site was stale. Remaining: device-test matrix (tracked under Continuous → Ops). | S | ✅ | v1.3, maintenance |
 
 ---
