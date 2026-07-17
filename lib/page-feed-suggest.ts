@@ -36,6 +36,18 @@ export type FeedCandidate = {
 const MIN_REPEAT = 3;
 const PREVIEW_CAP = 10;
 
+// Below this score a "candidate" is almost always navigation/footer chrome
+// or an unrelated repeating widget, not a real item list — most commonly
+// because the page's actual content list is rendered client-side (JS-only)
+// and never reached our static fetch, leaving only structural chrome for the
+// heuristic to see. A legitimate blog/listing candidate scores comfortably
+// above this even in the minimal case (3 short-titled, fully-linked items
+// with no date/image/content bonuses scores ~46; a real 5-item blog post
+// list with metadata scores ~88 — see tests). Confidently presenting a
+// sub-threshold candidate as "found" is worse than the honest "nothing
+// found" empty state, which points users at the manual/AI routes instead.
+const MIN_CANDIDATE_SCORE = 20;
+
 /** Wrap a literal in an XPath string, tolerating single quotes via concat(). */
 function xpathLiteral(value: string): string {
   if (!value.includes("'")) return `'${value}'`;
@@ -233,7 +245,9 @@ export function suggestFeedCandidates(rawHtml: string, url: string): FeedCandida
     });
   }
 
-  return candidates.sort((a, b) => b.score - a.score);
+  return candidates
+    .filter((c) => c.score >= MIN_CANDIDATE_SCORE)
+    .sort((a, b) => b.score - a.score);
 }
 
 /** SSRF-safe wrapper: fetch the URL, then suggest candidates. Fetch errors propagate. */

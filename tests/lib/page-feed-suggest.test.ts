@@ -100,6 +100,28 @@ describe("suggestFeedCandidates", () => {
     expect(candidates.every((c) => c.itemCount < 3)).toBe(true);
   });
 
+  it("does not confidently propose repeating navigation/footer chrome as a candidate", () => {
+    // Mirrors a real-world JS-rendered page: the actual content list is never
+    // in the static HTML, leaving only repeating nav-style links behind. A
+    // low-scoring candidate here is worse than no candidate at all, since it
+    // misleads the user into thinking we found the real item list.
+    const CHROME_ONLY = `
+<!DOCTYPE html>
+<html>
+<head><title>App</title></head>
+<body>
+  <nav>
+    <div class="nav-link"><a href="/solutions">Solutions</a></div>
+    <div class="nav-link"><a href="/services">Services</a></div>
+    <div class="nav-link"><a href="/tools">Tools</a></div>
+    <div class="nav-link"><a href="/team">Team</a></div>
+  </nav>
+  <main><div id="app"></div></main>
+</body>
+</html>`;
+    expect(suggestFeedCandidates(CHROME_ONLY, "https://example.com")).toEqual([]);
+  });
+
   it("does not throw on junk input and returns an array", () => {
     expect(Array.isArray(suggestFeedCandidates("<html></html>", "https://example.com"))).toBe(true);
     expect(Array.isArray(suggestFeedCandidates("", "https://example.com"))).toBe(true);
