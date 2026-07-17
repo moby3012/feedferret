@@ -64,7 +64,7 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 
 ---
 
-## Milestone M4 — AI config proposal ⭐ (the north-star UX) 🔄 *slice 1 shipped (#149): engine + validation + tests; UI (T3–T5) pending*
+## Milestone M4 — AI config proposal ⭐ (the north-star UX) ✅ *shipped (PRs #149, #155, #156)*
 *Phase 2.C1. "Paste a URL, the AI sets it up."*
 
 **User outcome (with an AI key):** paste any URL → AI analyzes it → **proposes the complete config** (full-text selector for a truncated feed, *or* the item + field selectors for a page→feed) → live preview → user accepts (or tweaks). No selector thinking.
@@ -73,7 +73,7 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 - [x] **M4-T2** *(slice 1, PR #149)* **Validate before showing:** run the proposed config through the real extraction engine (M1/M3) server-side, return a **preview** (extracted article / parsed items) alongside the config + a confidence signal. Never save unseen. — `M`
 - [x] **M4-T3** *(slice 2, PR #155 — add-feed "From web page" flow; the feed-settings full-text entry point is folded into T5)* UX: a single **"✨ Let AI set this up"** button in the add-feed / full-text flow → spinner → shows the preview + an editable summary of what the AI chose → **Accept** (saves the config) or **Edit** (drops into the manual Scout Studio fields, pre-filled). Falls back to manual if no AI key / AI fails. i18n en+de. — `M`
 - [x] **M4-T4** *(slice 1 size caps + slice 2 rate-limit, PRs #149/#150/#155)* Guardrails: token/size caps on the page sent to the model; rate-limit (`lib/rate-limit.ts`); clear error states; the AI call is **one-shot config generation** (not per-fetch) — after Accept it's plain selector scraping. — `S`
-- [ ] **M4-T5** Also offer AI proposal for **M1 truncated-feed full-text** (propose the article-body selector automatically), not just page→feed. — `S`
+- [x] **M4-T5** *(slice 3, PR #156 — "✨" button in feed settings → Full Text tab; proposes + engine-validates the selector against the feed's latest article, fills the field, user saves manually)* Also offer AI proposal for **M1 truncated-feed full-text** (propose the article-body selector automatically), not just page→feed. — `S`
 - [x] **M4-T6** *(slice 1, PR #149)* Tests (mocked AI returning good/garbage JSON → validation catches garbage; preview path). — `M`
 
 **Acceptance:** with a valid AI key, pasting a blog index *or* a truncated-feed article URL yields a correct, preview-backed config the user accepts in one click; with no key, the manual builder (M3) still works. **Deps:** M1, M3. **Risk:** hallucinated/invalid selectors (mitigated by mandatory server-side validation + preview + confirm); provider variance (strict JSON schema + retry/repair); cost (one-shot + caps).
@@ -126,7 +126,7 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 | **M1** ✅ | Auto full-text, Markdown/HTML selectable — *shipped, PRs #141–#143* | M | — |
 | **M2** | Full-text polish (tables/code/math/images) | S–M | M1 |
 | **M3** ✅ | Manual page→feed builder — *shipped, PRs #145–#147* | M–L | M1 |
-| **M4 ⭐** 🔄 | **AI proposes the whole config** (paste → accept) — *engine (#149) + "✨" UX/rate-limit (#155) shipped; remaining: T5 (AI proposal for truncated-feed full-text selectors)* | M | M1, M3 |
+| **M4 ⭐** ✅ | **AI proposes the whole config** (paste → accept) — *shipped: engine (#149), "✨" page→feed UX + rate-limit (#155), full-text-selector proposal in feed settings (#156)* | M | M1, M3 |
 | **M5** | Optional RSSHub + changedetection.io connectors | M (×2) | M3/M4 |
 | **M6** | Per-article AI extraction fallback | M–L | M1, M4 |
 | **M7** | Playwright / Firecrawl / Jina heavy path | L | M3–M5 |

@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { CheckCircle2, Eye, Loader2, Sparkles } from "lucide-react";
-import { useUpdateFeed, usePreviewFeedExtraction } from "@/hooks/use-rss-data";
+import { useUpdateFeed, usePreviewFeedExtraction, useProposeAiFullTextSelector, useAiSettings } from "@/hooks/use-rss-data";
 import { resolveFullTextMode, type FullTextMode } from "@/lib/full-text-mode";
 
 interface FeedEditDialogProps {
@@ -80,6 +80,9 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const t = useTranslations("feedEdit");
   const updateFeed = useUpdateFeed();
   const previewExtraction = usePreviewFeedExtraction();
+  const proposeAiSelector = useProposeAiFullTextSelector();
+  const { data: aiSettings } = useAiSettings();
+  const aiConfigured = Boolean(aiSettings?.provider);
 
   const [authType, setAuthType] = useState<string>("none");
   const [authUsername, setAuthUsername] = useState("");
@@ -122,6 +125,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
       sample: string;
     }>;
   } | null>(null);
+  const [aiSelectorInfo, setAiSelectorInfo] = useState<{ notes: string | null; excerpt: string | null } | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [hydrationTick, setHydrationTick] = useState(0);
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
@@ -200,6 +204,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     );
     setPreviewResult(null);
     setPreviewUrl("");
+    setAiSelectorInfo(null);
     setShowDiscardConfirm(false);
     // The field setters above only take effect on the next render, so we can't
     // snapshot from this closure yet. Bump a tick to trigger the snapshot
@@ -279,6 +284,24 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           toast.error(e instanceof Error ? e.message : t("toasts.previewFailed")),
       },
     );
+  };
+
+  const handleAiProposeSelector = async () => {
+    if (!feed) return;
+    setAiSelectorInfo(null);
+    try {
+      const result = await proposeAiSelector.mutateAsync(feed.id);
+      if (!result.success) {
+        toast.error(result.error || t("fulltext.aiProposeFailed"));
+        return;
+      }
+      setFullTextSelector(result.selector);
+      setFullTextMode("selector");
+      setAiSelectorInfo({ notes: result.notes, excerpt: result.excerpt });
+      toast.success(t("fulltext.aiProposeSuccess"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("fulltext.aiProposeFailed"));
+    }
   };
 
   const isDirty = (() => {
@@ -586,7 +609,25 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("fulltext.articleBodySelector")}</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-sm font-medium">{t("fulltext.articleBodySelector")}</Label>
+                  {aiConfigured && feed && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      disabled={proposeAiSelector.isPending}
+                      onClick={handleAiProposeSelector}
+                    >
+                      {proposeAiSelector.isPending ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        `✨ ${t("fulltext.aiProposeButton")}`
+                      )}
+                    </Button>
+                  )}
+                </div>
                 <Input
                   value={fullTextSelector}
                   onChange={(e) => setFullTextSelector(e.target.value)}
@@ -594,6 +635,18 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   className="rounded-xl h-10 border-border/70 bg-background/70 font-mono text-sm"
                 />
                 <p className="text-xs text-muted-foreground">{t("fulltext.selectorAppliesHint")}</p>
+                {aiSelectorInfo && (
+                  <div className="rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                    {aiSelectorInfo.notes && <p className="italic">{aiSelectorInfo.notes}</p>}
+                    {aiSelectorInfo.excerpt && (
+                      <p>
+                        {aiSelectorInfo.excerpt.length > 150
+                          ? `${aiSelectorInfo.excerpt.slice(0, 150)}…`
+                          : aiSelectorInfo.excerpt}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">

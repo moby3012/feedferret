@@ -1064,7 +1064,10 @@
       "links": "links",
       "recommended": "recommended",
       "scoutStudioTitle": "Scout Studio",
-      "scoutStudioDescription": "Guided extraction: paste an article URL, preview the cleaned content, then apply the best selector candidate."
+      "scoutStudioDescription": "Guided extraction: paste an article URL, preview the cleaned content, then apply the best selector candidate.",
+      "aiProposeButton": "Let AI propose a selector",
+      "aiProposeSuccess": "AI proposed a selector. Review it, then save to apply.",
+      "aiProposeFailed": "AI couldn't propose a selector. Try again or set one manually."
     },
     "scout": {
       "scoutAdvanced": "Scout Studio advanced source controls",

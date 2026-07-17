@@ -116,7 +116,11 @@ Slice 1 (#149) landed the validated backend engine; slice 2 (#155) adds the butt
 - [ ] Hammer the ✨ button repeatedly (>10× within a minute) → friendly rate-limit message, no error crash.
 - [ ] The AI note text renders as plain text (no styled/HTML content even if the page tried to inject some).
 
-Still open in M4: **T5** — the same AI proposal for truncated-feed full-text selectors inside feed settings (next slice).
+### 5b. AI full-text selector in feed settings (slice 3, PR #156 — M4 now complete ⭐)
+- [ ] Edit a feed that has synced articles → **Full Text** tab → next to the selector field there's a **"✨" propose button** (only with AI configured).
+- [ ] Click it → spinner → on success the **selector field fills in**, mode switches to "Custom selector", and a small box shows the AI's note + a plain-text excerpt of what the selector captured. **Nothing is saved yet** — hit Save to apply, or Cancel to discard.
+- [ ] A feed with **no synced articles** → friendly "sync the feed first" error, no crash.
+- [ ] The shared AI rate limit applies across both ✨ buttons (page→feed + selector) — hammering either exhausts the same 10/min budget.
 
 ---
 
