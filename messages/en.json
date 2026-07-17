@@ -599,6 +599,19 @@
       "deleted": "Feed deleted.",
       "couldNotDelete": "Could not delete feed."
     },
+    "webpage": {
+      "tabLabel": "From web page",
+      "urlPlaceholder": "Page URL (e.g. a blog or listing page)",
+      "findItems": "Find items",
+      "itemsFound": "{count, plural, one {# item found} other {# items found}}",
+      "namePlaceholder": "Feed name",
+      "createFeed": "Create feed",
+      "feedCreated": "Created {name}",
+      "emptyTitle": "No structured items found",
+      "emptyHint": "We couldn't detect a repeating list of items on that page. Try a direct RSS/Atom URL, Discover, or add the feed manually and fine-tune it in Scout Studio.",
+      "suggestFailed": "Could not read that page. Check the URL and try again.",
+      "createFailed": "Could not create the feed. Try a different selection."
+    },
     "spoilerAhead": "Spoiler content ahead",
     "spoilerDescription": "These articles have been flagged by your rules as spoilers and are kept out of every other view on purpose. Reveal only when you're ready to see them.",
     "revealSpoilers": "Reveal spoilers",

@@ -135,6 +135,19 @@ const DiscoveryPanel = dynamic(
   },
 );
 
+// Lazy-loaded: only rendered inside the "Add feed → From web page" tab.
+const PageFeedPanel = dynamic(
+  () => import("@/components/page-feed-panel").then((m) => m.PageFeedPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-10 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    ),
+  },
+);
+
 interface RssSidebarProps {
   feeds: FeedSource[];
   selectedFeed: string | null;
@@ -174,7 +187,7 @@ export function RssSidebar({
   const [importingPack, setImportingPack] = useState<string | null>(null);
   const [starterPacks, setStarterPacks] = useState<StarterPack[]>(DEFAULT_STARTER_PACKS);
   const [addingFeedUrl, setAddingFeedUrl] = useState<string | null>(null);
-  const [addFeedTab, setAddFeedTab] = useState<"url" | "discover">("url");
+  const [addFeedTab, setAddFeedTab] = useState<"url" | "discover" | "webpage">("url");
   const [branding, setBranding] = useState<{ instanceName: string; instanceIconDataUrl: string | null }>({
     instanceName: "FeedFerret",
     instanceIconDataUrl: null,
@@ -871,10 +884,11 @@ export function RssSidebar({
           <DialogHeader>
             <DialogTitle>{t("sidebar.addFeedTitle")}</DialogTitle>
           </DialogHeader>
-          <Tabs value={addFeedTab} onValueChange={(v) => setAddFeedTab(v as "url" | "discover")} className="w-full min-w-0">
-            <TabsList className="grid w-full grid-cols-2 h-9 rounded-xl">
+          <Tabs value={addFeedTab} onValueChange={(v) => setAddFeedTab(v as "url" | "discover" | "webpage")} className="w-full min-w-0">
+            <TabsList className="grid w-full grid-cols-3 h-9 rounded-xl">
               <TabsTrigger value="url" className="text-xs rounded-lg">{t("sidebar.byUrl")}</TabsTrigger>
               <TabsTrigger value="discover" className="text-xs rounded-lg">{t("sidebar.discover")}</TabsTrigger>
+              <TabsTrigger value="webpage" className="text-xs rounded-lg">{t("sidebar.webpage.tabLabel")}</TabsTrigger>
             </TabsList>
 
             {/* URL Tab */}
@@ -1022,6 +1036,34 @@ export function RssSidebar({
                 isAddingFeed={isAddingFeed}
                 addingUrl={addingFeedUrl}
                 subscribedUrls={new Set(feeds.map((f: any) => f.url).filter(Boolean))}
+              />
+            </TabsContent>
+
+            {/* From web page Tab */}
+            <TabsContent value="webpage" className="mt-3 min-w-0 overflow-hidden space-y-3">
+              <Select
+                value={newFeedCategoryId}
+                onValueChange={setNewFeedCategoryId}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder={t("sidebar.addToCategory")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("sidebar.noCategory")}</SelectItem>
+                  {allCategories.map((cat: any) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <PageFeedPanel
+                categoryId={newFeedCategoryId}
+                onCreated={(feed) => {
+                  toast.success(t("sidebar.webpage.feedCreated", { name: feed.name }));
+                  setIsAddFeedOpen(false);
+                  setAddFeedTab("url");
+                }}
               />
             </TabsContent>
           </Tabs>
