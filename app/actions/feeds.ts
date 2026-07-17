@@ -616,6 +616,128 @@ export async function proposeAiFeedConfig(url: string) {
     }
 }
 
+/**
+ * AI full-text-selector proposal (Phase 2 M4, slice 3/T5). Picks the most
+ * recent already-synced article on this feed as a representative sample,
+ * then reuses the same `proposeFeedConfig` engine as `proposeAiFeedConfig`
+ * to ask the user's BYOK AI provider for the article-body CSS selector.
+ * The proposal only comes back if the real extraction engine (JSDOM query +
+ * sanitizer) validates it against the live page — never trusts the AI's
+ * output on its own. Shares `RATE_LIMITS.aiFeedConfig`'s budget with
+ * `proposeAiFeedConfig` since both hit the AI provider and fetch a page.
+ */
+export async function proposeAiFullTextSelector(feedId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const feed = await db.feed.findFirst({
+        where: { id: feedId, userId: session.user.id },
+        select: { id: true },
+    });
+    if (!feed) throw new Error("Feed not found");
+
+    const article = await db.article.findFirst({
+        where: { feedId, userId: session.user.id, link: { not: "" } },
+        orderBy: { publishedAt: "desc" },
+        select: { link: true },
+    });
+    if (!article?.link) {
+        return {
+            success: false as const,
+            error: "This feed has no synced articles yet. Sync the feed first, then try again.",
+        };
+    }
+
+    const rateLimit = checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.aiFeedConfig);
+    if (!rateLimit.success) {
+        return { success: false as const, error: "Too many AI requests. Wait a bit and try again." };
+    }
+
+    const user = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { aiProvider: true, aiApiKey: true, aiModel: true, aiOllamaBaseUrl: true },
+    });
+    if (!user?.aiProvider) {
+        return { success: false as const, error: "AI is not configured. Set up AI in Settings → AI Summaries." };
+    }
+
+    // Captured by the injected fetchHtml below so we can re-derive a plain-text
+    // excerpt from the validated selector without fetching the page twice.
+    let fetchedHtml: string | null = null;
+
+    try {
+        const { proposeFeedConfig } = await import("@/lib/ai-feed-config");
+        const { proposal, validation } = await proposeFeedConfig(
+            article.link,
+            {
+                provider: user.aiProvider as AiProvider,
+                apiKey: decryptIfValue(user.aiApiKey),
+                model: user.aiModel,
+                ollamaBaseUrl: user.aiOllamaBaseUrl,
+            },
+            {
+                fetchHtml: async (u: string) => {
+                    fetchedHtml = await fetchTextWithSsrfProtection(
+                        u,
+                        {},
+                        {
+                            allowInternal: await isTrustedFeedFetchingAllowed(),
+                            context: "AI full-text selector",
+                            maxBytes: 2 * 1024 * 1024,
+                            maxRedirects: 5,
+                            timeoutMs: 12_000,
+                        },
+                    );
+                    return fetchedHtml;
+                },
+            },
+        );
+
+        if (proposal.mode !== "fulltext" || !validation.ok) {
+            return {
+                success: false as const,
+                error: "The AI couldn't find a reliable selector for this feed's articles",
+            };
+        }
+
+        let excerpt: string | null = null;
+        if (fetchedHtml) {
+            try {
+                const { JSDOM } = await import("jsdom");
+                const dom = new JSDOM(fetchedHtml, { url: article.link });
+                const element = dom.window.document.querySelector(proposal.fullTextSelector);
+                if (element) {
+                    const sanitizer = await getSanitizer();
+                    const plain = sanitizer
+                        .sanitize(element.innerHTML, { ALLOWED_TAGS: [] })
+                        .replace(/\s+/g, " ")
+                        .trim();
+                    excerpt = plain ? plain.slice(0, 500) : null;
+                }
+            } catch {
+                // Excerpt is a nice-to-have; the validated selector already proves it works.
+            }
+        }
+
+        return {
+            success: true as const,
+            selector: proposal.fullTextSelector,
+            notes: proposal.notes ?? null,
+            excerpt,
+        };
+    } catch (error) {
+        logger.error("Failed to propose AI full-text selector:", error);
+        const message = error instanceof Error ? error.message : "";
+        if (message.includes("unreadable config")) {
+            return { success: false as const, error: "The AI returned a response we couldn't understand. Try again." };
+        }
+        if (/Fetch failed|private IP|localhost|only supports http|URL is invalid|too large|Too many redirects/i.test(message)) {
+            return { success: false as const, error: describePageFetchError(error) };
+        }
+        return { success: false as const, error: message || "The AI request failed. Try again." };
+    }
+}
+
 export async function deleteFeed(feedId: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");

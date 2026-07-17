@@ -1064,7 +1064,10 @@
       "links": "Links",
       "recommended": "empfohlen",
       "scoutStudioTitle": "Scout Studio",
-      "scoutStudioDescription": "Geführte Extraktion: Artikel-URL einfügen, den bereinigten Inhalt in der Vorschau ansehen und den besten Selektor-Kandidaten übernehmen."
+      "scoutStudioDescription": "Geführte Extraktion: Artikel-URL einfügen, den bereinigten Inhalt in der Vorschau ansehen und den besten Selektor-Kandidaten übernehmen.",
+      "aiProposeButton": "Selektor von KI vorschlagen lassen",
+      "aiProposeSuccess": "Die KI hat einen Selektor vorgeschlagen. Prüfe ihn und speichere, um ihn zu übernehmen.",
+      "aiProposeFailed": "Die KI konnte keinen Selektor vorschlagen. Versuche es erneut oder lege einen manuell fest."
     },
     "scout": {
       "scoutAdvanced": "Scout Studio erweiterte Quellensteuerung",
