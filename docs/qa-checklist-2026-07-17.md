@@ -94,11 +94,19 @@ Everything merged to `main` today, with a manual test checklist. Tick items as y
 
 ---
 
+## 5. M4 — AI config proposal (⚙️ engine only so far — nothing to click yet)
+
+Slice 1 (PR #149) landed the **backend engine** (`lib/ai-feed-config.ts`): given a URL + your AI key it asks the model to propose a scraping config, then **validates that proposal through the real extraction engine** before it would ever be shown/saved. It is covered by unit tests and has **no UI yet** — the "✨ Let AI set this up" button is **slice 2**, not built.
+
+- [ ] Nothing to manually test in this slice — it's engine + tests only. (Listed here so the checklist reflects reality: M4 is in progress, UI pending.)
+
+---
+
 ## Known limitations (by design — not bugs)
-- **M3 suggestions are heuristic.** On messy/unusual pages the top candidate may not be perfect — that's expected; the AI proposal (M4, not built yet) will improve this. The manual Scout Studio (feed settings) remains the power-user fallback.
+- **M3 suggestions are heuristic.** On messy/unusual pages the top candidate may not be perfect — that's expected; the AI proposal (M4, engine landed, UI pending) will improve this. The manual Scout Studio (feed settings) remains the power-user fallback.
 - **JS-only pages** (content rendered client-side) won't yield items from the page→feed builder yet (needs the heavy-render connectors, a later milestone).
 - **a11y color-contrast** is guaranteed at the design-token level; axe's automated contrast check is disabled because it mis-reads our oklch tokens (all other WCAG checks run in CI). Authenticated-page axe coverage + a 200%-zoom pass are still pending.
-- **AI config proposal (M4)** — the "✨ let AI set this up" flow — is **not built yet**; it's the planned next milestone.
+- **AI config proposal (M4)** — the "✨ let AI set this up" flow — is **in progress**: the validation engine is merged (#149), but the user-facing button/flow (slice 2) is not built yet.
 
 ## How to report back
 For anything that misbehaves, note: which section, the feed/article URL, what you expected vs. saw, and browser/device. Screenshots help. I'll triage and fix.
