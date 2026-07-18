@@ -23,19 +23,30 @@ Key insight: Scrapling, crawl4ai and Firecrawl all solve the **same** "URL in �
 problem — pick **one** (crawl4ai: REST-native, single container, permissive license, honest docs), don't layer three.
 Crawlee is the odd one out in a good way: the only **in-process Node** option.
 
-## Recommended staged path
+## Staged path — DECIDED 2026-07-18 (maintainer)
 
-1. **In-process headless render, opt-in per feed** *(M7 slot, effort ~M)* — promote Playwright+Chromium
-   from devDependency to runtime dependency; a "render with headless browser before extract" toggle in
-   the page→feed builder + full-text pipeline. Routed through the SSRF guard, hard timeout, concurrency
-   cap, memory ceiling. **Fixes the JS-listing case (till-freitag) with zero new services** — off by
-   default, minimal deployments unaffected.
-2. **crawl4ai as optional M5 connector** *(effort S–M)* — admin-configured sidecar (base URL + API key,
-   hidden if unconfigured), same UX as the planned RSSHub/changedetection.io connectors. Incremental
-   anti-bot coverage without touching our image.
-3. **BYOK hosted API opt-in** *(Model C)* — for genuinely Cloudflare-challenged sites: Jina Reader or
-   Firecrawl **Cloud** with the user's own key, clearly labelled "content leaves your server". The only
-   tier that reliably clears active challenges.
+Revised after implementation experience (T0 shipped; Wired proved much "JS-only" content is
+actually embedded in the page's HTML/JSON). Ordered by cost/risk, lean default image preserved:
+
+0. **T0 — `impit` browser-fingerprint HTTP** ✅ shipped (#160). Soft anti-bot, no browser.
+1. **Embedded-data extraction (in-process, no Docker impact)** — *next*. Many "JS-rendered" pages
+   still ship their content in the HTML: `__NEXT_DATA__`, `<script type="application/json">` blobs,
+   JSON-LD lists. Extract those for article full-text AND listing→feed. Covers a real slice of
+   "JS" sites with **zero new services** (Wired's body lived in JSON-LD — same class of fix). Plus
+   the **ftr-site-config importer** (1,000+ pre-solved sites).
+2. **Sidecar browser connector (Option 3)** — for *genuinely* client-only pages that step 1 can't
+   reach: an **optional** admin-configured container (crawl4ai / a lean Playwright service), called
+   over HTTP (base URL + key, hidden if unconfigured — the RSSHub/changedetection.io connector
+   pattern). Keeps the **default image untouched** and **isolates the browser** (a render crash/OOM
+   stays in the sidecar, not the reader). Chosen over an in-process browser (which would add
+   ~400–500 MB Chromium to *every* deployment and run the browser in the reader's own container).
+3. **BYOK hosted API opt-in** *(Model C)* — for actively Cloudflare-challenged sites: Jina Reader or
+   Firecrawl **Cloud** with the user's own key, labelled "content leaves your server". The only tier
+   that reliably clears active challenges.
+
+> **Rejected: in-process headless render in the default image.** Bloats every self-hosted image with
+> Chromium (~400–500 MB) even for users who never render JS, and runs an untrusted-page browser inside
+> the reader's container. The sidecar (step 2) delivers the same capability opt-in, isolated, and lean.
 
 ## Honest limits (do not overpromise)
 
