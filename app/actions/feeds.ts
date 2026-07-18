@@ -552,6 +552,7 @@ export async function proposeAiFeedConfig(url: string) {
                         {
                             allowInternal: await isTrustedFeedFetchingAllowed(),
                             context: "AI feed config",
+                            impersonate: true,
                             maxBytes: 2 * 1024 * 1024,
                             maxRedirects: 5,
                             timeoutMs: 12_000,
@@ -683,6 +684,7 @@ export async function proposeAiFullTextSelector(feedId: string) {
                         {
                             allowInternal: await isTrustedFeedFetchingAllowed(),
                             context: "AI full-text selector",
+                            impersonate: true,
                             maxBytes: 2 * 1024 * 1024,
                             maxRedirects: 5,
                             timeoutMs: 12_000,
@@ -1358,6 +1360,7 @@ export async function fetchFullText(articleId: string) {
         {
             allowInternal: await isTrustedFeedFetchingAllowed(),
             context: "Full-text fetch",
+            impersonate: true,
             maxBytes: 2 * 1024 * 1024,
             maxRedirects: 5,
             timeoutMs: 12_000,
@@ -1994,6 +1997,7 @@ export async function previewFeedExtraction(feedId: string, articleUrl: string) 
         {
             allowInternal: await isTrustedFeedFetchingAllowed(),
             context: "Full-text preview fetch",
+            impersonate: true,
             maxBytes: 2 * 1024 * 1024,
             maxRedirects: 5,
             timeoutMs: 12_000,

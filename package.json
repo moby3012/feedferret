@@ -73,6 +73,7 @@
     "defuddle": "^0.19.1",
     "embla-carousel-react": "8.6.0",
     "geist": "^1.7.0",
+    "impit": "^0.14.3",
     "input-otp": "1.4.2",
     "isomorphic-dompurify": "^3.13.0",
     "jsdom": "^27.4.0",

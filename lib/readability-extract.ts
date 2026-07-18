@@ -162,6 +162,7 @@ export async function fetchAndExtractReadable(url: string): Promise<ExtractionRe
     {
       allowInternal: await isTrustedFeedFetchingAllowed(),
       context: "Full-text",
+      impersonate: true,
       maxBytes: 2 * 1024 * 1024,
       maxRedirects: 5,
       timeoutMs: 12_000,

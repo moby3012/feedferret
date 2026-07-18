@@ -13,6 +13,7 @@ const nextConfig = {
     "isomorphic-dompurify",
     "defuddle",
     "@mozilla/readability",
+    "impit",
     "@prisma/client",
     "@prisma/adapter-better-sqlite3",
     "@prisma/adapter-pg",

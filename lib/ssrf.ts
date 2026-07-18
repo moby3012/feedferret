@@ -1,6 +1,7 @@
 import dns from "dns/promises";
 import net from "net";
 import { db } from "@/lib/db";
+import { getImpitFetch, type FetchResponseLike } from "./impit-fetch";
 
 export type SsrfCheckOptions = {
   allowInternal?: boolean;
@@ -11,6 +12,11 @@ export type SafeFetchTextOptions = SsrfCheckOptions & {
   maxBytes?: number;
   maxRedirects?: number;
   timeoutMs?: number;
+  // When true, use the browser-fingerprint fetch engine (impit) instead of
+  // plain `fetch` — for "convert a web page" paths that hit soft bot
+  // protection. SSRF re-validation of every redirect hop is unaffected.
+  // Falls back to native fetch when impit is disabled/unavailable.
+  impersonate?: boolean;
 };
 
 function truthy(value?: string) {
@@ -103,7 +109,7 @@ export async function assertSafeFetchUrl(rawUrl: string, options: SsrfCheckOptio
   return url;
 }
 
-async function readTextWithLimit(response: Response, maxBytes?: number) {
+async function readTextWithLimit(response: FetchResponseLike, maxBytes?: number) {
   if (!maxBytes || !response.body) return response.text();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -138,6 +144,11 @@ export async function fetchWithSsrfProtection(
 ): Promise<ConditionalFetchResult> {
   const maxRedirects = options.maxRedirects ?? 10;
   const timeoutMs = options.timeoutMs ?? 30_000;
+  // Browser-fingerprint transport for "convert a web page" callers; plain
+  // fetch (unchanged behaviour) otherwise. Either way we drive redirects
+  // manually and re-validate every hop below, so SSRF protection is identical.
+  const doFetch: (url: string, init: RequestInit) => Promise<FetchResponseLike> =
+    options.impersonate ? getImpitFetch() ?? fetch : fetch;
   let current = (await assertSafeFetchUrl(rawUrl, options)).toString();
 
   for (let redirect = 0; redirect <= maxRedirects; redirect++) {
@@ -145,7 +156,7 @@ export async function fetchWithSsrfProtection(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(current, {
+      const response = await doFetch(current, {
         ...init,
         redirect: "manual",
         signal: controller.signal,
