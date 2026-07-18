@@ -112,9 +112,10 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 ## Milestone M7 — Heavy rendering / anti-bot (optional, top of the ramp)
 *Phase 2.D.*
 
-> **Research 2026-07-17** ([`scraping-engines-research.md`](scraping-engines-research.md)): staged plan is T1 (in-process Playwright, ~M not L) → optional **crawl4ai** sidecar (M5 pattern) → BYOK hosted (Jina / Firecrawl **Cloud**). Firecrawl *self-host* demoted — its anti-bot engine is cloud-only and the stack is 7 containers.
+> **Research 2026-07-17 (r1) + 2026-07-18 (r2)** ([`scraping-engines-research.md`](scraping-engines-research.md)): tiered plan — **T0** cheap in-process HTTP impersonation (`impit`+`header-generator`) → **T1** in-process render on `rebrowser-playwright` → **T2** optional **crawl4ai** sidecar → **T3** BYOK hosted (Jina / Firecrawl **Cloud**). Firecrawl *self-host* demoted (anti-bot engine cloud-only, 7 containers). Skip: got-scraping (EOL), puppeteer stealth plugin (dead), autoscraper/browser-use.
 
-- [ ] **M7-T1** In-process **Playwright** "render then extract" opt-in per feed — SSRF-guarded, hard timeout, concurrency cap, memory ceiling; per-feed opt-in only, off by default. Fixes JS-rendered listings with zero new services. — `M`
+- [ ] **M7-T0** *(new, r2)* Wrap the plain-HTTP fetch path with **`impit` + `header-generator`** (real browser TLS/HTTP2 fingerprints, still through `lib/ssrf.ts`) — no browser, no new service. Clears soft WAF/fingerprint gates that today look like "needs a browser." — `S`
+- [ ] **M7-T1** In-process render "then extract" opt-in per feed, built on **`rebrowser-playwright`** (patches the CDP leak vanilla Playwright leaks; the stealth-plugin ecosystem is dead) — SSRF-guarded, hard timeout, concurrency cap, memory ceiling; per-feed opt-in, off by default. Fixes JS-rendered listings with zero new services. — `M`
 - [ ] **M7-T2** Optional **crawl4ai** connector (Model B, REST out of the box, single container) and/or per-user BYO-key hosted API (Model C, Jina Reader / Firecrawl Cloud), clearly flagged "content leaves your server". — `M`
 
 **Acceptance:** a JS-only / mildly anti-bot page that all earlier tiers miss can be captured via the opt-in heavy path. **Deps:** M3–M5. **Risk:** RAM/CPU (isolate), fragility, ToS — position as last resort.

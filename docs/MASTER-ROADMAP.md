@@ -53,7 +53,7 @@ Source: [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md). North-st
 - ⬜ **F8 ⭐ · AI auto-tagging/classification** (pull in right after M4 — reuses the AI-config plumbing) — **M**
 - ⬜ **M5** — Optional connectors: **RSSHub** + **changedetection.io** (self-hosted sidecars) — **M ×2**
 - ⬜ **M6** — Per-article AI extraction fallback — **M–L**
-- ⬜ **M7** — Heavy render / anti-bot — **L** · Researched 2026-07-17 ([`scraping-engines-research.md`](scraping-engines-research.md)): staged path is **(1)** in-process Playwright render opt-in per feed (fixes JS-rendered listings, no new services, ~M), **(2)** optional **crawl4ai** sidecar connector (M5 pattern), **(3)** BYOK hosted API (Jina / Firecrawl **Cloud**) for actively Cloudflare-challenged sites. Firecrawl *self-host* demoted (7-container stack; its anti-bot engine is cloud-only). autoscraper/browser-use/curl-impersonate: skip.
+- ⬜ **M7** — Heavy render / anti-bot — **L** · Researched 2026-07-17/18 ([`scraping-engines-research.md`](scraping-engines-research.md), r1+r2): tiered path — **T0** cheap in-process HTTP impersonation (`impit`+`header-generator`, effort S, no browser/no service), **T1** in-process render on **`rebrowser-playwright`** (fixes JS listings, ~M), **T2** optional **crawl4ai** sidecar (M5 pattern), **T3** BYOK hosted (Jina / Firecrawl **Cloud**) for active Cloudflare challenges. Firecrawl *self-host* demoted (anti-bot cloud-only, 7 containers). Skip: got-scraping (EOL), puppeteer stealth plugin (dead), autoscraper, browser-use, curl-impersonate-direct. Possible extras: `@extractus/article-extractor` (3rd extraction fallback), an `ftr-site-config` importer (1,000+ pre-solved sites).
 
 ---
 
