@@ -1,0 +1,13 @@
+{
+  "name": "feedferret-render-sidecar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal browser-render sidecar for FeedFerret (M7-T2).",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.49.1"
+  }
+}

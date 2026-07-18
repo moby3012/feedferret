@@ -46,7 +46,10 @@ import {
   AlertTriangle,
   HardDrive,
   FileText,
+  ChevronDown,
+  BookOpen,
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -86,6 +89,20 @@ import {
   type StarterPack,
   type StarterPackFeed,
 } from "@/lib/starter-packs";
+
+// Copy-paste compose block for the render-sidecar setup guide (Sync tab). Kept
+// as a module constant so the string is identical in the <pre> and the copy
+// button. Mirrors docker/render-sidecar/docker-compose.example.yml.
+const RENDER_SIDECAR_COMPOSE = `services:
+  render-sidecar:
+    build: ./docker/render-sidecar
+    restart: unless-stopped
+    environment:
+      SIDECAR_TOKEN: "change-me"
+    expose:
+      - "8080"
+    security_opt:
+      - no-new-privileges:true`;
 
 export function ServerManagementDialog({
   open,
@@ -204,6 +221,15 @@ export function ServerManagementDialog({
     // "__encrypted__" sentinel (that would re-encrypt the placeholder string).
     if (token && token !== "__encrypted__") payload.renderSidecarToken = token;
     await handleUpdateSettings(payload);
+  };
+
+  const handleCopyText = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(t("toast.copiedToClipboard"));
+    } catch {
+      toast.error(t("toast.failedToUpdateSettings"));
+    }
   };
 
   const handleTestSidecar = async () => {
@@ -1098,11 +1124,71 @@ export function ServerManagementDialog({
                         onCheckedChange={(checked) => handleUpdateSettings({ renderSidecarEnabled: checked })}
                       />
                     </div>
+
+                    {/* Step-by-step setup guide (visible whether or not enabled) */}
+                    <Collapsible className="rounded-2xl bg-card border border-border/60 shadow-sm">
+                      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 p-5 text-start">
+                        <span className="flex items-center gap-2 text-sm font-semibold">
+                          <BookOpen className="w-4 h-4 text-muted-foreground" />
+                          {t("sync.renderSidecarGuideTitle")}
+                        </span>
+                        <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="px-5 pb-5 space-y-4">
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {t("sync.renderSidecarGuideIntro")}
+                        </p>
+                        <ol className="list-decimal space-y-1.5 ps-5 text-xs text-muted-foreground marker:text-muted-foreground/70">
+                          <li>{t("sync.renderSidecarGuideStep1")}</li>
+                          <li>{t("sync.renderSidecarGuideStep2")}</li>
+                          <li>{t("sync.renderSidecarGuideStep3")}</li>
+                          <li>{t("sync.renderSidecarGuideStep4")}</li>
+                        </ol>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideComposeLabel")}</Label>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 rounded-lg px-2 text-xs"
+                              onClick={() => handleCopyText(RENDER_SIDECAR_COMPOSE)}
+                            >
+                              <ClipboardCopy className="w-3.5 h-3.5 me-1" />
+                              {t("sync.renderSidecarGuideCopy")}
+                            </Button>
+                          </div>
+                          <pre className="rounded-xl bg-background/60 border border-border/50 p-3 text-[11px] font-mono whitespace-pre overflow-x-auto">{RENDER_SIDECAR_COMPOSE}</pre>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideCommandLabel")}</Label>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">docker compose up -d render-sidecar</code>
+                            <Button type="button" size="icon" variant="outline" className="rounded-xl shrink-0" onClick={() => handleCopyText("docker compose up -d render-sidecar")}>
+                              <ClipboardCopy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideUrlLabel")}</Label>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">http://render-sidecar:8080/</code>
+                            <Button type="button" size="icon" variant="outline" className="rounded-xl shrink-0" onClick={() => handleCopyText("http://render-sidecar:8080/")}>
+                              <ClipboardCopy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          {t("sync.renderSidecarGuideDocsHint")}
+                        </p>
+                      </CollapsibleContent>
+                    </Collapsible>
+
                     {settings?.renderSidecarEnabled && (
                       <div className="p-6 rounded-2xl bg-card border border-border/60 shadow-sm space-y-4">
                         <SettingsField
                           label={t("sync.renderSidecarUrl")}
-                          placeholder="http://crawl4ai:11235/crawl"
+                          placeholder="http://render-sidecar:8080/"
                           field="renderSidecarUrl"
                           settings={settings}
                           setSettings={setSettings}

@@ -1,0 +1,28 @@
+# Example: run FeedFerret's browser-render sidecar (M7-T2) next to FeedFerret.
+# Add this `render-sidecar` service to your existing FeedFerret compose file
+# (or merge the block) so both containers share a network and FeedFerret can
+# reach the sidecar at http://render-sidecar:8080/.
+#
+# After it's up: Server Management → Sync → Browser-render sidecar
+#   • enable it
+#   • URL:   http://render-sidecar:8080/
+#   • Token: the value of SIDECAR_TOKEN below (or leave both blank)
+#   • click Test — a green result means it's wired up.
+
+services:
+  render-sidecar:
+    build: ./docker/render-sidecar
+    # Or pin your own pre-built image instead of building:
+    # image: your-registry/feedferret-render-sidecar:latest
+    restart: unless-stopped
+    environment:
+      # Optional shared secret. If set, put the SAME value in the admin UI.
+      SIDECAR_TOKEN: "change-me"
+      # NAV_TIMEOUT_MS: "30000"
+    # No published ports needed — only FeedFerret talks to it, over the
+    # internal network. Keep it off the public internet.
+    expose:
+      - "8080"
+    # Renders untrusted pages: keep it isolated (no volumes, no extra caps).
+    security_opt:
+      - no-new-privileges:true
