@@ -46,3 +46,42 @@ Crawlee is the odd one out in a good way: the only **in-process Node** option.
   the next vendor update. Frame hard targets (e.g. the XenForo forum HTML) as "sometimes works", never solved.
   (For XenForo specifically the clean answer remains its native RSS: `…/index.rss` works since #153.)
 - CAPTCHAs and login/paywall content: different problem, out of scope.
+
+---
+
+# Round 2 — Node/npm-native candidates (2026-07-18)
+
+Round 1 was framework/service-heavy. This round hunts **in-process Node** wins (our preferred tier)
+plus complementary prior-art. Verdicts below; full reasoning in commit history.
+
+## New verdicts
+
+| Tool | What / runtime | Solves | Verdict |
+|---|---|---|---|
+| **`impit`** (`impit-node`, Apache-2.0, active) | Rust-core HTTP client w/ **real Chrome/Firefox TLS+HTTP2 fingerprints**, Node bindings, fetch-like API | Soft anti-bot (TLS/WAF fingerprinting); some "JS-looking" pages that are really just soft-blocked | ✅ **Adopt — new Tier 0.** In-process, drop-in behind `lib/ssrf.ts`. Our fetch path has **zero** impersonation today. Effort **S** |
+| **`header-generator`** (Apify, Apache-2.0, active) | Statistically-consistent header sets (Sec-CH-UA etc.) | pairs with impit + future Playwright | ✅ **Bundle with impit.** Effort **S** |
+| **`got-scraping`** (Apify) | predecessor of impit | — | ❌ **EOL** — maintainers redirect to impit |
+| **`rebrowser-playwright`** (active, MIT-ish) | Playwright fork patching the CDP `Runtime.enable` leak Cloudflare/DataDome key off | hardens the browser tier | ✅ **Use instead of vanilla Playwright when M7-T1 ships** — near-zero-cost import swap. Effort **S** |
+| **`puppeteer-extra-plugin-stealth`** | classic stealth plugin | — | ❌ **Dead** (no release since 2023; fails modern JA4/CH-UA/CDP signals). Do not adopt — false confidence |
+| **`@extractus/article-extractor`** (MIT, active) | linkedom+sanitize-html extraction, different heuristic than Readability | thin-extraction edge cases | ⏸ Possible **third-tier extraction fallback** after Defuddle→Readability. Effort **S**, value **S** |
+| **`@postlight/parser`** (Mercury) | per-site extractors | — | ❌ Stale since 2022; its per-site idea is better served by ftr-site-config below |
+| **`@extractus/feed-extractor`** / **`article-parser`** / **`node-unfluff`** | — | — | ❌ Redundant with our `rss-parser`/Defuddle, or unmaintained |
+| **`feed`** (jpmonette, MIT, active) | RSS/Atom/JSON-Feed **generator** | — | ⏸ We hand-roll feed/OPML XML today (`lib/opml.ts`) — **audit that serializer** for namespace/CDATA edge cases before deciding to add. Effort **S** |
+
+## Prior-art "anything → RSS" (reference / interop only — do not port)
+
+- **`rss-bridge`** (PHP, ~447 site-specific bridges, public-domain) — **best reference for site-rule design** + plausible interop target (consume its Atom output like the planned RSSHub connector).
+- **`rss-proxy`** (TypeScript, GPLv3) — heuristics close to our own `page-feed-suggest.ts`; author moved advanced features to a successor ("feedless"). Compare heuristics, don't adopt.
+- **`morss`** (Python) — single-file version of what our Defuddle/Readability + page-feed already do. Skip.
+- **Five Filters `ftr-site-config`** — **1,000+ community-maintained per-site extraction rules**, healthy repo, but **no Node parser exists**. The format is a simple key:value text — a ~100-line parser + ingest job would import 1,000+ pre-solved sites as a fallback ruleset. **Effort M, value M — a dataset-import project, not a dependency.**
+
+## Round-2 synthesis
+
+**Top in-process wins to `npm install` now:** ① **impit** (+ **header-generator**) — the cheap "Tier 0" anti-bot layer round 1 lacked a Node option for. ② **rebrowser-playwright** — held for M7-T1 (swap for vanilla Playwright, avoids a known-exploited CDP leak). ③ (optional) **article-extractor** as a third extraction fallback.
+
+**Cloudflare verdict unchanged:** impit + rebrowser raise the ceiling on *soft* anti-bot (TLS fingerprints, CDP tells) but **neither solves active JS challenges or IP reputation** — the XenForo-class case still needs the sidecar (crawl4ai) or BYOK tier. Tier 0/1 just shrink how many sites land in that bucket.
+
+**Revised M7 tiering:**
+- **Tier 0** *(new, cheap, in-process, effort S)* — wrap outbound fetch with **impit + header-generator** for non-render requests. Pure upside: no browser, no new service, still through the SSRF guard; closes soft-bot gaps today misdiagnosed as "needs a browser."
+- **Tier 1** *(= M7-T1)* — in-process headless render for genuinely JS-rendered pages, built on **rebrowser-playwright** (not vanilla Playwright / dead stealth plugins).
+- **Tier 2/3** *(unchanged)* — optional crawl4ai sidecar, then BYOK hosted API for active-challenge sites.
