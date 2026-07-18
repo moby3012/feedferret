@@ -258,6 +258,7 @@ export async function fetchAndSuggestFeedCandidates(url: string): Promise<FeedCa
     {
       allowInternal: await isTrustedFeedFetchingAllowed(),
       context: "Page feed",
+      impersonate: true,
       maxBytes: 2 * 1024 * 1024,
       maxRedirects: 5,
       timeoutMs: 12_000,

@@ -221,6 +221,7 @@ export async function proposeFeedConfig(
         {
           allowInternal: await isTrustedFeedFetchingAllowed(),
           context: "AI feed config",
+          impersonate: true,
           maxBytes: 2 * 1024 * 1024,
           maxRedirects: 5,
           timeoutMs: 12_000,
