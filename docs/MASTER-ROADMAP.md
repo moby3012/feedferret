@@ -6,7 +6,7 @@
 
 ## Source docs (hub)
 - Releases: [`releases/v1.2-theming.md`](releases/v1.2-theming.md) · [`releases/v1.3.md`](releases/v1.3.md) · [`releases/v2.md`](releases/v2.md) · [`releases/backlog.md`](releases/backlog.md) · [`releases/maintenance.md`](releases/maintenance.md) · [`releases/testing.md`](releases/testing.md)
-- Feed Intelligence: [`feed-intelligence-plan.md`](feed-intelligence-plan.md) · [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md) · [`feature-ideas.md`](feature-ideas.md)
+- Feed Intelligence: [`feed-intelligence-plan.md`](feed-intelligence-plan.md) · [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md) · [`feature-ideas.md`](feature-ideas.md) · [`scraping-engines-research.md`](scraping-engines-research.md)
 - Quality backlogs: [`design-polish-2-todo.md`](design-polish-2-todo.md) · [`accessibility-todo.md`](accessibility-todo.md) · [`deferred.md`](deferred.md)
 - Index: [`ROADMAP.md`](ROADMAP.md)
 
@@ -53,7 +53,7 @@ Source: [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md). North-st
 - ⬜ **F8 ⭐ · AI auto-tagging/classification** (pull in right after M4 — reuses the AI-config plumbing) — **M**
 - ⬜ **M5** — Optional connectors: **RSSHub** + **changedetection.io** (self-hosted sidecars) — **M ×2**
 - ⬜ **M6** — Per-article AI extraction fallback — **M–L**
-- ⬜ **M7** — Heavy render / anti-bot (Playwright / Firecrawl / Jina) — **L**
+- ⬜ **M7** — Heavy render / anti-bot — **L** · Researched 2026-07-17 ([`scraping-engines-research.md`](scraping-engines-research.md)): staged path is **(1)** in-process Playwright render opt-in per feed (fixes JS-rendered listings, no new services, ~M), **(2)** optional **crawl4ai** sidecar connector (M5 pattern), **(3)** BYOK hosted API (Jina / Firecrawl **Cloud**) for actively Cloudflare-challenged sites. Firecrawl *self-host* demoted (7-container stack; its anti-bot engine is cloud-only). autoscraper/browser-use/curl-impersonate: skip.
 
 ---
 
