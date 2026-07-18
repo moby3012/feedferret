@@ -33,7 +33,7 @@ import {
   useReleaseAllSpoilers,
 } from "@/hooks/use-rss-data";
 import { CommandPalette } from "@/components/command-palette";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Search as SearchIcon, X as XIcon } from "lucide-react";
@@ -848,15 +848,21 @@ export default function RSSReaderPage() {
       </div>
       )}
 
-      {/* Mobile feed picker: bottom drawer keeps navigation in thumb reach.
-          modal={false}: the sidebar hosts dialogs (Add feed, feed settings) whose
-          content portals to <body>, i.e. outside this drawer. A modal vaul drawer
-          traps focus inside itself and yanks it back off those dialogs' text
-          inputs — on iOS that shows the focus ring but suppresses the keyboard.
-          Non-modal disables that focus trap so nested-dialog inputs work. */}
+      {/* Mobile feed picker: a Radix-based bottom sheet (NOT a vaul drawer).
+          The sidebar hosts dialogs (Add feed) whose Radix content portals to
+          <body>; nesting them inside a vaul drawer breaks text-input focus on
+          iOS (tap shows the focus ring but no caret/keyboard). A Radix Sheet is
+          itself a Radix Dialog, so the Add-feed dialog stacks as a normal
+          nested Radix dialog and its inputs work. Trade-off vs. vaul: no
+          drag-to-dismiss gesture (close via the X, tap-outside, or picking a
+          feed). */}
       {isMobileLayout && (
-      <Drawer open={sidebarOpen} onOpenChange={setSidebarOpen} direction="bottom" modal={false}>
-        <DrawerContent className="h-[86dvh] rounded-t-[2rem] border-border/70 p-0 lg:hidden">
+      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetContent
+          side="bottom"
+          className="h-[86dvh] rounded-t-[2rem] border-border/70 p-0 gap-0 lg:hidden"
+        >
+          <SheetTitle className="sr-only">{t("feedNavigation")}</SheetTitle>
           <RssSidebar
             feeds={sidebarFeeds}
             selectedFeed={selectedFeed}
@@ -873,8 +879,8 @@ export default function RSSReaderPage() {
               setSidebarOpen(false);
             }}
           />
-        </DrawerContent>
-      </Drawer>
+        </SheetContent>
+      </Sheet>
       )}
 
       {/* Desktop: resizable article list + reader */}
