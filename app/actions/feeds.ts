@@ -32,6 +32,7 @@ import type { AiProvider } from "@/lib/ai-summary";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { getSanitizer } from "@/lib/sanitize-html";
+import { fetchAndExtractReadable } from "@/lib/readability-extract";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -1349,70 +1350,16 @@ export async function fetchFullText(articleId: string) {
 
     if (!article?.link) throw new Error("Article has no source link");
 
-    const html = await fetchTextWithSsrfProtection(
-        article.link,
-        {
-            headers: {
-                "User-Agent": "FeedFerret/1.0 (+https://github.com/moby3012/feedferret)",
-                Accept: "text/html,application/xhtml+xml",
-            },
-        },
-        {
-            allowInternal: await isTrustedFeedFetchingAllowed(),
-            context: "Full-text fetch",
-            impersonate: true,
-            maxBytes: 2 * 1024 * 1024,
-            maxRedirects: 5,
-            timeoutMs: 12_000,
-        },
-    );
-    const { JSDOM } = await import("jsdom");
+    // Use the shared extraction engine (Defuddle → Readability → JSON-LD
+    // articleBody fallback) rather than a bespoke DOM-scoring heuristic. The
+    // JSON-LD fallback recovers full text from sites (e.g. Wired/Condé Nast)
+    // that paywall/truncate the visible DOM but ship the whole body in
+    // schema.org structured data. Engine fetch is SSRF-safe + impersonating.
+    const result = await fetchAndExtractReadable(article.link);
+    if (!result.html) throw new Error("Could not extract article content");
+
     const DOMPurify = await getSanitizer();
-    const dom = new JSDOM(html, { url: article.link });
-    const document = dom.window.document;
-
-    document.querySelectorAll("script, style, nav, footer, header, aside, form, iframe, noscript, svg").forEach((node: Element) => node.remove());
-    document.querySelectorAll("a[href], img[src]").forEach((node: Element) => {
-        const attr = node instanceof dom.window.HTMLImageElement ? "src" : "href";
-        const value = node.getAttribute(attr);
-        if (!value) return;
-        try {
-            node.setAttribute(attr, new URL(value, article.link).toString());
-        } catch {
-            // Ignore malformed URLs.
-        }
-    });
-
-    const selectors = [
-        "article",
-        "main",
-        "[role='main']",
-        ".post-content",
-        ".entry-content",
-        ".article-content",
-        ".content",
-    ];
-
-    const candidates = selectors
-        .flatMap((selector) => Array.from<Element>(document.querySelectorAll(selector)))
-        .concat(Array.from<Element>(document.body.children));
-
-    const best = candidates
-        .map((element: Element) => ({
-            element,
-            score:
-                (element.textContent?.trim().length || 0) +
-                element.querySelectorAll("p").length * 250 -
-                element.querySelectorAll("a").length * 20,
-        }))
-        .sort((a, b) => b.score - a.score)[0]?.element;
-
-    if (!best) throw new Error("Could not extract article content");
-
-    const sanitized = DOMPurify.sanitize(best.innerHTML, {
-        ADD_ATTR: ["target", "rel"],
-    }).trim();
-    const plain = DOMPurify.sanitize(sanitized, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
+    const plain = DOMPurify.sanitize(result.html, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
 
     if (plain.length < 400 || plain.length <= (article.content || "").replace(/<[^>]*>?/gm, "").length) {
         throw new Error("Full text could not improve this article");
@@ -1421,9 +1368,9 @@ export async function fetchFullText(articleId: string) {
     return await db.article.update({
         where: { id: article.id, userId: session.user.id },
         data: {
-            content: sanitized,
+            content: result.html,
             contentFormat: "html",
-            excerpt: plain.slice(0, 240),
+            excerpt: result.excerpt?.trim() || plain.slice(0, 240),
         },
         include: {
             feed: true,

@@ -124,3 +124,58 @@ describe("extractReadableContent — junk input", () => {
     await expect(extractReadableContent("", "https://example.com/blank")).resolves.toBeDefined();
   });
 });
+
+// ── crash-hardening: jsdom CSS parser must not abort extraction ───────────────
+
+describe("extractReadableContent — <style> crash hardening", () => {
+  // jsdom's CSS engine throws on `border: var(--border-width,…)` shorthands.
+  // The page below embeds exactly that; extraction must strip <style> and still
+  // return the article rather than throwing (regression for the production
+  // "border-width" sync crash and Wired full-text failing).
+  const BORDER_VAR_CSS_ARTICLE = `
+<!doctype html><html><head><title>CSS Trap</title>
+<style>:root{--border-width:1px}.box{border:var(--border-width,1px) solid #000}</style>
+</head><body>
+<article><h1>Motion Sensors Without Cameras</h1>
+<p>The good news is you don't need a camera to secure your home or detect intruders. I tested several motion sensors and alternative systems that can alert you of activity just as effectively without sacrificing your privacy over many weeks of real use.</p>
+<p>Each device here was evaluated for reliability, ease of setup, privacy posture, and how well it integrated with common smart-home hubs, so you can pick one that fits your household without adding another camera to your life.</p>
+</article></body></html>`;
+
+  it("does not throw and extracts content despite a var() border shorthand in <style>", async () => {
+    const result = await extractReadableContent(BORDER_VAR_CSS_ARTICLE, "https://example.com/css-trap");
+    expect(result.html).toBeTruthy();
+    expect(result.extractedBy === "defuddle" || result.extractedBy === "readability").toBe(true);
+    expect((result.html || "").toLowerCase()).toContain("motion sensors");
+  });
+});
+
+// ── JSON-LD articleBody fallback for paywalled/truncated DOMs ──────────────────
+
+describe("extractReadableContent — JSON-LD articleBody fallback", () => {
+  const bodyText = Array.from({ length: 12 }, (_, i) =>
+    `Paragraph ${i + 1}: this is the full article body that only appears in the schema.org structured data, not in the visible paywalled DOM, and it is long enough to clear the extraction threshold comfortably.`,
+  ).join("\\n\\n");
+
+  const PAYWALLED_HTML = `
+<!doctype html><html><head><title>Paywalled Story</title>
+<script type="application/ld+json">${JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    headline: "Paywalled Story",
+    isAccessibleForFree: false,
+    articleBody: bodyText,
+  })}</script>
+</head><body>
+<article><h1>Paywalled Story</h1><p>Subscribe to read the rest.</p></article>
+</body></html>`;
+
+  it("recovers full text from schema.org articleBody when the DOM body is a thin teaser", async () => {
+    const result = await extractReadableContent(PAYWALLED_HTML, "https://example.com/paywalled");
+    // Recovery may come from Defuddle's own JSON-LD awareness or our explicit
+    // jsonld fallback — either way the full body must be surfaced, not "none".
+    expect(result.extractedBy).not.toBe("none");
+    const plain = (result.html || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    expect(plain.length).toBeGreaterThan(400);
+    expect(plain).toContain("Paragraph 12");
+  });
+});

@@ -13,6 +13,7 @@
 import { JSDOM } from "jsdom";
 import { buildXPathArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
+import { stripStyleBlocks } from "./html-utils";
 
 export type SuggestedFieldConfig = {
   xPathItem: string;
@@ -189,7 +190,7 @@ function averageTextLength(items: Element[]): number {
  * `[]` (never throws) when nothing qualifies.
  */
 export function suggestFeedCandidates(rawHtml: string, url: string): FeedCandidate[] {
-  const dom = new JSDOM(rawHtml, { url });
+  const dom = new JSDOM(stripStyleBlocks(rawHtml), { url });
   const groups = collectGroups(dom.window.document);
 
   const candidates: FeedCandidate[] = [];
