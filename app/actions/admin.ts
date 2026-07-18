@@ -7,6 +7,7 @@ import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import { revalidatePath } from "next/cache";
 import { normalizeStarterPacksInput, stringifyStarterPacks } from "@/lib/starter-packs";
 import { getStarterPacksFromSettings } from "@/lib/starter-packs.server";
+import { renderWithConfig } from "@/lib/render-sidecar";
 import { logger } from "@/lib/logger";
 
 async function checkAdmin() {
@@ -59,6 +60,7 @@ const ENCRYPTED_FIELDS = [
   "postmarkServerToken",
   "mailgunApiKey",
   "sendgridApiKey",
+  "renderSidecarToken",
 ] as const;
 
 type EncryptedField = (typeof ENCRYPTED_FIELDS)[number];
@@ -134,6 +136,16 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
   if ("backgroundSyncIntervalMinutes" in data) {
     const v = Number(data.backgroundSyncIntervalMinutes);
     next.backgroundSyncIntervalMinutes = Number.isFinite(v) && v > 0 ? v : 5;
+  }
+
+  // Browser-render sidecar (M7-T2)
+  if (typeof data.renderSidecarEnabled === "boolean") next.renderSidecarEnabled = data.renderSidecarEnabled;
+  if ("renderSidecarUrl" in data) {
+    const value = String(data.renderSidecarUrl || "").trim();
+    if (value && !/^https?:\/\//i.test(value)) {
+      throw new Error("Render sidecar URL must start with http:// or https://");
+    }
+    next.renderSidecarUrl = value || null;
   }
 
   // Encrypted fields: only update if a non-empty value is provided
@@ -323,6 +335,37 @@ export async function sendTestEmail(config: Record<string, unknown>) {
   } catch (error: any) {
     logger.error("Mail provider test failed:", error);
     return { success: false, error: error?.message || "Unknown mail error" };
+  }
+}
+
+export async function testRenderSidecar(config: { url?: string; token?: string; testUrl?: string }) {
+  await checkAdmin();
+  const url = String(config.url || "").trim();
+  if (!/^https?:\/\//i.test(url)) {
+    return { success: false as const, error: "Render sidecar URL must start with http:// or https://" };
+  }
+
+  // The token field may carry the "__encrypted__" sentinel when the admin left
+  // the stored value untouched — resolve it back to the stored token.
+  let token = String(config.token || "").trim() || null;
+  if (token === "__encrypted__") {
+    const current = await db.globalSettings.findUnique({
+      where: { id: "global" },
+      select: { renderSidecarToken: true },
+    });
+    token = decryptIfValue(current?.renderSidecarToken) || null;
+  }
+
+  const testUrl = String(config.testUrl || "").trim() || "https://example.com/";
+  try {
+    const html = await renderWithConfig({ url, token }, testUrl, { context: "Render sidecar test", timeoutMs: 30_000 });
+    if (!html || html.trim().length < 50) {
+      return { success: false as const, error: "Sidecar returned no usable HTML for the test URL" };
+    }
+    return { success: true as const, bytes: html.length, testUrl };
+  } catch (error: any) {
+    logger.error("Render sidecar test failed:", error);
+    return { success: false as const, error: error?.message || "Unknown render sidecar error" };
   }
 }
 

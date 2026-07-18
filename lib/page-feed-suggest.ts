@@ -14,6 +14,7 @@ import { JSDOM } from "jsdom";
 import { buildXPathArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { stripStyleBlocks } from "./html-utils";
+import { renderViaSidecar } from "./render-sidecar";
 
 export type SuggestedFieldConfig = {
   xPathItem: string;
@@ -253,17 +254,36 @@ export function suggestFeedCandidates(rawHtml: string, url: string): FeedCandida
 
 /** SSRF-safe wrapper: fetch the URL, then suggest candidates. Fetch errors propagate. */
 export async function fetchAndSuggestFeedCandidates(url: string): Promise<FeedCandidate[]> {
-  const html = await fetchTextWithSsrfProtection(
-    url,
-    {},
-    {
-      allowInternal: await isTrustedFeedFetchingAllowed(),
-      context: "Page feed",
-      impersonate: true,
-      maxBytes: 2 * 1024 * 1024,
-      maxRedirects: 5,
-      timeoutMs: 12_000,
-    },
-  );
-  return suggestFeedCandidates(html, url);
+  let directError: unknown = null;
+  try {
+    const html = await fetchTextWithSsrfProtection(
+      url,
+      {},
+      {
+        allowInternal: await isTrustedFeedFetchingAllowed(),
+        context: "Page feed",
+        impersonate: true,
+        maxBytes: 2 * 1024 * 1024,
+        maxRedirects: 5,
+        timeoutMs: 12_000,
+      },
+    );
+    const candidates = suggestFeedCandidates(html, url);
+    if (candidates.length > 0) return candidates;
+  } catch (error) {
+    directError = error; // hard block — the sidecar may still succeed.
+  }
+
+  // Fallback for genuinely client-only listing pages (the item list is rendered
+  // in the browser and never reaches our static fetch): if an admin configured
+  // a browser-render sidecar (M7-T2), render the page there and re-run the
+  // heuristic on the rendered DOM.
+  const rendered = await renderViaSidecar(url, { context: "Page feed" });
+  if (rendered) {
+    const candidates = suggestFeedCandidates(rendered, url);
+    if (candidates.length > 0) return candidates;
+  }
+
+  if (directError) throw directError;
+  return [];
 }
