@@ -19,6 +19,7 @@ import { Readability } from "@mozilla/readability";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { htmlToMarkdown } from "@/lib/html-to-markdown";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { stripStyleBlocks } from "@/lib/html-utils";
 
 export type ExtractionResult = {
   html: string | null; // sanitized, cleaned article HTML (null if extraction failed)
@@ -27,7 +28,7 @@ export type ExtractionResult = {
   byline: string | null;
   excerpt: string | null;
   wordCount: number;
-  extractedBy: "defuddle" | "readability" | "none";
+  extractedBy: "defuddle" | "readability" | "jsonld" | "none";
 };
 
 // Below this many characters of plain text, Defuddle's result is treated as
@@ -81,6 +82,77 @@ function tryDefuddle(document: Document, url: string): RawExtraction | null {
   }
 }
 
+const ARTICLE_LD_TYPES = new Set([
+  "Article",
+  "NewsArticle",
+  "BlogPosting",
+  "Report",
+  "ReportageNewsArticle",
+  "TechArticle",
+  "ScholarlyArticle",
+  "AdvertiserContentArticle",
+]);
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** Wrap a plain-text article body (as found in JSON-LD) into paragraph HTML. */
+function textToParagraphs(text: string): string {
+  return text
+    .split(/\n{2,}|\r\n{2,}/)
+    .map((block) => block.replace(/\s*\n\s*/g, " ").trim())
+    .filter(Boolean)
+    .map((block) => `<p>${escapeHtml(block)}</p>`)
+    .join("\n");
+}
+
+/**
+ * Many news sites (Wired/Condé Nast, etc.) truncate or paywall the article
+ * body in the visible DOM but still ship the FULL text in schema.org
+ * structured data (`<script type="application/ld+json">` → `articleBody`) for
+ * SEO. When the DOM extractors come up thin, this recovers that full text.
+ * Returns the longest `articleBody` found, or null.
+ */
+function extractJsonLdArticleBody(document: Document): string | null {
+  let best: string | null = null;
+  const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+  for (const script of Array.from(scripts)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(script.textContent || "");
+    } catch {
+      continue;
+    }
+    // JSON-LD can be a single object, an array, or use an @graph wrapper.
+    const nodes: unknown[] = [];
+    const stack: unknown[] = [parsed];
+    while (stack.length) {
+      const node = stack.pop();
+      if (Array.isArray(node)) stack.push(...node);
+      else if (node && typeof node === "object") {
+        nodes.push(node);
+        const graph = (node as { "@graph"?: unknown })["@graph"];
+        if (Array.isArray(graph)) stack.push(...graph);
+      }
+    }
+    for (const node of nodes) {
+      const obj = node as { "@type"?: unknown; articleBody?: unknown };
+      const types = Array.isArray(obj["@type"]) ? obj["@type"] : [obj["@type"]];
+      const isArticle = types.some((t) => typeof t === "string" && ARTICLE_LD_TYPES.has(t));
+      if (!isArticle) continue;
+      const body = obj.articleBody;
+      if (typeof body === "string" && body.trim().length > (best?.length ?? 0)) {
+        best = body.trim();
+      }
+    }
+  }
+  return best;
+}
+
 /** Runs Mozilla Readability against a jsdom document. Returns null on failure/empty result. */
 function tryReadability(document: Document): RawExtraction | null {
   try {
@@ -102,18 +174,19 @@ function tryReadability(document: Document): RawExtraction | null {
  * directly and does not perform any network I/O.
  */
 export async function extractReadableContent(rawHtml: string, url: string): Promise<ExtractionResult> {
+  const html = stripStyleBlocks(rawHtml);
   // Readability mutates the document it's given, so run Defuddle against its
   // own fresh JSDOM and (if needed) parse a second fresh JSDOM for
   // Readability, so one extractor's attempt can never corrupt the other's
   // input.
-  const defuddleDom = new JSDOM(rawHtml, { url });
+  const defuddleDom = new JSDOM(html, { url });
   const defuddleResult = tryDefuddle(defuddleDom.window.document, url);
 
   let raw: RawExtraction | null = defuddleResult;
   let extractedBy: ExtractionResult["extractedBy"] = defuddleResult ? "defuddle" : "none";
 
   if (!raw) {
-    const readabilityDom = new JSDOM(rawHtml, { url });
+    const readabilityDom = new JSDOM(html, { url });
     const readabilityResult = tryReadability(readabilityDom.window.document);
     if (readabilityResult) {
       raw = readabilityResult;
@@ -121,9 +194,27 @@ export async function extractReadableContent(rawHtml: string, url: string): Prom
     }
   }
 
+  // JSON-LD full-text recovery: only when the DOM extraction is missing or
+  // thin (paywalled/truncated bodies), since when the DOM has a real article
+  // its structured HTML (headings, images, links) beats JSON-LD's plain text.
+  const domTextLen = raw ? textLength(raw.content) : 0;
+  if (domTextLen < 1200) {
+    const jsonLdDom = new JSDOM(html, { url });
+    const jsonLdBody = extractJsonLdArticleBody(jsonLdDom.window.document);
+    if (jsonLdBody && jsonLdBody.length >= MIN_CONTENT_TEXT_LENGTH && jsonLdBody.length > domTextLen * 1.5) {
+      raw = {
+        content: textToParagraphs(jsonLdBody),
+        title: raw?.title ?? fallbackTitle(jsonLdDom.window.document),
+        byline: raw?.byline ?? null,
+        excerpt: raw?.excerpt ?? null,
+      };
+      extractedBy = "jsonld";
+    }
+  }
+
   if (!raw) {
-    // Both extractors failed — still surface whatever title we can find.
-    const titleDom = new JSDOM(rawHtml, { url });
+    // All strategies failed — still surface whatever title we can find.
+    const titleDom = new JSDOM(html, { url });
     return {
       html: null,
       markdown: null,

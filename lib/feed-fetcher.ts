@@ -10,6 +10,7 @@ import {
 } from "./feed-extraction";
 import { fetchWithSsrfProtection, isTrustedFeedFetchingAllowed, type ConditionalFetchResult } from "./ssrf";
 import { logger } from "./logger";
+import { stripStyleBlocks } from "./html-utils";
 
 export type FeedFetchConfig = {
   url: string;
@@ -173,7 +174,11 @@ function evaluateContent(xpath: XPathEvaluator, expression: string | undefined, 
 }
 
 export function buildXPathArticles(raw: string, feedUrl: string, config: FeedExtractionConfig, contentType: "text/html" | "text/xml"): FetchedFeed {
-  const dom = new JSDOM(raw, { url: feedUrl, contentType });
+  // Strip <style> from HTML pages so jsdom's CSS parser can't crash on
+  // `border: var(--border-width,…)` shorthands (see html-utils). XML feeds
+  // have no style blocks, so leave those untouched.
+  const source = contentType === "text/html" ? stripStyleBlocks(raw) : raw;
+  const dom = new JSDOM(source, { url: feedUrl, contentType });
   const document = dom.window.document;
   const xpath = new dom.window.XPathEvaluator();
   const settings = config.xpath ?? {};
@@ -350,7 +355,7 @@ export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedF
   if (sourceType === "HTML+XPath+JSON+DotNotation") {
     const result = await fetchText(feed, "text/html,application/xhtml+xml,*/*");
     if (result.notModified) return notModifiedResult(result);
-    const dom = new JSDOM(result.text, { url: feed.url, contentType: "text/html" });
+    const dom = new JSDOM(stripStyleBlocks(result.text), { url: feed.url, contentType: "text/html" });
     const xpath = new dom.window.XPathEvaluator();
     const jsonText = evaluateString(xpath, scraperConfig.xPathToJson, dom.window.document);
     return {
