@@ -21,6 +21,7 @@ import { htmlToMarkdown } from "@/lib/html-to-markdown";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { stripStyleBlocks } from "@/lib/html-utils";
 import { findFtrConfigForUrl, applyFtrConfig } from "@/lib/ftr-site-config";
+import { renderViaSidecar } from "@/lib/render-sidecar";
 
 export type ExtractionResult = {
   html: string | null; // sanitized, cleaned article HTML (null if extraction failed)
@@ -287,17 +288,36 @@ export async function extractReadableContent(rawHtml: string, url: string): Prom
  * (including SSRF blocks) are propagated to the caller, not swallowed.
  */
 export async function fetchAndExtractReadable(url: string): Promise<ExtractionResult> {
-  const html = await fetchTextWithSsrfProtection(
-    url,
-    {},
-    {
-      allowInternal: await isTrustedFeedFetchingAllowed(),
-      context: "Full-text",
-      impersonate: true,
-      maxBytes: 2 * 1024 * 1024,
-      maxRedirects: 5,
-      timeoutMs: 12_000,
-    },
-  );
-  return extractReadableContent(html, url);
+  let directError: unknown = null;
+  let result: ExtractionResult | null = null;
+  try {
+    const html = await fetchTextWithSsrfProtection(
+      url,
+      {},
+      {
+        allowInternal: await isTrustedFeedFetchingAllowed(),
+        context: "Full-text",
+        impersonate: true,
+        maxBytes: 2 * 1024 * 1024,
+        maxRedirects: 5,
+        timeoutMs: 12_000,
+      },
+    );
+    result = await extractReadableContent(html, url);
+    if (result.extractedBy !== "none") return result;
+  } catch (error) {
+    directError = error; // hard block (403/timeout) — the sidecar may still succeed.
+  }
+
+  // Fallback: if the in-process fetch found no readable content (client-only
+  // page) or was blocked outright, and an admin has configured a browser-render
+  // sidecar (M7-T2), render the page there and extract from the result.
+  const rendered = await renderViaSidecar(url, { context: "Full-text" });
+  if (rendered) {
+    const sidecarResult = await extractReadableContent(rendered, url);
+    if (sidecarResult.extractedBy !== "none") return sidecarResult;
+  }
+
+  if (result) return result; // the (empty) in-process result
+  throw directError ?? new Error("Full-text fetch failed");
 }

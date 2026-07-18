@@ -62,6 +62,7 @@ import {
   getGlobalSettings,
   updateGlobalSettings,
   sendTestEmail,
+  testRenderSidecar,
   getPushDiagnostics,
   generateVapidKeyPair,
   getAdminAuditLog,
@@ -188,6 +189,37 @@ export function ServerManagementDialog({
       }
     } catch (error: any) {
       toast.error(error.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveSidecar = async () => {
+    const payload: any = {
+      renderSidecarEnabled: settings?.renderSidecarEnabled ?? false,
+      renderSidecarUrl: settings?.renderSidecarUrl ?? null,
+    };
+    const token = (settings as any)?.renderSidecarToken;
+    // Only send the token when the admin actually typed a new one — never the
+    // "__encrypted__" sentinel (that would re-encrypt the placeholder string).
+    if (token && token !== "__encrypted__") payload.renderSidecarToken = token;
+    await handleUpdateSettings(payload);
+  };
+
+  const handleTestSidecar = async () => {
+    setIsSaving(true);
+    try {
+      const result = await testRenderSidecar({
+        url: (settings as any)?.renderSidecarUrl ?? "",
+        token: (settings as any)?.renderSidecarToken ?? "",
+      });
+      if (result.success) {
+        toast.success(t("toast.sidecarTestOk", { bytes: result.bytes }));
+      } else {
+        toast.error(t("toast.sidecarTestFailed", { error: result.error ?? "" }));
+      }
+    } catch (error: any) {
+      toast.error(error?.message || t("toast.sidecarTestFailed", { error: "" }));
     } finally {
       setIsSaving(false);
     }
@@ -1050,6 +1082,56 @@ export function ServerManagementDialog({
                         <p className="text-sm text-destructive/80 leading-relaxed">
                           {t("sync.internalUrlWarning")}
                         </p>
+                      </div>
+                    )}
+
+                    {/* ── Browser-render sidecar (M7-T2) ── */}
+                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1 pe-6">
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.renderSidecar")}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {t("sync.renderSidecarDescription")}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={settings?.renderSidecarEnabled ?? false}
+                        onCheckedChange={(checked) => handleUpdateSettings({ renderSidecarEnabled: checked })}
+                      />
+                    </div>
+                    {settings?.renderSidecarEnabled && (
+                      <div className="p-6 rounded-2xl bg-card border border-border/60 shadow-sm space-y-4">
+                        <SettingsField
+                          label={t("sync.renderSidecarUrl")}
+                          placeholder="http://crawl4ai:11235/crawl"
+                          field="renderSidecarUrl"
+                          settings={settings}
+                          setSettings={setSettings}
+                        />
+                        <SettingsField
+                          label={t("sync.renderSidecarToken")}
+                          placeholder="••••••••"
+                          field="renderSidecarToken"
+                          settings={settings}
+                          setSettings={setSettings}
+                          type="password"
+                          isSecret
+                        />
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {t("sync.renderSidecarHint")}
+                        </p>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            className="rounded-2xl px-6"
+                            onClick={handleTestSidecar}
+                            disabled={isSaving}
+                          >
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.renderSidecarTest")}
+                          </Button>
+                          <Button className="rounded-2xl px-8" onClick={handleSaveSidecar} disabled={isSaving}>
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.save")}
+                          </Button>
+                        </div>
                       </div>
                     )}
                     </div>

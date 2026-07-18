@@ -429,6 +429,13 @@ model GlobalSettings {
   backgroundSyncEnabled          Boolean @default(true)
   backgroundSyncIntervalMinutes  Int     @default(5)
   allowInternalFeedUrls          Boolean @default(false)
+  // Optional browser-render sidecar (M7-T2): an admin-configured external
+  // service that renders JS-heavy / client-only pages and returns HTML, used
+  // as a fallback when in-process fetch+extract comes up empty. Hidden in the
+  // UI until enabled. Token is encrypted at rest.
+  renderSidecarEnabled           Boolean @default(false)
+  renderSidecarUrl               String?
+  renderSidecarToken             String?
   // Onboarding
   onboardingCompleted Boolean @default(false)
   // Security

@@ -44,12 +44,16 @@ actually embedded in the page's HTML/JSON). Ordered by cost/risk, lean default i
      extraction tier** ahead of Defuddle/Readability. `FEEDFERRET_DISABLE_FTR=1` kill-switch;
      regenerate/extend via `scripts/gen-ftr-site-configs.mjs`. This is the "dataset-import, not a
      dependency" project flagged in round 2 below, delivered at effort **S–M**.
-2. **Sidecar browser connector (Option 3)** — for *genuinely* client-only pages that step 1 can't
-   reach: an **optional** admin-configured container (crawl4ai / a lean Playwright service), called
-   over HTTP (base URL + key, hidden if unconfigured — the RSSHub/changedetection.io connector
-   pattern). Keeps the **default image untouched** and **isolates the browser** (a render crash/OOM
-   stays in the sidecar, not the reader). Chosen over an in-process browser (which would add
-   ~400–500 MB Chromium to *every* deployment and run the browser in the reader's own container).
+2. **Sidecar browser connector (Option 3)** — ✅ **shipped**. For *genuinely* client-only pages that
+   step 1 can't reach: an **optional** admin-configured container (crawl4ai / a lean Playwright
+   service), called over HTTP (base URL + encrypted token, hidden until enabled — the
+   RSSHub/changedetection.io connector pattern). Keeps the **default image untouched** and
+   **isolates the browser** (a render crash/OOM stays in the sidecar, not the reader). Chosen over an
+   in-process browser (which would add ~400–500 MB Chromium to *every* deployment and run the browser
+   in the reader's own container). Implemented in `lib/render-sidecar.ts` as a **fallback** on the
+   full-text and page→feed paths (only when the in-process path returns nothing); the target URL is
+   still SSRF-validated so the sidecar is not an SSRF bypass. Contract + setup + a ~30-line reference
+   Playwright service: [`render-sidecar.md`](render-sidecar.md).
 3. **BYOK hosted API opt-in** *(Model C)* — for actively Cloudflare-challenged sites: Jina Reader or
    Firecrawl **Cloud** with the user's own key, labelled "content leaves your server". The only tier
    that reliably clears active challenges.

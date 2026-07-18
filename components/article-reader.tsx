@@ -28,7 +28,6 @@ import {
   CheckCircle2,
   Circle,
   Copy,
-  FileText,
   Code2,
   Sparkles,
   Tag,
@@ -349,18 +348,6 @@ export function ArticleReader({
     await copyLink();
   };
 
-  const copyAsMarkdown = async () => {
-    const lines = [`# ${article.title}`];
-    if (article.link) {
-      lines.push("", `[${article.link}](${article.link})`);
-    }
-    if (markdownSource.trim()) {
-      lines.push("", markdownSource);
-    }
-    await navigator.clipboard.writeText(lines.join("\n"));
-    toast.success(t("copiedAsMarkdown"));
-  };
-
   const articleLabelIds = article.labels?.map((item) => item.label.id) || [];
 
 
@@ -492,16 +479,6 @@ export function ArticleReader({
             title={t("copyLink")}
           >
             <Copy className="w-4 h-4 text-muted-foreground" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-            onClick={copyAsMarkdown}
-            aria-label={t("copyAsMarkdown")}
-            title={t("copyAsMarkdown")}
-          >
-            <FileText className="w-4 h-4 text-muted-foreground" />
           </Button>
           <Button
             variant="ghost"
@@ -850,10 +827,6 @@ export function ArticleReader({
               <DropdownMenuItem className="rounded-2xl py-3" onClick={copyLink} disabled={!article.link}>
                 <Copy className="me-3 h-4 w-4" />
                 {t("copyLink")}
-              </DropdownMenuItem>
-              <DropdownMenuItem className="rounded-2xl py-3" onClick={copyAsMarkdown}>
-                <FileText className="me-3 h-4 w-4" />
-                {t("copyAsMarkdown")}
               </DropdownMenuItem>
               {article.link && (!article.content || article.content.length < 900) && (
                 <DropdownMenuItem

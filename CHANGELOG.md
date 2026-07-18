@@ -9,11 +9,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
-### Added (2026-07-18 — Feed Intelligence M7-T0/T1: extraction robustness)
+### Added (2026-07-18 — Feed Intelligence M7-T0/T1/T2: extraction robustness)
 
+- **Optional browser-render sidecar** (M7-T2) — for genuinely client-only pages (the article/list is drawn by JS and never appears in the static HTML), FeedFerret can now call out to an **admin-configured** external render service and use the returned HTML as a **fallback** — only when the in-process path returns nothing — on both full-text extraction and the "Create feed from a web page" builder. `lib/render-sidecar.ts` POSTs `{ "url": … }` and accepts `text/html` or a JSON envelope (`html`/`content`/`cleaned_html`/`markdown`, incl. crawl4ai's `results[0]`), so a self-hosted **crawl4ai** or a ~30-line Playwright service both work. Configure in **Server Management → Sync** (URL + encrypted bearer token + Test button) or via `FEEDFERRET_RENDER_SIDECAR_URL`/`_TOKEN`; `FEEDFERRET_DISABLE_RENDER_SIDECAR=1` kill-switch. The default image stays untouched (no bundled Chromium) and the browser is isolated in the sidecar. The rendered target URL is still SSRF-validated, so the sidecar is not an SSRF bypass. See [`docs/render-sidecar.md`](docs/render-sidecar.md).
 - **Per-site extraction rules (ftr-site-config importer)** — full-text extraction now applies a bundled subset of FiveFilters [`ftr-site-config`](https://github.com/fivefilters/ftr-site-config) (CC0/public domain) rules **before** the generic Defuddle/Readability heuristics. `lib/ftr-site-config.ts` parses the `body`/`title`/`author`/`date`/`strip`/`strip_id_or_class` XPath directives and applies them in-process (jsdom `document.evaluate`) as the first extraction tier (`extractedBy: "ftr"`), falling through to the generic path when no rule matches or a rule yields too little. Ships a curated 44-host set (major EN + DE outlets) compiled into `lib/ftr-site-configs.ts` — **no runtime fs/network/Docker impact**; regenerate/extend with `scripts/gen-ftr-site-configs.mjs`. `FEEDFERRET_DISABLE_FTR=1` kill-switch.
 - **Browser-fingerprint page fetches** (PR #160, M7-T0) — the page-fetch paths (page→feed builder, AI config, manual full-text) now use the `impit` HTTP client for real Chrome TLS/HTTP2 fingerprints, still routed through `lib/ssrf.ts` with per-hop redirect re-validation. Routine feed-XML sync is unchanged. `FEEDFERRET_DISABLE_IMPIT=1` kill-switch + graceful fallback if the native binary is absent.
 - **JSON-LD full-text recovery** (PR #162) — when the visible DOM is a thin teaser (paywalled/truncated), the extractor recovers the full body from schema.org `articleBody` structured data.
+
+### Removed (2026-07-18)
+
+- **"Copy as Markdown" article action** — the reader toolbar button and overflow-menu item (and their `turndown`-backed copy handler) were removed to trim reader UI. The Markdown **source-view toggle** is unaffected.
 
 ### Fixed (2026-07-18)
 
