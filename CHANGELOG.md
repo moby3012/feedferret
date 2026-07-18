@@ -9,6 +9,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Added (2026-07-18 — Feed Intelligence M7-T0/T1: extraction robustness)
+
+- **Per-site extraction rules (ftr-site-config importer)** — full-text extraction now applies a bundled subset of FiveFilters [`ftr-site-config`](https://github.com/fivefilters/ftr-site-config) (CC0/public domain) rules **before** the generic Defuddle/Readability heuristics. `lib/ftr-site-config.ts` parses the `body`/`title`/`author`/`date`/`strip`/`strip_id_or_class` XPath directives and applies them in-process (jsdom `document.evaluate`) as the first extraction tier (`extractedBy: "ftr"`), falling through to the generic path when no rule matches or a rule yields too little. Ships a curated 44-host set (major EN + DE outlets) compiled into `lib/ftr-site-configs.ts` — **no runtime fs/network/Docker impact**; regenerate/extend with `scripts/gen-ftr-site-configs.mjs`. `FEEDFERRET_DISABLE_FTR=1` kill-switch.
+- **Browser-fingerprint page fetches** (PR #160, M7-T0) — the page-fetch paths (page→feed builder, AI config, manual full-text) now use the `impit` HTTP client for real Chrome TLS/HTTP2 fingerprints, still routed through `lib/ssrf.ts` with per-hop redirect re-validation. Routine feed-XML sync is unchanged. `FEEDFERRET_DISABLE_IMPIT=1` kill-switch + graceful fallback if the native binary is absent.
+- **JSON-LD full-text recovery** (PR #162) — when the visible DOM is a thin teaser (paywalled/truncated), the extractor recovers the full body from schema.org `articleBody` structured data.
+
+### Fixed (2026-07-18)
+
+- **Full-text extraction crash on modern CSS** (PR #162) — jsdom's CSS engine threw on `border: var(--border-width, …)` shorthands, aborting extraction on Wired and similar sites (and surfacing as a "border-width" error in feed-sync logs). `<style>` blocks are now stripped before parsing across the extraction, page→feed and XPath paths.
+- **Mobile add-feed input focus on iOS** (PR #161) — the add-feed sheet's inputs could not be focused (no cursor/keyboard) on iOS Safari; the mobile sidebar/add-feed drawer was reimplemented on Radix `Sheet` instead of vaul, restoring focus.
+- **Feed sync crash on XenForo/null-prototype category objects** — `Cannot convert object to primitive value` from xml2js `{_, $}` category nodes is handled by reading the text member explicitly.
+
 ### Added (2026-07-17 — Feed Intelligence M1/M3/M4 + Phase 0 + a11y CI)
 
 - **Automatic full-text extraction** (PR #141, M1 slice 1) — `lib/readability-extract.ts` runs **Defuddle** (primary) with a **Mozilla Readability** fallback on the existing SSRF-safe fetch/JSDOM pipeline; falls back to the feed's own summary if both fail.

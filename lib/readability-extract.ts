@@ -20,6 +20,7 @@ import { getSanitizer } from "@/lib/sanitize-html";
 import { htmlToMarkdown } from "@/lib/html-to-markdown";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { stripStyleBlocks } from "@/lib/html-utils";
+import { findFtrConfigForUrl, applyFtrConfig } from "@/lib/ftr-site-config";
 
 export type ExtractionResult = {
   html: string | null; // sanitized, cleaned article HTML (null if extraction failed)
@@ -28,7 +29,7 @@ export type ExtractionResult = {
   byline: string | null;
   excerpt: string | null;
   wordCount: number;
-  extractedBy: "defuddle" | "readability" | "jsonld" | "none";
+  extractedBy: "ftr" | "defuddle" | "readability" | "jsonld" | "none";
 };
 
 // Below this many characters of plain text, Defuddle's result is treated as
@@ -65,6 +66,34 @@ type RawExtraction = {
   byline: string | null;
   excerpt: string | null;
 };
+
+// Kill-switch: set FEEDFERRET_DISABLE_FTR=1 to bypass the bundled per-site
+// ftr rules and fall straight through to the generic Defuddle/Readability path.
+const FTR_DISABLED = process.env.FEEDFERRET_DISABLE_FTR === "1";
+
+/**
+ * First extraction tier: if a bundled FiveFilters ftr-site-config rule matches
+ * this URL's host, apply its XPath rules to pull the article body/title/author
+ * directly. Returns null when no rule matches or it yields too little — callers
+ * then fall through to the generic heuristics. Never throws.
+ */
+function tryFtr(rawHtml: string, url: string): RawExtraction | null {
+  if (FTR_DISABLED) return null;
+  try {
+    const config = findFtrConfigForUrl(url);
+    if (!config) return null;
+    const result = applyFtrConfig(rawHtml, url, config, MIN_CONTENT_TEXT_LENGTH);
+    if (!result) return null;
+    return {
+      content: result.content,
+      title: result.title,
+      byline: result.author,
+      excerpt: null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 /** Runs Defuddle against a jsdom document. Returns null on failure/empty result. */
 function tryDefuddle(document: Document, url: string): RawExtraction | null {
@@ -175,15 +204,26 @@ function tryReadability(document: Document): RawExtraction | null {
  */
 export async function extractReadableContent(rawHtml: string, url: string): Promise<ExtractionResult> {
   const html = stripStyleBlocks(rawHtml);
+
+  // Tier 0: a bundled per-site ftr rule, when one matches this host — the most
+  // reliable extraction, so it runs ahead of the generic heuristics.
+  const ftrResult = tryFtr(html, url);
+
+  let raw: RawExtraction | null = ftrResult;
+  let extractedBy: ExtractionResult["extractedBy"] = ftrResult ? "ftr" : "none";
+
   // Readability mutates the document it's given, so run Defuddle against its
   // own fresh JSDOM and (if needed) parse a second fresh JSDOM for
   // Readability, so one extractor's attempt can never corrupt the other's
   // input.
-  const defuddleDom = new JSDOM(html, { url });
-  const defuddleResult = tryDefuddle(defuddleDom.window.document, url);
-
-  let raw: RawExtraction | null = defuddleResult;
-  let extractedBy: ExtractionResult["extractedBy"] = defuddleResult ? "defuddle" : "none";
+  if (!raw) {
+    const defuddleDom = new JSDOM(html, { url });
+    const defuddleResult = tryDefuddle(defuddleDom.window.document, url);
+    if (defuddleResult) {
+      raw = defuddleResult;
+      extractedBy = "defuddle";
+    }
+  }
 
   if (!raw) {
     const readabilityDom = new JSDOM(html, { url });
