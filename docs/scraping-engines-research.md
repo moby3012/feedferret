@@ -29,11 +29,21 @@ Revised after implementation experience (T0 shipped; Wired proved much "JS-only"
 actually embedded in the page's HTML/JSON). Ordered by cost/risk, lean default image preserved:
 
 0. **T0 — `impit` browser-fingerprint HTTP** ✅ shipped (#160). Soft anti-bot, no browser.
-1. **Embedded-data extraction (in-process, no Docker impact)** — *next*. Many "JS-rendered" pages
+1. **Embedded-data extraction (in-process, no Docker impact)** — *in progress*. Many "JS-rendered" pages
    still ship their content in the HTML: `__NEXT_DATA__`, `<script type="application/json">` blobs,
    JSON-LD lists. Extract those for article full-text AND listing→feed. Covers a real slice of
-   "JS" sites with **zero new services** (Wired's body lived in JSON-LD — same class of fix). Plus
-   the **ftr-site-config importer** (1,000+ pre-solved sites).
+   "JS" sites with **zero new services** (Wired's body lived in JSON-LD — same class of fix). Two
+   pieces **shipped**: JSON-LD `articleBody` recovery (#162) and the **ftr-site-config importer**
+   below. `__NEXT_DATA__` listing→feed extraction deferred (no confirmed target).
+   - ✅ **ftr-site-config importer** *(shipped)* — a bundled subset of FiveFilters
+     [`ftr-site-config`](https://github.com/fivefilters/ftr-site-config) (CC0/public-domain), the
+     1,000+-site community ruleset. We compile a **curated 44-host subset** (major EN + DE outlets)
+     into a generated TS module (`lib/ftr-site-configs.ts`) — no runtime fs/network/Docker impact —
+     and a ~200-line parser+applier (`lib/ftr-site-config.ts`) runs the `body/title/author/date/
+     strip/strip_id_or_class` XPath rules in-process (jsdom `document.evaluate`) as the **first
+     extraction tier** ahead of Defuddle/Readability. `FEEDFERRET_DISABLE_FTR=1` kill-switch;
+     regenerate/extend via `scripts/gen-ftr-site-configs.mjs`. This is the "dataset-import, not a
+     dependency" project flagged in round 2 below, delivered at effort **S–M**.
 2. **Sidecar browser connector (Option 3)** — for *genuinely* client-only pages that step 1 can't
    reach: an **optional** admin-configured container (crawl4ai / a lean Playwright service), called
    over HTTP (base URL + key, hidden if unconfigured — the RSSHub/changedetection.io connector
