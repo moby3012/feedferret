@@ -46,11 +46,19 @@ bespoke Playwright service satisfy it.
 
 ## Setup
 
+**A ready-to-run sidecar ships in this repo** under
+[`docker/render-sidecar/`](../docker/render-sidecar/) (Dockerfile + tiny
+Playwright service + example compose). The in-app **Server Management → Sync**
+tab has a copy-paste "Setup guide" that walks through exactly these steps.
+
 1. Run a sidecar reachable from the FeedFerret container (e.g. on the same
-   Docker network / Compose stack).
+   Docker network / Compose stack) — either the bundled one
+   (`docker compose up -d render-sidecar` after adding the block from
+   `docker/render-sidecar/docker-compose.example.yml`) or your own service that
+   implements the contract below.
 2. In **Server Management → Sync**, enable **Browser-render sidecar**, set the
-   **Sidecar URL** (and a bearer token if your service requires one), and click
-   **Test**.
+   **Sidecar URL** (e.g. `http://render-sidecar:8080/`, and a bearer token if
+   your service requires one), and click **Test**.
 
 Or, for immutable/container deployments, configure it via environment instead of
 the admin UI:
