@@ -28,6 +28,11 @@ services:
     environment:
       # Optional shared secret. If set, put the SAME value in the admin UI.
       SIDECAR_TOKEN: "change-me"
+      # Pinned explicitly: some deploy platforms inject a PORT variable at the
+      # project level across every service in a compose stack, which would
+      # otherwise make this container listen on the wrong port. This service
+      # reads SIDECAR_PORT specifically so that can't happen.
+      SIDECAR_PORT: "8080"
       # NAV_TIMEOUT_MS: "30000"
     # No published ports needed — only FeedFerret talks to it, over the
     # internal network. Keep it off the public internet.
