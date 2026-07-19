@@ -570,16 +570,16 @@ export function ArticleReader({
           {aiSummaryEnabled && (() => {
             const summary = localSummary ?? article.aiSummary;
             return (
-              <div className="mb-8 rounded-2xl border border-border/60 border-s-2 border-s-brand bg-muted/40 px-5 py-4 animate-fade-in-up">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    <Sparkles className="h-3.5 w-3.5 text-brand" />
-                    {t("aiSummary")}
+              <div className="mb-8 min-w-0 overflow-hidden rounded-2xl border border-border/60 border-s-2 border-s-brand bg-muted/40 px-5 py-4 animate-fade-in-up">
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand" />
+                    <span className="truncate">{t("aiSummary")}</span>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-2 text-xs rounded-xl text-muted-foreground hover:text-foreground"
+                    className="h-7 shrink-0 whitespace-nowrap px-2 text-xs rounded-xl text-muted-foreground hover:text-foreground"
                     disabled={summarize.isPending}
                     onClick={async () => {
                       setSummarizeFailed(false);
