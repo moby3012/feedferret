@@ -54,9 +54,12 @@ actually embedded in the page's HTML/JSON). Ordered by cost/risk, lean default i
    full-text and page→feed paths (only when the in-process path returns nothing); the target URL is
    still SSRF-validated so the sidecar is not an SSRF bypass. Contract + setup + a ~30-line reference
    Playwright service: [`render-sidecar.md`](render-sidecar.md).
-3. **BYOK hosted API opt-in** *(Model C)* — for actively Cloudflare-challenged sites: Jina Reader or
-   Firecrawl **Cloud** with the user's own key, labelled "content leaves your server". The only tier
-   that reliably clears active challenges.
+3. **BYOK hosted API opt-in** *(Model C)* — ✅ **shipped**. For actively Cloudflare-challenged sites:
+   Jina Reader or Firecrawl **Cloud** with the user's own key, labelled "content leaves your server".
+   The only tier that reliably clears active challenges (never guaranteed — still a moving target).
+   Implemented in `lib/hosted-fetch.ts`, per-user (not admin-global, unlike the sidecar), wired as the
+   final fallback after the sidecar; automatic background sync only uses it when the user explicitly
+   opts in (`contentFetchAutoUse`), avoiding a silent per-article cost/privacy surprise.
 
 > **Rejected: in-process headless render in the default image.** Bloats every self-hosted image with
 > Chromium (~400–500 MB) even for users who never render JS, and runs an untrusted-page browser inside

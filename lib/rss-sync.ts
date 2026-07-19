@@ -518,10 +518,16 @@ async function autoFetchFullTextViaEngine(
         select: { id: true, link: true, content: true },
     });
 
+    // The hosted-API BYOK connector (M7-T3) sends article content to a third
+    // party, so unlike the manual "Fetch full text" button it must never run
+    // during unattended background sync unless the user explicitly opted in.
+    const user = await db.user.findUnique({ where: { id: userId }, select: { contentFetchAutoUse: true } });
+    const extractOptions = user?.contentFetchAutoUse ? { userId } : {};
+
     for (const article of articles) {
         if (!article.link) continue;
         try {
-            const result = await fetchAndExtractReadable(article.link);
+            const result = await fetchAndExtractReadable(article.link, extractOptions);
             if (result.extractedBy === "none" || !result.html) {
                 // Extraction failed to find anything useful — leave the
                 // feed-provided content as-is.

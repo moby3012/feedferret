@@ -1361,9 +1361,13 @@ export async function fetchFullText(articleId: string) {
     // and turned into the same clean, status-aware message `suggestFeedFromUrl`
     // gives, instead of letting a raw/native error escape this Server Action
     // uncaught (which previously surfaced as an opaque render crash).
+    // A manual "Fetch full text" click is a deliberate, single, user-initiated
+    // action — so the user's hosted-API BYOK connector (M7-T3), if they've
+    // configured one, is always eligible as the final fallback here, same as
+    // AI features distinguish a manual action from "auto" background use.
     let result: Awaited<ReturnType<typeof fetchAndExtractReadable>>;
     try {
-        result = await fetchAndExtractReadable(article.link);
+        result = await fetchAndExtractReadable(article.link, { userId: session.user.id });
     } catch (error) {
         throw new Error(describePageFetchError(error));
     }

@@ -304,6 +304,21 @@
       "chinese": "Chinesisch"
     }
   },
+  "contentFetch": {
+    "title": "Volltext-Abruf-Fallback (BYOK)",
+    "description": "Für Seiten, die selbst jede andere Extraktionsstufe schlagen (aktive Bot-Abwehr-Herausforderungen), bring deinen eigenen API-Schlüssel für Jina Reader oder Firecrawl Cloud mit — kommerzielle Dienste, die sich auf schwer erreichbare Seiten spezialisiert haben. Wird nur als letzter Ausweg genutzt, nachdem die eigenen Versuche dieses Servers erfolglos blieben. Dein API-Schlüssel wird verschlüsselt gespeichert und nie weitergegeben.",
+    "provider": "Anbieter",
+    "apiKey": "API-Schlüssel",
+    "privacyWarning": "Anders als bei jeder anderen Extraktionsmethode wird der Seiteninhalt an diesen Drittanbieter-Dienst zur Verarbeitung gesendet — er verlässt deinen Server.",
+    "autoUse": "Auch bei automatischer Synchronisierung nutzen",
+    "autoUseDescription": "Ohne diese Option läuft der Fallback nur, wenn du selbst auf „Volltext abrufen“ klickst (verbraucht API-Credits)",
+    "connectionSuccessful": "Verbindung erfolgreich",
+    "providers": {
+      "none": "Kein (deaktiviert)",
+      "jina": "Jina Reader",
+      "firecrawl": "Firecrawl Cloud"
+    }
+  },
   "notifications": {
     "title": "Benachrichtigungskanäle",
     "description": "Keyword-Benachrichtigungen und Regel-Treffer an externe Dienste weiterleiten. Kanal aktivieren, Anmeldedaten eingeben und in Regeln & Alerts als Aktion auswählen.",
