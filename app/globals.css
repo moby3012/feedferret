@@ -379,12 +379,20 @@
   html {
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
+    /* Last-resort net: individual flex/truncate chains are fixed as they're
+       found (see .article-content, .reader-page), but a missed one anywhere
+       in the tree should never be able to widen the whole document and
+       shift what's visible on screen — it should just get clipped in place. */
+    overflow-x: hidden;
+    max-width: 100vw;
   }
   body {
     @apply bg-background text-foreground;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    overflow-x: hidden;
+    max-width: 100vw;
   }
   ::selection {
     @apply bg-accent/20 text-foreground;
