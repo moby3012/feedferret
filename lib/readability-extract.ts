@@ -52,6 +52,37 @@ function countWords(html: string): number {
   return text ? text.split(" ").length : 0;
 }
 
+/** Removes every inline `style="…"` attribute from an HTML string. */
+function stripInlineStyleAttributes(html: string): string {
+  return html.replace(/\sstyle\s*=\s*(".*?"|'.*?')/gi, "");
+}
+
+/**
+ * Sanitizes extracted article content, never throwing. jsdom's CSS engine can
+ * throw on modern CSS (e.g. `var()` inside a `border`/`outline` shorthand) —
+ * previously seen inside `<style>` blocks (fixed by stripping those before
+ * parsing, see `stripStyleBlocks`) but the same class of crash can also come
+ * from an inline `style="…"` attribute the source page carries on some
+ * element within the extracted subtree. Retry once with inline styles
+ * stripped entirely before giving up — the reader applies its own
+ * typography, so losing arbitrary source styling here costs nothing — and
+ * fall back to `null` (never throw) if sanitizing still fails.
+ */
+function sanitizeExtractedContent(
+  DOMPurify: Awaited<ReturnType<typeof getSanitizer>>,
+  rawContent: string,
+): string | null {
+  try {
+    return DOMPurify.sanitize(rawContent, { ADD_ATTR: ["target", "rel"] });
+  } catch {
+    try {
+      return DOMPurify.sanitize(stripInlineStyleAttributes(rawContent), { ADD_ATTR: ["target", "rel"] });
+    } catch {
+      return null;
+    }
+  }
+}
+
 /** Best-effort title lookup from the raw document, used when both extractors fail. */
 function fallbackTitle(document: Document): string | null {
   const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute("content");
@@ -268,8 +299,30 @@ export async function extractReadableContent(rawHtml: string, url: string): Prom
   }
 
   const DOMPurify = await getSanitizer();
-  const clean = DOMPurify.sanitize(raw.content, { ADD_ATTR: ["target", "rel"] });
-  const markdown = htmlToMarkdown(clean);
+  const clean = sanitizeExtractedContent(DOMPurify, raw.content);
+  if (clean === null) {
+    // Sanitizing crashed even after the inline-style retry — surface a
+    // graceful "nothing extracted" result (with whatever title we found)
+    // rather than letting the crash propagate to the caller.
+    return {
+      html: null,
+      markdown: null,
+      title: raw.title ?? null,
+      byline: null,
+      excerpt: null,
+      wordCount: 0,
+      extractedBy: "none",
+    };
+  }
+  // Markdown conversion is a secondary output (only consulted for feeds whose
+  // configured content format is Markdown); a crash converting it must not
+  // discard the html we already have.
+  let markdown: string | null;
+  try {
+    markdown = htmlToMarkdown(clean);
+  } catch {
+    markdown = null;
+  }
 
   return {
     html: clean,

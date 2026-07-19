@@ -1,6 +1,48 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { extractHtmlFromSidecarResponse, renderWithConfig } from "../../lib/render-sidecar";
 
+// ── getRenderSidecarConfig — resilience to DB/schema errors ──────────────────
+//
+// This resolves on every full-text/page-feed fetch, including on deployments
+// that haven't yet applied the renderSidecar* schema migration. A DB error
+// here must degrade to "no sidecar configured", never propagate and crash the
+// (unrelated) extraction that's asking for it — regression for a production
+// crash ("An error occurred in the Server Components render") surfaced while
+// fetching full text for an article on a host with no sidecar configured.
+
+describe("getRenderSidecarConfig — resilience to DB/schema errors", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.doUnmock("../../lib/db");
+  });
+
+  it("returns null (never throws) when the settings query fails", async () => {
+    vi.doMock("../../lib/db", () => ({
+      db: {
+        globalSettings: {
+          findUnique: vi.fn().mockRejectedValue(new Error('no such column: "renderSidecarEnabled"')),
+        },
+      },
+    }));
+
+    const { getRenderSidecarConfig: freshGetConfig } = await import("../../lib/render-sidecar");
+    await expect(freshGetConfig()).resolves.toBeNull();
+  });
+
+  it("still resolves normally (no sidecar) when the settings row is simply absent", async () => {
+    vi.doMock("../../lib/db", () => ({
+      db: {
+        globalSettings: {
+          findUnique: vi.fn().mockResolvedValue(null),
+        },
+      },
+    }));
+
+    const { getRenderSidecarConfig: freshGetConfig } = await import("../../lib/render-sidecar");
+    await expect(freshGetConfig()).resolves.toBeNull();
+  });
+});
+
 // ── extractHtmlFromSidecarResponse (pure) ────────────────────────────────────
 
 describe("extractHtmlFromSidecarResponse", () => {

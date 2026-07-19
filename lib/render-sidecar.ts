@@ -37,6 +37,11 @@ const SIDECAR_DISABLED = truthy(process.env.FEEDFERRET_DISABLE_RENDER_SIDECAR);
  * Resolves the effective sidecar config, or null when unconfigured/disabled.
  * ENV (`FEEDFERRET_RENDER_SIDECAR_URL` / `_TOKEN`) wins for immutable/container
  * deployments; otherwise the admin-managed GlobalSettings row is used.
+ *
+ * Never throws: this runs on every full-text/page-feed fetch, including on
+ * deployments that haven't yet applied the renderSidecar* schema migration —
+ * a DB error here must degrade to "no sidecar configured", not break the
+ * (unrelated) extraction that's asking for it.
  */
 export async function getRenderSidecarConfig(): Promise<RenderSidecarConfig | null> {
   if (SIDECAR_DISABLED) return null;
@@ -46,16 +51,20 @@ export async function getRenderSidecarConfig(): Promise<RenderSidecarConfig | nu
     return { url: envUrl, token: process.env.FEEDFERRET_RENDER_SIDECAR_TOKEN?.trim() || null };
   }
 
-  const settings = await db.globalSettings.findUnique({
-    where: { id: "global" },
-    select: { renderSidecarEnabled: true, renderSidecarUrl: true, renderSidecarToken: true },
-  });
-  if (!settings?.renderSidecarEnabled || !settings.renderSidecarUrl?.trim()) return null;
+  try {
+    const settings = await db.globalSettings.findUnique({
+      where: { id: "global" },
+      select: { renderSidecarEnabled: true, renderSidecarUrl: true, renderSidecarToken: true },
+    });
+    if (!settings?.renderSidecarEnabled || !settings.renderSidecarUrl?.trim()) return null;
 
-  return {
-    url: settings.renderSidecarUrl.trim(),
-    token: decryptIfValue(settings.renderSidecarToken) || null,
-  };
+    return {
+      url: settings.renderSidecarUrl.trim(),
+      token: decryptIfValue(settings.renderSidecarToken) || null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Cheap "is the heavy-render path available?" check for UI/flow gating. */
