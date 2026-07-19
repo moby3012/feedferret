@@ -29,15 +29,42 @@ services:
       # - GOOGLE_CLIENT_SECRET=your-google-secret
       # - GITHUB_ID=your-github-id
       # - GITHUB_SECRET=your-github-secret
+      # Browser-render sidecar (M7-T2) — wired up by default against the
+      # 'render-sidecar' service below, for JS-heavy/client-only pages that
+      # in-process fetching can't extract. Used only as a fallback; leave
+      # FEEDFERRET_RENDER_SIDECAR_URL unset (or comment it out) to disable.
+      - FEEDFERRET_RENDER_SIDECAR_URL=${FEEDFERRET_RENDER_SIDECAR_URL:-http://render-sidecar:8080/}
+      - FEEDFERRET_RENDER_SIDECAR_TOKEN=${RENDER_SIDECAR_TOKEN:-change-me}
     depends_on:
       postgres:
         condition: service_healthy
+      # No 'render-sidecar' dependency here on purpose: FeedFerret must start
+      # and work fully even if the sidecar is still building, crashed, or
+      # removed — every call site already falls back gracefully when it's
+      # unreachable (see lib/render-sidecar.ts).
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
+
+  # Browser-render sidecar (M7-T2, docs/render-sidecar.md): renders JS-heavy /
+  # client-only pages in a real headless Chromium for the full-text and
+  # page→feed builder fallback paths. Runs isolated: no published ports (only
+  # 'feedferret' reaches it on the internal Compose network), non-root,
+  # no-new-privileges. To disable it entirely, remove this service AND the
+  # FEEDFERRET_RENDER_SIDECAR_URL line above.
+  render-sidecar:
+    build: ./docker/render-sidecar
+    container_name: feedferret-render-sidecar
+    restart: unless-stopped
+    environment:
+      - SIDECAR_TOKEN=${RENDER_SIDECAR_TOKEN:-change-me}
+    expose:
+      - "8080"
+    security_opt:
+      - no-new-privileges:true
 
   postgres:
     image: postgres:16-alpine
