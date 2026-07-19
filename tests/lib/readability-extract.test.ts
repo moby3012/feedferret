@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { extractReadableContent } from "../../lib/readability-extract";
 
 // ── extractReadableContent — realistic article page ──────────────────────────
@@ -146,6 +146,81 @@ describe("extractReadableContent — <style> crash hardening", () => {
     expect(result.html).toBeTruthy();
     expect(result.extractedBy === "defuddle" || result.extractedBy === "readability").toBe(true);
     expect((result.html || "").toLowerCase()).toContain("motion sensors");
+  });
+});
+
+// ── crash-hardening: an unexpected sanitize/markdown failure must degrade ────
+// gracefully instead of throwing out of extractReadableContent — regression
+// for a production crash ("An error occurred in the Server Components
+// render") on a page whose extracted content tripped up jsdom's CSS engine
+// in a way `stripStyleBlocks` (which only covers `<style>` blocks) doesn't.
+
+const NORMAL_ARTICLE_HTML = `
+<!doctype html><html><head><title>Plain Article</title></head><body>
+<article><h1>Ordinary Article</h1>
+<p>This paragraph is long enough on its own to clear every minimum-length
+threshold the extraction pipeline uses, so the test exercises the sanitize
+step rather than an earlier bail-out.</p>
+<p>A second paragraph adds further real prose content to the piece so both
+Defuddle and Readability treat this as a genuine article body.</p>
+</article></body></html>`;
+
+describe("extractReadableContent — sanitize-step crash hardening", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.doUnmock("@/lib/sanitize-html");
+  });
+
+  it("retries with inline styles stripped when sanitize throws once, and still returns content", async () => {
+    vi.doMock("@/lib/sanitize-html", async () => {
+      const real = await vi.importActual<typeof import("@/lib/sanitize-html")>("@/lib/sanitize-html");
+      const realDOMPurify = await real.getSanitizer();
+      let calls = 0;
+      return {
+        getSanitizer: async () => ({
+          ...realDOMPurify,
+          sanitize: (html: string, opts: unknown) => {
+            calls++;
+            if (calls === 1) throw new Error("simulated jsdom CSS engine crash");
+            return realDOMPurify.sanitize(html, opts as never);
+          },
+        }),
+      };
+    });
+
+    const { extractReadableContent: freshExtract } = await import("../../lib/readability-extract");
+    const result = await freshExtract(NORMAL_ARTICLE_HTML, "https://example.com/retry");
+    expect(result.html).toBeTruthy();
+    expect((result.html || "").toLowerCase()).toContain("ordinary article");
+    expect(result.extractedBy).not.toBe("none");
+  });
+
+  it("degrades to a graceful 'none' result (never throws) when sanitize fails on every attempt", async () => {
+    vi.doMock("@/lib/sanitize-html", () => ({
+      getSanitizer: async () => ({
+        sanitize: () => {
+          throw new Error("simulated persistent jsdom CSS engine crash");
+        },
+      }),
+    }));
+
+    const { extractReadableContent: freshExtract } = await import("../../lib/readability-extract");
+    await expect(freshExtract(NORMAL_ARTICLE_HTML, "https://example.com/persistent-crash")).resolves.toEqual(
+      expect.objectContaining({ html: null, markdown: null, wordCount: 0, extractedBy: "none" }),
+    );
+  });
+
+  it("keeps html when only markdown conversion fails", async () => {
+    vi.doMock("@/lib/html-to-markdown", () => ({
+      htmlToMarkdown: () => {
+        throw new Error("simulated turndown crash");
+      },
+    }));
+
+    const { extractReadableContent: freshExtract } = await import("../../lib/readability-extract");
+    const result = await freshExtract(NORMAL_ARTICLE_HTML, "https://example.com/markdown-crash");
+    expect(result.html).toBeTruthy();
+    expect(result.markdown).toBeNull();
   });
 });
 
