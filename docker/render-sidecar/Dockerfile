@@ -8,7 +8,7 @@ COPY package.json ./
 RUN npm install --omit=dev
 COPY server.mjs ./
 
-ENV PORT=8080
+ENV SIDECAR_PORT=8080
 EXPOSE 8080
 
 # Runs as the image's non-root `pwuser`.

@@ -14,7 +14,14 @@
 import http from "node:http";
 import { chromium } from "playwright";
 
-const PORT = Number(process.env.PORT || 8080);
+// Deliberately NOT reading the generic `PORT` env var: PaaS platforms that
+// deploy a whole Docker Compose stack (Coolify included) commonly inject
+// environment variables at the project/resource level rather than
+// per-service, so a `PORT` value meant for the main app can silently land on
+// every container in the stack — this sidecar would then listen on the
+// app's port instead of 8080, and the admin-configured Sidecar URL (:8080)
+// would find nothing there. `SIDECAR_PORT` is a name nothing else defines.
+const PORT = Number(process.env.SIDECAR_PORT || 8080);
 const TOKEN = process.env.SIDECAR_TOKEN || "";
 const NAV_TIMEOUT_MS = Number(process.env.NAV_TIMEOUT_MS || 30_000);
 const MAX_BODY_BYTES = 8 * 1024; // request bodies are tiny ({ "url": … })

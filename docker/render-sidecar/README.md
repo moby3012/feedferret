@@ -52,7 +52,7 @@ GET  /health      → 200 { "ok": true }
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `PORT` | `8080` | Listen port |
+| `SIDECAR_PORT` | `8080` | Listen port. Deliberately not `PORT` — some deploy platforms (Coolify included) inject that variable at the project level across every service in a compose stack, which would otherwise make this container listen on the main app's port instead |
 | `SIDECAR_TOKEN` | *(none)* | If set, requests must send `Authorization: Bearer <token>` |
 | `NAV_TIMEOUT_MS` | `30000` | Per-page navigation timeout |
 | `USER_AGENT` | *(Chromium default)* | Override the browser User-Agent |

@@ -61,6 +61,13 @@ services:
     restart: unless-stopped
     environment:
       - SIDECAR_TOKEN=${RENDER_SIDECAR_TOKEN:-change-me}
+      # Pinned explicitly (not templated from an env var): some deploy
+      # platforms — Coolify included — inject variables like PORT at the
+      # project/resource level, applying them to every service in a Compose
+      # stack rather than just the main app. This sidecar reads SIDECAR_PORT,
+      # a name nothing else defines, specifically so a project-wide PORT
+      # value can never make it listen on the wrong port.
+      - SIDECAR_PORT=8080
     expose:
       - "8080"
     security_opt:
