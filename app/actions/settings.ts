@@ -8,7 +8,7 @@ import { sendDigestEmail, getDigestArticles, markArticlesAsDigested } from "@/li
 import { buildOtpAuthUri, generateTotpSecret, verifyTotpToken } from "@/lib/totp";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import type { AiProvider } from "@/lib/ai-summary";
-import { fetchViaHostedApi, type HostedFetchProvider } from "@/lib/hosted-fetch";
+import { fetchViaHostedApiDetailed, type HostedFetchProvider } from "@/lib/hosted-fetch";
 
 async function requireUser() {
   const session = await auth();
@@ -622,6 +622,8 @@ export async function getContentFetchSettings() {
   });
   return {
     provider: user?.contentFetchProvider ?? null,
+    // Firecrawl alone is meaningful with hasApiKey:false — that's its keyless
+    // free tier, not "not configured yet" (see getHostedFetchConfigForUser).
     hasApiKey: !!user?.contentFetchApiKey,
     autoUse: user?.contentFetchAutoUse ?? false,
   };
@@ -646,7 +648,7 @@ export async function updateContentFetchSettings(data: {
   revalidatePath("/settings");
 }
 
-export async function testContentFetchConnection(): Promise<{ success: boolean; error?: string }> {
+export async function testContentFetchConnection(): Promise<{ success: boolean; error?: string; rateLimited?: boolean }> {
   const session = await requireUser();
   const user = await db.user.findUnique({
     where: { id: session.user.id },
@@ -654,12 +656,22 @@ export async function testContentFetchConnection(): Promise<{ success: boolean; 
   });
   if (!user?.contentFetchProvider) return { success: false, error: "No content-fetch provider configured" };
   const apiKey = decryptIfValue(user.contentFetchApiKey);
-  if (!apiKey) return { success: false, error: "No API key configured" };
-  const result = await fetchViaHostedApi("https://example.com/", {
+  const isKeylessFirecrawl = !apiKey && user.contentFetchProvider === "firecrawl";
+  if (!apiKey && !isKeylessFirecrawl) return { success: false, error: "No API key configured" };
+  const outcome = await fetchViaHostedApiDetailed("https://example.com/", {
     provider: user.contentFetchProvider as HostedFetchProvider,
-    apiKey,
+    apiKey: apiKey || null,
   });
-  if (!result) {
+  if (!outcome.ok) {
+    if (outcome.rateLimited) {
+      return {
+        success: false,
+        rateLimited: true,
+        error: isKeylessFirecrawl
+          ? "Firecrawl's free daily limit for this server has been reached (it's shared across every user on this instance). Add your own Firecrawl API key above for much higher limits, or try again tomorrow."
+          : "Rate limited by the provider — try again shortly.",
+      };
+    }
     return { success: false, error: "The provider did not return usable content for the test URL — check your API key" };
   }
   return { success: true };

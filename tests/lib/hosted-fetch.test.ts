@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchViaHostedApi } from "../../lib/hosted-fetch";
+import { fetchViaHostedApi, fetchViaHostedApiDetailed } from "../../lib/hosted-fetch";
 
 // ── getHostedFetchConfigForUser — resilience + resolution ────────────────────
 
@@ -48,6 +48,32 @@ describe("getHostedFetchConfigForUser", () => {
       },
     }));
     vi.doMock("../../lib/crypto", () => ({ decryptIfValue: () => "k" }));
+    const { getHostedFetchConfigForUser: fresh } = await import("../../lib/hosted-fetch");
+    await expect(fresh("user-1")).resolves.toBeNull();
+  });
+
+  it("returns a keyless firecrawl config when the provider is set with no stored key", async () => {
+    vi.doMock("../../lib/db", () => ({
+      db: {
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ contentFetchProvider: "firecrawl", contentFetchApiKey: null }),
+        },
+      },
+    }));
+    vi.doMock("../../lib/crypto", () => ({ decryptIfValue: () => null }));
+    const { getHostedFetchConfigForUser: fresh } = await import("../../lib/hosted-fetch");
+    await expect(fresh("user-1")).resolves.toEqual({ provider: "firecrawl", apiKey: null });
+  });
+
+  it("returns null for jina with no stored key (no keyless tier for jina)", async () => {
+    vi.doMock("../../lib/db", () => ({
+      db: {
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ contentFetchProvider: "jina", contentFetchApiKey: null }),
+        },
+      },
+    }));
+    vi.doMock("../../lib/crypto", () => ({ decryptIfValue: () => null }));
     const { getHostedFetchConfigForUser: fresh } = await import("../../lib/hosted-fetch");
     await expect(fresh("user-1")).resolves.toBeNull();
   });
@@ -109,6 +135,12 @@ describe("fetchViaHostedApi", () => {
       const result = await fetchViaHostedApi(targetUrl, { provider: "jina", apiKey: "k" });
       expect(result).toEqual({ content: "body text", title: null });
     });
+
+    it("never calls fetch when no apiKey is given (jina has no keyless tier)", async () => {
+      const outcome = await fetchViaHostedApiDetailed(targetUrl, { provider: "jina", apiKey: null });
+      expect(outcome).toEqual({ ok: false, rateLimited: false });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 
   describe("firecrawl provider", () => {
@@ -138,6 +170,41 @@ describe("fetchViaHostedApi", () => {
       fetchMock.mockResolvedValue(jsonResponse({ success: true, data: {} }));
       const result = await fetchViaHostedApi(targetUrl, { provider: "firecrawl", apiKey: "k" });
       expect(result).toBeNull();
+    });
+
+    it("sends no Authorization header when apiKey is null (keyless free tier)", async () => {
+      fetchMock.mockResolvedValue(
+        jsonResponse({ success: true, data: { markdown: "# Keyless body", metadata: {} } }),
+      );
+
+      const result = await fetchViaHostedApi(targetUrl, { provider: "firecrawl", apiKey: null });
+      expect(result).toEqual({ content: "# Keyless body", title: null });
+
+      const [, init] = fetchMock.mock.calls[0];
+      expect(init.headers.authorization).toBeUndefined();
+      expect(init.headers["content-type"]).toBe("application/json");
+    });
+
+    it("surfaces a 429 as rateLimited via fetchViaHostedApiDetailed", async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 429,
+        arrayBuffer: async () => new TextEncoder().encode("{}").buffer,
+      });
+
+      const outcome = await fetchViaHostedApiDetailed(targetUrl, { provider: "firecrawl", apiKey: null });
+      expect(outcome).toEqual({ ok: false, rateLimited: true });
+    });
+
+    it("a non-429 failure is not rate-limited", async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 500,
+        arrayBuffer: async () => new TextEncoder().encode("{}").buffer,
+      });
+
+      const outcome = await fetchViaHostedApiDetailed(targetUrl, { provider: "firecrawl", apiKey: "fc-key" });
+      expect(outcome).toEqual({ ok: false, rateLimited: false });
     });
   });
 

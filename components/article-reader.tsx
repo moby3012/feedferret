@@ -28,7 +28,6 @@ import {
   CheckCircle2,
   Circle,
   Copy,
-  Code2,
   Sparkles,
   Tag,
   MoreHorizontal,
@@ -37,22 +36,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import TurndownService from "turndown";
-import { gfm } from "turndown-plugin-gfm";
 
-// Lazily-created singleton: only instantiated on first actual use (a user
-// clicking "Copy as Markdown"), never during render/SSR.
-let turndownService: TurndownService | null = null;
-function getTurndownService() {
-  if (!turndownService) {
-    turndownService = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
-    turndownService.use(gfm);
-  }
-  return turndownService;
-}
-
-// Lazily-created singleton, mirroring getTurndownService() above: only
-// instantiated once markdown-format content actually needs rendering.
+// Lazily-created singleton: only instantiated once markdown-format content actually needs rendering.
 let markdownItService: MarkdownIt | null = null;
 function getMarkdownItService() {
   if (!markdownItService) {
@@ -180,15 +165,6 @@ export function ArticleReader({
     setSummarizeFailed(false);
   }, [article?.id]);
 
-  // Desktop-only toggle between the rendered article body and its raw
-  // Markdown source. Resets to "rendered" whenever the article changes so
-  // the previous article's view choice never leaks into the next one.
-  const [bodyViewMode, setBodyViewMode] = useState<"rendered" | "source">("rendered");
-
-  useEffect(() => {
-    setBodyViewMode("rendered");
-  }, [article?.id]);
-
   // Content is stored either as sanitized HTML or as Markdown (M1); render
   // Markdown to HTML client-side and sanitize the result before injecting it.
   const renderedHtml = useMemo(() => {
@@ -198,16 +174,6 @@ export function ArticleReader({
       return DOMPurify.sanitize(rawHtml, { ADD_ATTR: ["target", "rel"] });
     }
     return article.content; // already-sanitized HTML (legacy + html mode)
-  }, [article]);
-
-  // Markdown source view: reuse the stored markdown directly when the
-  // article is already in markdown format, otherwise derive it on the fly
-  // from the sanitized HTML via the same Turndown instance "Copy as Markdown"
-  // uses, so there's only one HTML→Markdown conversion path in this file.
-  const markdownSource = useMemo(() => {
-    if (!article?.content) return "";
-    if (article.contentFormat === "markdown") return article.content;
-    return getTurndownService().turndown(article.content);
   }, [article]);
 
   useEffect(() => {
@@ -480,20 +446,6 @@ export function ArticleReader({
           >
             <Copy className="w-4 h-4 text-muted-foreground" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
-              bodyViewMode === "source" && "bg-accent",
-            )}
-            onClick={() => setBodyViewMode((mode) => (mode === "source" ? "rendered" : "source"))}
-            aria-label={bodyViewMode === "source" ? t("viewRendered") : t("viewMarkdownSource")}
-            aria-pressed={bodyViewMode === "source"}
-            title={bodyViewMode === "source" ? t("viewRendered") : t("viewMarkdownSource")}
-          >
-            <Code2 className={cn("w-4 h-4", bodyViewMode === "source" ? "text-accent-foreground" : "text-muted-foreground")} />
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -663,16 +615,10 @@ export function ArticleReader({
 
           {/* Article Body */}
           {article.content && article.content.trim().length > 0 ? (
-            bodyViewMode === "source" ? (
-              <pre className="animate-fade-in-up animation-delay-200 whitespace-pre-wrap break-words rounded-2xl border border-border/70 bg-card/70 p-5 font-mono text-sm leading-relaxed min-w-0 max-w-full overflow-hidden">
-                {markdownSource}
-              </pre>
-            ) : (
-              <div
-                className={`animate-fade-in-up animation-delay-200 article-content min-w-0 max-w-full overflow-hidden ${readerFontSizeClass[readerFontSize] ?? readerFontSizeClass.medium}`}
-                dangerouslySetInnerHTML={{ __html: renderedHtml }}
-              />
-            )
+            <div
+              className={`animate-fade-in-up animation-delay-200 article-content min-w-0 max-w-full overflow-hidden ${readerFontSizeClass[readerFontSize] ?? readerFontSizeClass.medium}`}
+              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+            />
           ) : (
             <div className="animate-fade-in-up animation-delay-200 rounded-3xl border border-border/70 bg-card/70 p-6 text-center">
               <p className="text-sm font-medium text-foreground mb-1">{t("noContent")}</p>
