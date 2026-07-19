@@ -860,7 +860,11 @@ export default function RSSReaderPage() {
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="bottom"
-          className="h-[86dvh] rounded-t-[2rem] border-border/70 p-0 gap-0 lg:hidden"
+          // pt-12 reserves room for SheetContent's own built-in close button
+          // (absolute top-4 end-4, ~44px tall) — without it, RssSidebar's own
+          // header (search button top-right) renders directly underneath and
+          // visually collides with it.
+          className="h-[86dvh] rounded-t-[2rem] border-border/70 p-0 pt-12 gap-0 lg:hidden"
         >
           <SheetTitle className="sr-only">{t("feedNavigation")}</SheetTitle>
           <RssSidebar

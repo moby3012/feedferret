@@ -512,12 +512,12 @@ export function RssSidebar({
               <p
                 className="text-sm text-muted-foreground"
                 aria-live="polite"
-                aria-label={`${totalUnread} unread articles`}
+                aria-label={t("sidebar.unreadAriaLabel", { count: totalUnread })}
               >
                 <span className={cn("tabular-nums", totalUnread > 0 && "text-brand font-semibold")}>
                   {totalUnread}
                 </span>{" "}
-                unread
+                {t("sidebar.unreadSuffix")}
               </p>
             </div>
           </div>

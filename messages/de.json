@@ -551,6 +551,8 @@
     "readLater": "Später lesen",
     "spoiler": "Spoiler",
     "unread": "Ungelesen",
+    "unreadSuffix": "ungelesen",
+    "unreadAriaLabel": "{count} ungelesene Artikel",
     "savedSearches": "Gespeicherte Suchen",
     "labels": "Labels",
     "feeds": "Feeds",
@@ -699,7 +701,12 @@
     "nextArticle": "Nächster Artikel",
     "summarizeFailed": "Zusammenfassung fehlgeschlagen. Bitte die KI-Anbieter-Einstellungen prüfen.",
     "summarizeFailedInline": "Zusammenfassung fehlgeschlagen — bitte erneut versuchen.",
-    "fetchingFullTextStatus": "Volltext des Artikels wird abgerufen…"
+    "fetchingFullTextStatus": "Volltext des Artikels wird abgerufen…",
+    "fullTextLoaded": "Volltext geladen",
+    "fullTextUnavailable": "Volltext nicht verfügbar. Öffne stattdessen den Originalartikel.",
+    "truncatedFeedSuggestion": "Dieser Feed sieht gekürzt aus — Volltext ab jetzt automatisch für alle Artikel abrufen?",
+    "enableAutoFullText": "Aktivieren",
+    "dontAskAgainFullText": "Nicht mehr fragen"
   },
   "rssHeader": {
     "lastSynced": "Zuletzt synchronisiert",

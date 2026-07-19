@@ -551,6 +551,8 @@
     "readLater": "Read later",
     "spoiler": "Spoiler",
     "unread": "Unread",
+    "unreadSuffix": "unread",
+    "unreadAriaLabel": "{count} unread articles",
     "savedSearches": "Saved searches",
     "labels": "Labels",
     "feeds": "Feeds",
@@ -699,7 +701,12 @@
     "nextArticle": "Next article",
     "summarizeFailed": "Summary failed. Check your AI provider settings.",
     "summarizeFailedInline": "Summary failed — try again.",
-    "fetchingFullTextStatus": "Fetching full article text…"
+    "fetchingFullTextStatus": "Fetching full article text…",
+    "fullTextLoaded": "Full text loaded",
+    "fullTextUnavailable": "Full text unavailable. Open the original article instead.",
+    "truncatedFeedSuggestion": "This feed looks truncated — fetch full text automatically for all its articles from now on?",
+    "enableAutoFullText": "Enable",
+    "dontAskAgainFullText": "Don't ask again"
   },
   "rssHeader": {
     "lastSynced": "Last synced",

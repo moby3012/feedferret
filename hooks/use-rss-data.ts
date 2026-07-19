@@ -499,6 +499,7 @@ export function useMarkArticlesAsUnread() {
 export function useFetchFullText() {
     const queryClient = useQueryClient()
     const updateFeedMutation = useUpdateFeed()
+    const t = useTranslations("articleReader")
     return useMutation({
         mutationFn: (articleId: string) => fetchFullText(articleId),
         onSuccess: (article: any) => {
@@ -506,18 +507,18 @@ export function useFetchFullText() {
                 if (!Array.isArray(old)) return old
                 return old.map((item) => item.id === article.id ? article : item)
             })
-            toast.success("Full text loaded")
+            toast.success(t("fullTextLoaded"))
 
             const suggestion = article.suggestAutoFullText
             if (suggestion) {
-                toast("This feed looks truncated — fetch full text automatically for all its articles from now on?", {
+                toast(t("truncatedFeedSuggestion"), {
                     description: suggestion.feedName,
                     action: {
-                        label: "Enable",
+                        label: t("enableAutoFullText"),
                         onClick: () => updateFeedMutation.mutate({ feedId: suggestion.feedId, data: { fullTextMode: "auto" } }),
                     },
                     cancel: {
-                        label: "Don't ask again",
+                        label: t("dontAskAgainFullText"),
                         onClick: () => updateFeedMutation.mutate({ feedId: suggestion.feedId, data: { fullTextAutoSuggestDismissed: true } }),
                     },
                     duration: 10000,
@@ -525,7 +526,7 @@ export function useFetchFullText() {
             }
         },
         onError: (error) => {
-            toast.error(error instanceof Error ? error.message : "Full text unavailable. Open the original article instead.")
+            toast.error(error instanceof Error ? error.message : t("fullTextUnavailable"))
         },
     })
 }
