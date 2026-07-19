@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Last updated: 2026-07-15 — v1.1.1 shipped; post-release work (digest expansion, search view, settings tabs, PRs #88–#96) merged to `main`. A full design audit (performance / UX / security / visuals) was run and **all 54 findings resolved** across eight merged PRs (#99–#102 for the four tiers, #104–#106 for the deferred features, plus `docs/design-system.md`); full status in [`design-audit-todo.md`](design-audit-todo.md). All documented in the CHANGELOG "Unreleased" section and feeds into v1.2.
+> Last updated: 2026-07-19 — Feed Intelligence (Phase 2, M1/M3/M4/M7) shipped in full; M7 "Heavy Fetch" complete (T0–T3: impit → ftr-site-config → render sidecar → BYOK hosted API). Earlier: v1.1.1 shipped; a full design audit (performance / UX / security / visuals) resolved **all 54 findings** — see [`archive/`](archive/) for that and other completed one-time audits.
 
 This file is the **top-level index**. Each release has its own detailed planning document in [`docs/releases/`](releases/).
 
@@ -14,7 +14,7 @@ This file is the **top-level index**. Each release has its own detailed planning
 |---|---|---|---|
 | **v1.0.0** | Initial public release | ✅ Shipped 2026-05-18 | [`releases/v1.0.md`](releases/v1.0.md) |
 | **v1.1** | i18n + Full API/MCP Coverage + UX Polish | ✅ Shipped 2026-05-20 (v1.1.1 patch 2026-05-21) | [`releases/v1.1-i18n.md`](releases/v1.1-i18n.md) |
-| **v1.2** | Theming & Accessibility (+ design-audit findings) | ⬜ Queued | [`releases/v1.2-theming.md`](releases/v1.2-theming.md) · [`design-audit-todo.md`](design-audit-todo.md) |
+| **v1.2** | Theming & Accessibility (+ design-audit findings) | ⬜ Queued | [`releases/v1.2-theming.md`](releases/v1.2-theming.md) · [`archive/design-audit-todo.md`](archive/design-audit-todo.md) |
 | **v1.3** | Feature Backlog Release | ⬜ Queued | [`releases/v1.3.md`](releases/v1.3.md) |
 | **v2.0** | Podcast, Audio & Native Apps | ⬜ Planned | [`releases/v2.md`](releases/v2.md) |
 

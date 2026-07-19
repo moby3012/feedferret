@@ -13,7 +13,7 @@
 | UX | #101, #106 | U-1…U-8, U-10…U-12 (+ mounted the never-mounted `<Toaster/>`); **U-9** unsaved-changes warning (#106) |
 | Visual | #102, `docs/design-system.md` | V-1…V-13, V-17; **V-14/V-15/V-16** formalized as the design system (radius scale, icon scale, modal convention) |
 
-**Notes on the last six:** P-10 was addressed with `content-visibility:auto` (keeps every DOM node mounted → no risk to the list's heavy scroll coupling) rather than full `react-virtual` windowing. P-11 uses SQLite FTS5 (trigram tokenizer, substring-equivalent to LIKE) + Postgres pg_trgm, with a LIKE fallback so results are never narrower. V-14/V-15 were confirmed to be deliberate, consistently-reused scales — documented in [`design-system.md`](design-system.md) rather than rewritten (cosmetic churn avoided); V-16 is that same doc.
+**Notes on the last six:** P-10 was addressed with `content-visibility:auto` (keeps every DOM node mounted → no risk to the list's heavy scroll coupling) rather than full `react-virtual` windowing. P-11 uses SQLite FTS5 (trigram tokenizer, substring-equivalent to LIKE) + Postgres pg_trgm, with a LIKE fallback so results are never narrower. V-14/V-15 were confirmed to be deliberate, consistently-reused scales — documented in [`design-system.md`](../design-system.md) rather than rewritten (cosmetic churn avoided); V-16 is that same doc.
 
 Every PR: `tsc --noEmit` ✅ · `eslint` ✅ · `pnpm test` ✅ (103/103, incl. new sync-batching, FTS and escaping tests) · `translations:check` ✅ (1140 keys). Feature PRs (#104–#106) include maintainer browser-smoke-test notes where the sandbox couldn't render.
 

@@ -972,6 +972,7 @@ export default function RSSReaderPage() {
                     onSwipeNextFeed={() => navigateFeed(1)}
                     onSwipePreviousFeed={() => navigateFeed(-1)}
                     scrollBackToId={lastClosedArticleId}
+                    hasFeeds={feeds.length > 0}
                   />
                 )}
               </>
@@ -1092,6 +1093,7 @@ export default function RSSReaderPage() {
                 onSwipeNextFeed={() => navigateFeed(1)}
                 onSwipePreviousFeed={() => navigateFeed(-1)}
                 scrollBackToId={lastClosedArticleId}
+                hasFeeds={feeds.length > 0}
               />
             )}
           </>

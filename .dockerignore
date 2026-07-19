@@ -1,0 +1,51 @@
+# Not needed inside the build context — dependencies/build output are
+# reinstalled/rebuilt from scratch in the Dockerfile's own stages, and
+# shipping the host's copies (which can be multi-GB) just slows down
+# `docker build`'s context upload for no benefit.
+node_modules
+.next
+out
+build
+
+.git
+.github
+
+# env files (never bake secrets into the build context or an image layer)
+.env
+.env.*
+!.env.example
+
+*.tsbuildinfo
+next-env.d.ts
+
+# generated prisma (regenerated during the build)
+lib/prisma-client
+prisma/schema.generated.prisma
+
+# local databases
+*.db
+*.db-journal
+
+# tests / tooling
+test-results
+playwright-report
+blob-report
+coverage
+
+# docs and other non-runtime content
+docs
+*.md
+!README.md
+
+# editor / agent-local
+.vscode
+.idea
+.ai
+.agent
+.claude
+*.bak
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*

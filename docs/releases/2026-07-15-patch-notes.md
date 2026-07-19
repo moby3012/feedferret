@@ -56,4 +56,4 @@ These couldn't be verified in a headless environment:
 
 ---
 
-*See [`docs/design-audit-todo.md`](../design-audit-todo.md) for the full 54-item audit with per-finding detail and PR links, and the [CHANGELOG](../../CHANGELOG.md) for the canonical change list.*
+*See [`docs/archive/design-audit-todo.md`](../archive/design-audit-todo.md) for the full 54-item audit with per-finding detail and PR links, and the [CHANGELOG](../../CHANGELOG.md) for the canonical change list.*
