@@ -301,6 +301,9 @@ model Feed {
   fullTextConditions       String?
   fullTextMode             String    @default("off")  // "off" | "auto" | "selector"
   defaultContentFormat     String    @default("html")  // "html" | "markdown" — preferred stored format for auto full-text
+  // "Enable automatic full text for this feed?" suggestion (shown after a manual
+  // fetch reveals the feed is truncated) was declined — don't ask again.
+  fullTextAutoSuggestDismissed Boolean @default(false)
   filtersActionRead        String?
   hideFromAllFeeds         Boolean  @default(false)
   hideArticleImage         Boolean  @default(false)
