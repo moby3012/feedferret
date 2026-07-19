@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { extractHtmlFromSidecarResponse, renderWithConfig } from "../../lib/render-sidecar";
+import { extractHtmlFromSidecarResponse, renderWithConfig, renderWithConfigDetailed } from "../../lib/render-sidecar";
 
 // ── getRenderSidecarConfig — resilience to DB/schema errors ──────────────────
 //
@@ -142,7 +142,10 @@ describe("renderWithConfig", () => {
   it("returns null on a non-ok sidecar response", async () => {
     fetchMock.mockResolvedValue({
       ok: false,
+      status: 401,
+      statusText: "Unauthorized",
       headers: { get: () => null },
+      text: async () => "",
       arrayBuffer: async () => new ArrayBuffer(0),
     });
     expect(await renderWithConfig(config, "https://example.com/")).toBeNull();
@@ -161,5 +164,83 @@ describe("renderWithConfig", () => {
       arrayBuffer: async () => new TextEncoder().encode(big).buffer,
     });
     expect(await renderWithConfig(config, "https://example.com/", { maxBytes: 50 })).toBeNull();
+  });
+});
+
+// ── renderWithConfigDetailed — diagnostic reasons for the admin Test button ──
+//
+// Regression for a real deployment case: the admin "Test" button only ever
+// said "Sidecar returned no usable HTML for the test URL" regardless of the
+// actual cause (auth mismatch, unreachable host, sidecar crash, ...), leaving
+// the admin unable to tell what to fix. Every failure path must now surface a
+// specific, actionable reason.
+describe("renderWithConfigDetailed", () => {
+  const config = { url: "http://sidecar.internal/crawl", token: "secret-token" };
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("reports the HTTP status and the sidecar's own error body on a non-ok response (e.g. token mismatch)", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      headers: { get: () => "application/json" },
+      text: async () => JSON.stringify({ error: "invalid token" }),
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+    const result = await renderWithConfigDetailed(config, "https://example.com/");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain("HTTP 401");
+      expect(result.reason).toContain("invalid token");
+    }
+  });
+
+  it("reports a network error contacting the sidecar distinctly from a timeout", async () => {
+    fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
+    const result = await renderWithConfigDetailed(config, "https://example.com/");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("Network error contacting sidecar");
+  });
+
+  it("reports a timeout distinctly", async () => {
+    fetchMock.mockRejectedValue(Object.assign(new Error("aborted"), { name: "AbortError" }));
+    const result = await renderWithConfigDetailed(config, "https://example.com/", { timeoutMs: 1234 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("timed out after 1234ms");
+  });
+
+  it("reports a content-type/body-shape mismatch when the sidecar responds 200 with no usable field", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      arrayBuffer: async () => new TextEncoder().encode(JSON.stringify({ status: "queued" })).buffer,
+    });
+    const result = await renderWithConfigDetailed(config, "https://example.com/");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain("no usable html/content field");
+      expect(result.reason).toContain("application/json");
+    }
+  });
+
+  it("returns ok:true with the html on success", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      arrayBuffer: async () => new TextEncoder().encode(JSON.stringify({ html: "<p>hi</p>" })).buffer,
+    });
+    const result = await renderWithConfigDetailed(config, "https://example.com/");
+    expect(result).toEqual({ ok: true, html: "<p>hi</p>" });
   });
 });

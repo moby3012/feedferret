@@ -130,16 +130,29 @@ export async function renderViaSidecar(
   return renderWithConfig(config, targetUrl, options);
 }
 
+export type RenderDetailedResult = { ok: true; html: string } | { ok: false; reason: string };
+
+/** Cap a diagnostic snippet to a safe, short length for display. */
+function snippet(text: string, max = 200): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
+}
+
 /**
- * Same as `renderViaSidecar` but against an explicitly-provided config (used by
- * the admin "Test" button, which validates values before they are saved).
- * Returns null on any failure; never throws.
+ * Does the actual sidecar round-trip, returning a diagnostic-friendly result
+ * (which HTTP status / network error / parse failure it hit) instead of
+ * collapsing every failure into `null`. Never throws. `renderWithConfig`
+ * below is a thin wrapper around this for callers that only need the
+ * "did it work" outcome; the admin "Test" button uses this directly so a
+ * misconfiguration (bad token, unreachable host, sidecar returning an
+ * unexpected shape) is diagnosable from the error message alone instead of
+ * a generic "no usable HTML".
  */
-export async function renderWithConfig(
+export async function renderWithConfigDetailed(
   config: RenderSidecarConfig,
   targetUrl: string,
   options: RenderViaSidecarOptions = {},
-): Promise<string | null> {
+): Promise<RenderDetailedResult> {
   const maxBytes = options.maxBytes ?? 4 * 1024 * 1024;
   const timeoutMs = options.timeoutMs ?? 45_000;
   const context = options.context ?? "Render sidecar";
@@ -153,8 +166,8 @@ export async function renderWithConfig(
       context,
     });
     await assertSafeFetchUrl(config.url, { allowInternal: true, context });
-  } catch {
-    return null;
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
 
   const controller = new AbortController();
@@ -173,17 +186,54 @@ export async function renderWithConfig(
       redirect: "follow",
       signal: controller.signal,
     });
-    if (!response.ok) return null;
+
+    if (!response.ok) {
+      // Surface the sidecar's own error body when it sent one (our reference
+      // server.mjs replies with JSON { error }); this is usually the single
+      // most useful diagnostic (auth mismatch, bad target, upstream crash).
+      const bodyText = await response.text().catch(() => "");
+      const detail = bodyText ? `: ${snippet(bodyText)}` : "";
+      return { ok: false, reason: `Sidecar responded with HTTP ${response.status} ${response.statusText}${detail}` };
+    }
 
     // Size-cap the body defensively (rendered pages can be large).
     const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > maxBytes) return null;
+    if (buffer.byteLength > maxBytes) {
+      return { ok: false, reason: `Sidecar response too large (${buffer.byteLength} bytes > ${maxBytes} bytes)` };
+    }
     const body = new TextDecoder().decode(buffer);
 
-    return extractHtmlFromSidecarResponse(response.headers.get("content-type") || "", body);
-  } catch {
-    return null;
+    const html = extractHtmlFromSidecarResponse(response.headers.get("content-type") || "", body);
+    if (!html) {
+      const contentType = response.headers.get("content-type") || "(no content-type)";
+      return {
+        ok: false,
+        reason: `Sidecar returned HTTP ${response.status} but no usable html/content field (content-type: ${contentType}, body: ${snippet(body) || "(empty)"})`,
+      };
+    }
+    return { ok: true, html };
+  } catch (err) {
+    const timedOut = err instanceof Error && err.name === "AbortError";
+    const reason = timedOut
+      ? `Request timed out after ${timeoutMs}ms`
+      : `Network error contacting sidecar: ${err instanceof Error ? err.message : String(err)}`;
+    return { ok: false, reason };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Same as `renderViaSidecar` but against an explicitly-provided config.
+ * Returns null on any failure; never throws. Callers that need to know *why*
+ * it failed (e.g. the admin "Test" button) should use
+ * `renderWithConfigDetailed` instead.
+ */
+export async function renderWithConfig(
+  config: RenderSidecarConfig,
+  targetUrl: string,
+  options: RenderViaSidecarOptions = {},
+): Promise<string | null> {
+  const result = await renderWithConfigDetailed(config, targetUrl, options);
+  return result.ok ? result.html : null;
 }
