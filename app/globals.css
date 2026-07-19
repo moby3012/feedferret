@@ -12,6 +12,13 @@
   max-width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
+  /* Belt-and-suspenders against source HTML we can't fully sanitize away
+     (e.g. a browser-rendered page's own fixed/sticky/absolute element that
+     escapes the normal document flow, which a plain `overflow: hidden`
+     ancestor does not clip). `contain: layout` makes this element the
+     containing block for such descendants too, so they're always confined
+     here instead of breaking out to the viewport. */
+  contain: layout;
 }
 
 .article-content a,

@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Fixed (2026-07-19)
+
+- **Sidecar-rendered full text could break the reader's layout** — the first real M7-T2 sidecar success (formel1.de, via a real headless-Chromium render) exposed a gap the earlier `<style>`-block/inline-`style` hardening didn't cover: a browser-rendered page's DOM can carry a `position: fixed`/`sticky`/`absolute` element (common in lightbox/sticky-image widgets), which escapes a plain `overflow: hidden` ancestor entirely — those position relative to the viewport (or the nearest positioned ancestor), not any ancestor with `overflow: hidden`, so it isn't clipped. `lib/sanitize-html.ts`'s style-cleaning hook (used by every article-HTML sanitize call) now also drops `position: fixed|sticky|absolute` declarations (keeping `relative`/`static`, which stay in normal flow and are harmless); `.article-content` also gains `contain: layout`, making it the containing block for any such element that still slips through, so it's confined and clipped there instead of breaking out to the viewport. Verified with a Playwright repro: without the fix a `position: fixed` test element escaped its container entirely; with it, it stayed correctly contained.
+
 ### Changed (2026-07-19)
 
 - **Render sidecar reads `SIDECAR_PORT`, not `PORT`** — a real Coolify deploy surfaced the cause behind the sidecar being unreachable at its documented port: some deploy platforms (Coolify included) inject environment variables at the project/resource level across *every* service in a Docker Compose stack, not scoped per-service. FeedFerret's own required `PORT` variable was landing on the `render-sidecar` container too, making it listen on the app's port instead of 8080 — so the Sidecar URL (`:8080`) found nothing there. `docker/render-sidecar/server.mjs` now reads `SIDECAR_PORT` (a name nothing else defines), pinned explicitly to `8080` in both `docker-compose.yaml` and the standalone `docker-compose.example.yml`.
