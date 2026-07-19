@@ -348,7 +348,7 @@ export function ArticleReader({
           <button
             type="button"
             onClick={() => onOpenFeed?.(article.feedId)}
-            className="flex min-w-0 items-center gap-3 rounded-2xl px-2 py-1.5 text-start transition-colors hover:bg-muted/70 active:scale-[0.99]"
+            className="flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl px-2 py-1.5 text-start transition-colors hover:bg-muted/70 active:scale-[0.99]"
             aria-label={`Show all articles from ${article.feedName}`}
           >
             <div className="w-6 h-6 rounded-md overflow-hidden bg-muted flex items-center justify-center shrink-0">
@@ -533,7 +533,11 @@ export function ArticleReader({
               }}
               title={article.link ? t("openOriginal") : undefined}
               className={cn(
-                "text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 text-balance tracking-[-0.04em] break-words [overflow-wrap:anywhere]",
+                // No text-balance: Safari has shipped it with real interop bugs
+                // where a balanced heading stops respecting overflow-wrap on long
+                // headlines, letting them overflow instead of wrapping — not worth
+                // the purely cosmetic line-balancing on a reader headline.
+                "text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 tracking-[-0.04em] break-words [overflow-wrap:anywhere]",
                 article.link && "cursor-pointer transition-colors hover:text-link",
               )}
             >
