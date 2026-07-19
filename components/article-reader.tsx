@@ -446,6 +446,25 @@ export function ArticleReader({
           >
             <Copy className="w-4 h-4 text-muted-foreground" />
           </Button>
+          {/* Desktop parity for the mobile more-menu's "Fetch full text": the
+              bottom action bar hosting that menu is lg:hidden, so without this
+              a desktop reader showing a teaser article has no way to trigger a
+              manual full-text fetch at all. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            onClick={() => onFetchFullText?.(article.id)}
+            disabled={!article.link || isFetchingFullText}
+            aria-label={isFetchingFullText ? t("fetching") : t("fetchFullText")}
+            title={isFetchingFullText ? t("fetching") : t("fetchFullText")}
+          >
+            {isFetchingFullText ? (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-muted-foreground" />
+            )}
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -774,7 +793,13 @@ export function ArticleReader({
                 <Copy className="me-3 h-4 w-4" />
                 {t("copyLink")}
               </DropdownMenuItem>
-              {article.link && (!article.content || article.content.length < 900) && (
+              {/* No content-length gate here: it used to hide this for any
+                  article whose raw HTML topped 900 chars, which markup-heavy
+                  teasers (follow-us links, promo boxes) exceed while showing
+                  barely a paragraph of text. Fetching is a deliberate manual
+                  action and the server already rejects fetches that don't
+                  improve the article, so always offer it when a link exists. */}
+              {article.link && (
                 <DropdownMenuItem
                   className="rounded-2xl py-3"
                   onClick={() => onFetchFullText?.(article.id)}
