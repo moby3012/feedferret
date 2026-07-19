@@ -22,7 +22,7 @@ import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib
 import { stripStyleBlocks } from "@/lib/html-utils";
 import { findFtrConfigForUrl, applyFtrConfig } from "@/lib/ftr-site-config";
 import { renderViaSidecar } from "@/lib/render-sidecar";
-import { fetchViaHostedApi, getHostedFetchConfigForUser } from "@/lib/hosted-fetch";
+import { fetchViaHostedApiDetailed, getHostedFetchConfigForUser, HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 
 export type ExtractionResult = {
@@ -402,14 +402,21 @@ export async function fetchAndExtractReadable(
 
   // Last resort: the user's own hosted-API BYOK connector (M7-T3), for pages
   // that beat even a real rendered browser (active anti-bot challenges).
+  let hostedRateLimited = false;
   if (options.userId) {
     const hostedConfig = await getHostedFetchConfigForUser(options.userId);
     if (hostedConfig) {
-      const hosted = await fetchViaHostedApi(url, hostedConfig);
-      if (hosted) return buildHostedResult(hosted.content, hosted.title);
+      const outcome = await fetchViaHostedApiDetailed(url, hostedConfig);
+      if (outcome.ok) return buildHostedResult(outcome.result.content, outcome.result.title);
+      hostedRateLimited = outcome.rateLimited;
     }
   }
 
   if (result) return result; // the (empty) in-process result
+  // Rate-limiting on the last-resort tier is worth telling the caller apart
+  // from an ordinary fetch failure (see fetchFullText in app/actions/feeds.ts),
+  // since "try again later / add your own key" is actionable advice a plain
+  // "couldn't fetch" message can't give.
+  if (hostedRateLimited) throw new HostedFetchRateLimitedError();
   throw directError ?? new Error("Full-text fetch failed");
 }

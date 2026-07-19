@@ -2044,7 +2044,7 @@ function ContentFetchSection() {
   const [provider, setProvider] = useState<string>("none");
   const [apiKey, setApiKey] = useState("");
   const [autoUse, setAutoUse] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string; rateLimited?: boolean } | null>(null);
 
   useEffect(() => {
     if (!contentFetch) return;
@@ -2106,6 +2106,9 @@ function ContentFetchSection() {
             <div className="grid gap-1.5">
               <label className="text-sm font-medium" htmlFor="content-fetch-api-key-input">
                 {t("contentFetch.apiKey")}
+                {provider === "firecrawl" && (
+                  <span className="ms-2 text-xs font-normal text-muted-foreground">({t("contentFetch.optional")})</span>
+                )}
                 {contentFetch?.hasApiKey && !apiKey && (
                   <span className="ms-2 text-xs font-normal text-muted-foreground">({t("ai.currentlySet")})</span>
                 )}
@@ -2118,6 +2121,9 @@ function ContentFetchSection() {
                 onChange={(e) => setApiKey(e.target.value)}
                 className="h-10 rounded-2xl font-mono text-sm"
               />
+              {provider === "firecrawl" && !apiKey && !contentFetch?.hasApiKey && (
+                <p className="text-xs text-muted-foreground">{t("contentFetch.firecrawlKeylessHint")}</p>
+              )}
             </div>
 
             <div className="ui-control-surface flex items-center justify-between rounded-2xl border px-4 py-3">
@@ -2135,6 +2141,8 @@ function ContentFetchSection() {
             "flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm",
             testResult.success
               ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400"
+              : testResult.rateLimited
+              ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
               : "border-destructive/30 bg-destructive/10 text-destructive"
           )}>
             {testResult.success

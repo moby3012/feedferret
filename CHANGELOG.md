@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Added (2026-07-19 — Firecrawl keyless free tier)
+
+- **Firecrawl's BYOK connector now works without an API key** — Firecrawl recently launched a free, no-signup "keyless" tier for its `/v1/scrape` endpoint (verified directly against the live API: a plain request with no `Authorization` header succeeds), rate-limited per server IP per day rather than per user. Selecting Firecrawl in Settings → Integrations → Full-Text Fetch Fallback with the API key field left blank now opts into this tier — a good way to try the feature, and to gauge whether it's worth a paid Firecrawl key, before committing to one. Since the daily cap is shared across every user on a self-hosted instance (they all share one outbound IP), hitting it surfaces a specific, actionable message — both from the settings "Test connection" button and from a real "Fetch full text" click — pointing at adding a real API key instead of a generic failure. Jina Reader is unaffected (still requires a key).
+
+### Removed (2026-07-19)
+
+- **Article reader's Markdown source-view toggle** — the desktop toolbar button that switched between the rendered article and its raw Markdown source (`turndown`-derived for HTML-format articles). The "Copy as Markdown" action it was originally paired with was already removed on 2026-07-18; this removes the remaining toggle + source view for a simpler reader toolbar.
+
 ### Added (2026-07-19 — M7-T3: BYOK hosted-fetch connector)
 
 - **Full-text fetch fallback via Jina Reader / Firecrawl Cloud (BYOK)** — the final "heavy fetch" tier: for pages that beat even the browser-render sidecar (an active anti-bot challenge), a user can now bring their own API key for a commercial "URL to clean content" service. Per-user (unlike the admin-global render sidecar), strictly opt-in, and clearly labelled: content is sent to a third party, which every other extraction tier avoids. `lib/hosted-fetch.ts` implements both providers (Jina's `r.jina.ai` reader endpoint, Firecrawl Cloud's `/v1/scrape`), each returning clean Markdown rendered to sanitized HTML via the existing Markdown pipeline. Wired into `fetchAndExtractReadable` as the last fallback, after the in-process and sidecar tiers both come up empty.

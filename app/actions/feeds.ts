@@ -33,6 +33,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { fetchAndExtractReadable } from "@/lib/readability-extract";
+import { HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -1369,6 +1370,11 @@ export async function fetchFullText(articleId: string) {
     try {
         result = await fetchAndExtractReadable(article.link, { userId: session.user.id });
     } catch (error) {
+        if (error instanceof HostedFetchRateLimitedError) {
+            throw new Error(
+                "Your hosted full-text provider is rate-limited right now. If you're using Firecrawl's free tier without your own API key, this daily limit is shared across this whole server — add your own key in Settings → Integrations for much higher limits, or try again later.",
+            );
+        }
         throw new Error(describePageFetchError(error));
     }
     if (!result.html) throw new Error("Could not extract article content");
