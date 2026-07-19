@@ -50,6 +50,8 @@ Statt einer `.env`-Datei werden die Variablen in *Environment Variables* eingege
 
 Optionale Variablen (OAuth, E-Mail, VAPID) können ebenfalls hier gesetzt werden — alle Felder aus dem Abschnitt *Umgebungsvariablen* weiter unten funktionieren identisch.
 
+> **Browser-Render-Sidecar:** Das mitgelieferte `docker-compose.yaml` startet neben `feedferret` und `postgres` automatisch einen dritten Service (`render-sidecar`, siehe [`docs/render-sidecar.md`](render-sidecar.md)) — einen isolierten Headless-Chromium-Dienst für JavaScript-lastige/rein clientseitige Seiten, die der normale Abruf nicht lesen kann (Fallback bei Volltext und "Seite → Feed"). Er ist ab Werk aktiv; setze `RENDER_SIDECAR_TOKEN` auf einen eigenen Wert (Default ist `change-me`). Zum Deaktivieren den `render-sidecar`-Service und die `FEEDFERRET_RENDER_SIDECAR_URL`-Zeile aus `docker-compose.yaml` entfernen — der Rest der App funktioniert unverändert ohne ihn.
+
 **4. Domain konfigurieren**
 
 In Coolify unter *Domains* die gewünschte Domain eintragen. Coolify stellt automatisch ein Let's Encrypt-Zertifikat aus.

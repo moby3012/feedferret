@@ -46,22 +46,36 @@ bespoke Playwright service satisfy it.
 
 ## Setup
 
-**A ready-to-run sidecar ships in this repo** under
-[`docker/render-sidecar/`](../docker/render-sidecar/) (Dockerfile + tiny
-Playwright service + example compose). The in-app **Server Management → Sync**
-tab has a copy-paste "Setup guide" that walks through exactly these steps.
+**Wired up by default in `docker-compose.yaml`.** The repo's top-level compose
+file already defines a `render-sidecar` service (built from
+[`docker/render-sidecar/`](../docker/render-sidecar/): Dockerfile + tiny
+Playwright service) and points `feedferret` at it via
+`FEEDFERRET_RENDER_SIDECAR_URL=http://render-sidecar:8080/`. Both services share
+one `RENDER_SIDECAR_TOKEN` env var, so a fresh `docker compose up -d` (or a
+Coolify deploy of this repo) gives you a **working, already-active** sidecar
+with no admin-UI step required — only change `RENDER_SIDECAR_TOKEN` from its
+`change-me` default before deploying publicly.
 
-1. Run a sidecar reachable from the FeedFerret container (e.g. on the same
-   Docker network / Compose stack) — either the bundled one
-   (`docker compose up -d render-sidecar` after adding the block from
-   `docker/render-sidecar/docker-compose.example.yml`) or your own service that
-   implements the contract below.
-2. In **Server Management → Sync**, enable **Browser-render sidecar**, set the
-   **Sidecar URL** (e.g. `http://render-sidecar:8080/`, and a bearer token if
-   your service requires one), and click **Test**.
+**ENV always wins over the admin-UI/database config** (by design — see
+`getRenderSidecarConfig` in `lib/render-sidecar.ts` — the same pattern used
+elsewhere for immutable/container deployments). So with the bundled compose
+file: the **Server Management → Sync → Browser-render sidecar** toggle and its
+URL/token fields have **no effect** — the sidecar is active purely because the
+ENV vars are set, and those fields will read back empty (they reflect the
+database row, which nothing is writing to). To sanity-check connectivity
+anyway, paste the same URL/token into those fields and click **Test** — that
+exercises the identical endpoint the ENV config points at, it just doesn't
+change what's actually used at runtime.
 
-Or, for immutable/container deployments, configure it via environment instead of
-the admin UI:
+To turn the bundled sidecar **off**, remove the `FEEDFERRET_RENDER_SIDECAR_URL`
+line (and the `render-sidecar` service, to stop building/running it) from
+`docker-compose.yaml` — every call site already falls back gracefully when
+it's absent or unreachable. Once ENV is unset, the admin-UI toggle and its
+copy-paste "Setup guide" become the live configuration path instead, for a
+*standalone* sidecar (a different host, a hand-edited compose file, etc.).
+
+Or, for a hand-rolled deployment outside this repo's compose file, configure
+any service implementing the contract below via environment:
 
 ```
 FEEDFERRET_RENDER_SIDECAR_URL="http://render:8080/render"

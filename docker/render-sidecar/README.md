@@ -9,7 +9,22 @@ FeedFerret uses as a fallback for full-text extraction and the
 See the top-level [`docs/render-sidecar.md`](../../docs/render-sidecar.md) for
 the full contract, security notes, and alternatives (e.g. crawl4ai).
 
-## Quick start (Docker)
+## Already wired up
+
+The repo's top-level `docker-compose.yaml` runs this sidecar **by default** as
+a `render-sidecar` service and points `feedferret` at it via
+`FEEDFERRET_RENDER_SIDECAR_URL`, sharing one `RENDER_SIDECAR_TOKEN` between the
+two services. A plain `docker compose up -d` (or a Coolify deploy of this repo)
+gives you a working sidecar with nothing further to configure — just change
+`RENDER_SIDECAR_TOKEN` from its `change-me` default. See
+[`docs/render-sidecar.md`](../../docs/render-sidecar.md#setup) for how ENV vs.
+the admin-UI toggle interact.
+
+## Quick start (standalone)
+
+To run this sidecar on its own (a different host, testing outside Compose, a
+hand-rolled deployment), [`docker-compose.example.yml`](./docker-compose.example.yml)
+has a copy-paste block, or run it directly:
 
 ```bash
 # from the repo root
@@ -17,13 +32,12 @@ docker build -t feedferret-render-sidecar ./docker/render-sidecar
 docker run --rm -p 8080:8080 -e SIDECAR_TOKEN=change-me feedferret-render-sidecar
 ```
 
-Or use [`docker-compose.example.yml`](./docker-compose.example.yml) to run it
-alongside FeedFerret on the same network.
-
 Then in FeedFerret: **Server Management → Sync → Browser-render sidecar** →
 enable, set the URL (`http://render-sidecar:8080/` on a shared Docker network,
 or `http://localhost:8080/` for the local run above), paste the token if you set
-one, and click **Test**.
+one, and click **Test**. (This admin-UI path only takes effect when
+`FEEDFERRET_RENDER_SIDECAR_URL` is **not** set in the environment — see the
+link above.)
 
 ## Contract
 
