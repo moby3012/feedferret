@@ -1,156 +1,156 @@
-# FeedFerret selbst hosten
+# Self-Hosting FeedFerret
 
-Diese Anleitung beschreibt die vollständige Installation und den Betrieb von FeedFerret auf einem eigenen Server.
+This guide describes the complete installation and operation of FeedFerret on your own server.
 
 ---
 
-## Voraussetzungen
+## Requirements
 
-| Anforderung | Details |
+| Requirement | Details |
 |---|---|
-| **Docker** | Version 24+ mit Docker Compose Plugin (v2) |
-| **RAM** | Mindestens 512 MB, 1 GB empfohlen |
-| **Port** | 3000 (oder beliebiger freier Port, konfigurierbar) |
-| **Alternativ** | [Coolify](https://coolify.io/) — unterstützt Git-basiertes Deployment direkt aus dem Repository |
+| **Docker** | Version 24+ with Docker Compose plugin (v2) |
+| **RAM** | At least 512 MB, 1 GB recommended |
+| **Port** | 3000 (or any free port, configurable) |
+| **Alternative** | [Coolify](https://coolify.io/) — supports Git-based deployment directly from the repository |
 
-> **Hinweis zu Coolify:** FeedFerret lässt sich als Docker-Compose-Service in Coolify deployen. Umgebungsvariablen werden im Coolify-Dashboard statt in einer `.env`-Datei gesetzt.
+> **Note on Coolify:** FeedFerret can be deployed as a Docker Compose service in Coolify. Environment variables are set in the Coolify dashboard instead of in an `.env` file.
 
 ---
 
-## Deployment mit Coolify
+## Deploying with Coolify
 
-[Coolify](https://coolify.io/) ist eine selbst gehostete PaaS-Plattform, die Git-basiertes Deployment mit automatischen SSL-Zertifikaten und einer Web-UI für Umgebungsvariablen bietet.
+[Coolify](https://coolify.io/) is a self-hosted PaaS platform that offers Git-based deployment with automatic SSL certificates and a web UI for environment variables.
 
-### Schritt-für-Schritt
+### Step by Step
 
-**1. Neues Projekt in Coolify anlegen**
+**1. Create a new project in Coolify**
 
-1. Coolify öffnen → *Projects* → *Add New Project*
+1. Open Coolify → *Projects* → *Add New Project*
 2. *Add New Resource* → **Docker Compose**
-3. Als Source **GitHub** (oder deine Git-Instanz) auswählen und das `feedferret`-Repository verbinden
+3. Select **GitHub** (or your Git instance) as the source and connect the `feedferret` repository
 
-**2. Deployment-Typ konfigurieren**
+**2. Configure the deployment type**
 
 - Deployment Type: **Docker Compose**
-- Docker Compose File: `docker-compose.yaml` (im Root des Repos)
+- Docker Compose File: `docker-compose.yaml` (in the repo root)
 - Branch: `main`
 
-> **Wichtig:** Keinen eigenen `networks:`-Block im `docker-compose.yaml` definieren. Coolify fügt seinen eigenen Traefik-Netzwerk-Eintrag automatisch hinzu. Ein hardkodiertes custom Bridge-Netzwerk isoliert die Container von Traefik und führt zu *Gateway Timeout*-Fehlern. Das mitgelieferte `docker-compose.yaml` ist bereits korrekt konfiguriert.
+> **Important:** Do not define your own `networks:` block in `docker-compose.yaml`. Coolify automatically adds its own Traefik network entry. A hardcoded custom bridge network isolates the containers from Traefik and causes *Gateway Timeout* errors. The bundled `docker-compose.yaml` is already configured correctly.
 
-**3. Umgebungsvariablen im Coolify-Dashboard setzen**
+**3. Set environment variables in the Coolify dashboard**
 
-Statt einer `.env`-Datei werden die Variablen in *Environment Variables* eingegeben. Pflichtfelder:
+Instead of an `.env` file, the variables are entered under *Environment Variables*. Required fields:
 
-| Variable | Beschreibung | Beispiel |
+| Variable | Description | Example |
 |---|---|---|
-| `AUTH_SECRET` | Session-Schlüssel (32+ Zeichen) | `openssl rand -base64 32` |
-| `AUTH_URL` | Öffentliche URL der Instanz | `https://rss.example.com` |
-| `AUTH_TRUST_HOST` | Muss `true` sein hinter Coolify-Traefik | `true` |
-| `POSTGRES_PASSWORD` | DB-Passwort (PostgreSQL-Modus) | zufälliger String |
+| `AUTH_SECRET` | Session key (32+ characters) | `openssl rand -base64 32` |
+| `AUTH_URL` | Public URL of the instance | `https://rss.example.com` |
+| `AUTH_TRUST_HOST` | Must be `true` behind Coolify's Traefik | `true` |
+| `POSTGRES_PASSWORD` | DB password (PostgreSQL mode) | random string |
 
-Optionale Variablen (OAuth, E-Mail, VAPID) können ebenfalls hier gesetzt werden — alle Felder aus dem Abschnitt *Umgebungsvariablen* weiter unten funktionieren identisch.
+Optional variables (OAuth, email, VAPID) can also be set here — all fields from the *Environment Variables* section further below work identically.
 
-> **Browser-Render-Sidecar:** Das mitgelieferte `docker-compose.yaml` startet neben `feedferret` und `postgres` automatisch einen dritten Service (`render-sidecar`, siehe [`docs/render-sidecar.md`](render-sidecar.md)) — einen isolierten Headless-Chromium-Dienst für JavaScript-lastige/rein clientseitige Seiten, die der normale Abruf nicht lesen kann (Fallback bei Volltext und "Seite → Feed"). Er ist ab Werk aktiv; setze `RENDER_SIDECAR_TOKEN` auf einen eigenen Wert (Default ist `change-me`). Zum Deaktivieren den `render-sidecar`-Service und die `FEEDFERRET_RENDER_SIDECAR_URL`-Zeile aus `docker-compose.yaml` entfernen — der Rest der App funktioniert unverändert ohne ihn.
+> **Browser render sidecar:** The bundled `docker-compose.yaml` automatically starts a third service (`render-sidecar`, see [`docs/render-sidecar.md`](render-sidecar.md)) alongside `feedferret` and `postgres` — an isolated headless Chromium service for JavaScript-heavy/purely client-side pages that the normal fetcher can't read (used as a fallback for full text and "page → feed"). It is active by default; set `RENDER_SIDECAR_TOKEN` to your own value (the default is `change-me`). To disable it, remove the `render-sidecar` service and the `FEEDFERRET_RENDER_SIDECAR_URL` line from `docker-compose.yaml` — the rest of the app works unchanged without it.
 
-**4. Domain konfigurieren**
+**4. Configure the domain**
 
-In Coolify unter *Domains* die gewünschte Domain eintragen. Coolify stellt automatisch ein Let's Encrypt-Zertifikat aus.
+Enter the desired domain in Coolify under *Domains*. Coolify automatically issues a Let's Encrypt certificate.
 
 **5. Deploy**
 
-*Deploy* klicken — Coolify baut das Image, startet die Container und richtet HTTPS ein. Der Build dauert beim ersten Mal 3–5 Minuten.
+Click *Deploy* — Coolify builds the image, starts the containers, and sets up HTTPS. The first build takes 3–5 minutes.
 
 ### Troubleshooting Coolify
 
-| Problem | Ursache | Lösung |
+| Problem | Cause | Solution |
 |---|---|---|
-| *Gateway Timeout* nach Deploy | Custom `networks:` Block im Compose | `networks:` Abschnitt aus `docker-compose.yaml` entfernen — Coolify verwaltet Netzwerke selbst |
-| Login schlägt fehl / CSRF-Fehler | `AUTH_TRUST_HOST` fehlt | `AUTH_TRUST_HOST=true` in Coolify-Env-Variablen setzen |
-| `AUTH_URL` wird ignoriert | Coolify setzt keine `AUTH_URL` | Manuell in den Environment Variables setzen mit dem vollen `https://`-Präfix |
-| Build schlägt mit `prisma generate` fehl | Cache-Problem | In Coolify *Force Rebuild* aktivieren und erneut deployen |
-| PostgreSQL-Password-Fehler nach Rebuild | Volume mit altem Passwort vorhanden | In Coolify *Volumes* das PostgreSQL-Volume löschen und neu deployen (alle Daten gehen verloren — vorher Backup machen!) |
+| *Gateway Timeout* after deploy | Custom `networks:` block in the compose file | Remove the `networks:` section from `docker-compose.yaml` — Coolify manages networks itself |
+| Login fails / CSRF error | `AUTH_TRUST_HOST` missing | Set `AUTH_TRUST_HOST=true` in Coolify's environment variables |
+| `AUTH_URL` is ignored | Coolify doesn't set an `AUTH_URL` | Set it manually in the environment variables with the full `https://` prefix |
+| Build fails with `prisma generate` | Cache issue | Enable *Force Rebuild* in Coolify and deploy again |
+| PostgreSQL password error after rebuild | Volume still has the old password | Delete the PostgreSQL volume in Coolify's *Volumes* and redeploy (all data will be lost — back up first!) |
 
 ---
 
-## Schnellstart (5 Minuten)
+## Quick Start (5 Minutes)
 
 ```bash
-# 1. Repository klonen
+# 1. Clone the repository
 git clone https://github.com/moby3012/feedferret.git && cd feedferret
 
-# 2. Env-Datei anlegen
+# 2. Create the env file
 cp .env.example .env
 
-# 3. Drei Pflichtfelder setzen (siehe unten)
+# 3. Set the three required fields (see below)
 nano .env
 
-# 4. Stack starten
+# 4. Start the stack
 docker compose up -d --build
 ```
 
-Danach unter `http://localhost:3000` (oder deiner konfigurierten Domain) den Setup-Wizard durchlaufen.
+Then go through the setup wizard at `http://localhost:3000` (or your configured domain).
 
 ---
 
-## Umgebungsvariablen
+## Environment Variables
 
-### Pflichtfelder
+### Required Fields
 
-Diese drei Variablen **müssen** vor dem ersten Start gesetzt werden:
+These three variables **must** be set before the first start:
 
-| Variable | Beschreibung | Beispiel |
+| Variable | Description | Example |
 |---|---|---|
-| `AUTH_SECRET` | Geheimer Schlüssel für Sessions und verschlüsselte DB-Felder | `openssl rand -base64 32` |
-| `AUTH_URL` | Öffentliche URL der Instanz (mit Protokoll, ohne Slash am Ende) | `https://rss.example.com` |
-| `POSTGRES_PASSWORD` | Passwort für die PostgreSQL-Datenbank | `sicheres-passwort-hier` |
+| `AUTH_SECRET` | Secret key for sessions and encrypted DB fields | `openssl rand -base64 32` |
+| `AUTH_URL` | Public URL of the instance (with protocol, no trailing slash) | `https://rss.example.com` |
+| `POSTGRES_PASSWORD` | Password for the PostgreSQL database | `secure-password-here` |
 
-**`AUTH_SECRET` generieren:**
+**Generate `AUTH_SECRET`:**
 
 ```bash
 openssl rand -base64 32
 ```
 
-> **Wichtig:** `AUTH_SECRET` muss über alle Deploys hinweg stabil bleiben. FeedFerret verwendet diesen Schlüssel zum Verschlüsseln gespeicherter API-Zugangsdaten (z. B. KI-Zusammenfassungs-Credentials). Ändert man ihn, werden verschlüsselte Daten in der Datenbank unlesbar.
+> **Important:** `AUTH_SECRET` must remain stable across all deploys. FeedFerret uses this key to encrypt stored API credentials (e.g. AI summary credentials). If you change it, encrypted data in the database becomes unreadable.
 
-**Minimales `.env` für den Start:**
+**Minimal `.env` to get started:**
 
 ```env
-AUTH_SECRET="dein-generierter-schluessel"
+AUTH_SECRET="your-generated-key"
 AUTH_URL="https://rss.example.com"
 AUTH_TRUST_HOST=true
-POSTGRES_PASSWORD="sicheres-passwort-hier"
+POSTGRES_PASSWORD="secure-password-here"
 ```
 
 ---
 
-### Optionale Variablen
+### Optional Variables
 
-#### OAuth-Anmeldung
+#### OAuth Login
 
-Für die Anmeldung über externe Identitätsprovider. Weitere Details in [`docs/self-hosting-auth-email.md`](./self-hosting-auth-email.md).
+For login via external identity providers. More details in [`docs/self-hosting-auth-email.md`](./self-hosting-auth-email.md).
 
 ```env
 # Google OAuth
-GOOGLE_CLIENT_ID="deine-client-id.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET="dein-google-secret"
+GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="your-google-secret"
 
 # GitHub OAuth
-GITHUB_CLIENT_ID="deine-github-client-id"
-GITHUB_CLIENT_SECRET="dein-github-secret"
+GITHUB_CLIENT_ID="your-github-client-id"
+GITHUB_CLIENT_SECRET="your-github-secret"
 ```
 
-#### OIDC (z. B. Authelia, Keycloak)
+#### OIDC (e.g. Authelia, Keycloak)
 
 ```env
 AUTHELIA_CLIENT_ID="feedferret"
-AUTHELIA_CLIENT_SECRET="dein-oidc-secret"
+AUTHELIA_CLIENT_SECRET="your-oidc-secret"
 AUTHELIA_ISSUER="https://auth.example.com"
 AUTHELIA_PROVIDER_NAME="Authelia"
 ```
 
-#### E-Mail-Versand
+#### Email Sending
 
-Zugangsdaten können hier per ENV oder im Admin-UI (unter *Server Management → E-Mail*) konfiguriert werden. Werte aus der Datenbank haben Vorrang.
+Credentials can be configured here via ENV or in the admin UI (under *Server Management → Email*). Values from the database take precedence.
 
 ```env
 # Resend
@@ -158,12 +158,12 @@ RESEND_API_KEY="re_xxxxxxxxxxxx"
 RESEND_FROM_EMAIL="FeedFerret <noreply@example.com>"
 
 # Postmark
-POSTMARK_SERVER_TOKEN="dein-postmark-token"
+POSTMARK_SERVER_TOKEN="your-postmark-token"
 POSTMARK_FROM_EMAIL="noreply@example.com"
 POSTMARK_MESSAGE_STREAM="outbound"
 
 # Mailgun
-MAILGUN_API_KEY="dein-mailgun-key"
+MAILGUN_API_KEY="your-mailgun-key"
 MAILGUN_DOMAIN="mg.example.com"
 MAILGUN_FROM_EMAIL="FeedFerret <noreply@example.com>"
 MAILGUN_BASE_URL="https://api.mailgun.net"
@@ -172,92 +172,92 @@ MAILGUN_BASE_URL="https://api.mailgun.net"
 SENDGRID_API_KEY="SG.xxxxxxxxxxxx"
 SENDGRID_FROM_EMAIL="noreply@example.com"
 
-# SMTP (jeder SMTP-Anbieter)
+# SMTP (any SMTP provider)
 SMTP_HOST="smtp.example.com"
 SMTP_PORT="587"
 SMTP_USER="noreply@example.com"
-SMTP_PASSWORD="smtp-passwort"
+SMTP_PASSWORD="smtp-password"
 SMTP_FROM="FeedFerret <noreply@example.com>"
 ```
 
-#### Browser-Push-Benachrichtigungen (Web Push / VAPID)
+#### Browser Push Notifications (Web Push / VAPID)
 
 ```bash
-# VAPID-Schlüsselpaar generieren:
+# Generate a VAPID key pair:
 pnpm run webpush:keys
 ```
 
 ```env
-WEB_PUSH_VAPID_PUBLIC_KEY="dein-oeffentlicher-vapid-schluessel"
-WEB_PUSH_VAPID_PRIVATE_KEY="dein-privater-vapid-schluessel"
+WEB_PUSH_VAPID_PUBLIC_KEY="your-public-vapid-key"
+WEB_PUSH_VAPID_PRIVATE_KEY="your-private-vapid-key"
 WEB_PUSH_CONTACT="mailto:admin@example.com"
 ```
 
-#### Sonstiges
+#### Miscellaneous
 
 ```env
-# 2FA-Label in Authenticator-Apps
+# 2FA label in authenticator apps
 TOTP_ISSUER="FeedFerret"
 
-# Feed-Sync-Schutz (optionales Shared Secret für den Sync-Endpunkt)
-SYNC_SECRET="zufaelliger-string"
+# Feed sync protection (optional shared secret for the sync endpoint)
+SYNC_SECRET="random-string"
 
-# SSRF-Schutz (nur auf vertrauenswürdigen Single-Tenant-Instanzen deaktivieren)
+# SSRF protection (only disable on trusted single-tenant instances)
 TRUSTED_FEED_FETCHING="false"
 ALLOW_INTERNAL_FEED_URLS="false"
 ```
 
 ---
 
-## Erster Start und Setup-Wizard
+## First Start and Setup Wizard
 
-Nach `docker compose up -d --build` unter der konfigurierten URL aufrufen. Der Setup-Wizard führt in 5 Schritten durch die Erstkonfiguration:
+After `docker compose up -d --build`, open the configured URL. The setup wizard walks you through initial configuration in 5 steps:
 
-1. **Admin-Konto anlegen** — E-Mail-Adresse und Passwort für das erste Administratorkonto festlegen.
-2. **Instanzeinstellungen** — Name der Instanz, öffentliche URL, Registrierungsmodus (offen / Einladung / geschlossen).
-3. **E-Mail konfigurieren** (optional) — SMTP- oder API-Zugangsdaten für Passwort-Reset-Mails und Benachrichtigungen eintragen. Kann übersprungen und später nachgeholt werden.
-4. **Sicherheitseinstellungen** — 2FA-Pflicht, Session-Dauer, Datenschutzoptionen.
-5. **Fertig & Starter-Pakete** — Auf dem letzten Schritt können vorkonfigurierte Feed-Sammlungen (Starter Packs) nach Thema gewählt werden, um die Instanz direkt mit Inhalten zu befüllen.
+1. **Create admin account** — set the email address and password for the first administrator account.
+2. **Instance settings** — instance name, public URL, registration mode (open / invite-only / closed).
+3. **Configure email** (optional) — enter SMTP or API credentials for password reset emails and notifications. Can be skipped and configured later.
+4. **Security settings** — 2FA requirement, session duration, privacy options.
+5. **Done & starter packs** — on the last step, preconfigured feed collections (starter packs) can be chosen by topic to populate the instance with content right away.
 
 ---
 
-## Updates einspielen
+## Applying Updates
 
 ```bash
-# Neuestes Image holen und Container neu starten
+# Pull the latest image and restart the containers
 docker compose pull && docker compose up -d --build
 ```
 
-FeedFerret führt Datenbankmigrationen beim Start automatisch aus. Kein manueller Migrationsschritt nötig.
+FeedFerret automatically runs database migrations on startup. No manual migration step is needed.
 
 ---
 
 ## Backup
 
-### PostgreSQL (Standard)
+### PostgreSQL (Default)
 
 ```bash
-# Datenbank-Dump erstellen
+# Create a database dump
 docker exec feedferret-postgres pg_dump \
   -U feedferret \
   -d feedferret \
   > feedferret_backup_$(date +%Y%m%d_%H%M%S).sql
 
-# Dump wieder einspielen (in eine leere Datenbank)
+# Restore the dump (into an empty database)
 docker exec -i feedferret-postgres psql \
   -U feedferret \
   -d feedferret \
   < feedferret_backup_2024_01_01_120000.sql
 ```
 
-Für automatisierte Backups empfiehlt sich ein Cron-Job oder ein Tool wie [pgbackuper](https://github.com/2ndquadrant-it/barman) bzw. Restic mit dem obigen `pg_dump`-Befehl.
+For automated backups, a cron job or a tool like [pgbackuper](https://github.com/2ndquadrant-it/barman) or Restic with the `pg_dump` command above is recommended.
 
 ### SQLite
 
-Das gesamte Datenbankvolume als Tar-Archiv sichern:
+Back up the entire database volume as a tar archive:
 
 ```bash
-# Volume-Inhalt sichern
+# Back up the volume contents
 docker run --rm \
   -v feedferret_db_data:/data \
   -v $(pwd):/backup \
@@ -266,30 +266,30 @@ docker run --rm \
 
 ---
 
-## SQLite-Modus
+## SQLite Mode
 
-FeedFerret unterstützt SQLite als Alternative zu PostgreSQL — ideal für Einzelpersonen oder Testinstanzen ohne extra Datenbankdienst.
+FeedFerret supports SQLite as an alternative to PostgreSQL — ideal for individuals or test instances without a separate database service.
 
-**1. `.env` anpassen:**
+**1. Adjust `.env`:**
 
 ```env
 DATABASE_PROVIDER="sqlite"
 DATABASE_URL="file:/app/data/dev.db"
 ```
 
-Die Variablen `POSTGRES_DB`, `POSTGRES_USER` und `POSTGRES_PASSWORD` werden im SQLite-Modus nicht benötigt.
+The `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` variables are not needed in SQLite mode.
 
-**2. `docker-compose.yaml` anpassen:**
+**2. Adjust `docker-compose.yaml`:**
 
-Den auskommentierten Volume-Eintrag aktivieren und den `postgres`-Service sowie den `depends_on`-Block entfernen oder auskommentieren:
+Uncomment the commented-out volume entry and remove or comment out the `postgres` service as well as the `depends_on` block:
 
 ```yaml
 volumes:
   feedferret_postgres_data:
-  feedferret_db_data:   # <-- diese Zeile einkommentieren
+  feedferret_db_data:   # <-- uncomment this line
 ```
 
-Im `feedferret`-Service das Volume einbinden:
+Mount the volume in the `feedferret` service:
 
 ```yaml
 services:
@@ -299,46 +299,46 @@ services:
       - feedferret_db_data:/app/data
 ```
 
-Den `postgres`-Service und den `depends_on`-Block im `feedferret`-Service können dann vollständig entfernt werden.
+The `postgres` service and the `depends_on` block in the `feedferret` service can then be removed entirely.
 
-> **Hinweis:** Ein späterer Wechsel von SQLite zu PostgreSQL erfordert einen manuellen Datenexport (OPML/JSON) und Reimport. Es gibt kein automatisches Migrationswerkzeug.
+> **Note:** Switching from SQLite to PostgreSQL later requires a manual data export (OPML/JSON) and re-import. There is no automatic migration tool.
 
 ---
 
 ## Troubleshooting
 
-| Problem | Ursache | Lösung |
+| Problem | Cause | Solution |
 |---|---|---|
-| Login schlägt fehl / `CSRF`-Fehler hinter Reverse Proxy | `AUTH_TRUST_HOST` nicht gesetzt | `AUTH_TRUST_HOST=true` in `.env` setzen |
-| Port 3000 bereits belegt | Anderer Dienst nutzt den Port | `PORT=3001` in `.env` setzen und `ports:` in `docker-compose.yaml` auf `"3001:3001"` ändern |
-| `Connection refused` zur Datenbank beim Start | PostgreSQL noch nicht bereit | Container-Logs prüfen: `docker compose logs postgres`; der Health-Check sollte das automatisch abfangen |
-| `password authentication failed for user "feedferret"` | `POSTGRES_PASSWORD` in `.env` stimmt nicht mit dem beim ersten Start gesetzten Passwort überein | Volume löschen (`docker compose down -v`) und neu starten **oder** Passwort in der DB manuell zurücksetzen |
-| Build schlägt fehl (`ENOENT`, `prisma generate`) | Unvollständiger Clone oder Node-Module-Konflikt | `docker compose build --no-cache` ausführen |
-| Bilder / Assets laden nicht | `AUTH_URL` falsch konfiguriert | `AUTH_URL` muss exakt der öffentlich erreichbaren URL entsprechen (inkl. `https://`) |
-| Container startet, aber Health-Check schlägt fehl | Anwendung braucht länger zum Starten | `start_period` im Health-Check erhöhen oder Logs prüfen: `docker compose logs feedferret` |
+| Login fails / `CSRF` error behind a reverse proxy | `AUTH_TRUST_HOST` not set | Set `AUTH_TRUST_HOST=true` in `.env` |
+| Port 3000 already in use | Another service is using the port | Set `PORT=3001` in `.env` and change `ports:` in `docker-compose.yaml` to `"3001:3001"` |
+| `Connection refused` to the database at startup | PostgreSQL not ready yet | Check container logs: `docker compose logs postgres`; the health check should catch this automatically |
+| `password authentication failed for user "feedferret"` | `POSTGRES_PASSWORD` in `.env` doesn't match the password set at first startup | Delete the volume (`docker compose down -v`) and restart, **or** manually reset the password in the DB |
+| Build fails (`ENOENT`, `prisma generate`) | Incomplete clone or node module conflict | Run `docker compose build --no-cache` |
+| Images / assets don't load | `AUTH_URL` misconfigured | `AUTH_URL` must exactly match the publicly reachable URL (including `https://`) |
+| Container starts, but the health check fails | The application needs longer to start | Increase `start_period` in the health check, or check logs: `docker compose logs feedferret` |
 
 ---
 
-## Docker Image Architektur
+## Docker Image Architecture
 
-Das `Dockerfile` verwendet fünf Stages:
+The `Dockerfile` uses five stages:
 
-| Stage | Basis | Zweck |
+| Stage | Base | Purpose |
 |---|---|---|
-| `base-runtime` | `node:22-slim` + openssl, curl | Gemeinsame Laufzeit-Basis (kein Build-Tooling) |
-| `base-build` | `base-runtime` + python3, make, g++ | Basis für alle Build-Stages |
-| `deps` | `base-build` | Installiert npm-Abhängigkeiten via pnpm |
-| `builder` | `base-build` | Kompiliert Next.js |
-| `runner` | `base-runtime` | Produktions-Image — enthält keine Build-Tools |
+| `base-runtime` | `node:22-slim` + openssl, curl | Shared runtime base (no build tooling) |
+| `base-build` | `base-runtime` + python3, make, g++ | Base for all build stages |
+| `deps` | `base-build` | Installs npm dependencies via pnpm |
+| `builder` | `base-build` | Compiles Next.js |
+| `runner` | `base-runtime` | Production image — contains no build tools |
 
-Das Runner-Image enthält bewusst keine nativen Compiler (`g++`, `make`, `python3`) und kein `libvips`. Die Prisma-CLI wird explizit auf die in `package.json` gepinnte Version installiert (`npm install -g prisma@<version>`), damit CLI und Client garantiert übereinstimmen.
+The runner image deliberately contains no native compilers (`g++`, `make`, `python3`) and no `libvips`. The Prisma CLI is installed explicitly at the version pinned in `package.json` (`npm install -g prisma@<version>`) so the CLI and client are guaranteed to match.
 
 ---
 
-## Weiterführende Dokumentation
+## Further Documentation
 
-- **Reverse Proxy (Nginx, Caddy, Traefik):** [`docs/reverse-proxy.md`](./reverse-proxy.md)
-- **OAuth, OIDC und E-Mail-Provider im Detail:** [`docs/self-hosting-auth-email.md`](./self-hosting-auth-email.md)
-- **REST API und Google Reader API:** [`docs/api.md`](./api.md)
-- **Datenbank-Details:** [`docs/database.md`](./database.md)
-- **Sicherheit:** [`docs/security.md`](./security.md)
+- **Reverse proxy (Nginx, Caddy, Traefik):** [`docs/reverse-proxy.md`](./reverse-proxy.md)
+- **OAuth, OIDC, and email providers in detail:** [`docs/self-hosting-auth-email.md`](./self-hosting-auth-email.md)
+- **REST API and Google Reader API:** [`docs/api.md`](./api.md)
+- **Database details:** [`docs/database.md`](./database.md)
+- **Security:** [`docs/security.md`](./security.md)

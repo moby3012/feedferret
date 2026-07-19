@@ -1,12 +1,12 @@
-# FeedFerret API-Dokumentation
+# FeedFerret API Documentation
 
-FeedFerret stellt jetzt drei Integrationsflächen bereit:
+FeedFerret now provides three integration surfaces:
 
-1. **Public REST API v1** für n8n, mobile Apps, Browser Extensions und eigene Automationen.
-2. **MCP Endpoint** für Sprachmodelle und Agenten: [`docs/mcp.md`](./mcp.md).
-3. **Kompatibilitäts-APIs** wie Google Reader und bestehende Read-Later-/Webhook-Endpunkte.
+1. **Public REST API v1** for n8n, mobile apps, browser extensions, and custom automations.
+2. **MCP endpoint** for language models and agents: [`docs/mcp.md`](./mcp.md).
+3. **Compatibility APIs** such as Google Reader and existing read-later/webhook endpoints.
 
-> Ziel: Alle externen Schreibzugriffe sind benutzerbezogen, tokenbasiert und ohne Admin-/Server-Secrets nutzbar. Interne SaaS-Provisionierung bleibt getrennt in [`docs/internal-api.md`](./internal-api.md).
+> Goal: All external write access is user-scoped, token-based, and usable without admin/server secrets. Internal SaaS provisioning remains separate in [`docs/internal-api.md`](./internal-api.md).
 
 ---
 
@@ -18,50 +18,50 @@ https://your-feedferret-host
 
 ---
 
-## Authentifizierung
+## Authentication
 
 ### Session Cookie
 
-Für Same-Origin-UI-Integrationen kann die normale FeedFerret-Session genutzt werden.
+For same-origin UI integrations, the normal FeedFerret session can be used.
 
 ### Bearer Token
 
-Für n8n, MCP, externe Apps und Skripte:
+For n8n, MCP, external apps, and scripts:
 
-1. In FeedFerret einloggen.
-2. **Settings → API Access** öffnen.
-3. API-Token generieren.
-4. Token sicher speichern; er wird nur einmal angezeigt.
+1. Log in to FeedFerret.
+2. Open **Settings → API Access**.
+3. Generate an API token.
+4. Store the token securely; it is shown only once.
 
 ```http
 Authorization: Bearer <feedferret-api-token>
 ```
 
-Sicherheitsregeln:
+Security rules:
 
-- Der Token ist einem Benutzerkonto zugeordnet.
-- Ein deaktivierter Benutzer verliert API-Zugriff.
-- Token-Rotation über `POST /api/user/token`; Widerruf über `DELETE /api/user/token`.
-- Token nie clientseitig in öffentlichen Webseiten ausliefern.
-- Tokens beginnen mit dem Präfix `ff_` und werden serverseitig als SHA-256-Hash gespeichert — nur der Rohwert verlässt den Server, einmalig bei der Generierung.
+- The token is tied to a user account.
+- A deactivated user loses API access.
+- Token rotation via `POST /api/user/token`; revocation via `DELETE /api/user/token`.
+- Never expose the token client-side on public web pages.
+- Tokens start with the prefix `ff_` and are stored server-side as a SHA-256 hash — only the raw value ever leaves the server, once, at generation time.
 
-### Token-Scopes
+### Token Scopes
 
-Beim Erstellen eines Tokens in **Settings → API Access** kann ein Scope gewählt werden:
+When creating a token under **Settings → API Access**, a scope can be selected:
 
-| Scope | Zugriff |
+| Scope | Access |
 |---|---|
-| `read` | Nur lesende `GET`-Endpunkte |
-| `write` | `GET` + alle schreibenden `POST`/`PATCH`/`DELETE`-Endpunkte auf eigene Daten |
-| `admin` | Voller Zugriff (wie Session-Auth) |
+| `read` | Read-only `GET` endpoints only |
+| `write` | `GET` + all writing `POST`/`PATCH`/`DELETE` endpoints on the user's own data |
+| `admin` | Full access (same as session auth) |
 
-Session-Auth (Cookie) hat immer vollen Zugriff. Ein `read`-Token erhält HTTP 403 auf mutierenden Endpunkten.
+Session auth (cookie) always has full access. A `read` token receives HTTP 403 on mutating endpoints.
 
 ---
 
-## Fehlerformat
+## Error Format
 
-Public REST v1 nutzt ein einheitliches JSON-Fehlerformat:
+Public REST v1 uses a uniform JSON error format:
 
 ```json
 {
@@ -71,43 +71,43 @@ Public REST v1 nutzt ein einheitliches JSON-Fehlerformat:
 }
 ```
 
-| Status | Bedeutung |
+| Status | Meaning |
 |---|---|
-| `400` | Ungültige Anfrage / fehlende Pflichtfelder |
-| `401` | Kein oder ungültiger Token |
-| `404` | Ressource nicht gefunden oder gehört nicht dem Benutzer |
-| `500` | Serverfehler |
+| `400` | Invalid request / missing required fields |
+| `401` | No token or invalid token |
+| `404` | Resource not found or does not belong to the user |
+| `500` | Server error |
 
 ---
 
 ## OpenAPI
 
-Eine maschinenlesbare OpenAPI-Zusammenfassung ist verfügbar unter:
+A machine-readable OpenAPI summary is available at:
 
 ```http
 GET /api/v1/openapi.json
 ```
 
-Dieser Endpoint ist öffentlich lesbar und beschreibt die wichtigsten REST-v1-Routen.
+This endpoint is publicly readable and describes the most important REST v1 routes.
 
 ---
 
 # Public REST API v1
 
-Alle Endpunkte unter `/api/v1/*` akzeptieren Session Cookie oder `Authorization: Bearer <token>`.
+All endpoints under `/api/v1/*` accept a session cookie or `Authorization: Bearer <token>`.
 
 ## Account
 
 ### `GET /api/v1/me`
 
-Gibt das aktuelle API-Konto zurück.
+Returns the current API account.
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
   https://your-host/api/v1/me
 ```
 
-Antwort:
+Response:
 
 ```json
 {
@@ -120,31 +120,31 @@ Antwort:
 
 ---
 
-## Artikel
+## Articles
 
 ### `GET /api/v1/articles`
 
-Sucht oder listet Artikel.
+Searches or lists articles.
 
-Query-Parameter:
+Query parameters:
 
-| Parameter | Typ | Beschreibung |
+| Parameter | Type | Description |
 |---|---:|---|
-| `q` / `search` | string | Volltext + erweiterte Suchsyntax |
-| `feedId` | string | Nur ein Feed |
-| `categoryId` | string | Nur eine Kategorie |
-| `labelId` | string | Nur ein Label |
+| `q` / `search` | string | Full text + advanced search syntax |
+| `feedId` | string | Only one feed |
+| `categoryId` | string | Only one category |
+| `labelId` | string | Only one label |
 | `isRead` | boolean | `true`/`false` |
 | `isStarred` | boolean | `true`/`false` |
 | `isReadLater` | boolean | `true`/`false` |
-| `after` | date | Publiziert nach Datum |
-| `before` | date | Publiziert vor Datum |
+| `after` | date | Published after date |
+| `before` | date | Published before date |
 | `sort` | enum | `newest` (default), `oldest`, `recentlyRead` |
 | `limit` | number | 1–200, default 50 |
-| `offset` | number | Pagination-Offset |
-| `includeDuplicates` | boolean | Duplikate mitliefern |
+| `offset` | number | Pagination offset |
+| `includeDuplicates` | boolean | Include duplicates |
 
-Beispiel für n8n HTTP Request Node:
+Example for an n8n HTTP Request node:
 
 ```bash
 curl -G "https://your-host/api/v1/articles" \
@@ -153,7 +153,7 @@ curl -G "https://your-host/api/v1/articles" \
   --data-urlencode "limit=20"
 ```
 
-Antwort:
+Response:
 
 ```json
 {
@@ -185,11 +185,11 @@ Antwort:
 
 ### `GET /api/v1/articles/{id}`
 
-Lädt einen Artikel inkl. Feed und Labels.
+Loads an article including feed and labels.
 
 ### `PATCH /api/v1/articles/{id}`
 
-Ändert Artikelstatus und optional Labels.
+Changes article status and optionally labels.
 
 Body:
 
@@ -204,9 +204,9 @@ Body:
 
 ### `POST /api/v1/articles/mark-all-read`
 
-Markiert passende ungelesene Artikel als gelesen.
+Marks matching unread articles as read.
 
-Body-Filter sind kombinierbar:
+Body filters can be combined:
 
 ```json
 {
@@ -217,7 +217,7 @@ Body-Filter sind kombinierbar:
 }
 ```
 
-Antwort:
+Response:
 
 ```json
 { "updated": 12 }
@@ -225,7 +225,7 @@ Antwort:
 
 ### `POST /api/v1/articles/batch`
 
-Wendet eine Aktion auf bis zu 500 Artikel-IDs in einem Request an. Ideal für Sync-Clients, die große Lesestatus-Mengen übertragen müssen.
+Applies an action to up to 500 article IDs in a single request. Ideal for sync clients that need to transfer large volumes of read-status changes.
 
 Body:
 
@@ -237,32 +237,32 @@ Body:
 }
 ```
 
-| Feld | Typ | Beschreibung |
+| Field | Type | Description |
 |---|---|---|
-| `ids` | `string[]` | Artikel-IDs (max. 500). Nur Artikel des authentifizierten Benutzers werden verändert. |
-| `action` | `string` | Pflicht. Siehe Tabelle unten. |
-| `labelId` | `string` | Nur für `label` / `unlabel` erforderlich. |
+| `ids` | `string[]` | Article IDs (max 500). Only articles belonging to the authenticated user are changed. |
+| `action` | `string` | Required. See table below. |
+| `labelId` | `string` | Required only for `label` / `unlabel`. |
 
-Verfügbare Aktionen:
+Available actions:
 
-| `action` | Effekt |
+| `action` | Effect |
 |---|---|
-| `read` | Als gelesen markieren |
-| `unread` | Als ungelesen markieren |
-| `star` | Mit Stern versehen |
-| `unstar` | Stern entfernen |
-| `read_later` | Zu „Später lesen" hinzufügen |
-| `remove_read_later` | Aus „Später lesen" entfernen |
-| `label` | Label anhängen (`labelId` erforderlich) |
-| `unlabel` | Label entfernen (`labelId` erforderlich) |
+| `read` | Mark as read |
+| `unread` | Mark as unread |
+| `star` | Add a star |
+| `unstar` | Remove the star |
+| `read_later` | Add to "Read Later" |
+| `remove_read_later` | Remove from "Read Later" |
+| `label` | Attach a label (`labelId` required) |
+| `unlabel` | Remove a label (`labelId` required) |
 
-Antwort:
+Response:
 
 ```json
 { "updated": 42 }
 ```
 
-> **Scope:** Erfordert `write`-Scope (oder Session-Auth). Read-only-Tokens (`read`) erhalten HTTP 403.
+> **Scope:** Requires `write` scope (or session auth). Read-only tokens (`read`) receive HTTP 403.
 
 ---
 
@@ -270,11 +270,11 @@ Antwort:
 
 ### `GET /api/v1/feeds`
 
-Listet alle Feeds inkl. Kategorie, Status und Unread Count.
+Lists all feeds including category, status, and unread count.
 
 ### `POST /api/v1/feeds`
 
-Fügt einen Feed hinzu und synchronisiert standardmäßig direkt.
+Adds a feed and syncs it immediately by default.
 
 Body:
 
@@ -289,13 +289,13 @@ Body:
 
 ### `GET /api/v1/feeds/{id}`
 
-Lädt einen Feed.
+Loads a feed.
 
 ### `PATCH /api/v1/feeds/{id}`
 
-Aktualisiert Feed-Metadaten und Fetch-/Reader-Optionen.
+Updates feed metadata and fetch/reader options.
 
-Wichtige Felder:
+Key fields:
 
 ```json
 {
@@ -316,19 +316,19 @@ Wichtige Felder:
 
 ### `DELETE /api/v1/feeds/{id}`
 
-Löscht einen Feed mit Artikeln.
+Deletes a feed along with its articles.
 
 ### `POST /api/v1/feeds/{id}/sync`
 
-Synchronisiert genau einen Feed.
+Syncs exactly one feed.
 
 ---
 
-## Kategorien
+## Categories
 
 ### `GET /api/v1/categories`
 
-Listet Kategorien/Folders.
+Lists categories/folders.
 
 ### `POST /api/v1/categories`
 
@@ -344,7 +344,7 @@ Listet Kategorien/Folders.
 
 ### `DELETE /api/v1/categories/{id}`
 
-Löscht eine Kategorie. Feeds werden per Datenmodell entsprechend entkoppelt/gelöscht, falls Cascade greift.
+Deletes a category. Feeds are decoupled/deleted according to the data model if cascade applies.
 
 ---
 
@@ -352,7 +352,7 @@ Löscht eine Kategorie. Feeds werden per Datenmodell entsprechend entkoppelt/gel
 
 ### `GET /api/v1/labels`
 
-Listet Labels inkl. Artikelzählung.
+Lists labels including article counts.
 
 ### `POST /api/v1/labels`
 
@@ -368,15 +368,15 @@ Listet Labels inkl. Artikelzählung.
 
 ### `DELETE /api/v1/labels/{id}`
 
-Löscht ein Label und seine Artikelzuordnungen.
+Deletes a label and its article associations.
 
 ---
 
-## Gespeicherte Suchen
+## Saved Searches
 
 ### `GET /api/v1/saved-searches`
 
-Listet gespeicherte Suchen.
+Lists saved searches.
 
 ### `POST /api/v1/saved-searches`
 
@@ -392,11 +392,11 @@ Listet gespeicherte Suchen.
 
 ### `DELETE /api/v1/saved-searches/{id}`
 
-Löscht eine gespeicherte Suche.
+Deletes a saved search.
 
 ### `POST /api/v1/saved-searches/{id}/share`
 
-Aktiviert/deaktiviert öffentliche RSS-/Web-Freigabe der Suche.
+Enables/disables public RSS/web sharing of the search.
 
 ```json
 { "enabled": true }
@@ -408,7 +408,7 @@ Aktiviert/deaktiviert öffentliche RSS-/Web-Freigabe der Suche.
 
 ### `GET /api/v1/opml`
 
-Exportiert alle Feeds und Kategorien als OPML/XML.
+Exports all feeds and categories as OPML/XML.
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
@@ -417,13 +417,13 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ### `POST /api/v1/opml`
 
-Importiert OPML.
+Imports OPML.
 
 ```json
 { "xml": "<?xml version=\"1.0\"?><opml>...</opml>" }
 ```
 
-Antwort:
+Response:
 
 ```json
 {
@@ -441,7 +441,7 @@ Antwort:
 
 ### `POST /api/v1/sync`
 
-Synchronisiert alle Feeds des aktuellen Benutzers.
+Syncs all feeds for the current user.
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
@@ -450,11 +450,11 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ---
 
-## Keyword-Alerts
+## Keyword Alerts
 
 ### `GET /api/v1/alerts`
 
-Listet alle Keyword-Alerts des Benutzers.
+Lists all keyword alerts for the user.
 
 ### `POST /api/v1/alerts`
 
@@ -464,11 +464,11 @@ Listet alle Keyword-Alerts des Benutzers.
 
 ### `GET /api/v1/alerts/{id}`
 
-Lädt einen Keyword-Alert.
+Loads a keyword alert.
 
 ### `PATCH /api/v1/alerts/{id}`
 
-Aktualisiert einen Keyword-Alert (alle Felder optional).
+Updates a keyword alert (all fields optional).
 
 ```json
 { "name": "AI & ML News", "enabled": false }
@@ -476,15 +476,15 @@ Aktualisiert einen Keyword-Alert (alle Felder optional).
 
 ### `DELETE /api/v1/alerts/{id}`
 
-Löscht einen Keyword-Alert.
+Deletes a keyword alert.
 
 ---
 
-## Auto-Read Regeln
+## Auto-Read Rules
 
 ### `GET /api/v1/rules`
 
-Listet alle Auto-Read-Regeln des Benutzers (sortiert nach `order` aufsteigend).
+Lists all auto-read rules for the user (sorted by `order` ascending).
 
 ### `POST /api/v1/rules`
 
@@ -494,11 +494,11 @@ Listet alle Auto-Read-Regeln des Benutzers (sortiert nach `order` aufsteigend).
 
 ### `GET /api/v1/rules/{id}`
 
-Lädt eine Auto-Read-Regel.
+Loads an auto-read rule.
 
 ### `PATCH /api/v1/rules/{id}`
 
-Aktualisiert eine Auto-Read-Regel (alle Felder optional).
+Updates an auto-read rule (all fields optional).
 
 ```json
 { "enabled": false }
@@ -506,23 +506,23 @@ Aktualisiert eine Auto-Read-Regel (alle Felder optional).
 
 ### `DELETE /api/v1/rules/{id}`
 
-Löscht eine Auto-Read-Regel.
+Deletes an auto-read rule.
 
 ---
 
-## Benachrichtigungen
+## Notifications
 
 ### `GET /api/v1/notifications`
 
-Listet Benachrichtigungen, sortiert nach Erstelldatum absteigend.
+Lists notifications, sorted by creation date descending.
 
-Query-Parameter: `isRead` (bool), `limit` (1–100, default 50), `offset`.
+Query parameters: `isRead` (bool), `limit` (1–100, default 50), `offset`.
 
 ### `POST /api/v1/notifications/mark-all-read`
 
-Markiert alle Benachrichtigungen des Benutzers als gelesen.
+Marks all of the user's notifications as read.
 
-Antwort:
+Response:
 
 ```json
 { "updated": 5 }
@@ -530,17 +530,17 @@ Antwort:
 
 ### `POST /api/v1/notifications/{id}/read`
 
-Markiert eine einzelne Benachrichtigung als gelesen.
+Marks a single notification as read.
 
 ---
 
-## Statistiken
+## Statistics
 
 ### `GET /api/v1/stats`
 
-Gibt Aggregatwerte zurück: Feeds, Artikel, Unread, Starred, ReadLater, Labels, Kategorien, Suchen, Alerts, Regeln, Benachrichtigungen.
+Returns aggregate values: feeds, articles, unread, starred, read later, labels, categories, saved searches, alerts, rules, notifications.
 
-Antwort:
+Response:
 
 ```json
 {
@@ -560,64 +560,64 @@ Antwort:
 
 ---
 
-# Bestehende Spezial-APIs
+# Existing Special APIs
 
-## Read Later Kurz-API
+## Read Later Short API
 
-Die ältere Kurz-API bleibt kompatibel:
+The older short API remains compatible:
 
 - `GET /api/read-later`
 - `POST /api/read-later`
 - `DELETE /api/read-later`
 
-Sie ist für Browser Extensions weiter praktisch. Neue Integrationen können alternativ `GET /api/v1/articles?isReadLater=true` und `PATCH /api/v1/articles/{id}` verwenden.
+It's still convenient for browser extensions. New integrations can alternatively use `GET /api/v1/articles?isReadLater=true` and `PATCH /api/v1/articles/{id}`.
 
 ## API Token Management
 
-Diese Endpunkte benötigen **Session Cookie**, nicht Bearer Token:
+These endpoints require a **session cookie**, not a bearer token:
 
 - `GET /api/user/token` → `{ "hasToken": true }`
-- `POST /api/user/token` → erzeugt Token, zeigt ihn einmalig an
-- `DELETE /api/user/token` → widerruft Token
+- `POST /api/user/token` → generates a token, shows it once
+- `DELETE /api/user/token` → revokes the token
 
 ## Google Reader API
 
-Für native RSS-Clients: [`docs/google-reader-api.md`](./google-reader-api.md)
+For native RSS clients: [`docs/google-reader-api.md`](./google-reader-api.md)
 
 ## Webhooks
 
-Outbound Events zu externen Systemen: [`docs/webhooks.md`](./webhooks.md)
+Outbound events to external systems: [`docs/webhooks.md`](./webhooks.md)
 
 ## Internal API
 
-Admin-/SaaS-Provisionierung mit `INTERNAL_API_KEY`: [`docs/internal-api.md`](./internal-api.md)
+Admin/SaaS provisioning with `INTERNAL_API_KEY`: [`docs/internal-api.md`](./internal-api.md)
 
 ---
 
-# Suchsyntax
+# Search Syntax
 
-Die REST- und MCP-Suche nutzt die vorhandene Advanced Search Syntax.
+REST and MCP search use the existing advanced search syntax.
 
-| Token | Beschreibung | Beispiel |
+| Token | Description | Example |
 |---|---|---|
-| Freitext | Titel, Inhalt, Excerpt, Autor, URL, Feed, Labels | `OpenAI` |
-| Phrase | Exakte Phrase | `"model context protocol"` |
-| `is:unread` | Ungelesene Artikel | `is:unread` |
-| `is:read` | Gelesene Artikel | `is:read` |
-| `is:starred` | Favoriten | `is:starred` |
+| Free text | Title, content, excerpt, author, URL, feed, labels | `OpenAI` |
+| Phrase | Exact phrase | `"model context protocol"` |
+| `is:unread` | Unread articles | `is:unread` |
+| `is:read` | Read articles | `is:read` |
+| `is:starred` | Starred | `is:starred` |
 | `is:readlater` | Read Later | `is:readlater` |
-| `feed:name` | Feed nach ID, Name oder URL | `feed:verge` |
-| `category:name` | Kategorie nach ID oder Name | `category:AI` |
-| `label:name` | Label nach ID oder Name | `label:research` |
-| `#label` | Kurzform für Label | `#research` |
-| `author:name` | Autor | `author:alice` |
-| `intitle:word` | Titel enthält | `intitle:llm` |
-| `intext:word` | Content/Excerpt enthält | `intext:security` |
-| `inurl:word` | URL enthält | `inurl:github` |
-| `after:date` | Nach Datum | `after:2026-01-01` |
-| `before:date` | Vor Datum | `before:2026-06-01` |
-| Relative Zeit | `d`, `w`, `m`, `y` | `after:7d` |
-| Negation | `-` oder `!` | `AI -feed:spam` |
+| `feed:name` | Feed by ID, name, or URL | `feed:verge` |
+| `category:name` | Category by ID or name | `category:AI` |
+| `label:name` | Label by ID or name | `label:research` |
+| `#label` | Shorthand for label | `#research` |
+| `author:name` | Author | `author:alice` |
+| `intitle:word` | Title contains | `intitle:llm` |
+| `intext:word` | Content/excerpt contains | `intext:security` |
+| `inurl:word` | URL contains | `inurl:github` |
+| `after:date` | After date | `after:2026-01-01` |
+| `before:date` | Before date | `before:2026-06-01` |
+| Relative time | `d`, `w`, `m`, `y` | `after:7d` |
+| Negation | `-` or `!` | `AI -feed:spam` |
 
 Aliases:
 
@@ -629,11 +629,11 @@ Aliases:
 
 ---
 
-# n8n Beispiele
+# n8n Examples
 
-## Neue ungelesene KI-Artikel ziehen
+## Fetching New Unread AI Articles
 
-HTTP Request Node:
+HTTP Request node:
 
 - Method: `GET`
 - URL: `https://your-host/api/v1/articles`
@@ -643,7 +643,7 @@ HTTP Request Node:
   - `q = is:unread AI after:1d`
   - `limit = 25`
 
-## Artikel nach Verarbeitung markieren
+## Marking Articles After Processing
 
 ```http
 PATCH /api/v1/articles/{{ $json.id }}
@@ -653,7 +653,7 @@ Content-Type: application/json
 { "isRead": true, "isStarred": true }
 ```
 
-## Feed per Workflow hinzufügen
+## Adding a Feed via Workflow
 
 ```http
 POST /api/v1/feeds

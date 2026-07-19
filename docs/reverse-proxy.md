@@ -1,24 +1,24 @@
-# FeedFerret hinter einem Reverse Proxy betreiben
+# Running FeedFerret Behind a Reverse Proxy
 
-FeedFerret läuft standardmäßig auf Port 3000 und erwartet, dass ein Reverse Proxy HTTPS terminiert und die korrekten Header weiterleitet. Diese Anleitung zeigt Konfigurationen für **Nginx**, **Caddy** und **Traefik**.
+FeedFerret runs on port 3000 by default and expects a reverse proxy to terminate HTTPS and forward the correct headers. This guide shows configurations for **Nginx**, **Caddy**, and **Traefik**.
 
 ---
 
-## Voraussetzung: `AUTH_TRUST_HOST=true`
+## Prerequisite: `AUTH_TRUST_HOST=true`
 
-Da FeedFerret hinter einem Proxy betrieben wird, muss Next-Auth angewiesen werden, den `X-Forwarded-Host`-Header des Proxys zu vertrauen. Ohne diese Variable schlägt die CSRF-Prüfung fehl und Logins sind nicht möglich.
+Since FeedFerret is run behind a proxy, Next-Auth must be told to trust the proxy's `X-Forwarded-Host` header. Without this variable, the CSRF check fails and logins are not possible.
 
 ```env
 AUTH_TRUST_HOST=true
 ```
 
-Diese Variable ist in `.env.example` bereits enthalten und in `docker-compose.yaml` standardmäßig auf `true` gesetzt.
+This variable is already included in `.env.example` and is set to `true` by default in `docker-compose.yaml`.
 
 ---
 
 ## Nginx
 
-### Mit Let's Encrypt (Certbot)
+### With Let's Encrypt (Certbot)
 
 ```nginx
 # /etc/nginx/sites-available/feedferret
@@ -27,12 +27,12 @@ server {
     listen 80;
     server_name rss.example.com;
 
-    # Let's Encrypt HTTP-Challenge
+    # Let's Encrypt HTTP challenge
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
 
-    # Alle anderen Anfragen auf HTTPS umleiten
+    # Redirect all other requests to HTTPS
     location / {
         return 301 https://$host$request_uri;
     }
@@ -46,38 +46,38 @@ server {
     ssl_certificate     /etc/letsencrypt/live/rss.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/rss.example.com/privkey.pem;
 
-    # Moderne TLS-Einstellungen
+    # Modern TLS settings
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
     ssl_session_cache shared:SSL:10m;
     ssl_session_timeout 1d;
 
-    # HSTS (FeedFerret setzt diesen Header nicht selbst)
+    # HSTS (FeedFerret does not set this header itself)
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     location / {
         proxy_pass http://localhost:3000;
 
-        # Pflicht-Header für Next-Auth und korrekte URL-Erkennung
+        # Required headers for Next-Auth and correct URL detection
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # WebSocket-Unterstützung (für zukünftige Realtime-Features)
+        # WebSocket support (for future realtime features)
         proxy_http_version 1.1;
         proxy_set_header Upgrade    $http_upgrade;
         proxy_set_header Connection "upgrade";
 
-        # Timeouts für lange Sync-Anfragen
+        # Timeouts for long-running sync requests
         proxy_read_timeout 120s;
         proxy_connect_timeout 10s;
     }
 }
 ```
 
-**Zertifikat erstellen:**
+**Create the certificate:**
 
 ```bash
 certbot --nginx -d rss.example.com
@@ -85,9 +85,9 @@ certbot --nginx -d rss.example.com
 
 ---
 
-### Docker-Netzwerk (FeedFerret im selben Compose-Stack)
+### Docker Network (FeedFerret in the Same Compose Stack)
 
-Wenn Nginx ebenfalls als Docker-Container läuft und sich im selben Netzwerk befindet, den `proxy_pass` auf den Service-Namen statt `localhost` zeigen lassen:
+If Nginx also runs as a Docker container and is on the same network, point `proxy_pass` at the service name instead of `localhost`:
 
 ```nginx
 proxy_pass http://feedferret:3000;
@@ -97,7 +97,7 @@ proxy_pass http://feedferret:3000;
 
 ## Caddy
 
-Caddy bezieht und erneuert Let's Encrypt-Zertifikate vollautomatisch.
+Caddy obtains and renews Let's Encrypt certificates fully automatically.
 
 ### Caddyfile
 
@@ -110,14 +110,14 @@ rss.example.com {
         header_up X-Forwarded-Proto {scheme}
     }
 
-    # HSTS (FeedFerret setzt diesen Header nicht selbst)
+    # HSTS (FeedFerret does not set this header itself)
     header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
-    # WebSocket-Upgrade automatisch weitergeleitet durch Caddy — kein Extra-Config nötig
+    # WebSocket upgrades are forwarded automatically by Caddy — no extra config needed
 }
 ```
 
-### Docker-Netzwerk
+### Docker Network
 
 ```caddy
 rss.example.com {
@@ -132,10 +132,10 @@ rss.example.com {
 }
 ```
 
-### Caddy als Docker-Service zum FeedFerret-Stack hinzufügen
+### Adding Caddy as a Docker Service to the FeedFerret Stack
 
 ```yaml
-# Ergänzung in docker-compose.yaml
+# Addition to docker-compose.yaml
 
 services:
   caddy:
@@ -160,14 +160,14 @@ volumes:
 
 ## Traefik
 
-### Docker Labels (empfohlene Methode für Docker-Setups)
+### Docker Labels (Recommended Method for Docker Setups)
 
-Traefik-Labels direkt im `feedferret`-Service in `docker-compose.yaml` hinzufügen:
+Add Traefik labels directly to the `feedferret` service in `docker-compose.yaml`:
 
 ```yaml
 services:
   feedferret:
-    # ... bestehende Konfiguration ...
+    # ... existing configuration ...
     labels:
       - "traefik.enable=true"
 
@@ -177,16 +177,16 @@ services:
       - "traefik.http.routers.feedferret.tls=true"
       - "traefik.http.routers.feedferret.tls.certresolver=letsencrypt"
 
-      # Router: HTTP → HTTPS-Weiterleitung
+      # Router: HTTP → HTTPS redirect
       - "traefik.http.routers.feedferret-http.rule=Host(`rss.example.com`)"
       - "traefik.http.routers.feedferret-http.entrypoints=web"
       - "traefik.http.routers.feedferret-http.middlewares=redirect-to-https"
 
-      # Middleware: HTTP-Weiterleitung
+      # Middleware: HTTP redirect
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
 
-      # Middleware: HSTS (FeedFerret setzt diesen Header nicht selbst)
+      # Middleware: HSTS (FeedFerret does not set this header itself)
       - "traefik.http.middlewares.feedferret-hsts.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.feedferret-hsts.headers.stsIncludeSubdomains=true"
       - "traefik.http.routers.feedferret.middlewares=feedferret-hsts"
@@ -196,10 +196,10 @@ services:
 
     networks:
       - feedferret_net
-      - traefik_proxy   # externes Traefik-Netzwerk
+      - traefik_proxy   # external Traefik network
 ```
 
-> **Netzwerk-Hinweis:** Traefik muss Zugriff auf das `feedferret_net`-Netzwerk haben, oder FeedFerret muss dem externen Traefik-Netzwerk beitreten. Das externe Netzwerk in `docker-compose.yaml` als `external: true` deklarieren:
+> **Network note:** Traefik must have access to the `feedferret_net` network, or FeedFerret must join the external Traefik network. Declare the external network in `docker-compose.yaml` as `external: true`:
 
 ```yaml
 networks:
@@ -211,7 +211,7 @@ networks:
 
 ### Traefik Static Configuration (traefik.yaml)
 
-Mindest-Konfiguration für Traefik mit Let's Encrypt:
+Minimal configuration for Traefik with Let's Encrypt:
 
 ```yaml
 # traefik.yaml
@@ -244,33 +244,33 @@ api:
 
 ---
 
-## Gemeinsame Hinweise für alle Proxys
+## Common Notes for All Proxies
 
-### `AUTH_URL` korrekt setzen
+### Setting `AUTH_URL` Correctly
 
-`AUTH_URL` in `.env` muss exakt der öffentlich erreichbaren URL entsprechen — inklusive `https://`, ohne abschließenden Schrägstrich:
+`AUTH_URL` in `.env` must exactly match the publicly reachable URL — including `https://`, with no trailing slash:
 
 ```env
 AUTH_URL="https://rss.example.com"
 ```
 
-### Port in Docker Compose ausblenden
+### Hiding the Port in Docker Compose
 
-Wenn ein Reverse Proxy vor FeedFerret geschaltet ist, muss Port 3000 nicht mehr am Host exponiert werden. Den `ports`-Eintrag im `feedferret`-Service entfernen oder auskommentieren, damit der Port nur intern im Docker-Netzwerk erreichbar ist:
+If a reverse proxy sits in front of FeedFerret, port 3000 no longer needs to be exposed on the host. Remove or comment out the `ports` entry in the `feedferret` service so the port is only reachable internally on the Docker network:
 
 ```yaml
 services:
   feedferret:
-    # ports:         # auskommentiert: nur intern erreichbar
+    # ports:         # commented out: only reachable internally
     #   - "3000:3000"
     expose:
-      - "3000"       # Port im internen Netzwerk bekannt machen
+      - "3000"       # make the port known on the internal network
 ```
 
 ### HSTS
 
-FeedFerret setzt den `Strict-Transport-Security`-Header nicht selbst. Alle Konfigurationsbeispiele in dieser Anleitung enthalten den Header mit einer Gültigkeit von einem Jahr (`max-age=31536000`). Bei erstmaligem Einsatz empfiehlt sich ein kürzerer Testwert (z. B. `max-age=300`), um Sperren bei Fehlkonfiguration zu vermeiden.
+FeedFerret does not set the `Strict-Transport-Security` header itself. All configuration examples in this guide include the header with a one-year validity (`max-age=31536000`). For a first-time setup, a shorter test value (e.g. `max-age=300`) is recommended to avoid lockouts from misconfiguration.
 
 ### WebSocket
 
-FeedFerret nutzt WebSockets aktuell nicht produktiv, aber die Konfigurationen in dieser Anleitung leiten `Upgrade`-Verbindungen korrekt weiter — das gewährleistet Kompatibilität, sobald Realtime-Features hinzukommen.
+FeedFerret does not currently use WebSockets in production, but the configurations in this guide correctly forward `Upgrade` connections — this ensures compatibility once realtime features are added.
