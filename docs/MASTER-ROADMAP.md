@@ -1,17 +1,17 @@
 # FeedFerret — Master Roadmap (single source of truth)
 
-> **Consolidated 2026-07-16, updated 2026-07-17** from every planning doc + the marketing site (feedferret.org). One ordered backlog to work through top-to-bottom. Duplicates across docs are merged here (noted).
+> **Consolidated 2026-07-16, updated 2026-07-19.** One ordered backlog to work through top-to-bottom. Duplicates across docs are merged here (noted).
 > **How to use:** this is the *index and ordering*. Detailed task checklists live in the linked source docs — tick them there, keep this file's phase status current.
 > Effort: S (<1d) · M (1–3d) · L (1–2w) · XL (2w+). Status: ✅ done · 🔄 in progress · ⬜ planned · ❓ verify.
 
 ## Source docs (hub)
 - Releases: [`releases/v1.2-theming.md`](releases/v1.2-theming.md) · [`releases/v1.3.md`](releases/v1.3.md) · [`releases/v2.md`](releases/v2.md) · [`releases/backlog.md`](releases/backlog.md) · [`releases/maintenance.md`](releases/maintenance.md) · [`releases/testing.md`](releases/testing.md)
 - Feed Intelligence: [`feed-intelligence-plan.md`](feed-intelligence-plan.md) · [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md) · [`feature-ideas.md`](feature-ideas.md) · [`scraping-engines-research.md`](scraping-engines-research.md)
-- Quality backlogs: [`design-polish-2-todo.md`](design-polish-2-todo.md) · [`accessibility-todo.md`](accessibility-todo.md) · [`deferred.md`](deferred.md)
-- Index: [`ROADMAP.md`](ROADMAP.md)
+- Quality backlogs: [`accessibility-todo.md`](accessibility-todo.md) · [`deferred.md`](deferred.md)
+- Index: [`ROADMAP.md`](ROADMAP.md) · completed audits: [`archive/`](archive/)
 
 ## Already shipped (context — not re-listed below)
-v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FTS, sync batching, conditional GET), i18n/UX polish, **design audit (54/54)**, **visual polish rounds 1 & 2** (flat color system + contrast fixes + mobile/PWA + brand highlights), auth-redirect fix, article-sort tiebreaker, tap/​swipe-to-open-original, **Phase 0 quick wins** (F4 command palette ⌘K, F3 copy-as-markdown). See `CHANGELOG.md`.
+v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FTS, sync batching, conditional GET), i18n/UX polish, **design audit (54/54)**, **visual polish rounds 1 & 2** (flat color system + contrast fixes + mobile/PWA + brand highlights), auth-redirect fix, article-sort tiebreaker, tap/​swipe-to-open-original, **Phase 0 quick wins** (F4 command palette ⌘K, F3 copy-as-markdown), **M7 Heavy Fetch complete** (T0 impit → T1 ftr-site-config/JSON-LD → T2 render sidecar → T3 BYOK hosted API). See `CHANGELOG.md`.
 
 ---
 
@@ -53,7 +53,7 @@ Source: [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md). North-st
 - ⬜ **F8 ⭐ · AI auto-tagging/classification** (pull in right after M4 — reuses the AI-config plumbing) — **M**
 - ⬜ **M5** — Optional connectors: **RSSHub** + **changedetection.io** (self-hosted sidecars) — **M ×2**
 - ⬜ **M6** — Per-article AI extraction fallback — **M–L**
-- 🔄 **M7** — Heavy render / anti-bot — Researched 2026-07-17/18, **staged path decided 2026-07-18** ([`scraping-engines-research.md`](scraping-engines-research.md)): **T0** ✅ `impit` HTTP impersonation (shipped #160). **T1** *(next)* embedded-data extraction — `__NEXT_DATA__`/`<script application/json>`/JSON-LD lists for full-text + listing→feed, in-process, **no Docker impact** (Wired-class); + `ftr-site-config` importer (1,000+ sites). **T2** optional **sidecar** browser (crawl4ai / lean Playwright service) for true client-only pages — HTTP connector, default image untouched, browser isolated. **T3** BYOK hosted (Jina / Firecrawl **Cloud**) for active Cloudflare challenges. **Rejected: in-process browser in the default image** (~400–500 MB for everyone + browser in the reader's container). Also skip: got-scraping (EOL), puppeteer stealth plugin (dead), autoscraper, browser-use, curl-impersonate-direct, Firecrawl self-host.
+- ✅ **M7** — Heavy render / anti-bot — **complete**, all 4 tiers shipped ([`scraping-engines-research.md`](scraping-engines-research.md) has the full decision record): **T0** `impit` HTTP impersonation (#160). **T1** embedded-data extraction (JSON-LD/`ftr-site-config`, in-process, no Docker impact). **T2** optional browser-render **sidecar** connector (admin-configured, default image untouched, wired into `docker-compose.yaml` by default for Coolify). **T3** per-user **BYOK hosted API** (Jina Reader / Firecrawl Cloud) as the last-resort fallback for active anti-bot challenges, opt-in only for background sync (#173). **Rejected: in-process browser in the default image** (~400–500 MB for everyone + browser in the reader's container).
 
 ---
 

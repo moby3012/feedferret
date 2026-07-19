@@ -69,9 +69,10 @@ Full guide including reverse proxy (Nginx, Caddy, Traefik), updates, and backup:
 | GDPR / right to erasure | [`docs/gdpr.md`](docs/gdpr.md) |
 | Roadmap (consolidated backlog) | [`docs/MASTER-ROADMAP.md`](docs/MASTER-ROADMAP.md) · [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 | Feed Intelligence plan / milestones | [`docs/feed-intelligence-roadmap.md`](docs/feed-intelligence-roadmap.md) |
-| Design audit TODO (perf/UX/security/visuals) | [`docs/design-audit-todo.md`](docs/design-audit-todo.md) |
+| Browser-render sidecar (M7-T2) | [`docs/render-sidecar.md`](docs/render-sidecar.md) |
 | Design system (radius/icon/modal conventions) | [`docs/design-system.md`](docs/design-system.md) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
+| Completed audits & one-time QA checklists (archive) | [`docs/archive/`](docs/archive/) |
 
 ---
 

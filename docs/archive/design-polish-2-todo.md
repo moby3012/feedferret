@@ -1,7 +1,7 @@
 # FeedFerret — Visual Polish Round 2: Color, Contrast & Mobile/PWA
 
 > **Goal:** a cleaner, more confident color scheme (flat & intentional, not muddy tints/gradients), legible contrast everywhere (WCAG AA), and a phone/PWA experience that feels **native**.
-> **Started:** 2026-07-16. Follows the completed round-1 polish ([`design-polish-todo.md`](design-polish-todo.md)); conventions live in [`design-system.md`](design-system.md).
+> **Started:** 2026-07-16. Follows the completed round-1 polish ([`design-polish-todo.md`](design-polish-todo.md)); conventions live in [`design-system.md`](../design-system.md).
 > **Source:** two focused audits (color/contrast — with *computed* WCAG ratios; mobile/responsive/PWA — with a root-cause for the reported bottom-nav bug).
 
 ---

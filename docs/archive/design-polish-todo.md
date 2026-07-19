@@ -1,7 +1,7 @@
 # FeedFerret — Visual Polish & Cohesion TODO
 
 > **Goal:** make the whole app feel like *one* smooth, cohesive product — consistent color scheme, aligned typography, tasteful and uniform micro-animations, a shared spacing rhythm, and reuse of the shared primitives instead of per-screen re-implementations.
-> **Started:** 2026-07-15. This is a follow-up to the completed design audit ([`design-audit-todo.md`](design-audit-todo.md)) and builds on the conventions in [`design-system.md`](design-system.md).
+> **Started:** 2026-07-15. This is a follow-up to the completed design audit ([`design-audit-todo.md`](design-audit-todo.md)) and builds on the conventions in [`design-system.md`](../design-system.md).
 
 ## Status
 

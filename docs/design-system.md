@@ -2,7 +2,7 @@
 
 > Single source of truth for the visual conventions the codebase already follows. It formalizes the scales and component patterns so new code stays consistent instead of drifting. Created 2026-07-15 to close design-audit findings V-14 (radius), V-15 (icon sizes) and V-16 (modal convention) — those audit items were about **documenting** the existing, deliberate scales rather than rewriting them.
 
-All colors, radii and spacing come from the design tokens in [`app/globals.css`](../app/globals.css). Prefer semantic Tailwind classes (`bg-background`, `text-muted-foreground`, `border-border`, …) over hardcoded values so both light and dark themes stay correct — see the token reference at the bottom of `globals.css` and the notes in [`design-audit-todo.md`](design-audit-todo.md).
+All colors, radii and spacing come from the design tokens in [`app/globals.css`](../app/globals.css). Prefer semantic Tailwind classes (`bg-background`, `text-muted-foreground`, `border-border`, …) over hardcoded values so both light and dark themes stay correct — see the token reference at the bottom of `globals.css` and the notes in [`archive/design-audit-todo.md`](archive/design-audit-todo.md).
 
 ---
 
