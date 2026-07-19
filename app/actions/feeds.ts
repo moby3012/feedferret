@@ -1355,7 +1355,18 @@ export async function fetchFullText(articleId: string) {
     // JSON-LD fallback recovers full text from sites (e.g. Wired/Condé Nast)
     // that paywall/truncate the visible DOM but ship the whole body in
     // schema.org structured data. Engine fetch is SSRF-safe + impersonating.
-    const result = await fetchAndExtractReadable(article.link);
+    //
+    // A fetch failure (blocked, timed out, connection reset by the site's
+    // anti-bot layer, …) throws here rather than returning a result — caught
+    // and turned into the same clean, status-aware message `suggestFeedFromUrl`
+    // gives, instead of letting a raw/native error escape this Server Action
+    // uncaught (which previously surfaced as an opaque render crash).
+    let result: Awaited<ReturnType<typeof fetchAndExtractReadable>>;
+    try {
+        result = await fetchAndExtractReadable(article.link);
+    } catch (error) {
+        throw new Error(describePageFetchError(error));
+    }
     if (!result.html) throw new Error("Could not extract article content");
 
     const DOMPurify = await getSanitizer();
