@@ -553,6 +553,36 @@ export async function updateAiSettings(data: {
   revalidatePath("/settings");
 }
 
+// AI provider errors come back as "{Provider} {status}: {truncated raw body}"
+// (see lib/ai-summary.ts) — fine for logs, but a raw truncated JSON blob is
+// meaningless to a non-technical admin clicking "Test connection". Map the
+// common cases to a short, actionable sentence instead.
+function humanizeAiTestError(message: string): string {
+  const statusMatch = message.match(/^(\w+)\s+(\d{3}):/);
+  const provider = statusMatch?.[1];
+  const status = statusMatch?.[2];
+  if (status === "401" || status === "403" || /invalid.api.key|incorrect api key|unauthorized/i.test(message)) {
+    return provider
+      ? `${provider}: invalid API key — check that you copied it correctly.`
+      : "Invalid API key — check that you copied it correctly.";
+  }
+  if (status === "429" || /rate.?limit/i.test(message)) {
+    return provider ? `${provider}: rate limited — try again shortly.` : "Rate limited by the provider — try again shortly.";
+  }
+  if (status === "404") {
+    return provider
+      ? `${provider}: model or endpoint not found — check the model override.`
+      : "Model or endpoint not found — check the model override.";
+  }
+  if (/timed out|aborted|ETIMEDOUT|ECONNREFUSED/i.test(message)) {
+    return "Could not reach the provider — check the connection or base URL.";
+  }
+  if (statusMatch) {
+    return `${provider} returned an error (HTTP ${status}) — check your API key and model settings.`;
+  }
+  return message.length > 150 ? `${message.slice(0, 150)}…` : message;
+}
+
 export async function testAiConnection(): Promise<{ success: boolean; error?: string }> {
   const session = await requireUser();
   const user = await db.user.findUnique({
@@ -570,7 +600,8 @@ export async function testAiConnection(): Promise<{ success: boolean; error?: st
     });
     return { success: true };
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: humanizeAiTestError(message) };
   }
 }
 

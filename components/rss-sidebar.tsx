@@ -58,6 +58,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import dynamic from "next/dynamic";
 import {
   Tooltip,
@@ -651,6 +652,23 @@ export function RssSidebar({
             </div>
 
 
+            {feeds.length === 0 ? (
+              <Empty className="border-0 py-6">
+                <EmptyMedia variant="icon"><Rss className="size-6" /></EmptyMedia>
+                <EmptyContent>
+                  <EmptyTitle>{t("sidebar.noFeedsYet")}</EmptyTitle>
+                  <EmptyDescription>{t("sidebar.noFeedsYetDescription")}</EmptyDescription>
+                  <Button
+                    size="sm"
+                    className="mt-3 rounded-xl"
+                    onClick={() => setIsAddFeedOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 me-1.5" />
+                    {t("sidebar.addFeed")}
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            ) : (
             <DndContext
               sensors={sensors}
               collisionDetection={closestCorners}
@@ -690,6 +708,7 @@ export function RssSidebar({
                 </div>
               </SortableContext>
             </DndContext>
+            )}
           </div>
         </div>
       </ScrollArea>
@@ -1134,6 +1153,7 @@ function SortableCategory({
   };
 
   const isActiveCategory = selectedFeed === null && selectedCategory === category.name;
+  const categoryUnreadCount = feeds.reduce((sum: number, f: any) => sum + (f.unreadCount || 0), 0);
 
   return (
     <div
@@ -1167,6 +1187,11 @@ function SortableCategory({
         >
           <span>{category.name}</span>
         </button>
+        {!expanded && categoryUnreadCount > 0 && (
+          <span className="min-w-5 rounded-full bg-brand px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-brand-foreground">
+            {categoryUnreadCount}
+          </span>
+        )}
         <button
           onClick={onToggle}
           className="p-1 rounded hover:bg-muted transition-colors"

@@ -118,6 +118,7 @@ interface ArticleListProps {
   onSwipeNextFeed?: () => void;
   onSwipePreviousFeed?: () => void;
   scrollBackToId?: string | null;
+  hasFeeds?: boolean;
 }
 
 export function ArticleList({
@@ -143,6 +144,7 @@ export function ArticleList({
   onSwipeNextFeed,
   onSwipePreviousFeed,
   scrollBackToId,
+  hasFeeds = true,
 }: ArticleListProps) {
   const t = useTranslations("articleList");
   const transitionClass =
@@ -392,8 +394,8 @@ export function ArticleList({
           <Empty className="border-0">
             <EmptyMedia variant="icon"><Circle className="size-6" /></EmptyMedia>
             <EmptyContent>
-              <EmptyTitle>{t("noArticles")}</EmptyTitle>
-              <EmptyDescription>{t("noArticlesDescription")}</EmptyDescription>
+              <EmptyTitle>{hasFeeds ? t("noArticles") : t("noFeedsYet")}</EmptyTitle>
+              <EmptyDescription>{hasFeeds ? t("noArticlesDescription") : t("noFeedsYetDescription")}</EmptyDescription>
             </EmptyContent>
           </Empty>
         </div>
