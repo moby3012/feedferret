@@ -498,6 +498,7 @@ export function useMarkArticlesAsUnread() {
 
 export function useFetchFullText() {
     const queryClient = useQueryClient()
+    const updateFeedMutation = useUpdateFeed()
     return useMutation({
         mutationFn: (articleId: string) => fetchFullText(articleId),
         onSuccess: (article: any) => {
@@ -506,6 +507,22 @@ export function useFetchFullText() {
                 return old.map((item) => item.id === article.id ? article : item)
             })
             toast.success("Full text loaded")
+
+            const suggestion = article.suggestAutoFullText
+            if (suggestion) {
+                toast("This feed looks truncated — fetch full text automatically for all its articles from now on?", {
+                    description: suggestion.feedName,
+                    action: {
+                        label: "Enable",
+                        onClick: () => updateFeedMutation.mutate({ feedId: suggestion.feedId, data: { fullTextMode: "auto" } }),
+                    },
+                    cancel: {
+                        label: "Don't ask again",
+                        onClick: () => updateFeedMutation.mutate({ feedId: suggestion.feedId, data: { fullTextAutoSuggestDismissed: true } }),
+                    },
+                    duration: 10000,
+                })
+            }
         },
         onError: (error) => {
             toast.error(error instanceof Error ? error.message : "Full text unavailable. Open the original article instead.")

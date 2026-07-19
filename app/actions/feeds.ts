@@ -34,6 +34,7 @@ import { logger } from "@/lib/logger";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { fetchAndExtractReadable } from "@/lib/readability-extract";
 import { HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
+import { looksLikeTruncatedFeed } from "@/lib/full-text-mode";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -775,6 +776,7 @@ export async function updateFeed(feedId: string, data: {
     fullTextMode?: string;
     defaultContentFormat?: string;
     fullTextConditions?: string | null;
+    fullTextAutoSuggestDismissed?: boolean;
     filtersActionRead?: string | null;
     // Scout Studio source options
     sourceType?: string;
@@ -1381,12 +1383,13 @@ export async function fetchFullText(articleId: string) {
 
     const DOMPurify = await getSanitizer();
     const plain = DOMPurify.sanitize(result.html, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
+    const existingPlainLength = (article.content || "").replace(/<[^>]*>?/gm, "").length;
 
-    if (plain.length < 400 || plain.length <= (article.content || "").replace(/<[^>]*>?/gm, "").length) {
+    if (plain.length < 400 || plain.length <= existingPlainLength) {
         throw new Error("Full text could not improve this article");
     }
 
-    return await db.article.update({
+    const updated = await db.article.update({
         where: { id: article.id, userId: session.user.id },
         data: {
             content: result.html,
@@ -1398,6 +1401,22 @@ export async function fetchFullText(articleId: string) {
             labels: { include: { label: true } },
         },
     });
+
+    // A feed whose short, teaser-only description was dramatically improved by
+    // a real full-text fetch is a strong empirical signal it deliberately
+    // truncates (e.g. WordPress "Summary" feed mode) — a much more reliable
+    // detector than guessing from link/teaser text patterns, and it works
+    // retroactively for feeds added long before this existed, triggered
+    // exactly when the user first notices (their own manual fetch). Only
+    // offered once per feed unless the user re-enables it after dismissing.
+    const suggestAutoFullText =
+        looksLikeTruncatedFeed(existingPlainLength, plain.length) &&
+        updated.feed.fullTextMode === "off" &&
+        !updated.feed.fullTextAutoSuggestDismissed
+            ? { feedId: updated.feed.id, feedName: updated.feed.name }
+            : null;
+
+    return { ...updated, suggestAutoFullText };
 }
 
 export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null }) {

@@ -21,3 +21,14 @@ export function resolveFullTextMode(feed: {
   if (feed.autoFetchFullText) return "selector";
   return "off";
 }
+
+// Detects a feed that deliberately ships only a short teaser (e.g. WordPress's
+// "Summary" feed mode, common on sites that want readers to click through) —
+// a manual full-text fetch landing dramatically more content than the feed
+// itself provided is a much more reliable signal than guessing from
+// link/teaser text patterns, and it works retroactively for feeds added long
+// before this existed, at exactly the moment the user notices (their own
+// manual fetch).
+export function looksLikeTruncatedFeed(existingPlainLength: number, newPlainLength: number): boolean {
+  return existingPlainLength < 800 && newPlainLength >= existingPlainLength * 2.5 && newPlainLength >= 1200;
+}
