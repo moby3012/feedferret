@@ -7,7 +7,7 @@ import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import { revalidatePath } from "next/cache";
 import { normalizeStarterPacksInput, stringifyStarterPacks } from "@/lib/starter-packs";
 import { getStarterPacksFromSettings } from "@/lib/starter-packs.server";
-import { renderWithConfig } from "@/lib/render-sidecar";
+import { renderWithConfigDetailed } from "@/lib/render-sidecar";
 import { logger } from "@/lib/logger";
 
 async function checkAdmin() {
@@ -358,11 +358,20 @@ export async function testRenderSidecar(config: { url?: string; token?: string; 
 
   const testUrl = String(config.testUrl || "").trim() || "https://example.com/";
   try {
-    const html = await renderWithConfig({ url, token }, testUrl, { context: "Render sidecar test", timeoutMs: 30_000 });
-    if (!html || html.trim().length < 50) {
-      return { success: false as const, error: "Sidecar returned no usable HTML for the test URL" };
+    const result = await renderWithConfigDetailed({ url, token }, testUrl, {
+      context: "Render sidecar test",
+      timeoutMs: 30_000,
+    });
+    if (!result.ok) {
+      return { success: false as const, error: result.reason };
     }
-    return { success: true as const, bytes: html.length, testUrl };
+    if (result.html.trim().length < 50) {
+      return {
+        success: false as const,
+        error: `Sidecar responded but the extracted content was too short to be useful (${result.html.length} chars)`,
+      };
+    }
+    return { success: true as const, bytes: result.html.length, testUrl };
   } catch (error: any) {
     logger.error("Render sidecar test failed:", error);
     return { success: false as const, error: error?.message || "Unknown render sidecar error" };
