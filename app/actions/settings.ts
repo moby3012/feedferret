@@ -8,6 +8,7 @@ import { sendDigestEmail, getDigestArticles, markArticlesAsDigested } from "@/li
 import { buildOtpAuthUri, generateTotpSecret, verifyTotpToken } from "@/lib/totp";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import type { AiProvider } from "@/lib/ai-summary";
+import { fetchViaHostedApi, type HostedFetchProvider } from "@/lib/hosted-fetch";
 
 async function requireUser() {
   const session = await auth();
@@ -571,6 +572,66 @@ export async function testAiConnection(): Promise<{ success: boolean; error?: st
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+// ─── Hosted-fetch BYOK connector (M7-T3) ─────────────────────────────────────
+//
+// The last-resort heavy-fetch tier: a user's own API key for a commercial
+// "URL to clean content" service (Jina Reader / Firecrawl Cloud). Per-user,
+// opt-in, same BYOK pattern as the AI settings above. Unlike every earlier
+// fetch tier, content leaves the user's own server — labelled accordingly in
+// the settings UI, and never used during unattended background sync unless
+// the user explicitly enables `autoUse`.
+
+export async function getContentFetchSettings() {
+  const session = await requireUser();
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: { contentFetchProvider: true, contentFetchApiKey: true, contentFetchAutoUse: true },
+  });
+  return {
+    provider: user?.contentFetchProvider ?? null,
+    hasApiKey: !!user?.contentFetchApiKey,
+    autoUse: user?.contentFetchAutoUse ?? false,
+  };
+}
+
+export async function updateContentFetchSettings(data: {
+  provider?: string | null;
+  apiKey?: string | null;
+  clearApiKey?: boolean;
+  autoUse?: boolean;
+}) {
+  const session = await requireUser();
+  const updateData: Record<string, unknown> = {};
+  if ("provider" in data) updateData.contentFetchProvider = data.provider;
+  if (data.clearApiKey) {
+    updateData.contentFetchApiKey = null;
+  } else if (data.apiKey) {
+    updateData.contentFetchApiKey = encryptIfValue(data.apiKey);
+  }
+  if ("autoUse" in data) updateData.contentFetchAutoUse = data.autoUse;
+  await db.user.update({ where: { id: session.user.id }, data: updateData });
+  revalidatePath("/settings");
+}
+
+export async function testContentFetchConnection(): Promise<{ success: boolean; error?: string }> {
+  const session = await requireUser();
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: { contentFetchProvider: true, contentFetchApiKey: true },
+  });
+  if (!user?.contentFetchProvider) return { success: false, error: "No content-fetch provider configured" };
+  const apiKey = decryptIfValue(user.contentFetchApiKey);
+  if (!apiKey) return { success: false, error: "No API key configured" };
+  const result = await fetchViaHostedApi("https://example.com/", {
+    provider: user.contentFetchProvider as HostedFetchProvider,
+    apiKey,
+  });
+  if (!result) {
+    return { success: false, error: "The provider did not return usable content for the test URL — check your API key" };
+  }
+  return { success: true };
 }
 
 // ─── Notification Channels ──────────────────────────────────────────────────

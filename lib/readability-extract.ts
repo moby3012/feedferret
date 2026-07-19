@@ -22,6 +22,8 @@ import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib
 import { stripStyleBlocks } from "@/lib/html-utils";
 import { findFtrConfigForUrl, applyFtrConfig } from "@/lib/ftr-site-config";
 import { renderViaSidecar } from "@/lib/render-sidecar";
+import { fetchViaHostedApi, getHostedFetchConfigForUser } from "@/lib/hosted-fetch";
+import { renderMarkdownToHtml } from "@/lib/markdown-render";
 
 export type ExtractionResult = {
   html: string | null; // sanitized, cleaned article HTML (null if extraction failed)
@@ -30,7 +32,7 @@ export type ExtractionResult = {
   byline: string | null;
   excerpt: string | null;
   wordCount: number;
-  extractedBy: "ftr" | "defuddle" | "readability" | "jsonld" | "none";
+  extractedBy: "ftr" | "defuddle" | "readability" | "jsonld" | "hosted" | "none";
 };
 
 // Below this many characters of plain text, Defuddle's result is treated as
@@ -335,12 +337,39 @@ export async function extractReadableContent(rawHtml: string, url: string): Prom
   };
 }
 
+/** Builds an ExtractionResult from a hosted-API's clean Markdown output. */
+async function buildHostedResult(markdown: string, title: string | null): Promise<ExtractionResult> {
+  const html = await renderMarkdownToHtml(markdown);
+  return {
+    html,
+    markdown,
+    title,
+    byline: null,
+    excerpt: null,
+    wordCount: countWords(html),
+    extractedBy: "hosted",
+  };
+}
+
+export type FetchAndExtractReadableOptions = {
+  // When set, a hosted BYOK connector (M7-T3, Jina Reader / Firecrawl Cloud)
+  // is tried as the final fallback if configured for this user AND the
+  // in-process + sidecar tiers both come up empty. Omit to skip this tier
+  // entirely (e.g. unattended background sync, where sending a user's
+  // articles to a third party without an explicit per-call opt-in would be
+  // a silent cost/privacy surprise — see `contentFetchAutoUse`).
+  userId?: string;
+};
+
 /**
  * SSRF-safe wrapper: fetches `url`'s HTML (subject to the app's SSRF
  * protections) and extracts readable content from it. Fetch errors
  * (including SSRF blocks) are propagated to the caller, not swallowed.
  */
-export async function fetchAndExtractReadable(url: string): Promise<ExtractionResult> {
+export async function fetchAndExtractReadable(
+  url: string,
+  options: FetchAndExtractReadableOptions = {},
+): Promise<ExtractionResult> {
   let directError: unknown = null;
   let result: ExtractionResult | null = null;
   try {
@@ -369,6 +398,16 @@ export async function fetchAndExtractReadable(url: string): Promise<ExtractionRe
   if (rendered) {
     const sidecarResult = await extractReadableContent(rendered, url);
     if (sidecarResult.extractedBy !== "none") return sidecarResult;
+  }
+
+  // Last resort: the user's own hosted-API BYOK connector (M7-T3), for pages
+  // that beat even a real rendered browser (active anti-bot challenges).
+  if (options.userId) {
+    const hostedConfig = await getHostedFetchConfigForUser(options.userId);
+    if (hostedConfig) {
+      const hosted = await fetchViaHostedApi(url, hostedConfig);
+      if (hosted) return buildHostedResult(hosted.content, hosted.title);
+    }
   }
 
   if (result) return result; // the (empty) in-process result

@@ -85,6 +85,15 @@ model User {
   aiOllamaBaseUrl         String?
   aiAutoSummarize         Boolean   @default(false)
   aiSummaryLanguage       String    @default("same")   // "same" | BCP-47 tag e.g. "de"
+  // BYOK hosted-fetch connector (M7-T3): per-user, opt-in, own API key.
+  // The last-resort tier for pages that beat even the browser-render sidecar
+  // (M7-T2) — an active anti-bot challenge. Unlike every earlier tier, the
+  // target page's content is sent to a third party (labelled accordingly in
+  // the UI), so it never runs during background sync unless the user
+  // explicitly opts in via contentFetchAutoUse.
+  contentFetchProvider    String?                       // "jina" | "firecrawl"
+  contentFetchApiKey      String?                       // encrypted at rest
+  contentFetchAutoUse     Boolean   @default(false)
   role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

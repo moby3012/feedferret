@@ -41,6 +41,7 @@ import {
   ChevronRight,
   Plus,
   EyeOff,
+  Cloud,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -64,7 +65,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, usePreviewDigest, useFeeds, useLabels, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
+import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, usePreviewDigest, useFeeds, useLabels, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useContentFetchSettings, useUpdateContentFetchSettings, useTestContentFetchConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
 import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -597,6 +598,7 @@ export function SettingsForm() {
           {/* ── Tab: Integrations ── */}
           <TabsContent value="integrations" className="animate-filter-swap grid gap-5">
             <AiSummarySection />
+            <ContentFetchSection />
             <SyncTutorialSection />
           </TabsContent>
 
@@ -2020,6 +2022,139 @@ function AiSummarySection() {
             >
               <Sparkles className="w-4 h-4 me-2" />
               {testAi.isPending ? t("ai.testing") : t("ai.testConnection")}
+            </Button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ContentFetchSection() {
+  const t = useTranslations();
+  const { data: contentFetch } = useContentFetchSettings();
+  const updateContentFetch = useUpdateContentFetchSettings();
+  const testContentFetch = useTestContentFetchConnection();
+  const [provider, setProvider] = useState<string>("none");
+  const [apiKey, setApiKey] = useState("");
+  const [autoUse, setAutoUse] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+  useEffect(() => {
+    if (!contentFetch) return;
+    setProvider(contentFetch.provider ?? "none");
+    setAutoUse(contentFetch.autoUse ?? false);
+  }, [contentFetch]);
+
+  const handleSave = () => {
+    setTestResult(null);
+    updateContentFetch.mutate({
+      provider: provider === "none" ? null : provider,
+      ...(apiKey ? { apiKey } : {}),
+      autoUse,
+    });
+  };
+
+  const handleTest = async () => {
+    setTestResult(null);
+    const result = await testContentFetch.mutateAsync();
+    setTestResult(result);
+  };
+
+  return (
+    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+      <div className="flex items-start gap-4 mb-6">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+          <Cloud className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("contentFetch.title")}</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {t("contentFetch.description")}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {/* Provider */}
+        <div className="grid gap-1.5">
+          <label className="text-sm font-medium" htmlFor="content-fetch-provider-select">{t("contentFetch.provider")}</label>
+          <Select value={provider} onValueChange={setProvider}>
+            <SelectTrigger id="content-fetch-provider-select" className="h-10 rounded-2xl">
+              <SelectValue placeholder={t("contentFetch.provider")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">{t("contentFetch.providers.none")}</SelectItem>
+              <SelectItem value="jina">{t("contentFetch.providers.jina")}</SelectItem>
+              <SelectItem value="firecrawl">{t("contentFetch.providers.firecrawl")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {provider !== "none" && (
+          <>
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+              {t("contentFetch.privacyWarning")}
+            </div>
+
+            <div className="grid gap-1.5">
+              <label className="text-sm font-medium" htmlFor="content-fetch-api-key-input">
+                {t("contentFetch.apiKey")}
+                {contentFetch?.hasApiKey && !apiKey && (
+                  <span className="ms-2 text-xs font-normal text-muted-foreground">({t("ai.currentlySet")})</span>
+                )}
+              </label>
+              <Input
+                id="content-fetch-api-key-input"
+                type="password"
+                placeholder={contentFetch?.hasApiKey ? t("ai.leaveBlankToKeep") : "jina_... / fc-..."}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                className="h-10 rounded-2xl font-mono text-sm"
+              />
+            </div>
+
+            <div className="ui-control-surface flex items-center justify-between rounded-2xl border px-4 py-3">
+              <div>
+                <p className="text-sm font-medium">{t("contentFetch.autoUse")}</p>
+                <p className="text-xs text-muted-foreground">{t("contentFetch.autoUseDescription")}</p>
+              </div>
+              <Switch checked={autoUse} onCheckedChange={setAutoUse} />
+            </div>
+          </>
+        )}
+
+        {testResult && (
+          <div className={cn(
+            "flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm",
+            testResult.success
+              ? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400"
+              : "border-destructive/30 bg-destructive/10 text-destructive"
+          )}>
+            {testResult.success
+              ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+              : <XCircle className="h-4 w-4 shrink-0" />}
+            <span>{testResult.success ? t("contentFetch.connectionSuccessful") : testResult.error}</span>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <Button
+            onClick={handleSave}
+            disabled={updateContentFetch.isPending}
+            className="rounded-2xl h-10"
+          >
+            {updateContentFetch.isPending ? t("ai.saving") : t("ai.save")}
+          </Button>
+          {provider !== "none" && (
+            <Button
+              variant="outline"
+              onClick={handleTest}
+              disabled={testContentFetch.isPending}
+              className="rounded-2xl h-10"
+            >
+              <Cloud className="w-4 h-4 me-2" />
+              {testContentFetch.isPending ? t("ai.testing") : t("ai.testConnection")}
             </Button>
           )}
         </div>

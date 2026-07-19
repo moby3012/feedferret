@@ -304,6 +304,21 @@
       "chinese": "Chinese"
     }
   },
+  "contentFetch": {
+    "title": "Full-Text Fetch Fallback (BYOK)",
+    "description": "For pages that beat every other extraction tier (active bot-protection challenges), bring your own API key for Jina Reader or Firecrawl Cloud — commercial services that specialize in fetching hard-to-reach pages. Used only as a last resort, after this server's own attempts come up empty. Your API key is encrypted at rest and never shared.",
+    "provider": "Provider",
+    "apiKey": "API Key",
+    "privacyWarning": "Unlike every other extraction method, the page's content is sent to this third-party service to be processed — it leaves your server.",
+    "autoUse": "Also use during automatic sync",
+    "autoUseDescription": "Without this, the fallback only runs when you click \"Fetch full text\" yourself (uses API credits)",
+    "connectionSuccessful": "Connection successful",
+    "providers": {
+      "none": "None (disabled)",
+      "jina": "Jina Reader",
+      "firecrawl": "Firecrawl Cloud"
+    }
+  },
   "notifications": {
     "title": "Notification Channels",
     "description": "Forward keyword alerts and rule matches to external services. Enable a channel, enter your credentials, and choose it as an action in Rules & Alerts.",

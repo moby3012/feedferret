@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Added (2026-07-19 — M7-T3: BYOK hosted-fetch connector)
+
+- **Full-text fetch fallback via Jina Reader / Firecrawl Cloud (BYOK)** — the final "heavy fetch" tier: for pages that beat even the browser-render sidecar (an active anti-bot challenge), a user can now bring their own API key for a commercial "URL to clean content" service. Per-user (unlike the admin-global render sidecar), strictly opt-in, and clearly labelled: content is sent to a third party, which every other extraction tier avoids. `lib/hosted-fetch.ts` implements both providers (Jina's `r.jina.ai` reader endpoint, Firecrawl Cloud's `/v1/scrape`), each returning clean Markdown rendered to sanitized HTML via the existing Markdown pipeline. Wired into `fetchAndExtractReadable` as the last fallback, after the in-process and sidecar tiers both come up empty.
+  - Manual **"Fetch full text"** always tries it when configured (a deliberate, single, user-initiated action).
+  - **Automatic background sync** only uses it when the user explicitly enables **"Also use during automatic sync"** — otherwise a silent per-article cost/privacy surprise.
+  - New Settings → Integrations section ("Full-Text Fetch Fallback (BYOK)"), mirroring the existing AI-summary BYOK UX: provider select, encrypted API key, a privacy-warning callout, and a **Test connection** button. `FEEDFERRET_DISABLE_HOSTED_FETCH=1` kill-switch.
+  - Honest limits: even these commercial services cannot guarantee success against every active challenge — never advertised as "always works".
+
 ### Fixed (2026-07-19)
 
 - **Sidecar-rendered full text could break the reader's layout** — the first real M7-T2 sidecar success (formel1.de, via a real headless-Chromium render) exposed a gap the earlier `<style>`-block/inline-`style` hardening didn't cover: a browser-rendered page's DOM can carry a `position: fixed`/`sticky`/`absolute` element (common in lightbox/sticky-image widgets), which escapes a plain `overflow: hidden` ancestor entirely — those position relative to the viewport (or the nearest positioned ancestor), not any ancestor with `overflow: hidden`, so it isn't clipped. `lib/sanitize-html.ts`'s style-cleaning hook (used by every article-HTML sanitize call) now also drops `position: fixed|sticky|absolute` declarations (keeping `relative`/`static`, which stay in normal flow and are harmless); `.article-content` also gains `contain: layout`, making it the containing block for any such element that still slips through, so it's confined and clipped there instead of breaking out to the viewport. Verified with a Playwright repro: without the fix a `position: fixed` test element escaped its container entirely; with it, it stayed correctly contained.
