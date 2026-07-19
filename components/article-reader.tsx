@@ -327,7 +327,16 @@ export function ArticleReader({
   return (
     <div
       ref={rootRef}
-      className="flex-1 flex flex-col bg-background/75 backdrop-blur-xl animate-fade-in"
+      // min-w-0: this is a flex item in its parent's row (the fixed mobile
+      // reader wrapper in app/page.tsx, and the desktop split view). Without
+      // it, the browser's flex "automatic minimum size" lets any unbreakable
+      // content anywhere inside (however deeply nested) inflate this whole
+      // panel past the viewport — every truncate/overflow-hidden rule further
+      // down the tree then operates on an already-too-wide box, so it clips
+      // relative to that, not to the real screen edge. This is the actual
+      // fix for symptoms that look like "several unrelated elements are all
+      // cut off at once" — that's this exact failure mode, not a coincidence.
+      className="flex min-w-0 flex-1 flex-col bg-background/75 backdrop-blur-xl animate-fade-in"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
