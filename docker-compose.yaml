@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         DATABASE_PROVIDER: ${DATABASE_PROVIDER:-postgresql}
-        DATABASE_URL: ${DATABASE_URL:-postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public}
+        DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-feedferret}:${POSTGRES_PASSWORD:-feedferret-change-me}@postgres:5432/${POSTGRES_DB:-feedferret}?schema=public}
     container_name: feedferret
     restart: always
     # Note: when deploying under Coolify (or any reverse-proxy platform that
@@ -16,9 +16,13 @@ services:
     # and produces Gateway Timeout errors at the public URL.
     ports:
       - "3000:3000"
+    # Uncomment when using SQLite (DATABASE_PROVIDER=sqlite) to persist the
+    # database file across container recreation:
+    # volumes:
+    #   - feedferret_db_data:/app/data
     environment:
       - DATABASE_PROVIDER=${DATABASE_PROVIDER:-postgresql}
-      - DATABASE_URL=${DATABASE_URL:-postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-feedferret}:${POSTGRES_PASSWORD:-feedferret-change-me}@postgres:5432/${POSTGRES_DB:-feedferret}?schema=public}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-feedferret-change-me}
       - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
       - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
@@ -72,6 +76,12 @@ services:
       - "8080"
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   postgres:
     image: postgres:16-alpine

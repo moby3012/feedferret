@@ -13,6 +13,13 @@ admin-configured sidecar** that renders the page and returns HTML. If you don't
 configure one, the feature is simply absent (the setting is hidden). This is the
 same connector shape RSSHub / changedetection.io integrations use.
 
+> **Disk footprint:** the bundled `docker/render-sidecar` service builds on the
+> official Playwright image (all three browser engines + their OS-level
+> dependencies, not just Chromium), so the built image itself is several GB —
+> much more than the ~400–500 MB figure above, which is just the raw Chromium
+> binary the *rejected* in-process alternative would have added. Budget disk
+> accordingly on a small VPS before your first `docker compose up --build`.
+
 ## What it improves
 
 When configured, the sidecar is used as a **fallback** — only after the

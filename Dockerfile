@@ -27,16 +27,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 ARG DATABASE_URL=postgresql://feedferret:feedferret-change-me@postgres:5432/feedferret?schema=public
 ARG DATABASE_PROVIDER=postgresql
-ARG AUTH_SECRET
-ARG AUTH_URL=http://localhost:3000
-ARG AUTH_TRUST_HOST
 
 ENV DATABASE_URL=$DATABASE_URL
 ENV DATABASE_PROVIDER=$DATABASE_PROVIDER
-ENV AUTH_SECRET=$AUTH_SECRET
-ENV AUTH_URL=$AUTH_URL
-ENV AUTH_TRUST_HOST=$AUTH_TRUST_HOST
 
+# AUTH_SECRET/AUTH_URL/AUTH_TRUST_HOST are runtime-only (see docker-compose.yaml
+# 'environment:') and deliberately NOT build args: auth.ts falls back to a
+# placeholder secret during `next build`, and baking real secrets into build
+# ARGs/ENVs would persist them in the image's layer history.
 RUN pnpm run build
 
 # ── runner ────────────────────────────────────────────────────────────────────

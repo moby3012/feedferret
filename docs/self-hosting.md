@@ -321,7 +321,7 @@ Den `postgres`-Service und den `depends_on`-Block im `feedferret`-Service könne
 
 ## Docker Image Architektur
 
-Das `Dockerfile` verwendet vier Stages:
+Das `Dockerfile` verwendet fünf Stages:
 
 | Stage | Basis | Zweck |
 |---|---|---|
@@ -331,7 +331,7 @@ Das `Dockerfile` verwendet vier Stages:
 | `builder` | `base-build` | Kompiliert Next.js |
 | `runner` | `base-runtime` | Produktions-Image — enthält keine Build-Tools |
 
-Das Runner-Image enthält bewusst keine nativen Compiler (`g++`, `make`, `python3`) und kein `libvips`. Die Prisma-CLI wird aus der `deps`-Stage kopiert statt global installiert — so bleibt die Version automatisch mit `package.json` synchron.
+Das Runner-Image enthält bewusst keine nativen Compiler (`g++`, `make`, `python3`) und kein `libvips`. Die Prisma-CLI wird explizit auf die in `package.json` gepinnte Version installiert (`npm install -g prisma@<version>`), damit CLI und Client garantiert übereinstimmen.
 
 ---
 

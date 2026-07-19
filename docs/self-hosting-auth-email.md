@@ -167,6 +167,9 @@ Make sure the userinfo/id token provides at least:
 ## 4. Example `.env`
 
 ```env
+# DATABASE_URL below is for local dev (`pnpm run dev`) only. For a Docker
+# deployment with SQLite, use DATABASE_URL="file:/app/data/dev.db" instead —
+# see .env.example and docs/self-hosting.md.
 DATABASE_URL="file:./prisma/dev.db"
 AUTH_SECRET="replace-me"
 AUTH_URL="https://rss.example.com"

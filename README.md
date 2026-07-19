@@ -2,6 +2,9 @@
 
 A self-hosted, multi-user RSS reader with a modern reading experience, power-user automation, and native client compatibility.
 
+[![CI](https://github.com/moby3012/feedferret/actions/workflows/ci.yml/badge.svg)](https://github.com/moby3012/feedferret/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+
 > **Self-hosted · Multi-user · PWA · Google Reader API · REST API + MCP · AGPL-3.0 License**
 
 ---
@@ -45,7 +48,7 @@ Open `http://localhost:3000` and follow the setup wizard. Done.
 | Method | Command / Notes |
 |---|---|
 | **Docker Compose + PostgreSQL** | `docker compose up -d --build` — Postgres starts automatically |
-| **Docker Compose + SQLite** | Set `DATABASE_PROVIDER=sqlite` in `.env`, run `docker compose up feedferret -d --build` |
+| **Docker Compose + SQLite** | Set `DATABASE_PROVIDER=sqlite` and `DATABASE_URL=file:/app/data/dev.db` in `.env`, uncomment the `feedferret` service's `volumes:` block and the `feedferret_db_data` volume in `docker-compose.yaml`, then run `docker compose up feedferret -d --build --no-deps` (`--no-deps` skips starting Postgres, which SQLite mode doesn't need) |
 | **Coolify** | Use *Docker Compose* deployment type — point to repo root, set env vars in the Coolify dashboard. Do **not** add a custom `networks:` block. See [`docs/self-hosting.md`](docs/self-hosting.md#deployment-mit-coolify) |
 | **Local dev** | `pnpm install && pnpm run dev` (SQLite recommended, no Docker needed) |
 
@@ -97,4 +100,4 @@ See [`CHANGELOG.md`](CHANGELOG.md) for released changes and the Unreleased secti
 
 You are free to use, fork, and contribute to FeedFerret. Any modified version — including one run as a hosted service — must be released under the same license with attribution. See [LICENSE](LICENSE) for the full terms.
 
-For commercial use without the AGPL obligations, contact us about a commercial license.
+For commercial use without the AGPL obligations, [open a GitHub Discussion](https://github.com/moby3012/feedferret/discussions) to inquire about a commercial license.
