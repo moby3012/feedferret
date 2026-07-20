@@ -672,6 +672,17 @@
       "aiFullTextTitle": "Das sieht nach einem einzelnen Artikel aus, nicht nach einer Liste",
       "aiFullTextHint": "Füge stattdessen den eigenen Feed der Website hinzu und aktiviere dort in den Feed-Einstellungen die automatische Volltext-Extraktion."
     },
+    "rsshub": {
+      "tabLabel": "Von Plattform",
+      "introWithAi": "Füge eine Plattform-URL ein (z. B. einen YouTube-Kanal oder Subreddit) und die KI schlägt die passende Route vor — oder gib direkt einen RSSHub-Routenpfad ein, wenn du ihn kennst.",
+      "introManualOnly": "Gib einen RSSHub-Routenpfad ein (z. B. /github/repos/DIYgod/RSSHub/releases). Richte in Einstellungen → KI einen Anbieter ein, um stattdessen Routen aus einer einfachen Plattform-URL vorschlagen zu lassen.",
+      "sourcePlaceholder": "Plattform-URL, Beschreibung oder /routen/pfad",
+      "proposeButton": "Route vorschlagen",
+      "previewRoute": "Route prüfen",
+      "proposeFailed": "Dafür konnte kein funktionierender Feed gefunden werden. Versuche eine andere URL oder Route.",
+      "itemsFound": "{count, plural, one {# Eintrag gefunden} other {# Einträge gefunden}}",
+      "addFeed": "Feed hinzufügen"
+    },
     "spoilerAhead": "Spoiler-Inhalte voraus",
     "spoilerDescription": "Diese Artikel wurden durch deine Regeln als Spoiler markiert und bewusst aus allen anderen Ansichten ausgeblendet. Öffne sie nur, wenn du bereit bist.",
     "revealSpoilers": "Spoiler anzeigen",
@@ -1327,6 +1338,12 @@
       "renderSidecarGuideUrlLabel": "Sidecar-URL (oben einfügen)",
       "renderSidecarGuideCopy": "Kopieren",
       "renderSidecarGuideDocsHint": "Vollständiger Contract, Sicherheitshinweise und Alternativen (z. B. crawl4ai) stehen in docs/render-sidecar.md.",
+      "rsshub": "RSSHub-Connector",
+      "rsshubDescription": "Optionale selbst gehostete RSSHub-Instanz, genutzt für „Von Plattform hinzufügen“ — verwandelt einen YouTube-Kanal, Subreddit, GitHub-Repo-Releases u. Ä. in einen echten Feed.",
+      "rsshubBaseUrl": "RSSHub-Basis-URL",
+      "rsshubApiKey": "Zugriffs-Schlüssel (optional)",
+      "rsshubHint": "Trage hier deine eigene selbst gehostete RSSHub-Instanz ein (docs.rsshub.app). Der Zugriffs-Schlüssel ist RSSHubs eigenes optionales `?key=`-Gate (dessen ACCESS_KEY-Einstellung) — leer lassen, wenn deine Instanz keins verwendet. Sobald eine Route validiert ist, wird sie als normale Feed-URL gespeichert — dieser Schlüssel ist dann für den jeweiligen Nutzer sichtbar, der einen Plattform-Feed hinzufügt.",
+      "rsshubTest": "Testen",
       "save": "Speichern"
     },
     "discovery": {
@@ -1392,6 +1409,8 @@
       "mailTestFailed": "E-Mail-Test fehlgeschlagen: {error}",
       "sidecarTestOk": "Render-Sidecar OK – {bytes} Zeichen zurückgegeben",
       "sidecarTestFailed": "Render-Sidecar-Test fehlgeschlagen: {error}",
+      "rsshubTestOk": "RSSHub OK – Test-Route lieferte {count} Einträge",
+      "rsshubTestFailed": "RSSHub-Test fehlgeschlagen: {error}",
       "copiedToClipboard": "In die Zwischenablage kopiert",
       "userRoleUpdated": "{email} auf {role} aktualisiert",
       "failedToUpdateUserRole": "Benutzerrolle konnte nicht aktualisiert werden",

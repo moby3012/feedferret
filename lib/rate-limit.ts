@@ -121,6 +121,14 @@ export const RATE_LIMITS = {
     prefix: "ai-feed-config",
   } satisfies RateLimitConfig,
 
+  // RSSHub route proposal (M5a): same cost profile as aiFeedConfig — hits the
+  // user's BYOK AI provider, then a real RSSHub round-trip to validate.
+  rsshubRoute: {
+    limit: 10,
+    windowSecs: 60,
+    prefix: "rsshub-route",
+  } satisfies RateLimitConfig,
+
   // Auth: sign-in attempts — 10 per 15 minutes per IP
   authSignIn: {
     limit: 10,

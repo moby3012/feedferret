@@ -672,6 +672,17 @@
       "aiFullTextTitle": "This looks like a single article, not a listing",
       "aiFullTextHint": "Add the site's own feed instead, then turn on automatic full-text extraction in that feed's settings."
     },
+    "rsshub": {
+      "tabLabel": "From platform",
+      "introWithAi": "Paste a platform URL (e.g. a YouTube channel or subreddit) and AI will propose the right route — or type an RSSHub route path directly if you know it.",
+      "introManualOnly": "Type an RSSHub route path (e.g. /github/repos/DIYgod/RSSHub/releases). Set up an AI provider in Settings → AI to propose routes from a plain platform URL instead.",
+      "sourcePlaceholder": "Platform URL, description, or /route/path",
+      "proposeButton": "Propose route",
+      "previewRoute": "Preview route",
+      "proposeFailed": "Could not resolve a working feed for that. Try a different URL or route.",
+      "itemsFound": "{count, plural, one {# item found} other {# items found}}",
+      "addFeed": "Add feed"
+    },
     "spoilerAhead": "Spoiler content ahead",
     "spoilerDescription": "These articles have been flagged by your rules as spoilers and are kept out of every other view on purpose. Reveal only when you're ready to see them.",
     "revealSpoilers": "Reveal spoilers",
@@ -1327,6 +1338,12 @@
       "renderSidecarGuideUrlLabel": "Sidecar URL (paste above)",
       "renderSidecarGuideCopy": "Copy",
       "renderSidecarGuideDocsHint": "Full contract, security notes and alternatives (e.g. crawl4ai) are in docs/render-sidecar.md.",
+      "rsshub": "RSSHub connector",
+      "rsshubDescription": "Optional self-hosted RSSHub instance, used for \"Add from platform\" — turning a YouTube channel, subreddit, GitHub repo releases, etc. into a real feed.",
+      "rsshubBaseUrl": "RSSHub base URL",
+      "rsshubApiKey": "Access key (optional)",
+      "rsshubHint": "Point this at your own self-hosted RSSHub instance (docs.rsshub.app). The access key is RSSHub's own optional `?key=` gate (its ACCESS_KEY setting) — leave it blank if your instance doesn't use one. Once a route is validated it's stored as the feed's plain URL, so this key is visible to whichever user adds a platform feed.",
+      "rsshubTest": "Test",
       "save": "Save"
     },
     "discovery": {
@@ -1392,6 +1409,8 @@
       "mailTestFailed": "Mail test failed: {error}",
       "sidecarTestOk": "Render sidecar OK — returned {bytes} chars",
       "sidecarTestFailed": "Render sidecar test failed: {error}",
+      "rsshubTestOk": "RSSHub OK — test route returned {count} items",
+      "rsshubTestFailed": "RSSHub test failed: {error}",
       "copiedToClipboard": "Copied to clipboard",
       "userRoleUpdated": "Updated {email} to {role}",
       "failedToUpdateUserRole": "Failed to update user role",
