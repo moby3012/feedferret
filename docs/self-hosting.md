@@ -380,6 +380,16 @@ In `docker-compose.ultimate.yaml`, this is already pre-wired via the `FEEDFERRET
 
 > **Heads-up:** when the connector is configured via `FEEDFERRET_RSSHUB_URL` (env), the RSSHub fields under **Server Management → Sync** intentionally read back **empty** — that panel reflects the database row, and the env value takes precedence over it. This is expected: the connector is still active (env wins). Don't re-enter the URL there to "fix" it; if you do want to manage it from the UI instead, remove the `FEEDFERRET_RSSHUB_*` env vars so the database row becomes the live config.
 
+**When a route fails, the error is RSSHub's, not FeedFerret's.** FeedFerret only builds the route URL and fetches it; whether a given route works depends entirely on your RSSHub instance. FeedFerret now surfaces RSSHub's own message with the failure (e.g. `Fetch failed: 503 — Twitter API is not configured`). Common cases:
+
+| RSSHub message | What it means |
+|---|---|
+| `Twitter API is not configured` / similar for other platforms | That route needs credentials configured **in RSSHub itself** (see [RSSHub's config docs](https://docs.rsshub.app/deploy/config)) — X/Twitter, and some others, don't work on a stock RSSHub without keys. |
+| `This channel does not exist` / `404` | The identifier is wrong. When you paste a URL and let AI propose a route, it can guess the wrong channel/user ID — prefer pasting the **exact** RSSHub route path (e.g. `/youtube/channel/UC…` with the real ID from the channel's page) when a proposal fails. |
+| `The route does not exist or has been deleted` | That route category isn't available in your RSSHub version/build. |
+
+A quick way to confirm the connector itself is wired up correctly (independent of any one platform's quirks) is a route that needs no external credentials, e.g. a GitHub repo's releases: `/github/repos/DIYgod/RSSHub`. If that returns items, FeedFerret ↔ RSSHub is working and any other failure is that specific route's own requirement.
+
 Minimal compose addition (for `docker-compose.minimal.yaml` / `docker-compose.yaml`):
 
 ```yaml

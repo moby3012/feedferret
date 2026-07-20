@@ -38,6 +38,13 @@ export type FeedFetchConfig = {
    * configured connector host (see lib/connector-hosts.ts).
    */
   allowInternal?: boolean;
+  /**
+   * When true, a non-2xx response surfaces a snippet of the upstream error
+   * body (e.g. RSSHub's "Twitter API is not configured") instead of a bare
+   * "Fetch failed: N". Used by RSSHub route validation to give actionable
+   * errors; left off for ordinary syncs.
+   */
+  includeErrorBody?: boolean;
 };
 
 export type FetchedFeedArticle = {
@@ -289,6 +296,7 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
 
   return fetchWithSsrfProtection(feed.url, init, {
     allowInternal,
+    includeErrorBody: feed.includeErrorBody,
     context: "Feed fetch",
     maxBytes,
     maxRedirects: follow ? maxRedirects : 0,

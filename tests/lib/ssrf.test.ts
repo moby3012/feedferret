@@ -62,3 +62,44 @@ describe("isPrivateIp — non-IP input", () => {
   it("treats empty string as private", () =>
     expect(isPrivateIp("")).toBe(true));
 });
+
+// ── fetchWithSsrfProtection — error body surfacing ────────────────────────────
+
+import { afterEach, vi } from "vitest";
+import { fetchWithSsrfProtection } from "../../lib/ssrf";
+
+function mockFetchOnce(status: number, body: string) {
+  const response = {
+    status,
+    ok: status >= 200 && status < 300,
+    headers: { get: () => null },
+    text: async () => body,
+    body: null,
+  };
+  vi.stubGlobal("fetch", vi.fn(async () => response));
+}
+
+describe("fetchWithSsrfProtection — error body surfacing", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("appends the upstream body snippet when includeErrorBody is set", async () => {
+    mockFetchOnce(503, "Twitter API is not configured");
+    await expect(
+      fetchWithSsrfProtection("http://rsshub:3000/twitter/user/x", {}, { allowInternal: true, includeErrorBody: true }),
+    ).rejects.toThrow(/Fetch failed: 503 — Twitter API is not configured/);
+  });
+
+  it("keeps the terse error when includeErrorBody is off", async () => {
+    mockFetchOnce(503, "Twitter API is not configured");
+    await expect(
+      fetchWithSsrfProtection("http://rsshub:3000/twitter/user/x", {}, { allowInternal: true }),
+    ).rejects.toThrow(/^Fetch failed: 503$/);
+  });
+
+  it("strips HTML tags from an error page body", async () => {
+    mockFetchOnce(404, "<html><body><h1>Not Found</h1></body></html>");
+    await expect(
+      fetchWithSsrfProtection("http://rsshub:3000/nope", {}, { allowInternal: true, includeErrorBody: true }),
+    ).rejects.toThrow(/Fetch failed: 404 — Not Found/);
+  });
+});
