@@ -1026,6 +1026,13 @@ export function FeedManagement({
     { value: "labels", label: t("labelsAndSearchesTab") },
     { value: "health", label: t("healthTab") },
     { value: "rules", label: t("rulesAndAlertsTab") },
+    // Keyword alerts are being migrated into the newer rules system (see the
+    // migration banner in the "rules" tab below) and no longer get a
+    // permanent tab of their own — but before/without migrating, users with
+    // existing alerts still need a way to reach this UI to review, edit, or
+    // delete them. Without this, it's dead, unreachable code once the
+    // trigger disappears from the tab bar.
+    ...(keywordAlerts.length > 0 ? [{ value: "alerts", label: t("alerts.keywordAlerts") }] : []),
   ];
 
   const shellProps = { title: t("title"), description: t("description"), activeTab, onTabChange: setActiveTab, tabs: shellTabs };

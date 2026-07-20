@@ -20,6 +20,13 @@ let hookRegistered = false;
 // overflow from source-page inline styles.
 const DROPPED_STYLE_PROPS = new Set(["width", "min-width"]);
 
+// Hardcoded text/background colors from the source page survive sanitization
+// otherwise and outrank our prose/dark-mode CSS on specificity (an inline
+// style always beats a class), so a source page's dark-gray-on-white text
+// renders as near-black-on-dark in our reader's dark mode. Our own prose
+// styling already handles light/dark for both; drop the source's opinion.
+const DROPPED_COLOR_STYLE_PROPS = new Set(["color", "background", "background-color"]);
+
 // `position` values that let an element escape its container's normal flow
 // entirely — meaningful on a live page's own layout, never inside our
 // reader's scrollable excerpt. `fixed`/`sticky` position relative to the
@@ -46,6 +53,7 @@ export function stripLayoutBreakingStyles(styleValue: string): string {
             const prop = rawProp?.trim().toLowerCase();
             if (!prop) return false;
             if (DROPPED_STYLE_PROPS.has(prop)) return false;
+            if (DROPPED_COLOR_STYLE_PROPS.has(prop)) return false;
             if (prop === "position" && ESCAPING_POSITION_VALUES.has((rawValue || "").trim().toLowerCase())) {
                 return false;
             }

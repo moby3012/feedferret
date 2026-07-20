@@ -8,15 +8,16 @@ describe("getSanitizer", () => {
     expect(clean).toContain('rel="noopener noreferrer"');
   });
 
-  it("strips width/min-width and escaping position values from inline style, end to end", async () => {
+  it("strips width/min-width, escaping position values, and color from inline style, end to end", async () => {
     const DOMPurify = await getSanitizer();
     const clean = DOMPurify.sanitize(
       '<div style="width: 1200px; min-width: 800px; position: fixed; top: 0; color: red;">x</div>',
     );
     expect(clean).not.toContain("width");
     expect(clean).not.toContain("position");
-    // Unrelated declarations (and the now-inert top offset) survive.
-    expect(clean).toContain("color");
+    expect(clean).not.toContain("color");
+    // The now-inert top offset survives (not our concern to strip).
+    expect(clean).toContain("top: 0");
   });
 
   it("removes width/min-width HTML attributes on img (not just the style attribute)", async () => {
@@ -41,8 +42,8 @@ describe("stripLayoutBreakingStyles", () => {
   });
 
   it("is robust to whitespace and casing", () => {
-    const result = stripLayoutBreakingStyles("  Min-Width : 600px ; COLOR: blue ");
-    expect(result).toBe("COLOR: blue");
+    const result = stripLayoutBreakingStyles("  Min-Width : 600px ; COLOR: blue ; FONT-WEIGHT: bold ");
+    expect(result).toBe("FONT-WEIGHT: bold");
   });
 
   it("drops position:fixed, position:sticky, and position:absolute", () => {
@@ -61,11 +62,21 @@ describe("stripLayoutBreakingStyles", () => {
   });
 
   it("preserves unrelated declarations untouched", () => {
-    const result = stripLayoutBreakingStyles("color: red; font-weight: bold;");
-    expect(result).toBe("color: red; font-weight: bold");
+    const result = stripLayoutBreakingStyles("font-weight: bold; text-decoration: underline;");
+    expect(result).toBe("font-weight: bold; text-decoration: underline");
   });
 
   it("handles an empty string without throwing", () => {
     expect(stripLayoutBreakingStyles("")).toBe("");
+  });
+
+  // Regression: source pages hardcode text/background colors (e.g. dark-gray
+  // text tuned for a white page background) that survive sanitization and
+  // outrank our prose/dark-mode CSS on specificity, rendering as
+  // near-black-on-dark in our reader's dark mode.
+  it("drops color, background, and background-color declarations", () => {
+    expect(stripLayoutBreakingStyles("color: #333; font-weight: bold;")).toBe("font-weight: bold");
+    expect(stripLayoutBreakingStyles("background: white; color: black;")).toBe("");
+    expect(stripLayoutBreakingStyles("background-color: #fff;")).toBe("");
   });
 });

@@ -1,5 +1,11 @@
 const CACHE_NAME = "feedferret-pwa-v2";
 const RUNTIME_CACHE = "feedferret-runtime-v1";
+// cache.addAll() is all-or-nothing: a single 404 in this list fails the whole
+// install event, so the service worker never installs at all (not even
+// partially) for any user. Keep this to files that actually exist and that
+// the SW itself needs to serve offline — PWA-manifest screenshots are never
+// served through the SW's fetch handler (browsers fetch them directly for
+// the install-prompt UI), so they don't belong here.
 const PRECACHE_URLS = [
   "/offline.html",
   "/manifest.json",
@@ -8,8 +14,6 @@ const PRECACHE_URLS = [
   "/icon-192-maskable.png",
   "/icon-512.png",
   "/icon-512-maskable.png",
-  "/screenshots/mobile-narrow.svg",
-  "/screenshots/desktop-wide.svg",
 ];
 
 self.addEventListener("install", (event) => {
