@@ -71,9 +71,9 @@ Source: [`releases/v1.3.md`](releases/v1.3.md).
 ## PHASE 4 — Feature backlog (differentiators) *(F-items not already pulled forward; easy → complex)*
 Source: [`feature-ideas.md`](feature-ideas.md), [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md) (F-list).
 
-- ⬜ **F5** · Export / "Send to" Obsidian · Wallabag · Readwise · Pocket — S–M
-- ⬜ **F6** · Auto-mute + notify on persistently-failing feeds — S–M
-- ⬜ **F7** · PWA **share-target bookmarklet** ("Share → FeedFerret" → page→feed) — S–M
+- ✅ **F5** · Export / "Send to" Obsidian · Wallabag · Readwise · Pocket — S–M — *shipped 2026-07-20 (Obsidian + Wallabag; Readwise/Pocket deferred, unverified APIs)*
+- ✅ **F6** · Auto-mute + notify on persistently-failing feeds — S–M — *shipped 2026-07-20*
+- ✅ **F7** · PWA **share-target bookmarklet** ("Share → FeedFerret" → page→feed) — S–M — *shipped 2026-07-20 (manifest + deep link verified; OS-level invocation not testable in-sandbox)*
 - ⬜ **F9** · 🤖 User reading-stats dashboard — M
 - ⬜ **F11** · Article notes / highlights — M
 - ⬜ **F12** · 🤖 AI "translate this article" — M

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
 import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, markArticlesAsUnread, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers, suggestFeedFromUrl, createFeedFromPage, proposeAiFeedConfig, proposeAiFullTextSelector, getRsshubStatus, previewRsshubFeed, getChangedetectionStatus, createChangedetectionFeed } from "@/app/actions/feeds"
 import { updateProfile, changePassword, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, previewDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getContentFetchSettings, updateContentFetchSettings, testContentFetchConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
+import { getExportSettings, updateExportSettings, testWallabagExportConnection, buildObsidianExportLink, exportArticleToWallabag } from "@/app/actions/export"
 import { updateUiLanguage } from "@/app/actions/locale"
 import { toast } from "sonner"
 
@@ -307,6 +308,8 @@ export function useUpdateFeed() {
             updateFeed(feedId, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            // F6: the Health tab's mute toggle also goes through this mutation.
+            queryClient.invalidateQueries({ queryKey: ["feed-health"] })
         },
     })
 }
@@ -1076,6 +1079,47 @@ export function useUpdateContentFetchSettings() {
 export function useTestContentFetchConnection() {
     return useMutation({
         mutationFn: (overrides?: Parameters<typeof testContentFetchConnection>[0]) => testContentFetchConnection(overrides),
+    })
+}
+
+// ── F5: Export destinations (Obsidian / Wallabag) ───────────────────────────
+
+export function useExportSettings() {
+    return useQuery({
+        queryKey: ["export-settings"],
+        queryFn: () => getExportSettings(),
+    })
+}
+
+export function useUpdateExportSettings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: Parameters<typeof updateExportSettings>[0]) => updateExportSettings(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["export-settings"] })
+            toast.success("Export settings saved")
+        },
+        onError: (err) => {
+            toast.error(err instanceof Error ? err.message : "Export settings could not be saved. Try again.")
+        },
+    })
+}
+
+export function useTestWallabagExportConnection() {
+    return useMutation({
+        mutationFn: (overrides?: Parameters<typeof testWallabagExportConnection>[0]) => testWallabagExportConnection(overrides),
+    })
+}
+
+export function useBuildObsidianExportLink() {
+    return useMutation({
+        mutationFn: (articleId: string) => buildObsidianExportLink(articleId),
+    })
+}
+
+export function useExportArticleToWallabag() {
+    return useMutation({
+        mutationFn: (articleId: string) => exportArticleToWallabag(articleId),
     })
 }
 

@@ -12,6 +12,7 @@ import { logger } from "./logger";
 import { getSanitizer } from "./sanitize-html";
 import { resolveFullTextMode } from "./full-text-mode";
 import { fetchAndExtractReadable } from "./readability-extract";
+import { applySyncFailure, applySyncSuccess } from "./feed-auto-mute";
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 const MAX_AUTO_TAG_PER_SYNC = 3;
@@ -277,6 +278,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
 export async function syncFeed(userId: string, feedId: string) {
     const feed = await db.feed.findUnique({
         where: { id: feedId, userId },
+        include: { user: { select: { autoMuteFailingFeedsAfter: true } } },
     });
 
     if (!feed) throw new Error("Feed not found");
@@ -296,6 +298,7 @@ export async function syncFeed(userId: string, feedId: string) {
                     lastFetchedAt: new Date(),
                     lastStatus: "ok",
                     lastError: null,
+                    ...applySyncSuccess(),
                     ...(remoteFeed.etag ? { etag: remoteFeed.etag } : {}),
                     ...(remoteFeed.lastModifiedHeader ? { lastModifiedHeader: remoteFeed.lastModifiedHeader } : {}),
                 },
@@ -307,6 +310,7 @@ export async function syncFeed(userId: string, feedId: string) {
             lastFetchedAt: new Date(),
             lastStatus: "ok",
             lastError: null,
+            ...applySyncSuccess(),
             etag: remoteFeed.etag ?? null,
             lastModifiedHeader: remoteFeed.lastModifiedHeader ?? null,
         };
@@ -387,12 +391,18 @@ export async function syncFeed(userId: string, feedId: string) {
         return { success: true, count: articles.length, createdArticleIds };
     } catch (error) {
         logger.error(`Error syncing feed ${feed.url}:`, error);
+        const failureUpdate = applySyncFailure(
+            { consecutiveFailureCount: feed.consecutiveFailureCount, autoMuted: feed.autoMuted },
+            feed.user.autoMuteFailingFeedsAfter,
+        );
         await db.feed.update({
             where: { id: feed.id },
             data: {
                 lastFetchedAt: new Date(),
                 lastStatus: "error",
                 lastError: String(error).slice(0, 1000),
+                consecutiveFailureCount: failureUpdate.consecutiveFailureCount,
+                autoMuted: failureUpdate.autoMuted,
             },
         });
         const errorMessage = String(error).slice(0, 500);
@@ -407,6 +417,23 @@ export async function syncFeed(userId: string, feedId: string) {
                 }),
             )
             .catch((e) => logger.warn("[rss-sync] feed_error rules failed:", e));
+        // F6: fire a single one-time in-app notification the moment this sync
+        // crosses the auto-mute threshold — not on every subsequent failed
+        // sync of an already-muted feed (it's no longer actively re-fetched
+        // anyway, see syncUserFeeds/syncAllFeeds skipping autoMuted feeds).
+        if (failureUpdate.justMuted) {
+            db.notification
+                .create({
+                    data: {
+                        userId,
+                        type: "feed_auto_muted",
+                        title: feed.name,
+                        body: `Auto-muted after ${failureUpdate.consecutiveFailureCount} consecutive failed syncs: ${errorMessage}`,
+                        feedId: feed.id,
+                    },
+                })
+                .catch((e: unknown) => logger.warn("[rss-sync] feed_auto_muted notification failed:", e));
+        }
         return { success: false, error: String(error) };
     }
 }
@@ -743,6 +770,7 @@ export async function syncUserFeeds(userId: string) {
             url: true,
             updateFrequency: true,
             lastFetchedAt: true,
+            autoMuted: true,
             category: {
                 select: {
                     parentId: true,
@@ -760,6 +788,14 @@ export async function syncUserFeeds(userId: string) {
         const batch = feeds.slice(i, i + concurrency);
         const batchResults = await Promise.all(
             batch.map(async (feed) => {
+                // F6: an auto-muted feed is deliberately not actively re-fetched
+                // by background sync (stop wasting cycles hitting a dead URL) —
+                // a manual "Refresh now" (syncFeed called directly) still works
+                // and gives it a chance to self-recover.
+                if (feed.autoMuted) {
+                    return { feed: feed.url, success: true, skipped: true, count: 0 };
+                }
+
                 const effectiveUpdateFrequency = computeEffectiveUpdateFrequency(
                     feed,
                     userDefaultUpdateFrequency,
@@ -801,6 +837,7 @@ export async function syncAllFeeds() {
             url: true,
             updateFrequency: true,
             lastFetchedAt: true,
+            autoMuted: true,
             category: {
                 select: {
                     parentId: true,
@@ -819,6 +856,12 @@ export async function syncAllFeeds() {
         const batch = feeds.slice(i, i + concurrency);
         const batchResults = await Promise.all(
             batch.map(async (feed) => {
+                // F6: skip auto-muted feeds — see the equivalent comment in
+                // syncUserFeeds.
+                if (feed.autoMuted) {
+                    return { feed: feed.url, success: true, skipped: true, count: 0 };
+                }
+
                 const effectiveUpdateFrequency = computeEffectiveUpdateFrequency(
                     feed,
                     feed.user.defaultUpdateFrequency,

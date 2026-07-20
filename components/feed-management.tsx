@@ -40,6 +40,8 @@ import {
   useAlertHistory,
   useExportUserData,
   useNotificationChannelStatus,
+  useReadingPreferences,
+  useUpdateGlobalSettings,
 } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,6 +98,7 @@ import {
   Info,
   Compass,
   ArrowUp,
+  BellOff,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
 import { toast } from "sonner";
@@ -781,6 +784,9 @@ export function FeedManagement({
   const setSavedSearchSharing = useSetSavedSearchSharing();
   const applyRetention = useApplyRetentionPolicies();
   const { data: feedHealth = [] } = useFeedHealth();
+  const { data: readingPreferences } = useReadingPreferences();
+  const updateGlobalSettings = useUpdateGlobalSettings();
+  const [autoMuteThreshold, setAutoMuteThreshold] = useState<string>("10");
   const { data: autoReadRules = [] } = useAutoReadRules();
   const createAutoReadRule = useCreateAutoReadRule();
   const updateAutoReadRule = useUpdateAutoReadRule();
@@ -882,6 +888,12 @@ export function FeedManagement({
   useEffect(() => {
     if (open) setActiveTab(normalizeInitialTab(initialTab));
   }, [initialTab, open]);
+
+  useEffect(() => {
+    if (readingPreferences?.autoMuteFailingFeedsAfter !== undefined) {
+      setAutoMuteThreshold(String(readingPreferences.autoMuteFailingFeedsAfter));
+    }
+  }, [readingPreferences?.autoMuteFailingFeedsAfter]);
 
   // Initialize all categories as expanded when categories (or feeds) load.
   // The `categories.length > 0` gate used to mean a user with NO categories
@@ -1432,6 +1444,34 @@ export function FeedManagement({
                     </Button>
                   </div>
                 </div>
+
+                {/* F6: auto-mute threshold — 0 disables it entirely */}
+                <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <BellOff className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">{t("health.autoMuteThresholdLabel")}</p>
+                      <p className="text-xs text-muted-foreground">{t("health.autoMuteThresholdHint")}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={autoMuteThreshold}
+                      onChange={(e) => setAutoMuteThreshold(e.target.value)}
+                      onBlur={() => {
+                        const parsed = parseInt(autoMuteThreshold, 10);
+                        updateGlobalSettings.mutate({
+                          autoMuteFailingFeedsAfter: Number.isFinite(parsed) ? Math.max(0, parsed) : 0,
+                        });
+                      }}
+                      className="h-9 w-24 rounded-xl"
+                    />
+                    <span className="text-xs text-muted-foreground">{t("health.autoMuteThresholdSuffix")}</span>
+                  </div>
+                </div>
+
                 <ScrollArea className="min-h-0 flex-1">
                   <div className="space-y-3 pb-8 pe-3">
                     {feedHealth.map((feed: any) => (
@@ -1451,6 +1491,12 @@ export function FeedManagement({
                               )}>
                                 {feed.lastStatus || "unknown"}
                               </span>
+                              {feed.autoMuted && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-600">
+                                  <BellOff className="h-2.5 w-2.5" />
+                                  {t("health.autoMuted")}
+                                </span>
+                              )}
                             </div>
                             <p className="mt-1 truncate text-xs text-muted-foreground">{feed.url}</p>
                             <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-5">
@@ -1460,11 +1506,28 @@ export function FeedManagement({
                               <span>{t("health.sync")} {feed.lastFetchedAt ? format.dateTime(new Date(feed.lastFetchedAt), { dateStyle: "medium", timeStyle: "short" }) : t("feeds.never")}</span>
                               <span>{feed.retentionDays ? t("health.retentionDays", { count: feed.retentionDays }) : t("health.retentionDefault")}</span>
                             </div>
+                            {feed.consecutiveFailureCount > 0 && (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                {t("health.consecutiveFailures", { count: feed.consecutiveFailureCount })}
+                              </p>
+                            )}
                             {feed.lastError && (
                               <p className="mt-3 rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
                                 {feed.lastError}
                               </p>
                             )}
+                            <div className="mt-3">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="rounded-xl"
+                                onClick={() => updateFeed.mutate({ feedId: feed.id, data: { autoMuted: !feed.autoMuted } })}
+                                disabled={updateFeed.isPending}
+                              >
+                                <BellOff className="me-1.5 h-3.5 w-3.5" />
+                                {feed.autoMuted ? t("health.unmuteButton") : t("health.muteButton")}
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>

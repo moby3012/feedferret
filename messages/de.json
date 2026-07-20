@@ -353,6 +353,29 @@
       "firecrawl": "Firecrawl Cloud"
     }
   },
+  "exportDestinations": {
+    "title": "Exportziele",
+    "description": "Artikel direkt aus dem Lesemodus an deine eigene Notiz- oder Später-lesen-App senden.",
+    "obsidianTitle": "Obsidian",
+    "obsidianDescription": "Obsidian hat keine API — es ist eine lokale Vault-App. Trage deinen Vault-Namen ein, und „An Obsidian senden“ öffnet einen obsidian://new-Deep-Link mit dem Artikel als Markdown, direkt in deinem eigenen Vault. Kein Konto, keine Zugangsdaten, nichts verlässt diesen Server.",
+    "obsidianVaultLabel": "Vault-Name",
+    "obsidianVaultPlaceholder": "Mein Vault",
+    "wallabagTitle": "Wallabag",
+    "wallabagDescription": "Artikel an deine eigene selbst gehostete Wallabag-Instanz über deren API senden.",
+    "wallabagUrlLabel": "Instanz-URL",
+    "wallabagUrlPlaceholder": "https://wallabag.example.com",
+    "wallabagClientIdLabel": "Client-ID",
+    "wallabagClientSecretLabel": "Client-Secret",
+    "wallabagUsernameLabel": "Benutzername",
+    "wallabagPasswordLabel": "Passwort",
+    "currentlySet": "aktuell gesetzt",
+    "leaveBlankToKeep": "Leer lassen, um den aktuellen Wert zu behalten",
+    "save": "Speichern",
+    "saving": "Speichert…",
+    "testConnection": "Verbindung testen",
+    "testing": "Teste…",
+    "connectionSuccessful": "Verbindung erfolgreich"
+  },
   "notifications": {
     "title": "Benachrichtigungskanäle",
     "description": "Keyword-Benachrichtigungen und Regel-Treffer an externe Dienste weiterleiten. Kanal aktivieren, Anmeldedaten eingeben und in Regeln & Alerts als Aktion auswählen.",
@@ -751,6 +774,12 @@
     "copyLink": "Link kopieren",
     "labels": "Labels",
     "noLabels": "Keine Labels",
+    "sendTo": "Senden an",
+    "sendToObsidian": "Obsidian",
+    "sendToWallabag": "Wallabag",
+    "sendToObsidianSuccess": "Wird in Obsidian geöffnet…",
+    "sendToWallabagSuccess": "An Wallabag gesendet",
+    "sendToFailed": "Der Artikel konnte nicht gesendet werden",
     "moreActions": "Weitere Aktionen",
     "previousArticle": "Vorheriger Artikel",
     "backToList": "Zurück zur Liste",
@@ -878,7 +907,14 @@
       "sync": "Sync:",
       "retentionDays": "{count, plural, one {Aufbewahrung: # Tag} other {Aufbewahrung: # Tage}}",
       "retentionDefault": "Aufbewahrung: Standard",
-      "default": "Standard"
+      "default": "Standard",
+      "autoMuteThresholdLabel": "Nach aufeinanderfolgenden Fehlversuchen stummschalten",
+      "autoMuteThresholdHint": "Ein Feed nicht mehr aktiv abrufen, sobald er so oft in Folge fehlgeschlagen ist, und einmalig benachrichtigen. 0 deaktiviert dies.",
+      "autoMuteThresholdSuffix": "Syncs",
+      "autoMuted": "Stummgeschaltet",
+      "consecutiveFailures": "{count, plural, one {# aufeinanderfolgender Fehlversuch} other {# aufeinanderfolgende Fehlversuche}}",
+      "muteButton": "Stummschalten",
+      "unmuteButton": "Stummschaltung aufheben"
     },
     "importExport": {
       "genericOpmlImport": "Generischer OPML-Import",

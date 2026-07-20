@@ -792,6 +792,8 @@ export async function updateFeed(feedId: string, data: {
     readerFontSizeOverride?: string | null;
     readerWidthOverride?: string | null;
     openOriginalOverride?: boolean | null;
+    // F6: auto-mute for persistently-failing feeds
+    autoMuted?: boolean;
 }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -832,6 +834,10 @@ export async function updateFeed(feedId: string, data: {
             ...(data.defaultContentFormat !== undefined ? {
                 defaultContentFormat: CONTENT_FORMATS.has(data.defaultContentFormat) ? data.defaultContentFormat : "html",
             } : {}),
+            // F6: a user manually unmuting a feed resets the failure counter and
+            // gives it one more chance, rather than resuming right at the
+            // threshold (see lib/feed-auto-mute.ts's applyManualUnmute).
+            ...(data.autoMuted === false ? { consecutiveFailureCount: 0 } : {}),
         },
     });
 

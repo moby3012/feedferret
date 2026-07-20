@@ -96,6 +96,15 @@
       ]
     }
   ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "sharedTitle",
+      "text": "sharedText",
+      "url": "sharedUrl"
+    }
+  },
   "screenshots": [
     {
       "src": "/screenshots/feedlist-mobile-light-393x852.png",

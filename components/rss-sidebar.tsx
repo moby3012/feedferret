@@ -33,6 +33,7 @@ import {
   Play,
   Mail,
   Loader2,
+  BellOff,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -192,6 +193,9 @@ interface RssSidebarProps {
   defaultOpenAddFeed?: number;
   hideEmptyFeeds?: boolean;
   hideEmptyLabels?: boolean;
+  // F7: PWA share-target deep link (?sharedUrl=...) — opens the Add-Feed
+  // dialog directly on the "From web page" tab with this URL pre-filled.
+  initialWebpageUrl?: string;
 }
 
 export function RssSidebar({
@@ -204,6 +208,7 @@ export function RssSidebar({
   defaultOpenAddFeed = 0,
   hideEmptyFeeds = false,
   hideEmptyLabels = false,
+  initialWebpageUrl,
 }: RssSidebarProps) {
   const t = useTranslations();
   const router = useRouter();
@@ -248,8 +253,11 @@ export function RssSidebar({
   const markAllNotificationsRead = useMarkAllNotificationsRead();
 
   useEffect(() => {
-    if (defaultOpenAddFeed) setIsAddFeedOpen(true);
-  }, [defaultOpenAddFeed]);
+    if (defaultOpenAddFeed) {
+      setIsAddFeedOpen(true);
+      if (initialWebpageUrl) setAddFeedTab("webpage");
+    }
+  }, [defaultOpenAddFeed, initialWebpageUrl]);
 
   const loadStarterPacks = () => {
     fetch("/api/starter-packs")
@@ -855,6 +863,8 @@ export function RssSidebar({
                       (notifications as any[]).slice(0, 8).map((notification: any) => {
                         const typeIcon = notification.type === "feed_error"
                           ? <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                          : notification.type === "feed_auto_muted"
+                          ? <BellOff className="h-3.5 w-3.5 text-amber-500" />
                           : notification.type === "rule_match"
                           ? <Play className="h-3.5 w-3.5 text-muted-foreground" />
                           : notification.type === "digest_sent"
@@ -1131,6 +1141,7 @@ export function RssSidebar({
               </Select>
               <PageFeedPanel
                 categoryId={newFeedCategoryId}
+                initialUrl={initialWebpageUrl}
                 onCreated={(feed) => {
                   toast.success(t("sidebar.webpage.feedCreated", { name: feed.name }));
                   setIsAddFeedOpen(false);

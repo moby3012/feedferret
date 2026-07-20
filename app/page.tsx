@@ -111,6 +111,10 @@ export default function RSSReaderPage() {
   // the command palette) re-fire the effect in RssSidebar even if the
   // dialog was already opened once before in this session.
   const [openAddFeed, setOpenAddFeed] = useState(0);
+  // F7: PWA share-target deep link (?sharedUrl=...) — pre-fills the Add-Feed
+  // dialog's "From web page" tab so a share sheet drops straight into Scout
+  // Studio's page→feed builder.
+  const [sharedWebpageUrl, setSharedWebpageUrl] = useState<string | undefined>(undefined);
   const [isMobileLayout, setIsMobileLayout] = useState<boolean | null>(null);
   const [isClosingReader, setIsClosingReader] = useState(false);
   const isAuthenticated = status === "authenticated";
@@ -266,6 +270,21 @@ export default function RSSReaderPage() {
       // On mobile the sidebar (and the add-feed flow inside it) only mounts
       // inside a Sheet gated by sidebarOpen — without this the deep link
       // silently did nothing there, since nothing else opens the sheet.
+      setSidebarOpen(true);
+    }
+
+    // F7: PWA share-target ("Share → FeedFerret" from the OS share sheet).
+    // The manifest's share_target maps the share's `url` field onto a
+    // `sharedUrl` query param (and `text` onto `sharedText`, for apps that
+    // only fill in the free-text field with a link instead). Opens the
+    // Add-Feed dialog straight on the "From web page" tab, pre-filled.
+    const sharedUrlParam = params.get("sharedUrl");
+    const sharedTextParam = params.get("sharedText");
+    const candidateSharedUrl =
+      sharedUrlParam || (sharedTextParam && /^https?:\/\//i.test(sharedTextParam.trim()) ? sharedTextParam.trim() : null);
+    if (candidateSharedUrl) {
+      setSharedWebpageUrl(candidateSharedUrl);
+      setOpenAddFeed((n) => n + 1);
       setSidebarOpen(true);
     }
   }, [status]);
@@ -855,6 +874,7 @@ export default function RSSReaderPage() {
           selectedFeed={selectedFeed}
           selectedCategory={selectedCategory}
           defaultOpenAddFeed={openAddFeed}
+          initialWebpageUrl={sharedWebpageUrl}
           hideEmptyFeeds={readingPrefs?.hideEmptyFeeds ?? false}
           hideEmptyLabels={readingPrefs?.hideEmptyLabels ?? false}
           onSelectFeed={handleSelectFeedNav}
@@ -887,6 +907,7 @@ export default function RSSReaderPage() {
             selectedFeed={selectedFeed}
             selectedCategory={selectedCategory}
             defaultOpenAddFeed={openAddFeed}
+            initialWebpageUrl={sharedWebpageUrl}
             hideEmptyFeeds={readingPrefs?.hideEmptyFeeds ?? false}
             hideEmptyLabels={readingPrefs?.hideEmptyLabels ?? false}
             onSelectFeed={(feedId) => {

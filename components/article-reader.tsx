@@ -6,7 +6,7 @@ import Image from "next/image";
 import MarkdownIt from "markdown-it";
 import DOMPurify from "isomorphic-dompurify";
 import { Article } from "@/lib/rss-data";
-import { useAiSettings, useSummarizeArticle } from "@/hooks/use-rss-data";
+import { useAiSettings, useSummarizeArticle, useExportSettings, useBuildObsidianExportLink, useExportArticleToWallabag } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -17,6 +17,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Star,
@@ -33,6 +36,7 @@ import {
   MoreHorizontal,
   ArrowUp,
   Loader2,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -159,6 +163,35 @@ export function ArticleReader({
   const [localSummary, setLocalSummary] = useState<string | null>(null);
   const [summarizeFailed, setSummarizeFailed] = useState(false);
   const summarize = useSummarizeArticle();
+
+  // F5: export / "send to" destinations — hidden entirely unless the user has
+  // configured at least one, mirroring the aiSummaryEnabled gating above.
+  const { data: exportSettings } = useExportSettings();
+  const buildObsidianLink = useBuildObsidianExportLink();
+  const exportToWallabag = useExportArticleToWallabag();
+  const canExport = Boolean(exportSettings?.obsidianConfigured || exportSettings?.wallabagConfigured);
+
+  const sendToObsidian = useCallback(async () => {
+    if (!article) return;
+    const result = await buildObsidianLink.mutateAsync(article.id);
+    if (!result.success || !result.url) {
+      toast.error(result.error || t("sendToFailed"));
+      return;
+    }
+    // Hands off to the OS/Obsidian app — no data leaves this server.
+    window.location.href = result.url;
+    toast.success(t("sendToObsidianSuccess"));
+  }, [article, buildObsidianLink, t]);
+
+  const sendToWallabagHandler = useCallback(async () => {
+    if (!article) return;
+    const result = await exportToWallabag.mutateAsync(article.id);
+    if (!result.success) {
+      toast.error(result.error || t("sendToFailed"));
+      return;
+    }
+    toast.success(t("sendToWallabagSuccess"));
+  }, [article, exportToWallabag, t]);
 
   useEffect(() => {
     setLocalSummary(null);
@@ -462,6 +495,37 @@ export function ArticleReader({
           >
             <Copy className="w-4 h-4 text-muted-foreground" />
           </Button>
+          {/* F5: "Send to" export destinations — hidden entirely unless the
+              user has configured at least one (Obsidian vault / Wallabag). */}
+          {canExport && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                  aria-label={t("sendTo")}
+                  title={t("sendTo")}
+                >
+                  <Send className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 rounded-2xl p-2">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">{t("sendTo")}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {exportSettings?.obsidianConfigured && (
+                  <DropdownMenuItem className="rounded-xl" onClick={sendToObsidian} disabled={buildObsidianLink.isPending}>
+                    {t("sendToObsidian")}
+                  </DropdownMenuItem>
+                )}
+                {exportSettings?.wallabagConfigured && (
+                  <DropdownMenuItem className="rounded-xl" onClick={sendToWallabagHandler} disabled={exportToWallabag.isPending}>
+                    {t("sendToWallabag")}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           {/* Desktop parity for the mobile more-menu's "Fetch full text": the
               bottom action bar hosting that menu is lg:hidden, so without this
               a desktop reader showing a teaser article has no way to trigger a
@@ -823,6 +887,26 @@ export function ArticleReader({
                 <Copy className="me-3 h-4 w-4" />
                 {t("copyLink")}
               </DropdownMenuItem>
+              {canExport && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="rounded-2xl py-3">
+                    <Send className="me-3 h-4 w-4" />
+                    {t("sendTo")}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-48 rounded-2xl p-2">
+                    {exportSettings?.obsidianConfigured && (
+                      <DropdownMenuItem className="rounded-xl" onClick={sendToObsidian} disabled={buildObsidianLink.isPending}>
+                        {t("sendToObsidian")}
+                      </DropdownMenuItem>
+                    )}
+                    {exportSettings?.wallabagConfigured && (
+                      <DropdownMenuItem className="rounded-xl" onClick={sendToWallabagHandler} disabled={exportToWallabag.isPending}>
+                        {t("sendToWallabag")}
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
               {/* No content-length gate here: it used to hide this for any
                   article whose raw HTML topped 900 chars, which markup-heavy
                   teasers (follow-us links, promo boxes) exceed while showing
