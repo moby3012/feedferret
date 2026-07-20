@@ -1173,7 +1173,10 @@ export default function RSSReaderPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (searchQuery.trim()) setSearchOpen(false);
+              if (searchQuery.trim()) {
+                setSearchOpen(false);
+                setSidebarOpen(false);
+              }
             }}
           >
             <div className="flex items-center gap-3 px-5 pt-5 pb-3 border-b border-border/50">
