@@ -64,7 +64,7 @@ function toUiArticle(a: any, unknownAuthor = "Unknown") {
     publishedAtRaw: publishedAt.getTime(),
     createdAtRaw: a.createdAt ? new Date(a.createdAt).getTime() : 0,
     publishedAt: publishedAt.toISOString(),
-    readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
+    readTime: Math.ceil(readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).minutes),
     excerpt: a.excerpt || "",
     author: a.author || unknownAuthor,
     duplicateCount: a._count?.duplicates ?? 0,
@@ -375,7 +375,17 @@ export default function RSSReaderPage() {
     if (selectedCategory.startsWith("Search:")) {
       return savedSearches.find((search: any) => search.id === selectedCategory.slice("Search:".length))?.name || t("savedSearchFallback");
     }
-    return selectedCategory;
+    // These are internal sentinel values (also used as sidebar categoryIds),
+    // not display strings — translate the known ones. Anything else is a
+    // real user-created category name and passes through as-is.
+    const sentinelLabels: Record<string, string> = {
+      All: t("allArticles"),
+      "All Articles": t("allArticles"),
+      Starred: t("starred"),
+      "Read Later": t("readLater"),
+      Spoiler: t("spoiler"),
+    };
+    return sentinelLabels[selectedCategory] ?? selectedCategory;
   }, [selectedFeed, selectedCategory, feeds, labels, savedSearches, t]);
 
   const markArticleRead = useCallback((article: any) => {

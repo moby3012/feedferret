@@ -566,7 +566,7 @@ export function ArticleReader({
               <span aria-hidden="true" className="text-muted-foreground/40">·</span>
               <time dateTime={article.publishedAt}>{format.dateTime(new Date(article.publishedAt), { dateStyle: "medium" })}</time>
               <span aria-hidden="true" className="text-muted-foreground/40">·</span>
-              <span>{article.readTime}</span>
+              <span>{t("readTime", { minutes: article.readTime })}</span>
             </div>
             {!!article.labels?.length && (
               <div className="mt-5 flex flex-wrap gap-2">

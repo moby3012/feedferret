@@ -400,6 +400,7 @@
     "deletionFailed": "Kontolöschung fehlgeschlagen. Bitte erneut versuchen."
   },
   "pwa": {
+    "close": "Schließen",
     "title": "Zum Startbildschirm hinzufügen",
     "description": "Anleitung zum Installieren von FeedFerret als PWA auf dem Telefon oder Tablet anzeigen.",
     "iphoneInstructions": "Auf iPhone/iPad: Teilen-Schaltfläche tippen, dann 'Zum Home-Bildschirm'.",
@@ -670,9 +671,11 @@
     "markAsUnread": "Als ungelesen markieren",
     "markAsRead": "Als gelesen markieren",
     "alsoIn": "Auch in",
-    "unknownAuthor": "Unbekannt"
+    "unknownAuthor": "Unbekannt",
+    "duplicateBadge": "Duplikat"
   },
   "articleReader": {
+    "readTime": "{minutes, plural, one {# Min. Lesezeit} other {# Min. Lesezeit}}",
     "selectArticle": "Artikel auswählen",
     "selectArticleDescription": "Wähle einen Artikel aus der Liste, um ihn hier zu lesen.",
     "linkCopied": "Link kopiert",
@@ -718,7 +721,8 @@
     "refreshing": "Wird aktualisiert…",
     "markAllAsRead": "Alle als gelesen markieren",
     "saveSearch": "Suche speichern",
-    "moreOptions": "Weitere Optionen"
+    "moreOptions": "Weitere Optionen",
+    "unreadSuffix": "ungelesen"
   },
   "discovery": {
     "searchPlaceholder": "Feeds suchen…",
@@ -819,8 +823,8 @@
       "unread": "ungelesen",
       "perDay": "/Tag",
       "sync": "Sync:",
-      "retention": "Aufbewahrung:",
-      "days": "Tage",
+      "retentionDays": "{count, plural, one {Aufbewahrung: # Tag} other {Aufbewahrung: # Tage}}",
+      "retentionDefault": "Aufbewahrung: Standard",
       "default": "Standard"
     },
     "importExport": {
@@ -1137,6 +1141,7 @@
   },
   "serverManagement": {
     "title": "Servereinstellungen",
+    "description": "Benutzer, Integrationen und instanzweite Einstellungen verwalten.",
     "tabs": {
       "users": "Benutzer",
       "registrations": "Registrierungen",
@@ -1245,6 +1250,7 @@
       "description": "Beschreibung",
       "resetDefaults": "Standards zurücksetzen",
       "addPack": "Paket hinzufügen",
+      "newPackName": "Neues Starterpaket",
       "name": "Name",
       "enabled": "Aktiviert",
       "duplicatePack": "Paket duplizieren",

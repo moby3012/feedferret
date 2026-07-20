@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
@@ -8,15 +8,6 @@ import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers, Refresh
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import { useState, useRef, useEffect } from "react";
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${day}.${month} - ${hours}:${minutes}`;
-}
 
 function FeedFavicon({ icon, name, size = 16, articleLink }: { icon?: string; name?: string; size?: number; articleLink?: string }) {
   const [failed, setFailed] = useState(false);
@@ -469,6 +460,9 @@ function ArticlePreview({
   scrollRoot?: HTMLElement | null;
 }) {
   const t = useTranslations("articleList");
+  const format = useFormatter();
+  const formatDate = (dateStr: string) =>
+    format.dateTime(new Date(dateStr), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   const articleRef = useRef<HTMLDivElement>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -776,7 +770,7 @@ function ArticlePreview({
             {(article.duplicateCount ?? 0) > 0 && (
               <span
                 className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium shrink-0"
-                title={`${t("alsoIn")} ${article.duplicateCount} ${(article.duplicateCount ?? 0) > 1 ? t("otherFeeds") : t("otherFeed")}`}
+                title={`${t("alsoIn")} ${article.duplicateCount} ${t("otherFeeds", { count: article.duplicateCount ?? 0 })}`}
               >
                 <Layers className="w-2.5 h-2.5" />
                 {article.duplicateCount}
@@ -788,7 +782,7 @@ function ArticlePreview({
                 title={`${t("firstSeenIn")}: ${article.canonicalFeedName}`}
               >
                 <Layers className="w-2.5 h-2.5" />
-                dup
+                {t("duplicateBadge")}
               </span>
             )}
             <span className="text-muted-foreground/50">·</span>

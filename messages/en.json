@@ -400,6 +400,7 @@
     "deletionFailed": "Account deletion failed. Try again."
   },
   "pwa": {
+    "close": "Close",
     "title": "Add to Home Screen",
     "description": "Show instructions for installing FeedFerret as a PWA on your phone or tablet.",
     "iphoneInstructions": "On iPhone/iPad: tap the Share button, then \"Add to Home Screen\".",
@@ -670,9 +671,11 @@
     "markAsUnread": "Mark as unread",
     "markAsRead": "Mark as read",
     "alsoIn": "Also in",
-    "unknownAuthor": "Unknown"
+    "unknownAuthor": "Unknown",
+    "duplicateBadge": "Duplicate"
   },
   "articleReader": {
+    "readTime": "{minutes, plural, one {# min read} other {# min read}}",
     "selectArticle": "Select an article",
     "selectArticleDescription": "Choose an article from the list to read it here.",
     "linkCopied": "Link copied",
@@ -718,7 +721,8 @@
     "refreshing": "Refreshing…",
     "markAllAsRead": "Mark all as read",
     "saveSearch": "Save search",
-    "moreOptions": "More options"
+    "moreOptions": "More options",
+    "unreadSuffix": "unread"
   },
   "discovery": {
     "searchPlaceholder": "Search feeds…",
@@ -819,8 +823,8 @@
       "unread": "unread",
       "perDay": "/day",
       "sync": "Sync:",
-      "retention": "Retention:",
-      "days": "days",
+      "retentionDays": "{count, plural, one {Retention: # day} other {Retention: # days}}",
+      "retentionDefault": "Retention: default",
       "default": "default"
     },
     "importExport": {
@@ -1137,6 +1141,7 @@
   },
   "serverManagement": {
     "title": "Server Settings",
+    "description": "Manage users, integrations, and instance-wide configuration.",
     "tabs": {
       "users": "Users",
       "registrations": "Registrations",
@@ -1245,6 +1250,7 @@
       "description": "Description",
       "resetDefaults": "Reset defaults",
       "addPack": "Add pack",
+      "newPackName": "New starter pack",
       "name": "Name",
       "enabled": "Enabled",
       "duplicatePack": "Duplicate pack",

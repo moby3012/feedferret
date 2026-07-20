@@ -9,6 +9,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Fixed (2026-07-20 — i18n/locale gaps from the 2026-07-19 audit)
+
+- **Header title showed raw internal sentinel values untranslated** — `app/page.tsx`'s `headerTitle` fell through to `selectedCategory` verbatim for the built-in views (All Articles / Starred / Read Later / Spoiler), which are also used internally as sidebar `categoryId`s — so a German UI would show "All" or "Read Later" in English in the list header even though the sidebar itself already translates the same values correctly. Real user-created category names still pass through untouched.
+- **Hardcoded "unread" in the list header** (`components/rss-header.tsx`) — now translated, matching the same fix already applied to the sidebar's unread count.
+- **Non-localized date format in the article list** (`components/article-list.tsx`) — a hand-rolled `formatDate` always rendered `DD.MM - HH:MM` regardless of locale. Replaced with `next-intl`'s `useFormatter().dateTime`, consistent with the reader and everywhere else dates are shown.
+- **Reading time never translated** — `reading-time` (npm package) always renders English text ("4 min read") baked directly into `article.readTime`; that string got stored and displayed as-is regardless of locale. `readTime` is now a plain number (minutes) computed in `app/page.tsx`, formatted at display time via a proper ICU message in `components/article-reader.tsx`.
+- **"dup" badge literal and a broken singular/plural translation call** (`components/article-list.tsx`) — the duplicate-article badge's visible text was the hardcoded English word "dup"; separately, its tooltip called a `t("otherFeed")` key that was never defined (the actual key, `otherFeeds`, already handles singular/plural via ICU) — so the singular case (exactly one other feed) rendered a missing-message fallback. Both fixed.
+- **Retention line concatenated three independently-translated fragments in a fixed English word order** (`components/feed-management.tsx`, feed health tab) — `"Retention:" + count + "days"` can't adapt to other languages' word order or grammar, and always said "X days" even for `1` (no singular). Replaced with a single ICU plural message per locale.
+- **Server Settings dialog's subtitle duplicated its own title** — a copy-paste bug (`t("title")` used for both `title` and `description`) meant the dialog showed "Server Settings" twice instead of an actual description. Added a real description string.
+- **Hardcoded "New starter pack" default name** (`components/server-management-dialog.tsx`) — now translated.
+- **`Accept-Language` ignored entirely for anonymous visitors** (`i18n/request.ts`) — locale was only ever read from a cookie that's exclusively set by a logged-in user explicitly picking a UI language; a first-time visitor on `/login`, `/register`, or `/setup` always saw English regardless of their browser's language. Now falls back to parsing `Accept-Language` (respecting `q` weights) before defaulting to English.
+- **Hardcoded "Close" aria-label** on the PWA install prompt's dismiss button — now translated.
+
 ### Fixed (2026-07-20 — dark-mode prose, service worker install, unreachable alerts tab)
 
 - **Dark-mode article text rendering near-black** — traced to source-page inline `style="color: ..."`/`background`/`background-color` declarations surviving sanitization: they beat our prose/dark-mode CSS on specificity every time (an inline style always outranks a class), so a source page's dark-gray-on-white text renders as near-black-on-dark in our reader's dark mode. `lib/sanitize-html.ts`'s existing DOMPurify hook (already used to strip layout-breaking `width`/`min-width`) now also strips `color`, `background`, and `background-color` from inline styles, letting our own theme-aware prose styling handle text color entirely.

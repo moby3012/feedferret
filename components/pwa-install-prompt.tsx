@@ -119,7 +119,7 @@ export function PwaInstallPrompt() {
             type="button"
             onClick={closeAndRemember}
             className="absolute end-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted/70 text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="Close"
+            aria-label={t("close")}
           >
             <X className="h-4 w-4" />
           </button>

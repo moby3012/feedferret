@@ -1454,7 +1454,7 @@ export function FeedManagement({
                               <span>{feed.unreadCount} {t("health.unread")}</span>
                               <span>{feed.avgArticlesPerDay != null ? `${feed.avgArticlesPerDay}${t("health.perDay")}` : "—"}</span>
                               <span>{t("health.sync")} {feed.lastFetchedAt ? format.dateTime(new Date(feed.lastFetchedAt), { dateStyle: "medium", timeStyle: "short" }) : t("feeds.never")}</span>
-                              <span>{t("health.retention")} {feed.retentionDays || t("health.default")} {t("health.days")}</span>
+                              <span>{feed.retentionDays ? t("health.retentionDays", { count: feed.retentionDays }) : t("health.retentionDefault")}</span>
                             </div>
                             {feed.lastError && (
                               <p className="mt-3 rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
