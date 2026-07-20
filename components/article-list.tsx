@@ -7,7 +7,8 @@ import { Article } from "@/lib/rss-data";
 import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers, RefreshCw, ShieldOff } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { extractHighlightTerms, highlightText } from "@/lib/highlight-search-terms";
 
 function FeedFavicon({ icon, name, size = 16, articleLink }: { icon?: string; name?: string; size?: number; articleLink?: string }) {
   const [failed, setFailed] = useState(false);
@@ -114,6 +115,9 @@ interface ArticleListProps {
   onSwipePreviousFeed?: () => void;
   scrollBackToId?: string | null;
   hasFeeds?: boolean;
+  // When set, highlights occurrences of the query's free-text terms in each
+  // article's title/excerpt so it's visible *where* a search matched.
+  searchQuery?: string;
 }
 
 export function ArticleList({
@@ -140,8 +144,10 @@ export function ArticleList({
   onSwipePreviousFeed,
   scrollBackToId,
   hasFeeds = true,
+  searchQuery,
 }: ArticleListProps) {
   const t = useTranslations("articleList");
+  const highlightTerms = useMemo(() => extractHighlightTerms(searchQuery ?? ""), [searchQuery]);
   const transitionClass =
     transitionStyle === "flip"
       ? "animate-feed-flip"
@@ -422,6 +428,7 @@ export function ArticleList({
               markReadOnScroll={markReadOnScroll}
               onMarkRead={onMarkRead}
               scrollRoot={scrollRoot}
+              highlightTerms={highlightTerms}
             />
           ))}
           {hasMore && (
@@ -449,6 +456,7 @@ function ArticlePreview({
   markReadOnScroll,
   onMarkRead,
   scrollRoot,
+  highlightTerms,
 }: {
   article: Article;
   isSelected: boolean;
@@ -462,6 +470,7 @@ function ArticlePreview({
   markReadOnScroll?: boolean;
   onMarkRead?: (articleId: string) => void;
   scrollRoot?: HTMLElement | null;
+  highlightTerms?: string[];
 }) {
   const t = useTranslations("articleList");
   const format = useFormatter();
@@ -600,7 +609,7 @@ function ArticlePreview({
       >
         <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={14} />
         {!article.isRead && <CircleDot className="w-3 h-3 text-brand shrink-0" />}
-        <h3 className={cn("flex-1 text-sm truncate", !article.isRead ? "font-semibold" : "font-medium text-foreground/75")}>{article.title}</h3>
+        <h3 className={cn("flex-1 text-sm truncate", !article.isRead ? "font-semibold" : "font-medium text-foreground/75")}>{highlightTerms?.length ? highlightText(article.title, highlightTerms) : article.title}</h3>
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           {formatDate(article.publishedAt)}
         </span>
@@ -674,10 +683,10 @@ function ArticlePreview({
         )}
         <div className="p-4 space-y-3">
           <h3 className={cn("text-lg leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]", article.isRead ? "font-medium text-foreground/75" : "font-semibold")}>
-            {article.title}
+            {highlightTerms?.length ? highlightText(article.title, highlightTerms) : article.title}
           </h3>
           <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed break-words [overflow-wrap:anywhere]">
-            {article.excerpt}
+            {highlightTerms?.length ? highlightText(article.excerpt, highlightTerms) : article.excerpt}
           </p>
           <div className="flex items-center justify-between pt-2 border-t border-border/50">
             <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground font-medium">
@@ -825,11 +834,11 @@ function ArticlePreview({
                 : "font-medium text-foreground/75",
             )}
           >
-            {article.title}
+            {highlightTerms?.length ? highlightText(article.title, highlightTerms) : article.title}
           </h3>
 
           <p className="text-sm text-muted-foreground line-clamp-1 sm:line-clamp-2 leading-relaxed mb-3 break-words [overflow-wrap:anywhere]">
-            {article.excerpt}
+            {highlightTerms?.length ? highlightText(article.excerpt, highlightTerms) : article.excerpt}
           </p>
 
           {!!article.labels?.length && (

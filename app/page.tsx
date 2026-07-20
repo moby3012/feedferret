@@ -960,7 +960,7 @@ export default function RSSReaderPage() {
                   if (article) markArticleRead(article);
                 }}
                 markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
-                filterKey={`search|${searchQuery}|${sortOrder}`}
+                filterKey={`search|${debouncedSearchQuery}|${sortOrder}`}
                 transitionStyle={transitionStyle}
               />
             ) : (
@@ -1077,7 +1077,7 @@ export default function RSSReaderPage() {
               if (article) markArticleRead(article);
             }}
             markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
-            filterKey={`search|${searchQuery}|${sortOrder}`}
+            filterKey={`search|${debouncedSearchQuery}|${sortOrder}`}
             transitionStyle={transitionStyle}
             isMobile
           />
