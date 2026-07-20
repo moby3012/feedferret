@@ -9,6 +9,7 @@ import {
   parseJsonObject,
 } from "./feed-extraction";
 import { fetchWithSsrfProtection, isTrustedFeedFetchingAllowed, type ConditionalFetchResult } from "./ssrf";
+import { isTrustedConnectorUrl } from "./connector-hosts";
 import { logger } from "./logger";
 import { stripStyleBlocks } from "./html-utils";
 
@@ -28,6 +29,15 @@ export type FeedFetchConfig = {
   /** Previously-stored conditional-GET headers; when present, sent as If-None-Match / If-Modified-Since. */
   etag?: string | null;
   lastModifiedHeader?: string | null;
+  /**
+   * Force-allow internal/private fetch targets for this one fetch, bypassing
+   * the SSRF private-address block. Used by trusted optional connectors
+   * (RSSHub route validation) whose base URL is a private Docker hostname.
+   * When unset, internal access is allowed only if the instance-wide
+   * "allow internal feed URLs" setting is on, or the URL's host is a
+   * configured connector host (see lib/connector-hosts.ts).
+   */
+  allowInternal?: boolean;
 };
 
 export type FetchedFeedArticle = {
@@ -268,8 +278,17 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
     }
   }
 
+  // Internal fetch targets are allowed when: the caller forced it (trusted
+  // connector validation), OR the instance-wide switch is on, OR the URL's
+  // host is a configured optional-connector host (RSSHub / changedetection.io
+  // on the private Docker network) — see lib/connector-hosts.ts.
+  const allowInternal =
+    feed.allowInternal === true ||
+    (await isTrustedFeedFetchingAllowed()) ||
+    (await isTrustedConnectorUrl(feed.url));
+
   return fetchWithSsrfProtection(feed.url, init, {
-    allowInternal: await isTrustedFeedFetchingAllowed(),
+    allowInternal,
     context: "Feed fetch",
     maxBytes,
     maxRedirects: follow ? maxRedirects : 0,

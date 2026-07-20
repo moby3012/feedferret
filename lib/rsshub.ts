@@ -10,7 +10,7 @@
 
 import { db } from "@/lib/db";
 import { decryptIfValue } from "@/lib/crypto";
-import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { assertSafeFetchUrl } from "@/lib/ssrf";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { type AiConfig, runAiPrompt } from "@/lib/ai-summary";
 
@@ -83,14 +83,20 @@ export async function validateRsshubRoute(config: RsshubConfig, routePath: strin
     return { ok: false, reason: "Invalid RSSHub base URL or route" };
   }
 
+  // The URL host is always the admin-configured RSSHub base (only the route
+  // *path* varies), so internal/private Docker hostnames like rsshub:3000 are
+  // trusted here — same as the changedetection.io connector's own API calls.
+  // Without this, an internal RSSHub instance is rejected as an SSRF target
+  // even during the admin "Test" step (before it's saved to the DB, so the
+  // connector-host allowlist can't recognise it yet).
   try {
-    await assertSafeFetchUrl(url, { allowInternal: await isTrustedFeedFetchingAllowed(), context: "RSSHub" });
+    await assertSafeFetchUrl(url, { allowInternal: true, context: "RSSHub" });
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
 
   try {
-    const feed = await fetchFeedArticles({ url });
+    const feed = await fetchFeedArticles({ url, allowInternal: true });
     if (!feed.articles.length) {
       return { ok: false, reason: "RSSHub returned a feed with no items for this route" };
     }
