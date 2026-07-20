@@ -738,6 +738,7 @@
     "releaseToRefresh": "Release to refresh",
     "pullToRefresh": "Pull to refresh",
     "loadingMore": "Loading more…",
+    "endOfResults": "End of results",
     "removeFromReadLater": "Remove from Read Later",
     "saveToReadLater": "Save to Read Later",
     "releaseSpoiler": "Release spoiler",
@@ -1558,7 +1559,9 @@
     "matchesAcrossFeeds": "{count, plural, =0 {No matches across all feeds} one {# match across all feeds} other {# matches across all feeds}}",
     "cancel": "Cancel",
     "showResults": "{count, plural, one {Show # result} other {Show # results}}",
-    "enterSearchTerm": "Enter search term"
+    "enterSearchTerm": "Enter search term",
+    "searching": "Searching…",
+    "searchComplete": "Search complete"
   },
   "sharedSearch": {
     "title": "Shared FeedFerret search",

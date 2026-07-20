@@ -738,6 +738,7 @@
     "releaseToRefresh": "Zum Aktualisieren loslassen",
     "pullToRefresh": "Zum Aktualisieren ziehen",
     "loadingMore": "Mehr wird geladen…",
+    "endOfResults": "Ende der Ergebnisse",
     "removeFromReadLater": "Aus 'Später lesen' entfernen",
     "saveToReadLater": "In 'Später lesen' speichern",
     "releaseSpoiler": "Spoiler aufheben",
@@ -1558,7 +1559,9 @@
     "matchesAcrossFeeds": "{count, plural, =0 {Keine Treffer in allen Feeds} one {# Treffer in allen Feeds} other {# Treffer in allen Feeds}}",
     "cancel": "Abbrechen",
     "showResults": "{count, plural, one {# Ergebnis anzeigen} other {# Ergebnisse anzeigen}}",
-    "enterSearchTerm": "Suchbegriff eingeben"
+    "enterSearchTerm": "Suchbegriff eingeben",
+    "searching": "Suche läuft…",
+    "searchComplete": "Suche abgeschlossen"
   },
   "sharedSearch": {
     "title": "Geteilte FeedFerret-Suche",

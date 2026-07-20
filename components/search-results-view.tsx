@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Search as SearchIcon, X as XIcon, BookmarkPlus, Pencil } from "lucide-react";
+import { Search as SearchIcon, X as XIcon, BookmarkPlus, Pencil, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ArticleList } from "@/components/article-list";
 import { cn } from "@/lib/utils";
@@ -71,13 +71,20 @@ export function SearchResultsView({
               </h2>
               <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
             </div>
-            <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">
-              {t("resultsCount", { count })}
-              {typeof unreadCount === "number" && count > 0 && (
-                <span className="ms-2 text-muted-foreground/70">
-                  · {t("unreadCount", { count: unreadCount })}
-                </span>
+            <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs font-medium text-muted-foreground">
+              {isLoading ? (
+                <Loader2 className="h-3 w-3 shrink-0 animate-spin text-accent" aria-label={t("searching")} />
+              ) : (
+                <CheckCircle2 className="h-3 w-3 shrink-0 text-muted-foreground/50" aria-label={t("searchComplete")} />
               )}
+              <span className="truncate">
+                {t("resultsCount", { count })}
+                {typeof unreadCount === "number" && count > 0 && (
+                  <span className="ms-2 text-muted-foreground/70">
+                    · {t("unreadCount", { count: unreadCount })}
+                  </span>
+                )}
+              </span>
             </p>
           </button>
 

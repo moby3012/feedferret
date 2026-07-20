@@ -431,11 +431,20 @@ export function ArticleList({
               highlightTerms={highlightTerms}
             />
           ))}
-          {hasMore && (
+          {hasMore ? (
             <div ref={sentinelRef} className="flex items-center justify-center py-6 text-sm text-muted-foreground">
               <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin me-2" />
               {t("loadingMore")}
             </div>
+          ) : (
+            // Only in search context (searchQuery is only ever passed there) —
+            // reassures users who just had scroll bugs that reaching the
+            // bottom is the actual end of the results, not a broken list.
+            !!searchQuery && (
+              <div className="py-6 text-center text-xs font-medium text-muted-foreground/60">
+                {t("endOfResults")}
+              </div>
+            )
           )}
         </div>
       )}
