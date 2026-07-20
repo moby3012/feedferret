@@ -12,6 +12,11 @@ describe("resolveFullTextMode", () => {
     expect(resolveFullTextMode({ fullTextMode: "selector", autoFetchFullText: true })).toBe("selector");
   });
 
+  it("returns 'ai' when fullTextMode is explicitly 'ai', regardless of the legacy flag", () => {
+    expect(resolveFullTextMode({ fullTextMode: "ai", autoFetchFullText: false })).toBe("ai");
+    expect(resolveFullTextMode({ fullTextMode: "ai", autoFetchFullText: true })).toBe("ai");
+  });
+
   it("falls back to 'selector' when fullTextMode is 'off' (the default) but the legacy boolean is true", () => {
     // This is the critical back-compat case: every pre-existing feed row gets
     // fullTextMode = "off" by default migration, so it must not silently

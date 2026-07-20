@@ -25,6 +25,8 @@ import { findFtrConfigForUrl, applyFtrConfig } from "@/lib/ftr-site-config";
 import { renderViaSidecar } from "@/lib/render-sidecar";
 import { fetchViaHostedApiDetailed, getHostedFetchConfigForUser, HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
+import type { AiConfig } from "@/lib/ai-summary";
+import { extractArticleWithAi } from "@/lib/ai-extraction";
 
 export type ExtractionResult = {
   html: string | null; // sanitized, cleaned article HTML (null if extraction failed)
@@ -33,7 +35,7 @@ export type ExtractionResult = {
   byline: string | null;
   excerpt: string | null;
   wordCount: number;
-  extractedBy: "ftr" | "defuddle" | "readability" | "extractus" | "jsonld" | "hosted" | "none";
+  extractedBy: "ftr" | "defuddle" | "readability" | "extractus" | "jsonld" | "ai" | "hosted" | "none";
 };
 
 // Below this many characters of plain text, Defuddle's result is treated as
@@ -367,8 +369,12 @@ export async function extractReadableContent(rawHtml: string, url: string): Prom
   };
 }
 
-/** Builds an ExtractionResult from a hosted-API's clean Markdown output. */
-async function buildHostedResult(markdown: string, title: string | null): Promise<ExtractionResult> {
+/** Builds an ExtractionResult from a Markdown-native tier's output (hosted-API or AI extraction). */
+async function buildResultFromMarkdown(
+  markdown: string,
+  title: string | null,
+  extractedBy: "hosted" | "ai",
+): Promise<ExtractionResult> {
   const html = await renderMarkdownToHtml(markdown);
   return {
     html,
@@ -377,7 +383,7 @@ async function buildHostedResult(markdown: string, title: string | null): Promis
     byline: null,
     excerpt: null,
     wordCount: countWords(html),
-    extractedBy: "hosted",
+    extractedBy,
   };
 }
 
@@ -389,6 +395,13 @@ export type FetchAndExtractReadableOptions = {
   // articles to a third party without an explicit per-call opt-in would be
   // a silent cost/privacy surprise — see `contentFetchAutoUse`).
   userId?: string;
+  // M6: per-feed opt-in AI-extraction fallback. When set, and the in-process
+  // deterministic tiers found nothing on the directly-fetched HTML, the same
+  // HTML is sent to this BYOK model to extract the article before falling
+  // through to the (slower, whole-page-re-fetching) render sidecar. Callers
+  // must only set this for feeds with `fullTextMode === "ai"` — it spends the
+  // user's own AI tokens per article.
+  aiExtraction?: AiConfig;
 };
 
 /**
@@ -402,8 +415,9 @@ export async function fetchAndExtractReadable(
 ): Promise<ExtractionResult> {
   let directError: unknown = null;
   let result: ExtractionResult | null = null;
+  let fetchedHtml: string | null = null;
   try {
-    const html = await fetchTextWithSsrfProtection(
+    fetchedHtml = await fetchTextWithSsrfProtection(
       url,
       {},
       {
@@ -415,10 +429,17 @@ export async function fetchAndExtractReadable(
         timeoutMs: 12_000,
       },
     );
-    result = await extractReadableContent(html, url);
+    result = await extractReadableContent(fetchedHtml, url);
     if (result.extractedBy !== "none") return result;
   } catch (error) {
     directError = error; // hard block (403/timeout) — the sidecar may still succeed.
+  }
+
+  // M6: per-feed opt-in AI-extraction, on the same already-fetched HTML —
+  // before falling to the (slower, whole-page-re-fetching) render sidecar.
+  if (fetchedHtml && options.aiExtraction) {
+    const aiResult = await extractArticleWithAi(fetchedHtml, url, options.aiExtraction);
+    if (aiResult) return buildResultFromMarkdown(aiResult.content, aiResult.title, "ai");
   }
 
   // Fallback: if the in-process fetch found no readable content (client-only
@@ -437,7 +458,7 @@ export async function fetchAndExtractReadable(
     const hostedConfig = await getHostedFetchConfigForUser(options.userId);
     if (hostedConfig) {
       const outcome = await fetchViaHostedApiDetailed(url, hostedConfig);
-      if (outcome.ok) return buildHostedResult(outcome.result.content, outcome.result.title);
+      if (outcome.ok) return buildResultFromMarkdown(outcome.result.content, outcome.result.title, "hosted");
       hostedRateLimited = outcome.rateLimited;
     }
   }

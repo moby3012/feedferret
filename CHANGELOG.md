@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Added (2026-07-20 — M6: per-article AI extraction fallback)
+
+- **"AI extraction" full-text mode, a new opt-in 4th option per feed** (Settings → feed → Full Text tab, alongside off/automatic/custom-selector, only offered once an AI provider is configured) — when the free deterministic extraction tiers (bundled per-site rules, Defuddle, Readability, `@extractus/article-extractor`, JSON-LD recovery) all come up empty on a page whose structure trips up every one of them, the same already-fetched HTML is sent to the feed's configured BYOK model to pull out the clean article body directly, in strict JSON (`lib/ai-extraction.ts`). Runs before the (slower, whole-page-refetching) render sidecar tier, since it's a smarter *parser* fallback rather than a JS-rendering one. Guardrails: opt-in per feed (never runs unless explicitly switched on), the page HTML sent to the model is size-capped, and at most 5 articles per sync batch go through this tier (a feed's initial backfill can't blow through a user's API budget in one tick) — articles beyond the cap still get the free tiers, just not this one.
+
 ### Added (2026-07-20 — AI auto-tagging, OPML serializer hardening)
 
 - **AI auto-tagging of new articles (F8)** — a new opt-in "Auto-tag on sync" toggle (Settings → AI, next to auto-summarize) asks the user's configured AI provider to propose up to 4 short topical tags per newly-synced article. Rather than a new tag concept, it reuses the existing user-facing Label/ArticleLabel schema: AI-proposed tags become real Labels, so they show up for free in the existing label badges, the article-reader's label dropdown, and the sidebar's "Label:" filter — no new UI needed. The prompt is nudged to reuse the user's existing label names before minting a near-duplicate (e.g. "AI" vs "Artificial Intelligence"). A new `Article.aiTaggedAt` marks processed articles so a small per-sync cap (mirroring the existing auto-summarize cap) doesn't mean older articles are silently never reached.

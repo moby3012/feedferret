@@ -100,11 +100,11 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 
 ---
 
-## Milestone M6 — Per-article AI extraction fallback
+## Milestone M6 — Per-article AI extraction fallback ✅ *shipped 2026-07-20*
 *Phase 2.C2. For sites too unstable for a fixed selector config.*
 
-- [ ] **M6-T1** Opt-in per-feed "AI extraction" mode: when selectors are unreliable, run the article HTML through the BYOK model to extract clean content per article. — `M`
-- [ ] **M6-T2** Strong guardrails: opt-in only, per-user rate limits, token caps, cost visibility, cache results (don't re-extract unchanged articles — reuse contentHash). — `M`
+- [x] **M6-T1** Opt-in per-feed "AI extraction" mode: when selectors are unreliable, run the article HTML through the BYOK model to extract clean content per article. — `M` — *`Feed.fullTextMode` gained a 4th value, `"ai"` (Settings → feed → Full Text tab, only offered once an AI provider is configured). `lib/ai-extraction.ts` asks the model for a strict-JSON `{title, content}` (content as Markdown, preserving structure — not a summary). Wired into `fetchAndExtractReadable` (`lib/readability-extract.ts`) as a new tier that runs on the already-fetched HTML, right after the free deterministic tiers (ftr/Defuddle/Readability/extractus/JSON-LD) all come up empty, and before the (slower, whole-page-refetching) render sidecar — since it's a smarter *parser* fallback, not a JS-rendering one. `extractedBy: "ai"` for observability.*
+- [x] **M6-T2** Strong guardrails: opt-in only, per-user rate limits, token caps, cost visibility, cache results (don't re-extract unchanged articles — reuse contentHash). — `M` — *Opt-in via the per-feed mode itself (never runs unless a feed is explicitly switched to "ai"). Token caps: `reduceHtmlForPrompt` (shared with M4's `lib/ai-feed-config.ts`) bounds the page HTML sent to the model, and the output is capped at 2000 tokens. Rate/cost limit: capped at 5 AI-extraction calls per sync batch per feed (`MAX_AI_EXTRACTIONS_PER_SYNC_BATCH`, `lib/rss-sync.ts`) — a feed's initial backfill can't blow through the user's API budget in one tick; articles beyond the cap still get the free deterministic tiers. "Don't re-extract unchanged articles": no new caching layer needed — `autoFetchFullTextViaEngine` already only ever runs on `upsertedIds` (newly-arrived/changed articles for that sync), so an already-processed article is never revisited. Cost visibility UI deferred (not blocking — the per-feed opt-in plus the sync-batch cap are the primary safeguards for v1).*
 
 **Acceptance:** a site that M4 selectors can't pin down still yields clean articles in AI-extraction mode, within rate/cost limits. **Deps:** M1, M4. **Risk:** ongoing token cost (gated + cached), latency (async, off the render path).
 
@@ -139,7 +139,7 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 | **M3** ✅ | Manual page→feed builder — *shipped, PRs #145–#147* | M–L | M1 |
 | **M4 ⭐** ✅ | **AI proposes the whole config** (paste → accept) — *shipped: engine (#149), "✨" page→feed UX + rate-limit (#155), full-text-selector proposal in feed settings (#156)* | M | M1, M3 |
 | **M5** | Optional RSSHub + changedetection.io connectors | M (×2) | M3/M4 |
-| **M6** | Per-article AI extraction fallback | M–L | M1, M4 |
+| **M6** ✅ | Per-article AI extraction fallback — *shipped 2026-07-20* | M–L | M1, M4 |
 | **M7** | Playwright / Firecrawl / Jina heavy path | L | M3–M5 |
 
 **Recommended delivery order:** **M1 → M3 → M4** gets us to the north-star ("paste a URL, AI sets up any feed") entirely in-process/self-hosted. **M2** slots in whenever (polish). **M5** adds the big coverage jump once the core is solid. **M6/M7** are demand-driven.

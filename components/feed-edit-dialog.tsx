@@ -603,9 +603,15 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                     <SelectItem value="off">{t("fulltext.fullTextModeOff")}</SelectItem>
                     <SelectItem value="auto">{t("fulltext.fullTextModeAuto")}</SelectItem>
                     <SelectItem value="selector">{t("fulltext.fullTextModeSelector")}</SelectItem>
+                    {aiConfigured && <SelectItem value="ai">{t("fulltext.fullTextModeAi")}</SelectItem>}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">{t("fulltext.fullTextModeDescription")}</p>
+                {fullTextMode === "ai" && (
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+                    {t("fulltext.fullTextModeAiWarning")}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">

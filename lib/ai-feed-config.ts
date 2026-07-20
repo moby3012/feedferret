@@ -45,7 +45,7 @@ const FULLTEXT_MIN_CHARS = 400;
  * collapses whitespace, and caps the result — while keeping tags/classes/ids
  * so the model can still see the repeating structure of the page.
  */
-function reduceHtmlForPrompt(html: string): string {
+export function reduceHtmlForPrompt(html: string): string {
   const withoutComments = html.replace(/<!--[\s\S]*?-->/g, " ");
   const withoutNoisyTags = withoutComments.replace(
     /<(script|style|svg|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi,
