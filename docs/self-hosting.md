@@ -17,6 +17,35 @@ This guide describes the complete installation and operation of FeedFerret on yo
 
 ---
 
+## Choosing a Docker Compose variant
+
+The repository ships three ready-to-use compose files. All three run the exact same FeedFerret image — the only difference is which optional pieces are bundled alongside it. Pick one, there is no need to edit it further unless you want a fourth combination (see the note at the end of this section).
+
+| File | Database | Browser render sidecar | RSSHub | changedetection.io | Best for |
+|---|---|---|---|---|---|
+| `docker-compose.minimal.yaml` | SQLite | ✗ | ✗ | ✗ | Personal use, quick try-out, low-resource hosts — a single container |
+| `docker-compose.yaml` (default) | PostgreSQL | ✓ | ✗ | ✗ | Most self-hosted deployments — full-text extraction works fully, JS-heavy pages still handled |
+| `docker-compose.ultimate.yaml` | PostgreSQL | ✓ | ✓ | ✓ | Power users who want every optional connector available out of the box |
+
+```bash
+# Minimal
+docker compose -f docker-compose.minimal.yaml up -d --build
+
+# Default (same as just `docker compose up -d --build`)
+docker compose -f docker-compose.yaml up -d --build
+
+# Ultimate
+docker compose -f docker-compose.ultimate.yaml up -d --build
+```
+
+All three read the same `.env` file (`cp .env.example .env` first) — see [Environment Variables](#environment-variables) below for what to set. `docker-compose.minimal.yaml` ignores the `POSTGRES_*` variables since it doesn't use PostgreSQL at all.
+
+RSSHub and changedetection.io are still fully **optional** even in the ultimate stack: their containers just sit there, unused, until an admin actually turns the connector on in **Server Management → Sync** (see [Optional Connectors](#optional-connectors) below) — nothing is exposed to users or enabled by default just because the container exists.
+
+> **Want a different combination** (e.g. SQLite + render sidecar, or PostgreSQL + only RSSHub)? There's no separate file for every permutation — copy the relevant `services:` block(s) from `docker-compose.ultimate.yaml` into a copy of `docker-compose.minimal.yaml` or `docker-compose.yaml`, and add the matching `FEEDFERRET_*` environment lines to the `feedferret` service. All three files use the same service/network conventions, so blocks copy across cleanly.
+
+---
+
 ## Deploying with Coolify
 
 [Coolify](https://coolify.io/) is a self-hosted PaaS platform that offers Git-based deployment with automatic SSL certificates and a web UI for environment variables.
@@ -32,10 +61,10 @@ This guide describes the complete installation and operation of FeedFerret on yo
 **2. Configure the deployment type**
 
 - Deployment Type: **Docker Compose**
-- Docker Compose File: `docker-compose.yaml` (in the repo root)
+- Docker Compose File: `docker-compose.yaml` (in the repo root) — or `docker-compose.minimal.yaml` / `docker-compose.ultimate.yaml` for the other two variants, see [Choosing a Docker Compose variant](#choosing-a-docker-compose-variant) above
 - Branch: `main`
 
-> **Important:** Do not define your own `networks:` block in `docker-compose.yaml`. Coolify automatically adds its own Traefik network entry. A hardcoded custom bridge network isolates the containers from Traefik and causes *Gateway Timeout* errors. The bundled `docker-compose.yaml` is already configured correctly.
+> **Important:** Do not define your own `networks:` block in any of the three compose files. Coolify automatically adds its own Traefik network entry. A hardcoded custom bridge network isolates the containers from Traefik and causes *Gateway Timeout* errors. All three bundled compose files are already configured correctly.
 
 **3. Set environment variables in the Coolify dashboard**
 
@@ -50,7 +79,7 @@ Instead of an `.env` file, the variables are entered under *Environment Variable
 
 Optional variables (OAuth, email, VAPID) can also be set here — all fields from the *Environment Variables* section further below work identically.
 
-> **Browser render sidecar:** The bundled `docker-compose.yaml` automatically starts a third service (`render-sidecar`, see [`docs/render-sidecar.md`](render-sidecar.md)) alongside `feedferret` and `postgres` — an isolated headless Chromium service for JavaScript-heavy/purely client-side pages that the normal fetcher can't read (used as a fallback for full text and "page → feed"). It is active by default; set `RENDER_SIDECAR_TOKEN` to your own value (the default is `change-me`). To disable it, remove the `render-sidecar` service and the `FEEDFERRET_RENDER_SIDECAR_URL` line from `docker-compose.yaml` — the rest of the app works unchanged without it.
+> **Browser render sidecar:** `docker-compose.yaml` and `docker-compose.ultimate.yaml` both start a `render-sidecar` service (see [`docs/render-sidecar.md`](render-sidecar.md)) alongside `feedferret` and `postgres` — an isolated headless Chromium service for JavaScript-heavy/purely client-side pages that the normal fetcher can't read (used as a fallback for full text and "page → feed"). It is active by default in both; set `RENDER_SIDECAR_TOKEN` to your own value (the default is `change-me`). To disable it, remove the `render-sidecar` service and the `FEEDFERRET_RENDER_SIDECAR_URL` line — the rest of the app works unchanged without it. `docker-compose.minimal.yaml` doesn't include it at all.
 
 **4. Configure the domain**
 
@@ -64,7 +93,7 @@ Click *Deploy* — Coolify builds the image, starts the containers, and sets up 
 
 | Problem | Cause | Solution |
 |---|---|---|
-| *Gateway Timeout* after deploy | Custom `networks:` block in the compose file | Remove the `networks:` section from `docker-compose.yaml` — Coolify manages networks itself |
+| *Gateway Timeout* after deploy | Custom `networks:` block in the compose file | Remove the `networks:` section from the compose file you're using — Coolify manages networks itself |
 | Login fails / CSRF error | `AUTH_TRUST_HOST` missing | Set `AUTH_TRUST_HOST=true` in Coolify's environment variables |
 | `AUTH_URL` is ignored | Coolify doesn't set an `AUTH_URL` | Set it manually in the environment variables with the full `https://` prefix |
 | Build fails with `prisma generate` | Cache issue | Enable *Force Rebuild* in Coolify and deploy again |
@@ -84,7 +113,9 @@ cp .env.example .env
 # 3. Set the three required fields (see below)
 nano .env
 
-# 4. Start the stack
+# 4. Start the stack — this uses docker-compose.yaml (the default variant:
+#    PostgreSQL + render sidecar). See "Choosing a Docker Compose variant"
+#    above for the minimal/ultimate alternatives.
 docker compose up -d --build
 ```
 
@@ -268,38 +299,32 @@ docker run --rm \
 
 ## SQLite Mode
 
-FeedFerret supports SQLite as an alternative to PostgreSQL — ideal for individuals or test instances without a separate database service.
+FeedFerret supports SQLite as an alternative to PostgreSQL — ideal for individuals or test instances without a separate database service. The easiest way to get this is `docker-compose.minimal.yaml` (see [Choosing a Docker Compose variant](#choosing-a-docker-compose-variant)): it's already configured for SQLite end to end (build args, `DATABASE_PROVIDER`/`DATABASE_URL`, and a persistent volume at `/app/data`) — just run it, no editing needed:
 
-**1. Adjust `.env`:**
-
-```env
-DATABASE_PROVIDER="sqlite"
-DATABASE_URL="file:/app/data/dev.db"
+```bash
+cp .env.example .env   # POSTGRES_* variables in it are simply ignored
+docker compose -f docker-compose.minimal.yaml up -d --build
 ```
 
-The `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` variables are not needed in SQLite mode.
-
-**2. Adjust `docker-compose.yaml`:**
-
-Uncomment the commented-out volume entry and remove or comment out the `postgres` service as well as the `depends_on` block:
-
-```yaml
-volumes:
-  feedferret_postgres_data:
-  feedferret_db_data:   # <-- uncomment this line
-```
-
-Mount the volume in the `feedferret` service:
+If you'd rather add SQLite to a customized compose file instead of starting from `docker-compose.minimal.yaml`, the three ingredients it uses are:
 
 ```yaml
 services:
   feedferret:
-    # ...
+    build:
+      args:
+        DATABASE_PROVIDER: sqlite
+        DATABASE_URL: file:/app/data/dev.db
+    environment:
+      - DATABASE_PROVIDER=sqlite
+      - DATABASE_URL=file:/app/data/dev.db
     volumes:
       - feedferret_db_data:/app/data
-```
+    # remove the 'postgres' dependency and depends_on block entirely
 
-The `postgres` service and the `depends_on` block in the `feedferret` service can then be removed entirely.
+volumes:
+  feedferret_db_data:
+```
 
 > **Note:** Switching from SQLite to PostgreSQL later requires a manual data export (OPML/JSON) and re-import. There is no automatic migration tool.
 
@@ -310,7 +335,7 @@ The `postgres` service and the `depends_on` block in the `feedferret` service ca
 | Problem | Cause | Solution |
 |---|---|---|
 | Login fails / `CSRF` error behind a reverse proxy | `AUTH_TRUST_HOST` not set | Set `AUTH_TRUST_HOST=true` in `.env` |
-| Port 3000 already in use | Another service is using the port | Set `PORT=3001` in `.env` and change `ports:` in `docker-compose.yaml` to `"3001:3001"` |
+| Port 3000 already in use | Another service is using the port | Set `PORT=3001` in `.env` and change `ports:` in your compose file to `"3001:3001"` |
 | `Connection refused` to the database at startup | PostgreSQL not ready yet | Check container logs: `docker compose logs postgres`; the health check should catch this automatically |
 | `password authentication failed for user "feedferret"` | `POSTGRES_PASSWORD` in `.env` doesn't match the password set at first startup | Delete the volume (`docker compose down -v`) and restart, **or** manually reset the password in the DB |
 | Build fails (`ENOENT`, `prisma generate`) | Incomplete clone or node module conflict | Run `docker compose build --no-cache` |
@@ -337,17 +362,21 @@ The runner image deliberately contains no native compilers (`g++`, `make`, `pyth
 
 ## Optional Connectors
 
-FeedFerret runs completely on its own — none of the following are required. Each is an admin-configured, opt-in connector, hidden from every user until an admin turns it on in **Server Management → Sync**. All three require an outbound network path from the FeedFerret container to the connector's own container/host; if you run them on the same Docker network (the default for anything added to `docker-compose.yaml`), no extra firewall configuration is needed.
+FeedFerret runs completely on its own — none of the following are required. Each is an admin-configured, opt-in connector, hidden from every user until an admin turns it on in **Server Management → Sync**. All three require an outbound network path from the FeedFerret container to the connector's own container/host; if you run them on the same Docker network (the default for anything added to any of the three compose files), no extra firewall configuration is needed.
+
+`docker-compose.ultimate.yaml` already bundles all three — if you're using it, skip straight to each connector's admin-configuration step below (the "minimal compose addition" snippets are for adding a connector to `docker-compose.minimal.yaml` or `docker-compose.yaml` manually).
 
 ### Browser render sidecar
 
-For JavaScript-heavy pages the normal fetcher can't read (used as a fallback for full-text extraction and "page → feed"). Bundled by default in `docker-compose.yaml` — see [`docs/render-sidecar.md`](./render-sidecar.md) for the full setup, security model, and how to swap in your own service (e.g. crawl4ai).
+For JavaScript-heavy pages the normal fetcher can't read (used as a fallback for full-text extraction and "page → feed"). Bundled by default in `docker-compose.yaml` and `docker-compose.ultimate.yaml` — see [`docs/render-sidecar.md`](./render-sidecar.md) for the full setup, security model, and how to swap in your own service (e.g. crawl4ai).
 
 ### RSSHub connector
 
 Turns a platform source without its own feed — a YouTube channel, a subreddit, a GitHub repo's releases, and hundreds of other routes — into a real feed, via your own self-hosted [RSSHub](https://docs.rsshub.app/) instance. Configure the base URL (and, only if your RSSHub instance sets an `ACCESS_KEY`, the matching key) in **Server Management → Sync → RSSHub connector**. Once configured, users get a 4th "From platform" tab in the Add Feed dialog. A resolved RSSHub route is stored as a plain feed URL — no different from any other RSS feed — so no extra sync/export handling is needed, but note that if you set an access key, it becomes part of that feed's URL and is therefore visible to whichever user added it (OPML export, feed settings, etc.).
 
-Minimal compose addition:
+In `docker-compose.ultimate.yaml`, this is already pre-wired via the `FEEDFERRET_RSSHUB_URL`/`FEEDFERRET_RSSHUB_KEY` environment variables against the bundled `rsshub` service — it works immediately with no admin-UI step needed (though you can still override it there if you want a different RSSHub instance). Set `RSSHUB_ACCESS_KEY` in `.env` to turn on `ACCESS_KEY` auth for both the `rsshub` service and FeedFerret's own connector config at once; leave it unset to run with no auth.
+
+Minimal compose addition (for `docker-compose.minimal.yaml` / `docker-compose.yaml`):
 
 ```yaml
 services:
@@ -369,7 +398,9 @@ Turns *any* page — including JS-rendered ones, since [changedetection.io](http
 
 Once configured, users get a "Monitor page" tab in the Add Feed dialog. **A freshly created watch's feed has no items until changedetection.io has checked the page at least twice** — this is expected, not a bug; the feed fills in on its own once enough history exists.
 
-Minimal compose addition:
+`docker-compose.ultimate.yaml` bundles the `changedetection` service, but deliberately does **not** pre-wire FeedFerret's connector via environment variables — both secrets above only exist after changedetection.io's own container has started and you've opened its web UI at least once to generate them, so there's nothing to default them to at deploy time. After starting the ultimate stack, open changedetection's UI (`http://<host>:5000`, reverse-proxied, or a temporary port-forward), grab both values from Settings, then configure the connector once in **Server Management → Sync**. It's usable immediately after that — no restart needed.
+
+Minimal compose addition (for `docker-compose.minimal.yaml` / `docker-compose.yaml`):
 
 ```yaml
 services:

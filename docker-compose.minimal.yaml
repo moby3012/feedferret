@@ -1,0 +1,45 @@
+# FeedFerret — minimal stack.
+#
+# SQLite only, no browser-render sidecar, no optional connectors (RSSHub,
+# changedetection.io) — a single container, smallest possible footprint.
+# Ideal for personal use, a quick try-out, or a low-resource host.
+#
+# Use with: docker compose -f docker-compose.minimal.yaml up -d --build
+# See docs/self-hosting.md for how this compares to docker-compose.yaml
+# (default: PostgreSQL + render sidecar) and docker-compose.ultimate.yaml
+# (everything, including RSSHub and changedetection.io).
+services:
+  feedferret:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DATABASE_PROVIDER: sqlite
+        DATABASE_URL: file:/app/data/dev.db
+    container_name: feedferret
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - feedferret_db_data:/app/data
+    environment:
+      - DATABASE_PROVIDER=sqlite
+      - DATABASE_URL=file:/app/data/dev.db
+      - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
+      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
+      - AUTH_URL=${AUTH_URL:-https://feedferret.example.com}
+      - PORT=${PORT:-3000}
+      # Example OAuth Providers (Uncomment and set values to enable)
+      # - GOOGLE_CLIENT_ID=your-google-id
+      # - GOOGLE_CLIENT_SECRET=your-google-secret
+      # - GITHUB_ID=your-github-id
+      # - GITHUB_SECRET=your-github-secret
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  feedferret_db_data:

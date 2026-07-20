@@ -53,7 +53,9 @@ bespoke Playwright service satisfy it.
 
 ## Setup
 
-**Wired up by default in `docker-compose.yaml`.** The repo's top-level compose
+**Wired up by default in `docker-compose.yaml` and `docker-compose.ultimate.yaml`**
+(not in `docker-compose.minimal.yaml` — see [`docs/self-hosting.md`](self-hosting.md#choosing-a-docker-compose-variant)
+for how the three compare). The repo's default compose
 file already defines a `render-sidecar` service (built from
 [`docker/render-sidecar/`](../docker/render-sidecar/): Dockerfile + tiny
 Playwright service) and points `feedferret` at it via

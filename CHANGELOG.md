@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Added (2026-07-20 — three Docker Compose variants: minimal, default, ultimate)
+
+- Split the single `docker-compose.yaml` into three ready-to-use variants, no editing required for any of them: `docker-compose.minimal.yaml` (SQLite only, no sidecar, no connectors — single container), `docker-compose.yaml` (unchanged: PostgreSQL + render sidecar), and `docker-compose.ultimate.yaml` (PostgreSQL + render sidecar + RSSHub + changedetection.io, all on the same network). RSSHub is pre-wired via `FEEDFERRET_RSSHUB_URL`/`FEEDFERRET_RSSHUB_KEY` in the ultimate file and works immediately; changedetection.io is intentionally **not** pre-wired via ENV — its two secrets don't exist until its own container has started and its web UI has been opened once, so it's configured through Server Management → Sync instead, same as a manually-added connector. `docs/self-hosting.md` gained a new "Choosing a Docker Compose variant" section (comparison table + how to mix-and-match for other combinations), and the old manual SQLite-mode compose-editing instructions were replaced with "just use `docker-compose.minimal.yaml`."
+
 ### Added (2026-07-20 — search results: progress indicator + end-of-results marker)
 
 - The search results header now shows a small spinner while a search is still fetching (`isLoading`) and a checkmark once it settles, so it's visually clear whether the reader is still searching or done. When the incremental-loading window reaches the actual end of the matched articles, the list now shows an "End of results" marker instead of just stopping silently — reassurance that the list is complete, not cut off by a scroll bug.

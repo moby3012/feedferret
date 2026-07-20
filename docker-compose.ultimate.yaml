@@ -1,0 +1,152 @@
+# FeedFerret — "everything on" stack.
+#
+# PostgreSQL, the browser-render sidecar, and both bundled optional
+# connectors (RSSHub, changedetection.io) — all on the same private Docker
+# network. This is the largest of three compose variants — see
+# docs/self-hosting.md for the full comparison:
+#   - docker-compose.minimal.yaml   — SQLite only, no sidecar, no connectors
+#   - docker-compose.yaml           — default (PostgreSQL + render sidecar)
+#   - docker-compose.ultimate.yaml  — this file (everything)
+#
+# RSSHub is pre-wired via FEEDFERRET_RSSHUB_URL below — it works immediately,
+# no extra clicks needed (its own optional ACCESS_KEY is off by default; set
+# RSSHUB_ACCESS_KEY in .env to turn it on for both sides at once).
+#
+# changedetection.io is deliberately NOT pre-wired the same way: its API key
+# and RSS access token don't exist until its own container has started and
+# you've opened its web UI at least once (Settings → API) to generate them —
+# there's no value to default them to before that. Start this stack, open
+# changedetection's UI (http://<host>:5000 or reverse-proxied), grab both
+# secrets, then configure the connector once in FeedFerret's own
+# Server Management → Sync → changedetection.io connector. It becomes usable
+# immediately after that — no restart needed.
+services:
+  feedferret:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DATABASE_PROVIDER: ${DATABASE_PROVIDER:-postgresql}
+        DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-feedferret}:${POSTGRES_PASSWORD:-feedferret-change-me}@postgres:5432/${POSTGRES_DB:-feedferret}?schema=public}
+    container_name: feedferret
+    restart: always
+    # Note: when deploying under Coolify (or any reverse-proxy platform that
+    # injects its own network), do NOT define a custom 'networks:' block here.
+    # See docker-compose.yaml for the full explanation.
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_PROVIDER=${DATABASE_PROVIDER:-postgresql}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-feedferret}:${POSTGRES_PASSWORD:-feedferret-change-me}@postgres:5432/${POSTGRES_DB:-feedferret}?schema=public}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-feedferret-change-me}
+      - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
+      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
+      - AUTH_URL=${AUTH_URL:-https://feedferret.example.com}
+      - PORT=${PORT:-3000}
+      # Example OAuth Providers (Uncomment and set values to enable)
+      # - GOOGLE_CLIENT_ID=your-google-id
+      # - GOOGLE_CLIENT_SECRET=your-google-secret
+      # - GITHUB_ID=your-github-id
+      # - GITHUB_SECRET=your-github-secret
+      # Browser-render sidecar — wired up by default against the
+      # 'render-sidecar' service below. Leave FEEDFERRET_RENDER_SIDECAR_URL
+      # unset (or comment it out) to disable.
+      - FEEDFERRET_RENDER_SIDECAR_URL=${FEEDFERRET_RENDER_SIDECAR_URL:-http://render-sidecar:8080/}
+      - FEEDFERRET_RENDER_SIDECAR_TOKEN=${RENDER_SIDECAR_TOKEN:-change-me}
+      # RSSHub connector — pre-wired against the 'rsshub' service below, no
+      # setup required. RSSHUB_ACCESS_KEY is optional and shared with the
+      # rsshub service's own ACCESS_KEY further down; leave it unset to run
+      # both sides with no auth.
+      - FEEDFERRET_RSSHUB_URL=http://rsshub:1200/
+      - FEEDFERRET_RSSHUB_KEY=${RSSHUB_ACCESS_KEY:-}
+      # changedetection.io connector — intentionally NOT set here. Configure
+      # it once via Server Management → Sync → changedetection.io connector
+      # in the running app instead; see the note above this file's services:
+      # block for why (its secrets only exist after its own first start).
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # No 'render-sidecar'/'rsshub'/'changedetection' dependency here on
+      # purpose: FeedFerret must start and work fully even if a connector is
+      # still building, crashed, or removed — every call site already falls
+      # back gracefully when one is unreachable.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Browser-render sidecar (docs/render-sidecar.md): renders JS-heavy /
+  # client-only pages in a real headless Chromium for the full-text and
+  # page→feed builder fallback paths. Runs isolated: no published ports,
+  # non-root, no-new-privileges.
+  render-sidecar:
+    build: ./docker/render-sidecar
+    container_name: feedferret-render-sidecar
+    restart: unless-stopped
+    environment:
+      - SIDECAR_TOKEN=${RENDER_SIDECAR_TOKEN:-change-me}
+      - SIDECAR_PORT=8080
+    expose:
+      - "8080"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: feedferret-postgres
+    restart: unless-stopped
+    # Port 5432 is exposed to the host for maintenance access (e.g. pg_dump, psql).
+    # For public-facing servers, remove or comment out this 'ports' entry.
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-feedferret}
+      - POSTGRES_USER=${POSTGRES_USER:-feedferret}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-feedferret-change-me}
+    volumes:
+      - feedferret_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RSSHub connector (docs/self-hosting.md § Optional Connectors → RSSHub) —
+  # turns platform sources (YouTube channels, subreddits, GitHub releases,
+  # etc.) without their own feed into real feeds. No published ports; only
+  # 'feedferret' reaches it on the internal Compose network.
+  rsshub:
+    image: diygod/rsshub
+    container_name: feedferret-rsshub
+    restart: unless-stopped
+    environment:
+      - ACCESS_KEY=${RSSHUB_ACCESS_KEY:-}
+    expose:
+      - "1200"
+
+  # changedetection.io connector (docs/self-hosting.md § Optional Connectors
+  # → changedetection.io) — turns any page, including JS-rendered ones, into
+  # a feed of its own changes over time. Not pre-wired into FeedFerret's
+  # environment above — see the note at the top of this file. No published
+  # ports here either; reach its web UI through a reverse proxy or a
+  # temporary 'docker compose exec' port-forward if you need to open it.
+  changedetection:
+    image: ghcr.io/dgtlmoon/changedetection.io
+    container_name: feedferret-changedetection
+    restart: unless-stopped
+    volumes:
+      - changedetection-data:/datastore
+    expose:
+      - "5000"
+
+volumes:
+  feedferret_postgres_data:
+  changedetection-data:

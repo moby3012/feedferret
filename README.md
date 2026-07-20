@@ -45,11 +45,22 @@ Open `http://localhost:3000` and follow the setup wizard. Done.
 
 ## 🐳 Deploy
 
+Three ready-to-use Compose files ship in the repo — pick the one that matches what you need, no editing required:
+
+| File | Database | Render sidecar | RSSHub | changedetection.io |
+|---|---|---|---|---|
+| `docker-compose.minimal.yaml` | SQLite | ✗ | ✗ | ✗ |
+| `docker-compose.yaml` (default) | PostgreSQL | ✓ | ✗ | ✗ |
+| `docker-compose.ultimate.yaml` | PostgreSQL | ✓ | ✓ | ✓ |
+
+```bash
+docker compose -f docker-compose.minimal.yaml up -d --build   # or .yaml / .ultimate.yaml
+```
+
 | Method | Command / Notes |
 |---|---|
-| **Docker Compose + PostgreSQL** | `docker compose up -d --build` — Postgres starts automatically |
-| **Docker Compose + SQLite** | Set `DATABASE_PROVIDER=sqlite` and `DATABASE_URL=file:/app/data/dev.db` in `.env`, uncomment the `feedferret` service's `volumes:` block and the `feedferret_db_data` volume in `docker-compose.yaml`, then run `docker compose up feedferret -d --build --no-deps` (`--no-deps` skips starting Postgres, which SQLite mode doesn't need) |
-| **Coolify** | Use *Docker Compose* deployment type — point to repo root, set env vars in the Coolify dashboard. Do **not** add a custom `networks:` block. See [`docs/self-hosting.md`](docs/self-hosting.md#deploying-with-coolify) |
+| **Docker Compose** | `docker compose -f <file> up -d --build` — see the table above for which file, or [`docs/self-hosting.md`](docs/self-hosting.md#choosing-a-docker-compose-variant) for the full comparison |
+| **Coolify** | Use *Docker Compose* deployment type — point to repo root and one of the three files above, set env vars in the Coolify dashboard. Do **not** add a custom `networks:` block. See [`docs/self-hosting.md`](docs/self-hosting.md#deploying-with-coolify) |
 | **Local dev** | `pnpm install && pnpm run dev` (SQLite recommended, no Docker needed) |
 
 Full guide including reverse proxy (Nginx, Caddy, Traefik), updates, and backup: [`docs/self-hosting.md`](docs/self-hosting.md)
