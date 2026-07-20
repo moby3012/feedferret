@@ -16,6 +16,7 @@
 import { JSDOM } from "jsdom";
 import Defuddle from "defuddle";
 import { Readability } from "@mozilla/readability";
+import { extractFromHtml } from "@extractus/article-extractor";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { htmlToMarkdown } from "@/lib/html-to-markdown";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
@@ -32,7 +33,7 @@ export type ExtractionResult = {
   byline: string | null;
   excerpt: string | null;
   wordCount: number;
-  extractedBy: "ftr" | "defuddle" | "readability" | "jsonld" | "hosted" | "none";
+  extractedBy: "ftr" | "defuddle" | "readability" | "extractus" | "jsonld" | "hosted" | "none";
 };
 
 // Below this many characters of plain text, Defuddle's result is treated as
@@ -233,6 +234,27 @@ function tryReadability(document: Document): RawExtraction | null {
 }
 
 /**
+ * Fourth-tier fallback: @extractus/article-extractor uses a different
+ * heuristic (unfluff-derived scoring) than Defuddle/Readability, so it
+ * occasionally succeeds on a layout that trips up both of them. Runs last,
+ * before the JSON-LD structured-data recovery.
+ */
+async function tryArticleExtractor(html: string, url: string): Promise<RawExtraction | null> {
+  try {
+    const result = await extractFromHtml(html, url, { contentLengthThreshold: MIN_CONTENT_TEXT_LENGTH });
+    if (!result?.content || textLength(result.content) < MIN_CONTENT_TEXT_LENGTH) return null;
+    return {
+      content: result.content,
+      title: result.title || null,
+      byline: result.author || null,
+      excerpt: result.description || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Extracts readable article content from raw HTML. Pure/testable: takes HTML
  * directly and does not perform any network I/O.
  */
@@ -265,6 +287,14 @@ export async function extractReadableContent(rawHtml: string, url: string): Prom
     if (readabilityResult) {
       raw = readabilityResult;
       extractedBy = "readability";
+    }
+  }
+
+  if (!raw) {
+    const extractusResult = await tryArticleExtractor(html, url);
+    if (extractusResult) {
+      raw = extractusResult;
+      extractedBy = "extractus";
     }
   }
 

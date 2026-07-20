@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Added (2026-07-20 — 4th extraction tier + M2 full-text-polish)
+
+- **`@extractus/article-extractor` as a 4th extraction tier** (`lib/readability-extract.ts`) — inserted after Defuddle and Readability, before the JSON-LD `articleBody` recovery step: it uses a different (unfluff-derived) content-scoring heuristic than either, occasionally succeeding on pages where both fail. Only runs when the earlier tiers came back empty/too-thin; never throws, same as every other tier in the waterfall. `ExtractionResult.extractedBy` gained `"extractus"` for observability.
+- **M2 full-text-polish, closing out `docs/feed-intelligence-roadmap.md`'s M2 milestone**: GFM tables and inline images were confirmed already working natively (no plugin needed); newly added were GFM task-list checkboxes (`markdown-it-task-lists`, real `<table>`/checkbox markup instead of literal `[x]` text), fenced-code syntax highlighting (`highlight.js`, a single dark theme — Tailwind Typography already gives code blocks a fixed dark background in both site themes), server-rendered KaTeX math (`@vscode/markdown-it-katex`, no client-side JS needed to display formulas), and `loading="lazy"` on markdown-rendered images. Found and fixed a real bug along the way: the shared sanitizer's width-stripping hook (added for untrusted scraped-page styles) was also stripping KaTeX's own layout-critical inline widths, breaking math alignment — `lib/sanitize-html.ts` now exempts width/min-width (but not color) stripping for anything inside a `.katex` subtree, since that markup is our own server output, not attacker-controlled.
+
 ### Fixed (2026-07-20 — visual/a11y and polish findings from the 2026-07-19 audit)
 
 - **Logo invisible on light-mode auth pages** — `logo.svg` is a solid-white mark with no dark variant, sitting on a `bg-card` badge that's near-white in light mode. Login, register, and setup pages now use `bg-accent` for that badge, which stays a real color in both themes.

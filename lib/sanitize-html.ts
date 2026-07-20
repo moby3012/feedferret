@@ -42,8 +42,13 @@ const ESCAPING_POSITION_VALUES = new Set(["fixed", "sticky", "absolute"]);
  * Strips layout-breaking declarations from an inline `style` attribute value
  * while preserving everything else (including `max-width`). Robust to
  * whitespace and casing, e.g. "Min-Width : 600px" or "POSITION:Fixed".
+ *
+ * `keepWidth` exempts `width`/`min-width` from stripping — used for KaTeX's
+ * own server-rendered math markup (see the hook below), which relies on
+ * precise inline widths for character spacing/alignment and isn't
+ * attacker-controlled the way scraped source-page styles are.
  */
-export function stripLayoutBreakingStyles(styleValue: string): string {
+export function stripLayoutBreakingStyles(styleValue: string, keepWidth = false): string {
     return styleValue
         .split(";")
         .map((decl) => decl.trim())
@@ -52,7 +57,7 @@ export function stripLayoutBreakingStyles(styleValue: string): string {
             const [rawProp, rawValue] = decl.split(":");
             const prop = rawProp?.trim().toLowerCase();
             if (!prop) return false;
-            if (DROPPED_STYLE_PROPS.has(prop)) return false;
+            if (!keepWidth && DROPPED_STYLE_PROPS.has(prop)) return false;
             if (DROPPED_COLOR_STYLE_PROPS.has(prop)) return false;
             if (prop === "position" && ESCAPING_POSITION_VALUES.has((rawValue || "").trim().toLowerCase())) {
                 return false;
@@ -67,16 +72,22 @@ export async function getSanitizer() {
     const { default: DOMPurify } = await import("isomorphic-dompurify");
 
     if (!hookRegistered) {
-        DOMPurify.addHook("uponSanitizeAttribute", (_node, data: UponSanitizeAttributeHookEvent) => {
+        DOMPurify.addHook("uponSanitizeAttribute", (node, data: UponSanitizeAttributeHookEvent) => {
             const attrName = data.attrName.toLowerCase();
+            // KaTeX (rendered server-side by lib/markdown-render.ts) depends
+            // on inline width for math-symbol spacing/alignment — the normal
+            // width-strip below is meant for untrusted scraped-page styles,
+            // not our own generated markup, so exempt anything inside a
+            // `.katex` subtree.
+            const isKatex = typeof node.closest === "function" && !!node.closest(".katex");
 
-            if (attrName === "width" || attrName === "min-width") {
+            if (!isKatex && (attrName === "width" || attrName === "min-width")) {
                 data.keepAttr = false;
                 return;
             }
 
             if (attrName === "style" && data.attrValue) {
-                data.attrValue = stripLayoutBreakingStyles(data.attrValue);
+                data.attrValue = stripLayoutBreakingStyles(data.attrValue, isKatex);
             }
         });
 
