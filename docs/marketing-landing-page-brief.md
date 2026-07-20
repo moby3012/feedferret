@@ -1,6 +1,6 @@
 # FeedFerret — Marketing & SaaS Landing Page Brief
 
-> Zuletzt aktualisiert: 2026-07-20 — großes Update seit v1.1.0 (2026-05-21): komplett neue "Feed Intelligence"-Produktsäule (jede Webseite wird zum Feed, KI richtet Feeds automatisch ein, KI-Volltext-Fallback, KI-Auto-Tagging), Anti-Bot/Heavy-Fetch-Stack, RSSHub-Connector, zweite Sicherheits-Härtungsrunde, indizierte Volltextsuche, zwei komplette UX/A11y-Audit-Runden. Noch nicht als nummerierte Version veröffentlicht (siehe `CHANGELOG.md` → „Unreleased" für den vollständigen PR-Verlauf) — dieses Dokument beschreibt den tatsächlichen Code-Stand, nicht den Release-Stand.  
+> Zuletzt aktualisiert: 2026-07-20 (Nachmittag) — großes Update seit v1.1.0 (2026-05-21): komplett neue "Feed Intelligence"-Produktsäule (jede Webseite wird zum Feed, KI richtet Feeds automatisch ein, KI-Volltext-Fallback, KI-Auto-Tagging), Anti-Bot/Heavy-Fetch-Stack, zwei optionale Connectoren (RSSHub für Plattform-Feeds, changedetection.io für "jede Seite als Änderungs-Feed"), "Send to"-Exportziele (Obsidian, Wallabag), Feed-Auto-Mute mit Benachrichtigung, PWA-Share-Target ("Share → FeedFerret" direkt aus dem OS-Share-Sheet), zweite Sicherheits-Härtungsrunde, indizierte Volltextsuche, zwei komplette UX/A11y-Audit-Runden. Noch nicht als nummerierte Version veröffentlicht (siehe `CHANGELOG.md` → „Unreleased" für den vollständigen PR-Verlauf) — dieses Dokument beschreibt den tatsächlichen Code-Stand, nicht den Release-Stand.  
 > Zweck: Vorlage für die OSS-Landing Page, ProductHunt-Launch, Vergleichsseiten und Pressematerial.  
 > Status: **Bereit für ein großes Feature-Update der Landing Page — die "Feed Intelligence"-Säule ist aktuell komplett unkommuniziert und ist aus Marketing-Sicht das stärkste neue Alleinstellungsmerkmal.**
 >
@@ -25,7 +25,10 @@ Er kombiniert:
 - Kompatibilität mit nativen RSS-Clients via Google Reader API
 - REST API + MCP-Endpoint für Automatisierungen und AI-Agenten
 - Ausgehende Webhooks für n8n, Zapier und eigene Systeme
-- Optionaler RSSHub-Connector: eigene selbst gehostete RSSHub-Instanz anbinden, YouTube/Reddit/GitHub & Co. werden zu Feeds
+- Zwei optionale, selbst gehostete Connectoren: **RSSHub** (Plattform-Feeds — YouTube, Reddit, GitHub & Co.) und **changedetection.io** (jede Seite als Änderungs-Feed, inkl. JS-gerenderter Seiten)
+- **"Send to" — Artikel an Obsidian oder Wallabag schicken**, jeweils optional konfigurierbar
+- PWA-Share-Target: aus jeder App direkt "Share → FeedFerret", landet automatisch im Seite→Feed-Baukasten
+- Feed-Auto-Mute: dauerhaft fehlschlagende Feeds werden automatisch stummgeschaltet statt endlos weiterzuversuchen, mit einmaliger Benachrichtigung
 - Keyword-Alerts mit Push-, E-Mail-, Webhook- und externem Channel-Delivery (Telegram, Gotify, ntfy)
 
 FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte und Power-User, die mehr Kontrolle wollen als kommerzielle Feed-Reader bieten — und für alle, die von KI und Zusatzdiensten profitieren wollen, ohne sie zu brauchen: **alles läuft standardmäßig aus, mit reinen RSS/Atom-Feeds, ganz ohne KI oder externe Dienste — jede zusätzliche Fähigkeit ist eine bewusste Entscheidung des Nutzers oder Admins, nie eine Voraussetzung.**
@@ -58,7 +61,8 @@ FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte u
 | **KI komplett optional, privat und BYOK** ⭐ | Zusammenfassungen, Feed-Einrichtung, Volltext-Fallback, Auto-Tagging — alles standardmäßig **aus**, alles mit *deinem eigenen* Schlüssel (OpenAI, Anthropic, Gemini, OpenRouter oder komplett lokal via Ollama), nichts davon ist zum Betrieb nötig. Kein Lock-in, Schlüssel verschlüsselt gespeichert. |
 | **Anti-Bot & Volltext-Stack — alles optional/selbst gehostet** | Vier gestaffelte, jeweils einzeln abschaltbare Ebenen (Browser-Fingerprinting, 1000+ vorgefertigte Seiten-Regeln, optionaler eigener Render-Sidecar, optionaler BYOK-Hosted-Fetch) — nichts davon sendet Daten irgendwohin, wenn es nicht ausdrücklich aktiviert wird. |
 | **Native Client Kompatibilität** | Google Reader API → Reeder, NetNewsWire, FeedMe, ReadKit |
-| **Automation-First** | Webhooks (HMAC), REST API v1, MCP für AI-Agenten, n8n-Beispiele, optionaler RSSHub-Connector |
+| **Automation-First** | Webhooks (HMAC), REST API v1, MCP für AI-Agenten, n8n-Beispiele, zwei optionale Connectoren (RSSHub, changedetection.io) |
+| **"Send to" & Share-Target** | Artikel per Klick an Obsidian oder Wallabag schicken, oder per OS-Share-Sheet direkt eine Seite an FeedFerret teilen — beides optional |
 | **Flexible Auth** | Local, OAuth (Google/GitHub), Authelia OIDC, optionales TOTP 2FA |
 | **Setup in 5 Minuten** | `docker compose up` → Setup-Wizard → fertig, komplett ohne jede optionale Integration lauffähig |
 
@@ -98,6 +102,7 @@ FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte u
 - Service Worker mit Stale-While-Revalidate
 - App Shortcuts (Unread, Starred, Read Later, Settings)
 - Deep-Link-Handling für Shortcuts und Notification-Links
+- **Share-Target:** "Share → FeedFerret" aus jeder App (Browser, Social-App, Notizen-App) — die geteilte URL landet direkt im Seite→Feed-Baukasten (3.9.2), vorausgefüllt
 - Manifest Screenshots für Install-Prompts
 
 ### 3.4 Feeds & Kategorien
@@ -145,6 +150,11 @@ Volltext-indiziert (SQLite FTS5-Trigram / PostgreSQL `pg_trgm`) — schnell auch
 - Starred-Workflow
 - Read-Later-Workflow
 - Unread/Read State Tracking
+
+**"Send to" — Export-Ziele (jeweils optional, pro Nutzer konfigurierbar):**
+- **Obsidian:** kein API-Schlüssel nötig — Obsidian hat keine API, es ist eine lokale Vault-App. FeedFerret baut einen `obsidian://new`-Deep-Link mit dem Artikel als Markdown und übergibt ihn direkt ans bereits installierte Obsidian; keine Netzwerkanfrage, keine Zugangsdaten
+- **Wallabag:** selbst gehostetes Read-Later — OAuth2, "Test Connection"-Button, Artikel landet als Markdown-Eintrag
+- Erscheint als "Send to"-Aktion im Reader (Desktop-Toolbar + Mobile-Overflow-Menü), zeigt nur die vom Nutzer tatsächlich konfigurierten Ziele
 
 ### 3.7 Auto-Rules & Automatisierung
 
@@ -223,6 +233,13 @@ Das größte neue Feature-Paket. Kombiniert eine mehrstufige Extraktions-Engine 
 - Ein RSSHub-Feed ist danach ein ganz normaler RSS-Feed — kein Sonderfall im Sync, Export oder Deduplizierung
 - Komplett unsichtbar, solange kein Admin es einrichtet
 
+**3.9.8 changedetection.io-Connector — "Diese Seite beobachten" (optional, Admin-konfiguriert, selbst gehostet)**
+- Eigene, selbst gehostete [changedetection.io](https://changedetection.io)-Instanz anbinden
+- Verwandelt **jede Seite** — auch komplett JS-gerenderte, da changedetection.io selbst rendert — in einen Feed ihrer eigenen Änderungen über Zeit: Preisänderungen, News-Updates, Stellenausschreibungen, Verfügbarkeits-Status u. v. m., auch ganz ohne jeden RSS-Feed der Quelle
+- Optionaler KI-Konfigurationsvorschlag für den zu beobachtenden Seitenausschnitt (gleiche "AI schlägt vor, Engine validiert"-Logik wie überall sonst)
+- Auch ein changedetection.io-Feed ist danach ein ganz normaler RSS-Feed — kein Sonderfall im Sync, Export oder Deduplizierung
+- Komplett unsichtbar, solange kein Admin es einrichtet
+
 ### 3.10 Retention Policies & Feed Health
 
 - Retention-Fenster pro Feed
@@ -230,6 +247,7 @@ Das größte neue Feature-Paket. Kombiniert eine mehrstufige Extraktions-Engine 
 - Geschützte Artikel: Starred + Labeled werden nie gelöscht
 - Minimum Article Count pro Feed
 - Health Dashboard: Artikelzahl, Unread-Count, Letzter Sync, Ø Artikel/Tag, Error Rate
+- **Auto-Mute für dauerhaft fehlschlagende Feeds:** konfigurierbare Schwelle an aufeinanderfolgenden Fehlversuchen (Default 10, abschaltbar), danach stoppt der Hintergrund-Sync automatisch weitere Versuche gegen die tote URL und eine einmalige In-App-Benachrichtigung erklärt warum — "Jetzt aktualisieren" funktioniert trotzdem weiter und gibt dem Feed eine Chance zur Selbstheilung; manuelles Entstummen gibt eine "letzte Chance"
 
 ### 3.11 Outbound Webhooks
 
@@ -409,6 +427,7 @@ Das größte neue Feature-Paket. Kombiniert eine mehrstufige Extraktions-Engine 
 | Jina Reader (BYOK) | Letzter Fallback gegen aktive Anti-Bot-Systeme | Cloud, eigener Schlüssel |
 | Firecrawl Cloud (BYOK, inkl. kostenlosem Tier ohne Schlüssel) | s. o. | Cloud, eigener oder kein Schlüssel |
 | RSSHub | Plattform-Feeds (YouTube, Reddit, GitHub Releases, u. v. m.) | Selbst gehostet, Admin-konfiguriert |
+| changedetection.io | Jede Seite als Änderungs-Feed (auch JS-gerendert) | Selbst gehostet, Admin-konfiguriert |
 
 ### 4.3 Auth-Provider (frei kombinierbar)
 
@@ -438,6 +457,14 @@ Browser Push (VAPID) · E-Mail · Telegram · Gotify · ntfy · Outbound-Webhook
 | MCP-Endpoint (28 Tools) | AI-Agenten — Claude, GPT, LangChain, jedes MCP-fähige Tool |
 | Outbound Webhooks | n8n, Zapier, eigene Endpunkte |
 | OPML Import/Export | Migration von/zu jedem anderen RSS-Reader |
+| PWA Share-Target | "Share → FeedFerret" aus jeder installierten App direkt ins OS-Share-Sheet |
+
+### 4.7 Export-Ziele — "Send to" (jeweils optional, pro Nutzer konfigurierbar)
+
+| Ziel | Zweck | Zugangsdaten |
+|---|---|---|
+| Obsidian | Artikel als Markdown in die lokale Vault übernehmen | Keine — reiner `obsidian://`-Deep-Link, keine API |
+| Wallabag | Artikel ins selbst gehostete Read-Later sichern | OAuth2 (Client-ID/Secret + Nutzername/Passwort) |
 
 **Ein-Satz-Zusammenfassung für die Landing Page:**
 > Jede KI-Funktion ist optional und BYOK. Jeder Connector ist optional und einzeln abschaltbar. Kein einziger externer Dienst ist Voraussetzung — FeedFerret läuft komplett autark, und wächst nur so weit mit externen Diensten mit, wie du es zulässt.
@@ -509,7 +536,7 @@ Content:
 
 Content:
 - Screenshot/GIF: URL einfügen → vorgeschlagene Konfiguration → Live-Vorschau → Feed gespeichert
-- Feature-Bullets: Automatische Volltext-Extraktion (über 1.000 vorgefertigte Seiten-Regeln, kein KI nötig), Seite→Feed-Baukasten, **optionaler** KI-Konfigurationsvorschlag ("Paste a URL, AI sets it up"), **optionaler** KI-Volltext-Fallback für hartnäckige Seiten, **optionaler** RSSHub-Connector für Plattformen (YouTube, Reddit, GitHub Releases)
+- Feature-Bullets: Automatische Volltext-Extraktion (über 1.000 vorgefertigte Seiten-Regeln, kein KI nötig), Seite→Feed-Baukasten, **optionaler** KI-Konfigurationsvorschlag ("Paste a URL, AI sets it up"), **optionaler** KI-Volltext-Fallback für hartnäckige Seiten, **optionaler** RSSHub-Connector für Plattformen (YouTube, Reddit, GitHub Releases), **optionaler** changedetection.io-Connector ("jede Seite als Änderungs-Feed beobachten")
 - Durchgängiger Hinweis-Chip: **"AI-assisted, never AI-required"**
 
 ### Sektion 5: Mobile & PWA
@@ -519,7 +546,7 @@ Content:
 Content:
 - iPhone Screenshot: Bottom Navigation + Reader
 - Android Screenshot: Feed-Liste
-- Feature-Bullets: Swipe-Gesten, PWA Install, Offline-Fallback, One-Handed Reading
+- Feature-Bullets: Swipe-Gesten, PWA Install, Offline-Fallback, One-Handed Reading, **Share-Target** ("Share → FeedFerret" aus jeder App)
 
 ### Sektion 6: Organize Everything
 
@@ -543,13 +570,14 @@ Feature-Cards (je mit Icon + kurzer Beschreibung):
 - **AI Summaries (optional):** BYOK — OpenAI, Anthropic, Gemini, or fully local via Ollama
 - **AI Auto-Tagging (optional):** propose labels on sync, reuses your existing ones
 - **Full-Text Extraction:** works fully without AI; AI is an optional last-resort fallback
-- **Feed Health:** Stats, error rates, retention policies
+- **Feed Health:** Stats, error rates, retention policies, auto-mute for feeds that keep failing
+- **Send to (optional):** push any article straight to Obsidian or Wallabag
 
 ### Sektion 8: Integrations ⭐ NEU — "Bring your own everything"
 
 **Headline:** "Every integration is optional. FeedFerret works completely without any of them."
 
-Content: die vier Karten-Reihen aus Abschnitt 4 (KI-Provider, Volltext-Connectoren, Auth-Provider, Notification-Kanäle) als Logo-Grid, jeweils mit "optional"-Badge. Kernaussage prominent wiederholen.
+Content: die fünf Karten-Reihen aus Abschnitt 4 (KI-Provider, Volltext-/Änderungs-Connectoren, Auth-Provider, Notification-Kanäle, Export-Ziele) als Logo-Grid, jeweils mit "optional"-Badge. Kernaussage prominent wiederholen.
 
 ### Sektion 9: Native Client Compatibility
 
@@ -669,8 +697,17 @@ Top-Fragen (Entwurf, erweitert):
 | **KI-Auto-Tagging** | Automatische Label-Vorschläge beim Sync | **Ja, BYOK** |
 | **KI-Volltext-Fallback** | Letzter Rettungsanker für hartnäckige Einzelseiten, pro Feed aktivierbar | **Ja, BYOK** |
 | **RSSHub-Connector** | YouTube/Reddit/GitHub Releases & Co. werden zu Feeds | **Ja, selbst gehostet** |
+| **changedetection.io-Connector ⭐ NEU** | Jede Seite als Änderungs-Feed beobachten, auch JS-gerendert | **Ja, selbst gehostet** |
 | **4-stufiger Anti-Bot-Stack** | Fingerprinting → Seiten-Regeln → Render-Sidecar → Hosted-BYOK-Fetch | **Stufen 2+3 optional** |
 | **Erkennung gekürzter Feeds** | Erkennt automatisch "diese Quelle liefert nur Teaser" und schlägt Aktivierung vor | Nein — Kern-Feature |
+
+### Neue Quick Wins (NEU, 2026-07-20)
+
+| Feature | Botschaft | Optional? |
+|---|---|---|
+| **"Send to" Obsidian & Wallabag** | Artikel per Klick in die eigene Notiz-App oder das eigene Read-Later übernehmen | **Ja, pro Nutzer** |
+| **Feed-Auto-Mute** | Dauerhaft fehlschlagende Feeds werden automatisch stummgeschaltet statt endlos weiterzuversuchen | Nein — Kern-Feature (Schwelle konfigurierbar/abschaltbar) |
+| **PWA Share-Target** | "Share → FeedFerret" aus jeder App — landet direkt im Seite→Feed-Baukasten | Nein — Kern-Feature der PWA |
 
 ### Sicherheit & Robustheit (zweite Härtungsrunde)
 
@@ -715,7 +752,8 @@ Benötigte Assets für Launch:
 | **Feed Intelligence Flow** (URL → Vorschlag → Vorschau → gespeichert) | GIF oder 3–4 Standbilder | **Kritisch, NEU** |
 | Mobile Reader iPhone | 393×852 (iPhone 15 Pro), Light + Dark | Kritisch |
 | Mobile Feed-Liste | 393×852, Light + Dark | Hoch |
-| Integrations-Logo-Grid (KI-Provider + Connectoren) | Vektorgrafik/SVG-Set | Hoch, NEU |
+| **"Send to"-Menü** (Reader-Toolbar mit Obsidian/Wallabag-Optionen) | 1 Standbild, Light + Dark | Mittel, NEU |
+| Integrations-Logo-Grid (KI-Provider, Connectoren inkl. changedetection.io, Export-Ziele) | Vektorgrafik/SVG-Set | Hoch, NEU |
 | OG Image | 1200×630, Logo + Tagline | Kritisch |
 | ProductHunt Gallery | 5 Bilder à 1270×952 | Hoch |
 | Favicon Set | bereits vorhanden ✓ | — |
