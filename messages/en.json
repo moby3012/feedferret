@@ -297,6 +297,8 @@
     "summaryLanguage": "Summary language",
     "autoSummarize": "Auto-summarize on sync",
     "autoSummarizeDescription": "Automatically summarize new articles (uses API credits)",
+    "autoTag": "Auto-tag on sync",
+    "autoTagDescription": "Automatically suggest labels for new articles (uses API credits)",
     "save": "Save",
     "saving": "Saving…",
     "testConnection": "Test connection",

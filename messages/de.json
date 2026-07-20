@@ -297,6 +297,8 @@
     "summaryLanguage": "Zusammenfassungssprache",
     "autoSummarize": "Automatisch beim Synchronisieren zusammenfassen",
     "autoSummarizeDescription": "Neue Artikel automatisch zusammenfassen (verbraucht API-Credits)",
+    "autoTag": "Automatisch beim Synchronisieren taggen",
+    "autoTagDescription": "Für neue Artikel automatisch Labels vorschlagen (verbraucht API-Credits)",
     "save": "Speichern",
     "saving": "Wird gespeichert…",
     "testConnection": "Verbindung testen",

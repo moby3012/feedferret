@@ -44,6 +44,12 @@ actually embedded in the page's HTML/JSON). Ordered by cost/risk, lean default i
      extraction tier** ahead of Defuddle/Readability. `FEEDFERRET_DISABLE_FTR=1` kill-switch;
      regenerate/extend via `scripts/gen-ftr-site-configs.mjs`. This is the "dataset-import, not a
      dependency" project flagged in round 2 below, delivered at effort **S–M**.
+     **Follow-up (blocked):** expanding the curated 44-host subset toward the upstream repo's full
+     1,000+ sites needs to enumerate its file list; this session's sandbox only has scoped GitHub
+     access to `moby3012/feedferret`, so both the GitHub API and tarball download for
+     `fivefilters/ftr-site-config` return 403 (`raw.githubusercontent.com` single-file fetches still
+     work, which is how the current 44 were pulled one-by-one). Unblocking needs either broader repo
+     access granted to the session or hand-curating further hosts one at a time the same way.
 2. **Sidecar browser connector (Option 3)** — ✅ **shipped**. For *genuinely* client-only pages that
    step 1 can't reach: an **optional** admin-configured container (crawl4ai / a lean Playwright
    service), called over HTTP (base URL + encrypted token, hidden until enabled — the
@@ -91,10 +97,10 @@ plus complementary prior-art. Verdicts below; full reasoning in commit history.
 | **`got-scraping`** (Apify) | predecessor of impit | — | ❌ **EOL** — maintainers redirect to impit |
 | **`rebrowser-playwright`** (active, MIT-ish) | Playwright fork patching the CDP `Runtime.enable` leak Cloudflare/DataDome key off | hardens the browser tier | ✅ **Use instead of vanilla Playwright when M7-T1 ships** — near-zero-cost import swap. Effort **S** |
 | **`puppeteer-extra-plugin-stealth`** | classic stealth plugin | — | ❌ **Dead** (no release since 2023; fails modern JA4/CH-UA/CDP signals). Do not adopt — false confidence |
-| **`@extractus/article-extractor`** (MIT, active) | linkedom+sanitize-html extraction, different heuristic than Readability | thin-extraction edge cases | ⏸ Possible **third-tier extraction fallback** after Defuddle→Readability. Effort **S**, value **S** |
+| **`@extractus/article-extractor`** (MIT, active) | linkedom+sanitize-html extraction, different heuristic than Readability | thin-extraction edge cases | ✅ **Shipped 2026-07-20** as a 4th extraction tier (`lib/readability-extract.ts`), after Defuddle→Readability and before JSON-LD recovery |
 | **`@postlight/parser`** (Mercury) | per-site extractors | — | ❌ Stale since 2022; its per-site idea is better served by ftr-site-config below |
 | **`@extractus/feed-extractor`** / **`article-parser`** / **`node-unfluff`** | — | — | ❌ Redundant with our `rss-parser`/Defuddle, or unmaintained |
-| **`feed`** (jpmonette, MIT, active) | RSS/Atom/JSON-Feed **generator** | — | ⏸ We hand-roll feed/OPML XML today (`lib/opml.ts`) — **audit that serializer** for namespace/CDATA edge cases before deciding to add. Effort **S** |
+| **`feed`** (jpmonette, MIT, active) | RSS/Atom/JSON-Feed **generator** | — | ✅ **Audited 2026-07-20, decided not to adopt.** `lib/opml.ts`'s namespace prefix/URI are static constants (no injection risk) and nothing in the file uses CDATA at all, so neither original concern applied — but the audit found and fixed a real bug instead: XML 1.0 forbids most C0 control characters outright (unlike `<`/`&`, escaping can't make them legal), and malformed feed metadata occasionally carries one, which made `generateOpml()` emit a document our own `parseOpml()` throws a hard `SyntaxError` on. `escapeXml()` now strips them. The hand-rolled serializer is otherwise fine; not worth a new dependency for RSS/Atom/JSON-Feed generation we don't need. |
 
 ## Prior-art "anything → RSS" (reference / interop only — do not port)
 

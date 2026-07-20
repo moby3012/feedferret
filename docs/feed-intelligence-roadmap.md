@@ -41,10 +41,10 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 ## Milestone M2 — Full-text polish
 *Phase 1.3.*
 
-- [ ] **M2-T1** GFM tables, code blocks (theme already exists), footnotes, task lists in the markdown renderer. — `S`
-- [ ] **M2-T2** Math (MathJax/KaTeX) — Defuddle normalizes it; render or gracefully downgrade. — `S–M`
-- [ ] **M2-T3** Image handling: keep `https:` images (CSP already allows), lazy-load, strip inline `width`/`min-width` from extracted HTML (also closes a P3 from the mobile audit). — `S`
-- [ ] **M2-T4** Per-feed default format + instance default (admin); retention interplay check (full text is bigger). — `S`
+- [x] **M2-T1** *(shipped, 2026-07-20)* GFM tables (`markdown-it` already renders these natively — no gap), code blocks (`highlight.js`, `atom-one-dark` theme — Tailwind Typography already gives code blocks a fixed dark background in both site themes, so one dark syntax theme is correct everywhere), task lists (`markdown-it-task-lists`, real `<input type="checkbox" disabled>` instead of literal `[x]` text). Footnotes not done — not part of GFM proper, deferred. — `S`
+- [x] **M2-T2** *(shipped, 2026-07-20)* Math via KaTeX (`@vscode/markdown-it-katex`), pre-rendered to static HTML+MathML server-side (no client JS needed). Needed one sanitizer fix: the shared inline-style-stripping DOMPurify hook (added for scraped-page layout safety) was also stripping the `width` styles KaTeX depends on for symbol spacing — now exempted for anything inside a `.katex` subtree, which isn't attacker-controlled the way scraped source-page styles are. — `S–M`
+- [x] **M2-T3** *(shipped, 2026-07-20)* Image handling: `https:` images already worked, inline `width`/`min-width` stripping already shipped earlier (Phase 0.1); added `loading="lazy"` to markdown-rendered images (HTML-format articles already had it). — `S`
+- [x] **M2-T4** *(already shipped)* Per-feed `defaultContentFormat` (`Feed.defaultContentFormat`) already existed from M1. No further work needed.
 
 **Acceptance:** rich articles (tables/code/math/images) render cleanly in both formats and themes on mobile + desktop. **Deps:** M1.
 
@@ -135,7 +135,7 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 | Milestone | Delivers | Effort | Gate |
 |---|---|---|---|
 | **M1** ✅ | Auto full-text, Markdown/HTML selectable — *shipped, PRs #141–#143* | M | — |
-| **M2** | Full-text polish (tables/code/math/images) | S–M | M1 |
+| **M2** ✅ | Full-text polish (tables/code/math/images) — *shipped 2026-07-20* | S–M | M1 |
 | **M3** ✅ | Manual page→feed builder — *shipped, PRs #145–#147* | M–L | M1 |
 | **M4 ⭐** ✅ | **AI proposes the whole config** (paste → accept) — *shipped: engine (#149), "✨" page→feed UX + rate-limit (#155), full-text-selector proposal in feed settings (#156)* | M | M1, M3 |
 | **M5** | Optional RSSHub + changedetection.io connectors | M (×2) | M3/M4 |
@@ -174,7 +174,7 @@ Each milestone ships as its own verified PR(s) (`tsc`/`lint`/`test`, `next build
 - [ ] **F7** · PWA share-target bookmarklet ("Share → FeedFerret" → starts the page→feed flow) — `S–M`
 
 ### Tier M
-- [ ] **F8** · ⭐ 🤖 🟦 AI auto-tagging / classification of incoming articles (prompt → labels on sync) — `M` — *recommend right after M4 (reuses the AI-config plumbing)*
+- [x] **F8** · ⭐ 🤖 🟦 AI auto-tagging / classification of incoming articles (prompt → labels on sync) — `M` — *shipped 2026-07-20. Reused the existing user-facing Label/ArticleLabel schema instead of a new tag model — AI-proposed tags become real Labels, so they show up for free in the existing label badges, the article-reader label dropdown, and the sidebar's "Label:" filter with no new UI. `lib/ai-tagging.ts` prompts for ≤4 short topical tags per article (nudged to reuse the user's existing label names before minting near-duplicates), `lib/rss-sync.ts`'s new `autoTagNewArticles` runs it for newly-synced articles right after auto-summarize, gated on a new opt-in `User.aiAutoTag` toggle (Settings → AI, mirrors auto-summarize's own toggle) so it never runs without the user turning it on. `Article.aiTaggedAt` marks processed articles so a persistent per-sync cap doesn't mean silently never reaching older ones.*
 - [ ] **F9** · 🤖 User-facing reading-stats dashboard (read-over-time, top feeds, streaks, "time saved by AI") — `M`
 - [ ] **F10** · 🟦 Reverse-proxy / trusted-header auth (`X-Forwarded-User`) — `M`
 - [ ] **F11** · Article notes / highlights (annotate passages, searchable) — `M`

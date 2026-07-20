@@ -29,6 +29,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.6)
+      '@extractus/article-extractor':
+        specifier: ^8.1.0
+        version: 8.1.0
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.2.2(react-hook-form@7.76.0(react@19.2.6))
@@ -131,6 +134,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.100.11
         version: 5.100.11(react@19.2.6)
+      '@vscode/markdown-it-katex':
+        specifier: ^1.1.2
+        version: 1.1.2
       autoprefixer:
         specifier: ^10.5.0
         version: 10.5.0(postcss@8.5.14)
@@ -161,6 +167,9 @@ importers:
       geist:
         specifier: ^1.7.0
         version: 1.7.0(next@16.2.6(@babel/core@7.29.0)(@playwright/test@1.56.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
+      highlight.js:
+        specifier: ^11.11.1
+        version: 11.11.1
       impit:
         specifier: ^0.14.3
         version: 0.14.3
@@ -173,12 +182,18 @@ importers:
       jsdom:
         specifier: ^27.4.0
         version: 27.4.0
+      katex:
+        specifier: ^0.18.1
+        version: 0.18.1
       lucide-react:
         specifier: ^1.16.0
         version: 1.16.0(react@19.2.6)
       markdown-it:
         specifier: ^14.3.0
         version: 14.3.0
+      markdown-it-task-lists:
+        specifier: ^2.1.1
+        version: 2.1.1
       next:
         specifier: ^16.2.6
         version: 16.2.6(@babel/core@7.29.0)(@playwright/test@1.56.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -627,6 +642,10 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@extractus/article-extractor@8.1.0':
+    resolution: {integrity: sha512-FLA07C3YFFyisrob3UW3kyd88M2BW3OKLQpWFMDiH0abzAR9L5CL2B+HuB+rzo3s/gu7sdRW++82qZBmdOowMg==}
+    engines: {node: '>= 20'}
 
   '@floating-ui/core@1.7.4':
     resolution: {integrity: sha512-C3HlIdsBxszvm5McXlB8PeOEWfBhcGBTZGkGlWc2U0KFY5IwG5OQEuQ8rq52DZmcHDlPLd+YFBK+cZcytwIFWg==}
@@ -1086,6 +1105,10 @@ packages:
       '@types/react': ^18.0.0 || ^19.0.0
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
+
+  '@pwshub/bellajs@13.0.2':
+    resolution: {integrity: sha512-OWOaE7Ieufo7VMv957iahOzv/w5oXyyXO28Jh2x6rLU96ZLqC508kAKTgdMJRXgVjda2s+/0C6Kno+k16OmJsQ==}
+    engines: {bun: '>=1.0.0', node: '>=20.0.0'}
 
   '@radix-ui/number@1.1.1':
     resolution: {integrity: sha512-MkKCwxlXTgz6CFoJx3pCwn07GKp36+aZyu/u2Ln2VrA5DcdyCZkASEDBTd8x5whTQQL5CiYf4prXKLcgQdv29g==}
@@ -2495,6 +2518,9 @@ packages:
   '@vitest/utils@4.1.6':
     resolution: {integrity: sha512-FxIY+U81R3LGKCxaHHFRQ5+g6/iRgGLmeHWdp2Amj4ljQRrEIWHmZyDfDYBRZlpyqA7qKxtS9DD1dhk8RnRIVQ==}
 
+  '@vscode/markdown-it-katex@1.1.2':
+    resolution: {integrity: sha512-+4IIv5PgrmhKvW/3LpkpkGg257OViEhXkOOgCyj5KMsjsOfnRXkni8XAuuF9Ui5p3B8WnUovlDXAQNb8RJ/RaQ==}
+
   '@xmldom/xmldom@0.9.10':
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
@@ -2775,6 +2801,10 @@ packages:
     resolution: {integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==}
     engines: {node: '>=18'}
 
+  commander@8.3.0:
+    resolution: {integrity: sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww==}
+    engines: {node: '>= 12'}
+
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
 
@@ -2892,6 +2922,9 @@ packages:
   date-fns@4.2.1:
     resolution: {integrity: sha512-37RhSdxaG1suen6VDCza6rNrQfooyQh57HFVPwQGEq2QWliVLzPQZ8Oa017weOu+HZCnzI7N3Pf/wyoBKfEqrA==}
 
+  dayjs@1.11.21:
+    resolution: {integrity: sha512-98IT+HOahAisibz/yjKbzuOBwYcjJ7BCLPzARyHiyEBmRz4fatF+KPJszEHXsGYjUG234aH/cOjW1wwTbKUZlA==}
+
   debug@3.2.7:
     resolution: {integrity: sha512-CFjzYYAi4ThfiQvizrFQevTTXHtnCqWfe7x1AhgEscTz6ZbLbfoLRLPugTQyBth6f8ZERVUSyWHFD/7Wu4t1XQ==}
     peerDependencies:
@@ -2929,6 +2962,10 @@ packages:
   deepmerge-ts@7.1.5:
     resolution: {integrity: sha512-HOJkrhaYsweh+W+e74Yn7YStZOilkoPb6fycpwNLKzSPtruFs48nYis0zy5yJz1+ktUhHxoRDJ27RQAWLIJVJw==}
     engines: {node: '>=16.0.0'}
+
+  deepmerge@4.3.1:
+    resolution: {integrity: sha512-3sUqbMEc77XqpdNO7FRyRog+eW3ph+GYCbj+rK+uYyRMuwsVy0rMiVtPn+QJlKFvWP/1PYpapqYn0Me2knFn+A==}
+    engines: {node: '>=0.10.0'}
 
   define-data-property@1.1.4:
     resolution: {integrity: sha512-rBMvIzlpA8v6E+SJZoo++HAYqsLrkg7MSfIinMPFhmkorw7X+dOXVJQs+QT69zGkzMyfDnIMN2Wid1+NbL3T+A==}
@@ -3455,6 +3492,10 @@ packages:
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
 
+  highlight.js@11.11.1:
+    resolution: {integrity: sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w==}
+    engines: {node: '>=12.0.0'}
+
   hono@4.12.19:
     resolution: {integrity: sha512-xa3eYXYXx68XTT4hZ7dRzsXBhaq85ToSrlUJNoR0gwz/1Ap/CNwX47wfvV7pc/xWhjKVVkLT7zBJy8chhNguqQ==}
     engines: {node: '>=16.9.0'}
@@ -3471,6 +3512,10 @@ packages:
 
   htmlparser2@10.1.0:
     resolution: {integrity: sha512-VTZkM9GWRAtEpveh7MSF6SjjrpNVNNVJfFup7xTY3UpFtm67foy9HDVXneLtFVt4pMz5kZtgNcvCniNFb1hlEQ==}
+
+  htmlparser2@12.0.0:
+    resolution: {integrity: sha512-Tz7u1i95/g2x2jz81+x0FBVhBhY5aRTvD3tXXdFaljuNdzDLJ8UGNRrTcj2cgQvAg3iW/h77Fz15nLW0L0CrZw==}
+    engines: {node: '>=20.19.0'}
 
   http-proxy-agent@7.0.2:
     resolution: {integrity: sha512-T1gkAiYYDWYx3V5Bmyu7HcfcvL7mUrTWiM6yOfa3PIphViJ/gFPbvidQ+veqSOHci/PxBcDabeUNCzpOODJZig==}
@@ -3670,6 +3715,10 @@ packages:
     resolution: {integrity: sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==}
     engines: {node: '>=0.12.0'}
 
+  is-plain-object@5.0.0:
+    resolution: {integrity: sha512-VRSzKkbMm5jMDoKLbltAkFQ5Qr7VDiTFGXxYFXXowVj387GeGNOCsOH6Msy00SGZ3Fp84b1Naa1psqgcCIEP5Q==}
+    engines: {node: '>=0.10.0'}
+
   is-potential-custom-element-name@1.0.1:
     resolution: {integrity: sha512-bCYeRA2rVibKZd+s2625gGnGF/t7DSqDs4dP7CrLA1m7jKWz6pps0LpYLJN8Q64HtmPKJ1hrN3nzPNKFEKOUiQ==}
 
@@ -3809,6 +3858,14 @@ packages:
   jws@4.0.1:
     resolution: {integrity: sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==}
 
+  katex@0.16.47:
+    resolution: {integrity: sha512-Eeo8Ys1doU1z+x8AZsPpQu+p/QcZBI5PeOo7QGQdy2x2m0MU/hYagBbGOmXwr5KVbEfVuWv9LpnQWeehogurjg==}
+    hasBin: true
+
+  katex@0.18.1:
+    resolution: {integrity: sha512-Td8GCYSxDAoMhHOlKmCFMJ/hz5qlAAb71n66Dryw9nfCVfumLo7nhuotbvKom/XPADmrYC3O5QR71EPq4DarJQ==}
+    hasBin: true
+
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
@@ -3818,6 +3875,9 @@ packages:
   language-tags@1.0.9:
     resolution: {integrity: sha512-MbjN408fEndfiQXbFQ1vnd+1NoLDsnQW41410oQBXiyXDMYH5z505juWa4KUE1LqxRC7DgOgZDbKLxHIwm27hA==}
     engines: {node: '>=0.10'}
+
+  launder@1.7.1:
+    resolution: {integrity: sha512-mU6WRz5EusL9ZZuiZ5SO4Y6C0P9PAUR9iwdb6bzj4KDihm28DiHFw+/yk9DBH4f+Pv1wuzQ4e2jV3oQ7mkIqvw==}
 
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
@@ -3961,6 +4021,9 @@ packages:
   make-dir@4.0.0:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
+
+  markdown-it-task-lists@2.1.1:
+    resolution: {integrity: sha512-TxFAc76Jnhb2OUu+n3yz9RMu4CwGfaT788br6HhEDlvWfdeJcLUsxk1Hgw2yJio0OXsxv7pyIPmvECY7bMbluA==}
 
   markdown-it@14.3.0:
     resolution: {integrity: sha512-RCEsPjR+sr0x+AuYp601tKTkgFG4YEPLCzHST3cQ/fhlJkqAkz1L2/Qbp1j9qw5SBwQHFBoW8+hoN5xssOF0Tw==}
@@ -4190,6 +4253,9 @@ packages:
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
+
+  parse-srcset@1.0.2:
+    resolution: {integrity: sha512-/2qh0lav6CmI15FzA3i/2Bzk2zCgQhGMkvhOhKNcBVQ1ldgpbfiNTVslmooUmWJcADi1f1kIeynbDRVzNlfR6Q==}
 
   parse5@8.0.0:
     resolution: {integrity: sha512-9m4m5GSgXjL4AjumKzq1Fgfp3Z8rsvjRNbnkVwfu2ImRqE5D0LnY2QfDen18FSY9C573YU5XxSapdHZTZ2WolA==}
@@ -4554,6 +4620,10 @@ packages:
 
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
+
+  sanitize-html@2.17.6:
+    resolution: {integrity: sha512-M4bo9tfv1yfhQZZKkc6dL07ALrGJtfvNOuhX3hU9AVPR/uPQ+nKOJBqTYc7LfMQblTW04mtSWDJWEyLvygJsLA==}
+    engines: {node: '>=22.12.0'}
 
   sax@1.4.4:
     resolution: {integrity: sha512-1n3r/tGXO6b6VXMdFT54SHzT9ytu9yr7TaELowdYpMqY/Ao7EnlQGmAQ1+RatX7Tkkdm6hONI2owqNx2aZj5Sw==}
@@ -5507,6 +5577,15 @@ snapshots:
 
   '@exodus/bytes@1.15.0': {}
 
+  '@extractus/article-extractor@8.1.0':
+    dependencies:
+      '@mozilla/readability': 0.6.0
+      '@pwshub/bellajs': 13.0.2
+      linkedom: 0.18.13
+      sanitize-html: 2.17.6
+    transitivePeerDependencies:
+      - canvas
+
   '@floating-ui/core@1.7.4':
     dependencies:
       '@floating-ui/utils': 0.2.10
@@ -5912,6 +5991,8 @@ snapshots:
       react-dom: 19.2.6(react@19.2.6)
     transitivePeerDependencies:
       - '@types/react-dom'
+
+  '@pwshub/bellajs@13.0.2': {}
 
   '@radix-ui/number@1.1.1': {}
 
@@ -7261,6 +7342,10 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
+  '@vscode/markdown-it-katex@1.1.2':
+    dependencies:
+      katex: 0.16.47
+
   '@xmldom/xmldom@0.9.10':
     optional: true
 
@@ -7448,8 +7533,7 @@ snapshots:
 
   bn.js@4.12.3: {}
 
-  boolbase@2.0.0:
-    optional: true
+  boolbase@2.0.0: {}
 
   brace-expansion@1.1.14:
     dependencies:
@@ -7573,6 +7657,8 @@ snapshots:
 
   commander@12.1.0: {}
 
+  commander@8.3.0: {}
+
   concat-map@0.0.1: {}
 
   confbox@0.2.4: {}
@@ -7592,7 +7678,6 @@ snapshots:
       domhandler: 6.0.1
       domutils: 4.0.2
       nth-check: 3.0.1
-    optional: true
 
   css-tree@3.1.0:
     dependencies:
@@ -7604,13 +7689,11 @@ snapshots:
       mdn-data: 2.27.1
       source-map-js: 1.2.1
 
-  css-what@8.0.0:
-    optional: true
+  css-what@8.0.0: {}
 
   cssesc@3.0.0: {}
 
-  cssom@0.5.0:
-    optional: true
+  cssom@0.5.0: {}
 
   cssstyle@5.3.7:
     dependencies:
@@ -7695,6 +7778,8 @@ snapshots:
 
   date-fns@4.2.1: {}
 
+  dayjs@1.11.21: {}
+
   debug@3.2.7:
     dependencies:
       ms: 2.1.3
@@ -7716,6 +7801,8 @@ snapshots:
   deep-is@0.1.4: {}
 
   deepmerge-ts@7.1.5: {}
+
+  deepmerge@4.3.1: {}
 
   define-data-property@1.1.4:
     dependencies:
@@ -7759,30 +7846,24 @@ snapshots:
       domelementtype: 2.3.0
       domhandler: 5.0.3
       entities: 4.5.0
-    optional: true
 
   dom-serializer@3.1.1:
     dependencies:
       domelementtype: 3.0.0
       domhandler: 6.0.1
       entities: 8.0.0
-    optional: true
 
-  domelementtype@2.3.0:
-    optional: true
+  domelementtype@2.3.0: {}
 
-  domelementtype@3.0.0:
-    optional: true
+  domelementtype@3.0.0: {}
 
   domhandler@5.0.3:
     dependencies:
       domelementtype: 2.3.0
-    optional: true
 
   domhandler@6.0.1:
     dependencies:
       domelementtype: 3.0.0
-    optional: true
 
   dompurify@3.4.3:
     optionalDependencies:
@@ -7793,14 +7874,12 @@ snapshots:
       dom-serializer: 2.0.0
       domelementtype: 2.3.0
       domhandler: 5.0.3
-    optional: true
 
   domutils@4.0.2:
     dependencies:
       dom-serializer: 3.1.1
       domelementtype: 3.0.0
       domhandler: 6.0.1
-    optional: true
 
   dotenv@17.4.2: {}
 
@@ -7854,8 +7933,7 @@ snapshots:
 
   entities@6.0.1: {}
 
-  entities@7.0.1:
-    optional: true
+  entities@7.0.1: {}
 
   entities@8.0.0: {}
 
@@ -8374,6 +8452,8 @@ snapshots:
     dependencies:
       hermes-estree: 0.25.1
 
+  highlight.js@11.11.1: {}
+
   hono@4.12.19: {}
 
   html-encoding-sniffer@6.0.0:
@@ -8384,8 +8464,7 @@ snapshots:
 
   html-escaper@2.0.2: {}
 
-  html-escaper@3.0.3:
-    optional: true
+  html-escaper@3.0.3: {}
 
   htmlparser2@10.1.0:
     dependencies:
@@ -8393,7 +8472,13 @@ snapshots:
       domhandler: 5.0.3
       domutils: 3.2.2
       entities: 7.0.1
-    optional: true
+
+  htmlparser2@12.0.0:
+    dependencies:
+      domelementtype: 3.0.0
+      domhandler: 6.0.1
+      domutils: 4.0.2
+      entities: 8.0.0
 
   http-proxy-agent@7.0.2:
     dependencies:
@@ -8574,6 +8659,8 @@ snapshots:
 
   is-number@7.0.0: {}
 
+  is-plain-object@5.0.0: {}
+
   is-potential-custom-element-name@1.0.1: {}
 
   is-property@1.0.2: {}
@@ -8751,6 +8838,14 @@ snapshots:
       jwa: 2.0.1
       safe-buffer: 5.2.1
 
+  katex@0.16.47:
+    dependencies:
+      commander: 8.3.0
+
+  katex@0.18.1:
+    dependencies:
+      commander: 8.3.0
+
   keyv@4.5.4:
     dependencies:
       json-buffer: 3.0.1
@@ -8760,6 +8855,10 @@ snapshots:
   language-tags@1.0.9:
     dependencies:
       language-subtag-registry: 0.3.23
+
+  launder@1.7.1:
+    dependencies:
+      dayjs: 1.11.21
 
   levn@0.4.1:
     dependencies:
@@ -8822,7 +8921,6 @@ snapshots:
       html-escaper: 3.0.3
       htmlparser2: 10.1.0
       uhyphen: 0.2.0
-    optional: true
 
   linkify-it@5.0.2:
     dependencies:
@@ -8892,6 +8990,8 @@ snapshots:
   make-dir@4.0.0:
     dependencies:
       semver: 7.8.0
+
+  markdown-it-task-lists@2.1.1: {}
 
   markdown-it@14.3.0:
     dependencies:
@@ -9045,7 +9145,6 @@ snapshots:
   nth-check@3.0.1:
     dependencies:
       boolbase: 2.0.0
-    optional: true
 
   oauth4webapi@3.8.6: {}
 
@@ -9129,6 +9228,8 @@ snapshots:
   parent-module@1.0.1:
     dependencies:
       callsites: 3.1.0
+
+  parse-srcset@1.0.2: {}
 
   parse5@8.0.0:
     dependencies:
@@ -9514,6 +9615,16 @@ snapshots:
       is-regex: 1.2.1
 
   safer-buffer@2.1.2: {}
+
+  sanitize-html@2.17.6:
+    dependencies:
+      deepmerge: 4.3.1
+      escape-string-regexp: 4.0.0
+      htmlparser2: 12.0.0
+      is-plain-object: 5.0.0
+      launder: 1.7.1
+      parse-srcset: 1.0.2
+      postcss: 8.5.14
 
   sax@1.4.4: {}
 
@@ -9903,8 +10014,7 @@ snapshots:
 
   uc.micro@2.1.0: {}
 
-  uhyphen@0.2.0:
-    optional: true
+  uhyphen@0.2.0: {}
 
   unbox-primitive@1.1.0:
     dependencies:

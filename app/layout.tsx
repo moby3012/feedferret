@@ -12,6 +12,16 @@ import { SessionProvider } from "next-auth/react";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import "./globals.css";
+// KaTeX math rendering (M2 full-text polish): fonts + layout CSS only — it
+// sets no colors of its own, inheriting from .article-content's already
+// theme-aware text color, so no light/dark handling is needed here.
+import "katex/dist/katex.min.css";
+// Syntax-highlighting theme for fenced code blocks. A single dark theme is
+// correct in both light and dark site modes: Tailwind Typography's prose
+// styling already gives code blocks a fixed dark background regardless of
+// overall theme (the conventional "code always looks like a terminal" look),
+// so a light syntax theme would be unreadable on it in light mode too.
+import "highlight.js/styles/atom-one-dark.css";
 
 const APP_DESCRIPTION =
   "FeedFerret is a beautiful, self-hostable RSS reader. Follow any RSS, Atom or JSON feed, get AI summaries, keyword alerts, email digests and a full REST API — all on your own server.";

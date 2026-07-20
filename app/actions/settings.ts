@@ -548,6 +548,7 @@ export async function getAiSettings() {
       aiOllamaBaseUrl: true,
       aiAutoSummarize: true,
       aiSummaryLanguage: true,
+      aiAutoTag: true,
     },
   });
   return {
@@ -557,6 +558,7 @@ export async function getAiSettings() {
     ollamaBaseUrl: user?.aiOllamaBaseUrl ?? null,
     autoSummarize: user?.aiAutoSummarize ?? false,
     language: user?.aiSummaryLanguage ?? "same",
+    autoTag: user?.aiAutoTag ?? false,
   };
 }
 
@@ -568,6 +570,7 @@ export async function updateAiSettings(data: {
   ollamaBaseUrl?: string | null;
   autoSummarize?: boolean;
   language?: string;
+  autoTag?: boolean;
 }) {
   const session = await requireUser();
   const updateData: Record<string, unknown> = {};
@@ -581,6 +584,7 @@ export async function updateAiSettings(data: {
   if ("ollamaBaseUrl" in data) updateData.aiOllamaBaseUrl = data.ollamaBaseUrl;
   if ("autoSummarize" in data) updateData.aiAutoSummarize = data.autoSummarize;
   if ("language" in data) updateData.aiSummaryLanguage = data.language;
+  if ("autoTag" in data) updateData.aiAutoTag = data.autoTag;
   await db.user.update({ where: { id: session.user.id }, data: updateData });
   revalidatePath("/settings");
 }

@@ -14,6 +14,7 @@ import { resolveFullTextMode } from "./full-text-mode";
 import { fetchAndExtractReadable } from "./readability-extract";
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
+const MAX_AUTO_TAG_PER_SYNC = 3;
 
 export interface ArticleSyncInput {
     feedId: string;
@@ -369,6 +370,7 @@ export async function syncFeed(userId: string, feedId: string) {
 
         if (createdArticleIds.length > 0) {
             await autoSummarizeNewArticles(userId, createdArticleIds);
+            await autoTagNewArticles(userId, createdArticleIds);
         }
 
         if (createdArticleIds.length > 0) {
@@ -605,6 +607,85 @@ async function autoSummarizeNewArticles(userId: string, articleIds: string[]) {
             });
         } catch (error) {
             logger.error("[rss-sync] auto-summary failed:", error);
+        }
+    }
+}
+
+async function autoTagNewArticles(userId: string, articleIds: string[]) {
+    const user = await db.user.findUnique({
+        where: { id: userId },
+        select: {
+            aiAutoTag: true,
+            aiProvider: true,
+            aiApiKey: true,
+            aiModel: true,
+            aiOllamaBaseUrl: true,
+        },
+    });
+
+    if (!user?.aiAutoTag || !user.aiProvider) return;
+
+    const { generateTags } = await import("./ai-tagging");
+
+    const articles = await db.article.findMany({
+        where: {
+            id: { in: articleIds },
+            userId,
+            isDuplicate: false,
+            aiTaggedAt: null,
+        },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, content: true },
+        take: MAX_AUTO_TAG_PER_SYNC,
+    });
+
+    if (articles.length === 0) return;
+
+    // Nudges the model toward reusing existing tags instead of minting
+    // near-duplicates (e.g. "AI" vs "Artificial Intelligence") each sync.
+    const existingLabels = await db.label.findMany({
+        where: { userId },
+        select: { name: true },
+        orderBy: { name: "asc" },
+    });
+    const existingLabelNames = existingLabels.map((label) => label.name);
+
+    const aiConfig: AiConfig = {
+        provider: user.aiProvider as AiConfig["provider"],
+        apiKey: decryptIfValue(user.aiApiKey),
+        model: user.aiModel,
+        ollamaBaseUrl: user.aiOllamaBaseUrl,
+    };
+
+    for (const article of articles) {
+        const content = article.content?.trim();
+        if (!content) continue;
+
+        try {
+            const tagNames = await generateTags(content, aiConfig, existingLabelNames);
+
+            for (const name of tagNames) {
+                let label = await db.label.findFirst({ where: { userId, name } });
+                if (!label) {
+                    label = await db.label.create({ data: { userId, name } });
+                    existingLabelNames.push(name);
+                }
+                const alreadyLinked = await db.articleLabel.findUnique({
+                    where: { articleId_labelId: { articleId: article.id, labelId: label.id } },
+                });
+                if (!alreadyLinked) {
+                    await db.articleLabel.create({
+                        data: { articleId: article.id, labelId: label.id, userId },
+                    });
+                }
+            }
+
+            await db.article.update({
+                where: { id: article.id },
+                data: { aiTaggedAt: new Date() },
+            });
+        } catch (error) {
+            logger.error("[rss-sync] auto-tag failed:", error);
         }
     }
 }

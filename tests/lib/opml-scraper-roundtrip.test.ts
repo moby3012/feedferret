@@ -59,4 +59,24 @@ describe("OPML round-trip for page→feed (HTML+XPath) scraper configs", () => {
     // No xpath extensions → no xpath config reconstructed.
     expect(scraperConfigFromOutline(feedOutline!).xpath).toBeUndefined();
   });
+
+  it("strips XML-illegal control characters from feed names instead of producing unparseable OPML", async () => {
+    // XML 1.0 forbids most C0 controls outright — escaping (&#x0;) doesn't
+    // make them legal the way it does for < or & — so a stray control
+    // character from malformed feed metadata must be dropped, not encoded.
+    const feed = {
+      name: "Bad\x00Name\x0BHere",
+      url: "https://example.com/feed.xml",
+      sourceType: "rss",
+    };
+
+    const xml = generateOpml([feed]);
+    expect(xml).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F]/);
+
+    // The real regression: this must not throw — a strict XML parser errors
+    // out on the whole document, not just the offending outline.
+    const outlines = await parseOpml(xml);
+    const feedOutline = flatten(outlines).find((o) => o.xmlUrl === feed.url);
+    expect(feedOutline!.text).toBe("BadNameHere");
+  });
 });

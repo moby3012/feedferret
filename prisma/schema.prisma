@@ -85,6 +85,7 @@ model User {
   aiOllamaBaseUrl         String?
   aiAutoSummarize         Boolean   @default(false)
   aiSummaryLanguage       String    @default("same")   // "same" | BCP-47 tag e.g. "de"
+  aiAutoTag               Boolean   @default(false)     // F8: auto-tag new articles via Label/ArticleLabel on sync
   // BYOK hosted-fetch connector (M7-T3): per-user, opt-in, own API key.
   // The last-resort tier for pages that beat even the browser-render sidecar
   // (M7-T2) — an active anti-bot challenge. Unlike every earlier tier, the
@@ -351,6 +352,7 @@ model Article {
   labels      ArticleLabel[]
   aiSummary      String?
   aiSummarizedAt DateTime?
+  aiTaggedAt     DateTime?                              // F8: set once auto-tagging has run, whether or not it produced any tags — avoids re-asking every sync
   digestedAt     DateTime?                              // set when article is sent in a digest
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
