@@ -364,8 +364,11 @@ export default function RSSReaderPage() {
     // 1. Not yet read, OR
     // 2. Read in this session (clicked but still visible), OR
     // 3. Already in readInSession (persist visibility after server update)
-    // Global search bypasses unreadOnly so all matches show.
-    if (unreadOnly && !isSearchActive) {
+    // The search itself always queries across all articles regardless of
+    // read state (see useArticles above) — this filter only controls which
+    // of those matches are *displayed*, same as outside of search, so the
+    // unread/all toggle keeps working while a search is active.
+    if (unreadOnly) {
       list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
     }
 
@@ -382,7 +385,7 @@ export default function RSSReaderPage() {
       if (a.id === b.id) return 0;
       return sortOrder === "oldest" ? (a.id < b.id ? -1 : 1) : (a.id > b.id ? -1 : 1);
     });
-  }, [displayArticles, unreadOnly, readInSession, sortOrder, isSearchActive]);
+  }, [displayArticles, unreadOnly, readInSession, sortOrder]);
 
   const selectedArticleIndex = useMemo(
     () => filteredArticles.findIndex((article: any) => article.id === selectedArticleId),

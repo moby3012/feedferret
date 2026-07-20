@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,8 +51,36 @@ export function MobileBottomControls({
 }: MobileBottomControlsProps) {
   const t = useTranslations();
   const [searchOpen, setSearchOpen] = useState(!!searchQuery && !isSearchActive);
+  // The debounced search activates ~300ms after the first keystroke — without
+  // this, the whole nav would swap out from under the input mid-typing (the
+  // input unmounts, iOS drops the keyboard, and typing appears to "abort"
+  // after one letter). Stay on the editable input for as long as it's
+  // focused, and only switch to the results toolbar once the user is
+  // actually done (blurred it) — with a short grace delay so tapping a
+  // sibling button (e.g. the clear/close "X") doesn't lose the tap to the
+  // blur-before-click race on touch devices.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  if (isSearchActive) {
+  const handleSearchInputFocus = () => {
+    if (blurTimeoutRef.current) {
+      clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+    setIsEditingSearch(true);
+  };
+
+  const handleSearchInputBlur = () => {
+    blurTimeoutRef.current = setTimeout(() => setIsEditingSearch(false), 150);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+    };
+  }, []);
+
+  if (isSearchActive && !isEditingSearch) {
     return (
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 bg-background/95 backdrop-blur-xl pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
         <nav className="pointer-events-auto flex h-16 items-center gap-1.5 rounded-[2rem] border border-border/70 bg-background/90 px-2 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
@@ -116,6 +144,8 @@ export function MobileBottomControls({
               placeholder={t("sidebar.searchArticles")}
               value={searchQuery}
               onChange={(event) => onSearchChange(event.target.value)}
+              onFocus={handleSearchInputFocus}
+              onBlur={handleSearchInputBlur}
               className="h-12 rounded-2xl border-border/50 bg-muted/45 ps-10 pe-11 text-base"
               autoFocus
             />
