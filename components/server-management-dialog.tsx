@@ -66,6 +66,7 @@ import {
   updateGlobalSettings,
   sendTestEmail,
   testRenderSidecar,
+  testRsshubConnection,
   getPushDiagnostics,
   generateVapidKeyPair,
   getAdminAuditLog,
@@ -221,6 +222,37 @@ export function ServerManagementDialog({
     // "__encrypted__" sentinel (that would re-encrypt the placeholder string).
     if (token && token !== "__encrypted__") payload.renderSidecarToken = token;
     await handleUpdateSettings(payload);
+  };
+
+  const handleSaveRsshub = async () => {
+    const payload: any = {
+      rsshubEnabled: settings?.rsshubEnabled ?? false,
+      rsshubBaseUrl: settings?.rsshubBaseUrl ?? null,
+    };
+    const apiKey = (settings as any)?.rsshubApiKey;
+    // Only send the key when the admin actually typed a new one — never the
+    // "__encrypted__" sentinel (that would re-encrypt the placeholder string).
+    if (apiKey && apiKey !== "__encrypted__") payload.rsshubApiKey = apiKey;
+    await handleUpdateSettings(payload);
+  };
+
+  const handleTestRsshub = async () => {
+    setIsSaving(true);
+    try {
+      const result = await testRsshubConnection({
+        baseUrl: (settings as any)?.rsshubBaseUrl ?? "",
+        apiKey: (settings as any)?.rsshubApiKey ?? "",
+      });
+      if (result.success) {
+        toast.success(t("toast.rsshubTestOk", { count: result.itemCount }));
+      } else {
+        toast.error(t("toast.rsshubTestFailed", { error: result.error ?? "" }));
+      }
+    } catch (error: any) {
+      toast.error(error?.message || t("toast.rsshubTestFailed", { error: "" }));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCopyText = async (value: string) => {
@@ -1215,6 +1247,57 @@ export function ServerManagementDialog({
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.renderSidecarTest")}
                           </Button>
                           <Button className="rounded-2xl px-8" onClick={handleSaveSidecar} disabled={isSaving}>
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.save")}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── RSSHub connector (M5a) ── */}
+                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1 pe-6">
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.rsshub")}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {t("sync.rsshubDescription")}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={settings?.rsshubEnabled ?? false}
+                        onCheckedChange={(checked) => handleUpdateSettings({ rsshubEnabled: checked })}
+                      />
+                    </div>
+
+                    {settings?.rsshubEnabled && (
+                      <div className="p-6 rounded-2xl bg-card border border-border/60 shadow-sm space-y-4">
+                        <SettingsField
+                          label={t("sync.rsshubBaseUrl")}
+                          placeholder="http://rsshub:1200/"
+                          field="rsshubBaseUrl"
+                          settings={settings}
+                          setSettings={setSettings}
+                        />
+                        <SettingsField
+                          label={t("sync.rsshubApiKey")}
+                          placeholder="••••••••"
+                          field="rsshubApiKey"
+                          settings={settings}
+                          setSettings={setSettings}
+                          type="password"
+                          isSecret
+                        />
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {t("sync.rsshubHint")}
+                        </p>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            className="rounded-2xl px-6"
+                            onClick={handleTestRsshub}
+                            disabled={isSaving}
+                          >
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.rsshubTest")}
+                          </Button>
+                          <Button className="rounded-2xl px-8" onClick={handleSaveRsshub} disabled={isSaving}>
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.save")}
                           </Button>
                         </div>

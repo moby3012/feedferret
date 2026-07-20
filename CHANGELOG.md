@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Added (2026-07-20 — M5a complete: "Add from platform" UI)
+
+- **"Add from platform" — a 4th Add-Feed tab for the RSSHub connector** (`components/rsshub-panel.tsx`) — only appears once an admin has configured RSSHub (Server Management → Sync). Power users can type an RSSHub route path directly (e.g. `/github/repos/DIYgod/RSSHub/releases`); with an AI provider configured, pasting a platform URL or description instead gets a proposed route via the user's BYOK model — never trusted without a real fetch-and-validate round-trip first (mirrors M4's "AI proposes, engine validates"). Once a route resolves, adding it reuses the exact same generic add-feed flow as a plain URL, since an RSSHub-backed feed is just a normal RSS/Atom feed. This completes M5a end-to-end (engine, admin config, and UI).
+
 ### Added (2026-07-20 — M5a engine layer: RSSHub connector)
 
 - **RSSHub connector — backend/admin layer** (`lib/rsshub.ts`) — an optional, admin-configured self-hosted [RSSHub](https://docs.rsshub.app/) instance can now be validated and used to turn a platform source (YouTube channel, subreddit, GitHub repo releases, etc.) into a real feed, via RSSHub's own route conventions. Admin config (Server Management): base URL + optional encrypted access key, hidden entirely until enabled, with a "Test connection" that smokes-tests via RSSHub's own GitHub-releases route. `proposeAndValidateRoute` mirrors M4's "AI proposes, engine validates" pattern: the user's BYOK model proposes a route for a pasted platform URL, which is then fetched and validated for real before ever being trusted. An RSSHub-backed feed is just a plain RSS/Atom feed once the route resolves — no new feed type, sync path, or OPML handling needed. The user-facing "Add from platform" UI is a follow-up slice; this ships the fully-tested engine and admin config it depends on.

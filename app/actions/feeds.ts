@@ -2133,3 +2133,87 @@ export async function getRsshubStatus() {
     const { isRsshubConfigured } = await import("@/lib/rsshub");
     return { configured: await isRsshubConfigured() };
 }
+
+/**
+ * Resolves a candidate RSSHub feed and validates it for real before ever
+ * showing success — either from an explicit route path (power users who
+ * know RSSHub's route syntax) or, given a source URL/description, via the
+ * user's BYOK AI provider proposing one (never trusted without the same
+ * validation). Returns the fully-built route URL (including the admin's
+ * configured access key, if any) ready to hand to the normal add-feed flow —
+ * an RSSHub-backed feed is just a plain RSS/Atom feed once the route works.
+ */
+export async function previewRsshubFeed(input: { routePath?: string; sourceDescription?: string }) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const { getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute, proposeAndValidateRoute } = await import("@/lib/rsshub");
+    const rsshubConfig = await getRsshubConfig();
+    if (!rsshubConfig) {
+        return { success: false as const, error: "RSSHub is not configured on this server." };
+    }
+
+    const routePath = input.routePath?.trim();
+    if (routePath) {
+        const validation = await validateRsshubRoute(rsshubConfig, routePath);
+        if (!validation.ok) return { success: false as const, error: validation.reason };
+        return {
+            success: true as const,
+            route: routePath,
+            url: buildRsshubRouteUrl(rsshubConfig, routePath),
+            title: validation.title,
+            itemCount: validation.itemCount,
+            sampleTitles: validation.sampleTitles,
+        };
+    }
+
+    const sourceDescription = input.sourceDescription?.trim();
+    if (!sourceDescription) {
+        return { success: false as const, error: "Enter a platform URL/description, or an RSSHub route path." };
+    }
+
+    const rateLimit = checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.rsshubRoute);
+    if (!rateLimit.success) {
+        return { success: false as const, error: "Too many AI requests. Wait a bit and try again." };
+    }
+
+    const user = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { aiProvider: true, aiApiKey: true, aiModel: true, aiOllamaBaseUrl: true },
+    });
+    if (!user?.aiProvider) {
+        return {
+            success: false as const,
+            error: "AI is not configured. Set up AI in Settings → AI Summaries, or enter an RSSHub route path directly.",
+        };
+    }
+
+    const result = await proposeAndValidateRoute(
+        sourceDescription,
+        {
+            provider: user.aiProvider as AiProvider,
+            apiKey: decryptIfValue(user.aiApiKey),
+            model: user.aiModel,
+            ollamaBaseUrl: user.aiOllamaBaseUrl,
+        },
+        rsshubConfig,
+    );
+    if (!result) {
+        return {
+            success: false as const,
+            error: "The AI couldn't determine a route for that. Try a more specific URL, or enter a route path directly.",
+        };
+    }
+    if (!result.validation.ok) {
+        return { success: false as const, error: `Proposed route "${result.route}" didn't work: ${result.validation.reason}` };
+    }
+
+    return {
+        success: true as const,
+        route: result.route,
+        url: buildRsshubRouteUrl(rsshubConfig, result.route),
+        title: result.validation.title,
+        itemCount: result.validation.itemCount,
+        sampleTitles: result.validation.sampleTitles,
+    };
+}

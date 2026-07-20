@@ -86,10 +86,10 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 
 **User outcome:** an admin can point FeedFerret at a self-hosted RSSHub and/or changedetection.io; users then get platform feeds and any-page monitoring — the AI can even pick the right route/watch for them.
 
-- [~] **M5a — RSSHub connector** — `M` — *engine slice shipped 2026-07-20 (`lib/rsshub.ts` + admin config), UI slice ("Add from platform") still pending*
+- [x] **M5a — RSSHub connector** — `M` — *shipped 2026-07-20 in two slices: engine + admin config (`lib/rsshub.ts`), then the "Add from platform" UI*
   - [x] Admin setting: RSSHub base URL (+ optional key); reachable only via SSRF-allowlisted host. — `GlobalSettings.rsshubEnabled/rsshubBaseUrl/rsshubApiKey` (encrypted), mirrors the render-sidecar (M7-T2) admin-config pattern exactly. `testRsshubConnection` action smoke-tests via RSSHub's own GitHub-releases route (always exists, no platform auth needed).
-  - [ ] "Add from platform" UX: user names a source (YouTube channel, subreddit, GitHub repo releases…) → we build the RSSHub route → add as feed. AI can map "this YouTube URL" → the route. — *engine ready (`proposeAndValidateRoute`, mirrors M4's "AI proposes, engine validates"), UI not yet built.*
-  - [x] Hidden entirely when unconfigured. — `getRsshubStatus()` (`app/actions/feeds.ts`) exposes `isRsshubConfigured()` to any authenticated user for UI gating.
+  - [x] "Add from platform" UX: user names a source (YouTube channel, subreddit, GitHub repo releases…) → we build the RSSHub route → add as feed. AI can map "this YouTube URL" → the route. — new 4th "From platform" tab in the Add-Feed dialog (`components/rsshub-panel.tsx`), only rendered once RSSHub is configured. Power users can type an RSSHub route path directly (no AI needed); with an AI provider configured, a source URL/description gets a proposed route via `proposeAndValidateRoute` — never trusted without a real validation round-trip first. Reuses the existing generic add-feed flow once a route resolves (it's just a URL).
+  - [x] Hidden entirely when unconfigured. — `getRsshubStatus()` (`app/actions/feeds.ts`) exposes `isRsshubConfigured()`; the sidebar's Add-Feed tab bar drops from 4 to 3 columns and the tab itself doesn't render when it's false.
   - **Design note:** once a route is known, an RSSHub-backed feed IS just a plain RSS/Atom feed at `<rsshubBaseUrl><route>` — no new `sourceType`, sync path, or OPML handling needed. `validateRsshubRoute` reuses the exact same `fetchFeedArticles()` every other RSS feed already goes through.
 - [ ] **M5b — changedetection.io connector** — `M`
   - [ ] Admin setting: changedetection base URL + API key.
@@ -139,7 +139,7 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 | **M2** ✅ | Full-text polish (tables/code/math/images) — *shipped 2026-07-20* | S–M | M1 |
 | **M3** ✅ | Manual page→feed builder — *shipped, PRs #145–#147* | M–L | M1 |
 | **M4 ⭐** ✅ | **AI proposes the whole config** (paste → accept) — *shipped: engine (#149), "✨" page→feed UX + rate-limit (#155), full-text-selector proposal in feed settings (#156)* | M | M1, M3 |
-| **M5** | Optional RSSHub + changedetection.io connectors | M (×2) | M3/M4 |
+| **M5** 🔄 | Optional RSSHub + changedetection.io connectors — *M5a (RSSHub) shipped 2026-07-20, M5b (changedetection.io) remains* | M (×2) | M3/M4 |
 | **M6** ✅ | Per-article AI extraction fallback — *shipped 2026-07-20* | M–L | M1, M4 |
 | **M7** | Playwright / Firecrawl / Jina heavy path | L | M3–M5 |
 
