@@ -1,3 +1,11 @@
+# FeedFerret — default stack.
+#
+# PostgreSQL + browser-render sidecar, no RSSHub/changedetection.io. This is
+# the middle of three compose variants — see docs/self-hosting.md for the
+# full comparison:
+#   - docker-compose.minimal.yaml   — SQLite only, no sidecar, no connectors
+#   - docker-compose.yaml           — this file (PostgreSQL + render sidecar)
+#   - docker-compose.ultimate.yaml  — everything, incl. RSSHub + changedetection.io
 services:
   feedferret:
     build:
