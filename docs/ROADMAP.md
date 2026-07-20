@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Last updated: 2026-07-19 — Feed Intelligence (Phase 2, M1/M3/M4/M7) shipped in full; M7 "Heavy Fetch" complete (T0–T3: impit → ftr-site-config → render sidecar → BYOK hosted API). Earlier: v1.1.1 shipped; a full design audit (performance / UX / security / visuals) resolved **all 54 findings** — see [`archive/`](archive/) for that and other completed one-time audits.
+> Last updated: 2026-07-20 — a second full UX/design audit (2026-07-19, 26 findings across P0/i18n/UX-flow/visual-a11y/polish) resolved in full, plus a fourth round of reader-overflow fixes (WebKit-specific flexbox sizing bug, found via a second affected feed). Earlier: Feed Intelligence (Phase 2, M1/M3/M4/M7) shipped in full; M7 "Heavy Fetch" complete (T0–T3: impit → ftr-site-config → render sidecar → BYOK hosted API). Earlier still: v1.1.1 shipped; a full design audit (performance / UX / security / visuals) resolved **all 54 findings** — see [`archive/`](archive/) for that and other completed one-time audits.
 
 This file is the **top-level index**. Each release has its own detailed planning document in [`docs/releases/`](releases/).
 
