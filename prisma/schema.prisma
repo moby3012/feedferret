@@ -95,6 +95,19 @@ model User {
   contentFetchProvider    String?                       // "jina" | "firecrawl"
   contentFetchApiKey      String?                       // encrypted at rest
   contentFetchAutoUse     Boolean   @default(false)
+  // F6: auto-mute a feed after this many *consecutive* sync failures (see
+  // Feed.consecutiveFailureCount / Feed.autoMuted below). 0 = disabled/opt-out.
+  autoMuteFailingFeedsAfter Int     @default(10)
+  // F5: export destinations ("send to") from the article reader. Obsidian has
+  // no API — it's a local vault app — so all it needs is a vault name to build
+  // an `obsidian://new` deep link; no credentials involved. Wallabag is a
+  // self-hosted read-later service (OAuth2 password grant).
+  exportObsidianVault        String?
+  exportWallabagUrl          String?
+  exportWallabagClientId     String?
+  exportWallabagClientSecret String?                    // encrypted at rest
+  exportWallabagUsername     String?
+  exportWallabagPassword     String?                    // encrypted at rest
   role          String    @default("USER")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -171,7 +184,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // "keyword_alert" | "rule_match" | "feed_error" | "digest_sent"
+  type      String   // "keyword_alert" | "rule_match" | "feed_error" | "digest_sent" | "feed_auto_muted"
   title     String
   body      String
   articleId String?
@@ -284,6 +297,10 @@ model Feed {
   lastFetchedAt   DateTime?
   lastStatus       String?
   lastError        String?
+  // F6: auto-mute after N consecutive failures (User.autoMuteFailingFeedsAfter).
+  // Resets to 0 on any successful sync or a manual unmute.
+  consecutiveFailureCount Int      @default(0)
+  autoMuted               Boolean  @default(false)
   // Conditional GET (HTTP caching): sent as If-None-Match / If-Modified-Since on the next fetch.
   etag              String?
   lastModifiedHeader String?

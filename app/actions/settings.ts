@@ -78,6 +78,7 @@ export async function getReadingPreferences() {
       hideEmptyFeeds: true,
       hideEmptyLabels: true,
       uiLanguage: true,
+      autoMuteFailingFeedsAfter: true,
     },
   });
   return {
@@ -95,6 +96,7 @@ export async function getReadingPreferences() {
     hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
     hideEmptyLabels: user?.hideEmptyLabels ?? false,
     uiLanguage: user?.uiLanguage ?? "en",
+    autoMuteFailingFeedsAfter: user?.autoMuteFailingFeedsAfter ?? 10,
   };
 }
 
@@ -114,12 +116,20 @@ export async function updateGlobalSettings(data: {
   layoutDirection?: "ltr" | "rtl";
   hideEmptyFeeds?: boolean;
   hideEmptyLabels?: boolean;
+  autoMuteFailingFeedsAfter?: number;
 }) {
   const session = await requireUser();
 
+  const updateData: Record<string, unknown> = { ...data };
+  if (data.autoMuteFailingFeedsAfter !== undefined) {
+    // 0 = disabled/opt-out; otherwise clamp to a sane range.
+    updateData.autoMuteFailingFeedsAfter =
+      data.autoMuteFailingFeedsAfter <= 0 ? 0 : Math.min(1000, Math.round(data.autoMuteFailingFeedsAfter));
+  }
+
   await db.user.update({
     where: { id: session.user.id },
-    data,
+    data: updateData,
   });
 
   revalidatePath("/");

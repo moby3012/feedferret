@@ -353,6 +353,29 @@
       "firecrawl": "Firecrawl Cloud"
     }
   },
+  "exportDestinations": {
+    "title": "Export Destinations",
+    "description": "Send articles straight from the reader to your own notes or read-later app.",
+    "obsidianTitle": "Obsidian",
+    "obsidianDescription": "Obsidian has no API — it's a local vault app. Set your vault name and \"Send to Obsidian\" opens an obsidian://new deep link with the article as Markdown, straight into your own vault. No account, no credentials, nothing leaves this server.",
+    "obsidianVaultLabel": "Vault name",
+    "obsidianVaultPlaceholder": "My Vault",
+    "wallabagTitle": "Wallabag",
+    "wallabagDescription": "Send articles to your own self-hosted Wallabag instance via its API.",
+    "wallabagUrlLabel": "Instance URL",
+    "wallabagUrlPlaceholder": "https://wallabag.example.com",
+    "wallabagClientIdLabel": "Client ID",
+    "wallabagClientSecretLabel": "Client secret",
+    "wallabagUsernameLabel": "Username",
+    "wallabagPasswordLabel": "Password",
+    "currentlySet": "currently set",
+    "leaveBlankToKeep": "Leave blank to keep current",
+    "save": "Save",
+    "saving": "Saving…",
+    "testConnection": "Test connection",
+    "testing": "Testing…",
+    "connectionSuccessful": "Connection successful"
+  },
   "notifications": {
     "title": "Notification Channels",
     "description": "Forward keyword alerts and rule matches to external services. Enable a channel, enter your credentials, and choose it as an action in Rules & Alerts.",
@@ -751,6 +774,12 @@
     "copyLink": "Copy link",
     "labels": "Labels",
     "noLabels": "No labels",
+    "sendTo": "Send to",
+    "sendToObsidian": "Obsidian",
+    "sendToWallabag": "Wallabag",
+    "sendToObsidianSuccess": "Opening in Obsidian…",
+    "sendToWallabagSuccess": "Sent to Wallabag",
+    "sendToFailed": "Could not send the article",
     "moreActions": "More actions",
     "previousArticle": "Previous article",
     "backToList": "Back to list",
@@ -878,7 +907,14 @@
       "sync": "Sync:",
       "retentionDays": "{count, plural, one {Retention: # day} other {Retention: # days}}",
       "retentionDefault": "Retention: default",
-      "default": "default"
+      "default": "default",
+      "autoMuteThresholdLabel": "Auto-mute after consecutive failures",
+      "autoMuteThresholdHint": "Stop actively re-fetching a feed once it's failed this many syncs in a row, and notify you once. 0 disables this.",
+      "autoMuteThresholdSuffix": "syncs",
+      "autoMuted": "Auto-muted",
+      "consecutiveFailures": "{count, plural, one {# consecutive failed sync} other {# consecutive failed syncs}}",
+      "muteButton": "Mute",
+      "unmuteButton": "Unmute"
     },
     "importExport": {
       "genericOpmlImport": "Generic OPML import",

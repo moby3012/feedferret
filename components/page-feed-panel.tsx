@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, FileSearch } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,9 @@ type PageFeedCandidate = {
 interface PageFeedPanelProps {
   categoryId?: string;
   onCreated: (feed: { name: string }) => void;
+  // F7: PWA share-target deep link (?sharedUrl=...) pre-fills this instead of
+  // starting from an empty URL field.
+  initialUrl?: string;
 }
 
 function hostOf(link: string): string {
@@ -47,14 +50,20 @@ function deriveNameFromUrl(url: string): string {
   }
 }
 
-export function PageFeedPanel({ categoryId, onCreated }: PageFeedPanelProps) {
+export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPanelProps) {
   const t = useTranslations("sidebar.webpage");
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl ?? "");
   const [candidates, setCandidates] = useState<PageFeedCandidate[] | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [name, setName] = useState("");
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [fullTextInfo, setFullTextInfo] = useState<{ notes: string | null } | null>(null);
+
+  // Deep-link URL can arrive after this panel already mounted (it's rendered
+  // lazily inside the Add-Feed dialog's "From web page" tab).
+  useEffect(() => {
+    if (initialUrl) setUrl(initialUrl);
+  }, [initialUrl]);
 
   const suggest = useSuggestFeedFromUrl();
   const create = useCreateFeedFromPage();
