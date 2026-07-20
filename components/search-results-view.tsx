@@ -51,7 +51,7 @@ export function SearchResultsView({
   const count = articles.length;
 
   return (
-    <div className="relative z-10 flex h-full min-w-0 flex-col">
+    <div className="relative z-10 flex min-w-0 flex-1 flex-col min-h-0">
       <header className="relative border-b border-border/60 bg-card/85 backdrop-blur-2xl animate-fade-in">
         <div className="flex items-start gap-3 px-4 pt-4 pb-3 sm:px-5">
           <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
@@ -145,6 +145,7 @@ export function SearchResultsView({
             filterKey={filterKey}
             transitionStyle={transitionStyle}
             onMarkRead={onMarkRead}
+            searchQuery={searchQuery}
           />
         </div>
       )}
