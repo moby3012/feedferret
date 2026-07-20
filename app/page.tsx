@@ -55,7 +55,7 @@ const ssrSafeStorage = {
   setItem: (key: string, value: string) => { if (typeof window !== "undefined") localStorage.setItem(key, value); },
 };
 
-function toUiArticle(a: any, unknownAuthor = "Unknown") {
+function toUiArticle(a: any) {
   const publishedAt = new Date(a.publishedAt);
   return {
     ...a,
@@ -64,9 +64,12 @@ function toUiArticle(a: any, unknownAuthor = "Unknown") {
     publishedAtRaw: publishedAt.getTime(),
     createdAtRaw: a.createdAt ? new Date(a.createdAt).getTime() : 0,
     publishedAt: publishedAt.toISOString(),
-    readTime: readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).text,
+    readTime: Math.ceil(readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).minutes),
     excerpt: a.excerpt || "",
-    author: a.author || unknownAuthor,
+    // No "Unknown" fallback here — many feeds simply don't provide an
+    // author, and showing a placeholder for every one of their articles is
+    // just noise. Leave it empty and let the display layer hide it entirely.
+    author: a.author || "",
     duplicateCount: a._count?.duplicates ?? 0,
     canonicalFeedName: a.canonical?.feed?.name ?? null,
   };
@@ -85,7 +88,6 @@ function normalizeViewMode(value?: string | null): ViewMode {
 export default function RSSReaderPage() {
   const t = useTranslations("sidebar");
   const tA11y = useTranslations("accessibility");
-  const tList = useTranslations("articleList");
   const tSearch = useTranslations("searchResults");
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -261,6 +263,10 @@ export default function RSSReaderPage() {
 
     if (params.get("addFeed") === "1") {
       setOpenAddFeed((n) => n + 1);
+      // On mobile the sidebar (and the add-feed flow inside it) only mounts
+      // inside a Sheet gated by sidebarOpen — without this the deep link
+      // silently did nothing there, since nothing else opens the sheet.
+      setSidebarOpen(true);
     }
   }, [status]);
 
@@ -297,9 +303,8 @@ export default function RSSReaderPage() {
 
   // Transform articles for UI components
   const articles = useMemo(() => {
-    const unknownAuthor = tList("unknownAuthor");
-    return cachedRawArticles.map((a) => toUiArticle(a, unknownAuthor));
-  }, [cachedRawArticles, tList]);
+    return cachedRawArticles.map((a) => toUiArticle(a));
+  }, [cachedRawArticles]);
 
   const displayArticles = useMemo(() => {
     const byId = new Map<string, any>();
@@ -375,7 +380,17 @@ export default function RSSReaderPage() {
     if (selectedCategory.startsWith("Search:")) {
       return savedSearches.find((search: any) => search.id === selectedCategory.slice("Search:".length))?.name || t("savedSearchFallback");
     }
-    return selectedCategory;
+    // These are internal sentinel values (also used as sidebar categoryIds),
+    // not display strings — translate the known ones. Anything else is a
+    // real user-created category name and passes through as-is.
+    const sentinelLabels: Record<string, string> = {
+      All: t("allArticles"),
+      "All Articles": t("allArticles"),
+      Starred: t("starred"),
+      "Read Later": t("readLater"),
+      Spoiler: t("spoiler"),
+    };
+    return sentinelLabels[selectedCategory] ?? selectedCategory;
   }, [selectedFeed, selectedCategory, feeds, labels, savedSearches, t]);
 
   const markArticleRead = useCallback((article: any) => {
@@ -635,7 +650,7 @@ export default function RSSReaderPage() {
   const handleFetchFullText = useCallback((articleId: string) => {
     fetchFullText.mutate(articleId, {
       onSuccess: (article: any) => {
-        const uiArticle = toUiArticle(article, tList("unknownAuthor"));
+        const uiArticle = toUiArticle(article);
         setSelectedArticleSnapshot(uiArticle);
         setSessionReadArticles((prev) => [
           uiArticle,
@@ -643,12 +658,12 @@ export default function RSSReaderPage() {
         ]);
       },
     });
-  }, [fetchFullText, tList]);
+  }, [fetchFullText]);
 
   const handleSetLabels = useCallback((articleId: string, labelIds: string[]) => {
     setArticleLabels.mutate({ articleId, labelIds }, {
       onSuccess: (article: any) => {
-        const uiArticle = toUiArticle(article, tList("unknownAuthor"));
+        const uiArticle = toUiArticle(article);
         setSelectedArticleSnapshot(uiArticle);
         setSessionReadArticles((prev) => [
           uiArticle,
@@ -656,7 +671,7 @@ export default function RSSReaderPage() {
         ]);
       },
     });
-  }, [setArticleLabels, tList]);
+  }, [setArticleLabels]);
 
   const handleSaveSearch = useCallback(() => {
     const query = searchQuery.trim();

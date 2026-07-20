@@ -311,7 +311,7 @@ export function ServerManagementDialog({
   const addPack = () => {
     setStarterPacks([
       ...starterPacks,
-      { id: `custom-${Date.now()}`, name: "New starter pack", description: "", enabled: true, feeds: [] },
+      { id: `custom-${Date.now()}`, name: t("starterPacks.newPackName"), description: "", enabled: true, feeds: [] },
     ]);
   };
   const resetStarterPacks = async () => {
@@ -445,7 +445,7 @@ export function ServerManagementDialog({
 
   const shellProps = {
     title: t("title"),
-    description: t("title"),
+    description: t("description"),
     activeTab,
     onTabChange: (tab: string) => {
       setActiveTab(tab);

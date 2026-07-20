@@ -125,7 +125,7 @@ export function RssHeader({
             <span className={cn("tabular-nums", displayCount > 0 && "text-brand font-semibold")}>
               {displayCount}
             </span>{" "}
-            unread
+            {t("unreadSuffix")}
           </p>
         </div>
       </div>

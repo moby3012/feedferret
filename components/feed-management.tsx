@@ -883,12 +883,16 @@ export function FeedManagement({
     if (open) setActiveTab(normalizeInitialTab(initialTab));
   }, [initialTab, open]);
 
-  // Initialize all categories as expanded when categories load
+  // Initialize all categories as expanded when categories (or feeds) load.
+  // The `categories.length > 0` gate used to mean a user with NO categories
+  // yet never got this at all — every group (including "Uncategorized", the
+  // ONLY group they'd have) stayed collapsed from the initial empty Set,
+  // which read as "no feeds" rather than "click to expand".
   useEffect(() => {
-    if (categories.length > 0) {
+    if (categories.length > 0 || feedsByCategory.uncategorized.length > 0) {
       setExpandedCategories(new Set([...categories.map((c) => c.id), "__uncategorized__"]));
     }
-  }, [categories.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [categories.length, feedsByCategory.uncategorized.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const searchParams = useSearchParams();
   const highlightFeedId = searchParams.get("feedId");
@@ -1026,6 +1030,13 @@ export function FeedManagement({
     { value: "labels", label: t("labelsAndSearchesTab") },
     { value: "health", label: t("healthTab") },
     { value: "rules", label: t("rulesAndAlertsTab") },
+    // Keyword alerts are being migrated into the newer rules system (see the
+    // migration banner in the "rules" tab below) and no longer get a
+    // permanent tab of their own — but before/without migrating, users with
+    // existing alerts still need a way to reach this UI to review, edit, or
+    // delete them. Without this, it's dead, unreachable code once the
+    // trigger disappears from the tab bar.
+    ...(keywordAlerts.length > 0 ? [{ value: "alerts", label: t("alerts.keywordAlerts") }] : []),
   ];
 
   const shellProps = { title: t("title"), description: t("description"), activeTab, onTabChange: setActiveTab, tabs: shellTabs };
@@ -1447,7 +1458,7 @@ export function FeedManagement({
                               <span>{feed.unreadCount} {t("health.unread")}</span>
                               <span>{feed.avgArticlesPerDay != null ? `${feed.avgArticlesPerDay}${t("health.perDay")}` : "—"}</span>
                               <span>{t("health.sync")} {feed.lastFetchedAt ? format.dateTime(new Date(feed.lastFetchedAt), { dateStyle: "medium", timeStyle: "short" }) : t("feeds.never")}</span>
-                              <span>{t("health.retention")} {feed.retentionDays || t("health.default")} {t("health.days")}</span>
+                              <span>{feed.retentionDays ? t("health.retentionDays", { count: feed.retentionDays }) : t("health.retentionDefault")}</span>
                             </div>
                             {feed.lastError && (
                               <p className="mt-3 rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -1650,18 +1661,22 @@ export function FeedManagement({
                     </div>
                   </div>
 
+                  {/* text-*-700 in light mode / dark:text-*-400 in dark mode:
+                      the -400 shades alone read fine on a dark background but
+                      have poor contrast against a light one — same fix as the
+                      privacy-warning banners elsewhere in settings. */}
                   <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
                     <button
                       type="button"
                       onClick={() => setShowRuleTutorial((v) => !v)}
-                      className="flex w-full items-center justify-between gap-2 text-sm font-medium text-blue-400 active:scale-[0.99] transition-transform"
+                      className="flex w-full items-center justify-between gap-2 text-sm font-medium text-blue-700 dark:text-blue-400 active:scale-[0.99] transition-transform"
                       aria-expanded={showRuleTutorial}
                     >
                       <span className="flex items-center gap-2">
                         <Info className="w-4 h-4 shrink-0" />
                         {t("rules.howRulesWork")}
                       </span>
-                      <span className="text-xs text-blue-300/70">
+                      <span className="text-xs text-blue-700/70 dark:text-blue-300/70">
                         {showRuleTutorial ? t("rules.hide") : t("rules.show")}
                       </span>
                     </button>
@@ -2264,8 +2279,11 @@ export function FeedManagement({
                     </Button>
                   </div>
 
+                  {/* text-amber-700 in light mode / dark:text-amber-400 in dark
+                      mode: -400 alone has poor contrast on a light background —
+                      same fix as the blue tutorial banner above. */}
                   <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-amber-400">
+                    <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
                       <Info className="w-4 h-4 shrink-0" />
                       {t("alerts.howAlertsWork")}
                     </div>

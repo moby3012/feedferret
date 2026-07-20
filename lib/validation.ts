@@ -55,6 +55,11 @@ export const RegisterUserSchema = z.object({
   name: z.string().max(200).optional(),
 });
 
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters").max(200),
+});
+
 export const CreateCategorySchema = z.object({
   name: z.string().min(1).max(100),
   parentId: z.string().optional(),

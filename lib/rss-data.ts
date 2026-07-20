@@ -23,7 +23,7 @@ export interface Article {
   author: string
   publishedAt: string
   publishedAtRaw?: number
-  readTime: string
+  readTime: number
   isRead: boolean
   readAt?: string | Date | null
   isStarred: boolean
@@ -77,7 +77,7 @@ New developer tools include improved hand tracking, eye tracking accuracy improv
 Pricing starts at $2,999 for the 256GB model, with availability beginning next month.`,
     author: "Sarah Chen",
     publishedAt: "2 hours ago",
-    readTime: "4 min read",
+    readTime: 4,
     isRead: false,
     isStarred: true,
     isReadLater: false,
@@ -102,7 +102,7 @@ Critics argue that this reliance on AI could erode human skills and creativity. 
 What's clear is that the nature of work is changing. The most successful professionals of the future may be those who can effectively collaborate with AI, knowing when to leverage its capabilities and when to trust their own judgment.`,
     author: "Michael Torres",
     publishedAt: "5 hours ago",
-    readTime: "6 min read",
+    readTime: 6,
     isRead: false,
     isStarred: false,
     isReadLater: false,
@@ -127,7 +127,7 @@ The funding will be used to expand manufacturing capacity at the company's Nevad
 Industry analysts are watching closely. If Modular Motors can deliver on its promises, it could disrupt not just the automotive industry but the entire concept of vehicle ownership.`,
     author: "James Park",
     publishedAt: "8 hours ago",
-    readTime: "3 min read",
+    readTime: 3,
     isRead: true,
     isStarred: false,
     isReadLater: false,
@@ -152,7 +152,7 @@ The Rust ecosystem has also matured significantly. Frameworks for web developmen
 Critics note that Rust's complexity can slow development speed and that its strict compiler can frustrate newcomers. But for projects where reliability and performance are paramount, Rust has become an increasingly compelling choice.`,
     author: "Alex Kim",
     publishedAt: "12 hours ago",
-    readTime: "5 min read",
+    readTime: 5,
     isRead: false,
     isStarred: true,
     isReadLater: false,
@@ -176,7 +176,7 @@ Modularity emerged as another key theme. Sofas with reconfigurable sections, she
 "Good design should be invisible," said one prominent designer. "It should make life easier without demanding attention."`,
     author: "Emma Richardson",
     publishedAt: "1 day ago",
-    readTime: "4 min read",
+    readTime: 4,
     isRead: true,
     isStarred: false,
     isReadLater: false,
@@ -201,7 +201,7 @@ The experiment used a novel approach involving 72 physical qubits working togeth
 While practical applications remain years away, this breakthrough provides a clear path forward. Industry experts predict that error-corrected quantum computers capable of solving commercially relevant problems could arrive within the next decade.`,
     author: "David Chen",
     publishedAt: "1 day ago",
-    readTime: "7 min read",
+    readTime: 7,
     isRead: false,
     isStarred: false,
     isReadLater: false,

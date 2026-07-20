@@ -94,7 +94,7 @@ function FeedFaviconInReader({ feedIcon, feedName, articleLink, size }: { feedIc
   }
   if (src && !imgFailed) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt={feedName} width={size} height={size} className="object-contain rounded-sm" style={{ width: size, height: size }} onError={() => setImgFailed(true)} />;
+    return <img src={src} alt={feedName} width={size} height={size} referrerPolicy="no-referrer" className="object-contain rounded-sm" style={{ width: size, height: size }} onError={() => setImgFailed(true)} />;
   }
   return <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>{feedIcon || "📰"}</span>;
 }
@@ -336,12 +336,19 @@ export function ArticleReader({
       // relative to that, not to the real screen edge. This is the actual
       // fix for symptoms that look like "several unrelated elements are all
       // cut off at once" — that's this exact failure mode, not a coincidence.
-      className="flex min-w-0 flex-1 flex-col bg-background/75 backdrop-blur-xl animate-fade-in"
+      // contain:layout is belt-and-suspenders on top of min-w-0: it's the
+      // same guarantee already used on .article-content (see globals.css) —
+      // by spec it makes this box's own size independent of its content
+      // entirely, so no engine-specific automatic-minimum-size bug (seen on
+      // iOS Safari, not reproducible in Chromium) can inflate it no matter
+      // what renders inside, regardless of whether every descendant remembers
+      // its own min-w-0/overflow-hidden correctly.
+      className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background/75 backdrop-blur-xl animate-fade-in [contain:layout]"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
       {/* Reader Header */}
-      <header className="flex items-center justify-between px-4 sm:px-6 pt-[calc(0.75rem_+_env(safe-area-inset-top))] pb-3 border-b border-border/60 bg-background/80 backdrop-blur-2xl sticky top-0 z-10">
+      <header className="flex min-w-0 items-center justify-between px-4 sm:px-6 pt-[calc(0.75rem_+_env(safe-area-inset-top))] pb-3 border-b border-border/60 bg-background/80 backdrop-blur-2xl sticky top-0 z-10 [contain:layout]">
         <div className="flex min-w-0 flex-1 items-center gap-4">
           {showBackButton && (
             <Button
@@ -553,13 +560,17 @@ export function ArticleReader({
               {article.title}
             </h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
-              <address className="not-italic font-medium text-foreground" rel="author">
-                {article.author}
-              </address>
-              <span aria-hidden="true" className="text-muted-foreground/40">·</span>
+              {article.author && (
+                <>
+                  <address className="not-italic font-medium text-foreground" rel="author">
+                    {article.author}
+                  </address>
+                  <span aria-hidden="true" className="text-muted-foreground/40">·</span>
+                </>
+              )}
               <time dateTime={article.publishedAt}>{format.dateTime(new Date(article.publishedAt), { dateStyle: "medium" })}</time>
               <span aria-hidden="true" className="text-muted-foreground/40">·</span>
-              <span>{article.readTime}</span>
+              <span>{t("readTime", { minutes: article.readTime })}</span>
             </div>
             {!!article.labels?.length && (
               <div className="mt-5 flex flex-wrap gap-2">
@@ -723,12 +734,18 @@ export function ArticleReader({
       </ScrollArea>
 
       <nav className="fixed inset-x-0 bottom-0 z-[60] bg-background/95 backdrop-blur-xl pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
-        <div className="flex h-16 items-center rounded-[2rem] border border-border/70 bg-background/90 px-1 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
+        {/* overflow-hidden: last-resort net for this row too (see the
+            min-w-0 additions below) — if six flex-1 buttons ever don't fit
+            (the unread-toggle button is wider than the rest, being the one
+            icon button without size="icon"'s fixed square), they clip to
+            this pill's rounded shape instead of spilling past it onto the
+            screen edge. */}
+        <div className="flex h-16 items-center overflow-hidden rounded-[2rem] border border-border/70 bg-background/90 px-1 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
+            className="h-11 min-w-0 flex-1 rounded-2xl text-muted-foreground active:scale-95"
             onClick={hasPreviousArticle ? handlePreviousArticle : onBack}
             aria-label={hasPreviousArticle ? t("previousArticle") : t("backToList")}
           >
@@ -739,7 +756,7 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className={cn(
-              "h-11 flex-1 rounded-2xl active:scale-95",
+              "h-11 min-w-0 flex-1 rounded-2xl active:scale-95",
               article.isStarred ? "text-brand-secondary" : "text-muted-foreground",
             )}
             onClick={() => onToggleStar(article.id)}
@@ -751,7 +768,7 @@ export function ArticleReader({
             type="button"
             variant="ghost"
             className={cn(
-              "h-11 flex-1 rounded-2xl active:scale-95 transition-all duration-200",
+              "h-11 min-w-0 flex-1 rounded-2xl active:scale-95 transition-all duration-200",
               article.isRead ? "bg-muted/70 text-foreground" : "bg-accent text-accent-foreground shadow-lg shadow-accent/20",
             )}
             onClick={() => onToggleRead?.(article.id)}
@@ -765,7 +782,7 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className={cn(
-              "h-11 flex-1 rounded-2xl active:scale-95",
+              "h-11 min-w-0 flex-1 rounded-2xl active:scale-95",
               article.isReadLater ? "bg-accent text-accent-foreground" : "text-muted-foreground",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
@@ -779,7 +796,7 @@ export function ArticleReader({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
+                className="h-11 min-w-0 flex-1 rounded-2xl text-muted-foreground active:scale-95"
                 aria-label={t("moreActions")}
               >
                 <MoreHorizontal className="h-5 w-5" />
@@ -856,7 +873,7 @@ export function ArticleReader({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-11 flex-1 rounded-2xl text-muted-foreground active:scale-95"
+            className="h-11 min-w-0 flex-1 rounded-2xl text-muted-foreground active:scale-95"
             onClick={handleNextArticle}
             disabled={!hasNextArticle}
             aria-label={t("nextArticle")}
