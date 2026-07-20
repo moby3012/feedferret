@@ -366,6 +366,8 @@ FeedFerret runs completely on its own — none of the following are required. Ea
 
 `docker-compose.ultimate.yaml` already bundles all three — if you're using it, skip straight to each connector's admin-configuration step below (the "minimal compose addition" snippets are for adding a connector to `docker-compose.minimal.yaml` or `docker-compose.yaml` manually).
 
+> **Port note (matters on Coolify and similar platforms):** RSSHub and changedetection.io both read the generic `PORT` environment variable to pick their listen port (their own defaults are 1200 and 5000). Some deploy platforms — **Coolify included** — inject one project-wide `PORT` value into *every* service of a Compose stack, which silently moves both connectors onto that port (3000, matching FeedFerret) instead of their defaults. To stay predictable everywhere, `docker-compose.ultimate.yaml` pins both connectors to `PORT=3000`, exposes them on 3000, and points FeedFerret at `http://rsshub:3000/`. The snippets below do the same. If you ever see a *Bad Gateway* reaching one of these services, it's almost always this: the container is listening on a different port than the one you're routing to.
+
 ### Browser render sidecar
 
 For JavaScript-heavy pages the normal fetcher can't read (used as a fallback for full-text extraction and "page → feed"). Bundled by default in `docker-compose.yaml` and `docker-compose.ultimate.yaml` — see [`docs/render-sidecar.md`](./render-sidecar.md) for the full setup, security model, and how to swap in your own service (e.g. crawl4ai).
@@ -384,10 +386,13 @@ services:
     image: diygod/rsshub
     restart: unless-stopped
     environment:
+      - PORT=3000              # see the port note above — keeps it deterministic
       - ACCESS_KEY=change-me   # optional — omit to run without a key
+    expose:
+      - "3000"
 ```
 
-Point FeedFerret's RSSHub base URL at `http://rsshub:1200/` (the Docker Compose service name).
+Point FeedFerret's RSSHub base URL at `http://rsshub:3000/` (the Docker Compose service name).
 
 ### changedetection.io connector
 
@@ -398,7 +403,7 @@ Turns *any* page — including JS-rendered ones, since [changedetection.io](http
 
 Once configured, users get a "Monitor page" tab in the Add Feed dialog. **A freshly created watch's feed has no items until changedetection.io has checked the page at least twice** — this is expected, not a bug; the feed fills in on its own once enough history exists.
 
-`docker-compose.ultimate.yaml` bundles the `changedetection` service, but deliberately does **not** pre-wire FeedFerret's connector via environment variables — both secrets above only exist after changedetection.io's own container has started and you've opened its web UI at least once to generate them, so there's nothing to default them to at deploy time. After starting the ultimate stack, open changedetection's UI (`http://<host>:5000`, reverse-proxied, or a temporary port-forward), grab both values from Settings, then configure the connector once in **Server Management → Sync**. It's usable immediately after that — no restart needed.
+`docker-compose.ultimate.yaml` bundles the `changedetection` service, but deliberately does **not** pre-wire FeedFerret's connector via environment variables — both secrets above only exist after changedetection.io's own container has started and you've opened its web UI at least once to generate them, so there's nothing to default them to at deploy time. After starting the ultimate stack, open changedetection's UI (route a domain to the `changedetection` service's port 3000 in your reverse proxy / Coolify, or use a temporary port-forward), grab both values from Settings, then configure the connector once in **Server Management → Sync** with base URL `http://changedetection:3000/`. It's usable immediately after that — no restart needed.
 
 Minimal compose addition (for `docker-compose.minimal.yaml` / `docker-compose.yaml`):
 
@@ -407,13 +412,17 @@ services:
   changedetection:
     image: ghcr.io/dgtlmoon/changedetection.io
     restart: unless-stopped
+    environment:
+      - PORT=3000              # see the port note above — keeps it deterministic
     volumes:
       - changedetection-data:/datastore
+    expose:
+      - "3000"
 volumes:
   changedetection-data:
 ```
 
-Point FeedFerret's changedetection.io base URL at `http://changedetection:5000/` (the Docker Compose service name).
+Point FeedFerret's changedetection.io base URL at `http://changedetection:3000/` (the Docker Compose service name).
 
 ### Network isolation / SSRF notes
 
