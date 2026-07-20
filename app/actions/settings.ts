@@ -4,9 +4,11 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
+import bcrypt from "bcryptjs";
 import { sendDigestEmail, getDigestArticles, markArticlesAsDigested } from "@/lib/digest-email";
 import { buildOtpAuthUri, generateTotpSecret, verifyTotpToken } from "@/lib/totp";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
+import { ChangePasswordSchema } from "@/lib/validation";
 import type { AiProvider } from "@/lib/ai-summary";
 import { fetchViaHostedApiDetailed, type HostedFetchProvider } from "@/lib/hosted-fetch";
 
@@ -25,6 +27,36 @@ export async function updateProfile(data: { name?: string; email?: string }) {
   });
 
   revalidatePath("/");
+}
+
+export async function changePassword(data: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const session = await requireUser();
+  const { getTranslations } = await import("next-intl/server");
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: { password: true, uiLanguage: true },
+  });
+  const t = await getTranslations({ locale: user?.uiLanguage ?? "en", namespace: "profile" });
+
+  const parsed = ChangePasswordSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? t("passwordChangeFailed") };
+
+  // Accounts provisioned via SSO/OAuth (e.g. Authelia) have no password set.
+  if (!user?.password) return { success: false, error: t("noPasswordSet") };
+
+  const currentMatches = await bcrypt.compare(parsed.data.currentPassword, user.password);
+  if (!currentMatches) return { success: false, error: t("currentPasswordIncorrect") };
+
+  const hashedPassword = await bcrypt.hash(parsed.data.newPassword, 10);
+  await db.user.update({
+    where: { id: session.user.id },
+    data: { password: hashedPassword, sessionVersion: { increment: 1 } },
+  });
+
+  return { success: true };
 }
 
 export async function getReadingPreferences() {
@@ -557,51 +589,65 @@ export async function updateAiSettings(data: {
 // (see lib/ai-summary.ts) — fine for logs, but a raw truncated JSON blob is
 // meaningless to a non-technical admin clicking "Test connection". Map the
 // common cases to a short, actionable sentence instead.
-function humanizeAiTestError(message: string): string {
+type TAiTestError = (key: string, params?: Record<string, string>) => string;
+
+function humanizeAiTestError(message: string, t: TAiTestError): string {
   const statusMatch = message.match(/^(\w+)\s+(\d{3}):/);
   const provider = statusMatch?.[1];
   const status = statusMatch?.[2];
   if (status === "401" || status === "403" || /invalid.api.key|incorrect api key|unauthorized/i.test(message)) {
-    return provider
-      ? `${provider}: invalid API key — check that you copied it correctly.`
-      : "Invalid API key — check that you copied it correctly.";
+    return provider ? t("testErrorInvalidApiKeyWithProvider", { provider }) : t("testErrorInvalidApiKey");
   }
   if (status === "429" || /rate.?limit/i.test(message)) {
-    return provider ? `${provider}: rate limited — try again shortly.` : "Rate limited by the provider — try again shortly.";
+    return provider ? t("testErrorRateLimitedWithProvider", { provider }) : t("testErrorRateLimited");
   }
   if (status === "404") {
-    return provider
-      ? `${provider}: model or endpoint not found — check the model override.`
-      : "Model or endpoint not found — check the model override.";
+    return provider ? t("testErrorNotFoundWithProvider", { provider }) : t("testErrorNotFound");
   }
   if (/timed out|aborted|ETIMEDOUT|ECONNREFUSED/i.test(message)) {
-    return "Could not reach the provider — check the connection or base URL.";
+    return t("testErrorUnreachable");
   }
-  if (statusMatch) {
-    return `${provider} returned an error (HTTP ${status}) — check your API key and model settings.`;
+  if (statusMatch && status) {
+    return t("testErrorGenericHttp", { provider: provider ?? "", status });
   }
   return message.length > 150 ? `${message.slice(0, 150)}…` : message;
 }
 
-export async function testAiConnection(): Promise<{ success: boolean; error?: string }> {
+export async function testAiConnection(overrides?: {
+  provider?: string | null;
+  apiKey?: string;
+  model?: string | null;
+  ollamaBaseUrl?: string | null;
+}): Promise<{ success: boolean; error?: string }> {
   const session = await requireUser();
   const user = await db.user.findUnique({
     where: { id: session.user.id },
-    select: { aiProvider: true, aiApiKey: true, aiModel: true, aiOllamaBaseUrl: true },
+    select: { aiProvider: true, aiApiKey: true, aiModel: true, aiOllamaBaseUrl: true, uiLanguage: true },
   });
-  if (!user?.aiProvider) return { success: false, error: "No AI provider configured" };
+  const { getTranslations } = await import("next-intl/server");
+  const t = await getTranslations({ locale: user?.uiLanguage ?? "en", namespace: "ai" });
+
+  // Test the form's current (possibly unsaved) values, not just what's
+  // persisted — otherwise "Test connection" silently tests stale settings
+  // until the user separately clicks "Save" first.
+  const provider = overrides && "provider" in overrides ? overrides.provider : user?.aiProvider;
+  const apiKey = overrides?.apiKey || decryptIfValue(user?.aiApiKey);
+  const model = overrides && "model" in overrides ? overrides.model : user?.aiModel;
+  const ollamaBaseUrl = overrides && "ollamaBaseUrl" in overrides ? overrides.ollamaBaseUrl : user?.aiOllamaBaseUrl;
+
+  if (!provider) return { success: false, error: t("testErrorNoProvider") };
   try {
     const { generateSummary } = await import("@/lib/ai-summary");
     await generateSummary("Short test content for connectivity verification.", {
-      provider: user.aiProvider as AiProvider,
-      apiKey: decryptIfValue(user.aiApiKey),
-      model: user.aiModel,
-      ollamaBaseUrl: user.aiOllamaBaseUrl,
+      provider: provider as AiProvider,
+      apiKey,
+      model: model ?? null,
+      ollamaBaseUrl: ollamaBaseUrl ?? null,
     });
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: humanizeAiTestError(message) };
+    return { success: false, error: humanizeAiTestError(message, t) };
   }
 }
 
@@ -648,18 +694,29 @@ export async function updateContentFetchSettings(data: {
   revalidatePath("/settings");
 }
 
-export async function testContentFetchConnection(): Promise<{ success: boolean; error?: string; rateLimited?: boolean }> {
+export async function testContentFetchConnection(overrides?: {
+  provider?: string | null;
+  apiKey?: string;
+}): Promise<{ success: boolean; error?: string; rateLimited?: boolean }> {
   const session = await requireUser();
   const user = await db.user.findUnique({
     where: { id: session.user.id },
-    select: { contentFetchProvider: true, contentFetchApiKey: true },
+    select: { contentFetchProvider: true, contentFetchApiKey: true, uiLanguage: true },
   });
-  if (!user?.contentFetchProvider) return { success: false, error: "No content-fetch provider configured" };
-  const apiKey = decryptIfValue(user.contentFetchApiKey);
-  const isKeylessFirecrawl = !apiKey && user.contentFetchProvider === "firecrawl";
-  if (!apiKey && !isKeylessFirecrawl) return { success: false, error: "No API key configured" };
+  const { getTranslations } = await import("next-intl/server");
+  const t = await getTranslations({ locale: user?.uiLanguage ?? "en", namespace: "contentFetch" });
+
+  // Test the form's current (possibly unsaved) values, not just what's
+  // persisted — otherwise "Test connection" silently tests stale settings
+  // until the user separately clicks "Save" first.
+  const provider = overrides && "provider" in overrides ? overrides.provider : user?.contentFetchProvider;
+  const apiKey = overrides?.apiKey || decryptIfValue(user?.contentFetchApiKey);
+
+  if (!provider) return { success: false, error: t("testErrorNoProvider") };
+  const isKeylessFirecrawl = !apiKey && provider === "firecrawl";
+  if (!apiKey && !isKeylessFirecrawl) return { success: false, error: t("testErrorNoApiKey") };
   const outcome = await fetchViaHostedApiDetailed("https://example.com/", {
-    provider: user.contentFetchProvider as HostedFetchProvider,
+    provider: provider as HostedFetchProvider,
     apiKey: apiKey || null,
   });
   if (!outcome.ok) {
@@ -667,12 +724,10 @@ export async function testContentFetchConnection(): Promise<{ success: boolean; 
       return {
         success: false,
         rateLimited: true,
-        error: isKeylessFirecrawl
-          ? "Firecrawl's free daily limit for this server has been reached (it's shared across every user on this instance). Add your own Firecrawl API key above for much higher limits, or try again tomorrow."
-          : "Rate limited by the provider — try again shortly.",
+        error: isKeylessFirecrawl ? t("testErrorKeylessRateLimited") : t("testErrorRateLimited"),
       };
     }
-    return { success: false, error: "The provider did not return usable content for the test URL — check your API key" };
+    return { success: false, error: t("testErrorNoUsableContent") };
   }
   return { success: true };
 }

@@ -86,6 +86,20 @@
       "integrations": "Integrationen"
     }
   },
+  "profile": {
+    "changePassword": "Passwort ändern",
+    "changePasswordDescription": "Aktualisiere das Passwort für die Anmeldung mit E-Mail/Passwort.",
+    "currentPassword": "Aktuelles Passwort",
+    "newPassword": "Neues Passwort",
+    "newPasswordHint": "Mindestens 8 Zeichen.",
+    "updatePassword": "Passwort aktualisieren",
+    "updating": "Wird aktualisiert…",
+    "passwordChanged": "Passwort geändert",
+    "passwordChangeFailed": "Passwort konnte nicht geändert werden. Bitte versuche es erneut.",
+    "passwordTooShort": "Das neue Passwort muss mindestens 8 Zeichen lang sein",
+    "noPasswordSet": "Dieses Konto meldet sich per SSO/OAuth an und hat kein Passwort zum Ändern.",
+    "currentPasswordIncorrect": "Aktuelles Passwort ist falsch"
+  },
   "twoFactor": {
     "title": "Zwei-Faktor-Authentifizierung",
     "description": "Schütze deine E-Mail/Passwort-Anmeldung mit einem 6-stelligen Authentifizierungscode. OAuth-Anbieter wie Authelia können MFA separat erzwingen.",
@@ -115,6 +129,7 @@
   "digest": {
     "title": "E-Mail-Digest",
     "description": "Erhalte eine regelmäßige E-Mail-Zusammenfassung von Artikeln aus deinen Feeds. Erfordert SMTP-Konfiguration durch deinen Administrator.",
+    "mailNotConfigured": "Noch nicht verfügbar — bitte deinen Administrator, SMTP für diesen Server einzurichten (Servereinstellungen → E-Mail).",
     "enableDigestEmails": "Digest-E-Mails aktivieren",
     "lastSent": "Zuletzt gesendet",
     "frequency": "Häufigkeit",
@@ -287,6 +302,15 @@
     "testConnection": "Verbindung testen",
     "testing": "Wird getestet…",
     "connectionSuccessful": "Verbindung erfolgreich",
+    "testErrorNoProvider": "Kein KI-Anbieter konfiguriert",
+    "testErrorInvalidApiKeyWithProvider": "{provider}: ungültiger API-Schlüssel — prüfe, ob du ihn korrekt kopiert hast.",
+    "testErrorInvalidApiKey": "Ungültiger API-Schlüssel — prüfe, ob du ihn korrekt kopiert hast.",
+    "testErrorRateLimitedWithProvider": "{provider}: Rate-Limit erreicht — versuche es gleich noch einmal.",
+    "testErrorRateLimited": "Vom Anbieter rate-limitiert — versuche es gleich noch einmal.",
+    "testErrorNotFoundWithProvider": "{provider}: Modell oder Endpunkt nicht gefunden — Modell-Override prüfen.",
+    "testErrorNotFound": "Modell oder Endpunkt nicht gefunden — Modell-Override prüfen.",
+    "testErrorUnreachable": "Anbieter nicht erreichbar — Verbindung oder Basis-URL prüfen.",
+    "testErrorGenericHttp": "{provider} hat einen Fehler zurückgegeben (HTTP {status}) — API-Schlüssel und Modell-Einstellungen prüfen.",
     "providers": {
       "none": "Kein (deaktiviert)",
       "openai": "OpenAI",
@@ -316,6 +340,11 @@
     "autoUse": "Auch bei automatischer Synchronisierung nutzen",
     "autoUseDescription": "Ohne diese Option läuft der Fallback nur, wenn du selbst auf „Volltext abrufen“ klickst (verbraucht API-Credits)",
     "connectionSuccessful": "Verbindung erfolgreich",
+    "testErrorNoProvider": "Kein Volltext-Abruf-Anbieter konfiguriert",
+    "testErrorNoApiKey": "Kein API-Schlüssel konfiguriert",
+    "testErrorKeylessRateLimited": "Firecrawls kostenloses Tageslimit für diesen Server ist erreicht (es wird von allen Nutzern dieser Instanz gemeinsam genutzt). Trage oben deinen eigenen Firecrawl-API-Schlüssel ein für deutlich höhere Limits, oder versuche es morgen erneut.",
+    "testErrorRateLimited": "Vom Anbieter rate-limitiert — versuche es gleich noch einmal.",
+    "testErrorNoUsableContent": "Der Anbieter hat für die Test-URL keinen brauchbaren Inhalt zurückgegeben — API-Schlüssel prüfen",
     "providers": {
       "none": "Kein (deaktiviert)",
       "jina": "Jina Reader",

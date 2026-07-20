@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Fixed (2026-07-20 — UX-flow bugs from the 2026-07-19 audit)
+
+- **"Test connection" tested stale saved settings, not the current form** — reported directly: the AI-summary and content-fetch "Test connection" buttons (`app/actions/settings.ts`) read provider/API key/model straight from the database, ignoring whatever the user had just typed into the form. It only "worked" once you clicked Save first, which is exactly backwards from what the button implies. Both server actions now accept optional overrides (provider, API key, model, base URL) that the form passes from its current, possibly-unsaved state, falling back to the saved values only for fields left untouched.
+- **Test-connection error messages were English-only regardless of locale** — same two actions built their friendly error strings (invalid API key, rate limited, etc.) as hardcoded English literals. Now localized via `next-intl/server`'s `getTranslations`, using the user's own `uiLanguage`.
+- **Mobile `/?addFeed=1` deep link did nothing** — `app/page.tsx`'s deep-link handler incremented a counter meant to open the add-feed flow inside the sidebar, but on mobile the sidebar only mounts inside a `Sheet` gated by a separate `sidebarOpen` state that this handler never touched — so the sheet stayed closed and the deep link was silently inert. Now also opens the sheet.
+- **Email digest section vanished with no explanation when SMTP isn't configured** — `components/settings-form.tsx`'s `DigestSection` returned `null` outright, giving a user no way to tell "not available on this instance" apart from "failed to load". Now shows the section's title and a short explanation (with a pointer to Server Settings → Email) instead of disappearing.
+- **No self-service password-change flow** — there was no way to change an email/password account's password anywhere in the app. Added a `changePassword` server action (verifies the current password, matches the same 8-character minimum as registration, bumps `sessionVersion` to invalidate other sessions — mirroring the existing 2FA actions' pattern) and a new "Change password" section in Settings → Account.
+
 ### Fixed (2026-07-20 — i18n/locale gaps from the 2026-07-19 audit)
 
 - **Header title showed raw internal sentinel values untranslated** — `app/page.tsx`'s `headerTitle` fell through to `selectedCategory` verbatim for the built-in views (All Articles / Starred / Read Later / Spoiler), which are also used internally as sidebar `categoryId`s — so a German UI would show "All" or "Read Later" in English in the list header even though the sidebar itself already translates the same values correctly. Real user-created category names still pass through untouched.

@@ -86,6 +86,20 @@
       "integrations": "Integrations"
     }
   },
+  "profile": {
+    "changePassword": "Change password",
+    "changePasswordDescription": "Update the password used to sign in with email/password.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "newPasswordHint": "At least 8 characters.",
+    "updatePassword": "Update password",
+    "updating": "Updating…",
+    "passwordChanged": "Password changed",
+    "passwordChangeFailed": "Could not change password. Please try again.",
+    "passwordTooShort": "New password must be at least 8 characters",
+    "noPasswordSet": "This account signs in via SSO/OAuth and has no password to change.",
+    "currentPasswordIncorrect": "Current password is incorrect"
+  },
   "twoFactor": {
     "title": "Two-factor authentication",
     "description": "Protect your email/password login with a 6-digit authenticator code. OAuth providers like Authelia can enforce MFA separately.",
@@ -115,6 +129,7 @@
   "digest": {
     "title": "Email Digest",
     "description": "Receive a periodic email summary of articles from your feeds. Requires SMTP to be configured by your administrator.",
+    "mailNotConfigured": "Not available yet — ask your administrator to configure SMTP for this server (Server Settings → Email).",
     "enableDigestEmails": "Enable digest emails",
     "lastSent": "Last sent",
     "frequency": "Frequency",
@@ -287,6 +302,15 @@
     "testConnection": "Test connection",
     "testing": "Testing…",
     "connectionSuccessful": "Connection successful",
+    "testErrorNoProvider": "No AI provider configured",
+    "testErrorInvalidApiKeyWithProvider": "{provider}: invalid API key — check that you copied it correctly.",
+    "testErrorInvalidApiKey": "Invalid API key — check that you copied it correctly.",
+    "testErrorRateLimitedWithProvider": "{provider}: rate limited — try again shortly.",
+    "testErrorRateLimited": "Rate limited by the provider — try again shortly.",
+    "testErrorNotFoundWithProvider": "{provider}: model or endpoint not found — check the model override.",
+    "testErrorNotFound": "Model or endpoint not found — check the model override.",
+    "testErrorUnreachable": "Could not reach the provider — check the connection or base URL.",
+    "testErrorGenericHttp": "{provider} returned an error (HTTP {status}) — check your API key and model settings.",
     "providers": {
       "none": "None (disabled)",
       "openai": "OpenAI",
@@ -316,6 +340,11 @@
     "autoUse": "Also use during automatic sync",
     "autoUseDescription": "Without this, the fallback only runs when you click \"Fetch full text\" yourself (uses API credits)",
     "connectionSuccessful": "Connection successful",
+    "testErrorNoProvider": "No content-fetch provider configured",
+    "testErrorNoApiKey": "No API key configured",
+    "testErrorKeylessRateLimited": "Firecrawl's free daily limit for this server has been reached (it's shared across every user on this instance). Add your own Firecrawl API key above for much higher limits, or try again tomorrow.",
+    "testErrorRateLimited": "Rate limited by the provider — try again shortly.",
+    "testErrorNoUsableContent": "The provider did not return usable content for the test URL — check your API key",
     "providers": {
       "none": "None (disabled)",
       "jina": "Jina Reader",

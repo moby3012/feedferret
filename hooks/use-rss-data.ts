@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
 import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, markArticlesAsUnread, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers, suggestFeedFromUrl, createFeedFromPage, proposeAiFeedConfig, proposeAiFullTextSelector } from "@/app/actions/feeds"
-import { updateProfile, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, previewDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getContentFetchSettings, updateContentFetchSettings, testContentFetchConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
+import { updateProfile, changePassword, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, previewDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getContentFetchSettings, updateContentFetchSettings, testContentFetchConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
 import { updateUiLanguage } from "@/app/actions/locale"
 import { toast } from "sonner"
 
@@ -378,6 +378,12 @@ export function useReadingPreferences(enabled = true) {
 export function useUpdateProfile() {
     return useMutation({
         mutationFn: (data: { name?: string; email?: string }) => updateProfile(data),
+    })
+}
+
+export function useChangePassword() {
+    return useMutation({
+        mutationFn: (data: Parameters<typeof changePassword>[0]) => changePassword(data),
     })
 }
 
@@ -1014,7 +1020,7 @@ export function useUpdateAiSettings() {
 
 export function useTestAiConnection() {
     return useMutation({
-        mutationFn: () => testAiConnection(),
+        mutationFn: (overrides?: Parameters<typeof testAiConnection>[0]) => testAiConnection(overrides),
     })
 }
 
@@ -1041,7 +1047,7 @@ export function useUpdateContentFetchSettings() {
 
 export function useTestContentFetchConnection() {
     return useMutation({
-        mutationFn: () => testContentFetchConnection(),
+        mutationFn: (overrides?: Parameters<typeof testContentFetchConnection>[0]) => testContentFetchConnection(overrides),
     })
 }
 

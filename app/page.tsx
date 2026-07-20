@@ -261,6 +261,10 @@ export default function RSSReaderPage() {
 
     if (params.get("addFeed") === "1") {
       setOpenAddFeed((n) => n + 1);
+      // On mobile the sidebar (and the add-feed flow inside it) only mounts
+      // inside a Sheet gated by sidebarOpen — without this the deep link
+      // silently did nothing there, since nothing else opens the sheet.
+      setSidebarOpen(true);
     }
   }, [status]);
 

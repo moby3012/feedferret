@@ -42,6 +42,7 @@ import {
   Plus,
   EyeOff,
   Cloud,
+  Lock,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -65,7 +66,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, usePreviewDigest, useFeeds, useLabels, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useContentFetchSettings, useUpdateContentFetchSettings, useTestContentFetchConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
+import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useChangePassword, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, usePreviewDigest, useFeeds, useLabels, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useContentFetchSettings, useUpdateContentFetchSettings, useTestContentFetchConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel } from "@/hooks/use-rss-data";
 import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -539,6 +540,9 @@ export function SettingsForm() {
               </div>
             </section>
 
+            {/* Change password */}
+            <PasswordSection />
+
             {/* Two-factor authentication */}
             <TwoFactorSection />
 
@@ -871,6 +875,81 @@ function PushNotificationSection() {
   );
 }
 
+function PasswordSection() {
+  const t = useTranslations();
+  const changePassword = useChangePassword();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+
+  const handleSubmit = async () => {
+    if (newPassword.length < 8) {
+      toast.error(t("profile.passwordTooShort"));
+      return;
+    }
+    try {
+      const result = await changePassword.mutateAsync({ currentPassword, newPassword });
+      if (result.success) {
+        toast.success(t("profile.passwordChanged"));
+        setCurrentPassword("");
+        setNewPassword("");
+      } else {
+        toast.error(result.error ?? t("profile.passwordChangeFailed"));
+      }
+    } catch {
+      toast.error(t("profile.passwordChangeFailed"));
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+      <div className="flex items-start gap-4 mb-6">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+          <Lock className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("profile.changePassword")}</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {t("profile.changePasswordDescription")}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:max-w-sm">
+        <div className="grid gap-1.5">
+          <label className="text-sm font-medium" htmlFor="current-password-input">{t("profile.currentPassword")}</label>
+          <Input
+            id="current-password-input"
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className="h-10 rounded-2xl"
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <label className="text-sm font-medium" htmlFor="new-password-input">{t("profile.newPassword")}</label>
+          <Input
+            id="new-password-input"
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="h-10 rounded-2xl"
+          />
+          <p className="text-xs text-muted-foreground">{t("profile.newPasswordHint")}</p>
+        </div>
+        <Button
+          type="button"
+          onClick={handleSubmit}
+          disabled={changePassword.isPending || !currentPassword || !newPassword}
+          className="h-11 w-fit rounded-2xl px-5"
+        >
+          {changePassword.isPending ? t("profile.updating") : t("profile.updatePassword")}
+        </Button>
+      </div>
+    </section>
+  );
+}
 
 function TwoFactorSection() {
   const t = useTranslations();
@@ -1123,8 +1202,27 @@ function DigestSection() {
   const preview = usePreviewDigest();
 
   if (!digest) return null;
-  // Hide entirely if instance has no mail configured (#5)
-  if (!instanceLoading && instance && !instance.capabilities.mail) return null;
+  // If mail isn't configured on this instance, show why instead of silently
+  // vanishing — otherwise a user has no way to tell "not available" apart
+  // from "failed to load".
+  if (!instanceLoading && instance && !instance.capabilities.mail) {
+    return (
+      <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl sm:p-6">
+        <div className="flex items-start gap-4">
+          <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl opacity-60">
+            <Mail className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold tracking-[-0.02em]">{t("digest.title")}</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              {t("digest.description")}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">{t("digest.mailNotConfigured")}</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   const feeds = feedsData ?? [];
   const labels = labelsData ?? [];
@@ -1867,7 +1965,15 @@ function AiSummarySection() {
 
   const handleTest = async () => {
     setTestResult(null);
-    const result = await testAi.mutateAsync();
+    // Test the form's current values, not just what's already saved — so
+    // "Test connection" reflects a provider/key the user just typed instead
+    // of silently testing stale settings until they click "Save" first.
+    const result = await testAi.mutateAsync({
+      provider: provider === "none" ? null : provider,
+      ...(apiKey ? { apiKey } : {}),
+      model: model || null,
+      ollamaBaseUrl: ollamaBaseUrl || null,
+    });
     setTestResult(result);
   };
 
@@ -2063,7 +2169,12 @@ function ContentFetchSection() {
 
   const handleTest = async () => {
     setTestResult(null);
-    const result = await testContentFetch.mutateAsync();
+    // Test the form's current values, not just what's already saved — see
+    // the equivalent comment in AiSummarySection's handleTest.
+    const result = await testContentFetch.mutateAsync({
+      provider: provider === "none" ? null : provider,
+      ...(apiKey ? { apiKey } : {}),
+    });
     setTestResult(result);
   };
 
