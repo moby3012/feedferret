@@ -96,7 +96,10 @@ export async function validateRsshubRoute(config: RsshubConfig, routePath: strin
   }
 
   try {
-    const feed = await fetchFeedArticles({ url, allowInternal: true });
+    // includeErrorBody surfaces RSSHub's own message ("Twitter API is not
+    // configured", "This channel does not exist", …) instead of a bare 503,
+    // so a failed route tells the user what's actually wrong.
+    const feed = await fetchFeedArticles({ url, allowInternal: true, includeErrorBody: true });
     if (!feed.articles.length) {
       return { ok: false, reason: "RSSHub returned a feed with no items for this route" };
     }

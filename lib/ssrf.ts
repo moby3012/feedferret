@@ -17,6 +17,11 @@ export type SafeFetchTextOptions = SsrfCheckOptions & {
   // protection. SSRF re-validation of every redirect hop is unaffected.
   // Falls back to native fetch when impit is disabled/unavailable.
   impersonate?: boolean;
+  // When true, a non-2xx response's error includes a short snippet of the
+  // response body (e.g. RSSHub's own "Twitter API is not configured" message)
+  // instead of just the bare status code. Opt-in so ordinary feed syncs keep
+  // their terse "Fetch failed: N" errors.
+  includeErrorBody?: boolean;
 };
 
 function truthy(value?: string) {
@@ -128,6 +133,25 @@ async function readTextWithLimit(response: FetchResponseLike, maxBytes?: number)
   return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
+// Reads a short, cleaned snippet of a non-2xx response body for error
+// messages (e.g. RSSHub returns "Twitter API is not configured" in the body).
+// Returns "" when disabled, empty, or unreadable — never throws, so it can't
+// mask the original HTTP-status error.
+async function errorBodySuffix(response: FetchResponseLike, include?: boolean): Promise<string> {
+  if (!include) return "";
+  try {
+    const raw = await readTextWithLimit(response, 8192).catch(() => "");
+    const snippet = raw
+      .replace(/<[^>]*>/g, " ") // drop HTML tags from error pages
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 200);
+    return snippet ? ` — ${snippet}` : "";
+  } catch {
+    return "";
+  }
+}
+
 export type ConditionalFetchResult =
   | { notModified: true; etag: string | null; lastModified: string | null }
   | { notModified: false; text: string; etag: string | null; lastModified: string | null };
@@ -174,7 +198,9 @@ export async function fetchWithSsrfProtection(
         return { notModified: true, etag, lastModified };
       }
 
-      if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Fetch failed: ${response.status}${await errorBodySuffix(response, options.includeErrorBody)}`);
+      }
       const text = await readTextWithLimit(response, options.maxBytes);
       return { notModified: false, text, etag, lastModified };
     } finally {
