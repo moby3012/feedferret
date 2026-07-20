@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Added (2026-07-20 — search results: progress indicator + end-of-results marker)
+
+- The search results header now shows a small spinner while a search is still fetching (`isLoading`) and a checkmark once it settles, so it's visually clear whether the reader is still searching or done. When the incremental-loading window reaches the actual end of the matched articles, the list now shows an "End of results" marker instead of just stopping silently — reassurance that the list is complete, not cut off by a scroll bug.
+
 ### Added (2026-07-20 — quick wins F5/F6/F7: export destinations, feed auto-mute, PWA share-target)
 
 - **F5 — export / "Send to" Obsidian and Wallabag** — a new "Export Destinations" section in Settings → Integrations, following the same per-user BYOK pattern as the AI/content-fetch connectors (encrypted credential storage via `lib/crypto.ts`, hidden in the reader until configured). Obsidian has no API — it's a local vault app — so all it needs is a vault name: "Send to Obsidian" (`lib/export-destinations.ts`'s `buildObsidianUrl`) builds an `obsidian://new` deep link with the article as Markdown and hands it straight to the user's own installed Obsidian app; no network request from this server, no credentials. Wallabag is a self-hosted read-later service (matches this project's self-hosting ethos): OAuth2 password-grant token exchange, then `POST /api/entries`, wired up with a "Test connection" button. The reader's toolbar/overflow menu gains a "Send to" action, offering only the destinations the user has configured. **Readwise and Pocket were intentionally left out of this slice** — their "save article" API contracts couldn't be confidently verified from training knowledge alone; see the roadmap for the follow-up note rather than shipping a guessed integration.
