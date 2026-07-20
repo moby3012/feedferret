@@ -459,6 +459,7 @@
     "focusSearch": "Focus search",
     "clearSearch": "Clear search",
     "saveSearch": "Save search",
+    "commandPalette": "Open command palette",
     "help": "Help",
     "toggleHelp": "Toggle help"
   },
@@ -700,7 +701,6 @@
     "markAsUnread": "Mark as unread",
     "markAsRead": "Mark as read",
     "alsoIn": "Also in",
-    "unknownAuthor": "Unknown",
     "duplicateBadge": "Duplicate"
   },
   "articleReader": {

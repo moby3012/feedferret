@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useTheme } from "next-themes";
+import { useSession } from "next-auth/react";
 import { useReadingPreferences } from "@/hooks/use-rss-data";
 
 function normalizeHexColor(value: string | null | undefined, fallback: string) {
@@ -47,7 +48,13 @@ function getContrastColor(hex: string, darkForeground: string) {
 }
 
 export function ThemeColorApplier() {
-  const { data: prefs } = useReadingPreferences();
+  // This component is mounted unconditionally in the root layout, so it
+  // also renders on public, unauthenticated pages (login, register, setup).
+  // Without gating, getReadingPreferences() (which requires a session)
+  // fires there too, throwing and logging server-side noise on every
+  // anonymous pageview for a preference that doesn't even apply yet.
+  const { status } = useSession();
+  const { data: prefs } = useReadingPreferences(status === "authenticated");
   const { resolvedTheme } = useTheme();
 
   useEffect(() => {

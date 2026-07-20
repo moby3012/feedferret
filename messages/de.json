@@ -459,6 +459,7 @@
     "focusSearch": "Suche fokussieren",
     "clearSearch": "Suche leeren",
     "saveSearch": "Suche speichern",
+    "commandPalette": "Befehlspalette öffnen",
     "help": "Hilfe",
     "toggleHelp": "Hilfe umschalten"
   },
@@ -700,7 +701,6 @@
     "markAsUnread": "Als ungelesen markieren",
     "markAsRead": "Als gelesen markieren",
     "alsoIn": "Auch in",
-    "unknownAuthor": "Unbekannt",
     "duplicateBadge": "Duplikat"
   },
   "articleReader": {

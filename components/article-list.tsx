@@ -31,6 +31,10 @@ function FeedFavicon({ icon, name, size = 16, articleLink }: { icon?: string; na
         height={size}
         loading="lazy"
         decoding="async"
+        // The Google favicon fallback is a third-party request per article
+        // domain; no-referrer at least keeps our own page URL from being
+        // sent along with it.
+        referrerPolicy="no-referrer"
         className="rounded-sm object-contain shrink-0"
         style={{ width: size, height: size }}
         onError={() => setFailed(true)}
@@ -846,9 +850,11 @@ function ArticlePreview({
           )}
 
           <div className="flex min-w-0 items-center gap-3 text-sm text-muted-foreground">
-            <span className="font-medium truncate max-w-[100px]">
-              {article.author}
-            </span>
+            {article.author && (
+              <span className="font-medium truncate max-w-[100px]">
+                {article.author}
+              </span>
+            )}
             <div className="ml-auto flex items-center gap-1 opacity-100 transition-opacity">
               <button
                 type="button"

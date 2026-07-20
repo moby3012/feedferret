@@ -9,6 +9,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Fixed (2026-07-20 — visual/a11y and polish findings from the 2026-07-19 audit)
+
+- **Logo invisible on light-mode auth pages** — `logo.svg` is a solid-white mark with no dark variant, sitting on a `bg-card` badge that's near-white in light mode. Login, register, and setup pages now use `bg-accent` for that badge, which stays a real color in both themes.
+- **Manage Feeds looked empty for users with no categories** — every feed group (including "Uncategorized") started collapsed; a separate effect auto-expanded them, but only when `categories.length > 0` — so a user with zero categories, whose only group IS "Uncategorized", never got it, and the tab looked empty rather than "click to expand". Fixed the effect's condition.
+- **Hardcoded blue/amber tutorial-banner colors with poor contrast** (`components/feed-management.tsx`, Rules & Alerts tabs) — the `-400` shades read fine on a dark background but have poor contrast on a light one. Added the light-mode `-700` variant, matching the pattern already used for the AI/content-fetch privacy warnings elsewhere in settings.
+- **Unlabeled icon-only sidebar buttons** (Manage Feeds, Server Settings, Notifications, Sign-out) — each only had a visual hover tooltip, with no `aria-label`, so screen-reader and keyboard-only users had no accessible name for them at all. Added one to each, reusing the same tooltip text.
+- **"Unknown"/"Unbekannt" author noise** — articles without author metadata got a literal placeholder baked into `article.author` at fetch time, shown unconditionally everywhere. Left it empty instead and hide the author (and its separator) entirely when there isn't one — many feeds simply don't provide this field, and showing "Unknown" on every one of their articles was pure noise.
+- **Unauthenticated-page server-error noise** — `components/theme-color-applier.tsx` is mounted globally in the root layout, so it also rendered (and queried `getReadingPreferences`, which requires a session) on public pages like `/login`. Gated the query on `useSession()`'s status.
+- **Missing Cmd/Ctrl+K row in the keyboard-shortcuts dialog and settings-page summary** — the command palette shortcut existed but was undocumented in both places it's listed. Added it.
+- **Google favicon-fallback privacy** — the fallback for feeds/articles without their own icon fetches `google.com/s2/favicons`, leaking the viewing page's URL as a referrer on every request. Added `referrerPolicy="no-referrer"` to all three call sites (the domain being looked up still necessarily goes to Google — that's inherent to using the service — but the referring page no longer does).
+
 ### Fixed (2026-07-20 — UX-flow bugs from the 2026-07-19 audit)
 
 - **"Test connection" tested stale saved settings, not the current form** — reported directly: the AI-summary and content-fetch "Test connection" buttons (`app/actions/settings.ts`) read provider/API key/model straight from the database, ignoring whatever the user had just typed into the form. It only "worked" once you clicked Save first, which is exactly backwards from what the button implies. Both server actions now accept optional overrides (provider, API key, model, base URL) that the form passes from its current, possibly-unsaved state, falling back to the saved values only for fields left untouched.

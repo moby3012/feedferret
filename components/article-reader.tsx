@@ -94,7 +94,7 @@ function FeedFaviconInReader({ feedIcon, feedName, articleLink, size }: { feedIc
   }
   if (src && !imgFailed) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt={feedName} width={size} height={size} className="object-contain rounded-sm" style={{ width: size, height: size }} onError={() => setImgFailed(true)} />;
+    return <img src={src} alt={feedName} width={size} height={size} referrerPolicy="no-referrer" className="object-contain rounded-sm" style={{ width: size, height: size }} onError={() => setImgFailed(true)} />;
   }
   return <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>{feedIcon || "📰"}</span>;
 }
@@ -560,10 +560,14 @@ export function ArticleReader({
               {article.title}
             </h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
-              <address className="not-italic font-medium text-foreground" rel="author">
-                {article.author}
-              </address>
-              <span aria-hidden="true" className="text-muted-foreground/40">·</span>
+              {article.author && (
+                <>
+                  <address className="not-italic font-medium text-foreground" rel="author">
+                    {article.author}
+                  </address>
+                  <span aria-hidden="true" className="text-muted-foreground/40">·</span>
+                </>
+              )}
               <time dateTime={article.publishedAt}>{format.dateTime(new Date(article.publishedAt), { dateStyle: "medium" })}</time>
               <span aria-hidden="true" className="text-muted-foreground/40">·</span>
               <span>{t("readTime", { minutes: article.readTime })}</span>

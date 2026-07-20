@@ -56,6 +56,7 @@ export function KeyboardShortcutsDialog({
         { keys: ["/"], description: t("focusSearch") },
         { keys: ["Esc"], description: t("clearSearch") },
         { keys: ["Shift", "S"], description: t("saveSearch") },
+        { keys: ["Ctrl/⌘", "K"], description: t("commandPalette") },
       ],
     },
     {

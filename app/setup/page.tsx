@@ -225,7 +225,11 @@ export default function SetupPage() {
       <div className="w-full max-w-[520px] relative z-10">
         {/* Logo */}
         <div className="text-center mb-8 group">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-border bg-card p-3 mb-5 shadow-2xl">
+          {/* bg-accent, not bg-card: the logo mark is a solid white SVG with
+              no dark variant, so it needs a background that's never
+              near-white — bg-card is near-white in light mode and made the
+              logo effectively invisible there. */}
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-border bg-accent p-3 mb-5 shadow-2xl">
             <Image src="/logo.svg" alt="FeedFerret" width={44} height={44} className="w-full h-full opacity-90" />
           </div>
           <h1 className="text-2xl font-bold tracking-[-0.04em] text-foreground">

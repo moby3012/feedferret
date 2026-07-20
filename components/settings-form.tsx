@@ -581,6 +581,8 @@ export function SettingsForm() {
                   <span>{t("keyboard.toggleRead")} / {t("keyboard.toggleStar")}</span>
                   <span className="font-mono text-foreground">/</span>
                   <span>{t("keyboard.focusSearch")}</span>
+                  <span className="font-mono text-foreground">Ctrl/⌘ K</span>
+                  <span>{t("keyboard.commandPalette")}</span>
                   <span className="font-mono text-foreground">?</span>
                   <span>{t("keyboard.toggleHelp")}</span>
                 </div>

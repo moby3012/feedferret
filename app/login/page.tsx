@@ -152,7 +152,11 @@ export default function LoginPage() {
     <div className="min-h-dvh flex items-center justify-center p-4 bg-background text-foreground selection:bg-muted">
       <div className="w-full max-w-[400px] relative z-10 animate-scale-in">
         <div className="text-center mb-10 group">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl border border-border bg-card p-3 mb-6 shadow-2xl transition-transform duration-500 group-hover:scale-105">
+          {/* bg-accent, not bg-card: the logo mark is a solid white SVG with
+              no dark variant, so it needs a background that's never
+              near-white — bg-card is near-white in light mode and made the
+              logo effectively invisible there. */}
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl border border-border bg-accent p-3 mb-6 shadow-2xl transition-transform duration-500 group-hover:scale-105">
             <Image
               src="/logo.svg"
               alt="FeedFerret"
