@@ -2217,3 +2217,83 @@ export async function previewRsshubFeed(input: { routePath?: string; sourceDescr
         sampleTitles: result.validation.sampleTitles,
     };
 }
+
+/** Whether an admin has configured the changedetection.io connector (M5b) — gates the "Monitor this page" UI. */
+export async function getChangedetectionStatus() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const { isChangedetectionConfigured } = await import("@/lib/changedetection");
+    return { configured: await isChangedetectionConfigured() };
+}
+
+/**
+ * Creates a changedetection.io watch for `input.url` and returns it as a
+ * ready-to-add feed URL. When `useAiSelector` is set and the user has an AI
+ * provider configured, reuses M4's fulltext-selector-proposal engine
+ * (`proposeFeedConfig`) to suggest a content selector — only used as a
+ * best-effort `include_filters` when the engine also validated it actually
+ * extracts real content from the live page; otherwise falls back to
+ * watching the whole page, never blocking on the AI step.
+ *
+ * Important: unlike the RSSHub connector, the returned feed will have NO
+ * items until changedetection.io has completed at least two checks on the
+ * URL — this cannot be validated synchronously (see lib/changedetection.ts).
+ * Callers must set that expectation in the UI, not treat success here as
+ * "the feed has content."
+ */
+export async function createChangedetectionFeed(input: { url: string; useAiSelector?: boolean }) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const urlError = validateFeedUrl(input.url);
+    if (urlError) return { success: false as const, error: urlError };
+
+    const { getChangedetectionConfig, createWatch, buildWatchFeedUrl } = await import("@/lib/changedetection");
+    const config = await getChangedetectionConfig();
+    if (!config) {
+        return { success: false as const, error: "changedetection.io is not configured on this server." };
+    }
+
+    let includeFilters: string[] | undefined;
+    let aiNotes: string | null = null;
+    if (input.useAiSelector) {
+        const rateLimit = checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.aiFeedConfig);
+        if (!rateLimit.success) {
+            return { success: false as const, error: "Too many AI requests. Wait a bit and try again." };
+        }
+        const user = await db.user.findUnique({
+            where: { id: session.user.id },
+            select: { aiProvider: true, aiApiKey: true, aiModel: true, aiOllamaBaseUrl: true },
+        });
+        if (user?.aiProvider) {
+            try {
+                const { proposeFeedConfig } = await import("@/lib/ai-feed-config");
+                const { proposal, validation } = await proposeFeedConfig(input.url, {
+                    provider: user.aiProvider as AiProvider,
+                    apiKey: decryptIfValue(user.aiApiKey),
+                    model: user.aiModel,
+                    ollamaBaseUrl: user.aiOllamaBaseUrl,
+                });
+                if (proposal.mode === "fulltext" && validation.ok) {
+                    includeFilters = [proposal.fullTextSelector];
+                    aiNotes = proposal.notes ?? null;
+                }
+            } catch {
+                // AI assist is best-effort here — fall through to watching the whole page.
+            }
+        }
+    }
+
+    const result = await createWatch(config, { url: input.url, includeFilters });
+    if (!result.ok) {
+        return { success: false as const, error: result.reason };
+    }
+
+    return {
+        success: true as const,
+        url: buildWatchFeedUrl(config, result.uuid),
+        usedAiSelector: !!includeFilters,
+        aiNotes,
+    };
+}

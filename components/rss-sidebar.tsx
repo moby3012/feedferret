@@ -89,6 +89,7 @@ import {
   useMarkNotificationRead,
   useMarkAllNotificationsRead,
   useRsshubStatus,
+  useChangedetectionStatus,
 } from "@/hooks/use-rss-data";
 import { toast } from "sonner";
 import {
@@ -164,6 +165,20 @@ const RsshubPanel = dynamic(
   },
 );
 
+// Lazy-loaded: only rendered inside the "Add feed → Monitor page" tab, which
+// itself only renders once an admin has configured the changedetection.io connector.
+const ChangedetectionPanel = dynamic(
+  () => import("@/components/changedetection-panel").then((m) => m.ChangedetectionPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-10 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    ),
+  },
+);
+
 interface RssSidebarProps {
   feeds: FeedSource[];
   selectedFeed: string | null;
@@ -203,7 +218,7 @@ export function RssSidebar({
   const [importingPack, setImportingPack] = useState<string | null>(null);
   const [starterPacks, setStarterPacks] = useState<StarterPack[]>(DEFAULT_STARTER_PACKS);
   const [addingFeedUrl, setAddingFeedUrl] = useState<string | null>(null);
-  const [addFeedTab, setAddFeedTab] = useState<"url" | "discover" | "webpage" | "platform">("url");
+  const [addFeedTab, setAddFeedTab] = useState<"url" | "discover" | "webpage" | "platform" | "monitor">("url");
   const [branding, setBranding] = useState<{ instanceName: string; instanceIconDataUrl: string | null }>({
     instanceName: "FeedFerret",
     instanceIconDataUrl: null,
@@ -214,6 +229,9 @@ export function RssSidebar({
   const importOpml = useImportOpml();
   const { data: rsshubStatus } = useRsshubStatus();
   const rsshubConfigured = Boolean(rsshubStatus?.configured);
+  const { data: changedetectionStatus } = useChangedetectionStatus();
+  const changedetectionConfigured = Boolean(changedetectionStatus?.configured);
+  const addFeedTabCount = 3 + (rsshubConfigured ? 1 : 0) + (changedetectionConfigured ? 1 : 0);
   const { data: allCategories = [] } = useCategories();
   const updateFeedOrder = useUpdateFeedOrder();
   const updateCategoryOrder = useUpdateCategoryOrder();
@@ -924,13 +942,24 @@ export function RssSidebar({
           <DialogHeader>
             <DialogTitle>{t("sidebar.addFeedTitle")}</DialogTitle>
           </DialogHeader>
-          <Tabs value={addFeedTab} onValueChange={(v) => setAddFeedTab(v as "url" | "discover" | "webpage" | "platform")} className="w-full min-w-0">
-            <TabsList className={cn("grid w-full h-9 rounded-xl", rsshubConfigured ? "grid-cols-4" : "grid-cols-3")}>
+          <Tabs value={addFeedTab} onValueChange={(v) => setAddFeedTab(v as "url" | "discover" | "webpage" | "platform" | "monitor")} className="w-full min-w-0">
+            <TabsList
+              className={cn(
+                "grid w-full rounded-xl",
+                // 5 tabs no longer fit one row inside this dialog's width — wrap
+                // onto a second row (auto height) instead of squeezing them.
+                addFeedTabCount >= 5 ? "h-auto grid-cols-3 gap-1 p-1" : "h-9",
+                addFeedTabCount === 4 ? "grid-cols-4" : addFeedTabCount < 4 ? "grid-cols-3" : "",
+              )}
+            >
               <TabsTrigger value="url" className="text-xs rounded-lg">{t("sidebar.byUrl")}</TabsTrigger>
               <TabsTrigger value="discover" className="text-xs rounded-lg">{t("sidebar.discover")}</TabsTrigger>
               <TabsTrigger value="webpage" className="text-xs rounded-lg">{t("sidebar.webpage.tabLabel")}</TabsTrigger>
               {rsshubConfigured && (
                 <TabsTrigger value="platform" className="text-xs rounded-lg">{t("sidebar.rsshub.tabLabel")}</TabsTrigger>
+              )}
+              {changedetectionConfigured && (
+                <TabsTrigger value="monitor" className="text-xs rounded-lg">{t("sidebar.changedetection.tabLabel")}</TabsTrigger>
               )}
             </TabsList>
 
@@ -1114,6 +1143,13 @@ export function RssSidebar({
             {rsshubConfigured && (
               <TabsContent value="platform" className="mt-3 min-w-0 overflow-hidden">
                 <RsshubPanel onAddFeed={handleAddFeed} isAddingFeed={isAddingFeed} />
+              </TabsContent>
+            )}
+
+            {/* Monitor page (changedetection.io) Tab — only rendered once an admin has configured it */}
+            {changedetectionConfigured && (
+              <TabsContent value="monitor" className="mt-3 min-w-0 overflow-hidden">
+                <ChangedetectionPanel onAddFeed={handleAddFeed} isAddingFeed={isAddingFeed} />
               </TabsContent>
             )}
           </Tabs>

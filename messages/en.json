@@ -683,6 +683,17 @@
       "itemsFound": "{count, plural, one {# item found} other {# items found}}",
       "addFeed": "Add feed"
     },
+    "changedetection": {
+      "tabLabel": "Monitor page",
+      "intro": "Watch any page for changes — including JS-rendered pages, since changedetection.io does its own browser rendering — and get the changes as a feed.",
+      "urlPlaceholder": "Page URL to monitor",
+      "monitorButton": "Monitor this page",
+      "createFailed": "Could not create a watch for that page. Check the URL and try again.",
+      "watchCreated": "Watch created",
+      "watchCreatedHint": "This feed has no items yet — changedetection.io needs to check the page at least twice before it can show changes. It'll fill in on its own; add it now and come back later.",
+      "watchCreatedHintAi": "AI picked out the content area to watch on this page. This feed has no items yet — changedetection.io needs to check it at least twice before it can show changes. It'll fill in on its own; add it now and come back later.",
+      "addFeed": "Add feed"
+    },
     "spoilerAhead": "Spoiler content ahead",
     "spoilerDescription": "These articles have been flagged by your rules as spoilers and are kept out of every other view on purpose. Reveal only when you're ready to see them.",
     "revealSpoilers": "Reveal spoilers",
@@ -1344,6 +1355,13 @@
       "rsshubApiKey": "Access key (optional)",
       "rsshubHint": "Point this at your own self-hosted RSSHub instance (docs.rsshub.app). The access key is RSSHub's own optional `?key=` gate (its ACCESS_KEY setting) — leave it blank if your instance doesn't use one. Once a route is validated it's stored as the feed's plain URL, so this key is visible to whichever user adds a platform feed.",
       "rsshubTest": "Test",
+      "changedetection": "changedetection.io connector",
+      "changedetectionDescription": "Optional self-hosted changedetection.io instance, used for \"Monitor this page\" — turns any page (including JS-rendered ones, since changedetection.io does its own browser rendering) into a feed of its changes over time.",
+      "changedetectionBaseUrl": "changedetection.io base URL",
+      "changedetectionApiKey": "API key",
+      "changedetectionRssToken": "RSS access token",
+      "changedetectionHint": "Two different secrets are required: the API key is under Settings → API in your changedetection.io instance; the RSS access token is a separate value under Settings → General → RSS Access Token — changedetection.io does not accept the API key for reading its RSS output. A freshly created watch's feed has no items until changedetection.io has checked the page at least twice, so a new \"monitor this page\" feed can look empty for a while — this is expected, not an error.",
+      "changedetectionTest": "Test",
       "save": "Save"
     },
     "discovery": {
@@ -1411,6 +1429,8 @@
       "sidecarTestFailed": "Render sidecar test failed: {error}",
       "rsshubTestOk": "RSSHub OK — test route returned {count} items",
       "rsshubTestFailed": "RSSHub test failed: {error}",
+      "changedetectionTestOk": "changedetection.io OK — version {version}",
+      "changedetectionTestFailed": "changedetection.io test failed: {error}",
       "copiedToClipboard": "Copied to clipboard",
       "userRoleUpdated": "Updated {email} to {role}",
       "failedToUpdateUserRole": "Failed to update user role",

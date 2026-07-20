@@ -81,7 +81,7 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 
 ---
 
-## Milestone M5 — Optional self-hosted connectors (Model B)
+## Milestone M5 — Optional self-hosted connectors (Model B) ✅ *shipped 2026-07-20*
 *Phase 2.B. Broad coverage + JS rendering without us maintaining scrapers.*
 
 **User outcome:** an admin can point FeedFerret at a self-hosted RSSHub and/or changedetection.io; users then get platform feeds and any-page monitoring — the AI can even pick the right route/watch for them.
@@ -91,11 +91,12 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
   - [x] "Add from platform" UX: user names a source (YouTube channel, subreddit, GitHub repo releases…) → we build the RSSHub route → add as feed. AI can map "this YouTube URL" → the route. — new 4th "From platform" tab in the Add-Feed dialog (`components/rsshub-panel.tsx`), only rendered once RSSHub is configured. Power users can type an RSSHub route path directly (no AI needed); with an AI provider configured, a source URL/description gets a proposed route via `proposeAndValidateRoute` — never trusted without a real validation round-trip first. Reuses the existing generic add-feed flow once a route resolves (it's just a URL).
   - [x] Hidden entirely when unconfigured. — `getRsshubStatus()` (`app/actions/feeds.ts`) exposes `isRsshubConfigured()`; the sidebar's Add-Feed tab bar drops from 4 to 3 columns and the tab itself doesn't render when it's false.
   - **Design note:** once a route is known, an RSSHub-backed feed IS just a plain RSS/Atom feed at `<rsshubBaseUrl><route>` — no new `sourceType`, sync path, or OPML handling needed. `validateRsshubRoute` reuses the exact same `fetchFeedArticles()` every other RSS feed already goes through.
-- [ ] **M5b — changedetection.io connector** — `M`
-  - [ ] Admin setting: changedetection base URL + API key.
-  - [ ] "Monitor this page → feed": create a **watch** via its REST API (with CSS/xpath filter, optional restock/price processor), subscribe to its RSS output as a feed. Leans on its **own browser rendering** for JS pages (so we don't run Playwright in-process).
-  - [ ] AI assist: propose the watch's filter/selector from the page (reuse M4).
-- [ ] **M5-T3** Docs: `docs/self-hosting.md` connector setup; SSRF/network-isolation guidance. — `S`
+- [x] **M5b — changedetection.io connector** — `M` — *shipped 2026-07-20, `lib/changedetection.ts`*
+  - [x] Admin setting: changedetection base URL + API key. — `GlobalSettings.changedetectionEnabled/changedetectionBaseUrl/changedetectionApiKey/changedetectionRssToken` (both secrets encrypted), mirrors the render-sidecar/RSSHub admin-config pattern. **Two separate secrets are required, confirmed from changedetection.io's own source** (not guessed): the REST API key (`x-api-key`, for creating watches) and a distinct "RSS access token" (its own `?token=` query param on the per-watch RSS route — the API key does not work there). `testChangedetectionConnection` smoke-tests via the side-effect-free `GET /api/v1/systeminfo`.
+  - [x] "Monitor this page → feed": create a **watch** via its REST API (`POST /api/v1/watch` with `include_filters`/`subtractive_selectors`), subscribe to its RSS output (`GET /rss/watch/<uuid>?token=...`) as a feed. Leans on its **own browser rendering** for JS pages (so we don't run Playwright in-process). New 5th Add-Feed tab, "Monitor page" (`components/changedetection-panel.tsx`), only rendered once configured. **Key UX difference from RSSHub, confirmed from changedetection.io's own source:** a freshly created watch's RSS route returns HTTP 400 until the target has been checked at least twice, so unlike an RSSHub route this can't be synchronously validated with a live item-count preview — the UI sets that expectation explicitly instead of pretending to validate it.
+  - [x] AI assist: propose the watch's filter/selector from the page (reuse M4). — reuses `lib/ai-feed-config.ts`'s existing fulltext-selector-proposal engine verbatim (`proposeFeedConfig`'s `"fulltext"` mode + its own real-content validation) as the `include_filters` value — no new AI prompt needed.
+  - **Design note:** same "it's just a plain feed" philosophy as M5a — `buildWatchFeedUrl` needs no bespoke parsing, the watch's RSS output is consumed like any other RSS/Atom feed once it has content.
+- [x] **M5-T3** Docs: `docs/self-hosting.md` connector setup; SSRF/network-isolation guidance. — `S` — *shipped 2026-07-20: new "Optional Connectors" section covering the render sidecar, RSSHub, and changedetection.io (setup, minimal compose snippets, and a shared SSRF/network-isolation note).*
 
 **Acceptance:** with a sidecar configured, a user adds e.g. a YouTube channel (RSSHub) and a no-RSS product page (changedetection) as feeds; with no sidecar, the options are cleanly absent. **Deps:** M3/M4 for the AI-assist bits. **Risk:** ops burden (strictly optional); sidecar is an SSRF surface (isolate + allowlist).
 
@@ -139,7 +140,7 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 | **M2** ✅ | Full-text polish (tables/code/math/images) — *shipped 2026-07-20* | S–M | M1 |
 | **M3** ✅ | Manual page→feed builder — *shipped, PRs #145–#147* | M–L | M1 |
 | **M4 ⭐** ✅ | **AI proposes the whole config** (paste → accept) — *shipped: engine (#149), "✨" page→feed UX + rate-limit (#155), full-text-selector proposal in feed settings (#156)* | M | M1, M3 |
-| **M5** 🔄 | Optional RSSHub + changedetection.io connectors — *M5a (RSSHub) shipped 2026-07-20, M5b (changedetection.io) remains* | M (×2) | M3/M4 |
+| **M5** ✅ | Optional RSSHub + changedetection.io connectors — *both shipped 2026-07-20* | M (×2) | M3/M4 |
 | **M6** ✅ | Per-article AI extraction fallback — *shipped 2026-07-20* | M–L | M1, M4 |
 | **M7** | Playwright / Firecrawl / Jina heavy path | L | M3–M5 |
 
