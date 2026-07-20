@@ -450,6 +450,14 @@ model GlobalSettings {
   renderSidecarEnabled           Boolean @default(false)
   renderSidecarUrl               String?
   renderSidecarToken             String?
+  // Optional RSSHub connector (M5a): an admin-configured self-hosted RSSHub
+  // instance, used for "Add from platform" (turning a YouTube channel,
+  // subreddit, GitHub repo releases, etc. into a real feed via RSSHub's own
+  // route conventions). Hidden in the UI until enabled. API key (RSSHub's
+  // optional `?key=` access gate) is encrypted at rest.
+  rsshubEnabled                  Boolean @default(false)
+  rsshubBaseUrl                  String?
+  rsshubApiKey                   String?
   // Onboarding
   onboardingCompleted Boolean @default(false)
   // Security
