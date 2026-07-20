@@ -1,6 +1,6 @@
 # FeedFerret — Master Roadmap (single source of truth)
 
-> **Consolidated 2026-07-16, updated 2026-07-19.** One ordered backlog to work through top-to-bottom. Duplicates across docs are merged here (noted).
+> **Consolidated 2026-07-16, updated 2026-07-20.** One ordered backlog to work through top-to-bottom. Duplicates across docs are merged here (noted).
 > **How to use:** this is the *index and ordering*. Detailed task checklists live in the linked source docs — tick them there, keep this file's phase status current.
 > Effort: S (<1d) · M (1–3d) · L (1–2w) · XL (2w+). Status: ✅ done · 🔄 in progress · ⬜ planned · ❓ verify.
 
@@ -11,7 +11,7 @@
 - Index: [`ROADMAP.md`](ROADMAP.md) · completed audits: [`archive/`](archive/)
 
 ## Already shipped (context — not re-listed below)
-v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FTS, sync batching, conditional GET), i18n/UX polish, **design audit (54/54)**, **visual polish rounds 1 & 2** (flat color system + contrast fixes + mobile/PWA + brand highlights), auth-redirect fix, article-sort tiebreaker, tap/​swipe-to-open-original, **Phase 0 quick wins** (F4 command palette ⌘K, F3 copy-as-markdown), **M7 Heavy Fetch complete** (T0 impit → T1 ftr-site-config/JSON-LD → T2 render sidecar → T3 BYOK hosted API). See `CHANGELOG.md`.
+v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FTS, sync batching, conditional GET), i18n/UX polish, **design audit (54/54)**, **visual polish rounds 1 & 2** (flat color system + contrast fixes + mobile/PWA + brand highlights), auth-redirect fix, article-sort tiebreaker, tap/​swipe-to-open-original, **Phase 0 quick wins** (F4 command palette ⌘K, F3 copy-as-markdown), **M7 Heavy Fetch complete** (T0 impit → T1 ftr-site-config/JSON-LD → T2 render sidecar → T3 BYOK hosted API), Firecrawl keyless tier + truncated-feed detection, **second UX/design audit (26/26 findings, 2026-07-19/20)** across dark-mode prose, service worker install, i18n/locale gaps, UX-flow bugs (incl. stale "Test connection" state, self-service password change), visual/a11y, and polish, plus a fourth round of reader-overflow fixes (WebKit flexbox sizing). See `CHANGELOG.md`.
 
 ---
 
