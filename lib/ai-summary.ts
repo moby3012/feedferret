@@ -12,7 +12,7 @@ export type AiConfig = {
 
 const MAX_CONTENT_CHARS = 8_000;
 
-function stripHtml(html: string) {
+export function stripHtml(html: string) {
   return html.replace(/<[^>]*>?/gm, " ").replace(/\s+/g, " ").trim();
 }
 

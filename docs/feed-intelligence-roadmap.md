@@ -174,7 +174,7 @@ Each milestone ships as its own verified PR(s) (`tsc`/`lint`/`test`, `next build
 - [ ] **F7** · PWA share-target bookmarklet ("Share → FeedFerret" → starts the page→feed flow) — `S–M`
 
 ### Tier M
-- [ ] **F8** · ⭐ 🤖 🟦 AI auto-tagging / classification of incoming articles (prompt → labels on sync) — `M` — *recommend right after M4 (reuses the AI-config plumbing)*
+- [x] **F8** · ⭐ 🤖 🟦 AI auto-tagging / classification of incoming articles (prompt → labels on sync) — `M` — *shipped 2026-07-20. Reused the existing user-facing Label/ArticleLabel schema instead of a new tag model — AI-proposed tags become real Labels, so they show up for free in the existing label badges, the article-reader label dropdown, and the sidebar's "Label:" filter with no new UI. `lib/ai-tagging.ts` prompts for ≤4 short topical tags per article (nudged to reuse the user's existing label names before minting near-duplicates), `lib/rss-sync.ts`'s new `autoTagNewArticles` runs it for newly-synced articles right after auto-summarize, gated on a new opt-in `User.aiAutoTag` toggle (Settings → AI, mirrors auto-summarize's own toggle) so it never runs without the user turning it on. `Article.aiTaggedAt` marks processed articles so a persistent per-sync cap doesn't mean silently never reaching older ones.*
 - [ ] **F9** · 🤖 User-facing reading-stats dashboard (read-over-time, top feeds, streaks, "time saved by AI") — `M`
 - [ ] **F10** · 🟦 Reverse-proxy / trusted-header auth (`X-Forwarded-User`) — `M`
 - [ ] **F11** · Article notes / highlights (annotate passages, searchable) — `M`

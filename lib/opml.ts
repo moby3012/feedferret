@@ -216,8 +216,17 @@ export function httpOptionsFromOutline(outline: OpmlOutline) {
     return http;
 }
 
+// XML 1.0's Char production excludes most C0 controls outright (tab/LF/CR are
+// the only ones allowed) — unlike <, &, etc. these can't be made legal by
+// escaping them, so they have to be dropped instead. Malformed RSS/Atom feed
+// metadata occasionally carries these (e.g. a stray NUL or vertical-tab byte
+// in a title), and previously a single such feed produced an OPML document
+// that our own parseOpml() (JSDOM, text/xml) throws a SyntaxError on,
+// poisoning the entire export for everyone else's feeds too.
+const XML_ILLEGAL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+
 function escapeXml(unsafe: string): string {
-    return unsafe.replace(/[<>&"']/g, (c) => {
+    return unsafe.replace(XML_ILLEGAL_CHARS, "").replace(/[<>&"']/g, (c) => {
         switch (c) {
             case '<': return '&lt;';
             case '>': return '&gt;';

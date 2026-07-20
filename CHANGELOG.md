@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Added (2026-07-20 — AI auto-tagging, OPML serializer hardening)
+
+- **AI auto-tagging of new articles (F8)** — a new opt-in "Auto-tag on sync" toggle (Settings → AI, next to auto-summarize) asks the user's configured AI provider to propose up to 4 short topical tags per newly-synced article. Rather than a new tag concept, it reuses the existing user-facing Label/ArticleLabel schema: AI-proposed tags become real Labels, so they show up for free in the existing label badges, the article-reader's label dropdown, and the sidebar's "Label:" filter — no new UI needed. The prompt is nudged to reuse the user's existing label names before minting a near-duplicate (e.g. "AI" vs "Artificial Intelligence"). A new `Article.aiTaggedAt` marks processed articles so a small per-sync cap (mirroring the existing auto-summarize cap) doesn't mean older articles are silently never reached.
+- **OPML serializer hardened against a real control-character bug** — audited `lib/opml.ts`'s hand-written XML serializer (considered adopting the `feed` npm package instead; decided not to — see `docs/scraping-engines-research.md`). XML 1.0 forbids most C0 control characters outright — unlike `<`/`&`, escaping doesn't make them legal — and malformed RSS/Atom feed metadata occasionally carries one (a stray NUL or vertical-tab byte in a title). Previously, a single such feed made `generateOpml()` emit a document that our own `parseOpml()` (JSDOM, strict XML mode) throws a hard `SyntaxError` on, poisoning the whole exported file for every other feed too. `escapeXml()` now strips these characters instead of passing them through.
+
 ### Added (2026-07-20 — 4th extraction tier + M2 full-text-polish)
 
 - **`@extractus/article-extractor` as a 4th extraction tier** (`lib/readability-extract.ts`) — inserted after Defuddle and Readability, before the JSON-LD `articleBody` recovery step: it uses a different (unfluff-derived) content-scoring heuristic than either, occasionally succeeding on pages where both fail. Only runs when the earlier tiers came back empty/too-thin; never throws, same as every other tier in the waterfall. `ExtractionResult.extractedBy` gained `"extractus"` for observability.
