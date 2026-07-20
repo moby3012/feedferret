@@ -131,7 +131,7 @@ export function SearchResultsView({
           </Button>
         </div>
       ) : (
-        <div className={cn("flex-1 min-h-0", isMobile && "pb-24")}>
+        <div className={cn("flex flex-1 min-h-0 flex-col", isMobile && "pb-24")}>
           <ArticleList
             articles={articles}
             selectedArticle={selectedArticle}
