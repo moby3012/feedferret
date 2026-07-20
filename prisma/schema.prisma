@@ -300,7 +300,7 @@ model Feed {
   fullTextRemoveSelectors  String?
   autoFetchFullText        Boolean   @default(false)
   fullTextConditions       String?
-  fullTextMode             String    @default("off")  // "off" | "auto" | "selector"
+  fullTextMode             String    @default("off")  // "off" | "auto" | "selector" | "ai"
   defaultContentFormat     String    @default("html")  // "html" | "markdown" — preferred stored format for auto full-text
   // "Enable automatic full text for this feed?" suggestion (shown after a manual
   // fetch reveals the feed is truncated) was declined — don't ask again.

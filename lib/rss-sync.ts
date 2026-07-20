@@ -15,6 +15,7 @@ import { fetchAndExtractReadable } from "./readability-extract";
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 const MAX_AUTO_TAG_PER_SYNC = 3;
+const MAX_AI_EXTRACTIONS_PER_SYNC_BATCH = 5;
 
 export interface ArticleSyncInput {
     feedId: string;
@@ -363,8 +364,8 @@ export async function syncFeed(userId: string, feedId: string) {
             const mode = resolveFullTextMode(feed);
             if (mode === "selector") {
                 await autoFetchFullTextForArticles(userId, upsertedIds, feed);
-            } else if (mode === "auto") {
-                await autoFetchFullTextViaEngine(userId, upsertedIds, feed);
+            } else if (mode === "auto" || mode === "ai") {
+                await autoFetchFullTextViaEngine(userId, upsertedIds, feed, mode);
             }
         }
 
@@ -512,6 +513,7 @@ async function autoFetchFullTextViaEngine(
     feed: {
         defaultContentFormat?: string | null;
     },
+    mode: "auto" | "ai" = "auto",
 ) {
     const DOMPurify = await getSanitizer();
 
@@ -523,12 +525,44 @@ async function autoFetchFullTextViaEngine(
     // The hosted-API BYOK connector (M7-T3) sends article content to a third
     // party, so unlike the manual "Fetch full text" button it must never run
     // during unattended background sync unless the user explicitly opted in.
-    const user = await db.user.findUnique({ where: { id: userId }, select: { contentFetchAutoUse: true } });
-    const extractOptions = user?.contentFetchAutoUse ? { userId } : {};
+    const user = await db.user.findUnique({
+        where: { id: userId },
+        select: {
+            contentFetchAutoUse: true,
+            aiProvider: true,
+            aiApiKey: true,
+            aiModel: true,
+            aiOllamaBaseUrl: true,
+        },
+    });
+    const baseExtractOptions = user?.contentFetchAutoUse ? { userId } : {};
+
+    // M6: per-feed opt-in AI-extraction, capped per sync CALL (not per
+    // article) — a feed's initial backfill can land dozens of articles in one
+    // batch, and this bounds how many of those spend the user's own AI tokens
+    // in a single tick. Articles beyond the cap still get the free
+    // deterministic tiers (just without this fallback) and aren't revisited
+    // later, since `articleIds` only ever contains newly-arrived/changed rows.
+    const aiConfig: AiConfig | null =
+        mode === "ai" && user?.aiProvider
+            ? {
+                  provider: user.aiProvider as AiConfig["provider"],
+                  apiKey: decryptIfValue(user.aiApiKey),
+                  model: user.aiModel,
+                  ollamaBaseUrl: user.aiOllamaBaseUrl,
+              }
+            : null;
+    let aiExtractionsUsed = 0;
 
     for (const article of articles) {
         if (!article.link) continue;
         try {
+            const useAiForThisArticle = !!aiConfig && aiExtractionsUsed < MAX_AI_EXTRACTIONS_PER_SYNC_BATCH;
+            if (useAiForThisArticle) aiExtractionsUsed++;
+            const extractOptions = useAiForThisArticle
+                ? { ...baseExtractOptions, aiExtraction: aiConfig! }
+                : baseExtractOptions;
+
             const result = await fetchAndExtractReadable(article.link, extractOptions);
             if (result.extractedBy === "none" || !result.html) {
                 // Extraction failed to find anything useful — leave the
