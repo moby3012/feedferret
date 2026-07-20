@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { normalizeStarterPacksInput, stringifyStarterPacks } from "@/lib/starter-packs";
 import { getStarterPacksFromSettings } from "@/lib/starter-packs.server";
 import { renderWithConfigDetailed } from "@/lib/render-sidecar";
+import { validateRsshubRoute } from "@/lib/rsshub";
 import { logger } from "@/lib/logger";
 
 async function checkAdmin() {
@@ -61,6 +62,7 @@ const ENCRYPTED_FIELDS = [
   "mailgunApiKey",
   "sendgridApiKey",
   "renderSidecarToken",
+  "rsshubApiKey",
 ] as const;
 
 type EncryptedField = (typeof ENCRYPTED_FIELDS)[number];
@@ -146,6 +148,16 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
       throw new Error("Render sidecar URL must start with http:// or https://");
     }
     next.renderSidecarUrl = value || null;
+  }
+
+  // RSSHub connector (M5a)
+  if (typeof data.rsshubEnabled === "boolean") next.rsshubEnabled = data.rsshubEnabled;
+  if ("rsshubBaseUrl" in data) {
+    const value = String(data.rsshubBaseUrl || "").trim();
+    if (value && !/^https?:\/\//i.test(value)) {
+      throw new Error("RSSHub base URL must start with http:// or https://");
+    }
+    next.rsshubBaseUrl = value || null;
   }
 
   // Encrypted fields: only update if a non-empty value is provided
@@ -376,6 +388,37 @@ export async function testRenderSidecar(config: { url?: string; token?: string; 
     logger.error("Render sidecar test failed:", error);
     return { success: false as const, error: error?.message || "Unknown render sidecar error" };
   }
+}
+
+// RSSHub's own GitHub releases route: always exists, no platform auth needed
+// — a reliable smoke test for "is this RSSHub instance reachable and serving
+// real feeds" independent of whatever route a user later asks for.
+const RSSHUB_TEST_ROUTE = "/github/repos/DIYgod/RSSHub/releases";
+
+export async function testRsshubConnection(config: { baseUrl?: string; apiKey?: string; testRoute?: string }) {
+  await checkAdmin();
+  const baseUrl = String(config.baseUrl || "").trim();
+  if (!/^https?:\/\//i.test(baseUrl)) {
+    return { success: false as const, error: "RSSHub base URL must start with http:// or https://" };
+  }
+
+  // The key field may carry the "__encrypted__" sentinel when the admin left
+  // the stored value untouched — resolve it back to the stored key.
+  let apiKey = String(config.apiKey || "").trim() || null;
+  if (apiKey === "__encrypted__") {
+    const current = await db.globalSettings.findUnique({
+      where: { id: "global" },
+      select: { rsshubApiKey: true },
+    });
+    apiKey = decryptIfValue(current?.rsshubApiKey) || null;
+  }
+
+  const testRoute = String(config.testRoute || "").trim() || RSSHUB_TEST_ROUTE;
+  const result = await validateRsshubRoute({ baseUrl, apiKey }, testRoute);
+  if (!result.ok) {
+    return { success: false as const, error: result.reason };
+  }
+  return { success: true as const, itemCount: result.itemCount, testRoute };
 }
 
 export async function getPushDiagnostics() {

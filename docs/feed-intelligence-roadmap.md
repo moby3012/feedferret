@@ -86,10 +86,11 @@ Legend — **Effort:** S (hours) · M (≤ a few days) · L (multi-day) · XL (m
 
 **User outcome:** an admin can point FeedFerret at a self-hosted RSSHub and/or changedetection.io; users then get platform feeds and any-page monitoring — the AI can even pick the right route/watch for them.
 
-- [ ] **M5a — RSSHub connector** — `M`
-  - [ ] Admin setting: RSSHub base URL (+ optional key); reachable only via SSRF-allowlisted host.
-  - [ ] "Add from platform" UX: user names a source (YouTube channel, subreddit, GitHub repo releases…) → we build the RSSHub route → add as feed. AI can map "this YouTube URL" → the route.
-  - [ ] Hidden entirely when unconfigured.
+- [~] **M5a — RSSHub connector** — `M` — *engine slice shipped 2026-07-20 (`lib/rsshub.ts` + admin config), UI slice ("Add from platform") still pending*
+  - [x] Admin setting: RSSHub base URL (+ optional key); reachable only via SSRF-allowlisted host. — `GlobalSettings.rsshubEnabled/rsshubBaseUrl/rsshubApiKey` (encrypted), mirrors the render-sidecar (M7-T2) admin-config pattern exactly. `testRsshubConnection` action smoke-tests via RSSHub's own GitHub-releases route (always exists, no platform auth needed).
+  - [ ] "Add from platform" UX: user names a source (YouTube channel, subreddit, GitHub repo releases…) → we build the RSSHub route → add as feed. AI can map "this YouTube URL" → the route. — *engine ready (`proposeAndValidateRoute`, mirrors M4's "AI proposes, engine validates"), UI not yet built.*
+  - [x] Hidden entirely when unconfigured. — `getRsshubStatus()` (`app/actions/feeds.ts`) exposes `isRsshubConfigured()` to any authenticated user for UI gating.
+  - **Design note:** once a route is known, an RSSHub-backed feed IS just a plain RSS/Atom feed at `<rsshubBaseUrl><route>` — no new `sourceType`, sync path, or OPML handling needed. `validateRsshubRoute` reuses the exact same `fetchFeedArticles()` every other RSS feed already goes through.
 - [ ] **M5b — changedetection.io connector** — `M`
   - [ ] Admin setting: changedetection base URL + API key.
   - [ ] "Monitor this page → feed": create a **watch** via its REST API (with CSS/xpath filter, optional restock/price processor), subscribe to its RSS output as a feed. Leans on its **own browser rendering** for JS pages (so we don't run Playwright in-process).

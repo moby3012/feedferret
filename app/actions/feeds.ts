@@ -2124,3 +2124,12 @@ export async function summarizeArticle(articleId: string): Promise<{ summary: st
     revalidatePath("/");
     return { summary };
 }
+
+/** Whether an admin has configured the RSSHub connector (M5a) — gates the "Add from platform" UI. */
+export async function getRsshubStatus() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const { isRsshubConfigured } = await import("@/lib/rsshub");
+    return { configured: await isRsshubConfigured() };
+}
