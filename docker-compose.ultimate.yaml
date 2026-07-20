@@ -16,10 +16,20 @@
 # and RSS access token don't exist until its own container has started and
 # you've opened its web UI at least once (Settings → API) to generate them —
 # there's no value to default them to before that. Start this stack, open
-# changedetection's UI (http://<host>:5000 or reverse-proxied), grab both
+# changedetection's UI (http://<host>:3000 or reverse-proxied), grab both
 # secrets, then configure the connector once in FeedFerret's own
 # Server Management → Sync → changedetection.io connector. It becomes usable
 # immediately after that — no restart needed.
+#
+# PORT NOTE (important on Coolify): RSSHub and changedetection.io both read the
+# generic `PORT` env var to decide their listen port (defaulting to 1200 and
+# 5000 respectively on their own). Some deploy platforms — Coolify included —
+# inject a single project-wide `PORT` into *every* service in a Compose stack,
+# which would otherwise silently move these two onto a different port than the
+# one FeedFerret and the proxy expect. To stay deterministic in every
+# environment, both connectors are pinned to `PORT=3000` and exposed on 3000
+# below, and FeedFerret is pointed at `rsshub:3000`. (The render sidecar dodges
+# the same trap by reading `SIDECAR_PORT` instead — a name nothing injects.)
 services:
   feedferret:
     build:
@@ -54,10 +64,11 @@ services:
       - FEEDFERRET_RENDER_SIDECAR_URL=${FEEDFERRET_RENDER_SIDECAR_URL:-http://render-sidecar:8080/}
       - FEEDFERRET_RENDER_SIDECAR_TOKEN=${RENDER_SIDECAR_TOKEN:-change-me}
       # RSSHub connector — pre-wired against the 'rsshub' service below, no
-      # setup required. RSSHUB_ACCESS_KEY is optional and shared with the
-      # rsshub service's own ACCESS_KEY further down; leave it unset to run
-      # both sides with no auth.
-      - FEEDFERRET_RSSHUB_URL=http://rsshub:1200/
+      # setup required. Port 3000 (not RSSHub's own default 1200) — see the
+      # PORT NOTE at the top of this file. RSSHUB_ACCESS_KEY is optional and
+      # shared with the rsshub service's own ACCESS_KEY further down; leave it
+      # unset to run both sides with no auth.
+      - FEEDFERRET_RSSHUB_URL=http://rsshub:3000/
       - FEEDFERRET_RSSHUB_KEY=${RSSHUB_ACCESS_KEY:-}
       # changedetection.io connector — intentionally NOT set here. Configure
       # it once via Server Management → Sync → changedetection.io connector
@@ -121,31 +132,38 @@ services:
 
   # RSSHub connector (docs/self-hosting.md § Optional Connectors → RSSHub) —
   # turns platform sources (YouTube channels, subreddits, GitHub releases,
-  # etc.) without their own feed into real feeds. No published ports; only
-  # 'feedferret' reaches it on the internal Compose network.
+  # etc.) without their own feed into real feeds. Only 'feedferret' reaches it
+  # on the internal Compose network. PORT is pinned to 3000 (not RSSHub's own
+  # default 1200) for deterministic behaviour under Coolify — see the PORT NOTE
+  # at the top of this file.
   rsshub:
     image: diygod/rsshub
     container_name: feedferret-rsshub
     restart: unless-stopped
     environment:
+      - PORT=3000
       - ACCESS_KEY=${RSSHUB_ACCESS_KEY:-}
     expose:
-      - "1200"
+      - "3000"
 
   # changedetection.io connector (docs/self-hosting.md § Optional Connectors
   # → changedetection.io) — turns any page, including JS-rendered ones, into
   # a feed of its own changes over time. Not pre-wired into FeedFerret's
-  # environment above — see the note at the top of this file. No published
-  # ports here either; reach its web UI through a reverse proxy or a
-  # temporary 'docker compose exec' port-forward if you need to open it.
+  # environment above — see the note at the top of this file. Reach its web UI
+  # through a reverse proxy (route a domain to this service's port 3000) or a
+  # temporary port-forward when you need to grab its two secrets. PORT is
+  # pinned to 3000 (not changedetection's own default 5000) — see the PORT
+  # NOTE at the top of this file.
   changedetection:
     image: ghcr.io/dgtlmoon/changedetection.io
     container_name: feedferret-changedetection
     restart: unless-stopped
+    environment:
+      - PORT=3000
     volumes:
       - changedetection-data:/datastore
     expose:
-      - "5000"
+      - "3000"
 
 volumes:
   feedferret_postgres_data:

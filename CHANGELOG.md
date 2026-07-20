@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
 
+### Fixed (2026-07-20 — ultimate Compose: RSSHub/changedetection.io wrong port under Coolify)
+
+- `docker-compose.ultimate.yaml` exposed RSSHub on 1200 and changedetection.io on 5000 (their own defaults) and pointed FeedFerret at `rsshub:1200`, but Coolify (and similar platforms) inject one project-wide `PORT` into *every* service in a Compose stack — both connectors read `PORT`, so they actually came up on 3000, causing *Bad Gateway* in the browser and FeedFerret being unable to reach RSSHub. Both connectors are now pinned to `PORT=3000`, exposed on 3000, and FeedFerret's pre-wired RSSHub URL points at `http://rsshub:3000/` — deterministic on plain `docker compose` and Coolify alike (the render sidecar already dodged this by reading `SIDECAR_PORT`). `docs/self-hosting.md` gained an explicit port note explaining the gotcha, and the manual connector snippets/URLs were updated to match.
+
 ### Added (2026-07-20 — three Docker Compose variants: minimal, default, ultimate)
 
 - Split the single `docker-compose.yaml` into three ready-to-use variants, no editing required for any of them: `docker-compose.minimal.yaml` (SQLite only, no sidecar, no connectors — single container), `docker-compose.yaml` (unchanged: PostgreSQL + render sidecar), and `docker-compose.ultimate.yaml` (PostgreSQL + render sidecar + RSSHub + changedetection.io, all on the same network). RSSHub is pre-wired via `FEEDFERRET_RSSHUB_URL`/`FEEDFERRET_RSSHUB_KEY` in the ultimate file and works immediately; changedetection.io is intentionally **not** pre-wired via ENV — its two secrets don't exist until its own container has started and its web UI has been opened once, so it's configured through Server Management → Sync instead, same as a manually-added connector. `docs/self-hosting.md` gained a new "Choosing a Docker Compose variant" section (comparison table + how to mix-and-match for other combinations), and the old manual SQLite-mode compose-editing instructions were replaced with "just use `docker-compose.minimal.yaml`."
