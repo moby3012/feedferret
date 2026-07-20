@@ -335,6 +335,63 @@ The runner image deliberately contains no native compilers (`g++`, `make`, `pyth
 
 ---
 
+## Optional Connectors
+
+FeedFerret runs completely on its own — none of the following are required. Each is an admin-configured, opt-in connector, hidden from every user until an admin turns it on in **Server Management → Sync**. All three require an outbound network path from the FeedFerret container to the connector's own container/host; if you run them on the same Docker network (the default for anything added to `docker-compose.yaml`), no extra firewall configuration is needed.
+
+### Browser render sidecar
+
+For JavaScript-heavy pages the normal fetcher can't read (used as a fallback for full-text extraction and "page → feed"). Bundled by default in `docker-compose.yaml` — see [`docs/render-sidecar.md`](./render-sidecar.md) for the full setup, security model, and how to swap in your own service (e.g. crawl4ai).
+
+### RSSHub connector
+
+Turns a platform source without its own feed — a YouTube channel, a subreddit, a GitHub repo's releases, and hundreds of other routes — into a real feed, via your own self-hosted [RSSHub](https://docs.rsshub.app/) instance. Configure the base URL (and, only if your RSSHub instance sets an `ACCESS_KEY`, the matching key) in **Server Management → Sync → RSSHub connector**. Once configured, users get a 4th "From platform" tab in the Add Feed dialog. A resolved RSSHub route is stored as a plain feed URL — no different from any other RSS feed — so no extra sync/export handling is needed, but note that if you set an access key, it becomes part of that feed's URL and is therefore visible to whichever user added it (OPML export, feed settings, etc.).
+
+Minimal compose addition:
+
+```yaml
+services:
+  rsshub:
+    image: diygod/rsshub
+    restart: unless-stopped
+    environment:
+      - ACCESS_KEY=change-me   # optional — omit to run without a key
+```
+
+Point FeedFerret's RSSHub base URL at `http://rsshub:1200/` (the Docker Compose service name).
+
+### changedetection.io connector
+
+Turns *any* page — including JS-rendered ones, since [changedetection.io](https://changedetection.io) does its own browser rendering — into a feed of its changes over time. Configure the base URL and **two separate secrets** in **Server Management → Sync → changedetection.io connector**:
+
+- **API key** — from changedetection.io's own Settings → API tab. Used to create/manage watches.
+- **RSS access token** — from Settings → General → RSS Access Token in the *same* instance. This is a different value from the API key and is required to read a watch's RSS output; the API key alone will not work there.
+
+Once configured, users get a "Monitor page" tab in the Add Feed dialog. **A freshly created watch's feed has no items until changedetection.io has checked the page at least twice** — this is expected, not a bug; the feed fills in on its own once enough history exists.
+
+Minimal compose addition:
+
+```yaml
+services:
+  changedetection:
+    image: ghcr.io/dgtlmoon/changedetection.io
+    restart: unless-stopped
+    volumes:
+      - changedetection-data:/datastore
+volumes:
+  changedetection-data:
+```
+
+Point FeedFerret's changedetection.io base URL at `http://changedetection:5000/` (the Docker Compose service name).
+
+### Network isolation / SSRF notes
+
+- Every URL a connector is asked to fetch or watch (the *target* page, not the connector itself) still goes through FeedFerret's normal SSRF checks — a connector cannot be used to make FeedFerret (or the connector) reach an internal/private address a plain feed fetch wouldn't already be allowed to reach.
+- The connector's own base URL is treated as trusted admin configuration (like any other admin-entered service address) and is not itself SSRF-checked beyond requiring a valid `http(s)://` URL — only grant it to a service you control.
+- Keep each connector on the same private Docker network as FeedFerret and do not expose its port publicly; there is no reason for RSSHub or changedetection.io's own web UI to be reachable from outside your server.
+
+---
+
 ## Further Documentation
 
 - **Reverse proxy (Nginx, Caddy, Traefik):** [`docs/reverse-proxy.md`](./reverse-proxy.md)

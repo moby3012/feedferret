@@ -458,6 +458,20 @@ model GlobalSettings {
   rsshubEnabled                  Boolean @default(false)
   rsshubBaseUrl                  String?
   rsshubApiKey                   String?
+  // Optional changedetection.io connector (M5b): an admin-configured
+  // self-hosted changedetection.io instance, used for "Monitor this page"
+  // (any page, including JS-rendered ones since changedetection.io does its
+  // own browser rendering) → creates a watch → its own per-watch RSS output
+  // becomes a normal feed. Two DIFFERENT secrets, both encrypted at rest:
+  // `changedetectionApiKey` (its REST API's `x-api-key`, used to create/
+  // manage watches) and `changedetectionRssToken` (a separate "RSS access
+  // token" changedetection.io requires as a `?token=` query param on the
+  // per-watch RSS route — confirmed from its own source, the REST API key
+  // does NOT work for this). Hidden in the UI until enabled.
+  changedetectionEnabled         Boolean @default(false)
+  changedetectionBaseUrl         String?
+  changedetectionApiKey          String?
+  changedetectionRssToken        String?
   // Onboarding
   onboardingCompleted Boolean @default(false)
   // Security

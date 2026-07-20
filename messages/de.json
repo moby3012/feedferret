@@ -683,6 +683,17 @@
       "itemsFound": "{count, plural, one {# Eintrag gefunden} other {# Einträge gefunden}}",
       "addFeed": "Feed hinzufügen"
     },
+    "changedetection": {
+      "tabLabel": "Seite beobachten",
+      "intro": "Beobachte jede Seite auf Änderungen — auch JS-gerenderte, da changedetection.io eigenes Browser-Rendering nutzt — und erhalte die Änderungen als Feed.",
+      "urlPlaceholder": "Zu beobachtende Seiten-URL",
+      "monitorButton": "Diese Seite beobachten",
+      "createFailed": "Für diese Seite konnte kein Watch angelegt werden. Überprüfe die URL und versuche es erneut.",
+      "watchCreated": "Watch angelegt",
+      "watchCreatedHint": "Dieser Feed hat noch keine Einträge — changedetection.io muss die Seite mindestens zweimal prüfen, bevor Änderungen angezeigt werden können. Das füllt sich von selbst; füge ihn jetzt hinzu und schau später wieder vorbei.",
+      "watchCreatedHintAi": "Die KI hat den zu beobachtenden Inhaltsbereich auf dieser Seite ausgewählt. Dieser Feed hat noch keine Einträge — changedetection.io muss die Seite mindestens zweimal prüfen, bevor Änderungen angezeigt werden können. Das füllt sich von selbst; füge ihn jetzt hinzu und schau später wieder vorbei.",
+      "addFeed": "Feed hinzufügen"
+    },
     "spoilerAhead": "Spoiler-Inhalte voraus",
     "spoilerDescription": "Diese Artikel wurden durch deine Regeln als Spoiler markiert und bewusst aus allen anderen Ansichten ausgeblendet. Öffne sie nur, wenn du bereit bist.",
     "revealSpoilers": "Spoiler anzeigen",
@@ -1344,6 +1355,13 @@
       "rsshubApiKey": "Zugriffs-Schlüssel (optional)",
       "rsshubHint": "Trage hier deine eigene selbst gehostete RSSHub-Instanz ein (docs.rsshub.app). Der Zugriffs-Schlüssel ist RSSHubs eigenes optionales `?key=`-Gate (dessen ACCESS_KEY-Einstellung) — leer lassen, wenn deine Instanz keins verwendet. Sobald eine Route validiert ist, wird sie als normale Feed-URL gespeichert — dieser Schlüssel ist dann für den jeweiligen Nutzer sichtbar, der einen Plattform-Feed hinzufügt.",
       "rsshubTest": "Testen",
+      "changedetection": "changedetection.io-Connector",
+      "changedetectionDescription": "Optionale selbst gehostete changedetection.io-Instanz, genutzt für „Diese Seite beobachten“ — verwandelt jede Seite (auch JS-gerenderte, da changedetection.io eigenes Browser-Rendering nutzt) in einen Feed ihrer Änderungen über die Zeit.",
+      "changedetectionBaseUrl": "changedetection.io-Basis-URL",
+      "changedetectionApiKey": "API-Schlüssel",
+      "changedetectionRssToken": "RSS-Zugriffs-Token",
+      "changedetectionHint": "Zwei unterschiedliche Geheimnisse werden benötigt: der API-Schlüssel steht unter Einstellungen → API in deiner changedetection.io-Instanz; das RSS-Zugriffs-Token ist ein separater Wert unter Einstellungen → Allgemein → RSS-Zugriffs-Token — changedetection.io akzeptiert den API-Schlüssel nicht zum Lesen seines RSS-Outputs. Der Feed eines frisch angelegten Watches hat keine Einträge, bis changedetection.io die Seite mindestens zweimal geprüft hat — ein neuer „Seite beobachten“-Feed kann also eine Weile leer aussehen, das ist normal, kein Fehler.",
+      "changedetectionTest": "Testen",
       "save": "Speichern"
     },
     "discovery": {
@@ -1411,6 +1429,8 @@
       "sidecarTestFailed": "Render-Sidecar-Test fehlgeschlagen: {error}",
       "rsshubTestOk": "RSSHub OK – Test-Route lieferte {count} Einträge",
       "rsshubTestFailed": "RSSHub-Test fehlgeschlagen: {error}",
+      "changedetectionTestOk": "changedetection.io OK – Version {version}",
+      "changedetectionTestFailed": "changedetection.io-Test fehlgeschlagen: {error}",
       "copiedToClipboard": "In die Zwischenablage kopiert",
       "userRoleUpdated": "{email} auf {role} aktualisiert",
       "failedToUpdateUserRole": "Benutzerrolle konnte nicht aktualisiert werden",

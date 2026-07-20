@@ -67,6 +67,7 @@ import {
   sendTestEmail,
   testRenderSidecar,
   testRsshubConnection,
+  testChangedetectionConnection,
   getPushDiagnostics,
   generateVapidKeyPair,
   getAdminAuditLog,
@@ -250,6 +251,40 @@ export function ServerManagementDialog({
       }
     } catch (error: any) {
       toast.error(error?.message || t("toast.rsshubTestFailed", { error: "" }));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveChangedetection = async () => {
+    const payload: any = {
+      changedetectionEnabled: settings?.changedetectionEnabled ?? false,
+      changedetectionBaseUrl: settings?.changedetectionBaseUrl ?? null,
+    };
+    const apiKey = (settings as any)?.changedetectionApiKey;
+    const rssToken = (settings as any)?.changedetectionRssToken;
+    // Only send secrets when the admin actually typed a new one — never the
+    // "__encrypted__" sentinel (that would re-encrypt the placeholder string).
+    if (apiKey && apiKey !== "__encrypted__") payload.changedetectionApiKey = apiKey;
+    if (rssToken && rssToken !== "__encrypted__") payload.changedetectionRssToken = rssToken;
+    await handleUpdateSettings(payload);
+  };
+
+  const handleTestChangedetection = async () => {
+    setIsSaving(true);
+    try {
+      const result = await testChangedetectionConnection({
+        baseUrl: (settings as any)?.changedetectionBaseUrl ?? "",
+        apiKey: (settings as any)?.changedetectionApiKey ?? "",
+        rssToken: (settings as any)?.changedetectionRssToken ?? "",
+      });
+      if (result.success) {
+        toast.success(t("toast.changedetectionTestOk", { version: result.version }));
+      } else {
+        toast.error(t("toast.changedetectionTestFailed", { error: result.error ?? "" }));
+      }
+    } catch (error: any) {
+      toast.error(error?.message || t("toast.changedetectionTestFailed", { error: "" }));
     } finally {
       setIsSaving(false);
     }
@@ -1298,6 +1333,66 @@ export function ServerManagementDialog({
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.rsshubTest")}
                           </Button>
                           <Button className="rounded-2xl px-8" onClick={handleSaveRsshub} disabled={isSaving}>
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.save")}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── changedetection.io connector (M5b) ── */}
+                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1 pe-6">
+                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.changedetection")}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {t("sync.changedetectionDescription")}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={settings?.changedetectionEnabled ?? false}
+                        onCheckedChange={(checked) => handleUpdateSettings({ changedetectionEnabled: checked })}
+                      />
+                    </div>
+
+                    {settings?.changedetectionEnabled && (
+                      <div className="p-6 rounded-2xl bg-card border border-border/60 shadow-sm space-y-4">
+                        <SettingsField
+                          label={t("sync.changedetectionBaseUrl")}
+                          placeholder="http://changedetection:5000/"
+                          field="changedetectionBaseUrl"
+                          settings={settings}
+                          setSettings={setSettings}
+                        />
+                        <SettingsField
+                          label={t("sync.changedetectionApiKey")}
+                          placeholder="••••••••"
+                          field="changedetectionApiKey"
+                          settings={settings}
+                          setSettings={setSettings}
+                          type="password"
+                          isSecret
+                        />
+                        <SettingsField
+                          label={t("sync.changedetectionRssToken")}
+                          placeholder="••••••••"
+                          field="changedetectionRssToken"
+                          settings={settings}
+                          setSettings={setSettings}
+                          type="password"
+                          isSecret
+                        />
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {t("sync.changedetectionHint")}
+                        </p>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            className="rounded-2xl px-6"
+                            onClick={handleTestChangedetection}
+                            disabled={isSaving}
+                          >
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.changedetectionTest")}
+                          </Button>
+                          <Button className="rounded-2xl px-8" onClick={handleSaveChangedetection} disabled={isSaving}>
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.save")}
                           </Button>
                         </div>

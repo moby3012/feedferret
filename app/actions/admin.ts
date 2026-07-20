@@ -9,6 +9,7 @@ import { normalizeStarterPacksInput, stringifyStarterPacks } from "@/lib/starter
 import { getStarterPacksFromSettings } from "@/lib/starter-packs.server";
 import { renderWithConfigDetailed } from "@/lib/render-sidecar";
 import { validateRsshubRoute } from "@/lib/rsshub";
+import { testChangedetectionConnection as runChangedetectionTest } from "@/lib/changedetection";
 import { logger } from "@/lib/logger";
 
 async function checkAdmin() {
@@ -63,6 +64,8 @@ const ENCRYPTED_FIELDS = [
   "sendgridApiKey",
   "renderSidecarToken",
   "rsshubApiKey",
+  "changedetectionApiKey",
+  "changedetectionRssToken",
 ] as const;
 
 type EncryptedField = (typeof ENCRYPTED_FIELDS)[number];
@@ -158,6 +161,16 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
       throw new Error("RSSHub base URL must start with http:// or https://");
     }
     next.rsshubBaseUrl = value || null;
+  }
+
+  // changedetection.io connector (M5b)
+  if (typeof data.changedetectionEnabled === "boolean") next.changedetectionEnabled = data.changedetectionEnabled;
+  if ("changedetectionBaseUrl" in data) {
+    const value = String(data.changedetectionBaseUrl || "").trim();
+    if (value && !/^https?:\/\//i.test(value)) {
+      throw new Error("changedetection.io base URL must start with http:// or https://");
+    }
+    next.changedetectionBaseUrl = value || null;
   }
 
   // Encrypted fields: only update if a non-empty value is provided
@@ -419,6 +432,36 @@ export async function testRsshubConnection(config: { baseUrl?: string; apiKey?: 
     return { success: false as const, error: result.reason };
   }
   return { success: true as const, itemCount: result.itemCount, testRoute };
+}
+
+export async function testChangedetectionConnection(config: { baseUrl?: string; apiKey?: string; rssToken?: string }) {
+  await checkAdmin();
+  const baseUrl = String(config.baseUrl || "").trim();
+  if (!/^https?:\/\//i.test(baseUrl)) {
+    return { success: false as const, error: "changedetection.io base URL must start with http:// or https://" };
+  }
+
+  // These fields may carry the "__encrypted__" sentinel when the admin left
+  // the stored value untouched — resolve them back to the stored secrets.
+  let apiKey = String(config.apiKey || "").trim();
+  let rssToken = String(config.rssToken || "").trim();
+  if (apiKey === "__encrypted__" || rssToken === "__encrypted__") {
+    const current = await db.globalSettings.findUnique({
+      where: { id: "global" },
+      select: { changedetectionApiKey: true, changedetectionRssToken: true },
+    });
+    if (apiKey === "__encrypted__") apiKey = decryptIfValue(current?.changedetectionApiKey) || "";
+    if (rssToken === "__encrypted__") rssToken = decryptIfValue(current?.changedetectionRssToken) || "";
+  }
+  if (!apiKey) {
+    return { success: false as const, error: "An API key is required (Settings → API in your changedetection.io instance)." };
+  }
+
+  const result = await runChangedetectionTest({ baseUrl, apiKey, rssToken });
+  if (!result.ok) {
+    return { success: false as const, error: result.reason };
+  }
+  return { success: true as const, version: result.version };
 }
 
 export async function getPushDiagnostics() {
