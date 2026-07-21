@@ -1,5 +1,8 @@
 # Feed Intelligence — Implementation Roadmap
 
+> ## ✅ COMPLETE (2026-07-20/21) — kept as an implementation record
+> **All milestones M1–M7 shipped**, and the whole pillar is now also controllable over REST/MCP. The north-star UX (*paste a URL → AI proposes the whole config → confirm*) is delivered, alongside the manual page→feed builder, the RSSHub + changedetection.io connectors, per-article AI extraction, and the 4-tier anti-bot/heavy-fetch stack. The only remaining sub-item is the optional **M7-T1 embedded-data extraction** polish (`[~]`, non-blocking). This document is retained as the detailed build record; new work is tracked in [`MASTER-ROADMAP.md`](MASTER-ROADMAP.md).
+>
 > **Companion to** [`feed-intelligence-plan.md`](feed-intelligence-plan.md) (research + architecture). This is the **actionable, milestone-based TODO**.
 > **Created:** 2026-07-16.
 

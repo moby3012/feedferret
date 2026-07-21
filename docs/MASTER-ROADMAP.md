@@ -1,17 +1,25 @@
 # FeedFerret — Master Roadmap (single source of truth)
 
-> **Consolidated 2026-07-16, updated 2026-07-20.** One ordered backlog to work through top-to-bottom. Duplicates across docs are merged here (noted).
+> **Consolidated 2026-07-16, updated 2026-07-21.** One ordered backlog to work through top-to-bottom. Duplicates across docs are merged here (noted).
 > **How to use:** this is the *index and ordering*. Detailed task checklists live in the linked source docs — tick them there, keep this file's phase status current.
 > Effort: S (<1d) · M (1–3d) · L (1–2w) · XL (2w+). Status: ✅ done · 🔄 in progress · ⬜ planned · ❓ verify.
+>
+> **Next up ⭐: [Performance & UX Audit](releases/perf-ux-audit.md)** — make the app snappier, faster, and more pleasant. See the dedicated section below.
 
 ## Source docs (hub)
-- Releases: [`releases/v1.2-theming.md`](releases/v1.2-theming.md) · [`releases/v1.3.md`](releases/v1.3.md) · [`releases/v2.md`](releases/v2.md) · [`releases/backlog.md`](releases/backlog.md) · [`releases/maintenance.md`](releases/maintenance.md) · [`releases/testing.md`](releases/testing.md)
+- Releases: **[`releases/perf-ux-audit.md`](releases/perf-ux-audit.md) ⭐** · [`releases/v1.2-theming.md`](releases/v1.2-theming.md) · [`releases/v1.3.md`](releases/v1.3.md) · [`releases/v2.md`](releases/v2.md) · [`releases/backlog.md`](releases/backlog.md) · [`releases/maintenance.md`](releases/maintenance.md) · [`releases/testing.md`](releases/testing.md)
 - Feed Intelligence: [`feed-intelligence-plan.md`](feed-intelligence-plan.md) · [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md) · [`feature-ideas.md`](feature-ideas.md) · [`scraping-engines-research.md`](scraping-engines-research.md)
 - Quality backlogs: [`accessibility-todo.md`](accessibility-todo.md) · [`deferred.md`](deferred.md)
 - Index: [`ROADMAP.md`](ROADMAP.md) · completed audits: [`archive/`](archive/)
 
 ## Already shipped (context — not re-listed below)
-v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FTS, sync batching, conditional GET), i18n/UX polish, **design audit (54/54)**, **visual polish rounds 1 & 2** (flat color system + contrast fixes + mobile/PWA + brand highlights), auth-redirect fix, article-sort tiebreaker, tap/​swipe-to-open-original, **Phase 0 quick wins** (F4 command palette ⌘K, F3 copy-as-markdown), **M7 Heavy Fetch complete** (T0 impit → T1 ftr-site-config/JSON-LD → T2 render sidecar → T3 BYOK hosted API), Firecrawl keyless tier + truncated-feed detection, **second UX/design audit (26/26 findings, 2026-07-19/20)** across dark-mode prose, service worker install, i18n/locale gaps, UX-flow bugs (incl. stale "Test connection" state, self-service password change), visual/a11y, and polish, plus a fourth round of reader-overflow fixes (WebKit flexbox sizing). See `CHANGELOG.md`.
+v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FTS, sync batching, conditional GET), i18n/UX polish, **design audit (54/54)**, **visual polish rounds 1 & 2** (flat color system + contrast fixes + mobile/PWA + brand highlights), auth-redirect fix, article-sort tiebreaker, tap/​swipe-to-open-original, **Phase 0 quick wins** (F4 command palette ⌘K, F3 copy-as-markdown), **second UX/design audit (26/26 findings, 2026-07-19/20)**, plus a fourth round of reader-overflow fixes (WebKit flexbox sizing).
+
+**Feed Intelligence — the whole Phase 2 mission — is shipped (M1–M7 ✅, see below).** That includes auto full-text (Markdown/HTML), the page→feed builder, AI config proposal, AI auto-tagging (F8), the RSSHub + changedetection.io connectors (F-connectors), per-article AI extraction, and the 4-tier Heavy-Fetch/anti-bot stack.
+
+**Full REST/MCP automation surface (2026-07-21):** the API and MCP endpoint now cover the *complete* user-facing feature set — full per-feed config, per-article full-text (re)fetch, per-feed keyword content filter, connector-feed discovery + creation (RSSHub / changedetection / page→feed), and auto-read-rule webhook management. MCP grew **28 → 39 tools**; REST API v1.0 → v1.7. Secrets (per-feed auth password, webhook signing secret) are write-only everywhere. **F5** (Send-to Obsidian/Wallabag), **F6** (feed auto-mute + notify), **F7** (PWA share-target) all shipped. Also: three Docker Compose variants (minimal/default/ultimate), per-feed fetch-transparency panel, per-feed image hiding (lead + inline), mobile search fixes, and search progress/end-of-results indicators.
+
+See `CHANGELOG.md` for the detailed per-PR history.
 
 ---
 
@@ -30,6 +38,20 @@ v1.0 + v1.1 + v1.1.1, plus the 2026-07 work: security hardening, performance (FT
 
 ---
 
+## PHASE P — Performance & UX Audit ⭐ *(recommended next — make the app snappier, faster, more pleasant)*
+Source: [`releases/perf-ux-audit.md`](releases/perf-ux-audit.md). Measurement-first: set baselines & budgets, then fix the biggest offenders; each change ships with a before/after number.
+
+- ⬜ **P0 · Baseline & instrumentation** — Web-Vitals baselines (LCP/INP/CLS) on cold-load / open-article / feed-switch, bundle analysis, server query-count/timing baseline, agreed budgets + soft CI regression check. **Do this first.** — **S ×4**
+- ⬜ **Perceived speed** — optimistic UI for read/star/label everywhere, instant article open (paint from list data, hydrate content), prefetch-on-intent, preserve scroll/state across nav, consistent skeletons. — **M**
+- ⬜ **Client perf / bundle** — code-split heavy islands (command palette, feed-edit dialog, KaTeX, syntax highlighter, advanced add-feed panels), trim heavy deps, RSC-boundary audit, reduce re-renders, font-loading, route-level streaming. — **M–L**
+- ⬜ **Server / data** — kill N+1s + add indexes (list filters/sorts, unread counts, dedupe, label joins) for SQLite+Postgres, cache sidebar counts, trim list payloads (no full `content` in list), sync-path profiling. — **M**
+- ⬜ **UX polish** — animation/jank pass (respect `prefers-reduced-motion`, 60 fps on mid phone), empty/error/loading states, mobile gesture responsiveness, keyboard/focus completeness, micro-feedback. — **M**
+- ⬜ **Close-out** — re-run baselines, fill the after column, archive the audit doc. — **S**
+
+**Acceptance:** measured wins against the P0 baselines (INP/LCP/first-load JS budgets met on the mid-phone profile), read/star/label feel instant, no blank-frame article open, no dead-end empty/error states.
+
+---
+
 ## PHASE 1 — v1.2 Theming & Layout *(next planned release; the color foundation we just shipped is a head start)*
 Source: [`releases/v1.2-theming.md`](releases/v1.2-theming.md). Effort **L**.
 
@@ -43,8 +65,8 @@ Source: [`releases/v1.2-theming.md`](releases/v1.2-theming.md). Effort **L**.
 
 ---
 
-## PHASE 2 — Feed Intelligence (core) *(the big new mission; mostly in-process/self-hosted)*
-Source: [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md). North-star: *paste a URL → AI proposes the whole config → confirm.*
+## PHASE 2 — Feed Intelligence (core) ✅ *COMPLETE (M1–M7 shipped, 2026-07-20/21)*
+Source: [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md). North-star delivered: *paste a URL → AI proposes the whole config → confirm.* All milestones below shipped; the whole pillar is also now controllable over REST/MCP.
 
 - ✅ **M1** — Auto full-text → **Markdown/HTML-selectable** content (`Article.contentFormat`, Defuddle→Readability engine, markdown-it render, per-feed `fullTextMode`/`defaultContentFormat` + reader render/source toggle) — shipped in 3 slices: PRs **#141** (engine) · **#142** (schema + sync wiring, back-compat) · **#143** (reader render + settings + i18n)
 - ✅ **M2** — Full-text polish (tables/code/math/images) — **S–M** — *shipped 2026-07-20 (PR #183): 4th extraction tier (`@extractus/article-extractor`) + task-list checkboxes, syntax highlighting, KaTeX math, lazy images in the markdown renderer.*
@@ -118,12 +140,13 @@ Source: [`releases/maintenance.md`](releases/maintenance.md), [`releases/testing
 ---
 
 ## Recommended global order (opinionated)
-1. **Phase 0** quick wins (a few days, immediate polish + F4 command palette delight).
-2. **Phase 2 M1→M3→M4 + F8** — the Feed-Intelligence core is the biggest differentiator and the current strategic focus; ship it before the theming release.
-3. **Phase 1 v1.2 Theming** — cohesive, marketable release; our recent flat-color foundation feeds straight into it.
-4. **Phase 3 v1.3** gaps (nested categories, Telegram buttons, PWA badge).
-5. **Phase 4** differentiators as capacity allows (WebSub + Newsletter→feed are the standout L items).
-6. **Phase 5 v2** audio/native — the long game.
-7. **Continuous** security/testing/ops threaded throughout (don't let it lag).
+> **Phase 0 and Phase 2 (Feed Intelligence) are done. The whole feature set is now controllable via REST/MCP.** What's left is quality, theming, and the longer-tail features.
 
-> If you'd rather ship a *marketed release* next (what the site promises), do **Phase 1 (v1.2 Theming)** first, then Phase 2. If you'd rather lead with the *differentiator*, do Phase 2 first. My recommendation: **Phase 0 → Phase 2 core → Phase 1**, because Feed-Intelligence is the harder-to-copy moat and the theming work is lower-risk to slot in after.
+1. **Phase P — Performance & UX Audit ⭐** — now that the feature surface is broad and complete, make it *fast and pleasant*. Highest user-visible ROI, and it de-risks everything built on top. Start with P0 baselines.
+2. **Phase 1 — v1.2 Theming & Layout** — the cohesive, marketable release; the flat-color foundation + the perf/UX pass feed straight into it (the gesture-system rework lives here).
+3. **Phase 3 — v1.3** gaps (nested categories, Telegram inline buttons, PWA background badge, reverse-proxy auth).
+4. **Phase 4** differentiators as capacity allows (WebSub + Newsletter→feed are the standout L items; F18 event-hook surface is partly delivered via the new webhook/rules API).
+5. **Phase 5 — v2.0** audio/native — the long game.
+6. **Continuous** security/testing/ops threaded throughout (don't let it lag — the remaining Zod-schema + notification-token-encryption items are the priority there).
+
+> Rationale: with Feed-Intelligence and the full automation surface shipped, the biggest remaining user complaint surface is *speed and feel*, not missing features — so the **Performance & UX Audit goes first**, then the marketable **Theming** release.

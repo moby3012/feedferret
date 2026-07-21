@@ -7,7 +7,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
-Work merged since v1.1.1 (PRs #88–#150), targeting the next release.
+Work merged since v1.1.1 (PRs #88–#208), targeting the next release. The headline items: the complete **Feed Intelligence** pillar (auto full-text, page→feed builder, AI config proposal, AI auto-tagging, RSSHub + changedetection.io connectors, per-article AI extraction, 4-tier anti-bot stack), and a full **REST/MCP automation surface** that now covers every user-facing feature (MCP 28 → 39 tools).
+
+### Added (2026-07-21 — full REST/MCP coverage of the whole feature set)
+
+- **The REST API v1 and the MCP endpoint now expose the complete user-facing feature set — no feature is UI-only.** MCP grew from **28 to 39 tools**; REST API v1.0 → v1.7. Delivered in slices:
+  - **Full per-feed configuration parity** across REST and MCP — `GET`/`PATCH /api/v1/feeds/{id}` and the MCP `update_feed` / new `get_feed` tools cover every per-feed setting (fetch/HTTP options, HTTP Basic Auth, Feed-Intelligence full-text mode + selectors, reader/display overrides, health, mute).
+  - **Per-article full-text (re)fetch** — `POST /api/v1/articles/{id}/fetch-full-text` and the MCP `fetch_full_text` tool, sharing the same extraction engine and improvement check as the reader's "Fetch full text" button (extracted into `lib/full-text-fetch.ts`).
+  - **Connector-feed discovery + creation over the API** — `GET /api/v1/connectors` + MCP `list_connectors`; and creation of RSSHub-route feeds, changedetection.io-watch feeds, and **any web page → feed** (`/api/v1/connectors/{rsshub,changedetection,page}/*` and the matching MCP `create_rsshub_feed` / `create_changedetection_feed` / `suggest_page_feed` / `create_page_feed` tools).
+  - **Auto-read-rule webhook management** over REST (`webhookConfigs` on `POST`/`PATCH /api/v1/rules`) and new MCP `list`/`create`/`update`/`delete_auto_read_rule` tools.
+  - **Secret redaction (security):** the per-feed HTTP-auth password and webhook HMAC signing secret are write-only everywhere — accepted on write, never returned. This also closed a prior leak where rule reads returned the raw `webhookConfigs` JSON (secret included).
+  - Docs: `docs/api.md` and `docs/mcp.md` rewritten to match; marketing brief updated.
+
+### Added (2026-07-21 — per-feed keyword content filter, activated)
+
+- The dormant per-feed `filtersActionRead` field (persisted + OPML round-tripped but never applied) now works: newline-separated keywords, and new articles matching any of them (title, summary, or tag-stripped body) are **marked read on arrival** and dropped from every downstream new-article step (no summary, tags, alerts, or notifications). New `lib/feed-content-filter.ts` (unit-tested); the editor gained a clear label + description; the field is exposed over REST/MCP.
+
+### Added (2026-07-21 — per-feed fetch transparency panel)
+
+- A "How this feed is fetched" panel at the top of the feed editor's Fetch tab: the retrieval method (RSS/Atom, JSON Feed, or named custom scraper) and full-text summary (off/auto/selector/AI) derived live from the form, plus health from the last sync — status dot + label, last-checked relative time, source URL, consecutive-failure count, the last error, and a muted note.
+
+### Changed (2026-07-21 — per-feed image hiding now covers inline images)
+
+- The per-feed "Hide images" toggle (`hideArticleImage`) previously hid only the hero image; it now also hides every inline image in the article body (non-destructive CSS class toggle — instantly reversible, no HTML mutation). Toggle relabeled and re-described (en/de).
 
 ### Added (2026-07-20 — RSSHub route failures now surface RSSHub's own error)
 
