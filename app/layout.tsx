@@ -7,6 +7,7 @@ import { ThemeColorApplier } from "@/components/theme-color-applier";
 import { Providers } from "@/components/providers";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { TimezoneSync } from "@/components/timezone-sync";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionProvider } from "next-auth/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -103,6 +104,7 @@ export default async function RootLayout({
                 {children}
                 <PwaInstallPrompt />
                 <ServiceWorkerRegister />
+                <TimezoneSync />
                 {/* Fixed mobile bottom bars (rss-header/mobile-bottom-controls,
                     article-reader) are h-16 with safe-area padding; keep toasts
                     clear of them on small screens (UX audit U-12). */}

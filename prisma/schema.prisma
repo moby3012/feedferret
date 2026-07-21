@@ -79,6 +79,12 @@ model User {
   hideEmptyFeeds          Boolean   @default(false)
   hideEmptyLabels         Boolean   @default(false)
   uiLanguage              String    @default("en")     // BCP-47 tag e.g. "en" | "de"
+  // Display timezone for every timestamp shown in the app (article dates,
+  // reader, etc. — distinct from digestTimezone, which only affects when the
+  // email digest is sent). null = auto-detect from the browser (see
+  // i18n/request.ts + the `timezone` cookie); an explicit IANA name here
+  // always wins.
+  displayTimezone         String?
   aiProvider              String?                       // "openai" | "anthropic" | "ollama" | "gemini" | "openrouter"
   aiApiKey                String?                       // encrypted at rest
   aiModel                 String?

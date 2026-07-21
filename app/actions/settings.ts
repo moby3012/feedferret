@@ -78,6 +78,7 @@ export async function getReadingPreferences() {
       hideEmptyFeeds: true,
       hideEmptyLabels: true,
       uiLanguage: true,
+      displayTimezone: true,
       autoMuteFailingFeedsAfter: true,
     },
   });
@@ -96,6 +97,7 @@ export async function getReadingPreferences() {
     hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
     hideEmptyLabels: user?.hideEmptyLabels ?? false,
     uiLanguage: user?.uiLanguage ?? "en",
+    displayTimezone: user?.displayTimezone ?? null,
     autoMuteFailingFeedsAfter: user?.autoMuteFailingFeedsAfter ?? 10,
   };
 }
