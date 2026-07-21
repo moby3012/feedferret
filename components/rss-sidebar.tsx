@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -223,7 +223,9 @@ export function RssSidebar({
   const [importingPack, setImportingPack] = useState<string | null>(null);
   const [starterPacks, setStarterPacks] = useState<StarterPack[]>(DEFAULT_STARTER_PACKS);
   const [addingFeedUrl, setAddingFeedUrl] = useState<string | null>(null);
-  const [addFeedTab, setAddFeedTab] = useState<"url" | "discover" | "webpage" | "platform" | "monitor">("url");
+  const [addFeedTab, setAddFeedTab] = useState<"url" | "discover" | "more">("url");
+  // Which specialized source is shown inside the consolidated "More sources" tab.
+  const [moreSource, setMoreSource] = useState<"webpage" | "platform" | "monitor">("webpage");
   const [branding, setBranding] = useState<{ instanceName: string; instanceIconDataUrl: string | null }>({
     instanceName: "FeedFerret",
     instanceIconDataUrl: null,
@@ -236,7 +238,18 @@ export function RssSidebar({
   const rsshubConfigured = Boolean(rsshubStatus?.configured);
   const { data: changedetectionStatus } = useChangedetectionStatus();
   const changedetectionConfigured = Boolean(changedetectionStatus?.configured);
-  const addFeedTabCount = 3 + (rsshubConfigured ? 1 : 0) + (changedetectionConfigured ? 1 : 0);
+  // Specialized sources that live under the single "More sources" tab. "webpage"
+  // is always available; the two optional connectors appear only once an admin
+  // has configured them.
+  const moreSources = useMemo(
+    () =>
+      [
+        { value: "webpage" as const, label: t("sidebar.webpage.tabLabel") },
+        ...(rsshubConfigured ? [{ value: "platform" as const, label: t("sidebar.rsshub.tabLabel") }] : []),
+        ...(changedetectionConfigured ? [{ value: "monitor" as const, label: t("sidebar.changedetection.tabLabel") }] : []),
+      ],
+    [rsshubConfigured, changedetectionConfigured, t],
+  );
   const { data: allCategories = [] } = useCategories();
   const updateFeedOrder = useUpdateFeedOrder();
   const updateCategoryOrder = useUpdateCategoryOrder();
@@ -255,7 +268,10 @@ export function RssSidebar({
   useEffect(() => {
     if (defaultOpenAddFeed) {
       setIsAddFeedOpen(true);
-      if (initialWebpageUrl) setAddFeedTab("webpage");
+      if (initialWebpageUrl) {
+        setAddFeedTab("more");
+        setMoreSource("webpage");
+      }
     }
   }, [defaultOpenAddFeed, initialWebpageUrl]);
 
@@ -952,25 +968,16 @@ export function RssSidebar({
           <DialogHeader>
             <DialogTitle>{t("sidebar.addFeedTitle")}</DialogTitle>
           </DialogHeader>
-          <Tabs value={addFeedTab} onValueChange={(v) => setAddFeedTab(v as "url" | "discover" | "webpage" | "platform" | "monitor")} className="w-full min-w-0">
-            <TabsList
-              className={cn(
-                "grid w-full rounded-xl",
-                // 5 tabs no longer fit one row inside this dialog's width — wrap
-                // onto a second row (auto height) instead of squeezing them.
-                addFeedTabCount >= 5 ? "h-auto grid-cols-3 gap-1 p-1" : "h-9",
-                addFeedTabCount === 4 ? "grid-cols-4" : addFeedTabCount < 4 ? "grid-cols-3" : "",
-              )}
-            >
+          <Tabs value={addFeedTab} onValueChange={(v) => setAddFeedTab(v as "url" | "discover" | "more")} className="w-full min-w-0">
+            {/* Always exactly three tabs: the everyday "by URL" path, browse &
+                discover, and a single "More sources" bucket that holds the
+                specialized paths (web page / platform / monitor) behind an
+                inner selector — so the tab row never wraps regardless of which
+                optional connectors are configured. */}
+            <TabsList className="grid h-9 w-full grid-cols-3 rounded-xl">
               <TabsTrigger value="url" className="text-xs rounded-lg">{t("sidebar.byUrl")}</TabsTrigger>
               <TabsTrigger value="discover" className="text-xs rounded-lg">{t("sidebar.discover")}</TabsTrigger>
-              <TabsTrigger value="webpage" className="text-xs rounded-lg">{t("sidebar.webpage.tabLabel")}</TabsTrigger>
-              {rsshubConfigured && (
-                <TabsTrigger value="platform" className="text-xs rounded-lg">{t("sidebar.rsshub.tabLabel")}</TabsTrigger>
-              )}
-              {changedetectionConfigured && (
-                <TabsTrigger value="monitor" className="text-xs rounded-lg">{t("sidebar.changedetection.tabLabel")}</TabsTrigger>
-              )}
+              <TabsTrigger value="more" className="text-xs rounded-lg">{t("sidebar.moreSources")}</TabsTrigger>
             </TabsList>
 
             {/* URL Tab */}
@@ -1066,34 +1073,9 @@ export function RssSidebar({
                   {t("common.cancel")}
                 </Button>
               </div>
-
-              {/* Starter packs */}
-              <div className="pt-1 border-t border-border/40">
-                <p className="text-xs text-muted-foreground font-medium mb-1.5">{t("sidebar.starterPacks")}</p>
-                <div className="space-y-1">
-                  {starterPacks.map((pack) => (
-                    <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
-                      <span className="text-xs flex-1 text-foreground">
-                        {pack.name}
-                        <span className="text-muted-foreground ms-1">({pack.feeds.length || "OPML"})</span>
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 px-2 text-xs shrink-0"
-                        disabled={importingPack === pack.id || (pack.feeds.length === 0 && !pack.path)}
-                        onClick={() => handleImportStarterPack(pack)}
-                      >
-                        <Download className={cn("w-3 h-3 me-1", importingPack === pack.id && "animate-bounce")} />
-                        {importingPack === pack.id ? t("sidebar.importing") : t("sidebar.import")}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </TabsContent>
 
-            {/* Discover Tab */}
+            {/* Discover Tab — search + curated starter packs */}
             <TabsContent value="discover" className="mt-3 min-w-0 overflow-hidden">
               <div className="mb-3">
                 <Select
@@ -1119,10 +1101,57 @@ export function RssSidebar({
                 addingUrl={addingFeedUrl}
                 subscribedUrls={new Set(feeds.map((f: any) => f.url).filter(Boolean))}
               />
+
+              {/* Starter packs — moved here from the URL tab (they belong with
+                  "browse & discover", not the direct-add path). */}
+              <div className="mt-4 pt-3 border-t border-border/40">
+                <p className="text-xs text-muted-foreground font-medium mb-1.5">{t("sidebar.starterPacks")}</p>
+                <div className="space-y-1">
+                  {starterPacks.map((pack) => (
+                    <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
+                      <span className="text-xs flex-1 text-foreground">
+                        {pack.name}
+                        <span className="text-muted-foreground ms-1">({pack.feeds.length || "OPML"})</span>
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs shrink-0"
+                        disabled={importingPack === pack.id || (pack.feeds.length === 0 && !pack.path)}
+                        onClick={() => handleImportStarterPack(pack)}
+                      >
+                        <Download className={cn("w-3 h-3 me-1", importingPack === pack.id && "animate-bounce")} />
+                        {importingPack === pack.id ? t("sidebar.importing") : t("sidebar.import")}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </TabsContent>
 
-            {/* From web page Tab */}
-            <TabsContent value="webpage" className="mt-3 min-w-0 overflow-hidden space-y-3">
+            {/* More sources Tab — web page / platform / monitor behind a compact
+                inner selector, plus one shared category picker. */}
+            <TabsContent value="more" className="mt-3 min-w-0 overflow-hidden space-y-3">
+              {moreSources.length > 1 && (
+                <div className="grid w-full grid-cols-3 gap-1 rounded-xl bg-muted/60 p-1">
+                  {moreSources.map((src) => (
+                    <button
+                      key={src.value}
+                      type="button"
+                      onClick={() => setMoreSource(src.value)}
+                      className={cn(
+                        "rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                        moreSource === src.value
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {src.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <Select
                 value={newFeedCategoryId}
                 onValueChange={setNewFeedCategoryId}
@@ -1139,30 +1168,25 @@ export function RssSidebar({
                   ))}
                 </SelectContent>
               </Select>
-              <PageFeedPanel
-                categoryId={newFeedCategoryId}
-                initialUrl={initialWebpageUrl}
-                onCreated={(feed) => {
-                  toast.success(t("sidebar.webpage.feedCreated", { name: feed.name }));
-                  setIsAddFeedOpen(false);
-                  setAddFeedTab("url");
-                }}
-              />
-            </TabsContent>
 
-            {/* From platform (RSSHub) Tab — only rendered once an admin has configured RSSHub */}
-            {rsshubConfigured && (
-              <TabsContent value="platform" className="mt-3 min-w-0 overflow-hidden">
+              {moreSource === "webpage" && (
+                <PageFeedPanel
+                  categoryId={newFeedCategoryId}
+                  initialUrl={initialWebpageUrl}
+                  onCreated={(feed) => {
+                    toast.success(t("sidebar.webpage.feedCreated", { name: feed.name }));
+                    setIsAddFeedOpen(false);
+                    setAddFeedTab("url");
+                  }}
+                />
+              )}
+              {moreSource === "platform" && rsshubConfigured && (
                 <RsshubPanel onAddFeed={handleAddFeed} isAddingFeed={isAddingFeed} />
-              </TabsContent>
-            )}
-
-            {/* Monitor page (changedetection.io) Tab — only rendered once an admin has configured it */}
-            {changedetectionConfigured && (
-              <TabsContent value="monitor" className="mt-3 min-w-0 overflow-hidden">
+              )}
+              {moreSource === "monitor" && changedetectionConfigured && (
                 <ChangedetectionPanel onAddFeed={handleAddFeed} isAddingFeed={isAddingFeed} />
-              </TabsContent>
-            )}
+              )}
+            </TabsContent>
           </Tabs>
         </DialogContent>
       </Dialog>
