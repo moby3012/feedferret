@@ -1118,8 +1118,8 @@
     "behavior": {
       "hideFromAllArticles": "Aus allen Artikeln ausblenden",
       "articlesWontAppear": "Artikel aus diesem Feed erscheinen nicht in der Alle-Artikel-Ansicht.",
-      "hideArticleHeroImage": "Artikel-Headerbild ausblenden",
-      "suppressHeroImage": "Das Headerbild im Artikel-Reader unterdrücken."
+      "hideArticleHeroImage": "Bilder ausblenden",
+      "suppressHeroImage": "Das Titelbild und alle Bilder im Artikeltext für diesen Feed ausblenden."
     },
     "reader": {
       "inherit": "Erben (globaler Standard)",

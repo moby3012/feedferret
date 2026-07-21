@@ -1118,8 +1118,8 @@
     "behavior": {
       "hideFromAllArticles": "Hide from All Articles",
       "articlesWontAppear": "Articles from this feed will not appear in the All Articles view.",
-      "hideArticleHeroImage": "Hide article hero image",
-      "suppressHeroImage": "Suppress the hero image in the article reader."
+      "hideArticleHeroImage": "Hide images",
+      "suppressHeroImage": "Hide the lead image and all inline images in the article body for this feed."
     },
     "reader": {
       "inherit": "Inherit (global default)",
