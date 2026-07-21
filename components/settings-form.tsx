@@ -43,6 +43,7 @@ import {
   EyeOff,
   Cloud,
   Lock,
+  Globe,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -66,7 +67,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useChangePassword, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, usePreviewDigest, useFeeds, useLabels, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useContentFetchSettings, useUpdateContentFetchSettings, useTestContentFetchConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel, useExportSettings, useUpdateExportSettings, useTestWallabagExportConnection } from "@/hooks/use-rss-data";
+import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useUpdateDisplayTimezone, useChangePassword, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, usePreviewDigest, useFeeds, useLabels, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useContentFetchSettings, useUpdateContentFetchSettings, useTestContentFetchConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel, useExportSettings, useUpdateExportSettings, useTestWallabagExportConnection } from "@/hooks/use-rss-data";
 import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -135,6 +136,7 @@ export function SettingsForm() {
   const updateSettings = useUpdateGlobalSettings();
   const themeOptions = makeThemeOptions(t);
   const updateUiLang = useUpdateUiLanguage();
+  const updateDisplayTimezone = useUpdateDisplayTimezone();
 
   const update = (data: Parameters<typeof updateSettings.mutate>[0]) =>
     updateSettings.mutate(data);
@@ -479,6 +481,47 @@ export function SettingsForm() {
                 <SelectContent className="rounded-2xl">
                   <SelectItem value="en">English</SelectItem>
                   <SelectItem value="de">Deutsch</SelectItem>
+                </SelectContent>
+              </Select>
+            </PrefRow>
+
+            {/* Display timezone */}
+            <PrefRow
+              icon={Globe}
+              title={t("settings.displayTimezone")}
+              description={t("settings.displayTimezoneDescription")}
+            >
+              <Select
+                value={prefs?.displayTimezone ?? "auto"}
+                onValueChange={(v) => {
+                  if (v === "auto") {
+                    let detected: string | undefined;
+                    try {
+                      detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    } catch {}
+                    updateDisplayTimezone.mutate(
+                      { timezone: null, effectiveTimezone: detected },
+                      { onSuccess: () => router.refresh() },
+                    );
+                  } else {
+                    updateDisplayTimezone.mutate(
+                      { timezone: v },
+                      { onSuccess: () => router.refresh() },
+                    );
+                  }
+                }}
+              >
+                <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-52">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl max-h-72">
+                  <SelectItem value="auto">{t("settings.displayTimezoneAuto")}</SelectItem>
+                  {getCommonTimezones().map((tz) => (
+                    <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                  ))}
+                  {prefs?.displayTimezone && !getCommonTimezones().includes(prefs.displayTimezone) && (
+                    <SelectItem value={prefs.displayTimezone}>{prefs.displayTimezone}</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </PrefRow>

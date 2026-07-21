@@ -27,7 +27,7 @@
 
 import { db } from "@/lib/db";
 import { decryptIfValue } from "@/lib/crypto";
-import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { assertSafeFetchUrl, fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 
 export type ChangedetectionConfig = { baseUrl: string; apiKey: string; rssToken: string };
 
@@ -155,11 +155,19 @@ export async function createWatch(
   }
 }
 
-export type ConnectionTestResult = { ok: true; version: string } | { ok: false; reason: string };
+export type ConnectionTestResult =
+  | { ok: true; version: string; discoveredRssToken?: string; rssTokenDiscoveryError?: string }
+  | { ok: false; reason: string };
 
 /**
  * Verifies the connector is reachable and authenticated, with no side
  * effects (`GET /api/v1/systeminfo` — no watch is created). Never throws.
+ *
+ * Also opportunistically runs RSS-token auto-discovery (see
+ * `discoverRssToken` below) so a successful "Test connection" click can
+ * offer to fill in the RSS token field for the admin, instead of making them
+ * dig it out of the page source manually. Discovery failure never fails the
+ * overall test — the API-key check above is what "success" means here.
  */
 export async function testChangedetectionConnection(config: ChangedetectionConfig): Promise<ConnectionTestResult> {
   try {
@@ -179,9 +187,60 @@ export async function testChangedetectionConnection(config: ChangedetectionConfi
     }
     const data = await res.json().catch(() => ({}) as Record<string, unknown>);
     const version = typeof (data as Record<string, unknown>)?.version === "string" ? (data as Record<string, unknown>).version as string : "unknown";
-    return { ok: true, version };
+
+    const discovery = await discoverRssToken(config.baseUrl);
+    return discovery.ok
+      ? { ok: true, version, discoveredRssToken: discovery.token }
+      : { ok: true, version, rssTokenDiscoveryError: discovery.reason };
   } catch (err) {
     const timedOut = err instanceof Error && err.name === "AbortError";
     return { ok: false, reason: timedOut ? "Request timed out" : err instanceof Error ? err.message : String(err) };
   }
+}
+
+export type RssTokenDiscoveryResult = { ok: true; token: string } | { ok: false; reason: string };
+
+// A watch-specific hex token, generally 32 hex chars in practice — accept a
+// slightly wider range so we don't break on a future length change.
+const RSS_TOKEN_RE = /token=([a-f0-9]{16,64})/i;
+
+/**
+ * changedetection.io auto-generates its RSS access token on first run and
+ * never exposes it as a copyable field anywhere in Settings — confirmed
+ * against its own source (`changedetectionio/templates/base.html`), it is
+ * only ever embedded in an RSS-autodiscovery `<link>` tag in every page's
+ * HTML `<head>`:
+ *   <link rel="alternate" type="application/rss+xml" ... href="…?token=…">
+ * Rather than making the admin dig this out manually (view-source / curl),
+ * fetch the instance's homepage ourselves and pull the token out of that tag.
+ * Never throws.
+ */
+export async function discoverRssToken(baseUrl: string): Promise<RssTokenDiscoveryResult> {
+  let html: string;
+  try {
+    html = await fetchTextWithSsrfProtection(
+      baseUrl,
+      {},
+      { allowInternal: true, timeoutMs: 15_000, maxBytes: 512 * 1024, context: "changedetection.io RSS token discovery" },
+    );
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+
+  // Prefer the token from the actual RSS <link> tag over a bare "token="
+  // scan of the whole page, so we don't accidentally pick up an unrelated
+  // query param from some other link.
+  const linkTags = html.match(/<link\b[^>]*>/gi) ?? [];
+  const rssLinkTag = linkTags.find((tag) => /type=["']application\/rss\+xml["']/i.test(tag));
+  const fromLinkTag = rssLinkTag?.match(RSS_TOKEN_RE)?.[1];
+  const token = fromLinkTag ?? html.match(RSS_TOKEN_RE)?.[1];
+
+  if (!token) {
+    return {
+      ok: false,
+      reason:
+        "Could not find the RSS token on the instance's homepage. If password protection is enabled on changedetection.io, disable it temporarily, or enter the token manually (see docs/self-hosting.md).",
+    };
+  }
+  return { ok: true, token };
 }

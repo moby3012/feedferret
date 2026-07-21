@@ -1,11 +1,22 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 
+const fetchTextWithSsrfProtection = vi.fn(async (): Promise<string> => {
+  throw new Error("not mocked for this test");
+});
+
 vi.mock("../../lib/ssrf", () => ({
   assertSafeFetchUrl: vi.fn(async (u: string) => new URL(u)),
   isTrustedFeedFetchingAllowed: vi.fn(async () => false),
+  fetchTextWithSsrfProtection: (...args: unknown[]) => fetchTextWithSsrfProtection(...(args as [])),
 }));
 
-import { buildWatchFeedUrl, createWatch, testChangedetectionConnection, type ChangedetectionConfig } from "../../lib/changedetection";
+import {
+  buildWatchFeedUrl,
+  createWatch,
+  testChangedetectionConnection,
+  discoverRssToken,
+  type ChangedetectionConfig,
+} from "../../lib/changedetection";
 
 const config: ChangedetectionConfig = {
   baseUrl: "http://changedetection.internal:5000",
@@ -83,17 +94,74 @@ describe("testChangedetectionConnection", () => {
   const originalFetch = global.fetch;
   afterEach(() => {
     global.fetch = originalFetch;
+    fetchTextWithSsrfProtection.mockReset();
   });
 
-  it("returns ok with the reported version on success", async () => {
+  it("returns ok with the reported version and the discovered RSS token on success", async () => {
     global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ version: "0.50.10" }) })) as unknown as typeof fetch;
+    fetchTextWithSsrfProtection.mockResolvedValueOnce(
+      '<html><head><link rel="alternate" type="application/rss+xml" href="/rss/all?token=abcdef0123456789"></head></html>',
+    );
     const result = await testChangedetectionConnection(config);
-    expect(result).toEqual({ ok: true, version: "0.50.10" });
+    expect(result).toEqual({ ok: true, version: "0.50.10", discoveredRssToken: "abcdef0123456789" });
+  });
+
+  it("still reports overall success when RSS-token discovery fails", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ version: "0.50.10" }) })) as unknown as typeof fetch;
+    fetchTextWithSsrfProtection.mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
+    const result = await testChangedetectionConnection(config);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.discoveredRssToken).toBeUndefined();
+      expect(result.rssTokenDiscoveryError).toContain("ECONNREFUSED");
+    }
   });
 
   it("returns not-ok on an auth failure", async () => {
     global.fetch = vi.fn(async () => ({ ok: false, status: 403, text: async () => "Forbidden" })) as unknown as typeof fetch;
     const result = await testChangedetectionConnection(config);
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("discoverRssToken", () => {
+  afterEach(() => {
+    fetchTextWithSsrfProtection.mockReset();
+  });
+
+  it("extracts the token from the RSS autodiscovery <link> tag", async () => {
+    fetchTextWithSsrfProtection.mockResolvedValueOnce(
+      '<html><head><title>changedetection.io</title><link rel="alternate" type="application/rss+xml" title="feed" href="/rss?tag=&token=0123456789abcdef" ></head><body></body></html>',
+    );
+    const result = await discoverRssToken("http://changedetection.internal:5000");
+    expect(result).toEqual({ ok: true, token: "0123456789abcdef" });
+  });
+
+  it("prefers the RSS <link> tag's token over an unrelated token= elsewhere on the page", async () => {
+    fetchTextWithSsrfProtection.mockResolvedValueOnce(
+      '<html><head><link rel="alternate" type="application/rss+xml" href="/rss?token=aaaaaaaaaaaaaaaa"></head>' +
+        '<body><a href="/other?token=bbbbbbbbbbbbbbbb">link</a></body></html>',
+    );
+    const result = await discoverRssToken("http://changedetection.internal:5000");
+    expect(result).toEqual({ ok: true, token: "aaaaaaaaaaaaaaaa" });
+  });
+
+  it("falls back to a bare token= scan when there's no RSS <link> tag", async () => {
+    fetchTextWithSsrfProtection.mockResolvedValueOnce('<html><body>token=fedcba9876543210 somewhere in the page</body></html>');
+    const result = await discoverRssToken("http://changedetection.internal:5000");
+    expect(result).toEqual({ ok: true, token: "fedcba9876543210" });
+  });
+
+  it("returns not-ok with a helpful reason when no token is found", async () => {
+    fetchTextWithSsrfProtection.mockResolvedValueOnce("<html><body>no token here</body></html>");
+    const result = await discoverRssToken("http://changedetection.internal:5000");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("Could not find the RSS token");
+  });
+
+  it("returns not-ok (never throws) when the fetch itself fails", async () => {
+    fetchTextWithSsrfProtection.mockRejectedValueOnce(new Error("timeout"));
+    const result = await discoverRssToken("http://changedetection.internal:5000");
+    expect(result).toEqual({ ok: false, reason: "timeout" });
   });
 });
