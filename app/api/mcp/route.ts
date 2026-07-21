@@ -11,6 +11,8 @@ import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } f
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
 import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
+import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
+import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
 
 function rpc(id: unknown, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result });
@@ -152,6 +154,8 @@ const tools = [
   { name: "feedferret.list_connectors", description: "List server-configured connectors (RSSHub, changedetection.io) and whether each is available. Useful to discover what connector-backed feeds can be created on this server.", inputSchema: { type: "object", properties: {} } },
   { name: "feedferret.create_rsshub_feed", description: "Create a feed from an RSSHub route path (e.g. '/github/trending/daily/any'). The route is validated against the server's configured RSSHub instance before the feed is created. Requires the RSSHub connector to be configured.", inputSchema: { type: "object", properties: { routePath: { type: "string", description: "RSSHub route path, e.g. '/github/issue/DIYgod/RSSHub'." }, name: { type: "string" }, categoryId: { type: "string" }, sync: { type: "boolean" } }, required: ["routePath"] } },
   { name: "feedferret.create_changedetection_feed", description: "Create a changedetection.io watch for a web page URL and add it as a feed. The feed stays empty until changedetection has checked the page at least twice. Requires the changedetection.io connector to be configured.", inputSchema: { type: "object", properties: { url: { type: "string" }, name: { type: "string" }, categoryId: { type: "string" }, sync: { type: "boolean" } }, required: ["url"] } },
+  { name: "feedferret.suggest_page_feed", description: "Given an arbitrary web page URL, heuristically detect repeating item lists and return candidate feed configs (XPath selectors) with scores and sample titles. Use before create_page_feed to inspect/choose, or call create_page_feed directly to auto-pick the best candidate.", inputSchema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] } },
+  { name: "feedferret.create_page_feed", description: "Create an HTML+XPath feed from an arbitrary web page. Pass a `config` (as returned by suggest_page_feed) to use it, or omit it to auto-pick the top-scoring detected candidate. Fails if no repeating item list is found and no config is given.", inputSchema: { type: "object", properties: { url: { type: "string" }, config: { type: "object", description: "XPath field config: { xPathItem (required), xPathItemTitle?, xPathItemUri?, xPathItemContent?, xPathItemTimestamp?, xPathItemThumbnail? }.", properties: { xPathItem: { type: "string" }, xPathItemTitle: { type: "string" }, xPathItemUri: { type: "string" }, xPathItemContent: { type: "string" }, xPathItemTimestamp: { type: "string" }, xPathItemThumbnail: { type: "string" } } }, name: { type: "string" }, categoryId: { type: "string" }, sync: { type: "boolean" } }, required: ["url"] } },
 ];
 
 async function searchArticles(user: ApiUser, args: any) {
@@ -435,6 +439,31 @@ async function callTool(user: ApiUser, name: string, args: any) {
         sync: args.sync === true,
       });
     }
+    case "feedferret.suggest_page_feed": {
+      const url = typeof args.url === "string" ? args.url.trim() : "";
+      if (!url) throw new Error("url is required");
+      const candidates = await fetchAndSuggestFeedCandidates(url);
+      return {
+        candidates: candidates.map((c) => ({ config: c.config, score: c.score, itemCount: c.itemCount, sampleTitles: c.sampleTitles })),
+      };
+    }
+    case "feedferret.create_page_feed": {
+      const url = typeof args.url === "string" ? args.url.trim() : "";
+      if (!url) throw new Error("url is required");
+      let config = args.config;
+      if (!config || typeof config !== "object" || typeof config.xPathItem !== "string" || !config.xPathItem.trim()) {
+        config = await suggestTopPageFeedConfig(url);
+        if (!config) throw new Error("No feed-like repeating items found on that page; provide an explicit config with xPathItem");
+      }
+      const feed = await createPageFeedForUser(user.id, {
+        url,
+        config,
+        name: typeof args.name === "string" ? args.name : undefined,
+        categoryId: typeof args.categoryId === "string" ? args.categoryId : undefined,
+        sync: args.sync,
+      });
+      return stripFeedSecrets(feed);
+    }
     case "feedferret.get_stats": {
       const [totalFeeds, totalArticles, unreadArticles, starredArticles, readLaterArticles, totalLabels, totalCategories, totalSavedSearches, totalKeywordAlerts, totalAutoReadRules, unreadNotifications] = await db.$transaction([
         db.feed.count({ where: { userId: user.id } }),
@@ -459,7 +488,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
 export async function GET() {
   return NextResponse.json({
     name: "FeedFerret MCP",
-    version: "1.5.0",
+    version: "1.6.0",
     tools: tools.length,
     transport: "Streamable HTTP JSON-RPC",
     endpoint: "/api/mcp",
