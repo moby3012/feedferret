@@ -1,6 +1,6 @@
 # FeedFerret Roadmap
 
-> Last updated: 2026-07-20 — a second full UX/design audit (2026-07-19, 26 findings across P0/i18n/UX-flow/visual-a11y/polish) resolved in full, plus a fourth round of reader-overflow fixes (WebKit-specific flexbox sizing bug, found via a second affected feed). Earlier: Feed Intelligence (Phase 2, M1/M3/M4/M7) shipped in full; M7 "Heavy Fetch" complete (T0–T3: impit → ftr-site-config → render sidecar → BYOK hosted API). Earlier still: v1.1.1 shipped; a full design audit (performance / UX / security / visuals) resolved **all 54 findings** — see [`archive/`](archive/) for that and other completed one-time audits.
+> Last updated: 2026-07-21 — **Feed Intelligence (Phase 2, M1–M7) shipped in full**, and the **REST API v1 + MCP endpoint now cover the complete feature set** (MCP 28 → 39 tools; per-feed config, per-article full-text fetch, keyword filters, connector-feed creation, webhook management — see [`api.md`](api.md)/[`mcp.md`](mcp.md)). Two full UX/design audits (54/54 and 26/26 findings) resolved; four rounds of reader-overflow fixes. **Next up ⭐: the [Performance & UX Audit](releases/perf-ux-audit.md)** — make the app snappier, faster, more pleasant. See [`archive/`](archive/) for completed one-time audits.
 
 This file is the **top-level index**. Each release has its own detailed planning document in [`docs/releases/`](releases/).
 
@@ -14,6 +14,8 @@ This file is the **top-level index**. Each release has its own detailed planning
 |---|---|---|---|
 | **v1.0.0** | Initial public release | ✅ Shipped 2026-05-18 | [`releases/v1.0.md`](releases/v1.0.md) |
 | **v1.1** | i18n + Full API/MCP Coverage + UX Polish | ✅ Shipped 2026-05-20 (v1.1.1 patch 2026-05-21) | [`releases/v1.1-i18n.md`](releases/v1.1-i18n.md) |
+| **Feed Intelligence** | Any web page → a feed; AI-assisted config; connectors; full REST/MCP surface | ✅ Shipped 2026-07 (Unreleased → pending version bump) | [`feed-intelligence-roadmap.md`](feed-intelligence-roadmap.md) · [`api.md`](api.md) |
+| **Perf & UX Audit** ⭐ | Snappier, faster, more pleasant — measurement-first | 🔜 Next | [`releases/perf-ux-audit.md`](releases/perf-ux-audit.md) |
 | **v1.2** | Theming & Accessibility (+ design-audit findings) | ⬜ Queued | [`releases/v1.2-theming.md`](releases/v1.2-theming.md) · [`archive/design-audit-todo.md`](archive/design-audit-todo.md) |
 | **v1.3** | Feature Backlog Release | ⬜ Queued | [`releases/v1.3.md`](releases/v1.3.md) |
 | **v2.0** | Podcast, Audio & Native Apps | ⬜ Planned | [`releases/v2.md`](releases/v2.md) |
@@ -26,6 +28,7 @@ These run in parallel with feature releases — each item gets its own PR.
 
 | Workstream | Details |
 |---|---|
+| **Performance & UX Audit ⭐ (next major initiative)** | [`releases/perf-ux-audit.md`](releases/perf-ux-audit.md) |
 | Dependency upgrades, ops, monitoring | [`releases/maintenance.md`](releases/maintenance.md) |
 | Small features & backlog | [`releases/backlog.md`](releases/backlog.md) |
 | Test coverage (Vitest + Playwright) | [`releases/testing.md`](releases/testing.md) |
@@ -51,7 +54,7 @@ Each release is planned in a dedicated `releases/vX.Y.md` file before work start
 - Locale-aware date formatting via `format.dateTime()` throughout
 - REST API v1 extended (alerts, rules, notifications, stats, batch)
 - API token scopes (`read`/`write`/`admin`) enforced per endpoint
-- MCP server at 28 tools
+- MCP server at 28 tools *(since grown to 39 — see [`mcp.md`](mcp.md))*
 - OR operator in rules/alerts keyword queries
 - Unified label action picker in rules
 - Availability filter for notification actions

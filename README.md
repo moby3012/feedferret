@@ -12,14 +12,15 @@ A self-hosted, multi-user RSS reader with a modern reading experience, power-use
 ## ✨ Features
 
 - **Modern Reader** — multiple layouts, dark mode, configurable width, mobile swipe gestures, PWA install
-- **Feed Intelligence** — automatic full-text extraction (Defuddle → Readability) with clean Markdown or HTML rendering, per feed; build a feed from any web page that has no RSS (paste a listing URL → engine-validated selectors)
+- **Feed Intelligence** — automatic full-text extraction (Defuddle → Readability, +AI fallback) with clean Markdown or HTML rendering, per feed; **build a feed from any web page that has no RSS** (paste a listing URL → engine-validated selectors); optional self-hosted **RSSHub** (YouTube/Reddit/GitHub…) and **changedetection.io** ("any page as a change feed") connectors
+- **Per-Feed Control** — fetch transparency + health, full-text mode, keyword content filters, image hiding, HTTP auth, reader/display overrides — all also settable over the API
 - **Power-User Extras** — ⌘K command palette, copy article as Markdown, per-feed reader defaults, auto-mark-as-read rules, keyword alerts, outbound webhooks (HMAC-signed)
 - **Notifications** — browser push, email digests, Telegram, Gotify, ntfy
 - **Native Client Support** — Google Reader API (Reeder, NetNewsWire, FeedMe, ReadKit) and Fever API
-- **API-First** — REST API v1 + MCP endpoint for AI agents (Claude, n8n, LangChain)
-- **AI Summaries (BYOK)** — OpenAI, Anthropic, Gemini, OpenRouter, Ollama — keys stored encrypted
+- **API-First** — REST API v1 + MCP endpoint (**39 tools**) for AI agents (Claude, n8n, LangChain); *everything the UI can do is controllable via API and by LLM — no feature is UI-only*
+- **AI Summaries & Tagging (BYOK)** — OpenAI, Anthropic, Gemini, OpenRouter, Ollama — keys stored encrypted, all strictly optional
 - **Flexible Auth** — local accounts, magic link, Google/GitHub OAuth, Authelia OIDC, TOTP 2FA
-- **Self-Hosting Ready** — Docker Compose, PostgreSQL or SQLite, Coolify-compatible, 5-minute setup
+- **Self-Hosting Ready** — three Docker Compose variants (minimal / default / ultimate), PostgreSQL or SQLite, Coolify-compatible, 5-minute setup
 
 ---
 
@@ -82,7 +83,8 @@ Full guide including reverse proxy (Nginx, Caddy, Traefik), updates, and backup:
 | Security | [`docs/security.md`](docs/security.md) |
 | GDPR / right to erasure | [`docs/gdpr.md`](docs/gdpr.md) |
 | Roadmap (consolidated backlog) | [`docs/MASTER-ROADMAP.md`](docs/MASTER-ROADMAP.md) · [`docs/ROADMAP.md`](docs/ROADMAP.md) |
-| Feed Intelligence plan / milestones | [`docs/feed-intelligence-roadmap.md`](docs/feed-intelligence-roadmap.md) |
+| **Performance & UX Audit (next up)** | [`docs/releases/perf-ux-audit.md`](docs/releases/perf-ux-audit.md) |
+| Feed Intelligence build record (shipped) | [`docs/feed-intelligence-roadmap.md`](docs/feed-intelligence-roadmap.md) |
 | Browser-render sidecar (M7-T2) | [`docs/render-sidecar.md`](docs/render-sidecar.md) |
 | Design system (radius/icon/modal conventions) | [`docs/design-system.md`](docs/design-system.md) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
@@ -98,10 +100,12 @@ Next.js 16 · React 19 · TypeScript 6 · Prisma 7 · PostgreSQL / SQLite · Tai
 
 ## 📊 Status
 
-**v1.1.1** — production ready. English + German UI (i18n via next-intl).  
+**Production ready.** English + German UI (i18n via next-intl).  
 `pnpm run build` ✅ · `pnpm run lint` ✅ · `tsc --noEmit` ✅ · `pnpm test` ✅ · CI on every PR ✅
 
-See [`CHANGELOG.md`](CHANGELOG.md) for released changes and the Unreleased section for what's landed since (Feed Intelligence M1/M3, M4 slice 1, Phase 0 quick wins, a11y CI gate, security hardening). Next up is the M4 "✨ Let AI set this up" UX, then v1.2 Theming — see [`docs/MASTER-ROADMAP.md`](docs/MASTER-ROADMAP.md) for the consolidated, ordered backlog.
+Since v1.1.1, the **entire Feed Intelligence pillar** shipped (auto full-text, page→feed builder, AI config proposal, AI auto-tagging, RSSHub + changedetection.io connectors, per-article AI extraction, the 4-tier anti-bot/heavy-fetch stack), and the **REST API v1 + MCP endpoint grew to cover the complete feature set** (MCP 28 → 39 tools) — see [`CHANGELOG.md`](CHANGELOG.md) for the full history. These land in the `Unreleased` section pending a version bump.
+
+**Next up ⭐: a [Performance & UX Audit](docs/releases/perf-ux-audit.md)** — making the app snappier, faster, and more pleasant — then the v1.2 Theming release. See [`docs/MASTER-ROADMAP.md`](docs/MASTER-ROADMAP.md) for the consolidated, ordered backlog.
 
 ---
 
