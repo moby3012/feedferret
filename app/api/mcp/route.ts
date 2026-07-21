@@ -13,6 +13,7 @@ import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshu
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
+import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactWebhookConfigs } from "@/lib/webhooks";
 
 function rpc(id: unknown, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result });
@@ -35,6 +36,15 @@ function stripFeedSecrets<T>(value: T): T {
     return rest as T;
   }
   return value;
+}
+
+// Serialize an auto-read rule for MCP output: never return the raw
+// webhookConfigs JSON (it holds HMAC secrets); expose a redacted `webhooks`
+// array with a hasSecret flag instead.
+function ruleForMcp(rule: any) {
+  if (!rule) return rule;
+  const { webhookConfigs, ...rest } = rule;
+  return { ...rest, webhooks: redactWebhookConfigs(webhookConfigs) };
 }
 
 // Feed config fields an MCP client may set via update_feed / add_feed.
@@ -147,6 +157,41 @@ const tools = [
   { name: "feedferret.create_keyword_alert", description: "Create a keyword alert.", inputSchema: { type: "object", properties: { name: { type: "string" }, query: { type: "string" }, scope: { type: "string" }, actions: { type: "array", items: { type: "string" } } }, required: ["name", "query"] } },
   { name: "feedferret.update_keyword_alert", description: "Update a keyword alert.", inputSchema: { type: "object", properties: { alertId: { type: "string" }, enabled: { type: "boolean" }, name: { type: "string" }, query: { type: "string" }, scope: { type: "string" }, actions: { type: "array", items: { type: "string" } } }, required: ["alertId"] } },
   { name: "feedferret.delete_keyword_alert", description: "Delete a keyword alert.", inputSchema: { type: "object", properties: { alertId: { type: "string" } }, required: ["alertId"] } },
+  // Auto-read rules (incl. webhook actions)
+  { name: "feedferret.list_auto_read_rules", description: "List auto-read rules. Each rule's webhook configs are returned with the secret redacted (hasSecret flag only).", inputSchema: { type: "object", properties: {} } },
+  {
+    name: "feedferret.create_auto_read_rule",
+    description: "Create an auto-read rule. `actions` may include `webhook_call:<index>` entries that fire the webhook at that index in `webhookConfigs` when the rule matches. Webhook secrets are accepted here but never returned.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        query: { type: "string" },
+        actions: { type: "array", items: { type: "string" }, description: "e.g. [\"mark_read\", \"webhook_call:0\"]." },
+        scope: { type: "string" },
+        trigger: { type: "string", description: "'article' (default) or 'feed_error'." },
+        enabled: { type: "boolean" },
+        webhookConfigs: {
+          type: "array",
+          description: "Webhook targets referenced by webhook_call:<index> actions.",
+          items: {
+            type: "object",
+            properties: {
+              url: { type: "string" },
+              method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+              headers: { type: "object" },
+              bodyTemplate: { type: "string", description: "Supports {{event}}, {{rule_name}}, {{article_title}}, {{article_link}}, {{feed_name}}, … placeholders." },
+              secret: { type: "string", description: "HMAC signing secret (write-only; never returned)." },
+            },
+            required: ["url"],
+          },
+        },
+      },
+      required: ["name", "query"],
+    },
+  },
+  { name: "feedferret.update_auto_read_rule", description: "Update an auto-read rule (all fields optional). Passing webhookConfigs replaces the full list. Secrets are write-only.", inputSchema: { type: "object", properties: { ruleId: { type: "string" }, name: { type: "string" }, query: { type: "string" }, actions: { type: "array", items: { type: "string" } }, scope: { type: "string" }, trigger: { type: "string" }, enabled: { type: "boolean" }, order: { type: "number" }, webhookConfigs: { type: "array", items: { type: "object", properties: { url: { type: "string" }, method: { type: "string" }, headers: { type: "object" }, bodyTemplate: { type: "string" }, secret: { type: "string" } }, required: ["url"] } } }, required: ["ruleId"] } },
+  { name: "feedferret.delete_auto_read_rule", description: "Delete an auto-read rule.", inputSchema: { type: "object", properties: { ruleId: { type: "string" } }, required: ["ruleId"] } },
   // Notifications & stats
   { name: "feedferret.list_notifications", description: "List user notifications ordered by newest first.", inputSchema: { type: "object", properties: { isRead: { type: "boolean" }, limit: { type: "number", minimum: 1, maximum: 100 } } } },
   { name: "feedferret.get_stats", description: "Get aggregate stats for the current user.", inputSchema: { type: "object", properties: {} } },
@@ -399,6 +444,62 @@ async function callTool(user: ApiUser, name: string, args: any) {
       if (!result.count) throw new Error("Alert not found");
       return { deleted: true, id: String(args.alertId) };
     }
+    // Auto-read rules (incl. webhook actions). webhookConfigs secrets are
+    // accepted on write but redacted on read via ruleForMcp().
+    case "feedferret.list_auto_read_rules": {
+      const rules = await db.autoReadRule.findMany({ where: { userId: user.id }, orderBy: { order: "asc" } });
+      return rules.map(ruleForMcp);
+    }
+    case "feedferret.create_auto_read_rule": {
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      const query = typeof args.query === "string" ? args.query.trim() : "";
+      if (!name || !query) throw new Error("name and query are required");
+      const actions = Array.isArray(args.actions) ? args.actions.filter((a: unknown) => typeof a === "string") : null;
+      const { configs, valid } = sanitizeWebhookConfigs(args.webhookConfigs);
+      if (!valid) throw new Error("Each webhook needs a valid http(s) URL");
+      if (actions && !actionsReferenceConfigs(actions, configs.length)) throw new Error("A webhook_call action references a missing webhook config");
+      const order = await db.autoReadRule.count({ where: { userId: user.id } });
+      const rule = await db.autoReadRule.create({
+        data: {
+          userId: user.id,
+          name,
+          query,
+          action: "mark_read",
+          actions: actions ? JSON.stringify(actions) : null,
+          scope: typeof args.scope === "string" ? args.scope : null,
+          trigger: typeof args.trigger === "string" ? args.trigger : "article",
+          enabled: typeof args.enabled === "boolean" ? args.enabled : true,
+          webhookConfigs: configs.length ? JSON.stringify(configs) : null,
+          order,
+        },
+      });
+      return ruleForMcp(rule);
+    }
+    case "feedferret.update_auto_read_rule": {
+      const data: any = {};
+      if (typeof args.name === "string") data.name = args.name.trim();
+      if (typeof args.query === "string") data.query = args.query.trim();
+      if (typeof args.scope === "string") data.scope = args.scope;
+      if (typeof args.trigger === "string") data.trigger = args.trigger;
+      if (typeof args.enabled === "boolean") data.enabled = args.enabled;
+      if (typeof args.order === "number") data.order = args.order;
+      const nextActions = Array.isArray(args.actions) ? args.actions.filter((a: unknown) => typeof a === "string") : null;
+      if (nextActions) data.actions = JSON.stringify(nextActions);
+      if (args.webhookConfigs !== undefined) {
+        const { configs, valid } = sanitizeWebhookConfigs(args.webhookConfigs);
+        if (!valid) throw new Error("Each webhook needs a valid http(s) URL");
+        if (nextActions && !actionsReferenceConfigs(nextActions, configs.length)) throw new Error("A webhook_call action references a missing webhook config");
+        data.webhookConfigs = configs.length ? JSON.stringify(configs) : null;
+      }
+      const result = await db.autoReadRule.updateMany({ where: { id: String(args.ruleId), userId: user.id }, data });
+      if (!result.count) throw new Error("Rule not found");
+      return ruleForMcp(await db.autoReadRule.findFirst({ where: { id: String(args.ruleId), userId: user.id } }));
+    }
+    case "feedferret.delete_auto_read_rule": {
+      const result = await db.autoReadRule.deleteMany({ where: { id: String(args.ruleId), userId: user.id } });
+      if (!result.count) throw new Error("Rule not found");
+      return { deleted: true, id: String(args.ruleId) };
+    }
     // Notifications & stats
     case "feedferret.list_notifications": {
       const where: any = { userId: user.id };
@@ -488,7 +589,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
 export async function GET() {
   return NextResponse.json({
     name: "FeedFerret MCP",
-    version: "1.6.0",
+    version: "1.7.0",
     tools: tools.length,
     transport: "Streamable HTTP JSON-RPC",
     endpoint: "/api/mcp",
