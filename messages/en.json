@@ -1157,7 +1157,27 @@
       "maxSize": "Max size (KB)",
       "unlimited": "Unlimited",
       "verifySslCertificate": "Verify SSL certificate",
-      "disableOnlyForSelfSigned": "Disable only for self-signed certs on trusted servers"
+      "disableOnlyForSelfSigned": "Disable only for self-signed certs on trusted servers",
+      "transparency": {
+        "title": "How this feed is fetched",
+        "methodLabel": "Retrieval method",
+        "methodRss": "RSS/Atom feed",
+        "methodJsonFeed": "JSON Feed",
+        "methodScraper": "Custom scraper ({type})",
+        "fullTextLabel": "Full text",
+        "fullTextOff": "Uses the feed's own content",
+        "fullTextAuto": "Automatic extraction after each sync",
+        "fullTextSelector": "Selector-based extraction after each sync",
+        "fullTextAi": "AI extraction fallback",
+        "lastCheckedLabel": "Last checked",
+        "never": "Never",
+        "sourceUrlLabel": "Source URL",
+        "statusOk": "Healthy",
+        "statusError": "Error",
+        "statusPending": "Pending",
+        "consecutiveFailures": "{count} consecutive failed fetches",
+        "mutedNote": "This feed is muted — it won't raise alerts or count toward unread."
+      }
     },
     "fulltext": {
       "fullTextModeLabel": "Full text mode",
