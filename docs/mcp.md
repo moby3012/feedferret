@@ -1,6 +1,6 @@
 # FeedFerret MCP
 
-> **v1.1.0** — 28 tools available. All tools are user-scoped (token owner only).
+> **v1.2.0** — 29 tools available. All tools are user-scoped (token owner only).
 
 FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models and agents can work directly with the reader.
 
@@ -11,7 +11,8 @@ FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models a
 | `feedferret.search_articles` | read | Full-text + advanced search syntax |
 | `feedferret.get_article` | read | Fetch one article by ID |
 | `feedferret.update_article_state` | write | Set read / starred / read-later |
-| `feedferret.list_feeds` | read | List feeds with unread counts |
+| `feedferret.list_feeds` | read | List feeds with unread counts + full per-feed config |
+| `feedferret.get_feed` | read | Get one feed with its full configuration |
 | `feedferret.add_feed` | write | Add an RSS/Atom feed |
 | `feedferret.sync_feeds` | write | Sync all feeds or one feed |
 | `feedferret.list_categories` | read | List feed categories |
@@ -19,7 +20,7 @@ FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models a
 | `feedferret.create_label` | write | Create a label |
 | `feedferret.mark_all_read` | write | Bulk mark-as-read (use with care) |
 | `feedferret.delete_feed` | write | Delete a feed and all its articles |
-| `feedferret.update_feed` | write | Update feed metadata and fetch options |
+| `feedferret.update_feed` | write | Update full per-feed config (fetch, full-text, display, mute) |
 | `feedferret.create_category` | write | Create a feed category/folder |
 | `feedferret.update_category` | write | Update a category name, parent or order |
 | `feedferret.delete_category` | write | Delete a feed category |
@@ -146,10 +147,21 @@ Lädt einen Artikel vollständig.
 
 ### `feedferret.list_feeds`
 
-Listet Feeds inkl. Kategorie und Unread Count.
+Listet Feeds inkl. Kategorie, Unread Count und der **vollständigen Feed-Konfiguration**
+(Fetch-/HTTP-Optionen, Full-Text-/Feed-Intelligence-Einstellungen, Reader-/Anzeige-Overrides,
+Health-Status). Das Auth-Passwort wird nie zurückgegeben.
 
 ```json
 {}
+```
+
+### `feedferret.get_feed`
+
+Lädt einen einzelnen Feed anhand seiner ID mit vollständiger Konfiguration
+(dieselben Felder wie `list_feeds`, plus `unreadCount`). Das Auth-Passwort wird nie zurückgegeben.
+
+```json
+{ "feedId": "clf123" }
 ```
 
 ### `feedferret.add_feed`
@@ -160,6 +172,7 @@ Fügt einen Feed hinzu.
 {
   "url": "https://example.com/feed.xml",
   "name": "Example",
+  "icon": "📰",
   "categoryId": "cat123",
   "sync": true
 }
@@ -209,10 +222,30 @@ Löscht einen Feed und alle zugehörigen Artikel.
 
 ### `feedferret.update_feed`
 
-Aktualisiert Feed-Metadaten und Fetch-Optionen.
+Aktualisiert die **vollständige** Feed-Konfiguration. Nur übergebene Felder werden
+geändert; alles andere bleibt unverändert. Das Auth-Passwort ist write-only und
+wird im Ergebnis nie zurückgegeben.
+
+Unterstützte Felder:
+
+- **Metadaten/Zeitplan:** `name`, `icon`, `categoryId`, `priority`, `updateFrequency`, `retentionDays`, `keepMinArticles`
+- **Fetch/HTTP:** `customUserAgent`, `fetchTimeoutSecs`, `sslVerify`, `maxSizeKb`, `authType`, `authUsername`, `authPassword` (write-only)
+- **Full-Text (Feed Intelligence):** `fullTextMode` (`off`/`auto`/`selector`/`ai`), `fullTextSelector`, `fullTextRemoveSelectors`, `fullTextConditions`, `autoFetchFullText`, `defaultContentFormat` (`html`/`markdown`)
+- **Reader-/Anzeige-Overrides (nullable, `null` = User-Default erben):** `hideArticleImage`, `hideFromAllFeeds`, `readerFontSizeOverride`, `readerWidthOverride`, `openOriginalOverride`
+- **Muting:** `autoMuted`
+
+Beispiel — Feed auf Selector-basierte Markdown-Extraktion umstellen und stummschalten:
 
 ```json
-{ "feedId": "clf123", "name": "New Title", "categoryId": "cat1", "updateFrequency": 60, "retentionDays": 90, "priority": "main" }
+{
+  "feedId": "clf123",
+  "fullTextMode": "selector",
+  "fullTextSelector": "article.post-body",
+  "fullTextRemoveSelectors": "nav,.ads",
+  "autoFetchFullText": true,
+  "defaultContentFormat": "markdown",
+  "autoMuted": true
+}
 ```
 
 ### `feedferret.create_category`
@@ -390,4 +423,5 @@ Antwortform:
 - Alle Datenbankabfragen erzwingen `userId` als Filterkriterium — kein Cross-User-Zugriff möglich.
 - Mutierende Tools: `update_article_state`, `add_feed`, `sync_feeds`, `create_label`, `mark_all_read`, `delete_feed`, `update_feed`, `create_category`, `update_category`, `delete_category`, `update_label`, `delete_label`, `label_article`, `batch_update_articles`, `create_saved_search`, `delete_saved_search`, `create_keyword_alert`, `update_keyword_alert`, `delete_keyword_alert`.
 - `label_article` prüft zusätzlich, ob der Artikel dem Token-Inhaber gehört, bevor Labels geändert werden.
+- Das per-Feed HTTP-Basic-Auth-Passwort (`authPassword`) verlässt den Server nie: `list_feeds`, `get_feed`, `add_feed`, `update_feed` und `get_article` (eingebetteter Feed) entfernen es aus jeder Ausgabe. Es kann nur gesetzt, nie gelesen werden.
 - Für fremde Agenten empfiehlt sich ein dedizierter FeedFerret-Benutzer oder ein frisch rotierbarer Token.

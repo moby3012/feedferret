@@ -68,13 +68,28 @@ function feedPayload(feed: any) {
     lastFetchedAt: feed.lastFetchedAt,
     lastStatus: feed.lastStatus,
     lastError: feed.lastError,
+    consecutiveFailureCount: feed.consecutiveFailureCount,
+    autoMuted: feed.autoMuted,
     customUserAgent: feed.customUserAgent,
     fetchTimeoutSecs: feed.fetchTimeoutSecs,
     sslVerify: feed.sslVerify,
     maxSizeKb: feed.maxSizeKb,
+    // Per-feed auth: type/username are exposed; the password never is.
+    authType: feed.authType,
+    authUsername: feed.authUsername,
+    // Full-text / Feed Intelligence
+    fullTextMode: feed.fullTextMode,
     fullTextSelector: feed.fullTextSelector,
     fullTextRemoveSelectors: feed.fullTextRemoveSelectors,
+    fullTextConditions: feed.fullTextConditions,
     autoFetchFullText: feed.autoFetchFullText,
+    defaultContentFormat: feed.defaultContentFormat,
+    // Per-feed display overrides (null = inherit the user default)
+    hideArticleImage: feed.hideArticleImage,
+    hideFromAllFeeds: feed.hideFromAllFeeds,
+    readerFontSizeOverride: feed.readerFontSizeOverride,
+    readerWidthOverride: feed.readerWidthOverride,
+    openOriginalOverride: feed.openOriginalOverride,
     createdAt: feed.createdAt,
     updatedAt: feed.updatedAt,
     unreadCount: feed._count?.articles,
@@ -289,7 +304,19 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
   const body = await readJson<any>(request);
   if (!body) return apiError("Invalid JSON body", 400);
   const data: any = {};
-  for (const key of ["name", "icon", "categoryId", "updateFrequency", "retentionDays", "keepMinArticles", "customUserAgent", "fetchTimeoutSecs", "sslVerify", "maxSizeKb", "fullTextSelector", "fullTextRemoveSelectors", "autoFetchFullText", "sourceType", "priority", "unicityCriteria", "unicityCriteriaForced", "scraperConfig", "httpOptions"] as const) {
+  for (const key of [
+    "name", "icon", "categoryId", "updateFrequency", "retentionDays", "keepMinArticles",
+    "customUserAgent", "fetchTimeoutSecs", "sslVerify", "maxSizeKb",
+    "sourceType", "priority", "unicityCriteria", "unicityCriteriaForced", "scraperConfig", "httpOptions",
+    // Feed Intelligence / full-text extraction
+    "fullTextMode", "fullTextSelector", "fullTextRemoveSelectors", "fullTextConditions", "autoFetchFullText", "defaultContentFormat",
+    // Per-feed HTTP auth (password is write-only: accepted here, never serialized back)
+    "authType", "authUsername", "authPassword",
+    // Per-feed display overrides (null = inherit the user default)
+    "hideArticleImage", "hideFromAllFeeds", "readerFontSizeOverride", "readerWidthOverride", "openOriginalOverride",
+    // Muting
+    "autoMuted",
+  ] as const) {
     if (body[key] !== undefined) data[key] = body[key];
   }
   const result = await db.feed.updateMany({ where: { id: feedId, userId: user.id }, data });
