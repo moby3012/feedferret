@@ -202,6 +202,33 @@ Body:
 }
 ```
 
+### `POST /api/v1/articles/{id}/fetch-full-text`
+
+Fetches the article's source page, extracts the full readable text (Defuddle → Readability → JSON-LD `articleBody` fallback), and — if it's a genuine improvement over the current (often truncated) feed content — persists it onto the article. Ideal for feeds that ship only teaser/summary items.
+
+The fetch is SSRF-safe and impersonating; if you've configured a hosted full-text BYOK connector (e.g. Firecrawl/Jina) it is eligible as the final fallback for this explicit, user-initiated action.
+
+Returns the updated article (same shape as `GET /articles/{id}`) plus an optional `suggestAutoFullText` hint when the feed looks like it deliberately truncates its items:
+
+```json
+{
+  "id": "cla1",
+  "title": "Example article",
+  "content": "<p>Full extracted content…</p>",
+  "...": "…",
+  "suggestAutoFullText": { "feedId": "clf1", "feedName": "Example Feed" }
+}
+```
+
+Error responses use the uniform error format:
+
+| Status | When |
+|---|---|
+| `404` | Article not found or not owned by the user |
+| `422` | Page couldn't be read (blocked/anti-bot/timeout), has no source link, or the result wouldn't improve the article |
+
+> **Scope:** Requires `write` scope (or session auth).
+
 ### `POST /api/v1/articles/mark-all-read`
 
 Marks matching unread articles as read.
@@ -790,8 +817,12 @@ feed health (`lastStatus`, `lastError`, `consecutiveFailureCount`), and mute
 state (`autoMuted`). This makes everything an LLM needs to run and tune a feed
 controllable purely via the API/MCP surface. MCP tool total: 29.
 
+Shipped in v1.3: **per-article full-text (re)fetch** via REST
+(`POST /api/v1/articles/{id}/fetch-full-text`) and MCP (`fetch_full_text`),
+sharing the same extraction engine and improvement check as the UI's "Fetch
+full text" action. MCP tool total: 30.
+
 Planned — see [`docs/releases/backlog.md`](releases/backlog.md) for status:
 
-- Per-article full-text (re)fetch via REST/MCP
 - RSSHub / changedetection.io / page→feed connectors as first-class REST/MCP tools
 - Webhook management via REST v1 (currently UI/Server Actions only)

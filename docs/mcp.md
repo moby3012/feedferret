@@ -1,6 +1,6 @@
 # FeedFerret MCP
 
-> **v1.2.0** — 29 tools available. All tools are user-scoped (token owner only).
+> **v1.3.0** — 30 tools available. All tools are user-scoped (token owner only).
 
 FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models and agents can work directly with the reader.
 
@@ -10,6 +10,7 @@ FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models a
 |---|---|---|
 | `feedferret.search_articles` | read | Full-text + advanced search syntax |
 | `feedferret.get_article` | read | Fetch one article by ID |
+| `feedferret.fetch_full_text` | write | Fetch & persist an article's full text from its source page |
 | `feedferret.update_article_state` | write | Set read / starred / read-later |
 | `feedferret.list_feeds` | read | List feeds with unread counts + full per-feed config |
 | `feedferret.get_feed` | read | Get one feed with its full configuration |
@@ -127,6 +128,23 @@ Input:
 ### `feedferret.get_article`
 
 Lädt einen Artikel vollständig.
+
+```json
+{ "articleId": "cla123" }
+```
+
+### `feedferret.fetch_full_text`
+
+Holt die Quellseite eines Artikels, extrahiert den vollständigen lesbaren Text
+(Defuddle → Readability → JSON-LD-`articleBody`-Fallback) und speichert ihn am
+Artikel, **wenn** er den bestehenden (oft nur angerissenen) Feed-Inhalt echt
+verbessert. Ideal für Feeds, die nur Teaser/Zusammenfassungen ausliefern. Der
+Fetch ist SSRF-sicher und impersonierend; ein konfigurierter Hosted-BYOK-Connector
+(Firecrawl/Jina) ist als finaler Fallback für diese explizite Aktion zulässig.
+
+Gibt den aktualisierten Artikel zurück, plus optional `suggestAutoFullText`, wenn
+der Feed wie ein absichtlich kürzender Feed aussieht. Wirft eine klare Meldung,
+wenn die Seite nicht gelesen werden kann oder das Ergebnis keine Verbesserung wäre.
 
 ```json
 { "articleId": "cla123" }
@@ -421,7 +439,7 @@ Antwortform:
 - MCP braucht denselben Bearer Token wie REST v1.
 - Tools schreiben nur im Kontext des Token-Benutzers.
 - Alle Datenbankabfragen erzwingen `userId` als Filterkriterium — kein Cross-User-Zugriff möglich.
-- Mutierende Tools: `update_article_state`, `add_feed`, `sync_feeds`, `create_label`, `mark_all_read`, `delete_feed`, `update_feed`, `create_category`, `update_category`, `delete_category`, `update_label`, `delete_label`, `label_article`, `batch_update_articles`, `create_saved_search`, `delete_saved_search`, `create_keyword_alert`, `update_keyword_alert`, `delete_keyword_alert`.
+- Mutierende Tools: `fetch_full_text`, `update_article_state`, `add_feed`, `sync_feeds`, `create_label`, `mark_all_read`, `delete_feed`, `update_feed`, `create_category`, `update_category`, `delete_category`, `update_label`, `delete_label`, `label_article`, `batch_update_articles`, `create_saved_search`, `delete_saved_search`, `create_keyword_alert`, `update_keyword_alert`, `delete_keyword_alert`.
 - `label_article` prüft zusätzlich, ob der Artikel dem Token-Inhaber gehört, bevor Labels geändert werden.
 - Das per-Feed HTTP-Basic-Auth-Passwort (`authPassword`) verlässt den Server nie: `list_feeds`, `get_feed`, `add_feed`, `update_feed` und `get_article` (eingebetteter Feed) entfernen es aus jeder Ausgabe. Es kann nur gesetzt, nie gelesen werden.
 - Für fremde Agenten empfiehlt sich ein dedizierter FeedFerret-Benutzer oder ein frisch rotierbarer Token.
