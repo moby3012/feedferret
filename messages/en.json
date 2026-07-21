@@ -1233,7 +1233,9 @@
       "scraperConfig": "Scraper config JSON",
       "httpOptions": "HTTP / cURL options JSON",
       "fullContentConditions": "Full-content conditions",
-      "autoReadFilters": "Auto-read filters"
+      "autoReadFilters": "Auto-read filters",
+      "autoReadFiltersDescription": "One keyword per line. New articles that contain any of these words (in the title, summary, or body) are marked read automatically — they won't count as unread or trigger notifications.",
+      "autoReadFiltersPlaceholder": "sponsored\ngiveaway\ncrypto"
     },
     "buttons": {
       "cancel": "Cancel",

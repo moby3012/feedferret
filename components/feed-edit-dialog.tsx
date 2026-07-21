@@ -927,10 +927,11 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
 
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">{t("scout.autoReadFilters")}</Label>
+                <p className="text-xs text-muted-foreground">{t("scout.autoReadFiltersDescription")}</p>
                 <Textarea
                   value={filtersActionRead}
                   onChange={(e) => setFiltersActionRead(e.target.value)}
-                  placeholder="filtersActionRead, one per line"
+                  placeholder={t("scout.autoReadFiltersPlaceholder")}
                   className="min-h-20 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
                 />
               </div>

@@ -339,6 +339,8 @@ Feed object:
   "autoFetchFullText": true,
   "defaultContentFormat": "markdown",
 
+  "filtersActionRead": "sponsored\ngiveaway",
+
   "hideArticleImage": null,
   "hideFromAllFeeds": false,
   "readerFontSizeOverride": null,
@@ -417,6 +419,12 @@ body are changed; everything else is left untouched.
 | `fullTextConditions` | string \| null | Conditional extraction rules |
 | `autoFetchFullText` | boolean | Fetch full text automatically on sync |
 | `defaultContentFormat` | string \| null | `html` \| `markdown` |
+
+**Content filters**
+
+| Field | Type | Description |
+|---|---|---|
+| `filtersActionRead` | string \| null | Newline-separated keywords. New articles containing any of these words (in title, summary, or body) are marked read on arrival — they won't count as unread or trigger notifications. |
 
 **Per-feed reader / display overrides** (all nullable; `null` = inherit the user default)
 

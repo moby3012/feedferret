@@ -85,6 +85,9 @@ function feedPayload(feed: any) {
     fullTextConditions: feed.fullTextConditions,
     autoFetchFullText: feed.autoFetchFullText,
     defaultContentFormat: feed.defaultContentFormat,
+    // Per-feed keyword content filter: newline-separated words that mark
+    // matching new articles read on arrival.
+    filtersActionRead: feed.filtersActionRead,
     // Per-feed display overrides (null = inherit the user default)
     hideArticleImage: feed.hideArticleImage,
     hideFromAllFeeds: feed.hideFromAllFeeds,
@@ -324,6 +327,8 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
     "sourceType", "priority", "unicityCriteria", "unicityCriteriaForced", "scraperConfig", "httpOptions",
     // Feed Intelligence / full-text extraction
     "fullTextMode", "fullTextSelector", "fullTextRemoveSelectors", "fullTextConditions", "autoFetchFullText", "defaultContentFormat",
+    // Per-feed keyword content filter
+    "filtersActionRead",
     // Per-feed HTTP auth (password is write-only: accepted here, never serialized back)
     "authType", "authUsername", "authPassword",
     // Per-feed display overrides (null = inherit the user default)

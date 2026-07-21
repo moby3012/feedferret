@@ -42,6 +42,8 @@ const FEED_WRITABLE_KEYS = [
   "authType", "authUsername", "authPassword",
   // Feed Intelligence / full-text extraction
   "fullTextMode", "fullTextSelector", "fullTextRemoveSelectors", "fullTextConditions", "autoFetchFullText", "defaultContentFormat",
+  // Per-feed keyword content filter (newline-separated words → mark matching new articles read)
+  "filtersActionRead",
   // Per-feed display overrides (null = inherit the user default)
   "hideArticleImage", "hideFromAllFeeds", "readerFontSizeOverride", "readerWidthOverride", "openOriginalOverride",
   // Muting
@@ -109,6 +111,7 @@ const tools = [
         fullTextConditions: { type: ["string", "null"] },
         autoFetchFullText: { type: "boolean", description: "Fetch full text automatically on sync." },
         defaultContentFormat: { type: ["string", "null"], enum: ["html", "markdown", null] },
+        filtersActionRead: { type: ["string", "null"], description: "Newline-separated keywords; new articles containing any are marked read on arrival." },
         // Per-feed display overrides (null = inherit the user default)
         hideArticleImage: { type: ["boolean", "null"] },
         hideFromAllFeeds: { type: ["boolean", "null"] },
