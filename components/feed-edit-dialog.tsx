@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useTranslations } from "next-intl";
+import { useTranslations, useFormatter } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -71,6 +71,12 @@ interface FeedEditDialogProps {
     readerFontSizeOverride?: string | null;
     readerWidthOverride?: string | null;
     openOriginalOverride?: boolean | null;
+    // Read-only health/telemetry surfaced in the "How this feed is fetched" panel.
+    lastStatus?: string | null;
+    lastError?: string | null;
+    lastFetchedAt?: string | Date | null;
+    consecutiveFailureCount?: number | null;
+    autoMuted?: boolean | null;
   } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -78,6 +84,7 @@ interface FeedEditDialogProps {
 
 export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps) {
   const t = useTranslations("feedEdit");
+  const format = useFormatter();
   const updateFeed = useUpdateFeed();
   const previewExtraction = usePreviewFeedExtraction();
   const proposeAiSelector = useProposeAiFullTextSelector();
@@ -331,6 +338,39 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
 
   if (!feed) return null;
 
+  // "How this feed is fetched" transparency panel.
+  // Method + full-text summary reflect the *current* (possibly edited) form
+  // state so it reads as a live preview; health reflects the last saved sync.
+  const fetchMethodLabel =
+    sourceType === "rss"
+      ? t("fetch.transparency.methodRss")
+      : sourceType === "JSONFeed"
+        ? t("fetch.transparency.methodJsonFeed")
+        : t("fetch.transparency.methodScraper", { type: sourceType });
+  const fullTextSummary =
+    fullTextMode === "auto"
+      ? t("fetch.transparency.fullTextAuto")
+      : fullTextMode === "selector"
+        ? t("fetch.transparency.fullTextSelector")
+        : fullTextMode === "ai"
+          ? t("fetch.transparency.fullTextAi")
+          : t("fetch.transparency.fullTextOff");
+  const lastStatus = feed.lastStatus ?? "pending";
+  const lastFetchedAt = feed.lastFetchedAt ? new Date(feed.lastFetchedAt) : null;
+  const consecutiveFailures = feed.consecutiveFailureCount ?? 0;
+  const statusLabel =
+    lastStatus === "ok"
+      ? t("fetch.transparency.statusOk")
+      : lastStatus === "error"
+        ? t("fetch.transparency.statusError")
+        : t("fetch.transparency.statusPending");
+  const statusToneClass =
+    lastStatus === "ok"
+      ? "bg-emerald-500"
+      : lastStatus === "error"
+        ? "bg-destructive"
+        : "bg-muted-foreground";
+
   return (
     <>
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
@@ -519,6 +559,49 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             </TabsContent>
 
             <TabsContent value="fetch" className="mt-0 space-y-5">
+              <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">{t("fetch.transparency.title")}</p>
+                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className={`h-2 w-2 rounded-full ${statusToneClass}`} aria-hidden="true" />
+                    {statusLabel}
+                  </span>
+                </div>
+                <dl className="space-y-2 text-sm">
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
+                    <dt className="text-muted-foreground">{t("fetch.transparency.methodLabel")}</dt>
+                    <dd className="font-medium sm:text-right">{fetchMethodLabel}</dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
+                    <dt className="text-muted-foreground">{t("fetch.transparency.fullTextLabel")}</dt>
+                    <dd className="font-medium sm:text-right">{fullTextSummary}</dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
+                    <dt className="text-muted-foreground">{t("fetch.transparency.lastCheckedLabel")}</dt>
+                    <dd className="font-medium sm:text-right">
+                      {lastFetchedAt ? format.relativeTime(lastFetchedAt) : t("fetch.transparency.never")}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 break-all sm:flex-row sm:justify-between sm:gap-4">
+                    <dt className="text-muted-foreground">{t("fetch.transparency.sourceUrlLabel")}</dt>
+                    <dd className="font-mono text-xs text-muted-foreground sm:max-w-[60%] sm:text-right">{feed.url}</dd>
+                  </div>
+                </dl>
+                {consecutiveFailures > 0 && (
+                  <p className="text-xs text-destructive">
+                    {t("fetch.transparency.consecutiveFailures", { count: consecutiveFailures })}
+                  </p>
+                )}
+                {feed.lastError && lastStatus === "error" && (
+                  <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive break-words">
+                    {feed.lastError}
+                  </p>
+                )}
+                {feed.autoMuted && (
+                  <p className="text-xs text-muted-foreground">{t("fetch.transparency.mutedNote")}</p>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">{t("fetch.updateInterval")}</Label>
                 <Input
