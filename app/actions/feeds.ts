@@ -23,6 +23,7 @@ import {
 } from "@/lib/validation";
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { fetchAndSuggestFeedCandidates, type SuggestedFieldConfig } from "@/lib/page-feed-suggest";
+import { createPageFeedForUser } from "@/lib/page-feed-create";
 import { buildXPathArticles } from "@/lib/feed-fetcher";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { applyRetentionPoliciesForUser } from "@/lib/retention";
@@ -442,34 +443,12 @@ export async function createFeedFromPage(input: {
     }
 
     try {
-        const xpath: Record<string, string> = {};
-        for (const [key, value] of Object.entries(input.config)) {
-            if (typeof value === "string" && value.trim()) xpath[key] = value;
-        }
-        const scraperConfig = JSON.stringify({ xpath });
-
-        let name = input.name?.trim();
-        if (!name) {
-            try {
-                name = new URL(input.url).hostname.replace(/^www\./, "");
-            } catch {
-                name = "New Feed";
-            }
-        }
-
-        const feed = await db.feed.create({
-            data: {
-                url: input.url,
-                name,
-                userId: session.user.id,
-                categoryId: input.categoryId,
-                sourceType: "HTML+XPath",
-                scraperConfig,
-                lastStatus: "pending",
-            },
+        const feed = await createPageFeedForUser(session.user.id, {
+            url: input.url,
+            config: input.config,
+            name: input.name,
+            categoryId: input.categoryId,
         });
-
-        await syncFeed(session.user.id, feed.id);
         revalidatePath("/");
         return { success: true, feed };
     } catch (error) {

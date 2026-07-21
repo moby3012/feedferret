@@ -638,7 +638,55 @@ Creates a changedetection.io **watch** for a page URL and adds it as a feed.
 
 Returns the created feed (`201`). `400` if changedetection isn't configured or the URL is invalid; `422` if the watch couldn't be created.
 
-> **Scope:** Both create endpoints require `write` scope (or session auth).
+### `POST /api/v1/connectors/page/suggest`
+
+Given an arbitrary web page URL, heuristically detects repeating item lists and
+returns candidate feed configs (XPath selectors) with scores and sample titles —
+the same detection the "Create feed from web page" UI uses.
+
+```json
+{ "url": "https://example.com/blog" }
+```
+
+Response:
+
+```json
+{
+  "candidates": [
+    {
+      "config": { "xPathItem": "//article", "xPathItemTitle": ".//h2", "xPathItemUri": ".//a/@href" },
+      "score": 88,
+      "itemCount": 12,
+      "sampleTitles": ["First post", "Second post"]
+    }
+  ]
+}
+```
+
+### `POST /api/v1/connectors/page/feeds`
+
+Creates an `HTML+XPath` page-feed from a web page. Pass a `config` (as returned by
+`/connectors/page/suggest`) to use it, or omit it to auto-pick the top-scoring
+detected candidate.
+
+```json
+{
+  "url": "https://example.com/blog",
+  "config": { "xPathItem": "//article", "xPathItemTitle": ".//h2", "xPathItemUri": ".//a/@href" },
+  "name": "Example blog",
+  "categoryId": "cat1"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `url` | string | Required. The page to scrape. |
+| `config` | object | Optional. XPath field config; `xPathItem` is required when given. Omit to auto-detect. |
+| `name`, `categoryId`, `sync` | — | Same as `POST /feeds`. |
+
+Returns the created feed (`201`). `422` if no config is given and no repeating item list is found.
+
+> **Scope:** All connector create/suggest endpoints require `write` scope (or session auth).
 
 ---
 
@@ -891,7 +939,13 @@ Shipped in v1.5: **create connector-backed feeds** — `POST /api/v1/connectors/
 (changedetection watch → feed), plus the MCP `create_rsshub_feed` and
 `create_changedetection_feed` tools. MCP tool total: 33.
 
+Shipped in v1.6: **page→feed builder** — `POST /api/v1/connectors/page/suggest`
+detects repeating item lists on any web page, and `POST /api/v1/connectors/page/feeds`
+creates an HTML+XPath feed from a given or auto-detected config; MCP
+`suggest_page_feed` and `create_page_feed` tools mirror them. With this, all
+three connector paths (RSSHub, changedetection.io, page-feed) are fully
+controllable over REST and MCP. MCP tool total: 35.
+
 Planned — see [`docs/releases/backlog.md`](releases/backlog.md) for status:
 
-- Create a feed from an arbitrary web page (page→feed builder) via REST/MCP
 - Webhook management via REST v1 (currently UI/Server Actions only)

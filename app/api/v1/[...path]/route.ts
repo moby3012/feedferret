@@ -16,6 +16,8 @@ import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
 import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
+import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
+import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
@@ -375,6 +377,53 @@ async function createChangedetectionFeed(user: ApiUser, request: Request) {
     icon: allowedString(body?.icon),
     sync: body?.sync === true,
   });
+}
+
+async function suggestPageFeed(_user: ApiUser, request: Request) {
+  const body = await readJson<any>(request);
+  const url = allowedString(body?.url);
+  if (!url) return apiError("url is required", 400);
+  const urlError = validateFeedUrl(url);
+  if (urlError) return apiError(urlError, 400);
+
+  const candidates = await fetchAndSuggestFeedCandidates(url);
+  return NextResponse.json({
+    candidates: candidates.map((c) => ({
+      config: c.config,
+      score: c.score,
+      itemCount: c.itemCount,
+      sampleTitles: c.sampleTitles,
+    })),
+  });
+}
+
+async function createPageFeed(user: ApiUser, request: Request) {
+  const body = await readJson<any>(request);
+  const url = allowedString(body?.url);
+  if (!url) return apiError("url is required", 400);
+  const urlError = validateFeedUrl(url);
+  if (urlError) return apiError(urlError, 400);
+
+  // Use the caller's explicit config when given; otherwise auto-pick the
+  // top-scoring candidate so a URL alone is enough to build a page-feed.
+  let config = body?.config;
+  if (!config || typeof config !== "object" || !allowedString(config.xPathItem)) {
+    config = await suggestTopPageFeedConfig(url);
+    if (!config) return apiError("No feed-like repeating items found on that page; provide an explicit config with xPathItem", 422);
+  }
+
+  try {
+    const feed = await createPageFeedForUser(user.id, {
+      url,
+      config,
+      name: allowedString(body?.name),
+      categoryId: allowedString(body?.categoryId),
+      sync: body?.sync,
+    });
+    return NextResponse.json(feedPayload(feed), { status: 201 });
+  } catch (error) {
+    return apiError(error instanceof Error ? error.message : "Could not create feed from that page", 422);
+  }
 }
 
 async function getFeed(user: ApiUser, feedId: string) {
@@ -818,6 +867,8 @@ function openApiSpec(request: Request) {
       "/api/v1/connectors": { get: { summary: "List server-configured connectors (RSSHub, changedetection.io) and whether each is available" } },
       "/api/v1/connectors/rsshub/feeds": { post: { summary: "Create a feed from an RSSHub route path (validated against the configured RSSHub instance)" } },
       "/api/v1/connectors/changedetection/feeds": { post: { summary: "Create a changedetection.io watch for a URL and add it as a feed (empty until the watch has run twice)" } },
+      "/api/v1/connectors/page/suggest": { post: { summary: "Suggest feed-item selector configs for an arbitrary web page (heuristic repeating-item detection)" } },
+      "/api/v1/connectors/page/feeds": { post: { summary: "Create an HTML+XPath page-feed from a web page (uses the given config, or auto-picks the top suggestion)" } },
       "/api/v1/openapi.json": { get: { summary: "OpenAPI document" } },
       "/api/v1/alerts": { get: { summary: "List keyword alerts" }, post: { summary: "Create keyword alert" } },
       "/api/v1/alerts/{id}": { get: { summary: "Get keyword alert" }, patch: { summary: "Update keyword alert" }, delete: { summary: "Delete keyword alert" } },
@@ -936,6 +987,8 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
       if (method === "GET" && path.length === 1) res = await listConnectors(user);
       else if (method === "POST" && path.length === 3 && path[1] === "rsshub" && path[2] === "feeds") { const se = scopeError(user, "write"); if (se) res = se; else res = await createRsshubFeed(user, request); }
       else if (method === "POST" && path.length === 3 && path[1] === "changedetection" && path[2] === "feeds") { const se = scopeError(user, "write"); if (se) res = se; else res = await createChangedetectionFeed(user, request); }
+      else if (method === "POST" && path.length === 3 && path[1] === "page" && path[2] === "suggest") { const se = scopeError(user, "write"); if (se) res = se; else res = await suggestPageFeed(user, request); }
+      else if (method === "POST" && path.length === 3 && path[1] === "page" && path[2] === "feeds") { const se = scopeError(user, "write"); if (se) res = se; else res = await createPageFeed(user, request); }
       else res = apiError("Not found", 404);
     } else {
       res = apiError("Not found", 404);
