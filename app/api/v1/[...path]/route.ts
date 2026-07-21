@@ -13,6 +13,7 @@ import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { validateFeedUrl, validateOpml } from "@/lib/validation";
 import { logger } from "@/lib/logger";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
+import { refetchArticleFullText } from "@/lib/full-text-fetch";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
@@ -157,6 +158,19 @@ async function getArticle(user: ApiUser, articleId: string) {
   const article = await db.article.findFirst({ where: { id: articleId, userId: user.id }, include: ARTICLE_INCLUDE });
   if (!article) return apiError("Article not found", 404);
   return NextResponse.json(await articlePayload(article));
+}
+
+async function fetchArticleFullText(user: ApiUser, articleId: string) {
+  try {
+    const { article, suggestAutoFullText } = await refetchArticleFullText(user.id, articleId);
+    return NextResponse.json({ ...(await articlePayload(article)), suggestAutoFullText });
+  } catch (error) {
+    // The shared helper throws clean, user-facing messages ("Article not found",
+    // "Article has no source link", anti-bot block, "could not improve", …).
+    const message = error instanceof Error ? error.message : "Could not fetch full text";
+    const status = /not found/i.test(message) ? 404 : 422;
+    return apiError(message, status);
+  }
 }
 
 async function patchArticle(user: ApiUser, articleId: string, request: Request) {
@@ -675,6 +689,7 @@ function openApiSpec(request: Request) {
       "/api/v1/me": { get: { summary: "Current account" } },
       "/api/v1/articles": { get: { summary: "Search/list articles" } },
       "/api/v1/articles/{id}": { get: { summary: "Get article" }, patch: { summary: "Update read/star/read-later state and labels" } },
+      "/api/v1/articles/{id}/fetch-full-text": { post: { summary: "Fetch & extract the article's full text from its source page and persist it if it improves the article" } },
       "/api/v1/articles/mark-all-read": { post: { summary: "Bulk mark matching articles as read" } },
       "/api/v1/articles/batch": {
         post: {
@@ -772,6 +787,7 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
       else if (method === "POST" && path[1] === "batch") { const se = scopeError(user, "write"); if (se) res = se; else res = await batchArticles(user, request); }
       else if (method === "GET" && path.length === 2) res = await getArticle(user, path[1]);
       else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchArticle(user, path[1], request); }
+      else if (method === "POST" && path.length === 3 && path[2] === "fetch-full-text") { const se = scopeError(user, "write"); if (se) res = se; else res = await fetchArticleFullText(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "feeds") {
       if (method === "GET" && path.length === 1) res = await listFeeds(user);

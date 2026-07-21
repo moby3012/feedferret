@@ -8,6 +8,7 @@ import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
+import { refetchArticleFullText } from "@/lib/full-text-fetch";
 
 function rpc(id: unknown, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result });
@@ -66,6 +67,7 @@ const tools = [
     },
   },
   { name: "feedferret.get_article", description: "Get one full article by ID.", inputSchema: { type: "object", properties: { articleId: { type: "string" } }, required: ["articleId"] } },
+  { name: "feedferret.fetch_full_text", description: "Fetch and extract the full readable text of an article from its source page, and persist it onto the article if it's a genuine improvement over the current (often truncated) feed content. Returns the updated article. Throws a clean message if the page can't be read or the result wouldn't improve the article.", inputSchema: { type: "object", properties: { articleId: { type: "string" } }, required: ["articleId"] } },
   { name: "feedferret.update_article_state", description: "Update read/starred/read-later state on an article.", inputSchema: { type: "object", properties: { articleId: { type: "string" }, isRead: { type: "boolean" }, isStarred: { type: "boolean" }, isReadLater: { type: "boolean" } }, required: ["articleId"] } },
   { name: "feedferret.list_feeds", description: "List RSS feeds with category, unread counts and full per-feed configuration (fetch/HTTP options, full-text settings, reader/display overrides, health). The auth password is never included.", inputSchema: { type: "object", properties: {} } },
   { name: "feedferret.get_feed", description: "Get one feed by ID with its full configuration (fetch/HTTP options, full-text/Feed Intelligence settings, reader/display overrides, health, unread count). The auth password is never included.", inputSchema: { type: "object", properties: { feedId: { type: "string" } }, required: ["feedId"] } },
@@ -177,6 +179,11 @@ async function callTool(user: ApiUser, name: string, args: any) {
       const article = await db.article.findFirst({ where: { id: String(args.articleId), userId: user.id }, include: { feed: true, labels: { include: { label: true } } } });
       if (article && (article as any).feed) (article as any).feed = stripFeedSecrets((article as any).feed);
       return article;
+    }
+    case "feedferret.fetch_full_text": {
+      const { article, suggestAutoFullText } = await refetchArticleFullText(user.id, String(args.articleId));
+      if ((article as any).feed) (article as any).feed = stripFeedSecrets((article as any).feed);
+      return { ...article, suggestAutoFullText };
     }
     case "feedferret.update_article_state": {
       const data: any = {};
@@ -384,7 +391,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
 export async function GET() {
   return NextResponse.json({
     name: "FeedFerret MCP",
-    version: "1.2.0",
+    version: "1.3.0",
     tools: tools.length,
     transport: "Streamable HTTP JSON-RPC",
     endpoint: "/api/mcp",

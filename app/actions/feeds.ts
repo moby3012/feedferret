@@ -32,9 +32,7 @@ import type { AiProvider } from "@/lib/ai-summary";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { getSanitizer } from "@/lib/sanitize-html";
-import { fetchAndExtractReadable } from "@/lib/readability-extract";
-import { HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
-import { looksLikeTruncatedFeed } from "@/lib/full-text-mode";
+import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-fetch";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -389,31 +387,6 @@ const PAGE_FEED_PREVIEW_CAP = 8;
  * protection (e.g. a Cloudflare challenge) rejected our request, which is a
  * very different situation from a broken URL and worth telling users about.
  */
-function describePageFetchError(error: unknown): string {
-    const message = error instanceof Error ? error.message : "";
-
-    if (/private IP|localhost|only supports http|URL is invalid|too large|Too many redirects/i.test(message)) {
-        return message;
-    }
-
-    const statusMatch = message.match(/Fetch failed: (\d+)/);
-    if (statusMatch) {
-        const status = Number(statusMatch[1]);
-        if (status === 401 || status === 403) {
-            return "This site blocked automated access (it may use bot protection like Cloudflare). We can't read pages protected this way yet.";
-        }
-        if (status === 404) {
-            return "That page doesn't exist (404). Check the URL and try again.";
-        }
-        if (status === 429) {
-            return "This site is rate-limiting requests. Try again in a bit.";
-        }
-        return `The site returned an error (HTTP ${status}). Check the URL and try again.`;
-    }
-
-    return "Could not read that page. Check the URL and try again.";
-}
-
 export async function suggestFeedFromUrl(url: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
@@ -1352,77 +1325,12 @@ export async function fetchFullText(articleId: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    const article = await db.article.findUnique({
-        where: { id: articleId, userId: session.user.id },
-        include: { feed: true },
-    });
-
-    if (!article?.link) throw new Error("Article has no source link");
-
-    // Use the shared extraction engine (Defuddle → Readability → JSON-LD
-    // articleBody fallback) rather than a bespoke DOM-scoring heuristic. The
-    // JSON-LD fallback recovers full text from sites (e.g. Wired/Condé Nast)
-    // that paywall/truncate the visible DOM but ship the whole body in
-    // schema.org structured data. Engine fetch is SSRF-safe + impersonating.
-    //
-    // A fetch failure (blocked, timed out, connection reset by the site's
-    // anti-bot layer, …) throws here rather than returning a result — caught
-    // and turned into the same clean, status-aware message `suggestFeedFromUrl`
-    // gives, instead of letting a raw/native error escape this Server Action
-    // uncaught (which previously surfaced as an opaque render crash).
-    // A manual "Fetch full text" click is a deliberate, single, user-initiated
-    // action — so the user's hosted-API BYOK connector (M7-T3), if they've
-    // configured one, is always eligible as the final fallback here, same as
-    // AI features distinguish a manual action from "auto" background use.
-    let result: Awaited<ReturnType<typeof fetchAndExtractReadable>>;
-    try {
-        result = await fetchAndExtractReadable(article.link, { userId: session.user.id });
-    } catch (error) {
-        if (error instanceof HostedFetchRateLimitedError) {
-            throw new Error(
-                "Your hosted full-text provider is rate-limited right now. If you're using Firecrawl's free tier without your own API key, this daily limit is shared across this whole server — add your own key in Settings → Integrations for much higher limits, or try again later.",
-            );
-        }
-        throw new Error(describePageFetchError(error));
-    }
-    if (!result.html) throw new Error("Could not extract article content");
-
-    const DOMPurify = await getSanitizer();
-    const plain = DOMPurify.sanitize(result.html, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
-    const existingPlainLength = (article.content || "").replace(/<[^>]*>?/gm, "").length;
-
-    if (plain.length < 400 || plain.length <= existingPlainLength) {
-        throw new Error("Full text could not improve this article");
-    }
-
-    const updated = await db.article.update({
-        where: { id: article.id, userId: session.user.id },
-        data: {
-            content: result.html,
-            contentFormat: "html",
-            excerpt: result.excerpt?.trim() || plain.slice(0, 240),
-        },
-        include: {
-            feed: true,
-            labels: { include: { label: true } },
-        },
-    });
-
-    // A feed whose short, teaser-only description was dramatically improved by
-    // a real full-text fetch is a strong empirical signal it deliberately
-    // truncates (e.g. WordPress "Summary" feed mode) — a much more reliable
-    // detector than guessing from link/teaser text patterns, and it works
-    // retroactively for feeds added long before this existed, triggered
-    // exactly when the user first notices (their own manual fetch). Only
-    // offered once per feed unless the user re-enables it after dismissing.
-    const suggestAutoFullText =
-        looksLikeTruncatedFeed(existingPlainLength, plain.length) &&
-        updated.feed.fullTextMode === "off" &&
-        !updated.feed.fullTextAutoSuggestDismissed
-            ? { feedId: updated.feed.id, feedName: updated.feed.name }
-            : null;
-
-    return { ...updated, suggestAutoFullText };
+    // Shared with the REST v1 (`POST /articles/{id}/fetch-full-text`) and MCP
+    // (`fetch_full_text`) surfaces via lib/full-text-fetch. See that module for
+    // the extraction-engine + improvement-check rationale. The UI caller expects
+    // the article fields spread at the top level plus `suggestAutoFullText`.
+    const { article, suggestAutoFullText } = await refetchArticleFullText(session.user.id, articleId);
+    return { ...article, suggestAutoFullText };
 }
 
 export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null }) {
