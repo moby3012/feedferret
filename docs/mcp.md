@@ -1,6 +1,6 @@
 # FeedFerret MCP
 
-> **v1.3.0** — 30 tools available. All tools are user-scoped (token owner only).
+> **v1.4.0** — 31 tools available. All tools are user-scoped (token owner only).
 
 FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models and agents can work directly with the reader.
 
@@ -38,6 +38,7 @@ FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models a
 | `feedferret.delete_keyword_alert` | write | Delete a keyword alert |
 | `feedferret.list_notifications` | read | List notifications ordered by newest first |
 | `feedferret.get_stats` | read | Get aggregate stats for the current user |
+| `feedferret.list_connectors` | read | List server-configured connectors (RSSHub, changedetection.io) |
 
 ```text
 POST /api/mcp
@@ -395,6 +396,22 @@ Gibt aggregierte Nutzungsstatistiken zurück.
 
 ```json
 {}
+```
+
+### `feedferret.list_connectors`
+
+Listet die serverseitig konfigurierten Connectors (RSSHub, changedetection.io)
+und ob sie jeweils verfügbar sind — nützlich, um vor dem Anlegen herauszufinden,
+welche connector-basierten Feeds auf diesem Server möglich sind.
+
+```json
+{}
+```
+
+Antwort:
+
+```json
+{ "rsshub": { "configured": true }, "changedetection": { "configured": false } }
 ```
 
 ---
