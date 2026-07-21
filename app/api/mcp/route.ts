@@ -9,8 +9,8 @@ import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
-import { isRsshubConfigured } from "@/lib/rsshub";
-import { isChangedetectionConfigured } from "@/lib/changedetection";
+import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
+import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
 
 function rpc(id: unknown, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result });
@@ -150,6 +150,8 @@ const tools = [
   { name: "feedferret.get_stats", description: "Get aggregate stats for the current user.", inputSchema: { type: "object", properties: {} } },
   // Connectors
   { name: "feedferret.list_connectors", description: "List server-configured connectors (RSSHub, changedetection.io) and whether each is available. Useful to discover what connector-backed feeds can be created on this server.", inputSchema: { type: "object", properties: {} } },
+  { name: "feedferret.create_rsshub_feed", description: "Create a feed from an RSSHub route path (e.g. '/github/trending/daily/any'). The route is validated against the server's configured RSSHub instance before the feed is created. Requires the RSSHub connector to be configured.", inputSchema: { type: "object", properties: { routePath: { type: "string", description: "RSSHub route path, e.g. '/github/issue/DIYgod/RSSHub'." }, name: { type: "string" }, categoryId: { type: "string" }, sync: { type: "boolean" } }, required: ["routePath"] } },
+  { name: "feedferret.create_changedetection_feed", description: "Create a changedetection.io watch for a web page URL and add it as a feed. The feed stays empty until changedetection has checked the page at least twice. Requires the changedetection.io connector to be configured.", inputSchema: { type: "object", properties: { url: { type: "string" }, name: { type: "string" }, categoryId: { type: "string" }, sync: { type: "boolean" } }, required: ["url"] } },
 ];
 
 async function searchArticles(user: ApiUser, args: any) {
@@ -176,6 +178,36 @@ async function searchArticles(user: ApiUser, args: any) {
       labels: { include: { label: true } },
     },
   });
+}
+
+// Shared feed-creation core for the MCP add-feed + connector-feed tools. The
+// URL is already validated/resolved by the caller. A fetch failure never blocks
+// creation (the feed lands "pending" and its health carries the error).
+async function createFeedForUser(
+  userId: string,
+  url: string,
+  opts: { name?: unknown; categoryId?: unknown; icon?: unknown; fallbackName?: string; sync?: boolean },
+) {
+  const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
+  const order = await db.feed.count({ where: { userId } });
+  const name = (typeof opts.name === "string" && opts.name.trim()) || remoteFeed?.title || opts.fallbackName || url;
+  const feed = await db.feed.create({
+    data: {
+      userId,
+      url,
+      name,
+      categoryId: typeof opts.categoryId === "string" ? opts.categoryId : undefined,
+      icon: typeof opts.icon === "string" ? opts.icon : "📰",
+      order,
+      lastStatus: "pending",
+    },
+  });
+  if (opts.sync !== false) await syncFeed(userId, feed.id).catch(() => null);
+  const fresh = await db.feed.findFirst({
+    where: { id: feed.id, userId },
+    include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } },
+  });
+  return stripFeedSecrets(fresh);
 }
 
 async function callTool(user: ApiUser, name: string, args: any) {
@@ -210,11 +242,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
     case "feedferret.add_feed": {
       const url = typeof args.url === "string" ? args.url.trim() : "";
       if (!url) throw new Error("url is required");
-      const remoteFeed = await fetchFeedArticles({ url });
-      const order = await db.feed.count({ where: { userId: user.id } });
-      const feed = await db.feed.create({ data: { userId: user.id, url, name: typeof args.name === "string" ? args.name : remoteFeed.title || url, categoryId: typeof args.categoryId === "string" ? args.categoryId : undefined, icon: typeof args.icon === "string" ? args.icon : "📰", order } });
-      if (args.sync !== false) await syncFeed(user.id, feed.id).catch(() => null);
-      return stripFeedSecrets(feed);
+      return createFeedForUser(user.id, url, { name: args.name, categoryId: args.categoryId, icon: args.icon, sync: args.sync !== false });
     }
     case "feedferret.sync_feeds":
       if (typeof args.feedId === "string") return syncFeed(user.id, args.feedId);
@@ -378,6 +406,35 @@ async function callTool(user: ApiUser, name: string, args: any) {
       const [rsshub, changedetection] = await Promise.all([isRsshubConfigured(), isChangedetectionConfigured()]);
       return { rsshub: { configured: rsshub }, changedetection: { configured: changedetection } };
     }
+    case "feedferret.create_rsshub_feed": {
+      const routePath = typeof args.routePath === "string" ? args.routePath.trim() : "";
+      if (!routePath) throw new Error("routePath is required");
+      const config = await getRsshubConfig();
+      if (!config) throw new Error("RSSHub is not configured on this server");
+      const validation = await validateRsshubRoute(config, routePath);
+      if (!validation.ok) throw new Error(`RSSHub route did not validate: ${validation.reason}`);
+      return createFeedForUser(user.id, buildRsshubRouteUrl(config, routePath), {
+        name: args.name,
+        categoryId: args.categoryId,
+        fallbackName: validation.title ?? undefined,
+        sync: args.sync !== false,
+      });
+    }
+    case "feedferret.create_changedetection_feed": {
+      const url = typeof args.url === "string" ? args.url.trim() : "";
+      if (!url) throw new Error("url is required");
+      const config = await getChangedetectionConfig();
+      if (!config) throw new Error("changedetection.io is not configured on this server");
+      const watch = await createWatch(config, { url });
+      if (!watch.ok) throw new Error(`Could not create changedetection.io watch: ${watch.reason}`);
+      // The watch feed is empty until changedetection has checked twice, so
+      // don't sync on create unless explicitly requested.
+      return createFeedForUser(user.id, buildWatchFeedUrl(config, watch.uuid), {
+        name: args.name || url,
+        categoryId: args.categoryId,
+        sync: args.sync === true,
+      });
+    }
     case "feedferret.get_stats": {
       const [totalFeeds, totalArticles, unreadArticles, starredArticles, readLaterArticles, totalLabels, totalCategories, totalSavedSearches, totalKeywordAlerts, totalAutoReadRules, unreadNotifications] = await db.$transaction([
         db.feed.count({ where: { userId: user.id } }),
@@ -402,7 +459,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
 export async function GET() {
   return NextResponse.json({
     name: "FeedFerret MCP",
-    version: "1.4.0",
+    version: "1.5.0",
     tools: tools.length,
     transport: "Streamable HTTP JSON-RPC",
     endpoint: "/api/mcp",

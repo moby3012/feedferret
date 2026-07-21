@@ -606,6 +606,40 @@ feeds it can create before trying.
 }
 ```
 
+### `POST /api/v1/connectors/rsshub/feeds`
+
+Creates a feed from an RSSHub **route path**. The route is validated against the
+server's configured RSSHub instance before the feed is created (a bad route
+returns `422`); the built route URL — including any admin-configured access key —
+is then added through the normal add-feed flow.
+
+Body:
+
+```json
+{ "routePath": "/github/trending/daily/any", "name": "GH Trending", "categoryId": "cat1", "sync": true }
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `routePath` | string | Required. RSSHub route path, e.g. `/github/issue/DIYgod/RSSHub`. |
+| `name`, `categoryId`, `icon`, `sync` | — | Same as `POST /feeds`. |
+
+Returns the created feed (`201`). `400` if RSSHub isn't configured; `422` if the route doesn't validate.
+
+### `POST /api/v1/connectors/changedetection/feeds`
+
+Creates a changedetection.io **watch** for a page URL and adds it as a feed.
+
+```json
+{ "url": "https://example.com/pricing", "name": "Example pricing", "categoryId": "cat1" }
+```
+
+> The feed stays **empty until changedetection has checked the page at least twice**, so the initial sync is skipped unless you pass `"sync": true`.
+
+Returns the created feed (`201`). `400` if changedetection isn't configured or the URL is invalid; `422` if the watch couldn't be created.
+
+> **Scope:** Both create endpoints require `write` scope (or session auth).
+
 ---
 
 ## Keyword Alerts
@@ -852,7 +886,12 @@ Shipped in v1.4: **connector discovery** — `GET /api/v1/connectors` and the MC
 changedetection.io) are configured, and the per-feed keyword content filter
 (`filtersActionRead`) is now exposed across REST and MCP. MCP tool total: 31.
 
+Shipped in v1.5: **create connector-backed feeds** — `POST /api/v1/connectors/rsshub/feeds`
+(RSSHub route → feed) and `POST /api/v1/connectors/changedetection/feeds`
+(changedetection watch → feed), plus the MCP `create_rsshub_feed` and
+`create_changedetection_feed` tools. MCP tool total: 33.
+
 Planned — see [`docs/releases/backlog.md`](releases/backlog.md) for status:
 
-- Create connector-backed feeds via REST/MCP (RSSHub route → feed, changedetection watch → feed, web page → feed)
+- Create a feed from an arbitrary web page (page→feed builder) via REST/MCP
 - Webhook management via REST v1 (currently UI/Server Actions only)

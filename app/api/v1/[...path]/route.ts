@@ -14,8 +14,8 @@ import { validateFeedUrl, validateOpml } from "@/lib/validation";
 import { logger } from "@/lib/logger";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
-import { isRsshubConfigured } from "@/lib/rsshub";
-import { isChangedetectionConfigured } from "@/lib/changedetection";
+import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
+import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
@@ -286,6 +286,38 @@ async function listFeeds(user: ApiUser) {
   return NextResponse.json({ items: feeds.map(feedPayload) });
 }
 
+// Shared feed-creation core: create a feed row for `url` (already validated by
+// the caller), optionally sync it, and return the serialized feed. Used by the
+// plain add-feed endpoint and by the connector-backed create endpoints, which
+// resolve a connector-specific URL first. The feed title is taken from the
+// remote feed when reachable, else the caller's fallback, else the URL — a
+// fetch failure never blocks creation (the feed lands in "pending" and its
+// health surfaces the error, matching the UI's add-feed behavior).
+async function createFeedFromUrl(
+  user: ApiUser,
+  url: string,
+  opts: { name?: string; categoryId?: string; icon?: string; sync?: boolean; fallbackName?: string },
+) {
+  const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
+  const order = await db.feed.count({ where: { userId: user.id } });
+  const feed = await db.feed.create({
+    data: {
+      userId: user.id,
+      url,
+      name: opts.name || remoteFeed?.title || opts.fallbackName || url,
+      categoryId: opts.categoryId,
+      icon: opts.icon || "📰",
+      order,
+      lastStatus: "pending",
+    },
+    include: { category: true },
+  });
+
+  if (opts.sync !== false) await syncFeed(user.id, feed.id).catch((error) => logger.error("[api/v1] initial feed sync failed", error));
+  const fresh = await db.feed.findFirst({ where: { id: feed.id, userId: user.id }, include: { category: true } });
+  return NextResponse.json(feedPayload(fresh), { status: 201 });
+}
+
 async function createFeed(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
   const url = allowedString(body?.url);
@@ -293,24 +325,56 @@ async function createFeed(user: ApiUser, request: Request) {
   const urlError = validateFeedUrl(url);
   if (urlError) return apiError(urlError, 400);
 
-  const remoteFeed = await fetchFeedArticles({ url });
-  const order = await db.feed.count({ where: { userId: user.id } });
-  const feed = await db.feed.create({
-    data: {
-      userId: user.id,
-      url,
-      name: allowedString(body?.name) || remoteFeed.title || url,
-      categoryId: allowedString(body?.categoryId),
-      icon: allowedString(body?.icon) || "📰",
-      order,
-      lastStatus: "pending",
-    },
-    include: { category: true },
+  return createFeedFromUrl(user, url, {
+    name: allowedString(body?.name),
+    categoryId: allowedString(body?.categoryId),
+    icon: allowedString(body?.icon),
+    sync: body?.sync,
   });
+}
 
-  if (body?.sync !== false) await syncFeed(user.id, feed.id).catch((error) => logger.error("[api/v1] initial feed sync failed", error));
-  const fresh = await db.feed.findFirst({ where: { id: feed.id, userId: user.id }, include: { category: true } });
-  return NextResponse.json(feedPayload(fresh), { status: 201 });
+async function createRsshubFeed(user: ApiUser, request: Request) {
+  const body = await readJson<any>(request);
+  const routePath = allowedString(body?.routePath);
+  if (!routePath) return apiError("routePath is required", 400);
+
+  const config = await getRsshubConfig();
+  if (!config) return apiError("RSSHub is not configured on this server", 400);
+
+  const validation = await validateRsshubRoute(config, routePath);
+  if (!validation.ok) return apiError(`RSSHub route did not validate: ${validation.reason}`, 422);
+
+  return createFeedFromUrl(user, buildRsshubRouteUrl(config, routePath), {
+    name: allowedString(body?.name),
+    categoryId: allowedString(body?.categoryId),
+    icon: allowedString(body?.icon),
+    sync: body?.sync,
+    fallbackName: validation.title ?? undefined,
+  });
+}
+
+async function createChangedetectionFeed(user: ApiUser, request: Request) {
+  const body = await readJson<any>(request);
+  const url = allowedString(body?.url);
+  if (!url) return apiError("url is required", 400);
+  const urlError = validateFeedUrl(url);
+  if (urlError) return apiError(urlError, 400);
+
+  const config = await getChangedetectionConfig();
+  if (!config) return apiError("changedetection.io is not configured on this server", 400);
+
+  const watch = await createWatch(config, { url });
+  if (!watch.ok) return apiError(`Could not create changedetection.io watch: ${watch.reason}`, 422);
+
+  // A changedetection watch feed has no items until at least two checks have
+  // run, so we skip the initial sync (there is nothing to fetch yet) unless the
+  // caller explicitly asks for it.
+  return createFeedFromUrl(user, buildWatchFeedUrl(config, watch.uuid), {
+    name: allowedString(body?.name) || url,
+    categoryId: allowedString(body?.categoryId),
+    icon: allowedString(body?.icon),
+    sync: body?.sync === true,
+  });
 }
 
 async function getFeed(user: ApiUser, feedId: string) {
@@ -752,6 +816,8 @@ function openApiSpec(request: Request) {
       "/api/v1/saved-searches/{id}/share": { post: { summary: "Enable/disable public saved-search sharing" } },
       "/api/v1/opml": { get: { summary: "Export OPML" }, post: { summary: "Import OPML" } },
       "/api/v1/connectors": { get: { summary: "List server-configured connectors (RSSHub, changedetection.io) and whether each is available" } },
+      "/api/v1/connectors/rsshub/feeds": { post: { summary: "Create a feed from an RSSHub route path (validated against the configured RSSHub instance)" } },
+      "/api/v1/connectors/changedetection/feeds": { post: { summary: "Create a changedetection.io watch for a URL and add it as a feed (empty until the watch has run twice)" } },
       "/api/v1/openapi.json": { get: { summary: "OpenAPI document" } },
       "/api/v1/alerts": { get: { summary: "List keyword alerts" }, post: { summary: "Create keyword alert" } },
       "/api/v1/alerts/{id}": { get: { summary: "Get keyword alert" }, patch: { summary: "Update keyword alert" }, delete: { summary: "Delete keyword alert" } },
@@ -866,8 +932,11 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
       else res = apiError("Not found", 404);
     } else if (path[0] === "stats" && path.length === 1 && method === "GET") {
       res = await getStats(user);
-    } else if (path[0] === "connectors" && path.length === 1 && method === "GET") {
-      res = await listConnectors(user);
+    } else if (path[0] === "connectors") {
+      if (method === "GET" && path.length === 1) res = await listConnectors(user);
+      else if (method === "POST" && path.length === 3 && path[1] === "rsshub" && path[2] === "feeds") { const se = scopeError(user, "write"); if (se) res = se; else res = await createRsshubFeed(user, request); }
+      else if (method === "POST" && path.length === 3 && path[1] === "changedetection" && path[2] === "feeds") { const se = scopeError(user, "write"); if (se) res = se; else res = await createChangedetectionFeed(user, request); }
+      else res = apiError("Not found", 404);
     } else {
       res = apiError("Not found", 404);
     }

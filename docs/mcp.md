@@ -1,6 +1,6 @@
 # FeedFerret MCP
 
-> **v1.4.0** — 31 tools available. All tools are user-scoped (token owner only).
+> **v1.5.0** — 33 tools available. All tools are user-scoped (token owner only).
 
 FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models and agents can work directly with the reader.
 
@@ -39,6 +39,8 @@ FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models a
 | `feedferret.list_notifications` | read | List notifications ordered by newest first |
 | `feedferret.get_stats` | read | Get aggregate stats for the current user |
 | `feedferret.list_connectors` | read | List server-configured connectors (RSSHub, changedetection.io) |
+| `feedferret.create_rsshub_feed` | write | Create a feed from an RSSHub route path |
+| `feedferret.create_changedetection_feed` | write | Create a changedetection.io watch and add it as a feed |
 
 ```text
 POST /api/mcp
@@ -414,6 +416,27 @@ Antwort:
 { "rsshub": { "configured": true }, "changedetection": { "configured": false } }
 ```
 
+### `feedferret.create_rsshub_feed`
+
+Erstellt einen Feed aus einem RSSHub-**Route-Pfad**. Die Route wird vor dem
+Anlegen gegen die konfigurierte RSSHub-Instanz validiert. Erfordert den
+RSSHub-Connector.
+
+```json
+{ "routePath": "/github/trending/daily/any", "name": "GH Trending", "categoryId": "cat1", "sync": true }
+```
+
+### `feedferret.create_changedetection_feed`
+
+Erstellt einen changedetection.io-**Watch** für eine Seiten-URL und fügt ihn als
+Feed hinzu. Der Feed bleibt leer, bis changedetection die Seite mindestens
+zweimal geprüft hat — der Initial-Sync wird daher übersprungen, außer `sync`
+ist explizit `true`. Erfordert den changedetection.io-Connector.
+
+```json
+{ "url": "https://example.com/pricing", "name": "Example pricing", "categoryId": "cat1" }
+```
+
 ---
 
 ## Tool Call Beispiel
@@ -457,7 +480,7 @@ Antwortform:
 - MCP braucht denselben Bearer Token wie REST v1.
 - Tools schreiben nur im Kontext des Token-Benutzers.
 - Alle Datenbankabfragen erzwingen `userId` als Filterkriterium — kein Cross-User-Zugriff möglich.
-- Mutierende Tools: `fetch_full_text`, `update_article_state`, `add_feed`, `sync_feeds`, `create_label`, `mark_all_read`, `delete_feed`, `update_feed`, `create_category`, `update_category`, `delete_category`, `update_label`, `delete_label`, `label_article`, `batch_update_articles`, `create_saved_search`, `delete_saved_search`, `create_keyword_alert`, `update_keyword_alert`, `delete_keyword_alert`.
+- Mutierende Tools: `fetch_full_text`, `update_article_state`, `add_feed`, `sync_feeds`, `create_label`, `mark_all_read`, `delete_feed`, `update_feed`, `create_category`, `update_category`, `delete_category`, `update_label`, `delete_label`, `label_article`, `batch_update_articles`, `create_saved_search`, `delete_saved_search`, `create_keyword_alert`, `update_keyword_alert`, `delete_keyword_alert`, `create_rsshub_feed`, `create_changedetection_feed`.
 - `label_article` prüft zusätzlich, ob der Artikel dem Token-Inhaber gehört, bevor Labels geändert werden.
 - Das per-Feed HTTP-Basic-Auth-Passwort (`authPassword`) verlässt den Server nie: `list_feeds`, `get_feed`, `add_feed`, `update_feed` und `get_article` (eingebetteter Feed) entfernen es aus jeder Ausgabe. Es kann nur gesetzt, nie gelesen werden.
 - Für fremde Agenten empfiehlt sich ein dedizierter FeedFerret-Benutzer oder ein frisch rotierbarer Token.
