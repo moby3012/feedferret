@@ -430,7 +430,7 @@ body are changed; everything else is left untouched.
 
 | Field | Type | Description |
 |---|---|---|
-| `hideArticleImage` | boolean \| null | Hide the lead image in the reader |
+| `hideArticleImage` | boolean \| null | Hide the lead image **and** all inline images in the article body |
 | `hideFromAllFeeds` | boolean \| null | Exclude this feed from the "All feeds" view |
 | `readerFontSizeOverride` | string \| null | Reader font size for this feed |
 | `readerWidthOverride` | string \| null | Reader column width for this feed |

@@ -723,7 +723,7 @@ export function ArticleReader({
           {/* Article Body */}
           {article.content && article.content.trim().length > 0 ? (
             <div
-              className={`animate-fade-in-up animation-delay-200 article-content min-w-0 max-w-full overflow-hidden ${readerFontSizeClass[readerFontSize] ?? readerFontSizeClass.medium}`}
+              className={`animate-fade-in-up animation-delay-200 article-content min-w-0 max-w-full overflow-hidden ${hideArticleImage ? "hide-images " : ""}${readerFontSizeClass[readerFontSize] ?? readerFontSizeClass.medium}`}
               dangerouslySetInnerHTML={{ __html: renderedHtml }}
             />
           ) : (

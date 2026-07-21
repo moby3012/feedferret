@@ -21,6 +21,14 @@
   contain: layout;
 }
 
+/* Per-feed "hide images": when a feed's hideArticleImage is on, hide not just
+   the hero image (handled in the reader) but every inline image in the article
+   body too. Kept as a class toggle rather than stripping <img> from the stored
+   HTML so it's non-destructive and instantly reversible. */
+.article-content.hide-images :is(img, picture, figure, svg) {
+  display: none !important;
+}
+
 .article-content a,
 .article-content p,
 .article-content li,
