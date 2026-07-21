@@ -21,6 +21,32 @@ function textContent(data: unknown) {
   return { content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] };
 }
 
+// The per-feed HTTP Basic Auth password must never leave the server. Strip it
+// from any feed object (or array of feed objects) before returning it to a client.
+function stripFeedSecrets<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => stripFeedSecrets(item)) as T;
+  if (value && typeof value === "object" && "authPassword" in (value as Record<string, unknown>)) {
+    const { authPassword: _authPassword, ...rest } = value as Record<string, unknown>;
+    return rest as T;
+  }
+  return value;
+}
+
+// Feed config fields an MCP client may set via update_feed / add_feed.
+const FEED_WRITABLE_KEYS = [
+  "name", "icon", "categoryId", "updateFrequency", "retentionDays", "keepMinArticles", "priority",
+  // Fetch / HTTP options
+  "customUserAgent", "fetchTimeoutSecs", "sslVerify", "maxSizeKb",
+  // Per-feed HTTP auth (password is write-only: accepted, never serialized back)
+  "authType", "authUsername", "authPassword",
+  // Feed Intelligence / full-text extraction
+  "fullTextMode", "fullTextSelector", "fullTextRemoveSelectors", "fullTextConditions", "autoFetchFullText", "defaultContentFormat",
+  // Per-feed display overrides (null = inherit the user default)
+  "hideArticleImage", "hideFromAllFeeds", "readerFontSizeOverride", "readerWidthOverride", "openOriginalOverride",
+  // Muting
+  "autoMuted",
+] as const;
+
 const tools = [
   {
     name: "feedferret.search_articles",
@@ -41,8 +67,9 @@ const tools = [
   },
   { name: "feedferret.get_article", description: "Get one full article by ID.", inputSchema: { type: "object", properties: { articleId: { type: "string" } }, required: ["articleId"] } },
   { name: "feedferret.update_article_state", description: "Update read/starred/read-later state on an article.", inputSchema: { type: "object", properties: { articleId: { type: "string" }, isRead: { type: "boolean" }, isStarred: { type: "boolean" }, isReadLater: { type: "boolean" } }, required: ["articleId"] } },
-  { name: "feedferret.list_feeds", description: "List RSS feeds with category and unread counts.", inputSchema: { type: "object", properties: {} } },
-  { name: "feedferret.add_feed", description: "Add a new RSS/Atom feed and optionally sync it immediately.", inputSchema: { type: "object", properties: { url: { type: "string" }, name: { type: "string" }, categoryId: { type: "string" }, sync: { type: "boolean" } }, required: ["url"] } },
+  { name: "feedferret.list_feeds", description: "List RSS feeds with category, unread counts and full per-feed configuration (fetch/HTTP options, full-text settings, reader/display overrides, health). The auth password is never included.", inputSchema: { type: "object", properties: {} } },
+  { name: "feedferret.get_feed", description: "Get one feed by ID with its full configuration (fetch/HTTP options, full-text/Feed Intelligence settings, reader/display overrides, health, unread count). The auth password is never included.", inputSchema: { type: "object", properties: { feedId: { type: "string" } }, required: ["feedId"] } },
+  { name: "feedferret.add_feed", description: "Add a new RSS/Atom feed and optionally sync it immediately.", inputSchema: { type: "object", properties: { url: { type: "string" }, name: { type: "string" }, icon: { type: "string" }, categoryId: { type: "string" }, sync: { type: "boolean" } }, required: ["url"] } },
   { name: "feedferret.sync_feeds", description: "Sync all feeds or one feed when feedId is supplied.", inputSchema: { type: "object", properties: { feedId: { type: "string" } } } },
   { name: "feedferret.list_categories", description: "List feed categories/folders.", inputSchema: { type: "object", properties: {} } },
   { name: "feedferret.list_labels", description: "List article labels/tags.", inputSchema: { type: "object", properties: {} } },
@@ -50,7 +77,48 @@ const tools = [
   { name: "feedferret.mark_all_read", description: "Mark matching unread articles as read. Use with care.", inputSchema: { type: "object", properties: { query: { type: "string" }, feedId: { type: "string" }, categoryId: { type: "string" }, labelId: { type: "string" } } } },
   // Feed management
   { name: "feedferret.delete_feed", description: "Delete a feed and all its articles.", inputSchema: { type: "object", properties: { feedId: { type: "string" } }, required: ["feedId"] } },
-  { name: "feedferret.update_feed", description: "Update feed metadata and fetch/reader options.", inputSchema: { type: "object", properties: { feedId: { type: "string" }, name: { type: "string" }, categoryId: { type: ["string", "null"] }, updateFrequency: { type: ["number", "null"] }, retentionDays: { type: ["number", "null"] }, priority: { type: "string" } }, required: ["feedId"] } },
+  {
+    name: "feedferret.update_feed",
+    description: "Update a feed's metadata, fetch/HTTP options, full-text (Feed Intelligence) settings, per-feed reader/display overrides, and mute state. Only provided fields change. The auth password is write-only and is never returned.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        feedId: { type: "string" },
+        name: { type: "string" },
+        icon: { type: "string", description: "Emoji or short icon string." },
+        categoryId: { type: ["string", "null"], description: "Category/folder id, or null to remove." },
+        updateFrequency: { type: ["number", "null"], description: "Refresh interval in minutes; null = inherit default." },
+        retentionDays: { type: ["number", "null"] },
+        keepMinArticles: { type: ["number", "null"] },
+        priority: { type: "string", description: "e.g. 'low' | 'normal' | 'high'." },
+        // Fetch / HTTP options
+        customUserAgent: { type: ["string", "null"] },
+        fetchTimeoutSecs: { type: ["number", "null"] },
+        sslVerify: { type: "boolean" },
+        maxSizeKb: { type: ["number", "null"] },
+        // Per-feed HTTP auth (password write-only)
+        authType: { type: ["string", "null"], description: "e.g. 'none' | 'basic'." },
+        authUsername: { type: ["string", "null"] },
+        authPassword: { type: ["string", "null"], description: "Write-only; never returned in feed output." },
+        // Feed Intelligence / full-text extraction
+        fullTextMode: { type: ["string", "null"], enum: ["off", "auto", "selector", "ai", null], description: "How full text is extracted for this feed." },
+        fullTextSelector: { type: ["string", "null"], description: "CSS selector for the article body (selector mode)." },
+        fullTextRemoveSelectors: { type: ["string", "null"], description: "CSS selectors to strip from extracted content." },
+        fullTextConditions: { type: ["string", "null"] },
+        autoFetchFullText: { type: "boolean", description: "Fetch full text automatically on sync." },
+        defaultContentFormat: { type: ["string", "null"], enum: ["html", "markdown", null] },
+        // Per-feed display overrides (null = inherit the user default)
+        hideArticleImage: { type: ["boolean", "null"] },
+        hideFromAllFeeds: { type: ["boolean", "null"] },
+        readerFontSizeOverride: { type: ["string", "null"] },
+        readerWidthOverride: { type: ["string", "null"] },
+        openOriginalOverride: { type: ["boolean", "null"] },
+        // Muting
+        autoMuted: { type: "boolean", description: "Mute/unmute the feed (suppresses notifications & unread counting)." },
+      },
+      required: ["feedId"],
+    },
+  },
   // Category management
   { name: "feedferret.create_category", description: "Create a feed category/folder.", inputSchema: { type: "object", properties: { name: { type: "string" }, parentId: { type: "string" } }, required: ["name"] } },
   { name: "feedferret.update_category", description: "Update a feed category name, parent or order.", inputSchema: { type: "object", properties: { categoryId: { type: "string" }, name: { type: "string" }, parentId: { type: ["string", "null"] }, order: { type: "number" } }, required: ["categoryId"] } },
@@ -105,8 +173,11 @@ async function callTool(user: ApiUser, name: string, args: any) {
   switch (name) {
     case "feedferret.search_articles":
       return searchArticles(user, args);
-    case "feedferret.get_article":
-      return db.article.findFirst({ where: { id: String(args.articleId), userId: user.id }, include: { feed: true, labels: { include: { label: true } } } });
+    case "feedferret.get_article": {
+      const article = await db.article.findFirst({ where: { id: String(args.articleId), userId: user.id }, include: { feed: true, labels: { include: { label: true } } } });
+      if (article && (article as any).feed) (article as any).feed = stripFeedSecrets((article as any).feed);
+      return article;
+    }
     case "feedferret.update_article_state": {
       const data: any = {};
       if (typeof args.isRead === "boolean") { data.isRead = args.isRead; data.readAt = args.isRead ? new Date() : null; }
@@ -116,15 +187,20 @@ async function callTool(user: ApiUser, name: string, args: any) {
       return { updated: updated.count };
     }
     case "feedferret.list_feeds":
-      return db.feed.findMany({ where: { userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } }, orderBy: [{ order: "asc" }, { name: "asc" }] });
+      return stripFeedSecrets(await db.feed.findMany({ where: { userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } }, orderBy: [{ order: "asc" }, { name: "asc" }] }));
+    case "feedferret.get_feed": {
+      const feed = await db.feed.findFirst({ where: { id: String(args.feedId), userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } } });
+      if (!feed) throw new Error("Feed not found");
+      return stripFeedSecrets(feed);
+    }
     case "feedferret.add_feed": {
       const url = typeof args.url === "string" ? args.url.trim() : "";
       if (!url) throw new Error("url is required");
       const remoteFeed = await fetchFeedArticles({ url });
       const order = await db.feed.count({ where: { userId: user.id } });
-      const feed = await db.feed.create({ data: { userId: user.id, url, name: typeof args.name === "string" ? args.name : remoteFeed.title || url, categoryId: typeof args.categoryId === "string" ? args.categoryId : undefined, icon: "📰", order } });
+      const feed = await db.feed.create({ data: { userId: user.id, url, name: typeof args.name === "string" ? args.name : remoteFeed.title || url, categoryId: typeof args.categoryId === "string" ? args.categoryId : undefined, icon: typeof args.icon === "string" ? args.icon : "📰", order } });
       if (args.sync !== false) await syncFeed(user.id, feed.id).catch(() => null);
-      return feed;
+      return stripFeedSecrets(feed);
     }
     case "feedferret.sync_feeds":
       if (typeof args.feedId === "string") return syncFeed(user.id, args.feedId);
@@ -156,12 +232,13 @@ async function callTool(user: ApiUser, name: string, args: any) {
     }
     case "feedferret.update_feed": {
       const data: any = {};
-      for (const key of ["name", "categoryId", "updateFrequency", "retentionDays", "priority"] as const) {
+      for (const key of FEED_WRITABLE_KEYS) {
         if (args[key] !== undefined) data[key] = args[key];
       }
       const result = await db.feed.updateMany({ where: { id: String(args.feedId), userId: user.id }, data });
       if (!result.count) throw new Error("Feed not found");
-      return db.feed.findFirst({ where: { id: String(args.feedId), userId: user.id }, include: { category: true } });
+      const feed = await db.feed.findFirst({ where: { id: String(args.feedId), userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } } });
+      return stripFeedSecrets(feed);
     }
     // Category management
     case "feedferret.create_category": {
@@ -307,8 +384,8 @@ async function callTool(user: ApiUser, name: string, args: any) {
 export async function GET() {
   return NextResponse.json({
     name: "FeedFerret MCP",
-    version: "1.1.0",
-    tools: 28,
+    version: "1.2.0",
+    tools: tools.length,
     transport: "Streamable HTTP JSON-RPC",
     endpoint: "/api/mcp",
     auth: "Authorization: Bearer <FeedFerret API token>",

@@ -268,9 +268,66 @@ Response:
 
 ## Feeds
 
+A feed object exposes its full per-feed configuration so an automation (or an
+LLM via MCP) can inspect and reconfigure exactly how a feed is fetched,
+extracted, and displayed. The per-feed HTTP auth **password is never returned**
+(`authType` and `authUsername` are; `authPassword` is write-only).
+
+Feed object:
+
+```json
+{
+  "id": "clf1",
+  "url": "https://example.com/feed.xml",
+  "name": "Example Feed",
+  "icon": "📰",
+  "sourceType": "rss",
+  "htmlUrl": "https://example.com",
+  "description": "…",
+  "priority": "normal",
+  "categoryId": "cat1",
+  "category": { "id": "cat1", "name": "News" },
+  "order": 3,
+  "updateFrequency": 60,
+  "retentionDays": 90,
+  "keepMinArticles": 100,
+
+  "lastFetchedAt": "2026-07-21T08:00:00.000Z",
+  "lastStatus": "ok",
+  "lastError": null,
+  "consecutiveFailureCount": 0,
+  "autoMuted": false,
+
+  "customUserAgent": "MyBot/1.0",
+  "fetchTimeoutSecs": 15,
+  "sslVerify": true,
+  "maxSizeKb": 4096,
+  "authType": "basic",
+  "authUsername": "reader",
+
+  "fullTextMode": "selector",
+  "fullTextSelector": "article",
+  "fullTextRemoveSelectors": "nav,.ads",
+  "fullTextConditions": null,
+  "autoFetchFullText": true,
+  "defaultContentFormat": "markdown",
+
+  "hideArticleImage": null,
+  "hideFromAllFeeds": false,
+  "readerFontSizeOverride": null,
+  "readerWidthOverride": null,
+  "openOriginalOverride": null,
+
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-07-21T08:00:00.000Z",
+  "unreadCount": 12
+}
+```
+
 ### `GET /api/v1/feeds`
 
-Lists all feeds including category, status, and unread count.
+Lists all feeds including category, health/status, unread count, and the full
+per-feed configuration shown above.
 
 ### `POST /api/v1/feeds`
 
@@ -289,28 +346,77 @@ Body:
 
 ### `GET /api/v1/feeds/{id}`
 
-Loads a feed.
+Loads a single feed with its full configuration.
 
 ### `PATCH /api/v1/feeds/{id}`
 
-Updates feed metadata and fetch/reader options.
+Updates any subset of a feed's configuration. Only the fields present in the
+body are changed; everything else is left untouched.
 
-Key fields:
+**Metadata & scheduling**
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Display name |
+| `icon` | string | Emoji / short icon |
+| `categoryId` | string \| null | Category/folder; `null` to remove |
+| `priority` | string | `low` \| `normal` \| `high` |
+| `updateFrequency` | number \| null | Refresh interval in minutes; `null` inherits the default |
+| `retentionDays` | number \| null | Auto-clean articles older than N days |
+| `keepMinArticles` | number \| null | Always keep at least N articles |
+| `sourceType` | string | Feed source type |
+
+**Fetch / HTTP options**
+
+| Field | Type | Description |
+|---|---|---|
+| `customUserAgent` | string \| null | Override the User-Agent for this feed |
+| `fetchTimeoutSecs` | number \| null | Per-request timeout |
+| `sslVerify` | boolean | Verify TLS certificates |
+| `maxSizeKb` | number \| null | Max response size to download |
+| `authType` | string \| null | `none` \| `basic` |
+| `authUsername` | string \| null | HTTP Basic Auth username |
+| `authPassword` | string \| null | HTTP Basic Auth password — **write-only**, never returned |
+| `unicityCriteria`, `unicityCriteriaForced` | — | De-duplication controls |
+| `scraperConfig`, `httpOptions` | — | Advanced fetch/scraper config |
+
+**Full-text extraction (Feed Intelligence)**
+
+| Field | Type | Description |
+|---|---|---|
+| `fullTextMode` | string \| null | `off` \| `auto` \| `selector` \| `ai` |
+| `fullTextSelector` | string \| null | CSS selector for the article body (selector mode) |
+| `fullTextRemoveSelectors` | string \| null | CSS selectors to strip from extracted content |
+| `fullTextConditions` | string \| null | Conditional extraction rules |
+| `autoFetchFullText` | boolean | Fetch full text automatically on sync |
+| `defaultContentFormat` | string \| null | `html` \| `markdown` |
+
+**Per-feed reader / display overrides** (all nullable; `null` = inherit the user default)
+
+| Field | Type | Description |
+|---|---|---|
+| `hideArticleImage` | boolean \| null | Hide the lead image in the reader |
+| `hideFromAllFeeds` | boolean \| null | Exclude this feed from the "All feeds" view |
+| `readerFontSizeOverride` | string \| null | Reader font size for this feed |
+| `readerWidthOverride` | string \| null | Reader column width for this feed |
+| `openOriginalOverride` | boolean \| null | Open the original link instead of the reader |
+
+**Muting**
+
+| Field | Type | Description |
+|---|---|---|
+| `autoMuted` | boolean | Mute/unmute the feed (suppresses notifications & unread counting) |
+
+Example — switch a feed to selector-based markdown extraction and mute it:
 
 ```json
 {
-  "name": "New title",
-  "categoryId": "cat1",
-  "updateFrequency": 60,
-  "retentionDays": 90,
-  "keepMinArticles": 100,
-  "customUserAgent": "MyBot/1.0",
-  "fetchTimeoutSecs": 15,
-  "sslVerify": true,
-  "maxSizeKb": 4096,
-  "fullTextSelector": "article",
-  "fullTextRemoveSelectors": "nav,.ads",
-  "autoFetchFullText": true
+  "fullTextMode": "selector",
+  "fullTextSelector": "article.post-body",
+  "fullTextRemoveSelectors": "nav,.ads,.newsletter-signup",
+  "autoFetchFullText": true,
+  "defaultContentFormat": "markdown",
+  "autoMuted": true
 }
 ```
 
@@ -675,6 +781,17 @@ Shipped in v1.0: articles, feeds, categories, labels, saved searches, OPML, sync
 
 Shipped in v1.1: keyword alerts (`/api/v1/alerts`), auto-read rules (`/api/v1/rules`), notifications (`/api/v1/notifications`), aggregate stats (`/api/v1/stats`), batch article actions (`POST /api/v1/articles/batch`), fine-grained API token scopes (`read` / `write` / `admin`), 18 new MCP tools (28 total).
 
+Shipped in v1.2: **full per-feed configuration parity across REST and MCP.**
+`GET`/`PATCH /api/v1/feeds/{id}` and the MCP `update_feed` / `get_feed` tools now
+cover every per-feed setting — fetch/HTTP options, HTTP Basic Auth (password
+write-only), Feed Intelligence full-text extraction (`fullTextMode`, selectors,
+`autoFetchFullText`, `defaultContentFormat`), per-feed reader/display overrides,
+feed health (`lastStatus`, `lastError`, `consecutiveFailureCount`), and mute
+state (`autoMuted`). This makes everything an LLM needs to run and tune a feed
+controllable purely via the API/MCP surface. MCP tool total: 29.
+
 Planned — see [`docs/releases/backlog.md`](releases/backlog.md) for status:
 
+- Per-article full-text (re)fetch via REST/MCP
+- RSSHub / changedetection.io / page→feed connectors as first-class REST/MCP tools
 - Webhook management via REST v1 (currently UI/Server Actions only)
