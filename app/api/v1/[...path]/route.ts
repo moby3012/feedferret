@@ -14,6 +14,8 @@ import { validateFeedUrl, validateOpml } from "@/lib/validation";
 import { logger } from "@/lib/logger";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
+import { isRsshubConfigured } from "@/lib/rsshub";
+import { isChangedetectionConfigured } from "@/lib/changedetection";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
@@ -355,6 +357,20 @@ async function syncOneFeed(user: ApiUser, feedId: string) {
   if (!feed) return apiError("Feed not found", 404);
   const result = await syncFeed(user.id, feedId);
   return NextResponse.json(result);
+}
+
+async function listConnectors(_user: ApiUser) {
+  // Server-level integrations an admin may have configured. These gate the
+  // platform/monitor add-feed paths; exposing them lets an automation or LLM
+  // discover what connector-backed feeds it can create before trying.
+  const [rsshub, changedetection] = await Promise.all([
+    isRsshubConfigured(),
+    isChangedetectionConfigured(),
+  ]);
+  return NextResponse.json({
+    rsshub: { configured: rsshub },
+    changedetection: { configured: changedetection },
+  });
 }
 
 async function listCategories(user: ApiUser) {
@@ -735,6 +751,7 @@ function openApiSpec(request: Request) {
       "/api/v1/saved-searches/{id}": { patch: { summary: "Update saved search" }, delete: { summary: "Delete saved search" } },
       "/api/v1/saved-searches/{id}/share": { post: { summary: "Enable/disable public saved-search sharing" } },
       "/api/v1/opml": { get: { summary: "Export OPML" }, post: { summary: "Import OPML" } },
+      "/api/v1/connectors": { get: { summary: "List server-configured connectors (RSSHub, changedetection.io) and whether each is available" } },
       "/api/v1/openapi.json": { get: { summary: "OpenAPI document" } },
       "/api/v1/alerts": { get: { summary: "List keyword alerts" }, post: { summary: "Create keyword alert" } },
       "/api/v1/alerts/{id}": { get: { summary: "Get keyword alert" }, patch: { summary: "Update keyword alert" }, delete: { summary: "Delete keyword alert" } },
@@ -849,6 +866,8 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
       else res = apiError("Not found", 404);
     } else if (path[0] === "stats" && path.length === 1 && method === "GET") {
       res = await getStats(user);
+    } else if (path[0] === "connectors" && path.length === 1 && method === "GET") {
+      res = await listConnectors(user);
     } else {
       res = apiError("Not found", 404);
     }

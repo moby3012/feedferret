@@ -591,6 +591,23 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ---
 
+## Connectors
+
+### `GET /api/v1/connectors`
+
+Lists the server-level connectors an admin may have configured and whether each
+is currently available. Lets an automation or LLM discover which connector-backed
+feeds it can create before trying.
+
+```json
+{
+  "rsshub": { "configured": true },
+  "changedetection": { "configured": false }
+}
+```
+
+---
+
 ## Keyword Alerts
 
 ### `GET /api/v1/alerts`
@@ -830,7 +847,12 @@ Shipped in v1.3: **per-article full-text (re)fetch** via REST
 sharing the same extraction engine and improvement check as the UI's "Fetch
 full text" action. MCP tool total: 30.
 
+Shipped in v1.4: **connector discovery** — `GET /api/v1/connectors` and the MCP
+`list_connectors` tool report which server-level connectors (RSSHub,
+changedetection.io) are configured, and the per-feed keyword content filter
+(`filtersActionRead`) is now exposed across REST and MCP. MCP tool total: 31.
+
 Planned — see [`docs/releases/backlog.md`](releases/backlog.md) for status:
 
-- RSSHub / changedetection.io / page→feed connectors as first-class REST/MCP tools
+- Create connector-backed feeds via REST/MCP (RSSHub route → feed, changedetection watch → feed, web page → feed)
 - Webhook management via REST v1 (currently UI/Server Actions only)

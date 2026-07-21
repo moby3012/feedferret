@@ -9,6 +9,8 @@ import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
+import { isRsshubConfigured } from "@/lib/rsshub";
+import { isChangedetectionConfigured } from "@/lib/changedetection";
 
 function rpc(id: unknown, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result });
@@ -146,6 +148,8 @@ const tools = [
   // Notifications & stats
   { name: "feedferret.list_notifications", description: "List user notifications ordered by newest first.", inputSchema: { type: "object", properties: { isRead: { type: "boolean" }, limit: { type: "number", minimum: 1, maximum: 100 } } } },
   { name: "feedferret.get_stats", description: "Get aggregate stats for the current user.", inputSchema: { type: "object", properties: {} } },
+  // Connectors
+  { name: "feedferret.list_connectors", description: "List server-configured connectors (RSSHub, changedetection.io) and whether each is available. Useful to discover what connector-backed feeds can be created on this server.", inputSchema: { type: "object", properties: {} } },
 ];
 
 async function searchArticles(user: ApiUser, args: any) {
@@ -370,6 +374,10 @@ async function callTool(user: ApiUser, name: string, args: any) {
       const limit = Math.min(100, Math.max(1, clampInt(args.limit, 50, 1, 100)));
       return db.notification.findMany({ where, orderBy: { createdAt: "desc" }, take: limit });
     }
+    case "feedferret.list_connectors": {
+      const [rsshub, changedetection] = await Promise.all([isRsshubConfigured(), isChangedetectionConfigured()]);
+      return { rsshub: { configured: rsshub }, changedetection: { configured: changedetection } };
+    }
     case "feedferret.get_stats": {
       const [totalFeeds, totalArticles, unreadArticles, starredArticles, readLaterArticles, totalLabels, totalCategories, totalSavedSearches, totalKeywordAlerts, totalAutoReadRules, unreadNotifications] = await db.$transaction([
         db.feed.count({ where: { userId: user.id } }),
@@ -394,7 +402,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
 export async function GET() {
   return NextResponse.json({
     name: "FeedFerret MCP",
-    version: "1.3.0",
+    version: "1.4.0",
     tools: tools.length,
     transport: "Streamable HTTP JSON-RPC",
     endpoint: "/api/mcp",
