@@ -1,6 +1,6 @@
 # FeedFerret MCP
 
-> **v1.6.0** — 35 tools available. All tools are user-scoped (token owner only).
+> **v1.7.0** — 39 tools available. All tools are user-scoped (token owner only).
 
 FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models and agents can work directly with the reader.
 
@@ -36,6 +36,10 @@ FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models a
 | `feedferret.create_keyword_alert` | write | Create a keyword alert |
 | `feedferret.update_keyword_alert` | write | Update a keyword alert |
 | `feedferret.delete_keyword_alert` | write | Delete a keyword alert |
+| `feedferret.list_auto_read_rules` | read | List auto-read rules (webhook secrets redacted) |
+| `feedferret.create_auto_read_rule` | write | Create an auto-read rule (incl. webhook actions) |
+| `feedferret.update_auto_read_rule` | write | Update an auto-read rule |
+| `feedferret.delete_auto_read_rule` | write | Delete an auto-read rule |
 | `feedferret.list_notifications` | read | List notifications ordered by newest first |
 | `feedferret.get_stats` | read | Get aggregate stats for the current user |
 | `feedferret.list_connectors` | read | List server-configured connectors (RSSHub, changedetection.io) |
@@ -386,6 +390,53 @@ Löscht einen Keyword-Alert.
 { "alertId": "ka123" }
 ```
 
+### `feedferret.list_auto_read_rules`
+
+Listet Auto-Lese-Regeln. Webhook-Konfigurationen werden mit redigiertem Secret
+zurückgegeben (nur `hasSecret`-Flag).
+
+```json
+{}
+```
+
+### `feedferret.create_auto_read_rule`
+
+Erstellt eine Auto-Lese-Regel. `actions` darf `webhook_call:<index>`-Einträge
+enthalten, die beim Zutreffen den Webhook an diesem Index in `webhookConfigs`
+auslösen. Webhook-Secrets werden hier akzeptiert, aber nie zurückgegeben.
+
+```json
+{
+  "name": "Ping on AI news",
+  "query": "is:unread AI",
+  "actions": ["webhook_call:0"],
+  "webhookConfigs": [
+    { "url": "https://hooks.example.com/ff", "method": "POST", "bodyTemplate": "{\"title\":\"{{article_title}}\"}", "secret": "hmac-secret" }
+  ]
+}
+```
+
+`bodyTemplate` unterstützt `{{event}}`, `{{rule_name}}`, `{{article_title}}`,
+`{{article_link}}`, `{{feed_name}}` u. a. Ein gesetztes `secret` signiert jede
+Anfrage per `X-FeedFerret-Signature`-HMAC-Header.
+
+### `feedferret.update_auto_read_rule`
+
+Aktualisiert eine Auto-Lese-Regel (alle Felder optional). `webhookConfigs`
+ersetzt die gesamte Liste.
+
+```json
+{ "ruleId": "rule123", "enabled": false }
+```
+
+### `feedferret.delete_auto_read_rule`
+
+Löscht eine Auto-Lese-Regel.
+
+```json
+{ "ruleId": "rule123" }
+```
+
 ### `feedferret.list_notifications`
 
 Listet Benachrichtigungen, neueste zuerst.
@@ -501,7 +552,8 @@ Antwortform:
 - MCP braucht denselben Bearer Token wie REST v1.
 - Tools schreiben nur im Kontext des Token-Benutzers.
 - Alle Datenbankabfragen erzwingen `userId` als Filterkriterium — kein Cross-User-Zugriff möglich.
-- Mutierende Tools: `fetch_full_text`, `update_article_state`, `add_feed`, `sync_feeds`, `create_label`, `mark_all_read`, `delete_feed`, `update_feed`, `create_category`, `update_category`, `delete_category`, `update_label`, `delete_label`, `label_article`, `batch_update_articles`, `create_saved_search`, `delete_saved_search`, `create_keyword_alert`, `update_keyword_alert`, `delete_keyword_alert`, `create_rsshub_feed`, `create_changedetection_feed`, `create_page_feed`, `suggest_page_feed`.
+- Mutierende Tools: `fetch_full_text`, `update_article_state`, `add_feed`, `sync_feeds`, `create_label`, `mark_all_read`, `delete_feed`, `update_feed`, `create_category`, `update_category`, `delete_category`, `update_label`, `delete_label`, `label_article`, `batch_update_articles`, `create_saved_search`, `delete_saved_search`, `create_keyword_alert`, `update_keyword_alert`, `delete_keyword_alert`, `create_rsshub_feed`, `create_changedetection_feed`, `create_page_feed`, `suggest_page_feed`, `create_auto_read_rule`, `update_auto_read_rule`, `delete_auto_read_rule`.
+- Webhook-Signing-Secrets (in Auto-Lese-Regeln) sind write-only: `list_auto_read_rules`, `create_auto_read_rule` und `update_auto_read_rule` geben Webhooks nur mit `hasSecret`-Flag zurück, nie den Secret-Wert.
 - `label_article` prüft zusätzlich, ob der Artikel dem Token-Inhaber gehört, bevor Labels geändert werden.
 - Das per-Feed HTTP-Basic-Auth-Passwort (`authPassword`) verlässt den Server nie: `list_feeds`, `get_feed`, `add_feed`, `update_feed` und `get_article` (eingebetteter Feed) entfernen es aus jeder Ausgabe. Es kann nur gesetzt, nie gelesen werden.
 - Für fremde Agenten empfiehlt sich ein dedizierter FeedFerret-Benutzer oder ein frisch rotierbarer Token.

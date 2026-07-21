@@ -732,13 +732,53 @@ Lists all auto-read rules for the user (sorted by `order` ascending).
 { "name": "Mark newsletters read", "query": "feed:newsletter", "actions": ["mark_read"], "enabled": true }
 ```
 
+#### Webhook actions
+
+A rule can fire outbound webhooks when it matches. Add `webhook_call:<index>`
+entries to `actions` and supply the matching targets in `webhookConfigs`:
+
+```json
+{
+  "name": "Ping on AI news",
+  "query": "is:unread AI",
+  "actions": ["webhook_call:0"],
+  "webhookConfigs": [
+    {
+      "url": "https://hooks.example.com/feedferret",
+      "method": "POST",
+      "headers": { "X-Source": "feedferret" },
+      "bodyTemplate": "{\"title\":\"{{article_title}}\",\"link\":\"{{article_link}}\"}",
+      "secret": "your-hmac-signing-secret"
+    }
+  ]
+}
+```
+
+- `bodyTemplate` supports `{{event}}`, `{{rule_name}}`, `{{timestamp}}`, `{{article_id}}`, `{{article_title}}`, `{{article_link}}`, `{{feed_name}}` placeholders.
+- `secret`, when set, signs each request with an `X-FeedFerret-Signature: sha256=…` HMAC header.
+- **The secret is write-only.** Rule responses return a `webhooks` array where each entry has `hasSecret: true|false` in place of `secret` — the value itself is never sent back:
+
+```json
+{
+  "id": "rule1",
+  "name": "Ping on AI news",
+  "actions": "[\"webhook_call:0\"]",
+  "webhooks": [
+    { "url": "https://hooks.example.com/feedferret", "method": "POST", "headers": { "X-Source": "feedferret" }, "bodyTemplate": "…", "hasSecret": true }
+  ]
+}
+```
+
+A `webhook_call:<index>` action that points past the end of `webhookConfigs` is rejected with `400`.
+
 ### `GET /api/v1/rules/{id}`
 
-Loads an auto-read rule.
+Loads an auto-read rule (webhook secrets redacted).
 
 ### `PATCH /api/v1/rules/{id}`
 
-Updates an auto-read rule (all fields optional).
+Updates an auto-read rule (all fields optional). Passing `webhookConfigs`
+replaces the whole list.
 
 ```json
 { "enabled": false }
@@ -946,6 +986,12 @@ creates an HTML+XPath feed from a given or auto-detected config; MCP
 three connector paths (RSSHub, changedetection.io, page-feed) are fully
 controllable over REST and MCP. MCP tool total: 35.
 
-Planned — see [`docs/releases/backlog.md`](releases/backlog.md) for status:
+Shipped in v1.7: **webhook management** — auto-read rules' outbound webhooks are
+now settable over REST (`webhookConfigs` on `POST`/`PATCH /rules`) and via the new
+MCP `list/create/update/delete_auto_read_rule` tools. Webhook signing secrets are
+write-only: read surfaces return a redacted `webhooks` array with a `hasSecret`
+flag and never the secret value (this also closes a prior leak where the raw
+`webhookConfigs` JSON was returned). MCP tool total: 39.
 
-- Webhook management via REST v1 (currently UI/Server Actions only)
+The REST v1 + MCP surfaces now cover the full user-facing feature set. Further
+additions are tracked in [`docs/releases/backlog.md`](releases/backlog.md).

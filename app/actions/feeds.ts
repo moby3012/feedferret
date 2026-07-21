@@ -24,6 +24,7 @@ import {
 import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { fetchAndSuggestFeedCandidates, type SuggestedFieldConfig } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser } from "@/lib/page-feed-create";
+import { sanitizeWebhookConfigs, actionsReferenceConfigs } from "@/lib/webhooks";
 import { buildXPathArticles } from "@/lib/feed-fetcher";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { applyRetentionPoliciesForUser } from "@/lib/retention";
@@ -1441,52 +1442,6 @@ function filterActionsForTrigger(trigger: "article" | "feed_error", actions: str
     return actions.filter((a) => FEED_ERROR_ACTION_WHITELIST.has(a) || a.startsWith("webhook_call:"));
 }
 
-type IncomingWebhookConfig = {
-    url?: unknown;
-    method?: unknown;
-    headers?: unknown;
-    bodyTemplate?: unknown;
-    secret?: unknown;
-};
-
-function sanitizeWebhookConfigs(input: unknown): { configs: { url: string; method: string; headers?: Record<string, string>; bodyTemplate?: string; secret?: string }[]; valid: boolean } {
-    if (!Array.isArray(input)) return { configs: [], valid: true };
-    const out: { url: string; method: string; headers?: Record<string, string>; bodyTemplate?: string; secret?: string }[] = [];
-    for (const raw of input as IncomingWebhookConfig[]) {
-        if (!raw || typeof raw !== "object") continue;
-        const url = typeof raw.url === "string" ? raw.url.trim() : "";
-        if (!url) return { configs: [], valid: false };
-        try {
-            const parsed = new URL(url);
-            if (!["http:", "https:"].includes(parsed.protocol)) return { configs: [], valid: false };
-        } catch {
-            return { configs: [], valid: false };
-        }
-        const method = typeof raw.method === "string" && ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(raw.method.toUpperCase())
-            ? raw.method.toUpperCase()
-            : "POST";
-        const headers = raw.headers && typeof raw.headers === "object" && !Array.isArray(raw.headers)
-            ? Object.fromEntries(
-                Object.entries(raw.headers as Record<string, unknown>)
-                    .filter(([k, v]) => typeof k === "string" && typeof v === "string")
-                    .map(([k, v]) => [k.slice(0, 200), String(v).slice(0, 1000)]),
-            )
-            : undefined;
-        const bodyTemplate = typeof raw.bodyTemplate === "string" ? raw.bodyTemplate : undefined;
-        const secret = typeof raw.secret === "string" && raw.secret ? raw.secret : undefined;
-        out.push({ url, method, headers, bodyTemplate, secret });
-    }
-    return { configs: out, valid: true };
-}
-
-function actionsReferenceConfigs(actions: string[], configCount: number): boolean {
-    for (const a of actions) {
-        if (!a.startsWith("webhook_call:")) continue;
-        const idx = Number.parseInt(a.slice("webhook_call:".length), 10);
-        if (!Number.isFinite(idx) || idx < 0 || idx >= configCount) return false;
-    }
-    return true;
-}
 
 export async function createAutoReadRule(data: {
     name: string;

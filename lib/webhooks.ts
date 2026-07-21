@@ -73,6 +73,86 @@ export function getWebhookConfig(
   return configs[index] ?? null;
 }
 
+type IncomingWebhookConfig = {
+  url?: unknown;
+  method?: unknown;
+  headers?: unknown;
+  bodyTemplate?: unknown;
+  secret?: unknown;
+};
+
+export type SanitizedWebhookConfig = {
+  url: string;
+  method: string;
+  headers?: Record<string, string>;
+  bodyTemplate?: string;
+  secret?: string;
+};
+
+/**
+ * Validate and normalize an incoming array of webhook configs (from a Server
+ * Action, REST body, or MCP tool arg). Every entry needs a valid http(s) URL;
+ * `valid: false` means at least one entry was malformed and the whole set
+ * should be rejected. Shared by every write surface so validation is identical.
+ */
+export function sanitizeWebhookConfigs(input: unknown): { configs: SanitizedWebhookConfig[]; valid: boolean } {
+  if (!Array.isArray(input)) return { configs: [], valid: true };
+  const out: SanitizedWebhookConfig[] = [];
+  for (const raw of input as IncomingWebhookConfig[]) {
+    if (!raw || typeof raw !== "object") continue;
+    const url = typeof raw.url === "string" ? raw.url.trim() : "";
+    if (!url) return { configs: [], valid: false };
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol)) return { configs: [], valid: false };
+    } catch {
+      return { configs: [], valid: false };
+    }
+    const method = typeof raw.method === "string" && ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(raw.method.toUpperCase())
+      ? raw.method.toUpperCase()
+      : "POST";
+    const headers = raw.headers && typeof raw.headers === "object" && !Array.isArray(raw.headers)
+      ? Object.fromEntries(
+        Object.entries(raw.headers as Record<string, unknown>)
+          .filter(([k, v]) => typeof k === "string" && typeof v === "string")
+          .map(([k, v]) => [k.slice(0, 200), String(v).slice(0, 1000)]),
+      )
+      : undefined;
+    const bodyTemplate = typeof raw.bodyTemplate === "string" ? raw.bodyTemplate : undefined;
+    const secret = typeof raw.secret === "string" && raw.secret ? raw.secret : undefined;
+    out.push({ url, method, headers, bodyTemplate, secret });
+  }
+  return { configs: out, valid: true };
+}
+
+/** True if every `webhook_call:<index>` action points at an existing config. */
+export function actionsReferenceConfigs(actions: string[], configCount: number): boolean {
+  for (const a of actions) {
+    if (!a.startsWith("webhook_call:")) continue;
+    const idx = Number.parseInt(a.slice("webhook_call:".length), 10);
+    if (!Number.isFinite(idx) || idx < 0 || idx >= configCount) return false;
+  }
+  return true;
+}
+
+/**
+ * Parse a stored `webhookConfigs` JSON string for API/MCP output, replacing the
+ * secret with a boolean `hasSecret` flag. The HMAC signing secret must never
+ * leave the server, so read surfaces expose everything about a webhook except
+ * its secret value.
+ */
+export function redactWebhookConfigs(
+  raw: string | null | undefined,
+): Array<{ url: string; method: string; headers?: Record<string, string>; bodyTemplate?: string; hasSecret: boolean }> {
+  return parseConfigs(raw).map((c) => ({
+    url: c.url,
+    method: c.method ?? "POST",
+    headers: c.headers,
+    bodyTemplate: c.bodyTemplate,
+    hasSecret: Boolean(c.secret),
+  }));
+}
+
 const DEFAULT_BODY = JSON.stringify({
   event: "{{event}}",
   rule: "{{rule_name}}",

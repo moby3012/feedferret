@@ -18,6 +18,7 @@ import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshu
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
+import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactWebhookConfigs } from "@/lib/webhooks";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
@@ -698,9 +699,17 @@ async function deleteAlert(user: ApiUser, alertId: string) {
 
 // ─── Auto-Read Rules ──────────────────────────────────────────────────────────
 
+// Serialize an auto-read rule for API output. The stored `webhookConfigs` JSON
+// (which contains HMAC signing secrets) is never returned raw — it's replaced
+// by a `webhooks` array whose entries carry `hasSecret` instead of `secret`.
+function rulePayload(rule: any) {
+  const { webhookConfigs, ...rest } = rule;
+  return { ...rest, webhooks: redactWebhookConfigs(webhookConfigs) };
+}
+
 async function listRules(user: ApiUser) {
   const items = await db.autoReadRule.findMany({ where: { userId: user.id }, orderBy: { order: "asc" } });
-  return NextResponse.json({ items });
+  return NextResponse.json({ items: items.map(rulePayload) });
 }
 
 async function createRule(user: ApiUser, request: Request) {
@@ -709,6 +718,15 @@ async function createRule(user: ApiUser, request: Request) {
   const query = allowedString(body?.query);
   if (!name || !query) return apiError("name and query are required", 400);
   const actions = Array.isArray(body?.actions) ? body.actions.filter((a: unknown) => typeof a === "string") : null;
+
+  let webhookConfigsJson: string | null = null;
+  if (body?.webhookConfigs !== undefined) {
+    const { configs, valid } = sanitizeWebhookConfigs(body.webhookConfigs);
+    if (!valid) return apiError("Each webhook needs a valid http(s) URL", 400);
+    if (actions && !actionsReferenceConfigs(actions, configs.length)) return apiError("A webhook_call action references a missing webhook config", 400);
+    webhookConfigsJson = configs.length ? JSON.stringify(configs) : null;
+  }
+
   const order = await db.autoReadRule.count({ where: { userId: user.id } });
   const item = await db.autoReadRule.create({
     data: {
@@ -720,16 +738,17 @@ async function createRule(user: ApiUser, request: Request) {
       scope: allowedString(body?.scope) || null,
       trigger: allowedString(body?.trigger) || "article",
       enabled: typeof body?.enabled === "boolean" ? body.enabled : true,
+      webhookConfigs: webhookConfigsJson,
       order,
     },
   });
-  return NextResponse.json(item, { status: 201 });
+  return NextResponse.json(rulePayload(item), { status: 201 });
 }
 
 async function getRule(user: ApiUser, ruleId: string) {
   const item = await db.autoReadRule.findFirst({ where: { id: ruleId, userId: user.id } });
   if (!item) return apiError("Rule not found", 404);
-  return NextResponse.json(item);
+  return NextResponse.json(rulePayload(item));
 }
 
 async function patchRule(user: ApiUser, ruleId: string, request: Request) {
@@ -741,10 +760,17 @@ async function patchRule(user: ApiUser, ruleId: string, request: Request) {
   if (body.scope !== undefined) data.scope = allowedString(body.scope);
   if (body.trigger !== undefined) data.trigger = allowedString(body.trigger);
   if (body.enabled !== undefined) data.enabled = Boolean(body.enabled);
-  if (Array.isArray(body.actions)) data.actions = JSON.stringify(body.actions.filter((a: unknown) => typeof a === "string"));
+  const nextActions = Array.isArray(body.actions) ? body.actions.filter((a: unknown) => typeof a === "string") : null;
+  if (nextActions) data.actions = JSON.stringify(nextActions);
+  if (body.webhookConfigs !== undefined) {
+    const { configs, valid } = sanitizeWebhookConfigs(body.webhookConfigs);
+    if (!valid) return apiError("Each webhook needs a valid http(s) URL", 400);
+    if (nextActions && !actionsReferenceConfigs(nextActions, configs.length)) return apiError("A webhook_call action references a missing webhook config", 400);
+    data.webhookConfigs = configs.length ? JSON.stringify(configs) : null;
+  }
   const result = await db.autoReadRule.updateMany({ where: { id: ruleId, userId: user.id }, data });
   if (!result.count) return apiError("Rule not found", 404);
-  return NextResponse.json(await db.autoReadRule.findFirst({ where: { id: ruleId, userId: user.id } }));
+  return NextResponse.json(rulePayload(await db.autoReadRule.findFirst({ where: { id: ruleId, userId: user.id } })));
 }
 
 async function deleteRule(user: ApiUser, ruleId: string) {
@@ -872,8 +898,8 @@ function openApiSpec(request: Request) {
       "/api/v1/openapi.json": { get: { summary: "OpenAPI document" } },
       "/api/v1/alerts": { get: { summary: "List keyword alerts" }, post: { summary: "Create keyword alert" } },
       "/api/v1/alerts/{id}": { get: { summary: "Get keyword alert" }, patch: { summary: "Update keyword alert" }, delete: { summary: "Delete keyword alert" } },
-      "/api/v1/rules": { get: { summary: "List auto-read rules" }, post: { summary: "Create auto-read rule" } },
-      "/api/v1/rules/{id}": { get: { summary: "Get auto-read rule" }, patch: { summary: "Update auto-read rule" }, delete: { summary: "Delete auto-read rule" } },
+      "/api/v1/rules": { get: { summary: "List auto-read rules (webhook secrets redacted)" }, post: { summary: "Create auto-read rule, incl. webhook actions" } },
+      "/api/v1/rules/{id}": { get: { summary: "Get auto-read rule (webhook secrets redacted)" }, patch: { summary: "Update auto-read rule, incl. webhook actions" }, delete: { summary: "Delete auto-read rule" } },
       "/api/v1/notifications": { get: { summary: "List notifications" } },
       "/api/v1/notifications/mark-all-read": { post: { summary: "Mark all notifications as read" } },
       "/api/v1/notifications/{id}/read": { post: { summary: "Mark one notification as read" } },
