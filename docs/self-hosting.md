@@ -410,8 +410,12 @@ Point FeedFerret's RSSHub base URL at `http://rsshub:3000/` (the Docker Compose 
 
 Turns *any* page — including JS-rendered ones, since [changedetection.io](https://changedetection.io) does its own browser rendering — into a feed of its changes over time. Configure the base URL and **two separate secrets** in **Server Management → Sync → changedetection.io connector**:
 
-- **API key** — from changedetection.io's own Settings → API tab. Used to create/manage watches.
-- **RSS access token** — from Settings → General → RSS Access Token in the *same* instance. This is a different value from the API key and is required to read a watch's RSS output; the API key alone will not work there.
+- **API key** — from changedetection.io's own Settings → **API** tab (shown next to a "Regenerate API key" button). Used to create/manage watches via the `x-api-key` header.
+- **RSS access token** — a **different**, auto-generated secret required to read a watch's RSS output (the API key alone does not work there). **There is no copyable field for it anywhere in Settings** — changedetection.io only embeds it in a hidden RSS-autodiscovery `<link>` tag in every page's HTML `<head>`. Grab it with either:
+  - `curl -s https://your-changedetection-host/ | grep -o 'token=[a-f0-9]*' | head -1` (from a shell that can reach it), or
+  - "View Page Source" on changedetection's main watch-list page (not Settings) in a desktop browser, then search for `token=` in the `<head>`.
+
+  The same token also appears in the URL of any individual watch's own RSS link once you've created one, if you'd rather copy it from there.
 
 Once configured, users get a "Monitor page" tab in the Add Feed dialog. **A freshly created watch's feed has no items until changedetection.io has checked the page at least twice** — this is expected, not a bug; the feed fills in on its own once enough history exists.
 
@@ -449,5 +453,6 @@ Point FeedFerret's changedetection.io base URL at `http://changedetection:3000/`
 - **Reverse proxy (Nginx, Caddy, Traefik):** [`docs/reverse-proxy.md`](./reverse-proxy.md)
 - **OAuth, OIDC, and email providers in detail:** [`docs/self-hosting-auth-email.md`](./self-hosting-auth-email.md)
 - **REST API and Google Reader API:** [`docs/api.md`](./api.md)
+- **Example feeds/pages to smoke-test each fetch path (incl. connectors):** [`docs/testing-feeds.md`](./testing-feeds.md)
 - **Database details:** [`docs/database.md`](./database.md)
 - **Security:** [`docs/security.md`](./security.md)
