@@ -1,6 +1,6 @@
 # FeedFerret — Marketing & SaaS Landing Page Brief
 
-> Zuletzt aktualisiert: 2026-07-20 (Nachmittag) — großes Update seit v1.1.0 (2026-05-21): komplett neue "Feed Intelligence"-Produktsäule (jede Webseite wird zum Feed, KI richtet Feeds automatisch ein, KI-Volltext-Fallback, KI-Auto-Tagging), Anti-Bot/Heavy-Fetch-Stack, zwei optionale Connectoren (RSSHub für Plattform-Feeds, changedetection.io für "jede Seite als Änderungs-Feed"), "Send to"-Exportziele (Obsidian, Wallabag), Feed-Auto-Mute mit Benachrichtigung, PWA-Share-Target ("Share → FeedFerret" direkt aus dem OS-Share-Sheet), zweite Sicherheits-Härtungsrunde, indizierte Volltextsuche, zwei komplette UX/A11y-Audit-Runden. Noch nicht als nummerierte Version veröffentlicht (siehe `CHANGELOG.md` → „Unreleased" für den vollständigen PR-Verlauf) — dieses Dokument beschreibt den tatsächlichen Code-Stand, nicht den Release-Stand.  
+> Zuletzt aktualisiert: 2026-07-21 — großes Update seit v1.1.0 (2026-05-21): komplett neue "Feed Intelligence"-Produktsäule (jede Webseite wird zum Feed, KI richtet Feeds automatisch ein, KI-Volltext-Fallback, KI-Auto-Tagging), Anti-Bot/Heavy-Fetch-Stack, zwei optionale Connectoren (RSSHub für Plattform-Feeds, changedetection.io für "jede Seite als Änderungs-Feed"), "Send to"-Exportziele (Obsidian, Wallabag), Feed-Auto-Mute mit Benachrichtigung, PWA-Share-Target ("Share → FeedFerret" direkt aus dem OS-Share-Sheet), zweite Sicherheits-Härtungsrunde, indizierte Volltextsuche, zwei komplette UX/A11y-Audit-Runden, **eine vollständige Automation-Runde: die REST API v1 + der MCP-Endpoint (jetzt 39 Tools) decken nun die komplette App-Funktionalität ab — inkl. voller Per-Feed-Konfiguration, Volltext-Nachladen, Connector-Feeds (RSSHub/changedetection/Seite→Feed) und Webhook-Verwaltung; kein Feature ist mehr UI-only.** Noch nicht als nummerierte Version veröffentlicht (siehe `CHANGELOG.md` → „Unreleased" für den vollständigen PR-Verlauf) — dieses Dokument beschreibt den tatsächlichen Code-Stand, nicht den Release-Stand.  
 > Zweck: Vorlage für die OSS-Landing Page, ProductHunt-Launch, Vergleichsseiten und Pressematerial.  
 > Status: **Bereit für ein großes Feature-Update der Landing Page — die "Feed Intelligence"-Säule ist aktuell komplett unkommuniziert und ist aus Marketing-Sicht das stärkste neue Alleinstellungsmerkmal.**
 >
@@ -61,7 +61,7 @@ FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte u
 | **KI komplett optional, privat und BYOK** ⭐ | Zusammenfassungen, Feed-Einrichtung, Volltext-Fallback, Auto-Tagging — alles standardmäßig **aus**, alles mit *deinem eigenen* Schlüssel (OpenAI, Anthropic, Gemini, OpenRouter oder komplett lokal via Ollama), nichts davon ist zum Betrieb nötig. Kein Lock-in, Schlüssel verschlüsselt gespeichert. |
 | **Anti-Bot & Volltext-Stack — alles optional/selbst gehostet** | Vier gestaffelte, jeweils einzeln abschaltbare Ebenen (Browser-Fingerprinting, 1000+ vorgefertigte Seiten-Regeln, optionaler eigener Render-Sidecar, optionaler BYOK-Hosted-Fetch) — nichts davon sendet Daten irgendwohin, wenn es nicht ausdrücklich aktiviert wird. |
 | **Native Client Kompatibilität** | Google Reader API → Reeder, NetNewsWire, FeedMe, ReadKit |
-| **Automation-First** | Webhooks (HMAC), REST API v1, MCP für AI-Agenten, n8n-Beispiele, zwei optionale Connectoren (RSSHub, changedetection.io) |
+| **Automation-First — vollständig per API & LLM steuerbar** ⭐ | Alles, was die UI kann, geht auch per REST API v1 und per LLM über MCP (39 Tools) — inkl. kompletter Per-Feed-Konfiguration, Volltext-Nachladen, Connector-Feeds (RSSHub/changedetection/Seite→Feed anlegen) und Webhook-Verwaltung. Dazu HMAC-Webhooks, n8n-Beispiele, zwei optionale Connectoren. Kein Feature ist UI-only. |
 | **"Send to" & Share-Target** | Artikel per Klick an Obsidian oder Wallabag schicken, oder per OS-Share-Sheet direkt eine Seite an FeedFerret teilen — beides optional |
 | **Flexible Auth** | Local, OAuth (Google/GitHub), Authelia OIDC, optionales TOTP 2FA |
 | **Setup in 5 Minuten** | `docker compose up` → Setup-Wizard → fertig, komplett ohne jede optionale Integration lauffähig |
@@ -121,6 +121,9 @@ FeedFerret ist gebaut für den Homelab-Nutzer, Teams, Datenschutzinteressierte u
 - SSL-Verifikation konfigurierbar
 - Content-Größen-Limit
 - Update-Frequenz pro Feed überschreiben
+- **Fetch-Transparenz-Panel:** zeigt pro Feed direkt in den Einstellungen, *wie* er abgerufen wird (Quelle/Methode, Volltextmodus) und seinen Health-Status (letzter Abruf, letzter Fehler, Fehlversuche in Folge)
+- **Content-Filter pro Feed:** Stichwörter, die passende neue Artikel automatisch als gelesen markieren ("bestimmte Wörter filtern")
+- **Bilder ausblenden pro Feed:** Titelbild *und* alle Inline-Bilder eines Feeds im Reader unterdrücken
 
 ### 3.5 Suche & Saved Searches
 
@@ -257,6 +260,7 @@ Das größte neue Feature-Paket. Kombiniert eine mehrstufige Extraktions-Engine 
 - Retry-Strategie: 5 Versuche mit exponential Backoff (0, 5min, 30min, 2h, 8h)
 - Feed-Filter: Webhooks nur für bestimmte Feeds
 - Delivery-Log pro Webhook
+- **Komplett per REST API und MCP verwaltbar** (an Auto-Read-Rules gebunden) — das Signing-Secret ist dabei write-only und wird nie zurückgegeben
 
 ### 3.12 Duplicate Detection
 
@@ -307,12 +311,15 @@ Das größte neue Feature-Paket. Kombiniert eine mehrstufige Extraktions-Engine 
 
 ### 3.16 REST API v1 + MCP + Google Reader API
 
+> **Leitprinzip: alles, was die Web-Oberfläche kann, ist auch per REST API und per LLM über MCP steuerbar.** Kein Feature ist UI-only.
+
 **REST API v1 (`/api/v1/*`):**
-- Artikel: Suchen, lesen, Status ändern, Bulk-Mark-as-Read
-- Feeds: Listen, hinzufügen, bearbeiten, löschen, synchronisieren
-- Kategorien: Listen, erstellen, bearbeiten, löschen
-- Labels: Listen, erstellen, bearbeiten, löschen
-- Saved Searches: Listen, erstellen, bearbeiten, löschen, teilen
+- Artikel: Suchen, lesen, Status ändern, Bulk-Mark-as-Read, **Volltext pro Artikel nachladen** (`/articles/{id}/fetch-full-text`)
+- Feeds: Listen, hinzufügen, bearbeiten, löschen, synchronisieren — mit **voller Per-Feed-Konfiguration** (Fetch-/HTTP-Optionen, HTTP-Basic-Auth, Feed-Intelligence-Volltextmodus & -Selektoren, Reader-/Anzeige-Overrides, Health-Status, Mute, **Keyword-Content-Filter**)
+- **Connectoren:** verfügbare Connectoren abfragen (`/connectors`) und Connector-Feeds anlegen — RSSHub-Route → Feed, changedetection.io-Watch → Feed, **beliebige Webseite → Feed** (Seite→Feed-Baukasten, inkl. Auto-Vorschlag)
+- Kategorien, Labels, Saved Searches (inkl. Teilen): Listen, erstellen, bearbeiten, löschen
+- **Auto-Read-Rules inkl. ausgehender Webhooks** (Konfiguration per API; Signing-Secret ist write-only)
+- Keyword-Alerts, Notifications, aggregierte Stats
 - OPML: Exportieren, importieren
 - Sync: Alle Feeds synchronisieren
 - OpenAPI Schema unter `/api/v1/openapi.json`
@@ -320,7 +327,9 @@ Das größte neue Feature-Paket. Kombiniert eine mehrstufige Extraktions-Engine 
 
 **MCP Endpoint (`/api/mcp`):**
 - JSON-RPC 2.0 über HTTP (Streamable HTTP)
-- 28 Tools: vollständige CRUD-Kontrolle über Artikel, Feeds, Kategorien, Labels, Saved Searches, Alerts, Rules, Notifications, Stats
+- **39 Tools** — vollständige Kontrolle über Artikel (inkl. Volltext-Nachladen), Feeds (inkl. kompletter Per-Feed-Konfiguration & Keyword-Filter), **Connectoren (RSSHub / changedetection.io / Seite→Feed — entdecken *und* anlegen)**, Kategorien, Labels, Saved Searches, Keyword-Alerts, **Auto-Read-Rules inkl. Webhooks**, Notifications, Stats
+- Ein LLM-Agent kann damit einen Feed komplett anlegen, einrichten und feinjustieren — bis hin zum Bau eines Feeds aus einer Webseite, die selbst gar keinen RSS-Feed hat
+- Sensible Secrets (Per-Feed-Auth-Passwort, Webhook-Signing-Secret) sind durchgängig **write-only** — sie werden akzeptiert, aber nie zurückgegeben
 - Für AI-Agenten, Claude, GPT, LangChain etc. — **die Nutzung von MCP setzt keinerlei eigene KI-Konfiguration in FeedFerret voraus**, das Agent-System auf der anderen Seite bringt seine eigene KI mit
 
 **Google Reader API:**
@@ -454,7 +463,7 @@ Browser Push (VAPID) · E-Mail · Telegram · Gotify · ntfy · Outbound-Webhook
 |---|---|
 | Google Reader API | Reeder, NetNewsWire, FeedMe, ReadKit — jeder Google-Reader-kompatible Client |
 | REST API v1 | Eigene Skripte, Automatisierungen, mobile Zweit-Clients |
-| MCP-Endpoint (28 Tools) | AI-Agenten — Claude, GPT, LangChain, jedes MCP-fähige Tool |
+| MCP-Endpoint (39 Tools) | AI-Agenten — Claude, GPT, LangChain, jedes MCP-fähige Tool; deckt die komplette App-Funktionalität ab, inkl. Connector-Feeds & Webhook-Verwaltung |
 | Outbound Webhooks | n8n, Zapier, eigene Endpunkte |
 | OPML Import/Export | Migration von/zu jedem anderen RSS-Reader |
 | PWA Share-Target | "Share → FeedFerret" aus jeder installierten App direkt ins OS-Share-Sheet |
@@ -565,7 +574,7 @@ Feature-Cards (je mit Icon + kurzer Beschreibung):
 - **Smart Rules:** Auto-mark, star, label — with preview before enabling
 - **Keyword Alerts:** Notify via push, email, or webhook when articles match
 - **Advanced Search:** 15+ search tokens, save and share as RSS
-- **REST API + MCP:** Automate via n8n, connect AI agents
+- **REST API + MCP (39 tools):** every feature the UI has is drivable via API and by LLM agents — full per-feed config, connector-built feeds, webhook management; automate via n8n, connect AI agents
 - **Outbound Webhooks:** HMAC-signed, with retry logic
 - **AI Summaries (optional):** BYOK — OpenAI, Anthropic, Gemini, or fully local via Ollama
 - **AI Auto-Tagging (optional):** propose labels on sync, reuses your existing ones
@@ -709,6 +718,21 @@ Top-Fragen (Entwurf, erweitert):
 | **Feed-Auto-Mute** | Dauerhaft fehlschlagende Feeds werden automatisch stummgeschaltet statt endlos weiterzuversuchen | Nein — Kern-Feature (Schwelle konfigurierbar/abschaltbar) |
 | **PWA Share-Target** | "Share → FeedFerret" aus jeder App — landet direkt im Seite→Feed-Baukasten | Nein — Kern-Feature der PWA |
 
+### Vollständige API-/MCP-Abdeckung (NEU, 2026-07-21)
+
+Die Automatisierungs-Schnittstellen decken jetzt die **komplette** App-Funktionalität ab — Leitprinzip: *alles, was die UI kann, geht auch per REST API und per LLM über MCP.* MCP: **28 → 39 Tools**, REST API v1: **v1.0 → v1.7**.
+
+| Feature | Botschaft | Optional? |
+|---|---|---|
+| **Volle Per-Feed-Konfiguration per API** | Fetch-/HTTP-Optionen, Auth, Feed-Intelligence-Volltextmodus, Reader-/Anzeige-Overrides, Health, Mute — alles per REST/MCP les- und schreibbar | Nein — Kern-API |
+| **Per-Artikel-Volltext-Nachladen per API** | Denselben "Volltext holen"-Effekt wie im Reader per REST/MCP auslösen | Nein — Kern-API |
+| **Connector-Feeds per API anlegen** | RSSHub-Route → Feed, changedetection-Watch → Feed, **beliebige Webseite → Feed** — entdecken *und* anlegen per REST/MCP | Connectoren selbst optional |
+| **Keyword-Content-Filter pro Feed** | Bestimmte Wörter filtern (passende neue Artikel automatisch als gelesen markieren) — auch per API konfigurierbar | Nein — Kern-Feature |
+| **Webhook-Verwaltung per API/MCP** | Ausgehende Webhooks an Auto-Read-Rules per API konfigurieren; Signing-Secret write-only | Nein — Kern-API |
+| **Secret-Redaction** | Per-Feed-Auth-Passwort und Webhook-Secret sind durchgängig write-only — nie in API/MCP-Ausgaben | Sicherheits-Härtung |
+
+**Landing-Page-Botschaft:** *"Fully controllable by API and by AI agents — every feature, no exceptions."* Starkes Signal für die Automation-First-Zielgruppe (Homelab, n8n, LLM-Workflows) und für HN/r/selfhosted.
+
 ### Sicherheit & Robustheit (zweite Härtungsrunde)
 
 | Fix | Details |
@@ -731,7 +755,7 @@ Top-Fragen (Entwurf, erweitert):
 | Feature | Botschaft |
 |---|---|
 | **DE + EN vollständig übersetzt** | Alle Strings in Deutsch und Englisch |
-| **REST API v1 + 28 MCP-Tools** | Vollständige CRUD-Kontrolle für Automatisierung und AI-Agenten |
+| **REST API v1 + 39 MCP-Tools** | Vollständige, UI-gleiche Kontrolle für Automatisierung und AI-Agenten — jedes Feature per API/LLM steuerbar |
 | **OR-Operator in Suche/Rules** | `nextcloud OR tailscale` |
 | **Outbound Webhooks** | HMAC-signiert, mit Retry-Logik |
 | **Keyword Alerts + Telegram/Gotify/ntfy** | Homelab-native Notification-Kanäle |
