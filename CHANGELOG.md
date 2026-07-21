@@ -27,6 +27,10 @@ Work merged since v1.1.1 (PRs #88–#208), targeting the next release. The headl
 
 - A "How this feed is fetched" panel at the top of the feed editor's Fetch tab: the retrieval method (RSS/Atom, JSON Feed, or named custom scraper) and full-text summary (off/auto/selector/AI) derived live from the form, plus health from the last sync — status dot + label, last-checked relative time, source URL, consecutive-failure count, the last error, and a muted note.
 
+### Added (2026-07-21 — changedetection.io RSS token now auto-detected)
+
+- The changedetection.io connector's RSS access token (a secret changedetection.io never shows as a copyable field anywhere in its own Settings UI) previously had to be dug out manually via curl or "View Page Source". Clicking **"Test connection"** in **Server Management → Sync** now also fetches the instance's homepage in the background and auto-extracts the token from the hidden RSS-autodiscovery `<link>` tag changedetection.io embeds in every page's `<head>`, filling it into the form for review before saving. Discovery failure (e.g. password-protection enabled on the instance) never fails the connection test itself — it surfaces a toast with the reason and points back to the manual fallback. New `discoverRssToken()` in `lib/changedetection.ts` (unit-tested); `docs/self-hosting.md` and the in-app hint text updated to describe auto-detection as the primary method.
+
 ### Changed (2026-07-21 — per-feed image hiding now covers inline images)
 
 - The per-feed "Hide images" toggle (`hideArticleImage`) previously hid only the hero image; it now also hides every inline image in the article body (non-destructive CSS class toggle — instantly reversible, no HTML mutation). Toggle relabeled and re-described (en/de).

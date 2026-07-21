@@ -461,7 +461,12 @@ export async function testChangedetectionConnection(config: { baseUrl?: string; 
   if (!result.ok) {
     return { success: false as const, error: result.reason };
   }
-  return { success: true as const, version: result.version };
+  return {
+    success: true as const,
+    version: result.version,
+    discoveredRssToken: result.discoveredRssToken,
+    rssTokenDiscoveryError: result.rssTokenDiscoveryError,
+  };
 }
 
 export async function getPushDiagnostics() {

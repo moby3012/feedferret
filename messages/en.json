@@ -1420,7 +1420,7 @@
       "changedetectionBaseUrl": "changedetection.io base URL",
       "changedetectionApiKey": "API key",
       "changedetectionRssToken": "RSS access token",
-      "changedetectionHint": "Two different secrets are required: the API key is under Settings → API in your changedetection.io instance; the RSS access token is a separate value under Settings → General → RSS Access Token — changedetection.io does not accept the API key for reading its RSS output. A freshly created watch's feed has no items until changedetection.io has checked the page at least twice, so a new \"monitor this page\" feed can look empty for a while — this is expected, not an error.",
+      "changedetectionHint": "Two different secrets are required: the API key is under Settings → API in your changedetection.io instance; the RSS access token is a separate value that changedetection.io never shows as a copyable field — click \"Test connection\" below with the API key filled in and it will be auto-detected and filled in for you. A freshly created watch's feed has no items until changedetection.io has checked the page at least twice, so a new \"monitor this page\" feed can look empty for a while — this is expected, not an error.",
       "changedetectionTest": "Test",
       "save": "Save"
     },
@@ -1491,6 +1491,8 @@
       "rsshubTestFailed": "RSSHub test failed: {error}",
       "changedetectionTestOk": "changedetection.io OK — version {version}",
       "changedetectionTestFailed": "changedetection.io test failed: {error}",
+      "changedetectionRssTokenDetected": "RSS access token auto-detected and filled in",
+      "changedetectionRssTokenNotDetected": "Could not auto-detect the RSS access token: {error}",
       "copiedToClipboard": "Copied to clipboard",
       "userRoleUpdated": "Updated {email} to {role}",
       "failedToUpdateUserRole": "Failed to update user role",

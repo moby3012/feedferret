@@ -1420,7 +1420,7 @@
       "changedetectionBaseUrl": "changedetection.io-Basis-URL",
       "changedetectionApiKey": "API-Schlüssel",
       "changedetectionRssToken": "RSS-Zugriffs-Token",
-      "changedetectionHint": "Zwei unterschiedliche Geheimnisse werden benötigt: der API-Schlüssel steht unter Einstellungen → API in deiner changedetection.io-Instanz; das RSS-Zugriffs-Token ist ein separater Wert unter Einstellungen → Allgemein → RSS-Zugriffs-Token — changedetection.io akzeptiert den API-Schlüssel nicht zum Lesen seines RSS-Outputs. Der Feed eines frisch angelegten Watches hat keine Einträge, bis changedetection.io die Seite mindestens zweimal geprüft hat — ein neuer „Seite beobachten“-Feed kann also eine Weile leer aussehen, das ist normal, kein Fehler.",
+      "changedetectionHint": "Zwei unterschiedliche Geheimnisse werden benötigt: der API-Schlüssel steht unter Einstellungen → API in deiner changedetection.io-Instanz; das RSS-Zugriffs-Token ist ein separater Wert, den changedetection.io nirgends als kopierbares Feld anzeigt — klicke unten mit ausgefülltem API-Schlüssel auf „Testen“, dann wird es automatisch erkannt und eingetragen. Der Feed eines frisch angelegten Watches hat keine Einträge, bis changedetection.io die Seite mindestens zweimal geprüft hat — ein neuer „Seite beobachten“-Feed kann also eine Weile leer aussehen, das ist normal, kein Fehler.",
       "changedetectionTest": "Testen",
       "save": "Speichern"
     },
@@ -1491,6 +1491,8 @@
       "rsshubTestFailed": "RSSHub-Test fehlgeschlagen: {error}",
       "changedetectionTestOk": "changedetection.io OK – Version {version}",
       "changedetectionTestFailed": "changedetection.io-Test fehlgeschlagen: {error}",
+      "changedetectionRssTokenDetected": "RSS-Zugriffs-Token automatisch erkannt und eingetragen",
+      "changedetectionRssTokenNotDetected": "RSS-Zugriffs-Token konnte nicht automatisch erkannt werden: {error}",
       "copiedToClipboard": "In die Zwischenablage kopiert",
       "userRoleUpdated": "{email} auf {role} aktualisiert",
       "failedToUpdateUserRole": "Benutzerrolle konnte nicht aktualisiert werden",
