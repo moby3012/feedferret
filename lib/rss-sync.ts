@@ -2,6 +2,7 @@ import { db } from "./db";
 import { applyAutoReadRules } from "./auto-read-rules";
 import { applyKeywordAlerts } from "./keyword-alerts";
 import { queueNewArticleNotifications } from "./notifications";
+import { applyFeedReadFilter } from "./feed-content-filter";
 import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
@@ -373,16 +374,31 @@ export async function syncFeed(userId: string, feedId: string) {
             }
         }
 
+        // Per-feed keyword content filter: mark matching new articles read on
+        // arrival and drop them from every downstream new-article step so a
+        // muted keyword produces no summary, tags, alerts, or notifications.
+        let newArticleIds = createdArticleIds;
         if (createdArticleIds.length > 0) {
-            await autoSummarizeNewArticles(userId, createdArticleIds);
-            await autoTagNewArticles(userId, createdArticleIds);
+            const filteredOut = await applyFeedReadFilter(userId, feed, createdArticleIds).catch((e) => {
+                logger.error("[rss-sync] content filter failed:", e);
+                return [] as string[];
+            });
+            if (filteredOut.length > 0) {
+                const filteredSet = new Set(filteredOut);
+                newArticleIds = createdArticleIds.filter((id) => !filteredSet.has(id));
+            }
         }
 
-        if (createdArticleIds.length > 0) {
-            await applyKeywordAlerts(userId, createdArticleIds).catch((e) =>
+        if (newArticleIds.length > 0) {
+            await autoSummarizeNewArticles(userId, newArticleIds);
+            await autoTagNewArticles(userId, newArticleIds);
+        }
+
+        if (newArticleIds.length > 0) {
+            await applyKeywordAlerts(userId, newArticleIds).catch((e) =>
                 logger.error("[rss-sync] keyword alerts failed:", e),
             );
-            await queueNewArticleNotifications(userId, createdArticleIds).catch((e) =>
+            await queueNewArticleNotifications(userId, newArticleIds).catch((e) =>
                 logger.error("[rss-sync] push notification queue failed:", e),
             );
             // Webhook: new_article events (one per created article, non-blocking)

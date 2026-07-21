@@ -1233,7 +1233,9 @@
       "scraperConfig": "Scraper-Konfigurations-JSON",
       "httpOptions": "HTTP / cURL-Optionen JSON",
       "fullContentConditions": "Vollinhalt-Bedingungen",
-      "autoReadFilters": "Auto-Lesen-Filter"
+      "autoReadFilters": "Auto-Lesen-Filter",
+      "autoReadFiltersDescription": "Ein Stichwort pro Zeile. Neue Artikel, die eines dieser Wörter enthalten (in Titel, Zusammenfassung oder Text), werden automatisch als gelesen markiert – sie zählen nicht als ungelesen und lösen keine Benachrichtigungen aus.",
+      "autoReadFiltersPlaceholder": "gesponsert\ngewinnspiel\ncrypto"
     },
     "buttons": {
       "cancel": "Abbrechen",

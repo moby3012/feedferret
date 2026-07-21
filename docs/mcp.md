@@ -249,6 +249,7 @@ Unterstützte Felder:
 - **Metadaten/Zeitplan:** `name`, `icon`, `categoryId`, `priority`, `updateFrequency`, `retentionDays`, `keepMinArticles`
 - **Fetch/HTTP:** `customUserAgent`, `fetchTimeoutSecs`, `sslVerify`, `maxSizeKb`, `authType`, `authUsername`, `authPassword` (write-only)
 - **Full-Text (Feed Intelligence):** `fullTextMode` (`off`/`auto`/`selector`/`ai`), `fullTextSelector`, `fullTextRemoveSelectors`, `fullTextConditions`, `autoFetchFullText`, `defaultContentFormat` (`html`/`markdown`)
+- **Content-Filter:** `filtersActionRead` (durch Zeilenumbrüche getrennte Stichwörter; passende neue Artikel werden beim Abruf als gelesen markiert)
 - **Reader-/Anzeige-Overrides (nullable, `null` = User-Default erben):** `hideArticleImage`, `hideFromAllFeeds`, `readerFontSizeOverride`, `readerWidthOverride`, `openOriginalOverride`
 - **Muting:** `autoMuted`
 
