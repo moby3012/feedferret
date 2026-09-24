@@ -411,7 +411,9 @@ Point FeedFerret's RSSHub base URL at `http://rsshub:3000/` (the Docker Compose 
 Turns *any* page — including JS-rendered ones, since [changedetection.io](https://changedetection.io) does its own browser rendering — into a feed of its changes over time. Configure the base URL and **two separate secrets** in **Server Management → Sync → changedetection.io connector**:
 
 - **API key** — from changedetection.io's own Settings → **API** tab (shown next to a "Regenerate API key" button). Used to create/manage watches via the `x-api-key` header.
-- **RSS access token** — a **different**, auto-generated secret required to read a watch's RSS output (the API key alone does not work there). **There is no copyable field for it anywhere in Settings** — changedetection.io only embeds it in a hidden RSS-autodiscovery `<link>` tag in every page's HTML `<head>`. Grab it with either:
+- **RSS access token** — a **different**, auto-generated secret required to read a watch's RSS output (the API key alone does not work there). **There is no copyable field for it anywhere in Settings.** Fill in the base URL and API key, then click **"Test connection"** — FeedFerret fetches the instance's homepage in the background and auto-fills the RSS token from the hidden RSS-autodiscovery `<link>` tag changedetection.io embeds in every page's HTML `<head>`. Review the auto-filled value and hit Save.
+
+  If auto-detection fails (e.g. password protection is enabled on the changedetection.io instance), grab the token manually instead:
   - `curl -s https://your-changedetection-host/ | grep -o 'token=[a-f0-9]*' | head -1` (from a shell that can reach it), or
   - "View Page Source" on changedetection's main watch-list page (not Settings) in a desktop browser, then search for `token=` in the `<head>`.
 

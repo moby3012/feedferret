@@ -1,5 +1,6 @@
 import { getRequestConfig } from 'next-intl/server';
 import { cookies, headers } from 'next/headers';
+import { isValidTimeZone } from '@/lib/timezone';
 
 const SUPPORTED_LOCALES = ['en', 'de'];
 
@@ -34,8 +35,22 @@ export default getRequestConfig(async () => {
     raw && SUPPORTED_LOCALES.includes(raw)
       ? raw
       : pickLocaleFromAcceptLanguage((await headers()).get('accept-language')) ?? 'en';
+
+  // Every timestamp in the app (article dates, reader, etc.) is formatted via
+  // next-intl's ambient `timeZone` — set once here, it applies both to server
+  // components (via `getFormatter`) and to `NextIntlClientProvider`'s
+  // client-side descendants (via `useFormatter`), so no per-component change
+  // is needed. The `timezone` cookie is the single source of truth: an
+  // explicit user choice (app/actions/timezone.ts) always overwrites it;
+  // absent that, a small client-side effect seeds it once with the browser's
+  // detected zone (components/timezone-sync.tsx). Falls back to UTC (the
+  // previous, implicit behavior) until either has run.
+  const tzRaw = cookieStore.get('timezone')?.value;
+  const timeZone = tzRaw && isValidTimeZone(tzRaw) ? tzRaw : 'UTC';
+
   return {
     locale,
     messages: (await import(`../messages/${locale}.json`)).default,
+    timeZone,
   };
 });

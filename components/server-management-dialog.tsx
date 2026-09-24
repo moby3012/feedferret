@@ -280,6 +280,16 @@ export function ServerManagementDialog({
       });
       if (result.success) {
         toast.success(t("toast.changedetectionTestOk", { version: result.version }));
+        // changedetection.io never exposes the RSS token as a copyable Settings
+        // field (it only lives in an autodiscovery <link> tag on its homepage —
+        // see docs/self-hosting.md); a successful test opportunistically scrapes
+        // it so the admin doesn't have to go dig it out manually.
+        if (result.discoveredRssToken) {
+          setSettings((prev: any) => ({ ...prev, changedetectionRssToken: result.discoveredRssToken }));
+          toast.success(t("toast.changedetectionRssTokenDetected"));
+        } else if (result.rssTokenDiscoveryError) {
+          toast.error(t("toast.changedetectionRssTokenNotDetected", { error: result.rssTokenDiscoveryError }));
+        }
       } else {
         toast.error(t("toast.changedetectionTestFailed", { error: result.error ?? "" }));
       }

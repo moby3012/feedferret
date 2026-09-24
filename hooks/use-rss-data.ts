@@ -6,6 +6,7 @@ import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleS
 import { updateProfile, changePassword, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, previewDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getContentFetchSettings, updateContentFetchSettings, testContentFetchConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
 import { getExportSettings, updateExportSettings, testWallabagExportConnection, buildObsidianExportLink, exportArticleToWallabag } from "@/app/actions/export"
 import { updateUiLanguage } from "@/app/actions/locale"
+import { updateDisplayTimezone } from "@/app/actions/timezone"
 import { toast } from "sonner"
 
 export function useFeeds(enabled = true) {
@@ -451,6 +452,27 @@ export function useUpdateUiLanguage() {
             const prev = queryClient.getQueryData(["reading-preferences"])
             queryClient.setQueryData(["reading-preferences"], (old: any) =>
                 old ? { ...old, uiLanguage: locale } : old,
+            )
+            return { prev }
+        },
+        onError: (_err, _vars, context) => {
+            if (context?.prev !== undefined) {
+                queryClient.setQueryData(["reading-preferences"], context.prev)
+            }
+        },
+    })
+}
+
+export function useUpdateDisplayTimezone() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (data: { timezone: string | null; effectiveTimezone?: string }) =>
+            updateDisplayTimezone(data.timezone, data.effectiveTimezone),
+        onMutate: async (data) => {
+            await queryClient.cancelQueries({ queryKey: ["reading-preferences"] })
+            const prev = queryClient.getQueryData(["reading-preferences"])
+            queryClient.setQueryData(["reading-preferences"], (old: any) =>
+                old ? { ...old, displayTimezone: data.timezone } : old,
             )
             return { prev }
         },
