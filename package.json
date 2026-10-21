@@ -80,7 +80,7 @@
     "input-otp": "1.4.2",
     "isomorphic-dompurify": "^3.23.0",
     "jsdom": "^27.4.0",
-    "katex": "^0.18.1",
+    "katex": "0.18.2",
     "lucide-react": "^1.16.0",
     "markdown-it": "^14.3.3",
     "markdown-it-task-lists": "^2.1.1",
