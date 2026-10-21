@@ -1,7 +1,7 @@
 # Production Dockerfile
 # ── base-runtime ─────────────────────────────────────────────────────────────
 # Minimal runtime dependencies only — no build tools.
-FROM node:22-slim AS base-runtime
+FROM node:22.23.4-slim AS base-runtime
 RUN apt-get update && apt-get install -y openssl ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
 # ── base-build ────────────────────────────────────────────────────────────────
