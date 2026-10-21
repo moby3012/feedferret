@@ -78,9 +78,9 @@
     "highlight.js": "^11.11.1",
     "impit": "^0.14.3",
     "input-otp": "1.4.2",
-    "isomorphic-dompurify": "^3.13.0",
+    "isomorphic-dompurify": "^3.23.0",
     "jsdom": "^27.4.0",
-    "katex": "^0.18.1",
+    "katex": "0.18.2",
     "lucide-react": "^1.16.0",
     "markdown-it": "^14.3.3",
     "markdown-it-task-lists": "^2.1.1",
@@ -152,7 +152,12 @@
       "source-map-js": ">=1.2.2",
       "vite": ">=8.3.5",
       "browserslist": ">=4.29.4",
-      "nanoid": "^3.3.20"
+      "nanoid": "^3.3.20",
+      "sanitize-html": ">=2.18.1",
+      "valibot": ">=1.5.0",
+      "postcss-selector-parser": ">=7.1.7",
+      "baseline-browser-mapping": ">=2.11.30",
+      "@babel/core": ">=7.29.7 <8.0.0"
     }
   },
   "lint-staged": {
