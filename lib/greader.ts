@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import crypto from "crypto";
 import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
@@ -139,7 +140,7 @@ export function createContinuationToken(article: { createdAt: Date; id: string }
   return Buffer.from(JSON.stringify({ createdAt: article.createdAt.toISOString(), id: article.id, ceiling })).toString("base64url");
 }
 
-// FreshRSS defaults to 20 and imposes no positive maximum; n<=0 means unlimited.
+// ID sync supports large/unlimited pages; full contents have a separate bound.
 export function greaderLimit(value: string | null) {
   const n = value?.trim() ? Number(value) : NaN;
   return Number.isFinite(n) ? Math.trunc(n) : 20;
@@ -149,6 +150,14 @@ export function normalizeCategoryNameFromTag(tag: string) {
   if (!tag.startsWith(GREADER_LABEL_PREFIX)) return null;
   const name = decodeURIComponent(tag.slice(GREADER_LABEL_PREFIX.length)).trim();
   return name || null;
+}
+
+export function isKnownGReaderStream(streamId: string) {
+  return [GREADER_UNREAD, GREADER_MAIN, GREADER_IMPORTANT].includes(streamId) || parseGReaderStreamId(streamId).type !== "unknown";
+}
+
+export function normalizeGReaderReadStream(streamId: string) {
+  return isKnownGReaderStream(streamId) ? streamId : GREADER_READING_LIST;
 }
 
 function streamPredicate(userId: string, streamId?: string | null): any {
@@ -164,7 +173,7 @@ function streamPredicate(userId: string, streamId?: string | null): any {
     { labels: { some: { label: { userId, name: stream.value } } } },
     { feed: { priority: { in: ["category", "main", "important"] }, category: { userId, name: stream.value } } },
   ] };
-  // Unknown targets must never broaden a read or bulk mutation to all articles.
+  // Mutations remain fail-closed; read callers normalize unknown primary streams.
   return { id: { in: [] } };
 }
 
@@ -172,8 +181,8 @@ export function buildStreamWhere(userId: string, streamId?: string | null, inclu
   const AND: any[] = [streamPredicate(userId, streamId),
     ...([GREADER_READ, GREADER_UNREAD].includes(streamId || "") ? [{ feed: { priority: { in: ["category", "main", "important"] } } }] : []),
     ...(streamId === GREADER_STARRED ? [{ feed: { priority: { not: "hidden" } } }] : []),
-    ...includeStates.map((state) => streamPredicate(userId, state)),
-    ...excludeStates.map((state) => ({ NOT: streamPredicate(userId, state) })),
+    ...includeStates.filter(isKnownGReaderStream).map((state) => streamPredicate(userId, state)),
+    ...excludeStates.filter(isKnownGReaderStream).map((state) => ({ NOT: streamPredicate(userId, state) })),
   ];
   // FreshRSS EntryDAO compares discovery ID and lastModified, never publication.
   // updatedAt is FeedFerret's combined content/state modification clock.
@@ -280,12 +289,51 @@ export async function countGReaderUnread(userId: string, streamId: string) {
   return { id: streamId, count, newestItemTimestampUsec: newest ? String(newest.createdAt.getTime() * 1000) : "0" };
 }
 
-export async function countUnreadByGReaderTag(userId: string) {
-  const [labels, categories] = await Promise.all([
-    db.label.findMany({ where: { userId } }), db.category.findMany({ where: { userId } }),
+/** Constant query count regardless of subscription/tag count. */
+export async function countGReaderFeedsAndTags(userId: string) {
+  const [feeds, categories, labels, unread, tagged] = await Promise.all([
+    db.feed.findMany({ where: { userId }, select: { id: true, url: true, priority: true, categoryId: true } }),
+    db.category.findMany({ where: { userId }, select: { id: true, name: true } }),
+    db.label.findMany({ where: { userId }, select: { name: true } }),
+    db.article.groupBy({ by: ["feedId"], where: { userId, isRead: false }, _count: true, _max: { createdAt: true } }),
+    // Exclude folder matches from label totals to count the folder/label union once.
+    // COUNT and timestamps are normalized below for SQLite and PostgreSQL adapters.
+    db.$queryRaw<Array<{ name: string; count: bigint | number; newest: Date | string | number | null }>>(Prisma.sql`
+      SELECT l."name", COUNT(*) AS "count", MAX(a."createdAt") AS "newest"
+      FROM "ArticleLabel" al
+      JOIN "Label" l ON l."id" = al."labelId"
+      JOIN "Article" a ON a."id" = al."articleId"
+      JOIN "Feed" f ON f."id" = a."feedId"
+      LEFT JOIN "Category" c ON c."id" = f."categoryId"
+      WHERE al."userId" = ${userId} AND l."userId" = ${userId}
+        AND a."userId" = ${userId} AND a."isRead" = false
+        AND NOT (f."priority" IN ('category', 'main', 'important')
+          AND COALESCE(c."userId", '') = ${userId} AND COALESCE(c."name", '') = l."name"
+          AND c."id" IS NOT NULL)
+      GROUP BY l."name"
+    `),
   ]);
-  const names = new Set([...categories, ...labels].map((row) => row.name));
-  return Promise.all([...names].map((name) => countGReaderUnread(userId, `${GREADER_LABEL_PREFIX}${name}`)));
+  const byFeed = new Map(unread.map((row) => [row.feedId, row]));
+  const categoryNames = new Map(categories.map((row) => [row.id, row.name]));
+  const tags = new Map([...categories, ...labels].map((row) => [row.name, { count: 0, newest: 0 }]));
+  const result = (id: string, count: number, newest: number) => ({ id, count, newestItemTimestampUsec: String(newest * 1000) });
+  const feedCounts = feeds.flatMap((feed) => {
+    const row = byFeed.get(feed.id);
+    const count = row?._count ?? 0;
+    const newest = row?._max.createdAt?.getTime() ?? 0;
+    const name = feed.categoryId ? categoryNames.get(feed.categoryId) : undefined;
+    if (name && ["category", "main", "important"].includes(feed.priority)) {
+      const tag = tags.get(name)!;
+      tag.count += count; tag.newest = Math.max(tag.newest, newest);
+    }
+    return feed.priority === "hidden" ? [] : [result(`feed/${feed.url}`, count, newest)];
+  });
+  for (const row of tagged) {
+    const tag = tags.get(row.name)!;
+    tag.count += Number(row.count);
+    tag.newest = Math.max(tag.newest, row.newest === null ? 0 : new Date(row.newest).getTime());
+  }
+  return [...feedCounts, ...Array.from(tags, ([name, tag]) => result(`${GREADER_LABEL_PREFIX}${name}`, tag.count, tag.newest))];
 }
 
 export async function toGReaderArticle(article: any) {
@@ -294,6 +342,11 @@ export async function toGReaderArticle(article: any) {
     article.contentFormat === "markdown" && article.content
       ? await renderMarkdownToHtml(article.content)
       : article.content;
+  let enclosures;
+  try {
+    const parsed = article.enclosures ? JSON.parse(article.enclosures) : null;
+    if (Array.isArray(parsed)) enclosures = parsed;
+  } catch { /* Corrupt feed metadata must not break a sync page. */ }
   return {
     id: greaderItemId(article.id),
     crawlTimeMsec: String(new Date(article.createdAt).getTime()),
@@ -318,9 +371,9 @@ export async function toGReaderArticle(article: any) {
       title: article.feed.name,
       htmlUrl: article.feed.htmlUrl || article.feed.url,
     },
-    author: article.author || "",
+    ...(article.author?.trim() ? { author: article.author } : {}),
     summary: { content: content || article.excerpt || "" },
-    ...(article.enclosures ? { enclosure: JSON.parse(article.enclosures) } : {}),
+    ...(enclosures ? { enclosure: enclosures } : {}),
     content: { content: content || article.excerpt || "" },
   };
 }
