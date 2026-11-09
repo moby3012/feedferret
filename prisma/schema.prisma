@@ -360,6 +360,7 @@ model Article {
   excerpt     String?
   author      String?
   publishedAt DateTime
+  enclosures  String? // JSON array of GReader enclosure {href,type,length} objects
   imageUrl    String?
   isRead      Boolean  @default(false)
   readAt      DateTime?
@@ -381,6 +382,7 @@ model Article {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, feedId, dedupeKey])
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([userId, contentHash])
   @@index([userId, isRead, publishedAt])
   @@index([userId, isStarred, publishedAt])

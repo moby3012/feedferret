@@ -32,6 +32,7 @@ export interface ArticleSyncInput {
     author: string | null;
     publishedAt: Date;
     imageUrl?: string | null;
+    enclosures?: string | null;
 }
 
 export interface ArticleSyncResult {
@@ -52,6 +53,7 @@ function updatableFields(article: ArticleSyncInput) {
         author: article.author,
         publishedAt: article.publishedAt,
         imageUrl: article.imageUrl ?? null,
+        enclosures: article.enclosures ?? null,
     };
 }
 
@@ -118,6 +120,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
             author: true,
             publishedAt: true,
             imageUrl: true,
+            enclosures: true,
         },
     });
     const existingByDedupeKey = new Map(
@@ -147,7 +150,8 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
             existing.excerpt !== next.excerpt ||
             existing.author !== next.author ||
             existing.publishedAt.getTime() !== next.publishedAt.getTime() ||
-            (existing.imageUrl ?? null) !== next.imageUrl;
+            (existing.imageUrl ?? null) !== next.imageUrl ||
+            (existing.enclosures ?? null) !== next.enclosures;
 
         if (changed) {
             await db.article.update({ where: { id: existing.id }, data: next });
@@ -187,6 +191,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
                     author: article.author,
                     publishedAt: article.publishedAt,
                     imageUrl: article.imageUrl ?? null,
+                    enclosures: article.enclosures ?? null,
                 })),
                 select: { id: true, dedupeKey: true, contentHash: true },
             });
@@ -220,6 +225,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
                         author: article.author,
                         publishedAt: article.publishedAt,
                         imageUrl: article.imageUrl ?? null,
+                        enclosures: article.enclosures ?? null,
                     },
                     select: { id: true, dedupeKey: true, contentHash: true },
                 });
@@ -350,6 +356,7 @@ export async function syncFeed(userId: string, feedId: string) {
                 author: item.author || null,
                 publishedAt: item.publishedAt || new Date(),
                 imageUrl: item.imageUrl,
+                enclosures: item.enclosures?.length ? JSON.stringify(item.enclosures) : null,
             };
         });
 

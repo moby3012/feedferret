@@ -55,6 +55,7 @@ export type FetchedFeedArticle = {
   author?: string | null;
   publishedAt?: Date | null;
   imageUrl?: string | null;
+  enclosures?: Array<{ href: string; type: string; length?: number }>;
   externalId?: string | null;
   categories?: string[];
 };
@@ -339,6 +340,7 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
         publishedAt: pubDate ? dateFrom(pubDate) : null,
         imageUrl: extractImageFromHtml(content) || item.enclosure?.url || item["media:content"]?.$?.url || null,
         externalId: htmlText(item.guid) || htmlText(item.id) || htmlText(item.link) || null,
+        enclosures: item.enclosure?.url ? [{ href: item.enclosure.url, type: item.enclosure.type || "", ...(Number(item.enclosure.length) > 0 ? { length: Number(item.enclosure.length) } : {}) }] : [],
         categories: categoriesFrom(item.categories),
       };
     }),

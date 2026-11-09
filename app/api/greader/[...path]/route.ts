@@ -7,7 +7,11 @@ import {
   authenticateGReaderRequest,
   buildCursorWhere,
   buildStreamWhere,
-  countUnreadByGReaderTag,
+  countGReaderFeedsAndTags,
+  isKnownGReaderStream,
+  normalizeGReaderReadStream,
+  countGReaderUnread,
+  greaderLimit,
   createContinuationToken,
   createGReaderToken,
   deleteGReaderStreamPref,
@@ -30,9 +34,27 @@ import {
 } from "@/lib/greader";
 
 
+class UnauthorizedError extends Error {}
+class InvalidRequestError extends Error {}
+
+function errorResponse(error: unknown) {
+  const status = error instanceof UnauthorizedError ? 401 : error instanceof InvalidRequestError ? 400 : 500;
+  return NextResponse.json({ error: status === 401 ? "Unauthorized" : status === 400 ? (error as Error).message : "Internal server error" }, { status });
+}
+
+function itemIds(values: string[]) {
+  const ids = [...new Set(values.filter(Boolean).map(parseGReaderItemId))];
+  if (ids.length > 1000) throw new InvalidRequestError("At most 1000 item IDs are allowed");
+  return ids;
+}
+
+function chunks<T>(items: T[]) {
+  return Array.from({ length: Math.ceil(items.length / 200) }, (_, i) => items.slice(i * 200, (i + 1) * 200));
+}
+
 async function requireUser(request: Request) {
   const user = await authenticateGReaderRequest(request);
-  if (!user) throw new Error("Unauthorized");
+  if (!user) throw new UnauthorizedError();
   return user;
 }
 
@@ -55,44 +77,47 @@ function getPath(requestPath: string[], marker: string) {
 }
 
 function getStreamId(pathParts: string[], url: URL, marker: string) {
-  return url.searchParams.get("s") || url.searchParams.get("stream") || getPath(pathParts, marker) || GREADER_READING_LIST;
+  return normalizeGReaderReadStream(url.searchParams.get("s") || url.searchParams.get("stream") || getPath(pathParts, marker) || GREADER_READING_LIST);
 }
 
-async function getArticlesForStream(userId: string, streamId: string, url: URL) {
-  const limit = Math.max(1, Math.min(Number(url.searchParams.get("n") || 20), 200));
-  const continuationToken = parseContinuationToken(url.searchParams.get("c"));
-  const includeStates = url.searchParams.getAll("it");
-  const excludeStates = url.searchParams.getAll("xt");
-  // `ot` = older-than: Unix timestamp in seconds; only articles published before this time
-  const otParam = url.searchParams.get("ot");
-  const olderThanSec = otParam ? Number(otParam) : null;
-  // `r=o` = oldest-first; default is newest-first
-  const sortOldestFirst = url.searchParams.get("r") === "o";
-
-  const where = {
-    ...buildStreamWhere(userId, streamId, includeStates, excludeStates, olderThanSec),
-    ...buildCursorWhere(continuationToken),
-  };
-
-  const orderBy = sortOldestFirst
-    ? [{ publishedAt: "asc" as const }, { id: "asc" as const }]
-    : [{ publishedAt: "desc" as const }, { id: "desc" as const }];
-
-  const articles = await db.article.findMany({
+async function getArticlesForStream(userId: string, streamId: string, url: URL, idsOnly = false) {
+  const requested = greaderLimit(url.searchParams.get("n"));
+  const limit = idsOnly ? requested : Math.min(requested > 0 ? requested : 20, 1000);
+  const cursor = parseContinuationToken(url.searchParams.get("c"));
+  const ascending = url.searchParams.get("r") === "o";
+  const scope = buildStreamWhere(userId, streamId, url.searchParams.getAll("it"), url.searchParams.getAll("xt"), Number(url.searchParams.get("ot")), Number(url.searchParams.get("nt")));
+  // Freeze the discovery high-water mark, including its ID tie-breaker. New arrivals
+  // are picked up by the next sync, not inserted into this pagination sequence.
+  const newest = cursor?.ceiling ? null : await db.article.findFirst({ where: scope, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true, id: true } });
+  const ceiling = cursor?.ceiling || (newest ? { createdAt: newest.createdAt.toISOString(), id: newest.id } : undefined);
+  const where = { AND: [scope, buildCursorWhere(cursor, ascending), ...(ceiling ? [{ OR: [
+    { createdAt: { lt: new Date(ceiling.createdAt) } },
+    { createdAt: new Date(ceiling.createdAt), id: { lte: ceiling.id } },
+  ] }] : [])] };
+  const direction = ascending ? "asc" as const : "desc" as const;
+  const rows = await db.article.findMany({
     where,
-    include: {
-      feed: { include: { category: true } },
-      labels: { include: { label: true } },
-    },
-    orderBy,
-    ...(continuationToken.mode === "offset" ? { skip: continuationToken.offset } : {}),
-    take: limit,
+    include: { feed: { include: { category: true } }, ...(!idsOnly ? { labels: { include: { label: true } } } : {}) },
+    orderBy: [{ createdAt: direction }, { id: direction }],
+    ...(limit > 0 ? { take: limit + 1 } : {}),
   });
+  const articles = limit > 0 ? rows.slice(0, limit) : rows;
+  return { articles, continuation: limit > 0 && rows.length > limit ? createContinuationToken(articles[articles.length - 1], ceiling) : undefined };
+}
 
-  return {
-    articles,
-    continuation: articles.length === limit ? createContinuationToken(articles[articles.length - 1]) : undefined,
-  };
+async function getItemsByIds(userId: string, ids: string[], order: string | null) {
+  const direction = order === "o" ? "asc" as const : "desc" as const;
+  const rows = [];
+  for (const batch of chunks(itemIds(ids))) {
+    rows.push(...await db.article.findMany({
+      where: { userId, id: { in: batch } },
+      include: { feed: { include: { category: true } }, labels: { include: { label: true } } },
+    }));
+  }
+  return rows.sort((a, b) => {
+    const comparison = a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    return direction === "asc" ? comparison : -comparison;
+  });
 }
 
 async function getOrCreateCategory(userId: string, name: string) {
@@ -144,6 +169,8 @@ async function getOrCreateLabel(userId: string, name: string) {
  * `createMany`/`deleteMany` (keyed on `articleId: { in: ids }`) for labels.
  */
 async function applyTagEdit(userId: string, ids: string[], add: string[], remove: string[]) {
+  const owned = await db.article.findMany({ where: { userId, id: { in: ids } }, select: { id: true } });
+  ids = [...new Set(owned.map((row) => row.id))];
   if (ids.length === 0) return;
 
   const updates: Record<string, unknown> = {};
@@ -269,6 +296,7 @@ async function handleSubscriptionEdit(userId: string, form: FormData) {
 
 async function handleMarkAllAsRead(userId: string, form: FormData) {
   const streamId = String(form.get("s") || GREADER_READING_LIST);
+  if (!isKnownGReaderStream(streamId)) return textResponse("Unknown stream", 400);
   // `ts` is a Unix timestamp in microseconds — only mark articles older than this as read.
   // Clients send this to avoid marking freshly-arrived articles as read during a sync.
   const tsParam = form.get("ts");
@@ -279,7 +307,8 @@ async function handleMarkAllAsRead(userId: string, form: FormData) {
 
   const where = buildStreamWhere(userId, streamId, [], []);
   const readWhere: any = { ...where, isRead: false };
-  if (cutoff) readWhere.publishedAt = { lte: cutoff };
+  if (tsParam && (Number(tsParam) !== 0) && (!cutoff || !Number.isFinite(cutoff.getTime()))) return textResponse("Invalid ts", 400);
+  if (cutoff) readWhere.createdAt = { lte: cutoff };
 
   await db.article.updateMany({
     where: readWhere,
@@ -351,65 +380,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
     }
 
     if (path.endsWith("unread-count")) {
-      const feeds = await db.feed.findMany({ where: { userId: user.id }, include: { category: true } });
-      const [totalUnread, starredUnread, newestUnread, newestStarredUnread, feedCounts, labelCounts] = await Promise.all([
-        db.article.count({ where: { userId: user.id, isRead: false } }),
-        db.article.count({ where: { userId: user.id, isRead: false, isStarred: true } }),
-        db.article.findFirst({
-          where: { userId: user.id, isRead: false },
-          orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
-          select: { publishedAt: true },
-        }),
-        db.article.findFirst({
-          where: { userId: user.id, isRead: false, isStarred: true },
-          orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
-          select: { publishedAt: true },
-        }),
-        db.article.groupBy({ by: ["feedId"], where: { userId: user.id, isRead: false }, _count: { _all: true } }),
-        countUnreadByGReaderTag(user.id),
+      const [reading, starred, grouped] = await Promise.all([
+        countGReaderUnread(user.id, GREADER_READING_LIST), countGReaderUnread(user.id, GREADER_STARRED),
+        countGReaderFeedsAndTags(user.id),
       ]);
-      const feedCountMap = new Map(feedCounts.map((item: { feedId: string; _count: { _all: number } }) => [item.feedId, item._count._all]));
+      return NextResponse.json({ max: reading.count, unreadcounts: [reading, starred, ...grouped] });
+    }
 
-      // Newest-per-feed timestamps (for per-feed newestItemTimestampUsec)
-      const newestPerFeed = await db.article.groupBy({
-        by: ["feedId"],
-        where: { userId: user.id, isRead: false },
-        _max: { publishedAt: true },
-      });
-      const newestFeedMap = new Map(newestPerFeed.map((r: { feedId: string; _max: { publishedAt: Date | null } }) => [r.feedId, r._max.publishedAt]));
-
-      return NextResponse.json({
-        max: 1000,
-        unreadcounts: [
-          {
-            id: GREADER_READING_LIST,
-            count: totalUnread,
-            newestItemTimestampUsec: newestUnread
-              ? String(newestUnread.publishedAt.getTime() * 1000)
-              : "0",
-          },
-          {
-            id: GREADER_STARRED,
-            count: starredUnread,
-            newestItemTimestampUsec: newestStarredUnread
-              ? String(newestStarredUnread.publishedAt.getTime() * 1000)
-              : "0",
-          },
-          ...feeds.map((feed: { id: string; url: string }) => ({
-            id: `feed/${feed.url}`,
-            count: feedCountMap.get(feed.id) || 0,
-            newestItemTimestampUsec: newestFeedMap.get(feed.id)
-              ? String(newestFeedMap.get(feed.id)!.getTime() * 1000)
-              : "0",
-          })),
-          ...labelCounts,
-        ],
-      });
+    if ((path.includes("stream/items/contents") || path.includes("stream/contents")) && url.searchParams.has("i")) {
+      const articles = await getItemsByIds(user.id, url.searchParams.getAll("i"), url.searchParams.get("r"));
+      return NextResponse.json({ id: GREADER_READING_LIST, updated: Math.floor(Date.now() / 1000), items: await Promise.all(articles.map(toGReaderArticle)) });
     }
 
     if (path.includes("stream/items/ids")) {
       const streamId = getStreamId(pathParts, url, "stream/items/ids");
-      const { articles, continuation } = await getArticlesForStream(user.id, streamId, url);
+      const { articles, continuation } = await getArticlesForStream(user.id, streamId, url, true);
       return NextResponse.json({
         id: streamId,
         title: getGReaderStreamTitle(streamId),
@@ -432,8 +417,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
     }
 
     return NextResponse.json({ error: "Unsupported Google Reader endpoint", path }, { status: 404 });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (error) {
+    return errorResponse(error);
   }
 }
 
@@ -446,11 +431,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
     const form = await request.formData();
 
     if (path.endsWith("subscription/quickadd")) {
-      return handleSubscriptionQuickAdd(user.id, form);
+      return await handleSubscriptionQuickAdd(user.id, form);
     }
 
     if (path.endsWith("subscription/edit")) {
-      return handleSubscriptionEdit(user.id, form);
+      return await handleSubscriptionEdit(user.id, form);
     }
 
     if (path.endsWith("preference/stream/set")) {
@@ -471,14 +456,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
     }
 
     if (path.endsWith("mark-all-as-read")) {
-      return handleMarkAllAsRead(user.id, form);
+      return await handleMarkAllAsRead(user.id, form);
     }
 
     if (path.endsWith("edit-tag")) {
-      const ids = form.getAll("i").map((id) => parseGReaderItemId(String(id)));
+      const ids = itemIds(form.getAll("i").map(String));
       const add = form.getAll("a").map(String);
       const remove = form.getAll("r").map(String);
-      await applyTagEdit(user.id, ids, add, remove);
+      for (const batch of chunks(ids)) await applyTagEdit(user.id, batch, add, remove);
       return okResponse();
     }
 
@@ -490,14 +475,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
       if (rawIds.length === 0) {
         return NextResponse.json({ id: "user/-/state/com.google/reading-list", updated: Math.floor(Date.now() / 1000), items: [] });
       }
-      const articleIds = rawIds.map(parseGReaderItemId).filter(Boolean);
-      const articles = await db.article.findMany({
-        where: { id: { in: articleIds }, userId: user.id },
-        include: {
-          feed: { include: { category: true } },
-          labels: { include: { label: true } },
-        },
-      });
+      const articles = await getItemsByIds(user.id, rawIds, String(form.get("r") || new URL(request.url).searchParams.get("r") || ""));
       return NextResponse.json({
         id: "user/-/state/com.google/reading-list",
         updated: Math.floor(Date.now() / 1000),
@@ -506,7 +484,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
     }
 
     return NextResponse.json({ error: "Unsupported Google Reader endpoint", path }, { status: 404 });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (error) {
+    return errorResponse(error);
   }
 }
