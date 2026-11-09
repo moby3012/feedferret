@@ -109,10 +109,12 @@ interface ArticleListProps {
   onPullToRefresh?: () => void;
   filterKey?: string;
   transitionStyle?: "fade" | "flip" | "filter";
-  onOverscrollPastEnd?: () => void;
-  onOverscrollPastTop?: () => void;
-  onSwipeNextFeed?: () => void;
-  onSwipePreviousFeed?: () => void;
+  /**
+   * Rendered once after the last row in every view mode (and instead of the
+   * generic empty state when nothing is left): the explicit "end of list"
+   * card. Switching feeds is always a deliberate tap — never a gesture.
+   */
+  endOfList?: React.ReactNode;
   scrollBackToId?: string | null;
   hasFeeds?: boolean;
   // When set, highlights occurrences of the query's free-text terms in each
@@ -138,10 +140,7 @@ export function ArticleList({
   onPullToRefresh,
   filterKey,
   transitionStyle = "fade",
-  onOverscrollPastEnd,
-  onOverscrollPastTop,
-  onSwipeNextFeed,
-  onSwipePreviousFeed,
+  endOfList,
   scrollBackToId,
   hasFeeds = true,
   searchQuery,
@@ -155,30 +154,6 @@ export function ArticleList({
         ? "animate-filter-swap"
         : "animate-fade-in";
 
-  // Background horizontal swipe handlers — only fire when the touch started
-  // outside an <article> element so per-article swipes (star/read) keep working.
-  const bgSwipeRef = useRef<{ x: number; y: number; onArticle: boolean } | null>(null);
-  const handleBgSwipeStart = (e: React.TouchEvent) => {
-    if (!onSwipeNextFeed && !onSwipePreviousFeed) return;
-    const touch = e.touches[0];
-    const onArticle = !!(touch.target as HTMLElement | null)?.closest?.("article");
-    bgSwipeRef.current = { x: touch.clientX, y: touch.clientY, onArticle };
-  };
-  const handleBgSwipeEnd = (e: React.TouchEvent) => {
-    if (!bgSwipeRef.current) return;
-    const start = bgSwipeRef.current;
-    bgSwipeRef.current = null;
-    if (start.onArticle) return;
-    const touch = e.changedTouches[0];
-    const dx = touch.clientX - start.x;
-    const dy = touch.clientY - start.y;
-    if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
-    
-    const isRtl = typeof document !== "undefined" && document.documentElement.getAttribute("dir") === "rtl";
-    const goNext = isRtl ? dx > 0 : dx < 0;
-    if (goNext) onSwipeNextFeed?.();
-    else onSwipePreviousFeed?.();
-  };
   const [visibleCount, setVisibleCount] = useState(pageSize ?? 30);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -290,49 +265,6 @@ export function ArticleList({
   const showPullIndicator = enablePullToRefresh && (pullDistance > 0 || pullTriggered);
   const pullReady = pullDistance >= 72;
 
-  // Overscroll-past-end / past-top → navigate feeds (#11)
-  useEffect(() => {
-    if (!scrollRoot || (!onOverscrollPastEnd && !onOverscrollPastTop)) return;
-
-    let accum = 0;
-    let lastFire = 0;
-    const COOLDOWN = 1200;
-    const THRESHOLD = 500;
-
-    const fire = (dir: 1 | -1) => {
-      const now = Date.now();
-      if (now - lastFire < COOLDOWN) return;
-      lastFire = now;
-      accum = 0;
-      if (dir === 1) onOverscrollPastEnd?.();
-      else onOverscrollPastTop?.();
-    };
-
-    const handleWheel = (e: WheelEvent) => {
-      const { scrollTop, scrollHeight, clientHeight } = scrollRoot;
-      const canScroll = scrollHeight > clientHeight + 8;
-      const atBottom = !canScroll || scrollHeight - (scrollTop + clientHeight) < 8;
-      const atTop = scrollTop < 4;
-      if (atBottom && e.deltaY > 0) {
-        accum += e.deltaY;
-        if (accum > THRESHOLD) fire(1);
-      } else if (atTop && e.deltaY < 0) {
-        accum += Math.abs(e.deltaY);
-        if (accum > THRESHOLD) fire(-1);
-      } else {
-        accum = 0;
-      }
-    };
-
-    // Wheel only on the feed list. Touch overscroll removed because vertical
-    // swipe at the top collides with pull-to-refresh (#5). Mobile users
-    // switch feeds via the sidebar or the header-area swipe gesture.
-    scrollRoot.addEventListener("wheel", handleWheel, { passive: true });
-    return () => {
-      scrollRoot.removeEventListener("wheel", handleWheel);
-    };
-  }, [scrollRoot, onOverscrollPastEnd, onOverscrollPastTop]);
-
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel || !hasMore) return;
@@ -369,8 +301,6 @@ export function ArticleList({
   return (
     <ScrollArea
       key={filterKey ?? "default"}
-      onTouchStart={handleBgSwipeStart}
-      onTouchEnd={handleBgSwipeEnd}
       className={cn("flex-1 overflow-hidden min-h-0", transitionClass)}
     >
       {showPullIndicator && (
@@ -387,7 +317,13 @@ export function ArticleList({
           </div>
         </div>
       )}
-      {articles.length === 0 ? (
+      {articles.length === 0 && endOfList ? (
+        // Nothing left to show: the end card is the empty state ("Du bist auf
+        // dem Laufenden" + the way on), so the user never faces a blank list.
+        <div ref={contentRef} className="p-3 pb-28 lg:pb-3">
+          {endOfList}
+        </div>
+      ) : articles.length === 0 ? (
         <div
           ref={contentRef}
           className="flex items-center justify-center p-4 py-20"
@@ -436,6 +372,9 @@ export function ArticleList({
               <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin me-2" />
               {t("loadingMore")}
             </div>
+          ) : endOfList ? (
+            // col-span-full keeps the card full-width inside the magazine grid.
+            <div className="col-span-full">{endOfList}</div>
           ) : (
             // Only in search context (searchQuery is only ever passed there) —
             // reassures users who just had scroll bugs that reaching the

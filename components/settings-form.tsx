@@ -22,6 +22,7 @@ import {
   Moon,
   Palette,
   ScrollText,
+  CheckCheck,
   Send,
   Settings,
   Smartphone,
@@ -423,6 +424,19 @@ export function SettingsForm() {
               <Switch
                 checked={prefs?.markReadOnScroll ?? false}
                 onCheckedChange={(checked) => update({ markReadOnScroll: checked })}
+              />
+            </PrefRow>
+
+            {/* Mark the current view read when advancing from the end-of-list card */}
+            <PrefRow
+              icon={CheckCheck}
+              title={t("settings.markReadOnAdvance")}
+              description={t("settings.markReadOnAdvanceDescription")}
+            >
+              <Switch
+                aria-label={t("settings.markReadOnAdvance")}
+                checked={prefs?.markReadOnAdvance ?? false}
+                onCheckedChange={(checked) => update({ markReadOnAdvance: checked })}
               />
             </PrefRow>
 

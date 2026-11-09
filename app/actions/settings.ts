@@ -74,6 +74,7 @@ export async function getReadingPreferences() {
       secondaryColor: true,
       hideDuplicates: true,
       markReadOnScroll: true,
+      markReadOnAdvance: true,
       layoutDirection: true,
       hideEmptyFeeds: true,
       hideEmptyLabels: true,
@@ -93,6 +94,7 @@ export async function getReadingPreferences() {
     secondaryColor: user?.secondaryColor ?? "#F0963C",
     hideDuplicates: user?.hideDuplicates ?? true,
     markReadOnScroll: user?.markReadOnScroll ?? false,
+    markReadOnAdvance: user?.markReadOnAdvance ?? false,
     layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
     hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
     hideEmptyLabels: user?.hideEmptyLabels ?? false,
@@ -115,6 +117,7 @@ export async function updateGlobalSettings(data: {
   secondaryColor?: string;
   hideDuplicates?: boolean;
   markReadOnScroll?: boolean;
+  markReadOnAdvance?: boolean;
   layoutDirection?: "ltr" | "rtl";
   hideEmptyFeeds?: boolean;
   hideEmptyLabels?: boolean;
