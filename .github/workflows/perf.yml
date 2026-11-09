@@ -1,0 +1,67 @@
+name: Perf baseline
+
+# Manual / soft: lab web-vitals + bundle numbers against a production build
+# with the seeded E2E database (see docs/releases/testing.md#performance-baseline).
+# Never gates a PR. Lab numbers on a shared runner are noisy: compare runs of
+# this workflow with each other (and with docs/perf/baseline-2026-11.md only
+# as an order of magnitude), not against numbers from another machine.
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Cold runs (median is reported)
+        default: "5"
+      label:
+        description: Result label (file name)
+        default: ci-perf
+
+jobs:
+  perf:
+    name: Perf measure (soft)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.14.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm run prisma:generate
+        env:
+          DATABASE_PROVIDER: sqlite
+          DATABASE_URL: file:./dev.db
+
+      - name: Build
+        run: pnpm run build
+        env:
+          DATABASE_PROVIDER: sqlite
+          DATABASE_URL: file:./dev.db
+          AUTH_SECRET: ci-test-secret-minimum-32-chars-long
+          AUTH_URL: http://localhost:3200
+          NEXTAUTH_URL: http://localhost:3200
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Measure
+        # Writes the markdown table to the job summary ($GITHUB_STEP_SUMMARY).
+        run: node scripts/perf-measure.mjs --runs "${{ inputs.runs }}" --label "${{ inputs.label }}"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: perf-results/
+          retention-days: 30
+          if-no-files-found: ignore

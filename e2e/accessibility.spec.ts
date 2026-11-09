@@ -4,11 +4,8 @@ import AxeBuilder from "@axe-core/playwright";
 /**
  * Automated accessibility gate (sprint A-5.2 / A-4).
  *
- * Scope: PUBLIC, unauthenticated pages only. Authenticated screens (home
- * timeline, manage-feeds, settings, server-settings) require a seeded DB
- * user + a signed-in session and are intentionally OUT OF SCOPE here — see
- * TODO at the bottom of this file for how to extend coverage once a seeded
- * test user is available in CI.
+ * Scope: PUBLIC, unauthenticated pages only (authenticated screens live in
+ * e2e/authenticated-a11y.spec.ts).
  *
  * Route discovery: on a fresh, empty database (no users yet — the state a
  * new self-hosted instance boots into, and what CI provisions via
@@ -24,7 +21,9 @@ import AxeBuilder from "@axe-core/playwright";
  * covered directly below. Auditing them here would either double-test
  * /setup's DOM or be flaky (racing the client-side redirect).
  */
-const PUBLIC_ROUTES = ["/setup", "/register", "/accessibility"];
+// "/login" only has distinct content once a user exists; the seeded E2E database
+// (scripts/e2e-seed.mjs) always has users, so it is audited too.
+const PUBLIC_ROUTES = ["/setup", "/register", "/accessibility", "/login"];
 
 // Only fail the build on axe's "serious" and "critical" impact violations.
 // "minor"/"moderate" findings are logged by axe but not asserted on yet --
@@ -75,7 +74,6 @@ for (const route of PUBLIC_ROUTES) {
   });
 }
 
-// TODO(A-5.2 follow-up): add authenticated-page coverage (/, /manage-feeds,
-// /settings, /server-settings) once CI can seed a test user + session,
-// e.g. via a Prisma seed script + a login helper (fill /login form, or set
-// the authjs session cookie directly) run in a `test.beforeEach`.
+// Authenticated screens (main view, settings) are covered, non-blocking, by
+// e2e/authenticated-a11y.spec.ts using the seeded DB + storageState from the
+// E2E harness (docs/releases/testing.md).
