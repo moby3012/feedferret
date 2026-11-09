@@ -12,6 +12,12 @@ export async function register() {
     const { ensureSearchIndexes } = await import("./lib/search-indexes");
     await ensureSearchIndexes();
 
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+        const { db } = await import("./lib/db");
+        const { backfillExternalIds } = await import("./lib/external-id-store");
+        await backfillExternalIds(db as unknown as import("@prisma/client").PrismaClient);
+    }
+
     const { startBackgroundSync } = await import("./lib/background-sync");
     startBackgroundSync();
 }

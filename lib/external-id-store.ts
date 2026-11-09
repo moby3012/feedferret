@@ -1,0 +1,51 @@
+import type { PrismaClient } from "@prisma/client";
+import { storedExternalId } from "./external-ids";
+
+export async function allocateExternalIds(client: PrismaClient, count: number): Promise<string[]> {
+  if (!count) return [];
+  // The atomic increment reserves disjoint ranges across concurrent processes.
+  const row = await client.externalIdSequence.upsert({
+    where: { name: "global" },
+    create: { name: "global", value: BigInt(Date.now()) * BigInt(1000) + BigInt(count) },
+    update: { value: { increment: BigInt(count) } },
+  });
+  return Array.from({ length: count }, (_, i) => storedExternalId(row.value - BigInt(count - i - 1)));
+}
+
+export function withExternalIds(client: PrismaClient) {
+  return client.$extends({ query: { $allModels: {
+    async $allOperations({ model, operation, args, query }) {
+      if (!["Article", "Feed", "Category", "Label"].includes(model)) return query(args);
+      // Covers create, upsert and both bulk insert operations used by ingestion.
+      const input = args as { data?: unknown; create?: unknown };
+      const data = operation === "upsert" ? input.create :
+        ["create", "createMany", "createManyAndReturn"].includes(operation) ? input.data : undefined;
+      if (data) {
+        const rows = (Array.isArray(data) ? data : [data]) as { extId?: string }[];
+        const missing = rows.filter((row) => !row.extId);
+        const ids = await allocateExternalIds(client, missing.length);
+        missing.forEach((row, i) => { row.extId = ids[i]; });
+      }
+      return query(args);
+    },
+  } } });
+}
+
+export async function backfillExternalIds(client: PrismaClient, batchSize = 200) {
+  for (const model of ["category", "feed", "label", "article"] as const) {
+    // Delegate types have different overloads; all four share this small contract.
+    const delegate = client[model] as unknown as {
+      findMany(args: object): Promise<{ id: string }[]>;
+      updateMany(args: object): Promise<unknown>;
+    };
+    for (;;) {
+      const rows = await delegate.findMany({ where: { extId: null }, select: { id: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: batchSize });
+      if (!rows.length) break;
+      const ids = await allocateExternalIds(client, rows.length);
+      for (let i = 0; i < rows.length; i++) {
+        // Compare-and-set makes concurrent/restarted backfills safe; gaps are fine.
+        await delegate.updateMany({ where: { id: rows[i].id, extId: null }, data: { extId: ids[i] } });
+      }
+    }
+  }
+}

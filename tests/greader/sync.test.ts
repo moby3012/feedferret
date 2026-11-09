@@ -16,7 +16,14 @@ vi.mock("@/lib/db", async () => {
   fixture.url = `file:${join(dir, "test.db")}`;
   const db = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: fixture.url }), log: [{ emit: "event", level: "query" }] });
   db.$on("query", () => { fixture.queries++; });
-  return { db };
+    const fixtureId = (id: string) => (/^\d+$/.test(id) ? BigInt(id) : Buffer.from(id).reduce((n, c) => (n * BigInt(257) + BigInt(c)) % BigInt("72057594037927931"), BigInt(0))).toString().padStart(19, "0");
+  return { db: db.$extends({ query: { $allModels: { async $allOperations({ model, operation, args, query }) {
+    if (["Article", "Feed", "Category", "Label"].includes(model) && ["create", "createMany"].includes(operation)) {
+      const data = (args as { data: unknown }).data;
+      for (const row of (Array.isArray(data) ? data : [data]) as { id?: string; extId?: string }[]) if (row.id) row.extId = fixtureId(row.id);
+    }
+    return query(args);
+  } } } }) };
 });
 vi.mock("@/lib/greader", async (original) => ({
   ...await original<typeof import("@/lib/greader")>(),
@@ -27,7 +34,9 @@ vi.mock("@/lib/feed-fetcher", () => ({ fetchFeedArticles: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: () => ({ success: true }), getClientIdentifier: () => "u", RATE_LIMITS: { greader: {} } }));
 import { db } from "@/lib/db";
 import { GET, POST } from "@/app/api/greader/[...path]/route";
-import { authenticateGReaderRequest, greaderItemId } from "@/lib/greader";
+import { authenticateGReaderRequest, greaderItemId as encodeItemId } from "@/lib/greader";
+const fixtureId = (id: string) => (/^\d+$/.test(id) ? BigInt(id) : Buffer.from(id).reduce((n, c) => (n * BigInt(257) + BigInt(c)) % BigInt("72057594037927931"), BigInt(0))).toString();
+const greaderItemId = (id: string) => encodeItemId(fixtureId(id));
 const state = (s: string) => `user/-/state/com.google/${s}`;
 const label = "user/-/label/Tech";
 const epoch = 1700000000;
@@ -44,7 +53,7 @@ async function request(path: string, values: Record<string, string> = {}, method
 async function article(id: string, offset = 0, extra = {}) {
   return db.article.create({ data: { id, userId: "u", feedId: "f", title: id, link: `https://example.org/${id}`, content: "<p>Full body</p>", excerpt: "Short", publishedAt: date(epoch - 10000), createdAt: date(epoch + offset), updatedAt: date(epoch + offset), ...extra } });
 }
-const refs = (result: { itemRefs: { id: string }[] }) => result.itemRefs.map((r) => r.id);
+const refs = (result: { itemRefs: { id: string }[] }) => result.itemRefs.map((r) => encodeItemId(r.id));
 beforeAll(() => {
   execFileSync("node_modules/.bin/prisma", ["db", "push", "--schema", "prisma/schema.generated.prisma"], { env: { ...process.env, DATABASE_URL: fixture.url }, stdio: "pipe" });
 }, 30000);
@@ -92,7 +101,7 @@ describe("FreshRSS stream contracts", () => {
     const seen: string[] = []; let c = "";
     do {
       const page = await request(endpoint, { s: label, n: "1", r, c });
-      seen.push(...(page.itemRefs || page.items).map((item: { id: string }) => item.id)); c = page.continuation || "";
+      seen.push(...(page.itemRefs || page.items).map((item: { id: string }) => page.itemRefs ? encodeItemId(item.id) : item.id)); c = page.continuation || "";
       if (seen.length === 1) await article("arrival", 100, { publishedAt: date(epoch - 999999) });
     } while (c && seen.length < 10);
     expect(seen).toEqual((r === "o" ? ["a", "b", "c", "d"] : ["d", "c", "b", "a"]).map(greaderItemId));
@@ -110,7 +119,7 @@ describe("FreshRSS stream contracts", () => {
     expect(item.id).toBe(greaderItemId("123"));
     expect(item.summary.content).toContain("<strong>Complete</strong> body");
     expect(item.content).toEqual(item.summary);
-    expect(item.origin).toEqual({ streamId: "feed/https://example.org/rss", title: "Example", htmlUrl: "https://example.org" });
+    expect(item.origin).toEqual({ streamId: `feed/${fixtureId("f")}`, title: "Example", htmlUrl: "https://example.org" });
     expect(item.canonical).toEqual([{ href: "https://example.org/123" }]);
     expect(item.alternate).toEqual(item.canonical);
     expect(item.enclosure).toEqual([{ href: "https://example.org/a.mp3", type: "audio/mpeg", length: 42 }]);
@@ -133,7 +142,7 @@ describe("FreshRSS stream contracts", () => {
     const result = await request("unread-count");
     expect(result.max).toBe(2);
     expect(result.unreadcounts.find((x: { id: string }) => x.id === label)).toEqual({ id: label, count: 2, newestItemTimestampUsec: String((epoch + 5) * 1000000) });
-    expect(result.unreadcounts.find((x: { id: string }) => x.id === "feed/https://example.org/rss").count).toBe(1);
+    expect(result.unreadcounts.find((x: { id: string }) => x.id === `feed/${fixtureId("f")}`).count).toBe(1);
   });
   it("scopes edits to owned IDs and bulk read to discovery ts and stream", async () => {
     await article("a"); await article("b", 10); await article("foreign", 0, { userId: "other" });
@@ -165,7 +174,7 @@ it("ignores unknown read filters and falls back for unknown content streams", as
   await article("a");
   for (const endpoint of ["stream/items/ids", "stream/contents"]) {
     const result = await request(endpoint, { s: "unknown", it: "unknown", xt: "also-unknown" });
-    expect((result.itemRefs || result.items).map((x: { id: string }) => x.id)).toEqual([greaderItemId("a")]);
+    expect((result.itemRefs || result.items).map((x: { id: string }) => result.itemRefs ? encodeItemId(x.id) : x.id)).toEqual([greaderItemId("a")]);
   }
 });
 it("excludes out-of-bound discoveries and modifications for ot/nt", async () => {
@@ -209,7 +218,7 @@ it("deduplicates, caps and chunks explicit IDs on GET/POST contents and edit-tag
   const result = await request("stream/items/contents", {}, "POST", [...batches, ...batches, ...batches]);
   expect(result.items).toHaveLength(401);
   expect(spy).toHaveBeenCalledTimes(3);
-  expect(spy.mock.calls.every(([args]) => (args?.where?.id as { in: string[] }).in.length <= 200)).toBe(true);
+  expect(spy.mock.calls.every(([args]) => (args?.where?.OR?.[1]?.id as { in: string[] }).in.length <= 200)).toBe(true);
   spy.mockRestore();
   await request("edit-tag", { a: state("read") }, "POST", batches);
   expect(await db.article.count({ where: { isRead: true } })).toBe(401);

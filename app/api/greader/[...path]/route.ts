@@ -1,3 +1,4 @@
+import { decimalExternalId, externalItemWhere, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { syncFeed } from "@/lib/rss-sync";
@@ -110,7 +111,7 @@ async function getItemsByIds(userId: string, ids: string[], order: string | null
   const rows = [];
   for (const batch of chunks(itemIds(ids))) {
     rows.push(...await db.article.findMany({
-      where: { userId, id: { in: batch } },
+      where: { userId, ...externalItemWhere(batch) },
       include: { feed: { include: { category: true } }, labels: { include: { label: true } } },
     }));
   }
@@ -169,7 +170,7 @@ async function getOrCreateLabel(userId: string, name: string) {
  * `createMany`/`deleteMany` (keyed on `articleId: { in: ids }`) for labels.
  */
 async function applyTagEdit(userId: string, ids: string[], add: string[], remove: string[]) {
-  const owned = await db.article.findMany({ where: { userId, id: { in: ids } }, select: { id: true } });
+  const owned = await db.article.findMany({ where: { userId, ...externalItemWhere(ids) }, select: { id: true } });
   ids = [...new Set(owned.map((row) => row.id))];
   if (ids.length === 0) return;
 
@@ -222,9 +223,9 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
   const feedUrl = String(form.get("quickadd") || form.get("url") || "").trim();
   if (!feedUrl) return textResponse("Missing quickadd parameter", 400);
 
-  const existing = await db.feed.findFirst({ where: { userId, url: feedUrl } });
+  const existing = await db.feed.findFirst({ where: { userId, ...(/^\d+$/.test(feedUrl) ? { extId: storedExternalId(feedUrl) } : { url: feedUrl }) } });
   if (existing) {
-    return NextResponse.json({ numResults: 1, query: feedUrl, streamId: `feed/${existing.url}`, numSubscribers: 1, title: existing.name });
+    return NextResponse.json({ numResults: 1, query: feedUrl, streamId: `feed/${decimalExternalId(existing.extId)}`, numSubscribers: 1, title: existing.name });
   }
 
   const remoteFeed = await fetchFeedArticles({ url: feedUrl });
@@ -244,7 +245,7 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
   return NextResponse.json({
     numResults: 1,
     query: feedUrl,
-    streamId: `feed/${feed.url}`,
+    streamId: `feed/${decimalExternalId(feed.extId)}`,
     numSubscribers: 1,
     title: feed.name,
   });
@@ -255,7 +256,7 @@ async function handleSubscriptionEdit(userId: string, form: FormData) {
   if (!streamId.startsWith("feed/")) return textResponse("Unsupported subscription", 400);
 
   const feedUrl = streamId.slice(5);
-  const feed = await db.feed.findFirst({ where: { userId, url: feedUrl } });
+  const feed = await db.feed.findFirst({ where: { userId, ...(/^\d+$/.test(feedUrl) ? { extId: storedExternalId(feedUrl) } : { url: feedUrl }) } });
   if (!feed) return textResponse("Feed not found", 404);
 
   const action = String(form.get("ac") || "edit").toLowerCase();
@@ -362,8 +363,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
       });
 
       return NextResponse.json({
-        subscriptions: feeds.map((feed: { id: string; url: string; name: string; category: { name: string } | null }) => ({
-          id: `feed/${feed.url}`,
+        subscriptions: feeds.map((feed: { id: string; extId: string | null; url: string; name: string; category: { name: string } | null }) => ({
+          id: `feed/${decimalExternalId(feed.extId)}`,
           title: feed.name,
           categories: feed.category
             ? [{ id: `${GREADER_LABEL_PREFIX}${feed.category.name}`, label: feed.category.name }]

@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+import { decimalExternalId, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -40,9 +41,9 @@ async function getGroups(userId: string) {
   const categories = await db.category.findMany({
     where: { userId },
     orderBy: { name: "asc" },
-    select: { id: true, name: true },
+    select: { extId: true, name: true },
   });
-  return categories.map((c: { id: string; name: string }) => ({ id: c.id, title: c.name }));
+  return categories.map((c) => ({ id: decimalExternalId(c.extId), title: c.name }));
 }
 
 async function getFeedsAndGroups(userId: string) {
@@ -52,25 +53,16 @@ async function getFeedsAndGroups(userId: string) {
     orderBy: { name: "asc" },
   });
 
-  const feverFeeds = feeds.map((f: { id: string; name: string; url: string; htmlUrl: string | null; lastFetchedAt: Date | null; categoryId: string | null }) => ({
-    id: f.id,
-    favicon_id: f.id,
-    title: f.name,
-    url: f.url,
-    site_url: f.htmlUrl || f.url,
-    is_spark: 0,
-    last_updated_on_time: f.lastFetchedAt
-      ? Math.floor(f.lastFetchedAt.getTime() / 1000)
-      : 0,
-    group_id: f.categoryId || "",
+  const feverFeeds = feeds.map((f) => ({
+    id: decimalExternalId(f.extId), favicon_id: decimalExternalId(f.extId),
+    title: f.name, url: f.url, site_url: f.htmlUrl || f.url, is_spark: 0,
+    last_updated_on_time: f.lastFetchedAt ? Math.floor(f.lastFetchedAt.getTime() / 1000) : 0,
   }));
-
-  // Group by categoryId
   const groupMap = new Map<string, string[]>();
   for (const f of feeds) {
-    const gid = f.categoryId || "0";
+    const gid = f.category ? decimalExternalId(f.category.extId) : "0";
     if (!groupMap.has(gid)) groupMap.set(gid, []);
-    groupMap.get(gid)!.push(f.id);
+    groupMap.get(gid)!.push(decimalExternalId(f.extId));
   }
   const feedsGroups = Array.from(groupMap.entries()).map(
     ([group_id, feed_ids]) => ({
@@ -96,30 +88,21 @@ async function getItems(
 
   const where: Record<string, unknown> = { userId };
 
-  if (withIds?.length) {
-    where.id = { in: withIds };
-  } else if (sinceId) {
-    // Use createdAt cursor: since_id is an id string, compare by createdAt
-    const pivot = await db.article.findFirst({
-      where: { id: sinceId, userId },
-      select: { createdAt: true },
-    });
-    if (pivot) where.createdAt = { gt: pivot.createdAt };
-  } else if (maxId) {
-    const pivot = await db.article.findFirst({
-      where: { id: maxId, userId },
-      select: { createdAt: true },
-    });
-    if (pivot) where.createdAt = { lt: pivot.createdAt };
-  }
+  if (withIds?.length) where.extId = { in: withIds.map(storedExternalId) };
+  else where.extId = { ...(sinceId ? { gt: storedExternalId(sinceId) } : {}), ...(maxId && maxId !== "0" ? { lt: storedExternalId(maxId) } : {}) };
+  const feedIds = params.get("feed_ids")?.split(",").filter(Boolean);
+  const groupIds = params.get("group_ids")?.split(",").filter(Boolean);
+  if (feedIds?.length) where.feed = { extId: { in: feedIds.map(storedExternalId) }, userId };
+  if (groupIds?.length) where.AND = [{ feed: { userId, category: { userId, extId: { in: groupIds.map(storedExternalId) } } } }];
 
   const articles = await db.article.findMany({
     where,
-    orderBy: { publishedAt: "desc" },
-    take: withIds?.length ? undefined : 50,
+    orderBy: { extId: sinceId ? "asc" : "desc" },
+    take: 50,
     select: {
       id: true,
-      feedId: true,
+      extId: true,
+      feed: { select: { extId: true } },
       title: true,
       author: true,
       content: true,
@@ -133,9 +116,9 @@ async function getItems(
   });
 
   return Promise.all(
-    articles.map(async (a: { id: string; feedId: string; title: string | null; author: string | null; content: string | null; contentFormat: string; link: string | null; isStarred: boolean; isRead: boolean; publishedAt: Date }) => ({
-      id: a.id,
-      feed_id: a.feedId,
+    articles.map(async (a) => ({
+      id: decimalExternalId(a.extId),
+      feed_id: decimalExternalId(a.feed.extId),
       title: a.title,
       author: a.author || "",
       html: a.contentFormat === "markdown" && a.content ? await renderMarkdownToHtml(a.content) : a.content,
@@ -150,21 +133,19 @@ async function getItems(
 async function getUnreadIds(userId: string): Promise<string> {
   const articles = await db.article.findMany({
     where: { userId, isRead: false },
-    select: { id: true },
+    select: { extId: true },
     orderBy: { publishedAt: "desc" },
-    take: 10_000,
   });
-  return articles.map((a: { id: string }) => a.id).join(",");
+  return articles.map((a) => decimalExternalId(a.extId)).join(",");
 }
 
 async function getSavedIds(userId: string): Promise<string> {
   const articles = await db.article.findMany({
     where: { userId, isStarred: true },
-    select: { id: true },
+    select: { extId: true },
     orderBy: { publishedAt: "desc" },
-    take: 10_000,
   });
-  return articles.map((a: { id: string }) => a.id).join(",");
+  return articles.map((a) => decimalExternalId(a.extId)).join(",");
 }
 
 async function handleMark(
@@ -177,7 +158,10 @@ async function handleMark(
   const id = params.get("id") || body.id;
   const before = params.get("before") || body.before;
 
-  if (!mark || !as_ || !id) return;
+  const withIds = params.get("with_ids") || body.with_ids;
+  if (!mark || !as_ || (!id && !withIds)) return;
+  const beforeDate = before ? new Date(Number(before) * 1000) : new Date();
+  if (!Number.isFinite(beforeDate.getTime())) throw new Error("Invalid before");
 
   if (mark === "item") {
     const data: Record<string, unknown> = {};
@@ -193,25 +177,23 @@ async function handleMark(
       data.isStarred = false;
     }
     if (Object.keys(data).length) {
-      await db.article.updateMany({ where: { id, userId }, data });
+      await db.article.updateMany({ where: { extId: { in: (withIds || id!).split(",").map(storedExternalId) }, userId, ...(before ? { createdAt: { lte: beforeDate } } : {}) }, data });
     }
   } else if (mark === "feed" && as_ === "read") {
-    const beforeDate = before ? new Date(Number(before) * 1000) : new Date();
     await db.article.updateMany({
       where: {
-        feedId: id,
+        feed: { userId, extId: storedExternalId(id!) },
         userId,
         isRead: false,
-        publishedAt: { lte: beforeDate },
+        createdAt: { lte: beforeDate },
       },
       data: { isRead: true, readAt: new Date() },
     });
   } else if (mark === "group" && as_ === "read") {
-    const beforeDate = before ? new Date(Number(before) * 1000) : new Date();
     if (id === "0") {
       // Special group ID 0 = all feeds
       await db.article.updateMany({
-        where: { userId, isRead: false, publishedAt: { lte: beforeDate } },
+        where: { userId, isRead: false, createdAt: { lte: beforeDate } },
         data: { isRead: true, readAt: new Date() },
       });
     } else {
@@ -219,8 +201,8 @@ async function handleMark(
         where: {
           userId,
           isRead: false,
-          publishedAt: { lte: beforeDate },
-          feed: { categoryId: id },
+          createdAt: { lte: beforeDate },
+          feed: { userId, category: { userId, extId: storedExternalId(id!) } },
         },
         data: { isRead: true, readAt: new Date() },
       });
@@ -238,7 +220,10 @@ async function handle(request: Request) {
     if (request.method === "POST") {
       try {
         const ct = request.headers.get("content-type") || "";
-        if (ct.includes("application/x-www-form-urlencoded")) {
+        if (ct.includes("multipart/form-data")) {
+          const form = await request.formData();
+          form.forEach((v, k) => { if (typeof v === "string") body[k] = v; });
+        } else if (ct.includes("application/x-www-form-urlencoded")) {
           const text = await request.text();
           new URLSearchParams(text).forEach((v, k) => {
             body[k] = v;
@@ -250,6 +235,8 @@ async function handle(request: Request) {
         /* ignore parse errors */
       }
     }
+
+    Object.entries(body).forEach(([k, v]) => params.set(k, v));
 
     if (!params.has("api")) {
       return NextResponse.json(
@@ -272,6 +259,8 @@ async function handle(request: Request) {
     if (params.has("mark") || body.mark) {
       if (!["write", "admin"].includes(user.tokenScope)) return NextResponse.json({ api_version: 3, auth: 1, error: "Insufficient token scope" }, { status: 403 });
       await handleMark(user.id, params, body);
+      result.unread_item_ids = await getUnreadIds(user.id);
+      result.saved_item_ids = await getSavedIds(user.id);
     }
 
     if (params.has("feeds") || params.has("groups")) {
@@ -297,7 +286,8 @@ async function handle(request: Request) {
     }
 
     if (params.has("favicons")) {
-      result.favicons = [];
+      const feeds = await db.feed.findMany({ where: { userId: user.id }, select: { extId: true, icon: true } });
+      result.favicons = feeds.map((feed) => ({ id: decimalExternalId(feed.extId), data: feed.icon?.startsWith("data:") ? feed.icon : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=" }));
     }
 
     if (params.has("unread_item_ids")) {
@@ -308,7 +298,10 @@ async function handle(request: Request) {
       result.saved_item_ids = await getSavedIds(user.id);
     }
 
-    return NextResponse.json(result);
+    const refresh = await db.feed.aggregate({ where: { userId: user.id }, _max: { lastFetchedAt: true } });
+    result.last_refreshed_on_time = refresh._max.lastFetchedAt ? Math.floor(refresh._max.lastFetchedAt.getTime() / 1000) : 0;
+    // Emit JSON integer tokens without passing identities through Number.
+    return new NextResponse(JSON.stringify(result).replace(/"(id|feed_id|favicon_id|group_id)":"(\d+)"/g, '"$1":$2'), { headers: { "content-type": "application/json" } });
   } catch (error) {
     logger.error("[api/fever]", error);
     return NextResponse.json(baseResponse(0), { status: 500 });

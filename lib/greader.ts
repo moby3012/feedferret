@@ -1,3 +1,4 @@
+import { decimalExternalId, storedExternalId } from "./external-ids";
 import { Prisma } from "@prisma/client";
 import crypto from "crypto";
 import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
@@ -93,7 +94,7 @@ export async function authenticateGReaderRequest(request: Request) {
 }
 
 export function greaderItemId(articleId: string) {
-  return `tag:feedferret,2026:article/${articleId}`;
+  return `tag:google.com,2005:reader/item/${BigInt(articleId).toString(16).padStart(16, "0")}`;
 }
 
 export function parseGReaderItemId(id: string) {
@@ -168,7 +169,7 @@ function streamPredicate(userId: string, streamId?: string | null): any {
   if (stream.type === "reading-list") return { feed: { priority: { in: ["category", "main", "important"] } } };
   if (stream.type === "starred") return { isStarred: true };
   if (stream.type === "read") return { isRead: true };
-  if (stream.type === "feed") return { feed: { url: stream.value } };
+  if (stream.type === "feed") return { feed: /^\d+$/.test(stream.value) ? { extId: storedExternalId(stream.value) } : { url: stream.value } };
   if (stream.type === "label") return { OR: [
     { labels: { some: { label: { userId, name: stream.value } } } },
     { feed: { priority: { in: ["category", "main", "important"] }, category: { userId, name: stream.value } } },
@@ -292,7 +293,7 @@ export async function countGReaderUnread(userId: string, streamId: string) {
 /** Constant query count regardless of subscription/tag count. */
 export async function countGReaderFeedsAndTags(userId: string) {
   const [feeds, categories, labels, unread, tagged] = await Promise.all([
-    db.feed.findMany({ where: { userId }, select: { id: true, url: true, priority: true, categoryId: true } }),
+    db.feed.findMany({ where: { userId }, select: { id: true, extId: true, url: true, priority: true, categoryId: true } }),
     db.category.findMany({ where: { userId }, select: { id: true, name: true } }),
     db.label.findMany({ where: { userId }, select: { name: true } }),
     db.article.groupBy({ by: ["feedId"], where: { userId, isRead: false }, _count: true, _max: { createdAt: true } }),
@@ -326,7 +327,7 @@ export async function countGReaderFeedsAndTags(userId: string) {
       const tag = tags.get(name)!;
       tag.count += count; tag.newest = Math.max(tag.newest, newest);
     }
-    return feed.priority === "hidden" ? [] : [result(`feed/${feed.url}`, count, newest)];
+    return feed.priority === "hidden" ? [] : [result(`feed/${decimalExternalId(feed.extId)}`, count, newest)];
   });
   for (const row of tagged) {
     const tag = tags.get(row.name)!;
@@ -348,7 +349,7 @@ export async function toGReaderArticle(article: any) {
     if (Array.isArray(parsed)) enclosures = parsed;
   } catch { /* Corrupt feed metadata must not break a sync page. */ }
   return {
-    id: greaderItemId(article.id),
+    id: greaderItemId(decimalExternalId(article.extId)),
     crawlTimeMsec: String(new Date(article.createdAt).getTime()),
     timestampUsec: String(timestampUsec),
     published: Math.floor(new Date(article.publishedAt).getTime() / 1000),
@@ -367,7 +368,7 @@ export async function toGReaderArticle(article: any) {
       ...(article.labels || []).map((item: any) => `${GREADER_LABEL_PREFIX}${item.label.name}`),
     ])],
     origin: {
-      streamId: `feed/${article.feed.url}`,
+      streamId: `feed/${decimalExternalId(article.feed.extId)}`,
       title: article.feed.name,
       htmlUrl: article.feed.htmlUrl || article.feed.url,
     },
@@ -380,9 +381,9 @@ export async function toGReaderArticle(article: any) {
 
 export function toGReaderItemRef(article: any) {
   return {
-    id: greaderItemId(article.id),
+    id: decimalExternalId(article.extId),
     directStreamIds: [
-      `feed/${article.feed.url}`,
+      `feed/${decimalExternalId(article.feed.extId)}`,
       ...(article.feed?.category?.name ? [`${GREADER_LABEL_PREFIX}${article.feed.category.name}`] : []),
     ],
     timestampUsec: String(new Date(article.createdAt).getTime() * 1000),

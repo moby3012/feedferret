@@ -30,7 +30,7 @@ Supported query parameters for stream endpoints:
 
 | Param | Description |
 |---|---|
-| `s` | Stream ID (reading-list, starred, specific feed URL, label) |
+| `s` | Stream ID (reading-list, starred, numeric feed ID or legacy feed URL, label) |
 | `n` | Page size (default 20; positive sizes have no artificial maximum; zero/negative = unlimited, as FreshRSS) |
 | `c` | Continuation token for pagination |
 | `it` | Include state filter (e.g. `user/-/state/com.google/read`) |
@@ -39,14 +39,14 @@ Supported query parameters for stream endpoints:
 | `nt` | Newest timestamp (Unix seconds): discovery <= nt AND modification <= nt |
 | `r` | Sort order: `o` = oldest first; default is newest first |
 
-The `POST stream/items/contents` body uses `application/x-www-form-urlencoded` with one or more `i=<itemId>` fields. Item IDs use the `tag:feedferret,2026:article/<id>` format returned by `stream/items/ids`.
+The `POST stream/items/contents` body uses `application/x-www-form-urlencoded` with one or more `i=<itemId>` fields. `stream/items/ids` returns decimal numeric strings. Contents use `tag:google.com,2005:reader/item/<16-hex>`; both forms and legacy FeedFerret CUID references are accepted.
 
 Supported stream targets:
 
 - `user/-/state/com.google/reading-list` — articles from category/main/important feeds
 - `user/-/state/com.google/starred` — starred articles
 - `user/-/state/com.google/read` — read articles
-- `feed/<url>` — specific feed
+- `feed/<numeric-id>` — specific feed (legacy `feed/<url>` also accepted)
 - `user/-/label/<name>` — user label or folder/category
 
 ### Metadata
@@ -80,7 +80,7 @@ Use `https://your-feedferret-host/api/greader` with a **Google Reader compatible
 
 | Client target | Contract coverage | Native-client status |
 |---|---|---|
-| Reeder Classic, FeedMe | IDs → repeated POST `i`, full summary, state edits | Not certified; numeric-ID adapter still required |
+| Reeder Classic, FeedMe | IDs → repeated POST `i`, full summary, state edits | Protocol contracts tested; native app release not certified |
 | Read You, Fluent Reader, ReadKit | Stream filters, delta bounds, ordering, continuation | Not certified; verify the app's selected protocol/version |
 | NetNewsWire | No supported FreshRSS/GReader adapter established | Unsupported/unverified; Feedbin support does not imply GReader support |
 
@@ -95,7 +95,7 @@ Reference baseline: [FreshRSS a24ff145 GReader API](https://github.com/FreshRSS/
 - Reading list includes category/main/important feeds; feed-only and hidden priorities require explicit feed access. `org.freshrss/main` includes main/important feeds; `org.freshrss/important` includes important feeds. Explicit feed streams can access hidden feeds.
 - Unread, read, starred, folder/label and feed targets combine with repeated `it`/`xt` filters using AND. Unknown targets return no items.
 - Read/starred states map directly to FeedFerret article flags.
-- Item IDs retain `tag:feedferret,2026:article/<cuid>`. Numeric-only clients can fail to sync: persistent external numeric identities are deferred to the next PR. Raw database IDs and FeedFerret refs round-trip; decimal raw IDs and Google hex references resolve only when the underlying stored ID is that decimal string. No numeric mapping is fabricated for CUIDs.
+- Article/feed identities persist independently of CUIDs; decimal references and Google hex contents round-trip without `Number` conversion. See [numeric identity deployment details](numeric-api-ids.md) for startup backfill, Fever contracts and remaining timestamp limitations.
 - Ordering uses discovery (`createdAt`) plus ID, not publication. Continuations preserve a discovery high-water mark and use direction-aware keyset comparisons. Items arriving after that mark appear in the next sync. Changes to stream membership during pagination are not a database snapshot.
 - `ot` also includes modified older articles; `nt` bounds both discovery and modification. FeedFerret uses its combined `updatedAt` clock because it has no separate FreshRSS `lastModified` field.
 - Bulk read `ts` compares discovery in microseconds, including the cutoff; invalid cutoffs are rejected.

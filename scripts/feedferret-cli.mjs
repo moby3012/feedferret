@@ -36,6 +36,11 @@ async function syncUser(user) {
       for (const item of remote.items) {
         if (!item.link) continue;
         const externalId = item.guid || item.id || item.link;
+        const sequence = await prisma.externalIdSequence.upsert({
+          where: { name: 'global' },
+          create: { name: 'global', value: BigInt(Date.now()) * 1000n + 1n },
+          update: { value: { increment: 1n } },
+        });
         await prisma.article.upsert({
           where: {
             userId_feedId_dedupeKey: {
@@ -46,6 +51,7 @@ async function syncUser(user) {
           },
           update: { title: item.title || 'Untitled', link: item.link, externalId, excerpt: item.summary || item.contentSnippet || null },
           create: {
+            extId: sequence.value.toString().padStart(19, "0"),
             userId: feed.userId,
             feedId: feed.id,
             title: item.title || 'Untitled',
