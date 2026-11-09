@@ -194,6 +194,7 @@ export async function executeWebhookCall(
     await assertSafeFetchUrl(url, { context: "Webhook", allowInternal });
 
     const res = await fetch(url, {
+      redirect: "manual",
       method,
       headers,
       body,

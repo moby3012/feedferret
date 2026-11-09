@@ -42,7 +42,7 @@ export async function GET() {
   return NextResponse.json({
     instanceName: settings?.instanceName || "FeedFerret",
     instanceIconDataUrl: settings?.instanceIconDataUrl || null,
-    registrationsEnabled: settings?.registrationsEnabled ?? true,
+    registrationsEnabled: settings?.registrationsEnabled ?? false,
     capabilities: {
       mail: mailConfigured,
       push: pushConfigured,

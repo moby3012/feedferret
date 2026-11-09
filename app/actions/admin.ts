@@ -14,7 +14,10 @@ import { logger } from "@/lib/logger";
 
 async function checkAdmin() {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  const currentUser = session?.user?.id ? await db.user.findUnique({
+    where: { id: session.user.id }, select: { role: true, isActive: true },
+  }) : null;
+  if (!session?.user?.id || !currentUser?.isActive || currentUser.role !== "ADMIN") {
     throw new Error("Unauthorized: Admin access required");
   }
   const settings = await db.globalSettings.findUnique({

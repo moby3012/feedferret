@@ -1,25 +1,9 @@
 export const dynamic = "force-dynamic";
 
-import { auth } from "@/auth";
+import { resolveApiUser, scopeError } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
-import { hashApiToken } from "@/lib/token";
 
-async function resolveUser(request: Request) {
-    // Session auth (web app / same-origin)
-    const session = await auth();
-    if (session?.user?.id) return session.user.id;
-
-    // Bearer token auth (browser extension / mobile app)
-    const authHeader = request.headers.get("authorization");
-    if (authHeader?.startsWith("Bearer ")) {
-        const token = authHeader.slice(7).trim();
-        const tokenRecord = await db.apiToken.findUnique({ where: { tokenHash: hashApiToken(token) }, select: { userId: true, expiresAt: true } });
-        if (tokenRecord && (!tokenRecord.expiresAt || tokenRecord.expiresAt > new Date())) return tokenRecord.userId;
-    }
-
-    return null;
-}
 
 /**
  * GET /api/read-later
@@ -32,7 +16,8 @@ async function resolveUser(request: Request) {
  * [{ id, title, link, excerpt, author, publishedAt, feedName, imageUrl, isRead, readLaterSavedAt }]
  */
 export async function GET(request: Request) {
-    const userId = await resolveUser(request);
+    const user = await resolveApiUser(request);
+    const userId = user?.id;
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const articles = await db.article.findMany({
@@ -70,8 +55,12 @@ export async function GET(request: Request) {
  * Response 404: { error: "Article not found" }
  */
 export async function POST(request: Request) {
-    const userId = await resolveUser(request);
+    const user = await resolveApiUser(request);
+    const userId = user?.id;
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const denied = scopeError(user!, "write");
+    if (denied) return denied;
 
     const body = await request.json().catch(() => ({}));
     const { articleId, url } = body as { articleId?: string; url?: string };
@@ -107,8 +96,12 @@ export async function POST(request: Request) {
  * Response 404: { error: "Article not found" }
  */
 export async function DELETE(request: Request) {
-    const userId = await resolveUser(request);
+    const user = await resolveApiUser(request);
+    const userId = user?.id;
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const denied = scopeError(user!, "write");
+    if (denied) return denied;
 
     const body = await request.json().catch(() => ({}));
     const { articleId, url } = body as { articleId?: string; url?: string };

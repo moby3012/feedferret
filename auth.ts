@@ -8,13 +8,15 @@ import bcrypt from "bcryptjs";
 import { verifyTotpToken } from "@/lib/totp";
 import { sendSignInEmail } from "@/lib/mail";
 
+import { validateAuthSecret } from "@/lib/auth-secret";
+import { getClientIdentifier } from "@/lib/rate-limit";
+
 const isBuild = process.env.NEXT_PHASE === "phase-production-build";
 
 if (isBuild && !process.env.AUTH_SECRET) {
   process.env.AUTH_SECRET = "build-time-secret-only";
-} else if (!isBuild && process.env.NODE_ENV === "production" && !process.env.AUTH_SECRET) {
-  throw new Error("AUTH_SECRET must be set in production — refusing to start with an insecure fallback secret.");
 }
+if (!isBuild) validateAuthSecret();
 
 const oauthProviders = [...((authConfig.providers ?? []) as any[])];
 
@@ -47,9 +49,7 @@ const config = {
         if (!credentials?.email || !credentials?.password) return null;
 
         const email = credentials.email as string;
-        const ip = (req as any)?.headers?.get?.("x-forwarded-for")?.split(",")[0]?.trim()
-          ?? (req as any)?.headers?.get?.("x-real-ip")
-          ?? null;
+        const ip = getClientIdentifier(req).replace(/^ip:/, "");
         const userAgent = (req as any)?.headers?.get?.("user-agent") ?? null;
 
         const logAttempt = async (success: boolean, userId?: string, failReason?: string) => {
@@ -85,7 +85,8 @@ const config = {
       if (
         account?.type === "credentials" ||
         account?.provider === "nodemailer" ||
-        account?.type === "oauth"
+        account?.type === "oauth" ||
+        account?.type === "oidc"
       ) {
         if (!user.email) {
           return false;
@@ -101,8 +102,14 @@ const config = {
 
         if (!existingUser) {
           const settings = await db.globalSettings.findUnique({ where: { id: "global" } });
-          if (settings && !settings.registrationsEnabled) {
-            return false;
+          if (settings && !settings.registrationsEnabled && await db.user.count() > 0) return false;
+          // Persist the default only for an empty installation. Legacy installs
+          // with users and no settings retain their previous open policy.
+          if (!settings && await db.user.count() === 0) {
+            await db.globalSettings.upsert({
+              where: { id: "global" }, update: {},
+              create: { id: "global", registrationsEnabled: false },
+            });
           }
         }
       }
@@ -123,14 +130,14 @@ const config = {
         select: { isActive: true, sessionVersion: true, role: true },
       })) as any;
 
+      if (!user || !user.isActive) {
+        const { sub: _sub, role: _role, sv: _sv, email: _email, name: _name, picture: _picture, ...rest } = token;
+        return rest;
+      }
       if (user) {
-        if (user.isActive === false) {
-          const { sub: _sub, ...rest } = token;
-          return rest;
-        }
         // Invalidate token if sessionVersion changed (password change, 2FA toggle)
         if (typeof token.sv === "number" && token.sv !== user.sessionVersion) {
-          const { sub: _sub, ...rest } = token;
+          const { sub: _sub, role: _role, sv: _sv, email: _email, name: _name, picture: _picture, ...rest } = token;
           return rest;
         }
         token.role = user.role;

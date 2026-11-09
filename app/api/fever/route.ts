@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
 import { checkRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 
-type FeverUser = { id: string; email: string | null };
+type FeverUser = { id: string; email: string | null; tokenScope: string };
 
 async function authenticateFever(
   params: URLSearchParams,
@@ -21,7 +21,7 @@ async function authenticateFever(
       where: { feverKey: apiKey },
       include: { user: { select: { id: true, email: true, isActive: true } } },
     });
-    if (token?.user?.isActive) return token.user;
+    if (token?.user?.isActive && (!token.expiresAt || token.expiresAt > new Date())) return { ...token.user, tokenScope: token.scope };
   } catch {
     // ApiToken model not yet available
   }
@@ -270,6 +270,7 @@ async function handle(request: Request) {
 
     // Handle mark (write) operations
     if (params.has("mark") || body.mark) {
+      if (!["write", "admin"].includes(user.tokenScope)) return NextResponse.json({ api_version: 3, auth: 1, error: "Insufficient token scope" }, { status: 403 });
       await handleMark(user.id, params, body);
     }
 

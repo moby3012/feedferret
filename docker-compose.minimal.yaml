@@ -25,7 +25,7 @@ services:
     environment:
       - DATABASE_PROVIDER=sqlite
       - DATABASE_URL=file:/app/data/dev.db
-      - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
+      - AUTH_SECRET=${AUTH_SECRET:?set AUTH_SECRET}
       - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
       - AUTH_URL=${AUTH_URL:-https://feedferret.example.com}
       - PORT=${PORT:-3000}

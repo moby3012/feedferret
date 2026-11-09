@@ -437,7 +437,7 @@ model SavedSearch {
 
 model GlobalSettings {
   id                  String   @id @default("global")
-  registrationsEnabled Boolean  @default(true)
+  registrationsEnabled Boolean  @default(false)
   mailServiceEnabled   Boolean  @default(false)
   mailProvider        String   @default("smtp")
   // SMTP config

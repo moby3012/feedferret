@@ -103,3 +103,36 @@ describe("fetchWithSsrfProtection — error body surfacing", () => {
     ).rejects.toThrow(/Fetch failed: 404 — Not Found/);
   });
 });
+
+describe("reserved addresses and mapped normalization", () => {
+  it.each(["0.1.2.3", "192.0.0.1", "198.51.100.1", "203.0.113.1", "240.0.0.1", "::ffff:172.17.0.1", "::ffff:ac1f:ffff", "::ffff:100.64.0.1", "::ffff:0.0.0.0", "::ffff:192.0.0.1", "64:ff9b::a00:1", "2002:0808:0808::1", "fec0::1", "febf::1", "ff02::1", "2001:db8::1", "[::1]"])("blocks %s", ip => {
+    expect(isPrivateIp(ip)).toBe(true);
+  });
+  it.each(["::ffff:8.8.8.8", "::ffff:808:808", "2001:4860:4860::8888", "2606:4700:4700::1111"])("allows %s", ip => {
+    expect(isPrivateIp(ip)).toBe(false);
+  });
+});
+
+describe("redirect credentials", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each([true, false])("cross origin = %s", async crossOrigin => {
+    const seen: Headers[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url, init) => {
+      seen.push(new Headers(init.headers));
+      return seen.length === 1
+        ? new Response(null, { status: 302, headers: { location: crossOrigin ? "https://other.test/final" : "/final" } })
+        : new Response("ok");
+    }));
+    const headers = { Authorization: "Basic secret", Cookie: "session=secret", Accept: "text/plain" };
+    await fetchWithSsrfProtection("https://start.test/", { headers }, { allowInternal: true });
+    expect(seen[0].get("authorization")).toBe("Basic secret");
+    expect(seen[1].get("authorization")).toBe(crossOrigin ? null : "Basic secret");
+    expect(seen[1].get("cookie")).toBe(crossOrigin ? null : "session=secret");
+    expect(seen[1].get("accept")).toBe("text/plain");
+    expect(headers.Authorization).toBe("Basic secret");
+  });
+});
+
+it.each(["fe80::1%eth0", "2606:4700::1111%eth0", "[fe80::1%25en0]"])("blocks zone-ID literal %s without throwing", ip => {
+  expect(isPrivateIp(ip)).toBe(true);
+});

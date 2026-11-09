@@ -90,6 +90,15 @@ export function checkRateLimit(
   };
 }
 
+/** Inspect failed-attempt budgets without consuming a request. */
+export function peekRateLimit(identifier: string, config: RateLimitConfig): RateLimitResult {
+  const now = Date.now();
+  const entry = store.get(`${config.prefix}:${identifier}`);
+  const count = entry && entry.resetAt >= now ? entry.count : 0;
+  const resetAt = entry && entry.resetAt >= now ? entry.resetAt : now + config.windowSecs * 1000;
+  return { success: count < config.limit, remaining: Math.max(0, config.limit - count), resetAt };
+}
+
 // Presets for different API endpoints
 export const RATE_LIMITS = {
   // Feedsearch.dev: be respectful, 10 req/min per user
@@ -213,7 +222,12 @@ export function getClientIdentifier(
 
   // Try common proxy headers
   const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return `ip:${forwarded.split(",")[0].trim()}`;
+  if (forwarded) {
+    const hops = forwarded.split(",").map(hop => hop.trim());
+    const configured = Number(process.env.TRUSTED_PROXY_COUNT ?? 1);
+    const count = Number.isSafeInteger(configured) && configured >= 1 ? configured : 1;
+    return `ip:${hops[Math.max(0, hops.length - count)] || "unknown"}`;
+  }
 
   const realIp = request.headers.get("x-real-ip");
   if (realIp) return `ip:${realIp}`;

@@ -1,6 +1,9 @@
+import { validateAuthSecret } from "./lib/auth-secret";
+
 export async function register() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+    if (process.env.NEXT_PHASE !== "phase-production-build") validateAuthSecret();
     validateEnvironment();
 
     // Provisions pg_trgm / FTS5 search acceleration (audit finding P-11).

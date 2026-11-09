@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
+
 export async function POST(request: Request) {
+  const limit = checkRateLimit(getClientIdentifier(request), { ...RATE_LIMITS.authSignIn, prefix: "credentials-status" });
+  if (!limit.success) return rateLimitResponse(limit);
   try {
     const { email } = await request.json();
 
