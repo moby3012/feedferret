@@ -46,7 +46,7 @@ interface CommandPaletteProps {
   categories: CommandPaletteCategory[];
   labels: CommandPaletteLabel[];
   onRefresh: () => void;
-  onMarkAllRead: () => void;
+  onMarkAllRead?: () => void;
   onFocusSearch: () => void;
   onAddFeed: () => void;
   onOpenSettings: () => void;
@@ -123,11 +123,13 @@ export function CommandPalette({
             {t("actions.refresh")}
             <CommandShortcut>R</CommandShortcut>
           </CommandItem>
-          <CommandItem value={t("actions.markAllRead")} onSelect={() => runAction(onMarkAllRead)}>
-            <CheckCheck />
-            {t("actions.markAllRead")}
-            <CommandShortcut>⇧A</CommandShortcut>
-          </CommandItem>
+          {onMarkAllRead && (
+            <CommandItem value={t("actions.markAllRead")} onSelect={() => runAction(onMarkAllRead)}>
+              <CheckCheck />
+              {t("actions.markAllRead")}
+              <CommandShortcut>⇧A</CommandShortcut>
+            </CommandItem>
+          )}
           <CommandItem value={t("actions.focusSearch")} onSelect={() => runAction(onFocusSearch)}>
             <Search />
             {t("actions.focusSearch")}

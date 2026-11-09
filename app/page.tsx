@@ -13,6 +13,7 @@ import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog"
 import { MobileBottomControls } from "@/components/mobile-bottom-controls";
 import { EndOfListCard } from "@/components/end-of-list-card";
 import { SearchResultsView } from "@/components/search-results-view";
+import { isMarkAllAllowed } from "@/lib/view-scope";
 import {
   useFeeds,
   useArticles,
@@ -21,8 +22,9 @@ import {
   useToggleStarred,
   useToggleReadLater,
   useRefresh,
-  useMarkAllAsRead,
-  useMarkArticlesAsUnread,
+  useMarkViewRead,
+  ARTICLES_READ_CHANGED_EVENT,
+  type ArticlesReadChangedDetail,
   useFetchFullText,
   useLabels,
   useCategories,
@@ -144,8 +146,7 @@ export default function RSSReaderPage() {
   const toggleRead = useToggleRead();
   const toggleStarred = useToggleStarred();
   const toggleReadLater = useToggleReadLater();
-  const markAllAsRead = useMarkAllAsRead();
-  const markArticlesAsUnread = useMarkArticlesAsUnread();
+  const { markViewRead, isPending: isMarkingAllRead } = useMarkViewRead();
   const fetchFullText = useFetchFullText();
   const { data: labels = [] } = useLabels(isAuthenticated);
   const { data: categories = [] } = useCategories(isAuthenticated);
@@ -594,32 +595,37 @@ export default function RSSReaderPage() {
     refresh.mutate();
   }, [refresh]);
 
-  // Every bulk mark-read goes through here so it always gets a 6 s Undo toast
-  // that restores exactly the articles this call changed.
-  const markViewRead = useCallback(
-    (scope: { feedId: string | null; category: string | null }) => {
-      markAllAsRead
-        .mutateAsync(scope)
-        .then((result) => {
-          const ids = result?.ids ?? [];
-          if (ids.length === 0) return;
-          toast(t("undoMarkAllReadMessage", { count: ids.length }), {
-            duration: 6000,
-            action: {
-              label: t("undo"),
-              onClick: () => markArticlesAsUnread.mutate(ids),
-            },
-          });
-        })
-        .catch(() => toast.error(t("markAllReadFailed")));
-    },
-    [markAllAsRead, markArticlesAsUnread, t],
-  );
+  // Whether "mark all read" applies to the current view. Read-only views
+  // (Recently Read, Spoiler) have nothing to mark, so every control is hidden.
+  const canMarkAllRead = isSearchActive || isMarkAllAllowed(selectedFeed, selectedCategory);
 
-  // Explicit "mark all read": stays on the current view (no auto-jump).
+  // Explicit "mark all read": marks exactly the current view (feed / category /
+  // label / saved search / active search) and stays on it (no auto-jump).
+  // Every entry point (header, end card, palette, shortcut) shares this handler.
   const handleMarkAllRead = useCallback(() => {
+    if (!canMarkAllRead) return;
+    if (isSearchActive) {
+      markViewRead({ feedId: null, category: "All Articles", search: debouncedSearchQuery });
+      return;
+    }
     markViewRead({ feedId: selectedFeed, category: selectedFeed ? null : selectedCategory });
-  }, [markViewRead, selectedFeed, selectedCategory]);
+  }, [canMarkAllRead, isSearchActive, debouncedSearchQuery, markViewRead, selectedFeed, selectedCategory]);
+
+  // Reconcile locally held article copies (session snapshots, open reader) with
+  // what the server just committed — bulk mark-read and its Undo, from any
+  // entry point including the sidebar menus.
+  useEffect(() => {
+    const onReadChanged = (event: Event) => {
+      const { ids, isRead } = (event as CustomEvent<ArticlesReadChangedDetail>).detail;
+      const changed = new Set(ids);
+      const patch = (a: any) => (changed.has(a.id) ? { ...a, isRead, readAt: isRead ? new Date() : null } : a);
+      setSessionReadArticles((prev) => prev.map(patch));
+      setSelectedArticleSnapshot((prev: any) => (prev ? patch(prev) : prev));
+      setReadInSession((prev) => (isRead ? prev : prev.filter((id) => !changed.has(id))));
+    };
+    window.addEventListener(ARTICLES_READ_CHANGED_EVENT, onReadChanged);
+    return () => window.removeEventListener(ARTICLES_READ_CHANGED_EVENT, onReadChanged);
+  }, []);
 
   const toggleUnreadOnly = useCallback(() => {
     setTransitionStyle("filter");
@@ -660,8 +666,8 @@ export default function RSSReaderPage() {
   const endOfListCard = (
     <EndOfListCard
       caughtUp={unreadCount === 0}
-      onMarkAllRead={handleMarkAllRead}
-      isMarkingAllRead={markAllAsRead.isPending}
+      onMarkAllRead={canMarkAllRead ? handleMarkAllRead : undefined}
+      isMarkingAllRead={isMarkingAllRead}
       nextFeedName={nextFeedWithUnread?.name ?? null}
       onContinue={handleContinueToNextFeed}
       continueMarksRead={readingPrefs?.markReadOnAdvance ?? false}
@@ -985,8 +991,8 @@ export default function RSSReaderPage() {
                   onToggleUnreadOnly={toggleUnreadOnly}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
-                  onMarkAllRead={handleMarkAllRead}
-                  isMarkingAllRead={markAllAsRead.isPending}
+                  onMarkAllRead={canMarkAllRead ? handleMarkAllRead : undefined}
+                  isMarkingAllRead={isMarkingAllRead}
                   onSaveSearch={handleSaveSearch}
                   onShowShortcuts={() => setShortcutsOpen(true)}
                   sortOrder={sortOrder}
@@ -1098,8 +1104,8 @@ export default function RSSReaderPage() {
               onToggleUnreadOnly={toggleUnreadOnly}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
-              onMarkAllRead={handleMarkAllRead}
-              isMarkingAllRead={markAllAsRead.isPending}
+              onMarkAllRead={canMarkAllRead ? handleMarkAllRead : undefined}
+              isMarkingAllRead={isMarkingAllRead}
               onSaveSearch={handleSaveSearch}
               onShowShortcuts={() => setShortcutsOpen(true)}
               sortOrder={sortOrder}
@@ -1147,8 +1153,8 @@ export default function RSSReaderPage() {
           isRefreshing={articlesLoading || refresh.isPending}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onMarkAllRead={handleMarkAllRead}
-          isMarkingAllRead={markAllAsRead.isPending}
+          onMarkAllRead={canMarkAllRead ? handleMarkAllRead : undefined}
+          isMarkingAllRead={isMarkingAllRead}
           isSearchActive={isSearchActive}
           onCloseSearch={handleCloseSearch}
           onEditSearch={handleEditSearch}
@@ -1263,7 +1269,7 @@ export default function RSSReaderPage() {
         categories={categories}
         labels={labels}
         onRefresh={handleRefresh}
-        onMarkAllRead={handleMarkAllRead}
+        onMarkAllRead={canMarkAllRead ? handleMarkAllRead : undefined}
         onFocusSearch={handleEditSearch}
         onAddFeed={handleOpenAddFeed}
         onOpenSettings={handleOpenSettings}

@@ -27,6 +27,8 @@ import { createPageFeedForUser } from "@/lib/page-feed-create";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs } from "@/lib/webhooks";
 import { buildXPathArticles } from "@/lib/feed-fetcher";
 import { buildAdvancedSearchWhere } from "@/lib/search";
+import { createUndoToken, peekUndoToken, discardUndoToken } from "@/lib/undo-tokens";
+import { isMarkAllAllowed } from "@/lib/view-scope";
 import { applyRetentionPoliciesForUser } from "@/lib/retention";
 import { randomBytes } from "crypto";
 import { decryptIfValue } from "@/lib/crypto";
@@ -1129,10 +1131,12 @@ export async function getViewUnreadCount(feedId?: string | null, category?: stri
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
+    // Read-only views ("Recently Read", "Spoiler") have nothing to mark read:
+    // report 0 instead of counting unrelated unread rows.
+    if (!isMarkAllAllowed(feedId, category)) return 0;
+
     const { where } = await buildViewScope(session.user.id, feedId, category, search);
-    // "Recently Read" is by definition all read; keep its own isRead filter
-    // intact so the count is 0 rather than overriding it.
-    if (where.isRead !== true) where.isRead = false;
+    where.isRead = false;
     return db.article.count({ where });
 }
 
@@ -1355,109 +1359,102 @@ export async function fetchFullText(articleId: string) {
     return { ...article, suggestAutoFullText };
 }
 
-export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null }) {
+/**
+ * Marks exactly the current list view read: the scope is built by the same
+ * `buildViewScope` as `getArticles` / `getViewUnreadCount`, so feed / category /
+ * label / saved search / free-text search / "hide duplicates" / spoiler rules
+ * all match what the user sees. Read-only views ("Recently Read", "Spoiler")
+ * change nothing.
+ *
+ * The select + update run in one transaction (all or nothing) and the result
+ * lists the ids that were really changed plus a server-side, user-scoped
+ * `undoToken` for `markArticlesAsUnread`.
+ */
+export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null; search?: string | null }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+    const userId = session.user.id;
 
-    const where: any = { 
-        userId: session.user.id,
-        isRead: false 
-    };
-    
-    if (scope?.feedId) {
-        where.feedId = scope.feedId;
-    } else if (scope?.category && scope.category !== "All" && scope.category !== "All Articles") {
-        if (scope.category === "Starred") {
-            where.isStarred = true;
-        } else if (scope.category === "New Articles") {
-            where.isRead = false;
-        } else if (scope.category.startsWith("Label:")) {
-            where.labels = {
-                some: {
-                    labelId: scope.category.slice("Label:".length),
-                    userId: session.user.id,
-                },
-            };
-        } else if (scope.category.startsWith("Search:")) {
-            const savedSearch = await db.savedSearch.findUnique({
-                where: { id: scope.category.slice("Search:".length), userId: session.user.id },
-            });
-            if (savedSearch) {
-                const savedWhere = await buildAdvancedSearchWhere(session.user.id, savedSearch.query);
-                where.AND = [...(where.AND || []), savedWhere];
-            }
-        } else if (scope.category !== "Recently Read") {
-            where.feed = {
-                category: {
-                    name: scope.category,
-                },
-            };
-        }
-    }
+    const feedId = scope?.feedId || null;
+    const category = scope?.category || undefined;
+    const search = scope?.search?.trim() || undefined;
 
-    // Mirror getArticles: for the global "All Articles" / "All" / no-scope view,
-    // exclude feeds/categories marked as hidden from the all-feeds view. Without
-    // this, "Mark all read" on All Articles would silently mark articles from
-    // hidden feeds as read. Category-specific scopes (Starred, Label:, etc.) are
-    // deliberately NOT filtered here — the user explicitly navigated to them.
-    if (!scope?.feedId && (!scope?.category || scope.category === "All" || scope.category === "All Articles")) {
-        where.AND = [...(where.AND || []), {
-            feed: {
-                hideFromAllFeeds: false,
-                OR: [
-                    { categoryId: null },
-                    { category: { hideFromAllFeeds: false } },
-                ],
-            },
-        }];
-    }
+    if (!isMarkAllAllowed(feedId, category)) return { ids: [] as string[], undoToken: null as string | null };
 
-    // Capture the affected article ids before the bulk update so callers can
-    // offer an "undo" (re-mark as unread) without needing to re-derive the
-    // same scope/where clause.
-    const affected = await db.article.findMany({
-        where,
-        select: { id: true },
-    });
-    const ids = affected.map((a) => a.id);
+    const { where } = await buildViewScope(userId, feedId, category, search);
+    where.isRead = false;
 
     const readAt = new Date();
-    for (const chunk of chunkIds(ids)) {
-        await db.article.updateMany({
-            where: { id: { in: chunk }, userId: session.user.id },
-            data: { isRead: true, readAt },
-        });
-    }
+    const ids = await db.$transaction(
+        async (tx) => {
+            const affected = await tx.article.findMany({ where, select: { id: true } });
+            const candidates = affected.map((a) => a.id);
+            const changed: string[] = [];
+            for (const chunk of chunkIds(candidates)) {
+                const result = await tx.article.updateMany({
+                    where: { id: { in: chunk }, userId, isRead: false },
+                    data: { isRead: true, readAt },
+                });
+                if (result.count === chunk.length) {
+                    changed.push(...chunk);
+                } else if (result.count > 0) {
+                    // Another writer got to some rows first: keep only the ones this call changed.
+                    const mine = await tx.article.findMany({
+                        where: { id: { in: chunk }, userId, isRead: true, readAt },
+                        select: { id: true },
+                    });
+                    changed.push(...mine.map((a) => a.id));
+                }
+            }
+            return changed;
+        },
+        { timeout: 60_000, maxWait: 10_000 },
+    );
 
     revalidatePath("/");
 
-    return { ids };
+    return { ids, undoToken: ids.length > 0 ? createUndoToken(userId, ids) : null };
 }
 
 /**
- * Re-mark a specific set of articles as unread. Powers the "Undo" toast of
- * every bulk mark-read (`markAllAsRead` returns the exact ids it changed).
- * Always scoped to the signed-in user, so foreign ids are silently ignored.
+ * Undo for `markAllAsRead`. Takes only the opaque token that call returned
+ * (random, bound to the signed-in user, valid ~10 minutes) — never article ids
+ * from the client. Restores exactly the articles that call changed and that are
+ * still read; returns their ids.
  */
-export async function markArticlesAsUnread(articleIds: string[]) {
+export async function markArticlesAsUnread(undoToken: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+    const userId = session.user.id;
 
-    if (!Array.isArray(articleIds) || articleIds.length === 0) return { count: 0 };
-    const ids = articleIds.filter((id): id is string => typeof id === "string" && id.length > 0);
+    const candidates = peekUndoToken(userId, undoToken);
+    if (!candidates) throw new Error("Undo expired");
 
-    let count = 0;
-    for (const chunk of chunkIds(ids)) {
-        const result = await db.article.updateMany({
-            where: { id: { in: chunk }, userId: session.user.id, isRead: true },
-            data: { isRead: false, readAt: null },
-        });
-        count += result.count;
-    }
+    const ids = await db.$transaction(
+        async (tx) => {
+            const restored: string[] = [];
+            for (const chunk of chunkIds(candidates)) {
+                const stillRead = await tx.article.findMany({
+                    where: { id: { in: chunk }, userId, isRead: true },
+                    select: { id: true },
+                });
+                if (stillRead.length === 0) continue;
+                const restoreIds = stillRead.map((a) => a.id);
+                await tx.article.updateMany({
+                    where: { id: { in: restoreIds }, userId },
+                    data: { isRead: false, readAt: null },
+                });
+                restored.push(...restoreIds);
+            }
+            return restored;
+        },
+        { timeout: 60_000, maxWait: 10_000 },
+    );
 
+    discardUndoToken(undoToken);
     revalidatePath("/");
 
-    return { count };
+    return { count: ids.length, ids };
 }
 
 // Keeps `IN (...)` lists below SQLite's bound-variable limit for huge views.

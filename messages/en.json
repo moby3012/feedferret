@@ -664,6 +664,7 @@
     "undoMarkAllReadMessage": "{count, plural, one {Marked # article as read} other {Marked # articles as read}}",
     "undo": "Undo",
     "markAllReadFailed": "Could not mark articles as read. Please try again.",
+    "undoFailed": "Could not undo. The undo window may have expired — refresh the page to check.",
     "signOutConfirmTitle": "Sign out?",
     "signOutConfirmDescription": "You will need to sign in again to read your feeds on this device.",
     "errors": {

@@ -188,6 +188,7 @@ export function RssHeader({
         </Button>
 
         {/* Mark all read – visible at xl+, hidden at lg-xl */}
+        {onMarkAllRead && (
         <Button
           variant="ghost"
           size="icon"
@@ -199,6 +200,7 @@ export function RssHeader({
         >
           <CheckCheck className={cn("w-4 h-4", isMarkingAllRead && "animate-pulse")} />
         </Button>
+        )}
 
         {/* Save search – visible at xl+ when active search */}
         {searchQuery.trim() && onSaveSearch && (
@@ -257,14 +259,16 @@ export function RssHeader({
               )}
               {sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              className="rounded-xl gap-2 cursor-pointer"
-              onClick={() => onMarkAllRead?.()}
-              disabled={isMarkingAllRead}
-            >
-              <CheckCheck className="w-4 h-4" />
-              {t("markAllAsRead")}
-            </DropdownMenuItem>
+            {onMarkAllRead && (
+              <DropdownMenuItem
+                className="rounded-xl gap-2 cursor-pointer"
+                onClick={() => onMarkAllRead?.()}
+                disabled={isMarkingAllRead}
+              >
+                <CheckCheck className="w-4 h-4" />
+                {t("markAllAsRead")}
+              </DropdownMenuItem>
+            )}
             {searchQuery.trim() && onSaveSearch && (
               <>
                 <DropdownMenuSeparator />

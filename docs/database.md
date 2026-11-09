@@ -80,6 +80,22 @@ Supported `DATABASE_PROVIDER` values: `postgresql`, `postgres`, `sqlite`, `file`
 
 ---
 
+## Schema changes: `db push`, not `prisma/migrations`
+
+Startup (`pnpm run start` → `prisma:push`) applies the schema with
+`prisma db push --schema prisma/schema.generated.prisma --accept-data-loss`.
+`prisma/schema.prisma` is therefore the **source of truth** for both SQLite and
+PostgreSQL, and every schema change must be **additive** (new nullable /
+defaulted columns, new tables) so `db push` never needs to drop data.
+
+The SQL files under `prisma/migrations/` are an **archival, SQLite-flavoured
+change log** (what changed and when, handy for hand-written upgrades). They are
+**not executed** at startup or in CI and are not used for PostgreSQL. When you
+change `schema.prisma`, adding a matching migration file is nice for the
+history, but the schema file is what actually reaches users' databases.
+
+---
+
 ## Full-text search
 
 Article search (`lib/search.ts`) supports structured operators (`author:`, `intitle:`, `is:unread`, `label:`, date ranges, `OR` groups) plus free-text terms. Free-text terms are accelerated with an index appropriate to the active provider. Setup is automatic and idempotent — it runs once at server startup (`instrumentation.ts` → `ensureSearchIndexes()` in `lib/search-indexes.ts`) and is safe to run on every restart. If it fails for any reason, it logs a warning and search keeps working unaccelerated — a broken index setup never blocks startup or feed sync.

@@ -83,7 +83,7 @@ import {
   useLabels,
   useSavedSearches,
   useRefreshFeed,
-  useMarkAllAsRead,
+  useMarkViewRead,
   useDeleteFeed,
   useImportOpml,
   useNotifications,
@@ -260,7 +260,8 @@ export function RssSidebar({
   const { data: labels = [] } = useLabels();
   const { data: savedSearches = [] } = useSavedSearches();
   const refreshFeed = useRefreshFeed();
-  const markAllRead = useMarkAllAsRead();
+  // Same handler (and Undo toast) as the header / end-of-list card / shortcuts.
+  const { markViewRead } = useMarkViewRead();
   const { data: notifications = [] } = useNotifications();
   const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
   const markNotificationRead = useMarkNotificationRead();
@@ -393,7 +394,7 @@ export function RssSidebar({
       isSelected={selectedFeed === feed.id}
       onSelect={() => onSelectFeed(feed.id)}
       onRefresh={() => refreshFeed.mutate(feed.id)}
-      onMarkRead={() => markAllRead.mutate({ feedId: feed.id })}
+      onMarkRead={() => markViewRead({ feedId: feed.id, category: null })}
       onEdit={() => router.push(`/manage-feeds?feedId=${feed.id}`)}
       onShowHealth={() => router.push("/manage-feeds?tab=health")}
       onDelete={() => setFeedToDelete({ id: feed.id, name: feed.name })}

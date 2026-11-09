@@ -2,11 +2,13 @@ import { test, expect } from "../helpers/test";
 import type { Page } from "@playwright/test";
 import {
   articleFlags,
+  makeSpoilers,
   markEverythingUnread,
   setUserSettings,
   unreadCountForFeed,
   unreadCountInDb,
   unreadIds,
+  unreadIdsMatching,
   userSettings,
 } from "../helpers/db";
 import { swipeAt, swipeOn } from "../helpers/gestures";
@@ -125,9 +127,20 @@ test.describe("explicit mark-all + undo", () => {
   test("the Undo toast stays for ~6 seconds", async ({ app, page }) => {
     await openSoloBlog(app, page);
     await app.activate(page.getByRole("button", { name: "Mark all as read" }).first());
-    // Sonner pauses its timer while the pointer hovers the toast area; the
-    // emulated pointer of a tap can linger there, so park it elsewhere.
-    await page.mouse.move(1, 1);
+    // Desktop: sonner pauses its timer while the mouse hovers the toast area,
+    // so park the mouse elsewhere. (Touch needs no such help — see the tap-only test.)
+    if (!app.isMobile) await page.mouse.move(1, 1);
+    await expect(toast(page)).toBeVisible();
+    await page.waitForTimeout(4500);
+    await expect(toast(page)).toBeVisible();
+    await expect(toast(page)).toBeHidden({ timeout: 6000 });
+  });
+
+  test("on touch, the Undo toast also expires by itself after a tap-only interaction (no mouse moves)", async ({ app, page }) => {
+    test.skip(!app.isMobile, "tap-only behaviour");
+    await openSoloBlog(app, page);
+    // Tap (synthesised mouse events included) — and never touch the mouse again.
+    await app.activate(page.getByRole("button", { name: "Mark all as read" }).filter({ visible: true }).first());
     await expect(toast(page)).toBeVisible();
     await page.waitForTimeout(4500);
     await expect(toast(page)).toBeVisible();
@@ -141,6 +154,94 @@ test.describe("explicit mark-all + undo", () => {
     expect(sidebar).toBe(app.user.counts.total); // 300 > 200 loaded rows
     const header = page.locator("header").filter({ has: page.getByRole("heading", { level: 2, name: "All articles" }) });
     await expect(header.getByText(/^\d+\s+unread$/)).toHaveText(`${sidebar} unread`);
+  });
+});
+
+const visibleMarkAll = (page: Page) => page.getByRole("button", { name: "Mark all as read" }).filter({ visible: true }).first();
+
+test.describe("every bulk mark-read path is undoable and scoped to the visible view", () => {
+  test("sidebar feed menu 'Mark all as read' shows the Undo toast and undo restores exactly that feed", async ({ app, page }) => {
+    await app.open();
+    const before = unreadIds(app.userKey);
+    const solo = unreadCountForFeed(app.userKey, "Solo Blog");
+    await app.openSidebar();
+    const feedButton = app.sidebar().getByRole("button", { name: /^Solo Blog\s*\d+$/ }).first();
+    const row = feedButton.locator('xpath=ancestor::div[contains(@class,"group/row")][1]');
+    await row.hover();
+    await app.activate(row.getByRole("button", { name: "Feed actions" }));
+    await app.activate(page.getByRole("menuitem", { name: "Mark all as read" }));
+
+    await expect.poll(() => unreadCountForFeed(app.userKey, "Solo Blog")).toBe(0);
+    expect(unreadCountInDb(app.userKey)).toBe(before.length - solo);
+    await expect(page.getByRole("menu")).toBeHidden();
+    await app.closeSidebar();
+    await expect(toast(page)).toBeVisible();
+    await expect(toast(page)).toContainText(String(solo));
+
+    await app.activate(toast(page).getByRole("button", { name: "Undo" }));
+    await expect.poll(() => unreadIds(app.userKey), { timeout: 15_000 }).toEqual(before);
+  });
+
+  test("mark-all during an active search only marks the matching articles", async ({ app, page }) => {
+    await app.open();
+    const needle = app.user.sample.needle;
+    const before = unreadIds(app.userKey);
+    const matching = unreadIdsMatching(app.userKey, needle);
+    expect(matching.length).toBeGreaterThan(0);
+    expect(before.length).toBeGreaterThan(matching.length);
+
+    await app.activate(page.getByRole("button", { name: "Search articles" }).first());
+    await page.keyboard.type(needle);
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { level: 2, name: new RegExp(needle) })).toBeVisible();
+    await expect(page.locator(`[role="button"][aria-label*="${needle}"]`)).toHaveCount(app.user.sample.needleHits);
+
+    // Search view: desktop has the Shift+A shortcut, mobile the bottom-bar button.
+    if (app.isMobile) await app.activate(visibleMarkAll(page));
+    else await page.keyboard.press("Shift+A");
+    await expect(toast(page)).toBeVisible();
+    await expect.poll(() => unreadIdsMatching(app.userKey, needle)).toEqual([]);
+    expect(unreadIds(app.userKey)).toEqual(before.filter((id) => !matching.includes(id)));
+
+    await app.activate(toast(page).getByRole("button", { name: "Undo" }));
+    await expect.poll(() => unreadIds(app.userKey), { timeout: 15_000 }).toEqual(before);
+  });
+
+  test("read-only 'Spoiler' view has no mark-all controls and a bulk shortcut changes nothing", async ({ app, page }) => {
+    makeSpoilers(app.userKey, 3);
+    await app.open();
+    const before = unreadIds(app.userKey);
+    await app.selectSidebar(/^Spoiler\s*\d*$/);
+    await expect(page.getByRole("heading", { level: 2, name: "Spoiler" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Mark all as read" })).toHaveCount(0);
+    if (!app.isMobile) {
+      await page.keyboard.press("Shift+A");
+      await page.waitForTimeout(800);
+      expect(unreadIds(app.userKey)).toEqual(before);
+      await expect(toast(page)).toHaveCount(0);
+    }
+    await expect(endCard(page).getByRole("button", { name: "Mark all as read" })).toHaveCount(0);
+  });
+
+  test("mark-all reconciles an article toggled earlier in the session, and undo restores it", async ({ app, page }) => {
+    await openSoloBlog(app, page);
+    const id = app.articleId(8);
+    // read -> unread again leaves a stale "unread" session snapshot behind.
+    await app.activate(app.rowActions(8).read);
+    await expect.poll(() => articleFlags(id).isRead).toBe(true);
+    await app.activate(app.rowActions(8).read);
+    await expect.poll(() => articleFlags(id).isRead).toBe(false);
+    await expect(app.row(8)).toHaveAttribute("aria-label", /^Unread:/);
+
+    await app.activate(visibleMarkAll(page));
+    await expect.poll(() => articleFlags(id).isRead).toBe(true);
+    // Default list is "unread only": the now-read article must be gone, not
+    // lingering as a stale "unread" session copy.
+    await expect(app.row(8)).toHaveCount(0);
+
+    await app.activate(toast(page).getByRole("button", { name: "Undo" }));
+    await expect.poll(() => articleFlags(id).isRead, { timeout: 15_000 }).toBe(false);
+    await expect(app.row(8)).toHaveAttribute("aria-label", /^Unread:/);
   });
 });
 

@@ -43,6 +43,7 @@ export function resetArticleState(userKey: string) {
     ).run(userId);
     // Settings the specs flip must not leak between tests either.
     db.prepare(`UPDATE "User" SET markReadOnAdvance = 0, defaultViewMode = 'list' WHERE id = ?`).run(userId);
+    db.prepare(`UPDATE "Article" SET isSpoiler = 0, spoilerAt = NULL WHERE userId = ? AND isSpoiler = 1`).run(userId);
   } finally {
     db.close();
   }
@@ -131,6 +132,33 @@ export function userSettings(userKey: string): { markReadOnAdvance: boolean } {
   try {
     const row = db.prepare(`SELECT markReadOnAdvance FROM "User" WHERE id = ?`).get(userId) as { markReadOnAdvance: number };
     return { markReadOnAdvance: !!row.markReadOnAdvance };
+  } finally {
+    db.close();
+  }
+}
+
+/** Unread articles of a user whose title contains `text` (search-scope assertions). */
+export function unreadIdsMatching(userKey: string, text: string): string[] {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    return (
+      db.prepare(`SELECT id FROM "Article" WHERE userId = ? AND isRead = 0 AND title LIKE ? ORDER BY id`).all(userId, `%${text}%`) as { id: string }[]
+    ).map((r) => r.id);
+  } finally {
+    db.close();
+  }
+}
+
+/** Turn the last `count` unread articles into spoilers (so the "Spoiler" view exists). Reset by resetArticleState. */
+export function makeSpoilers(userKey: string, count: number) {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    db.prepare(
+      `UPDATE "Article" SET isSpoiler = 1, spoilerAt = CURRENT_TIMESTAMP WHERE id IN
+         (SELECT id FROM "Article" WHERE userId = ? AND isRead = 0 ORDER BY id DESC LIMIT ?)`,
+    ).run(userId, count);
   } finally {
     db.close();
   }

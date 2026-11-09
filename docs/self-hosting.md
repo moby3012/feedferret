@@ -259,7 +259,7 @@ After `docker compose up -d --build`, open the configured URL. The setup wizard 
 docker compose pull && docker compose up -d --build
 ```
 
-FeedFerret automatically runs database migrations on startup. No manual migration step is needed.
+FeedFerret automatically syncs the database schema on startup (`prisma db push`; see [database.md](database.md#schema-changes-db-push-not-prismamigrations)). No manual migration step is needed.
 
 ---
 
