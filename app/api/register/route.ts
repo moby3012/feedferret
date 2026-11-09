@@ -23,47 +23,26 @@ export async function POST(req: Request) {
         }
         const { name, email, password } = parsed.data;
 
-        const settings = await db.globalSettings.findUnique({
-            where: { id: "global" },
-            select: { registrationsEnabled: true },
-        });
-        const userCount = await db.user.count();
-        // Always allow the very first user (admin bootstrap). After that, respect the setting.
-        if (userCount > 0 && !(settings?.registrationsEnabled ?? true)) {
-            return NextResponse.json(
-                { message: "Registrations are currently disabled on this instance" },
-                { status: 403 }
-            );
-        }
-
-        const existingUser = await db.user.findUnique({
-            where: { email },
-        });
-
-        if (existingUser) {
-            return NextResponse.json(
-                { message: "Registration failed" },
-                { status: 400 }
-            );
-        }
-
         const hashedPassword = await bcrypt.hash(password, 10);
-        const role = userCount === 0 ? "ADMIN" : "USER";
-
-        const user = await db.user.create({
-            data: {
-                name,
-                email,
-                password: hashedPassword,
-                role,
-            },
-        });
+        const result = await db.$transaction(async (tx) => {
+            const settings = await tx.globalSettings.findUnique({ where: { id: "global" } });
+            const userCount = await tx.user.count();
+            if (userCount > 0 && !(settings?.registrationsEnabled ?? false)) return null;
+            return tx.user.create({
+                data: { name, email, password: hashedPassword, role: userCount === 0 ? "ADMIN" : "USER" },
+            });
+        }, { isolationLevel: "Serializable" });
+        if (!result) return NextResponse.json({ message: "Registrations are currently disabled on this instance" }, { status: 403 });
+        const user = result;
 
         return NextResponse.json(
             { message: "User created successfuly", userId: user.id },
             { status: 201 }
         );
     } catch (error) {
+        if (error && typeof error === "object" && "code" in error && ["P2002", "P2034", "P1008", "P2028"].includes(String(error.code))) {
+            return NextResponse.json({ message: "Registration failed; please retry" }, { status: 409 });
+        }
         logger.error("Registration error:", error);
         return NextResponse.json(
             { message: "Internal server error" },

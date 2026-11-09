@@ -213,7 +213,12 @@ export function getClientIdentifier(
 
   // Try common proxy headers
   const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return `ip:${forwarded.split(",")[0].trim()}`;
+  if (forwarded) {
+    const hops = forwarded.split(",").map(hop => hop.trim());
+    const configured = Number(process.env.TRUSTED_PROXY_COUNT ?? 1);
+    const count = Number.isSafeInteger(configured) && configured >= 1 ? configured : 1;
+    return `ip:${hops[Math.max(0, hops.length - count)] || "unknown"}`;
+  }
 
   const realIp = request.headers.get("x-real-ip");
   if (realIp) return `ip:${realIp}`;

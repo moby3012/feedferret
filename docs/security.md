@@ -13,7 +13,9 @@ For feed fetches, Dynamic OPML, full-text extraction, and full-text preview:
 - HTTP/HTTPS protocol allowlist.
 - Private/internal IP blocking by default: localhost, RFC1918 IPv4 ranges, link-local, loopback, and local IPv6 ranges.
 - DNS resolution checks before every fetch and every redirect target.
-- Manual redirect handling with per-hop safety checks.
+- Manual redirect handling with per-hop safety checks; Authorization and Cookie headers are stripped on cross-origin redirects.
+- User-configured webhooks, Gotify/ntfy, Ollama and Wallabag reject redirects.
+- DNS checks do not pin connection addresses: DNS rebinding remains a known limitation. Render-sidecar navigation and connector isolation require further hardening.
 - Timeout limits.
 - Maximum response-size limits.
 
@@ -53,15 +55,15 @@ The database admin setting is preferred — it can be changed without redeployin
 
 | Area | Implementation |
 |---|---|
-| Credentials encryption | API keys, email provider credentials, AI keys: AES-256-GCM with key derived from `AUTH_SECRET` |
+| Credentials encryption | Selected API keys, email provider credentials and AI keys use AES-256-GCM derived from `AUTH_SECRET`; TOTP seeds, feed passwords and some notification/webhook secrets remain plaintext |
 | Password hashing | bcrypt via Auth.js |
 | Sessions | Signed JWT tokens — no server-side session state |
 | CSRF | Next.js Server Actions have built-in CSRF protection |
-| Data isolation | All data is strictly per-user — no cross-user access possible at the query layer |
+| Data isolation | Queries generally scope data by user; connector feed isolation and category ownership still need further hardening |
 | Content sanitization | Article HTML is sanitized by DOMPurify before rendering |
 | 2FA | Optional TOTP for local accounts; can be made mandatory for admins |
-| Session invalidation | `sessionVersion` pattern — 2FA changes instantly kill all existing sessions |
-| Login attempt logging | Every credentials attempt recorded with IP, user agent, and fail reason |
+| Session invalidation | `sessionVersion` pattern — Password/2FA changes invalidate browser JWT sessions; legacy GReader tokens are unaffected |
+| Login attempt logging | Browser and GReader credentials attempts recorded (best effort) with IP, user agent, and fail reason |
 | Admin audit log | All admin mutations (role change, suspend, delete, settings) recorded with actor and timestamp |
 | Admin safety | Last admin cannot be deleted or demoted |
 | GDPR | Self-service account deletion with full cascade delete |
@@ -78,11 +80,14 @@ In-memory sliding window rate limiter (`lib/rate-limit.ts`) protects against bru
 | Endpoint group | Limit | Window |
 |---|---|---|
 | `POST /api/auth/*` (sign-in, credentials) | 10 attempts | 15 minutes |
+| GReader ClientLogin / Basic (per IP and email), credentials-status (per IP) | 10 attempts | 15 minutes |
 | Magic link requests | 3 attempts | 10 minutes |
 | `POST /api/mcp` | 100 requests | 1 minute |
 | `POST /api/internal/*` | 30 requests | 1 minute |
 | `GET /api/v1/*` (read) | 200 requests | 1 minute |
 | `POST/PATCH/DELETE /api/v1/*` (write) | 60 requests | 1 minute |
+
+Limits are per process, not shared across replicas. MCP is limited by source IP. `TRUSTED_PROXY_COUNT=1` selects the right-most X-Forwarded-For hop; configure the exact trusted proxy chain and prevent direct access that bypasses your proxy.
 
 Response on limit exceeded: HTTP 429 with `Retry-After`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` headers.
 
@@ -120,7 +125,7 @@ On server start, `instrumentation.ts` checks:
 - `POSTGRES_PASSWORD` — not the default `feedferret-change-me` placeholder
 - `AUTH_URL` — not the placeholder `feedferret.example.com`
 
-Warnings are printed to stdout as `⚠️` log lines. The server continues to start to avoid outages, but the warnings are clearly visible in Docker logs.
+In production, an absent, short or placeholder `AUTH_SECRET` logs a clear error and stops startup. Build-time validation is skipped. Other configuration issues produce warnings.
 
 ### Health Endpoint ✅
 
@@ -151,14 +156,14 @@ API tokens are stored as SHA-256 hashes — the raw token is never persisted.
 
 - **Format:** `ff_<base64url(32 random bytes)>` — the `ff_` prefix enables secret scanning detection in CI and Git hooks.
 - **Storage:** `SHA-256(rawToken)` hex digest stored in the `apiToken` column. Only the hash is ever written to the database.
-- **Auth:** Incoming `Authorization: Bearer ff_...` is hashed on every request before the database lookup — constant-time hash comparison via Prisma unique index.
+- **Auth:** Incoming `Authorization: Bearer ff_...` is hashed on every request before the database lookup — database lookup by hash (not a constant-time comparison).
 - **Rotation:** Generating a new token via `POST /api/user/token` immediately overwrites the stored hash; the old token stops working at that instant.
 
 > ⚠️ **Upgraders:** tokens issued before this hardening were stored as plaintext and will no longer authenticate. Regenerate your token in **Settings → API Access**.
 
 ### Input Validation ✅
 
-All entry points for untrusted data enforce explicit limits:
+Selected entry points enforce explicit limits:
 
 | Input | Limit |
 |---|---|
@@ -186,7 +191,7 @@ This guarantees that if a user changes their security state, all existing browse
 
 #### Login attempt logging
 
-Every credentials sign-in attempt is recorded in the `LoginAttempt` table regardless of outcome:
+Browser and GReader credentials sign-in attempts are recorded on a best-effort basis in the `LoginAttempt` table regardless of outcome:
 
 | Field | Description |
 |---|---|
@@ -223,6 +228,14 @@ Admins can require all admin accounts to have TOTP 2FA enabled before they can p
 When enabled, any admin without 2FA active receives an error on every admin server action until they enable 2FA via **Settings → Security**.
 
 ---
+
+## Quick-win access controls
+
+- `GET /api/sync` requires a configured `SYNC_SECRET` in `Authorization: Bearer …`; unset or incorrect secrets return 404. Responses omit feed URLs. The built-in scheduler calls sync directly and needs no secret.
+- New installs default to closed registration. The first local registration is allowed with zero users; serializable creation ensures only one bootstrap ADMIN. Existing settings rows retain their registration choice. Concurrent registration can return 409 and should be retried.
+- Deleted or inactive users lose JWT identity; admin actions re-read role and active status. Legacy GReader tokens now reject inactive users, but still lack expiry/password-change revocation.
+- MCP write tools and Fever mark operations require write/admin token scope. Fever rejects expired tokens; read-later uses the common active-user resolver.
+- Service workers cache no navigation responses and logout clears browser caches.
 
 ## Configuration Security Notes
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { signOut } from "@/lib/logout";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import {

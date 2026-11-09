@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { apiError, clampInt, readJson, requireApiUser, type ApiUser } from "@/lib/api-auth";
+import { apiError, clampInt, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
@@ -260,6 +260,10 @@ async function createFeedForUser(
 }
 
 async function callTool(user: ApiUser, name: string, args: any) {
+  const readTools = new Set(["search_articles", "get_article", "list_feeds", "get_feed", "list_categories", "list_labels", "list_saved_searches", "list_keyword_alerts", "list_auto_read_rules", "list_notifications", "list_connectors", "get_stats", "suggest_page_feed"]);
+  if (scopeError(user, readTools.has(name.replace(/^feedferret\./, "")) ? "read" : "write")) {
+    throw new Error("Insufficient token scope");
+  }
   switch (name) {
     case "feedferret.search_articles":
       return searchArticles(user, args);

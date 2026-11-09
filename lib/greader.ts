@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
@@ -33,6 +34,30 @@ export function verifyGReaderToken(token: string) {
   return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)) ? userId : null;
 }
 
+/** Shared password path: throttle both identity and source before bcrypt. */
+export async function authenticateGReaderPassword(request: Request, email: string, password: string) {
+  const ip = getClientIdentifier(request);
+  const ipLimit = checkRateLimit(ip, RATE_LIMITS.authSignIn);
+  const accountLimit = checkRateLimit(email.trim().toLowerCase(), { ...RATE_LIMITS.authSignIn, prefix: "greader-account" });
+  let user: Awaited<ReturnType<typeof db.user.findUnique>> = null;
+  let failReason: string | undefined;
+  if (!ipLimit.success || !accountLimit.success) failReason = "rate_limit";
+  else {
+    user = email ? await db.user.findUnique({ where: { email } }) : null;
+    if (!user?.password) failReason = "no_account";
+    else if (!user.isActive) failReason = "inactive";
+    else if (user.twoFactorEnabled) failReason = "otp";
+    else if (!(await bcrypt.compare(password, user.password))) failReason = "password";
+  }
+  try {
+    await db.loginAttempt.create({ data: {
+      email, userId: user?.id, success: !failReason, failReason,
+      ip: ip.replace(/^ip:/, ""), userAgent: request.headers.get("user-agent"),
+    } });
+  } catch { /* Audit failures must not crash authentication. */ }
+  return failReason ? null : user;
+}
+
 export async function authenticateGReaderRequest(request: Request) {
   const header = request.headers.get("authorization") || "";
   const googleLogin = header.match(/GoogleLogin\s+auth=(.+)$/i);
@@ -42,18 +67,14 @@ export async function authenticateGReaderRequest(request: Request) {
     const userId = verifyGReaderToken(token.trim());
     if (userId) {
       const user = await db.user.findUnique({ where: { id: userId } });
-      if (user) return user;
+      if (user?.isActive) return user;
     }
   }
 
   if (header.startsWith("Basic ")) {
     const raw = Buffer.from(header.slice(6), "base64").toString("utf8");
-    const [email, password] = raw.split(":");
-    if (email && password) {
-      const user = await db.user.findUnique({ where: { email } });
-      if (user?.twoFactorEnabled) return null;
-      if (user?.password && await bcrypt.compare(password, user.password)) return user;
-    }
+    const separator = raw.indexOf(":");
+    if (separator > 0) return authenticateGReaderPassword(request, raw.slice(0, separator), raw.slice(separator + 1));
   }
 
   return null;

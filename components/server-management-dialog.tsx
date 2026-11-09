@@ -641,7 +641,7 @@ export function ServerManagementDialog({
                         </p>
                       </div>
                       <Switch
-                        checked={settings?.registrationsEnabled ?? true}
+                        checked={settings?.registrationsEnabled ?? false}
                         onCheckedChange={(checked) => handleUpdateSettings({ registrationsEnabled: checked })}
                       />
                     </div>

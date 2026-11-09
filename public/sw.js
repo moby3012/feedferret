@@ -1,5 +1,5 @@
-const CACHE_NAME = "feedferret-pwa-v2";
-const RUNTIME_CACHE = "feedferret-runtime-v1";
+const CACHE_NAME = "feedferret-pwa-v3";
+const RUNTIME_CACHE = "feedferret-runtime-v2";
 // cache.addAll() is all-or-nothing: a single 404 in this list fails the whole
 // install event, so the service worker never installs at all (not even
 // partially) for any user. Keep this to files that actually exist and that
@@ -45,7 +45,7 @@ async function staleWhileRevalidate(request) {
   const cached = await cache.match(request);
   const network = fetch(request)
     .then((response) => {
-      if (response.ok) cache.put(request, response.clone());
+      if (response.ok && !/private|no-store/i.test(response.headers.get("cache-control") || "")) cache.put(request, response.clone());
       return response;
     })
     .catch(() => cached);
@@ -61,13 +61,7 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then(async (response) => {
-          const cache = await caches.open(RUNTIME_CACHE);
-          cache.put(request, response.clone());
-          return response;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match("/offline.html"))),
+      fetch(request).catch(() => caches.match("/offline.html")),
     );
     return;
   }

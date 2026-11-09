@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/auth";
 import { syncAllFeeds, syncUserFeeds } from "@/lib/rss-sync";
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
+import { hasSyncSecret } from "@/lib/sync-auth";
 import { logger } from "@/lib/logger";
 
 // Background sync state to prevent concurrent syncs
@@ -11,21 +11,11 @@ let lastSyncTime = 0;
 let isSyncing = false;
 
 export async function GET(request: Request) {
-    const authHeader = request.headers.get("authorization");
-    
-    // Check SYNC_SECRET if configured
-    if (process.env.SYNC_SECRET) {
-        const expected = Buffer.from(`Bearer ${process.env.SYNC_SECRET}`);
-        const actual   = Buffer.from(authHeader ?? "");
-        const valid = actual.length === expected.length && timingSafeEqual(actual, expected);
-        if (!valid) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-    }
+    if (!hasSyncSecret(request)) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     // Prevent concurrent syncs (run at most every 2 minutes)
     const now = Date.now();
-    if (isSyncing && (now - lastSyncTime) < 120000) {
+    if (isSyncing || (now - lastSyncTime) < 120000) {
         return NextResponse.json({ 
             status: "already_syncing", 
             message: "Sync already in progress",
@@ -44,7 +34,7 @@ export async function GET(request: Request) {
             success: true, 
             synced,
             total: results.length,
-            results: results.map(r => ({ feed: r.feed, success: r.success, count: r.count }))
+            results: results.map(r => ({ success: r.success, count: r.count }))
         });
     } catch (error) {
         logger.error("[sync/GET]", error);
@@ -80,7 +70,7 @@ export async function POST(request: Request) {
             success: true,
             synced,
             total: results.length,
-            results: results.map(r => ({ feed: r.feed, success: r.success, skipped: r.skipped, count: r.count }))
+            results: results.map(r => ({ success: r.success, skipped: r.skipped, count: r.count }))
         });
     } catch (error) {
         logger.error("[sync/POST]", error);

@@ -1,3 +1,4 @@
+import { hasSyncSecret } from "@/lib/sync-auth";
 export const dynamic = "force-dynamic";
 
 import { auth } from "@/auth";
@@ -5,10 +6,7 @@ import { getBackgroundSyncStatus } from "@/lib/background-sync";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
-    const authHeader = request.headers.get("authorization");
-    const hasSecretAuth =
-        process.env.SYNC_SECRET &&
-        authHeader === `Bearer ${process.env.SYNC_SECRET}`;
+    const hasSecretAuth = hasSyncSecret(request);
 
     if (!hasSecretAuth) {
         const session = await auth();

@@ -41,7 +41,7 @@ export default function LoginPage() {
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const { data: instance } = useInstance();
   const magicLinkAvailable = Boolean(instance?.capabilities.magicLink);
-  const registrationsEnabled = instance?.registrationsEnabled ?? true;
+  const registrationsEnabled = instance?.registrationsEnabled ?? false;
   const router = useRouter();
   const { status } = useSession();
 
