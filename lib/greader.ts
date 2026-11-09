@@ -98,8 +98,8 @@ export function greaderItemId(articleId: string) {
 }
 
 export function parseGReaderItemId(id: string) {
-  // Keep identity conversion isolated for the forthcoming persistent numeric adapter.
-  if (id.startsWith("tag:google.com,2005:reader/item/") || (/^[0-9a-f]{16}$/i.test(id) && (id.startsWith("0") || /[a-f]/i.test(id)))) {
+  // Only the Google namespace denotes hex; bare references keep their identity.
+  if (id.startsWith("tag:google.com,2005:reader/item/")) {
     const hex = id.slice(id.lastIndexOf("/") + 1);
     if (/^[0-9a-f]+$/i.test(hex)) return BigInt(`0x${hex}`).toString();
   }
@@ -141,10 +141,11 @@ export function createContinuationToken(article: { createdAt: Date; id: string }
   return Buffer.from(JSON.stringify({ createdAt: article.createdAt.toISOString(), id: article.id, ceiling })).toString("base64url");
 }
 
-// ID sync supports large/unlimited pages; full contents have a separate bound.
-export function greaderLimit(value: string | null) {
-  const n = value?.trim() ? Number(value) : NaN;
-  return Number.isFinite(n) ? Math.trunc(n) : 20;
+// ID pages cap the FreshRSS unlimited convention; contents retain a default page.
+export function greaderLimit(value: string | null, idsOnly = true) {
+  const n = value?.trim() ? Math.trunc(Number(value)) : NaN;
+  if (!Number.isFinite(n)) return 20;
+  return Math.min(n > 0 ? n : idsOnly ? 10000 : 20, idsOnly ? 10000 : 1000);
 }
 
 export function normalizeCategoryNameFromTag(tag: string) {
@@ -170,7 +171,7 @@ function streamPredicate(userId: string, streamId?: string | null): any {
   if (stream.type === "starred") return { isStarred: true };
   if (stream.type === "read") return { isRead: true };
   if (stream.type === "feed") return { feed: /^\d+$/.test(stream.value) ? { extId: storedExternalId(stream.value) } : { url: stream.value } };
-  if (stream.type === "label") return { OR: [
+  if (stream.type === "label") return { feed: { priority: { in: ["category", "main", "important"] } }, OR: [
     { labels: { some: { label: { userId, name: stream.value } } } },
     { feed: { priority: { in: ["category", "main", "important"] }, category: { userId, name: stream.value } } },
   ] };
@@ -192,8 +193,8 @@ export function buildStreamWhere(userId: string, streamId?: string | null, inclu
     AND.push({ OR: [{ createdAt: { gte } }, { updatedAt: { gte } }] });
   }
   if (newestSec && Number.isFinite(newestSec)) {
-    const lte = new Date(Math.trunc(newestSec) * 1000);
-    AND.push({ createdAt: { lte }, updatedAt: { lt: new Date((Math.trunc(newestSec) + 1) * 1000) } });
+    const lt = new Date((Math.trunc(newestSec) + 1) * 1000);
+    AND.push({ createdAt: { lt }, updatedAt: { lt } });
   }
   return { userId, AND };
 }
@@ -292,22 +293,24 @@ export async function countGReaderUnread(userId: string, streamId: string) {
 
 /** Constant query count regardless of subscription/tag count. */
 export async function countGReaderFeedsAndTags(userId: string) {
-  const [feeds, categories, labels, unread, tagged] = await Promise.all([
+  const [feeds, categories, labels, unread, newestByFeed, tagged] = await Promise.all([
     db.feed.findMany({ where: { userId }, select: { id: true, extId: true, url: true, priority: true, categoryId: true } }),
     db.category.findMany({ where: { userId }, select: { id: true, name: true } }),
     db.label.findMany({ where: { userId }, select: { name: true } }),
-    db.article.groupBy({ by: ["feedId"], where: { userId, isRead: false }, _count: true, _max: { createdAt: true } }),
+    db.article.groupBy({ by: ["feedId"], where: { userId, isRead: false }, _count: true }),
+    db.article.groupBy({ by: ["feedId"], where: { userId }, _max: { createdAt: true } }),
     // Exclude folder matches from label totals to count the folder/label union once.
     // COUNT and timestamps are normalized below for SQLite and PostgreSQL adapters.
     db.$queryRaw<Array<{ name: string; count: bigint | number; newest: Date | string | number | null }>>(Prisma.sql`
-      SELECT l."name", COUNT(*) AS "count", MAX(a."createdAt") AS "newest"
+      SELECT l."name", SUM(CASE WHEN a."isRead" = false THEN 1 ELSE 0 END) AS "count", MAX(a."createdAt") AS "newest"
       FROM "ArticleLabel" al
       JOIN "Label" l ON l."id" = al."labelId"
       JOIN "Article" a ON a."id" = al."articleId"
       JOIN "Feed" f ON f."id" = a."feedId"
       LEFT JOIN "Category" c ON c."id" = f."categoryId"
       WHERE al."userId" = ${userId} AND l."userId" = ${userId}
-        AND a."userId" = ${userId} AND a."isRead" = false
+        AND a."userId" = ${userId}
+        AND f."priority" IN ('category', 'main', 'important')
         AND NOT (f."priority" IN ('category', 'main', 'important')
           AND COALESCE(c."userId", '') = ${userId} AND COALESCE(c."name", '') = l."name"
           AND c."id" IS NOT NULL)
@@ -315,13 +318,14 @@ export async function countGReaderFeedsAndTags(userId: string) {
     `),
   ]);
   const byFeed = new Map(unread.map((row) => [row.feedId, row]));
+  const newestForFeed = new Map(newestByFeed.map((row) => [row.feedId, row._max.createdAt?.getTime() ?? 0]));
   const categoryNames = new Map(categories.map((row) => [row.id, row.name]));
   const tags = new Map([...categories, ...labels].map((row) => [row.name, { count: 0, newest: 0 }]));
   const result = (id: string, count: number, newest: number) => ({ id, count, newestItemTimestampUsec: String(newest * 1000) });
   const feedCounts = feeds.flatMap((feed) => {
     const row = byFeed.get(feed.id);
     const count = row?._count ?? 0;
-    const newest = row?._max.createdAt?.getTime() ?? 0;
+    const newest = newestForFeed.get(feed.id) ?? 0;
     const name = feed.categoryId ? categoryNames.get(feed.categoryId) : undefined;
     if (name && ["category", "main", "important"].includes(feed.priority)) {
       const tag = tags.get(name)!;

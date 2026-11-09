@@ -22,8 +22,8 @@ client). The standalone CLI reserves IDs with the same sequence.
 
 Google Reader ID references are decimal strings and content IDs are padded
 16-digit Google hex names. Reads and edits accept those forms and legacy
-FeedFerret CUID references. Bare all-digit IDs are decimal, except 16-digit
-zero-padded forms; use the full Google namespace for unambiguous hexadecimal.
+FeedFerret CUID references. Bare all-digit IDs are decimal, including zero-padded
+forms. Hexadecimal requires the full Google namespace; other bare strings remain legacy references.
 New subscription IDs are numeric `feed/<id>`; old URL-based feed streams remain
 accepted. Never convert IDs through `Number` in adapters or clients.
 

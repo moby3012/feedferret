@@ -82,11 +82,19 @@ function getStreamId(pathParts: string[], url: URL, marker: string) {
 }
 
 async function getArticlesForStream(userId: string, streamId: string, url: URL, idsOnly = false) {
-  const requested = greaderLimit(url.searchParams.get("n"));
-  const limit = idsOnly ? requested : Math.min(requested > 0 ? requested : 20, 1000);
+  const limit = greaderLimit(url.searchParams.get("n"), idsOnly);
+  const timestamp = (name: "ot" | "nt") => {
+    const value = Number(url.searchParams.get(name));
+    // nt includes the whole second; validate its exclusive upper bound too.
+    const ms = (Math.trunc(value) + (name === "nt" ? 1 : 0)) * 1000;
+    if (!Number.isFinite(value) || !Number.isFinite(new Date(ms).getTime())) {
+      throw new InvalidRequestError(`Invalid ${name}`);
+    }
+    return value;
+  };
   const cursor = parseContinuationToken(url.searchParams.get("c"));
   const ascending = url.searchParams.get("r") === "o";
-  const scope = buildStreamWhere(userId, streamId, url.searchParams.getAll("it"), url.searchParams.getAll("xt"), Number(url.searchParams.get("ot")), Number(url.searchParams.get("nt")));
+  const scope = buildStreamWhere(userId, streamId, url.searchParams.getAll("it"), url.searchParams.getAll("xt"), timestamp("ot"), timestamp("nt"));
   // Freeze the discovery high-water mark, including its ID tie-breaker. New arrivals
   // are picked up by the next sync, not inserted into this pagination sequence.
   const newest = cursor?.ceiling ? null : await db.article.findFirst({ where: scope, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true, id: true } });
@@ -100,10 +108,10 @@ async function getArticlesForStream(userId: string, streamId: string, url: URL, 
     where,
     include: { feed: { include: { category: true } }, ...(!idsOnly ? { labels: { include: { label: true } } } : {}) },
     orderBy: [{ createdAt: direction }, { id: direction }],
-    ...(limit > 0 ? { take: limit + 1 } : {}),
+    take: limit + 1,
   });
-  const articles = limit > 0 ? rows.slice(0, limit) : rows;
-  return { articles, continuation: limit > 0 && rows.length > limit ? createContinuationToken(articles[articles.length - 1], ceiling) : undefined };
+  const articles = rows.slice(0, limit);
+  return { articles, continuation: rows.length > limit ? createContinuationToken(articles[articles.length - 1], ceiling) : undefined };
 }
 
 async function getItemsByIds(userId: string, ids: string[], order: string | null) {

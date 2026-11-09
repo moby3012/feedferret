@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const fixture = vi.hoisted(() => ({ url: "", queries: 0 }));
+const fixture = vi.hoisted(() => ({ url: "", queries: 0, sql: [] as { query: string; params: string }[] }));
 vi.mock("@/lib/db", async () => {
   const { PrismaClient } = await import("@prisma/client");
   const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
@@ -15,7 +15,7 @@ vi.mock("@/lib/db", async () => {
   const dir = mkdtempSync(join(tmpdir(), "greader-contract-"));
   fixture.url = `file:${join(dir, "test.db")}`;
   const db = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: fixture.url }), log: [{ emit: "event", level: "query" }] });
-  db.$on("query", () => { fixture.queries++; });
+  db.$on("query", (event) => { fixture.queries++; if (event.query.includes("ORDER BY") && event.query.includes("LIMIT")) fixture.sql.push({ query: event.query, params: event.params }); });
     const fixtureId = (id: string) => (/^\d+$/.test(id) ? BigInt(id) : Buffer.from(id).reduce((n, c) => (n * BigInt(257) + BigInt(c)) % BigInt("72057594037927931"), BigInt(0))).toString().padStart(19, "0");
   return { db: db.$extends({ query: { $allModels: { async $allOperations({ model, operation, args, query }) {
     if (["Article", "Feed", "Category", "Label"].includes(model) && ["create", "createMany"].includes(operation)) {
@@ -34,7 +34,7 @@ vi.mock("@/lib/feed-fetcher", () => ({ fetchFeedArticles: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: () => ({ success: true }), getClientIdentifier: () => "u", RATE_LIMITS: { greader: {} } }));
 import { db } from "@/lib/db";
 import { GET, POST } from "@/app/api/greader/[...path]/route";
-import { authenticateGReaderRequest, greaderItemId as encodeItemId } from "@/lib/greader";
+import { authenticateGReaderRequest, parseGReaderItemId, greaderLimit, greaderItemId as encodeItemId } from "@/lib/greader";
 const fixtureId = (id: string) => (/^\d+$/.test(id) ? BigInt(id) : Buffer.from(id).reduce((n, c) => (n * BigInt(257) + BigInt(c)) % BigInt("72057594037927931"), BigInt(0))).toString();
 const greaderItemId = (id: string) => encodeItemId(fixtureId(id));
 const state = (s: string) => `user/-/state/com.google/${s}`;
@@ -95,7 +95,7 @@ describe("FreshRSS stream contracts", () => {
     await article("b", 0); await article("c", 1); await article("d", 2);
     expect(refs(await request("stream/items/ids", { ot: String(epoch), nt: String(epoch + 1) }))).toEqual(["c", "b", "a"].map(greaderItemId));
   });
-  it.each([["o", "stream/items/ids"], ["d", "stream/items/ids"], ["o", "stream/contents"], ["d", "stream/contents"]])("paginates label scopes exactly once (%s, %s), ties and backdated arrivals", async (r, endpoint) => {
+  it.each([["o", "stream/items/ids"], ["d", "stream/items/ids"], ["o", "stream/contents"], ["d", "stream/contents"]])("paginates label scopes exactly once (%s, %s), discovery ties and arrivals with old publication dates", async (r, endpoint) => {
     for (const id of ["a", "b", "c", "d"]) await article(id);
     await article("outside", 0, { feedId: "g" });
     const seen: string[] = []; let c = "";
@@ -106,7 +106,7 @@ describe("FreshRSS stream contracts", () => {
     } while (c && seen.length < 10);
     expect(seen).toEqual((r === "o" ? ["a", "b", "c", "d"] : ["d", "c", "b", "a"]).map(greaderItemId));
   });
-  it("supports large/unlimited pages and safely defaults invalid n", async () => {
+  it("supports bounded large pages and safely defaults invalid n", async () => {
     await db.article.createMany({ data: Array.from({ length: 205 }, (_, i) => ({ id: `item${i}`, userId: "u", feedId: "f", title: "Item", content: "body", link: "https://example.org", publishedAt: date(epoch), createdAt: date(epoch), updatedAt: date(epoch) })) });
     for (const n of ["10000", "0", "-1"]) expect(refs(await request("stream/items/ids", { n }))).toHaveLength(205);
     expect(refs(await request("stream/items/ids", { n: "invalid" }))).toHaveLength(20);
@@ -127,21 +127,21 @@ describe("FreshRSS stream contracts", () => {
     expect(item.categories).toEqual(expect.arrayContaining([label, state("read"), state("starred")]));
     const stream = await request("stream/contents", { s: label }); expect(stream.items[0]).toEqual(item);
   });
-  it("accepts raw decimal, padded hex and namespaced refs without precision loss, ordering both ways", async () => {
+  it("accepts raw decimal and namespaced hex refs without precision loss, ordering both ways", async () => {
     await article("9007199254740993", 1); await article("123", 0);
-    const ids: [string, string][] = [["i", "9007199254740993"], ["i", "000000000000007b"]];
+    const ids: [string, string][] = [["i", "9007199254740993"], ["i", "tag:google.com,2005:reader/item/000000000000007b"]];
     const asc = await request("stream/items/contents", { r: "o" }, "POST", ids);
     expect(asc.items.map((item: { id: string }) => item.id)).toEqual(["123", "9007199254740993"].map(greaderItemId));
     const desc = await request("stream/items/contents", {}, "GET", ids);
     expect(desc.items.map((item: { id: string }) => item.id)).toEqual(["9007199254740993", "123"].map(greaderItemId));
     expect((await request("stream/items/contents", {}, "POST")).items).toEqual([]);
   });
-  it("counts feed/folder/label unions once and reports newest unread discovery", async () => {
+  it("counts feed/folder/label unions once and reports newest discovery including read articles", async () => {
     await article("a"); await article("b", 10, { isRead: true }); await article("c", 5, { feedId: "g" });
     await db.articleLabel.create({ data: { articleId: "c", labelId: "tag", userId: "u" } });
     const result = await request("unread-count");
     expect(result.max).toBe(2);
-    expect(result.unreadcounts.find((x: { id: string }) => x.id === label)).toEqual({ id: label, count: 2, newestItemTimestampUsec: String((epoch + 5) * 1000000) });
+    expect(result.unreadcounts.find((x: { id: string }) => x.id === label)).toEqual({ id: label, count: 2, newestItemTimestampUsec: String((epoch + 10) * 1000000) });
     expect(result.unreadcounts.find((x: { id: string }) => x.id === `feed/${fixtureId("f")}`).count).toBe(1);
   });
   it("scopes edits to owned IDs and bulk read to discovery ts and stream", async () => {
@@ -166,7 +166,7 @@ it("bounds unread-count SQL queries with 300 feeds", async () => {
   await article("scale-article");
   fixture.queries = 0;
   const result = await request("unread-count");
-  expect(fixture.queries).toBe(9);
+  expect(fixture.queries).toBe(10);
   expect(result.unreadcounts.filter((x: { id: string }) => x.id.startsWith("feed/"))).toHaveLength(300);
 });
 
@@ -243,8 +243,87 @@ it("returns 401 only for failed authentication and 500 for server failures", asy
   await request("mark-all-as-read", {}, "POST", [], 500);
   spy.mockRestore();
 });
-it("uses the discovery keyset index on SQLite", async () => {
-  const plan = await db.$queryRawUnsafe<Array<{ detail: string }>>('EXPLAIN QUERY PLAN SELECT id FROM Article WHERE userId = ? AND createdAt < ? ORDER BY createdAt DESC, id DESC LIMIT 21', "u", epoch * 1000);
-  expect(plan.map(row => row.detail).join(" ")).toContain("Article_userId_createdAt_id_idx");
-  expect(plan.map(row => row.detail).join(" ")).not.toContain("TEMP B-TREE");
+it.each(["o", "d"])("uses the discovery index for the actual paginated endpoint SQL (%s)", async (r) => {
+  await article("a"); await article("b"); await article("c", 1);
+  const first = await request("stream/items/ids", { n: "1", r });
+  fixture.sql = [];
+  await request("stream/items/ids", { n: "1", r, c: first.continuation });
+  const query = fixture.sql.find(row => row.query.includes('ORDER BY') && row.query.includes('LIMIT'));
+  expect(query).toBeDefined();
+  // Includes the real stream relation, cursor OR, ceiling OR, order and limit.
+  expect(query!.query).toContain('priority');
+  const plan = await db.$queryRawUnsafe<Array<{ detail: string }>>(`EXPLAIN QUERY PLAN ${query!.query}`, ...JSON.parse(query!.params));
+  const details = plan.map(row => row.detail).join(" ");
+  expect(details).toContain("Article_userId_createdAt_id_idx");
+  expect(details).not.toContain("TEMP B-TREE");
+});
+
+it.each(["category", "main", "important", "feed", "hidden"])("filters folder/label unions consistently for priority %s", async (priority) => {
+  await db.feed.update({ where: { id: "f" }, data: { priority } });
+  await db.feed.update({ where: { id: "g" }, data: { priority } });
+  await article("folder"); await article("tagged", 1, { feedId: "g" });
+  await db.articleLabel.createMany({ data: ["folder", "tagged"].map(articleId => ({ articleId, labelId: "tag", userId: "u" })) });
+  const visible = ["category", "main", "important"].includes(priority);
+  expect(refs(await request("stream/items/ids", { s: label }))).toEqual(visible ? ["tagged", "folder"].map(greaderItemId) : []);
+  const counts = (await request("unread-count")).unreadcounts;
+  expect(counts.find((x: { id: string }) => x.id === label)).toEqual({ id: label, count: visible ? 2 : 0, newestItemTimestampUsec: visible ? String((epoch + 1) * 1000000) : "0" });
+});
+it("keeps starred feed-only articles and excludes hidden articles as FreshRSS does", async () => {
+  await db.feed.update({ where: { id: "f" }, data: { priority: "feed" } });
+  await db.feed.update({ where: { id: "g" }, data: { priority: "hidden" } });
+  await article("visible", 0, { isStarred: true });
+  await article("hidden", 1, { feedId: "g", isStarred: true });
+  expect(refs(await request("stream/items/ids", { s: state("starred") }))).toEqual([greaderItemId("visible")]);
+  expect(refs(await request("stream/items/ids"))).toEqual([]);
+  const counts = (await request("unread-count")).unreadcounts;
+  expect(counts.find((x: { id: string }) => x.id === state("starred"))).toEqual({ id: state("starred"), count: 1, newestItemTimestampUsec: String(epoch * 1000000) });
+});
+it("retains newest read discovery for feeds, folders, labels and starred even with no unread articles", async () => {
+  await article("folder", 10, { isRead: true, isStarred: true });
+  await article("tagged", 20, { feedId: "g", isRead: true, isStarred: true });
+  await db.articleLabel.create({ data: { articleId: "tagged", labelId: "tag", userId: "u" } });
+  await db.label.create({ data: { id: "solo", userId: "u", name: "Solo" } });
+  await db.articleLabel.create({ data: { articleId: "tagged", labelId: "solo", userId: "u" } });
+  const counts = (await request("unread-count")).unreadcounts;
+  for (const [id, offset] of [[state("reading-list"), 20], [state("starred"), 20], [label, 20], ["user/-/label/Solo", 20], [`feed/${fixtureId("f")}`, 10], [`feed/${fixtureId("g")}`, 20]] as const) {
+    expect(counts.find((x: { id: string }) => x.id === id)).toEqual({ id, count: 0, newestItemTimestampUsec: String((epoch + offset) * 1000000) });
+  }
+});
+it.each(["stream/items/ids", "stream/contents"])("applies one inclusive-second nt boundary to both clocks on %s", async (endpoint) => {
+  await article("discovered", 0.999); await article("modified", -1, { updatedAt: date(epoch + 0.999) });
+  await article("next-discovery", 1); await article("next-modification", -1, { updatedAt: date(epoch + 1) });
+  const result = await request(endpoint, { nt: String(epoch) });
+  expect((result.itemRefs || result.items).map((x: { id: string }) => result.itemRefs ? encodeItemId(x.id) : x.id)).toEqual(["discovered", "modified"].map(greaderItemId));
+});
+it.each(["stream/items/ids", "stream/contents"])("rejects invalid ot/nt before querying on %s", async (endpoint) => {
+  for (const param of ["ot", "nt"]) {
+    for (const value of ["1e100", "-1e100", "Infinity", "NaN", "invalid", "8640000000001"]) {
+      fixture.queries = 0;
+      await request(endpoint, { [param]: value }, "GET", [], 400);
+      expect(fixture.queries).toBe(0);
+    }
+  }
+});
+it("preserves bare references and only decodes explicitly namespaced hex", async () => {
+  for (const id of ["000000000000007b", "abcdef0123456789", "0123456789012345", "9007199254740993"]) expect(parseGReaderItemId(id)).toBe(id);
+  expect(parseGReaderItemId("tag:google.com,2005:reader/item/000000000000007b")).toBe("123");
+  await article("abcdef0123456789");
+  expect((await request("stream/items/contents", {}, "POST", [["i", "abcdef0123456789"]])).items).toHaveLength(1);
+  await request("edit-tag", { a: state("starred") }, "POST", [["i", "abcdef0123456789"]]);
+  expect((await db.article.findUniqueOrThrow({ where: { id: "abcdef0123456789" } })).isStarred).toBe(true);
+});
+it("caps ID pages at 10000 with continuations for nonpositive and huge n", async () => {
+  await db.article.createMany({ data: Array.from({ length: 10001 }, (_, i) => ({ id: `cap${i}`, userId: "u", feedId: "f", title: "Item", content: "body", link: "https://example.org", publishedAt: date(epoch), createdAt: date(epoch), updatedAt: date(epoch) })) });
+  for (const n of ["0", "-1", "1000000000", "1e100"]) {
+    const page = await request("stream/items/ids", { n });
+    expect(page.itemRefs).toHaveLength(10000); expect(page.continuation).toBeTruthy();
+    expect(refs(await request("stream/items/ids", { n, c: page.continuation }))).toHaveLength(1);
+  }
+  for (const n of [null, "", "invalid"]) {
+    expect(greaderLimit(n)).toBe(20); expect(greaderLimit(n, false)).toBe(20);
+  }
+  for (const n of ["0", "-1"]) {
+    expect(greaderLimit(n)).toBe(10000); expect(greaderLimit(n, false)).toBe(20);
+  }
+  expect(greaderLimit("100000", false)).toBe(1000);
 });
