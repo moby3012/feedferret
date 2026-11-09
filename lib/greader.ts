@@ -5,6 +5,9 @@ import { db } from "@/lib/db";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 
 export const GREADER_READING_LIST = "user/-/state/com.google/reading-list";
+export const GREADER_UNREAD = "user/-/state/com.google/unread";
+export const GREADER_MAIN = "user/-/state/org.freshrss/main";
+export const GREADER_IMPORTANT = "user/-/state/org.freshrss/important";
 export const GREADER_READ = "user/-/state/com.google/read";
 export const GREADER_STARRED = "user/-/state/com.google/starred";
 export const GREADER_KEEP_UNREAD = "user/-/state/com.google/kept-unread";
@@ -93,6 +96,11 @@ export function greaderItemId(articleId: string) {
 }
 
 export function parseGReaderItemId(id: string) {
+  // Keep identity conversion isolated for the forthcoming persistent numeric adapter.
+  if (id.startsWith("tag:google.com,2005:reader/item/") || (/^[0-9a-f]{16}$/i.test(id) && (id.startsWith("0") || /[a-f]/i.test(id)))) {
+    const hex = id.slice(id.lastIndexOf("/") + 1);
+    if (/^[0-9a-f]+$/i.test(hex)) return BigInt(`0x${hex}`).toString();
+  }
   return id.split("/").pop() || id;
 }
 
@@ -114,36 +122,27 @@ export function parseGReaderStreamId(streamId?: string | null) {
   return { type: "unknown" as const, value: streamId };
 }
 
-export type GReaderContinuation =
-  | { mode: "offset"; offset: number }
-  | { mode: "cursor"; publishedAt: Date; id: string };
+export type GReaderContinuation = { createdAt: Date; id: string; ceiling?: { createdAt: string; id: string } } | null;
 
 export function parseContinuationToken(token?: string | null): GReaderContinuation {
-  if (!token) return { mode: "offset", offset: 0 };
+  if (!token) return null;
   try {
-    const decoded = Buffer.from(token, "base64url").toString("utf8");
-    if (decoded.startsWith("{")) {
-      const parsed = JSON.parse(decoded);
-      const publishedAt = new Date(parsed.publishedAt);
-      if (parsed.id && !Number.isNaN(publishedAt.getTime())) {
-        return { mode: "cursor", publishedAt, id: String(parsed.id) };
-      }
-    }
-    const value = Number(decoded);
-    return { mode: "offset", offset: Number.isFinite(value) && value >= 0 ? value : 0 };
-  } catch {
-    return { mode: "offset", offset: 0 };
-  }
+    const parsed = JSON.parse(Buffer.from(token, "base64url").toString("utf8"));
+    const createdAt = new Date(parsed.createdAt);
+    if (typeof parsed.id !== "string" || !Number.isFinite(createdAt.getTime())) return null;
+    if (parsed.ceiling && (typeof parsed.ceiling.id !== "string" || !Number.isFinite(new Date(parsed.ceiling.createdAt).getTime()))) return null;
+    return { createdAt, id: parsed.id, ceiling: parsed.ceiling };
+  } catch { return null; }
 }
 
-export function createContinuationToken(article: { publishedAt: Date | string; id: string }) {
-  return Buffer.from(
-    JSON.stringify({
-      publishedAt: new Date(article.publishedAt).toISOString(),
-      id: article.id,
-    }),
-    "utf8",
-  ).toString("base64url");
+export function createContinuationToken(article: { createdAt: Date; id: string }, ceiling?: { createdAt: string; id: string }) {
+  return Buffer.from(JSON.stringify({ createdAt: article.createdAt.toISOString(), id: article.id, ceiling })).toString("base64url");
+}
+
+// FreshRSS defaults to 20 and imposes no positive maximum; n<=0 means unlimited.
+export function greaderLimit(value: string | null) {
+  const n = value?.trim() ? Number(value) : NaN;
+  return Number.isFinite(n) ? Math.trunc(n) : 20;
 }
 
 export function normalizeCategoryNameFromTag(tag: string) {
@@ -152,99 +151,50 @@ export function normalizeCategoryNameFromTag(tag: string) {
   return name || null;
 }
 
-export function buildStreamWhere(
-  userId: string,
-  streamId?: string | null,
-  includeStates: string[] = [],
-  excludeStates: string[] = [],
-  olderThanSec?: number | null,
-) {
-  const where: any = { userId };
+function streamPredicate(userId: string, streamId?: string | null): any {
   const stream = parseGReaderStreamId(streamId);
-
-  if (stream.type === "starred") where.isStarred = true;
-  else if (stream.type === "read") where.isRead = true;
-  else if (stream.type === "feed") where.feed = { url: stream.value };
-  else if (stream.type === "label") {
-    where.OR = [
-      {
-        labels: {
-          some: {
-            label: {
-              userId,
-              name: stream.value,
-            },
-          },
-        },
-      },
-      {
-        feed: {
-          category: {
-            userId,
-            name: stream.value,
-          },
-        },
-      },
-    ];
-  }
-
-  for (const state of includeStates) {
-    if (state === GREADER_STARRED) where.isStarred = true;
-    if (state === GREADER_READ) where.isRead = true;
-  }
-
-  for (const state of excludeStates) {
-    if (state === GREADER_STARRED) where.isStarred = false;
-    if (state === GREADER_READ) where.isRead = false;
-    const labelName = normalizeCategoryNameFromTag(state);
-    if (labelName) {
-      where.NOT = [
-        ...(Array.isArray(where.NOT) ? where.NOT : where.NOT ? [where.NOT] : []),
-        {
-          OR: [
-            {
-              labels: {
-                some: {
-                  label: {
-                    userId,
-                    name: labelName,
-                  },
-                },
-              },
-            },
-            {
-              feed: {
-                category: {
-                  userId,
-                  name: labelName,
-                },
-              },
-            },
-          ],
-        },
-      ];
-    }
-  }
-
-  // `ot` (older-than) = only return articles published before this Unix timestamp
-  if (olderThanSec != null && Number.isFinite(olderThanSec) && olderThanSec > 0) {
-    where.publishedAt = { ...(where.publishedAt ?? {}), lt: new Date(olderThanSec * 1000) };
-  }
-
-  return where;
+  if (streamId === GREADER_UNREAD) return { isRead: false };
+  if (streamId === GREADER_MAIN) return { feed: { priority: { in: ["main", "important"] } } };
+  if (streamId === GREADER_IMPORTANT) return { feed: { priority: "important" } };
+  if (stream.type === "reading-list") return { feed: { priority: { in: ["category", "main", "important"] } } };
+  if (stream.type === "starred") return { isStarred: true };
+  if (stream.type === "read") return { isRead: true };
+  if (stream.type === "feed") return { feed: { url: stream.value } };
+  if (stream.type === "label") return { OR: [
+    { labels: { some: { label: { userId, name: stream.value } } } },
+    { feed: { priority: { in: ["category", "main", "important"] }, category: { userId, name: stream.value } } },
+  ] };
+  // Unknown targets must never broaden a read or bulk mutation to all articles.
+  return { id: { in: [] } };
 }
 
-export function buildCursorWhere(continuation: GReaderContinuation) {
-  if (continuation.mode !== "cursor") return {};
-  return {
-    OR: [
-      { publishedAt: { lt: continuation.publishedAt } },
-      {
-        publishedAt: continuation.publishedAt,
-        id: { lt: continuation.id },
-      },
-    ],
-  };
+export function buildStreamWhere(userId: string, streamId?: string | null, includeStates: string[] = [], excludeStates: string[] = [], oldestSec?: number | null, newestSec?: number | null) {
+  const AND: any[] = [streamPredicate(userId, streamId),
+    ...([GREADER_READ, GREADER_UNREAD].includes(streamId || "") ? [{ feed: { priority: { in: ["category", "main", "important"] } } }] : []),
+    ...(streamId === GREADER_STARRED ? [{ feed: { priority: { not: "hidden" } } }] : []),
+    ...includeStates.map((state) => streamPredicate(userId, state)),
+    ...excludeStates.map((state) => ({ NOT: streamPredicate(userId, state) })),
+  ];
+  // FreshRSS EntryDAO compares discovery ID and lastModified, never publication.
+  // updatedAt is FeedFerret's combined content/state modification clock.
+  if (oldestSec && Number.isFinite(oldestSec)) {
+    const gte = new Date(Math.trunc(oldestSec) * 1000);
+    AND.push({ OR: [{ createdAt: { gte } }, { updatedAt: { gte } }] });
+  }
+  if (newestSec && Number.isFinite(newestSec)) {
+    const lte = new Date(Math.trunc(newestSec) * 1000);
+    AND.push({ createdAt: { lte }, updatedAt: { lt: new Date((Math.trunc(newestSec) + 1) * 1000) } });
+  }
+  return { userId, AND };
+}
+
+export function buildCursorWhere(continuation: GReaderContinuation, ascending = false) {
+  if (!continuation) return {};
+  const op = ascending ? "gt" : "lt";
+  return { OR: [
+    { createdAt: { [op]: continuation.createdAt } },
+    { createdAt: continuation.createdAt, id: { [op]: continuation.id } },
+  ] };
 }
 
 export async function listGReaderStreamPrefs(userId: string) {
@@ -301,6 +251,9 @@ export async function listGReaderTags(userId: string) {
   const systemTags = [
     GREADER_READING_LIST,
     GREADER_READ,
+    GREADER_UNREAD,
+    GREADER_MAIN,
+    GREADER_IMPORTANT,
     GREADER_STARRED,
     GREADER_BROADCAST,
     GREADER_KEEP_UNREAD,
@@ -310,70 +263,33 @@ export async function listGReaderTags(userId: string) {
   const seen = new Set<string>();
   const customTags = [...categories, ...labels].flatMap((item) => {
     const name = item.name.trim();
-    if (!name || seen.has(name.toLowerCase())) return [];
-    seen.add(name.toLowerCase());
+    if (!name || seen.has(name)) return [];
+    seen.add(name);
     return [{ id: `${GREADER_LABEL_PREFIX}${name}`, type: "label", sortid: name }];
   });
 
   return [...systemTags, ...customTags];
 }
 
+export async function countGReaderUnread(userId: string, streamId: string) {
+  const scope = buildStreamWhere(userId, streamId);
+  const [count, newest] = await Promise.all([
+    db.article.count({ where: { AND: [scope, { isRead: false }] } }),
+    db.article.findFirst({ where: scope, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true } }),
+  ]);
+  return { id: streamId, count, newestItemTimestampUsec: newest ? String(newest.createdAt.getTime() * 1000) : "0" };
+}
+
 export async function countUnreadByGReaderTag(userId: string) {
   const [labels, categories] = await Promise.all([
-    db.label.findMany({ where: { userId } }),
-    db.category.findMany({ where: { userId } }),
+    db.label.findMany({ where: { userId } }), db.category.findMany({ where: { userId } }),
   ]);
-
-  const rows: Array<{ id: string; count: number; newestItemTimestampUsec: string }> = [];
-  const seen = new Set<string>();
-
-  for (const category of categories) {
-    const key = category.name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const [count, newest] = await Promise.all([
-      db.article.count({
-        where: { userId, isRead: false, feed: { categoryId: category.id } },
-      }),
-      db.article.findFirst({
-        where: { userId, isRead: false, feed: { categoryId: category.id } },
-        orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
-        select: { publishedAt: true },
-      }),
-    ]);
-    rows.push({
-      id: `${GREADER_LABEL_PREFIX}${category.name}`,
-      count,
-      newestItemTimestampUsec: newest ? String(newest.publishedAt.getTime() * 1000) : "0",
-    });
-  }
-
-  for (const label of labels) {
-    const key = label.name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const [count, newest] = await Promise.all([
-      db.article.count({
-        where: { userId, isRead: false, labels: { some: { labelId: label.id } } },
-      }),
-      db.article.findFirst({
-        where: { userId, isRead: false, labels: { some: { labelId: label.id } } },
-        orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
-        select: { publishedAt: true },
-      }),
-    ]);
-    rows.push({
-      id: `${GREADER_LABEL_PREFIX}${label.name}`,
-      count,
-      newestItemTimestampUsec: newest ? String(newest.publishedAt.getTime() * 1000) : "0",
-    });
-  }
-
-  return rows;
+  const names = new Set([...categories, ...labels].map((row) => row.name));
+  return Promise.all([...names].map((name) => countGReaderUnread(userId, `${GREADER_LABEL_PREFIX}${name}`)));
 }
 
 export async function toGReaderArticle(article: any) {
-  const timestampUsec = new Date(article.publishedAt).getTime() * 1000;
+  const timestampUsec = new Date(article.createdAt).getTime() * 1000;
   const content =
     article.contentFormat === "markdown" && article.content
       ? await renderMarkdownToHtml(article.content)
@@ -386,21 +302,25 @@ export async function toGReaderArticle(article: any) {
     updated: Math.floor(new Date(article.updatedAt ?? article.publishedAt).getTime() / 1000),
     title: article.title,
     canonical: article.link ? [{ href: article.link }] : [],
-    alternate: article.link ? [{ href: article.link, type: "text/html" }] : [],
-    categories: [
+    alternate: article.link ? [{ href: article.link }] : [],
+    categories: [...new Set([
       GREADER_READING_LIST,
       ...(article.isRead ? [GREADER_READ] : []),
+      ...(["main", "important"].includes(article.feed?.priority) ? [GREADER_MAIN] : []),
+      ...(article.feed?.priority === "important" ? [GREADER_IMPORTANT] : []),
+      ...(article.feed?.priority === "hidden" ? ["user/-/state/org.freshrss/hidden"] : []),
       ...(article.isStarred ? [GREADER_STARRED] : []),
       ...(article.feed?.category?.name ? [`${GREADER_LABEL_PREFIX}${article.feed.category.name}`] : []),
       ...(article.labels || []).map((item: any) => `${GREADER_LABEL_PREFIX}${item.label.name}`),
-    ],
+    ])],
     origin: {
       streamId: `feed/${article.feed.url}`,
       title: article.feed.name,
-      htmlUrl: article.feed.url,
+      htmlUrl: article.feed.htmlUrl || article.feed.url,
     },
     author: article.author || "",
-    summary: { content: article.excerpt || "" },
+    summary: { content: content || article.excerpt || "" },
+    ...(article.enclosures ? { enclosure: JSON.parse(article.enclosures) } : {}),
     content: { content: content || article.excerpt || "" },
   };
 }
@@ -412,6 +332,6 @@ export function toGReaderItemRef(article: any) {
       `feed/${article.feed.url}`,
       ...(article.feed?.category?.name ? [`${GREADER_LABEL_PREFIX}${article.feed.category.name}`] : []),
     ],
-    timestampUsec: String(new Date(article.publishedAt).getTime() * 1000),
+    timestampUsec: String(new Date(article.createdAt).getTime() * 1000),
   };
 }

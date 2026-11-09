@@ -359,6 +359,7 @@ model Article {
   excerpt     String?
   author      String?
   publishedAt DateTime
+  enclosures  String? // JSON array of GReader enclosure {href,type,length} objects
   imageUrl    String?
   isRead      Boolean  @default(false)
   readAt      DateTime?
