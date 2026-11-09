@@ -84,14 +84,24 @@ async function ensureSqliteFts() {
         END
     `);
 
-    await db.$executeRawUnsafe(`
-        CREATE TRIGGER IF NOT EXISTS article_fts_au AFTER UPDATE ON "Article" BEGIN
+    // Only re-index when an indexed column changes. The previous trigger fired
+    // on *any* UPDATE (mark-read, star, aiSummary, updatedAt...) and rewrote the
+    // whole trigram row each time. Existing installs still have that old
+    // definition, and CREATE TRIGGER IF NOT EXISTS would keep it, so drop and
+    // recreate (cheap, idempotent DDL) on every startup.
+    // DROP + CREATE run in one transaction so a concurrent content update can
+    // never land in a window with no trigger (which would leave FTS stale).
+    await db.$transaction([
+        db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS article_fts_au`),
+        db.$executeRawUnsafe(`
+        CREATE TRIGGER article_fts_au AFTER UPDATE OF title, content, excerpt, author ON "Article" BEGIN
             INSERT INTO article_fts(article_fts, rowid, id, title, content, excerpt, author)
             VALUES ('delete', old.rowid, old.id, old.title, old.content, old.excerpt, old.author);
             INSERT INTO article_fts(rowid, id, title, content, excerpt, author)
             VALUES (new.rowid, new.id, new.title, new.content, new.excerpt, new.author);
         END
-    `);
+    `),
+    ]);
 
     await backfillSqliteFtsIfNeeded();
 }

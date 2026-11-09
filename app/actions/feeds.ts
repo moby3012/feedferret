@@ -64,23 +64,31 @@ export async function getFeeds() {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    return await db.feed.findMany({
-        where: { userId: session.user.id },
-        include: {
-            category: true,
-            _count: {
-                select: {
-                    articles: {
-                        where: { isRead: false, isSpoiler: false },
-                    },
-                },
-            },
-        },
-        orderBy: [
-            { order: "asc" },
-            { name: "asc" }
-        ],
-    });
+    // Unread counts via a single userId-scoped groupBy (served by the
+    // (userId, isRead, isSpoiler, feedId) index) instead of a per-feed
+    // relation _count subquery that scans Article across all users.
+    const [feeds, unreadCounts] = await Promise.all([
+        db.feed.findMany({
+            where: { userId: session.user.id },
+            include: { category: true },
+            orderBy: [
+                { order: "asc" },
+                { name: "asc" }
+            ],
+        }),
+        db.article.groupBy({
+            by: ["feedId"],
+            where: { userId: session.user.id, isRead: false, isSpoiler: false },
+            _count: { _all: true },
+        }),
+    ]);
+    const unreadByFeed = new Map<string, number>(
+        unreadCounts.map((item: { feedId: string; _count: { _all: number } }) => [item.feedId, item._count._all])
+    );
+    return feeds.map((feed) => ({
+        ...feed,
+        _count: { articles: unreadByFeed.get(feed.id) ?? 0 },
+    }));
 }
 
 export async function getCategories() {

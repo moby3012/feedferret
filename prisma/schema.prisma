@@ -386,9 +386,13 @@ model Article {
   @@index([userId, isReadLater, readLaterSavedAt])
   @@index([userId, isSpoiler, publishedAt])
   @@index([userId, readAt])
-  @@index([feedId, publishedAt])
+  @@index([feedId, publishedAt(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
   @@index([spoilerRuleId])
   @@index([userId, digestedAt])
+  // Perf: serves the default list ORDER BY publishedAt DESC, createdAt DESC, id DESC
+  @@index([userId, publishedAt(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
+  // Perf: serves per-feed unread counts (groupBy feedId WHERE userId, isRead=false, isSpoiler=false)
+  @@index([userId, isRead, isSpoiler, feedId])
 }
 
 model Label {
