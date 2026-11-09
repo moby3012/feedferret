@@ -960,7 +960,7 @@ export default function RSSReaderPage() {
                 articles={filteredArticles}
                 selectedArticle={selectedArticle}
                 isLoading={articlesLoading}
-                unreadCount={filteredArticles.filter((a: any) => !a.isRead).length}
+                unreadCount={unreadCount}
                 onCloseSearch={handleCloseSearch}
                 onEditSearch={handleEditSearch}
                 onSaveSearch={handleSaveSearch}
@@ -1072,7 +1072,7 @@ export default function RSSReaderPage() {
             articles={filteredArticles}
             selectedArticle={selectedArticle}
             isLoading={articlesLoading}
-            unreadCount={filteredArticles.filter((a: any) => !a.isRead).length}
+            unreadCount={unreadCount}
             onCloseSearch={handleCloseSearch}
             onEditSearch={handleEditSearch}
             onSaveSearch={handleSaveSearch}

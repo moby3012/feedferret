@@ -18,10 +18,12 @@ export const UNDO_TOKEN_TTL_MS = 10 * 60 * 1000;
 const MAX_TOKENS_PER_USER = 10;
 /** Upper bound for all stored ids together (~tens of MB worst case). */
 const MAX_TOTAL_IDS = 500_000;
+/** A single bulk action larger than this gets no Undo (it would evict everything else). */
+export const MAX_IDS_PER_TOKEN = 100_000;
 
 export const UNDO_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,64}$/;
 
-interface UndoEntry {
+export interface UndoEntry {
   userId: string;
   ids: string[];
   expiresAt: number;
@@ -44,15 +46,17 @@ function evictOldest(predicate: (entry: UndoEntry) => boolean, limitReached: () 
   }
 }
 
-export function createUndoToken(userId: string, ids: string[], now = Date.now()): string {
+export function createUndoToken(userId: string, ids: string[], now = Date.now()): string | null {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0 || unique.length > MAX_IDS_PER_TOKEN) return null;
   prune(now);
   const countFor = () => [...store.values()].filter((e) => e.userId === userId).length;
   evictOldest((e) => e.userId === userId, () => countFor() >= MAX_TOKENS_PER_USER);
   const totalIds = () => [...store.values()].reduce((sum, e) => sum + e.ids.length, 0);
-  evictOldest(() => true, () => totalIds() + ids.length > MAX_TOTAL_IDS);
+  evictOldest(() => true, () => totalIds() + unique.length > MAX_TOTAL_IDS);
 
   const token = randomBytes(24).toString("base64url"); // 32 chars, 192 bit
-  store.set(token, { userId, ids: [...new Set(ids)], expiresAt: now + UNDO_TOKEN_TTL_MS });
+  store.set(token, { userId, ids: unique, expiresAt: now + UNDO_TOKEN_TTL_MS });
   return token;
 }
 
@@ -72,6 +76,23 @@ export function peekUndoToken(userId: string, token: unknown, now = Date.now()):
 
 export function discardUndoToken(token: string) {
   store.delete(token);
+}
+
+/**
+ * Atomically takes a live token out of the store (synchronous, so two concurrent
+ * undo requests can never both get it). Call `releaseUndoToken` if the undo
+ * then fails, so the user can retry.
+ */
+export function claimUndoToken(userId: string, token: unknown, now = Date.now()): UndoEntry | null {
+  const ids = peekUndoToken(userId, token, now);
+  if (!ids) return null;
+  const entry = store.get(token as string)!;
+  store.delete(token as string);
+  return entry;
+}
+
+export function releaseUndoToken(token: string, entry: UndoEntry, now = Date.now()) {
+  if (entry.expiresAt > now) store.set(token, entry);
 }
 
 /** Test helper. */

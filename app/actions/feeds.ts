@@ -27,7 +27,7 @@ import { createPageFeedForUser } from "@/lib/page-feed-create";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs } from "@/lib/webhooks";
 import { buildXPathArticles } from "@/lib/feed-fetcher";
 import { buildAdvancedSearchWhere } from "@/lib/search";
-import { createUndoToken, peekUndoToken, discardUndoToken } from "@/lib/undo-tokens";
+import { createUndoToken, claimUndoToken, releaseUndoToken } from "@/lib/undo-tokens";
 import { isMarkAllAllowed } from "@/lib/view-scope";
 import { applyRetentionPoliciesForUser } from "@/lib/retention";
 import { randomBytes } from "crypto";
@@ -1413,7 +1413,11 @@ export async function markAllAsRead(scope?: { feedId?: string | null; category?:
 
     revalidatePath("/");
 
-    return { ids, undoToken: ids.length > 0 ? createUndoToken(userId, ids) : null };
+    // Note: rows are attributed to this call via `readAt`. Two concurrent mark-all
+    // calls of the same user in the same millisecond could share it; worst case
+    // an Undo restores a few rows the other call also marked. Acceptable for a
+    // user-initiated action; revisit with UPDATE … RETURNING if it ever matters.
+    return { ids, undoToken: createUndoToken(userId, ids) };
 }
 
 /**
@@ -1427,10 +1431,13 @@ export async function markArticlesAsUnread(undoToken: string) {
     if (!session?.user?.id) throw new Error("Unauthorized");
     const userId = session.user.id;
 
-    const candidates = peekUndoToken(userId, undoToken);
-    if (!candidates) throw new Error("Undo expired");
+    const claim = claimUndoToken(userId, undoToken);
+    if (!claim) throw new Error("Undo expired");
+    const candidates = claim.ids;
 
-    const ids = await db.$transaction(
+    let ids: string[];
+    try {
+    ids = await db.$transaction(
         async (tx) => {
             const restored: string[] = [];
             for (const chunk of chunkIds(candidates)) {
@@ -1450,8 +1457,11 @@ export async function markArticlesAsUnread(undoToken: string) {
         },
         { timeout: 60_000, maxWait: 10_000 },
     );
+    } catch (error) {
+        releaseUndoToken(undoToken, claim);
+        throw error;
+    }
 
-    discardUndoToken(undoToken);
     revalidatePath("/");
 
     return { count: ids.length, ids };
