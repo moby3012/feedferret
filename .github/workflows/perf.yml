@@ -55,7 +55,10 @@ jobs:
 
       - name: Measure
         # Writes the markdown table to the job summary ($GITHUB_STEP_SUMMARY).
-        run: node scripts/perf-measure.mjs --runs "${{ inputs.runs }}" --label "${{ inputs.label }}"
+        env:
+          RUNS: ${{ inputs.runs }}
+          LABEL: ${{ inputs.label }}
+        run: node scripts/perf-measure.mjs --runs "$RUNS" --label "$LABEL"
 
       - name: Upload results
         if: always()

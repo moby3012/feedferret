@@ -56,7 +56,6 @@ async function startServer() {
   const env = {
     ...process.env,
     E2E_DB_PATH: dbPath,
-    E2E_ALLOW_CUSTOM_DB: "1",
     DATABASE_PROVIDER: "sqlite",
     DATABASE_URL: `file:${dbPath}`,
     AUTH_SECRET: "e2e-0123456789abcdef0123456789abcd-k",
@@ -73,7 +72,7 @@ async function startServer() {
   creds = { email: manifest.users.perf.email, password: manifest.password };
   perfDb = { path: dbPath, userId: manifest.users.perf.userId };
   if (!fs.existsSync(path.join(root, ".next", "BUILD_ID"))) throw new Error("no production build: run `pnpm run build` first");
-  server = spawn("npx", ["next", "start", "-p", String(PORT)], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
+  server = spawn("npx", ["next", "start", "-p", String(PORT)], { cwd: root, env, stdio: ["ignore", "ignore", "inherit"] });
   for (let i = 0; i < 120; i++) {
     try {
       if ((await fetch(`${BASE}/login`)).ok) return;

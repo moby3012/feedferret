@@ -28,8 +28,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const e2eDir = path.join(root, ".e2e");
 const dbPath = path.resolve(process.env.E2E_DB_PATH || path.join(e2eDir, "e2e.db"));
 
-if (!dbPath.startsWith(e2eDir + path.sep) && process.env.E2E_ALLOW_CUSTOM_DB !== "1") {
-  console.error(`[e2e-seed] refusing to write ${dbPath}: outside ${e2eDir} (set E2E_ALLOW_CUSTOM_DB=1 to override)`);
+if (!dbPath.startsWith(e2eDir + path.sep)) {
+  // Hard guard: this script wipes the target DB and creates ADMIN users with a
+  // known password, so it must never touch anything outside .e2e/.
+  console.error(`[e2e-seed] refusing to write ${dbPath}: outside ${e2eDir}`);
   process.exit(1);
 }
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });

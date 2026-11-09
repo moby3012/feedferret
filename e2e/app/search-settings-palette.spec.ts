@@ -3,6 +3,7 @@ import { test, expect } from "../helpers/test";
 test("search finds the seeded needle articles", async ({ app, page }) => {
   await app.open();
   await app.activate(page.getByRole("button", { name: "Search articles" }).first());
+  await expect(page.locator("input:focus, textarea:focus")).toHaveCount(1);
   await page.keyboard.type(app.user.sample.needle);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { level: 2, name: new RegExp(app.user.sample.needle) })).toBeVisible();
