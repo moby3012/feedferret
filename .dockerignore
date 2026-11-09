@@ -49,3 +49,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+
+# test artefacts
+.e2e/
+e2e/.auth/
+perf-results/

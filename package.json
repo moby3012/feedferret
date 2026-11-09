@@ -20,6 +20,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:a11y": "playwright test accessibility",
+    "test:e2e:seed": "node scripts/e2e-seed.mjs",
+    "perf:measure": "node scripts/perf-measure.mjs",
     "translations:check": "node scripts/check-translations.mjs",
     "prepare": "husky"
   },
