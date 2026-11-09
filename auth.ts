@@ -120,6 +120,7 @@ const config = {
 
       const user = (await db.user.findUnique({
         where: { id: token.sub },
+        select: { isActive: true, sessionVersion: true, role: true },
       })) as any;
 
       if (user) {
