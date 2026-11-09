@@ -89,15 +89,19 @@ async function ensureSqliteFts() {
     // whole trigram row each time. Existing installs still have that old
     // definition, and CREATE TRIGGER IF NOT EXISTS would keep it, so drop and
     // recreate (cheap, idempotent DDL) on every startup.
-    await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS article_fts_au`);
-    await db.$executeRawUnsafe(`
+    // DROP + CREATE run in one transaction so a concurrent content update can
+    // never land in a window with no trigger (which would leave FTS stale).
+    await db.$transaction([
+        db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS article_fts_au`),
+        db.$executeRawUnsafe(`
         CREATE TRIGGER article_fts_au AFTER UPDATE OF title, content, excerpt, author ON "Article" BEGIN
             INSERT INTO article_fts(article_fts, rowid, id, title, content, excerpt, author)
             VALUES ('delete', old.rowid, old.id, old.title, old.content, old.excerpt, old.author);
             INSERT INTO article_fts(rowid, id, title, content, excerpt, author)
             VALUES (new.rowid, new.id, new.title, new.content, new.excerpt, new.author);
         END
-    `);
+    `),
+    ]);
 
     await backfillSqliteFtsIfNeeded();
 }
