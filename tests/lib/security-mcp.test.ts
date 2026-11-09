@@ -11,10 +11,18 @@ function request(name: string) {
   return new Request("https://example.test/api/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: `feedferret.${name}`, arguments: {} } }) });
 }
 describe("MCP read token", () => {
-  it.each(["add_feed", "delete_feed", "create_auto_read_rule", "mark_all_read", "fetch_full_text", "sync_feeds"])("rejects write tool %s", async name => {
-    const body = await (await POST(request(name))).json();
-    expect(body.result.isError).toBe(true);
-    expect(body.result.content[0].text).toBe("Insufficient token scope");
+  it("rejects every advertised tool outside the read allowlist", async () => {
+    const read = new Set(["search_articles", "get_article", "list_feeds", "get_feed", "list_categories", "list_labels", "list_saved_searches", "list_keyword_alerts", "list_auto_read_rules", "list_notifications", "list_connectors", "get_stats", "suggest_page_feed"]);
+    const response = await POST(new Request("https://example.test/api/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }));
+    const { result: { tools } } = await response.json();
+    expect(tools.length).toBeGreaterThan(0);
+    for (const tool of tools) {
+      const name = tool.name.replace(/^feedferret\./, "");
+      if (read.has(name)) continue;
+      const body = await (await POST(request(name))).json();
+      expect(body.result.isError, name).toBe(true);
+      expect(body.result.content[0].text, name).toBe("Insufficient token scope");
+    }
   });
   it("allows list feeds", async () => {
     const body = await (await POST(request("list_feeds"))).json();

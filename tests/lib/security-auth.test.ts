@@ -9,7 +9,7 @@ vi.mock("@/lib/db", () => ({ db: {
 vi.mock("bcryptjs", () => ({ default: { compare: mocks.compare } }));
 vi.mock("@/lib/markdown-render", () => ({ renderMarkdownToHtml: vi.fn() }));
 vi.mock("@/lib/rate-limit", async importOriginal => ({
-  ...await importOriginal<typeof import("@/lib/rate-limit")>(), checkRateLimit: mocks.limited,
+  ...await importOriginal<typeof import("@/lib/rate-limit")>(), peekRateLimit: mocks.limited,
 }));
 import { authenticateGReaderPassword, authenticateGReaderRequest, createGReaderToken } from "../../lib/greader";
 import { POST as fever } from "../../app/api/fever/route";
@@ -33,11 +33,11 @@ describe("GReader password authentication", () => {
     expect(await authenticateGReaderPassword(request, user.email, "pw")).toBeNull();
     expect(mocks.compare).not.toHaveBeenCalled();
   });
-  it("logs successful Basic auth and preserves colons in password", async () => {
+  it("does not log successful Basic auth and preserves colons in password", async () => {
     const req = new Request("https://example.test", { headers: { authorization: `Basic ${Buffer.from(`${user.email}:p:w`).toString("base64")}` } });
     expect(await authenticateGReaderRequest(req)).toEqual(user);
     expect(mocks.compare).toHaveBeenCalledWith("p:w", "hash");
-    expect(mocks.log).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ success: true }) }));
+    expect(mocks.log).not.toHaveBeenCalled();
   });
   it("rejects suspended users with an existing HMAC token", async () => {
     vi.stubEnv("AUTH_SECRET", "test-key");
@@ -58,7 +58,9 @@ describe("Fever token guards", () => {
   });
   it("rejects marks with read scope", async () => {
     mocks.token.mockResolvedValue({ user, scope: "read" });
-    expect((await fever(request())).status).toBe(403);
+    const response = await fever(request());
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ api_version: 3, auth: 1, error: "Insufficient token scope" });
     expect(mocks.marks).not.toHaveBeenCalled();
   });
   it("allows marks with write scope", async () => {

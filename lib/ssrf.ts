@@ -65,7 +65,13 @@ function isPrivateIpv4(ip: string) {
 
 function isPrivateIpv6(ip: string) {
   // URL canonicalization handles compressed and dotted IPv4-mapped literals.
-  const canonical = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
+  let canonical: string;
+  try {
+    canonical = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
+  } catch {
+    // Zone IDs and unsupported literals must fail closed, never escape guards.
+    return true;
+  }
   const halves = canonical.split("::");
   const left = halves[0] ? halves[0].split(":") : [];
   const right = halves[1] ? halves[1].split(":") : [];

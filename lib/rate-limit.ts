@@ -90,6 +90,15 @@ export function checkRateLimit(
   };
 }
 
+/** Inspect failed-attempt budgets without consuming a request. */
+export function peekRateLimit(identifier: string, config: RateLimitConfig): RateLimitResult {
+  const now = Date.now();
+  const entry = store.get(`${config.prefix}:${identifier}`);
+  const count = entry && entry.resetAt >= now ? entry.count : 0;
+  const resetAt = entry && entry.resetAt >= now ? entry.resetAt : now + config.windowSecs * 1000;
+  return { success: count < config.limit, remaining: Math.max(0, config.limit - count), resetAt };
+}
+
 // Presets for different API endpoints
 export const RATE_LIMITS = {
   // Feedsearch.dev: be respectful, 10 req/min per user

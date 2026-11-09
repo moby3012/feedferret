@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 
 // Background sync state to prevent concurrent syncs
 let lastSyncTime = 0;
+let lastCronSyncTime = 0;
 let isSyncing = false;
 
 export async function GET(request: Request) {
@@ -15,17 +16,17 @@ export async function GET(request: Request) {
 
     // Prevent concurrent syncs (run at most every 2 minutes)
     const now = Date.now();
-    if (isSyncing || (now - lastSyncTime) < 120000) {
+    if (isSyncing || (now - lastCronSyncTime) < 120000) {
         return NextResponse.json({ 
             status: "already_syncing", 
             message: "Sync already in progress",
-            lastSync: new Date(lastSyncTime).toISOString()
+            lastSync: new Date(lastCronSyncTime).toISOString()
         });
     }
 
     try {
         isSyncing = true;
-        lastSyncTime = now;
+        lastCronSyncTime = now;
         
         const results = await syncAllFeeds();
         const synced = results.filter(r => r.success).length;

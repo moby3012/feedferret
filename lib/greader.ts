@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
@@ -37,8 +37,11 @@ export function verifyGReaderToken(token: string) {
 /** Shared password path: throttle both identity and source before bcrypt. */
 export async function authenticateGReaderPassword(request: Request, email: string, password: string) {
   const ip = getClientIdentifier(request);
-  const ipLimit = checkRateLimit(ip, RATE_LIMITS.authSignIn);
-  const accountLimit = checkRateLimit(email.trim().toLowerCase(), { ...RATE_LIMITS.authSignIn, prefix: "greader-account" });
+  const identity = email.trim().toLowerCase();
+  const ipConfig = { ...RATE_LIMITS.authSignIn, prefix: "greader-ip" };
+  const emailConfig = { ...RATE_LIMITS.authSignIn, prefix: "greader-email" };
+  const ipLimit = peekRateLimit(ip, ipConfig);
+  const accountLimit = peekRateLimit(identity, emailConfig);
   let user: Awaited<ReturnType<typeof db.user.findUnique>> = null;
   let failReason: string | undefined;
   if (!ipLimit.success || !accountLimit.success) failReason = "rate_limit";
@@ -48,6 +51,11 @@ export async function authenticateGReaderPassword(request: Request, email: strin
     else if (!user.isActive) failReason = "inactive";
     else if (user.twoFactorEnabled) failReason = "otp";
     else if (!(await bcrypt.compare(password, user.password))) failReason = "password";
+  }
+  if (!failReason) return user;
+  if (failReason !== "rate_limit") {
+    checkRateLimit(ip, ipConfig);
+    checkRateLimit(identity, emailConfig);
   }
   try {
     await db.loginAttempt.create({ data: {

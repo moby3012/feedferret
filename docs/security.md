@@ -63,7 +63,7 @@ The database admin setting is preferred — it can be changed without redeployin
 | Content sanitization | Article HTML is sanitized by DOMPurify before rendering |
 | 2FA | Optional TOTP for local accounts; can be made mandatory for admins |
 | Session invalidation | `sessionVersion` pattern — Password/2FA changes invalidate browser JWT sessions; legacy GReader tokens are unaffected |
-| Login attempt logging | Browser and GReader credentials attempts recorded (best effort) with IP, user agent, and fail reason |
+| Login attempt logging | Browser credentials attempts and GReader failures recorded (best effort) with IP, user agent, and fail reason |
 | Admin audit log | All admin mutations (role change, suspend, delete, settings) recorded with actor and timestamp |
 | Admin safety | Last admin cannot be deleted or demoted |
 | GDPR | Self-service account deletion with full cascade delete |
@@ -79,15 +79,15 @@ In-memory sliding window rate limiter (`lib/rate-limit.ts`) protects against bru
 
 | Endpoint group | Limit | Window |
 |---|---|---|
-| `POST /api/auth/*` (sign-in, credentials) | 10 attempts | 15 minutes |
-| GReader ClientLogin / Basic (per IP and email), credentials-status (per IP) | 10 attempts | 15 minutes |
+| `POST /api/auth/*` (sign-in, credentials) | 10 failed GReader attempts (credentials-status counts requests) | 15 minutes |
+| GReader ClientLogin / Basic (per IP and email), credentials-status (per IP) | 10 failed GReader attempts (credentials-status counts requests) | 15 minutes |
 | Magic link requests | 3 attempts | 10 minutes |
 | `POST /api/mcp` | 100 requests | 1 minute |
 | `POST /api/internal/*` | 30 requests | 1 minute |
 | `GET /api/v1/*` (read) | 200 requests | 1 minute |
 | `POST/PATCH/DELETE /api/v1/*` (write) | 60 requests | 1 minute |
 
-Limits are per process, not shared across replicas. MCP is limited by source IP. `TRUSTED_PROXY_COUNT=1` selects the right-most X-Forwarded-For hop; configure the exact trusted proxy chain and prevent direct access that bypasses your proxy.
+Limits are per process, not shared across replicas. MCP is limited by source IP. `TRUSTED_PROXY_COUNT=1` selects the right-most `X-Forwarded-For` entry for a single Nginx, Caddy or Traefik proxy. For Cloudflare → Traefik → FeedFerret, set `TRUSTED_PROXY_COUNT=2`. Restrict origin access to Cloudflare and app access to Traefik; only trust headers appended by this controlled chain.
 
 Response on limit exceeded: HTTP 429 with `Retry-After`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` headers.
 
@@ -191,14 +191,14 @@ This guarantees that if a user changes their security state, all existing browse
 
 #### Login attempt logging
 
-Browser and GReader credentials sign-in attempts are recorded on a best-effort basis in the `LoginAttempt` table regardless of outcome:
+Browser credentials sign-in attempts are recorded regardless of outcome. GReader records only failed password attempts (including throttled requests); successful Basic polling and ClientLogin do not create rows. Recording is best effort in the `LoginAttempt` table:
 
 | Field | Description |
 |---|---|
 | `email` | Email address used in the attempt |
 | `userId` | Resolved user ID (null if account does not exist) |
 | `success` | Boolean — whether authentication succeeded |
-| `failReason` | `no_account` / `password` / `otp` |
+| `failReason` | `no_account` / `password` / `otp` / `inactive` / `rate_limit` |
 | `ip` | Client IP from `X-Forwarded-For` / `X-Real-IP` |
 | `userAgent` | Browser/client user agent string |
 | `createdAt` | Timestamp |
@@ -232,10 +232,10 @@ When enabled, any admin without 2FA active receives an error on every admin serv
 ## Quick-win access controls
 
 - `GET /api/sync` requires a configured `SYNC_SECRET` in `Authorization: Bearer …`; unset or incorrect secrets return 404. Responses omit feed URLs. The built-in scheduler calls sync directly and needs no secret.
-- New installs default to closed registration. The first local registration is allowed with zero users; serializable creation ensures only one bootstrap ADMIN. Existing settings rows retain their registration choice. Concurrent registration can return 409 and should be retried.
+- Local and OAuth/OIDC registration allow bootstrap with zero users, including with a disabled setting. Only an installation with zero users AND no GlobalSettings row initializes a persisted disabled setting. After bootstrap, new users require registration to be enabled. Legacy installations with users and no settings row retain open registration; existing settings values are preserved. Local registration uses a serializable transaction to create one bootstrap ADMIN. Serialization/time-out conflicts return 409 for retry; duplicate accounts return generic 400.
 - Deleted or inactive users lose JWT identity; admin actions re-read role and active status. Legacy GReader tokens now reject inactive users, but still lack expiry/password-change revocation.
 - MCP write tools and Fever mark operations require write/admin token scope. Fever rejects expired tokens; read-later uses the common active-user resolver.
-- Service workers cache no navigation responses and logout clears browser caches.
+- Service workers cache no navigation responses and logout clears FeedFerret runtime caches while retaining the static offline precache.
 
 ## Configuration Security Notes
 

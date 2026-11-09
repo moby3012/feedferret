@@ -132,3 +132,7 @@ describe("redirect credentials", () => {
     expect(headers.Authorization).toBe("Basic secret");
   });
 });
+
+it.each(["fe80::1%eth0", "2606:4700::1111%eth0", "[fe80::1%25en0]"])("blocks zone-ID literal %s without throwing", ip => {
+  expect(isPrivateIp(ip)).toBe(true);
+});

@@ -5,10 +5,11 @@ import { getClientIdentifier } from "../../lib/rate-limit";
 
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 describe("production secret", () => {
-  it.each([undefined, "", "short", "your-secret-here".repeat(3), "build-time-secret-only".repeat(2)])("rejects insecure secret %s", secret => {
+  it.each([undefined, "", "short", " YOUR-SUPER-SECRET-KEY-CHANGE-THIS "])("rejects insecure secret %s", secret => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() => validateAuthSecret(secret, true)).toThrow(/AUTH_SECRET/);
   });
+  it("accepts placeholder substrings in otherwise long secrets", () => expect(() => validateAuthSecret("random-prefix-secret-with-enough-characters", true)).not.toThrow());
   it("accepts a long random value", () => expect(() => validateAuthSecret("a98F2u4kTn76Xz09QP56wB2m84ZvH7rL", true)).not.toThrow());
   it("does not enforce production policy in development", () => expect(() => validateAuthSecret("short", false)).not.toThrow());
 });

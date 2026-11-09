@@ -270,7 +270,7 @@ async function handle(request: Request) {
 
     // Handle mark (write) operations
     if (params.has("mark") || body.mark) {
-      if (!["write", "admin"].includes(user.tokenScope)) return NextResponse.json({ error: "Insufficient token scope" }, { status: 403 });
+      if (!["write", "admin"].includes(user.tokenScope)) return NextResponse.json({ api_version: 3, auth: 1, error: "Insufficient token scope" }, { status: 403 });
       await handleMark(user.id, params, body);
     }
 

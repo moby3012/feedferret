@@ -85,7 +85,8 @@ const config = {
       if (
         account?.type === "credentials" ||
         account?.provider === "nodemailer" ||
-        account?.type === "oauth"
+        account?.type === "oauth" ||
+        account?.type === "oidc"
       ) {
         if (!user.email) {
           return false;
@@ -101,8 +102,14 @@ const config = {
 
         if (!existingUser) {
           const settings = await db.globalSettings.findUnique({ where: { id: "global" } });
-          if (!(settings?.registrationsEnabled ?? false)) {
-            return false;
+          if (settings && !settings.registrationsEnabled && await db.user.count() > 0) return false;
+          // Persist the default only for an empty installation. Legacy installs
+          // with users and no settings retain their previous open policy.
+          if (!settings && await db.user.count() === 0) {
+            await db.globalSettings.upsert({
+              where: { id: "global" }, update: {},
+              create: { id: "global", registrationsEnabled: false },
+            });
           }
         }
       }

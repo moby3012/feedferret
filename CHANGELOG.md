@@ -9,6 +9,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ### Security (2026-11-09 — audit quick wins)
 
+- Registration policy (local and OAuth/OIDC): zero users may bootstrap even when registration is disabled. Only zero users AND no GlobalSettings row initializes a persisted disabled setting; subsequent new users are denied unless enabled. Existing installations with users and no settings row retain legacy open registration. Existing settings values and existing active-user sign-ins remain unchanged.
+- Review follow-up: GReader uses separate failed-attempt IP/email budgets without logging successful Basic requests; secrets use exact placeholder matching; duplicate registration returns generic 400; logout preserves offline precache; cron sync has its own cooldown; Fever scope errors retain protocol fields; IPv6 zone literals fail closed. Proxy examples include Cloudflare → Traefik = 2.
+
 - C1, H1, H2, H3, H5, partial H6: require a strong production AUTH_SECRET, revoke missing/inactive-user JWT identity, recheck admin privileges, close sync GET behind SYNC_SECRET without feed URLs, reject redirects at configurable integration endpoints, and throttle/log GReader password authentication with active-user checks.
 - M1, M2, M3, M5, M6, M7, M9, M10, L6, L9: close registration by default for new installations with transactional admin bootstrap; enforce MCP/Fever scopes and Fever expiry; expand SSRF reserved-address blocking and strip credentials across origins; use configurable trusted proxy hops; rate-limit credentials-status; share read-later authentication; stop navigation caching and clear caches on logout.
 - Operators: configure AUTH_SECRET (32+ random characters), SYNC_SECRET for external GET sync triggers, and TRUSTED_PROXY_COUNT (default 1/right-most XFF hop). Existing registration settings are preserved. Internal background sync is unchanged.
