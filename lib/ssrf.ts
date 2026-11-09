@@ -54,31 +54,37 @@ function isPrivateIpv4(ip: string) {
     // routed. NOTE: this is 192.0.2.0/24, not all of 192.0.0.0/16 — the rest
     // of that /16 (e.g. 192.0.78.0/23, allocated to Automattic/WordPress.com)
     // is ordinary public space and must not be blocked here.
-    (a === 192 && b === 0 && c === 2) ||
+    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 192 && b === 88 && c === 99) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113) ||
     (a === 198 && (b === 18 || b === 19)) ||
     a >= 224
   );
 }
 
 function isPrivateIpv6(ip: string) {
-  const lower = ip.toLowerCase();
-  return (
-    lower === "::1" ||
-    lower === "::" ||
-    lower.startsWith("fc") ||
-    lower.startsWith("fd") ||
-    lower.startsWith("fe80:") ||
-    lower.startsWith("::ffff:127.") ||
-    lower.startsWith("::ffff:10.") ||
-    lower.startsWith("::ffff:192.168.") ||
-    lower.startsWith("::ffff:169.254.")
-  );
+  // URL canonicalization handles compressed and dotted IPv4-mapped literals.
+  const canonical = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
+  const halves = canonical.split("::");
+  const left = halves[0] ? halves[0].split(":") : [];
+  const right = halves[1] ? halves[1].split(":") : [];
+  const words = [...left, ...Array(8 - left.length - right.length).fill("0"), ...right].map(v => parseInt(v, 16));
+  if (words.slice(0, 5).every(v => v === 0) && words[5] === 0xffff) {
+    return isPrivateIpv4(`${words[6] >> 8}.${words[6] & 255}.${words[7] >> 8}.${words[7] & 255}`);
+  }
+  // Only global unicast 2000::/3, excluding special-purpose assignments.
+  // This also rejects NAT64 (64:ff9b::/96), ULA, site/link-local and multicast.
+  return (words[0] & 0xe000) !== 0x2000 ||
+    (words[0] === 0x2001 && (words[1] < 0x200 || words[1] === 0xdb8)) ||
+    words[0] === 0x2002 || (words[0] === 0x3fff && words[1] < 0x1000);
 }
 
 export function isPrivateIp(ip: string) {
-  const version = net.isIP(ip);
-  if (version === 4) return isPrivateIpv4(ip);
-  if (version === 6) return isPrivateIpv6(ip);
+  const normalized = ip.replace(/^\[|\]$/g, "");
+  const version = net.isIP(normalized);
+  if (version === 4) return isPrivateIpv4(normalized);
+  if (version === 6) return isPrivateIpv6(normalized);
   return true;
 }
 
@@ -96,7 +102,7 @@ export async function assertSafeFetchUrl(rawUrl: string, options: SsrfCheckOptio
 
   if (options.allowInternal) return url;
 
-  const hostname = url.hostname.toLowerCase();
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (hostname === "localhost" || hostname.endsWith(".localhost")) {
     throw new Error(`${options.context || "Fetch"} URL points to localhost`);
   }
@@ -175,6 +181,8 @@ export async function fetchWithSsrfProtection(
     options.impersonate ? getImpitFetch() ?? fetch : fetch;
   let current = (await assertSafeFetchUrl(rawUrl, options)).toString();
 
+  const headers = new Headers(init.headers);
+
   for (let redirect = 0; redirect <= maxRedirects; redirect++) {
     await assertSafeFetchUrl(current, options);
     const controller = new AbortController();
@@ -182,12 +190,19 @@ export async function fetchWithSsrfProtection(
     try {
       const response = await doFetch(current, {
         ...init,
+        headers,
         redirect: "manual",
         signal: controller.signal,
       });
 
       if (response.status >= 300 && response.status < 400 && response.headers.get("location")) {
-        current = (await assertSafeFetchUrl(new URL(response.headers.get("location")!, current).toString(), options)).toString();
+        const next = (await assertSafeFetchUrl(new URL(response.headers.get("location")!, current).toString(), options)).toString();
+        if (new URL(next).origin !== new URL(current).origin) {
+          headers.delete("authorization");
+          headers.delete("cookie");
+          headers.delete("proxy-authorization");
+        }
+        current = next;
         continue;
       }
 

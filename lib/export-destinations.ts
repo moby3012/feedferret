@@ -93,6 +93,7 @@ async function getWallabagAccessToken(config: WallabagConfig, timeoutMs = 15_000
       password: config.password,
     });
     const res = await fetch(`${base}/oauth/v2/token`, {
+      redirect: "manual",
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
@@ -131,6 +132,7 @@ export async function sendToWallabag(config: WallabagConfig, article: WallabagAr
   try {
     const base = config.baseUrl.replace(/\/$/, "");
     const res = await fetch(`${base}/api/entries`, {
+      redirect: "manual",
       method: "POST",
       headers: {
         "Content-Type": "application/json",

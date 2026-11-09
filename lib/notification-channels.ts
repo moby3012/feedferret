@@ -81,6 +81,7 @@ export async function sendGotifyNotification(
 
     const base = config.url.replace(/\/$/, "");
     const res = await fetch(`${base}/message?token=${encodeURIComponent(config.token)}`, {
+      redirect: "manual",
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -118,6 +119,7 @@ export async function sendNtfyNotification(
     if (config.token) headers["Authorization"] = `Bearer ${config.token}`;
 
     const res = await fetch(config.url, {
+      redirect: "manual",
       method: "POST",
       headers,
       body: payload.body,

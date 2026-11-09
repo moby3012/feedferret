@@ -163,6 +163,7 @@ async function summarizeOllama(prompt: string, config: AiConfig, maxTokens = 300
   }
 
   const res = await fetch(`${base}/api/chat`, {
+    redirect: "manual",
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
