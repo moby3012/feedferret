@@ -75,6 +75,7 @@ model User {
   ntfyToken               String?
   hideDuplicates          Boolean   @default(true)
   markReadOnScroll        Boolean   @default(false)
+  markReadOnAdvance       Boolean   @default(false)     // end-of-list "Weiter zu …" also marks the current view read
   layoutDirection         String    @default("ltr")     // "ltr" | "rtl"
   hideEmptyFeeds          Boolean   @default(false)
   hideEmptyLabels         Boolean   @default(false)

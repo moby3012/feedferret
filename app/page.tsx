@@ -11,16 +11,20 @@ import { ArticleReader } from "@/components/article-reader";
 import { RssHeader, ViewMode } from "@/components/rss-header";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { MobileBottomControls } from "@/components/mobile-bottom-controls";
+import { EndOfListCard } from "@/components/end-of-list-card";
 import { SearchResultsView } from "@/components/search-results-view";
+import { isMarkAllAllowed } from "@/lib/view-scope";
 import {
   useFeeds,
   useArticles,
+  useViewUnreadCount,
   useToggleRead,
   useToggleStarred,
   useToggleReadLater,
   useRefresh,
-  useMarkAllAsRead,
-  useMarkArticlesAsUnread,
+  useMarkViewRead,
+  ARTICLES_READ_CHANGED_EVENT,
+  type ArticlesReadChangedDetail,
   useFetchFullText,
   useLabels,
   useCategories,
@@ -129,12 +133,20 @@ export default function RSSReaderPage() {
     isAuthenticated,
   );
 
+  // Header count comes from the server: the article query is capped, so a
+  // client-side count under-reports big views and disagreed with the sidebar.
+  const viewUnreadQuery = useViewUnreadCount(
+    isSearchActive ? null : selectedFeed,
+    isSearchActive ? "All Articles" : selectedCategory,
+    debouncedSearchQuery || undefined,
+    isAuthenticated,
+  );
+
   const refresh = useRefresh();
   const toggleRead = useToggleRead();
   const toggleStarred = useToggleStarred();
   const toggleReadLater = useToggleReadLater();
-  const markAllAsRead = useMarkAllAsRead();
-  const markArticlesAsUnread = useMarkArticlesAsUnread();
+  const { markViewRead, isPending: isMarkingAllRead } = useMarkViewRead();
   const fetchFullText = useFetchFullText();
   const { data: labels = [] } = useLabels(isAuthenticated);
   const { data: categories = [] } = useCategories(isAuthenticated);
@@ -341,10 +353,17 @@ export default function RSSReaderPage() {
     [displayArticles, selectedArticleId, selectedArticleSnapshot],
   );
 
-  const unreadCount = useMemo(
+  const loadedUnreadCount = useMemo(
     () => displayArticles.filter((a: any) => !a.isRead).length,
     [displayArticles],
   );
+  // Server count once known; until then the sidebar's own per-feed number
+  // (same source as its badge) or, as a last resort, what is loaded.
+  const unreadCount =
+    viewUnreadQuery.data ??
+    (selectedFeed && !isSearchActive
+      ? (feeds.find((f) => f.id === selectedFeed)?._count?.articles ?? loadedUnreadCount)
+      : loadedUnreadCount);
 
   useEffect(() => {
     const articleId = articleDeepLinkRef.current;
@@ -576,37 +595,37 @@ export default function RSSReaderPage() {
     refresh.mutate();
   }, [refresh]);
 
+  // Whether "mark all read" applies to the current view. Read-only views
+  // (Recently Read, Spoiler) have nothing to mark, so every control is hidden.
+  const canMarkAllRead = isSearchActive || isMarkAllAllowed(selectedFeed, selectedCategory);
+
+  // Explicit "mark all read": marks exactly the current view (feed / category /
+  // label / saved search / active search) and stays on it (no auto-jump).
+  // Every entry point (header, end card, palette, shortcut) shares this handler.
   const handleMarkAllRead = useCallback(() => {
-    const feedsList = feeds;
-    markAllAsRead.mutate(
-      { feedId: selectedFeed, category: selectedFeed ? null : selectedCategory },
-      {
-        onSuccess: () => {
-          if (!selectedFeed) return;
-          const currentIdx = feedsList.findIndex((f) => f.id === selectedFeed);
-          if (currentIdx === -1) return;
-          const ordered = [
-            ...feedsList.slice(currentIdx + 1),
-            ...feedsList.slice(0, currentIdx),
-          ];
-          const nextFeed = ordered.find((f) => (f._count?.articles ?? 0) > 0);
-          setSelectedArticleId(null);
-          setSelectedArticleSnapshot(null);
-          setTransitionStyle("flip");
-          if (nextFeed) {
-            setSelectedFeed(nextFeed.id);
-            setSelectedCategory("All");
-            setUnreadOnly(true);
-          } else {
-            // No more unread anywhere — fall back to the global Unread view
-            setSelectedFeed(null);
-            setSelectedCategory("All Articles");
-            setUnreadOnly(true);
-          }
-        },
-      },
-    );
-  }, [feeds, markAllAsRead, selectedFeed, selectedCategory]);
+    if (!canMarkAllRead) return;
+    if (isSearchActive) {
+      markViewRead({ feedId: null, category: "All Articles", search: debouncedSearchQuery });
+      return;
+    }
+    markViewRead({ feedId: selectedFeed, category: selectedFeed ? null : selectedCategory });
+  }, [canMarkAllRead, isSearchActive, debouncedSearchQuery, markViewRead, selectedFeed, selectedCategory]);
+
+  // Reconcile locally held article copies (session snapshots, open reader) with
+  // what the server just committed — bulk mark-read and its Undo, from any
+  // entry point including the sidebar menus.
+  useEffect(() => {
+    const onReadChanged = (event: Event) => {
+      const { ids, isRead } = (event as CustomEvent<ArticlesReadChangedDetail>).detail;
+      const changed = new Set(ids);
+      const patch = (a: any) => (changed.has(a.id) ? { ...a, isRead, readAt: isRead ? new Date() : null } : a);
+      setSessionReadArticles((prev) => prev.map(patch));
+      setSelectedArticleSnapshot((prev: any) => (prev ? patch(prev) : prev));
+      setReadInSession((prev) => (isRead ? prev : prev.filter((id) => !changed.has(id))));
+    };
+    window.addEventListener(ARTICLES_READ_CHANGED_EVENT, onReadChanged);
+    return () => window.removeEventListener(ARTICLES_READ_CHANGED_EVENT, onReadChanged);
+  }, []);
 
   const toggleUnreadOnly = useCallback(() => {
     setTransitionStyle("filter");
@@ -620,46 +639,40 @@ export default function RSSReaderPage() {
     return () => window.clearTimeout(id);
   }, [transitionStyle, unreadOnly, selectedFeed, selectedCategory]);
 
-  const navigateFeed = useCallback((direction: 1 | -1) => {
-    const feedsList = feeds;
-    if (feedsList.length === 0) return;
-    if (!selectedFeed) {
-      const target = direction === 1 ? feedsList[0] : feedsList[feedsList.length - 1];
-      if (target) {
-        setSelectedFeed(target.id);
-        setSelectedCategory("All");
-        setSelectedArticleId(null);
-        setSelectedArticleSnapshot(null);
-      }
-      return;
+  // Next feed (in sidebar order, wrapping) that still has unread articles. Only
+  // offered when a single feed is open: switching feeds is a deliberate tap on
+  // the end-of-list card, never a swipe or overscroll.
+  const nextFeedWithUnread = useMemo(() => {
+    if (!selectedFeed || isSearchActive) return null;
+    const currentIdx = feeds.findIndex((f) => f.id === selectedFeed);
+    if (currentIdx === -1) return null;
+    const ordered = [...feeds.slice(currentIdx + 1), ...feeds.slice(0, currentIdx)];
+    return ordered.find((f) => (f._count?.articles ?? 0) > 0) ?? null;
+  }, [feeds, selectedFeed, isSearchActive]);
+
+  const handleContinueToNextFeed = useCallback(() => {
+    if (!nextFeedWithUnread) return;
+    // Opt-in setting: moving on also marks the view you are leaving read (with Undo).
+    if (readingPrefs?.markReadOnAdvance && unreadCount > 0) {
+      markViewRead({ feedId: selectedFeed, category: null });
     }
-    const idx = feedsList.findIndex((f) => f.id === selectedFeed);
-    if (idx === -1) return;
-    const next = feedsList[(idx + direction + feedsList.length) % feedsList.length];
-    if (next && next.id !== selectedFeed) {
-      // Auto-mark all articles in the current feed as read when swiping forward.
-      // Offer an "Undo" toast since this can happen accidentally (e.g. a swipe
-      // gesture misfiring) and there's no other confirmation step.
-      if (direction === 1) {
-        markAllAsRead.mutate({ feedId: selectedFeed, category: null }, {
-          onSuccess: (result) => {
-            const ids = result?.ids ?? [];
-            if (ids.length === 0) return;
-            toast(t("undoMarkAllReadMessage", { count: ids.length }), {
-              action: {
-                label: t("undo"),
-                onClick: () => markArticlesAsUnread.mutate(ids),
-              },
-            });
-          },
-        });
-      }
-      setSelectedFeed(next.id);
-      setSelectedCategory("All");
-      setSelectedArticleId(null);
-      setSelectedArticleSnapshot(null);
-    }
-  }, [feeds, selectedFeed, markAllAsRead, markArticlesAsUnread, t]);
+    setSelectedFeed(nextFeedWithUnread.id);
+    setSelectedCategory("All");
+    setSelectedArticleId(null);
+    setSelectedArticleSnapshot(null);
+    setTransitionStyle("flip");
+  }, [nextFeedWithUnread, readingPrefs?.markReadOnAdvance, unreadCount, markViewRead, selectedFeed]);
+
+  const endOfListCard = (
+    <EndOfListCard
+      caughtUp={unreadCount === 0}
+      onMarkAllRead={canMarkAllRead ? handleMarkAllRead : undefined}
+      isMarkingAllRead={isMarkingAllRead}
+      nextFeedName={nextFeedWithUnread?.name ?? null}
+      onContinue={handleContinueToNextFeed}
+      continueMarksRead={readingPrefs?.markReadOnAdvance ?? false}
+    />
+  );
 
   const handleToggleSort = useCallback(() => {
     setSortOrder((prev) => {
@@ -947,7 +960,7 @@ export default function RSSReaderPage() {
                 articles={filteredArticles}
                 selectedArticle={selectedArticle}
                 isLoading={articlesLoading}
-                unreadCount={filteredArticles.filter((a: any) => !a.isRead).length}
+                unreadCount={unreadCount}
                 onCloseSearch={handleCloseSearch}
                 onEditSearch={handleEditSearch}
                 onSaveSearch={handleSaveSearch}
@@ -978,14 +991,12 @@ export default function RSSReaderPage() {
                   onToggleUnreadOnly={toggleUnreadOnly}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
-                  onMarkAllRead={handleMarkAllRead}
-                  isMarkingAllRead={markAllAsRead.isPending}
+                  onMarkAllRead={canMarkAllRead ? handleMarkAllRead : undefined}
+                  isMarkingAllRead={isMarkingAllRead}
                   onSaveSearch={handleSaveSearch}
                   onShowShortcuts={() => setShortcutsOpen(true)}
                   sortOrder={sortOrder}
                   onToggleSort={handleToggleSort}
-                  onSwipeNextFeed={() => navigateFeed(1)}
-                  onSwipePreviousFeed={() => navigateFeed(-1)}
                 />
                 {isOffline && hasOfflineSnapshot && (
                   <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
@@ -1010,10 +1021,7 @@ export default function RSSReaderPage() {
                       const article = displayArticles.find((a: any) => a.id === articleId);
                       if (article) markArticleRead(article);
                     }}
-                    onOverscrollPastEnd={() => navigateFeed(1)}
-                    onOverscrollPastTop={() => navigateFeed(-1)}
-                    onSwipeNextFeed={() => navigateFeed(1)}
-                    onSwipePreviousFeed={() => navigateFeed(-1)}
+                    endOfList={endOfListCard}
                     scrollBackToId={lastClosedArticleId}
                     hasFeeds={feeds.length > 0}
                   />
@@ -1064,7 +1072,7 @@ export default function RSSReaderPage() {
             articles={filteredArticles}
             selectedArticle={selectedArticle}
             isLoading={articlesLoading}
-            unreadCount={filteredArticles.filter((a: any) => !a.isRead).length}
+            unreadCount={unreadCount}
             onCloseSearch={handleCloseSearch}
             onEditSearch={handleEditSearch}
             onSaveSearch={handleSaveSearch}
@@ -1096,14 +1104,12 @@ export default function RSSReaderPage() {
               onToggleUnreadOnly={toggleUnreadOnly}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
-              onMarkAllRead={handleMarkAllRead}
-              isMarkingAllRead={markAllAsRead.isPending}
+              onMarkAllRead={canMarkAllRead ? handleMarkAllRead : undefined}
+              isMarkingAllRead={isMarkingAllRead}
               onSaveSearch={handleSaveSearch}
               onShowShortcuts={() => setShortcutsOpen(true)}
               sortOrder={sortOrder}
               onToggleSort={handleToggleSort}
-              onSwipeNextFeed={() => navigateFeed(1)}
-              onSwipePreviousFeed={() => navigateFeed(-1)}
             />
             {isOffline && hasOfflineSnapshot && (
               <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
@@ -1131,10 +1137,7 @@ export default function RSSReaderPage() {
                 enablePullToRefresh
                 isRefreshing={articlesLoading || refresh.isPending}
                 onPullToRefresh={handleRefresh}
-                onOverscrollPastEnd={() => navigateFeed(1)}
-                onOverscrollPastTop={() => navigateFeed(-1)}
-                onSwipeNextFeed={() => navigateFeed(1)}
-                onSwipePreviousFeed={() => navigateFeed(-1)}
+                endOfList={endOfListCard}
                 scrollBackToId={lastClosedArticleId}
                 hasFeeds={feeds.length > 0}
               />
@@ -1150,8 +1153,8 @@ export default function RSSReaderPage() {
           isRefreshing={articlesLoading || refresh.isPending}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onMarkAllRead={handleMarkAllRead}
-          isMarkingAllRead={markAllAsRead.isPending}
+          onMarkAllRead={canMarkAllRead ? handleMarkAllRead : undefined}
+          isMarkingAllRead={isMarkingAllRead}
           isSearchActive={isSearchActive}
           onCloseSearch={handleCloseSearch}
           onEditSearch={handleEditSearch}
@@ -1266,7 +1269,7 @@ export default function RSSReaderPage() {
         categories={categories}
         labels={labels}
         onRefresh={handleRefresh}
-        onMarkAllRead={handleMarkAllRead}
+        onMarkAllRead={canMarkAllRead ? handleMarkAllRead : undefined}
         onFocusSearch={handleEditSearch}
         onAddFeed={handleOpenAddFeed}
         onOpenSettings={handleOpenSettings}

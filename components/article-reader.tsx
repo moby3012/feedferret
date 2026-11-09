@@ -6,6 +6,7 @@ import Image from "next/image";
 import MarkdownIt from "markdown-it";
 import DOMPurify from "isomorphic-dompurify";
 import { Article } from "@/lib/rss-data";
+import { startsInPannableContent } from "@/lib/gesture-guards";
 import { useAiSettings, useSummarizeArticle, useExportSettings, useBuildObsidianExportLink, useExportArticleToWallabag } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -143,9 +144,15 @@ export function ArticleReader({
     onPreviousArticle?.();
   }, [onPreviousArticle]);
 
+  // Swipe right → back (mobile). There is deliberately no left-swipe action:
+  // opening the original is only ever an explicit button / the `o` shortcut.
+  // Touches that start in code blocks, tables or other horizontal scrollers
+  // are the user panning content, not navigating.
   const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
     const touch = e.touches[0];
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    touchStartRef.current = startsInPannableContent(e.target, rootRef.current)
+      ? null
+      : { x: touch.clientX, y: touch.clientY };
   };
 
   const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
@@ -156,7 +163,6 @@ export function ArticleReader({
     touchStartRef.current = null;
     if (Math.abs(dx) < 72 || Math.abs(dy) > Math.abs(dx) * 0.75) return;
     if (dx > 0) onBack?.();
-    else if (dx < 0 && article?.link) window.open(article.link, "_blank", "noopener,noreferrer");
   };
   const { data: aiSettings } = useAiSettings();
   const aiSummaryEnabled = Boolean(aiSettings?.provider);
@@ -605,20 +611,12 @@ export function ArticleReader({
           <header className="mb-10 animate-fade-in-up">
             <h1
               id="article-title"
-              onClick={() => {
-                // Tapping/clicking the headline opens the original article — but
-                // don't hijack a click that was really the user selecting title text.
-                if (typeof window !== "undefined" && window.getSelection()?.toString()) return;
-                openOriginal();
-              }}
-              title={article.link ? t("openOriginal") : undefined}
               className={cn(
                 // No text-balance: Safari has shipped it with real interop bugs
                 // where a balanced heading stops respecting overflow-wrap on long
                 // headlines, letting them overflow instead of wrapping — not worth
                 // the purely cosmetic line-balancing on a reader headline.
                 "text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 tracking-[-0.04em] break-words [overflow-wrap:anywhere]",
-                article.link && "cursor-pointer transition-colors hover:text-link",
               )}
             >
               {article.title}

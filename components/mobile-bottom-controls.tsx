@@ -94,6 +94,7 @@ export function MobileBottomControls({
             <ArrowLeft className="me-2 h-5 w-5" />
             {t("searchResults.backToFeed")}
           </Button>
+          {onMarkAllRead && (
           <Button
             type="button"
             variant="ghost"
@@ -106,6 +107,7 @@ export function MobileBottomControls({
           >
             <CheckCheck className={cn("h-5 w-5", isMarkingAllRead && "animate-pulse")} />
           </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -204,6 +206,7 @@ export function MobileBottomControls({
           <span className={cn("h-2 w-2 rounded-full", unreadOnly ? "bg-accent-foreground" : "bg-muted-foreground")} />
           {unreadOnly ? t("sidebar.unread") : t("sidebar.allArticles")}
         </Button>
+        {onMarkAllRead && (
         <Button
           type="button"
           variant="ghost"
@@ -216,6 +219,7 @@ export function MobileBottomControls({
         >
           <CheckCheck className={cn("h-5 w-5", isMarkingAllRead && "animate-pulse")} />
         </Button>
+        )}
         <Button
           type="button"
           variant="ghost"

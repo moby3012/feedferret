@@ -41,6 +41,9 @@ export function resetArticleState(userKey: string) {
          readLaterSavedAt = (SELECT readLaterSavedAt FROM e2e_pristine WHERE articleId = "Article".id)
        WHERE userId = ?`,
     ).run(userId);
+    // Settings the specs flip must not leak between tests either.
+    db.prepare(`UPDATE "User" SET markReadOnAdvance = 0, defaultViewMode = 'list' WHERE id = ?`).run(userId);
+    db.prepare(`UPDATE "Article" SET isSpoiler = 0, spoilerAt = NULL WHERE userId = ? AND isSpoiler = 1`).run(userId);
   } finally {
     db.close();
   }
@@ -66,6 +69,96 @@ export function unreadCountInDb(userKey: string): number {
   const db = open();
   try {
     return (db.prepare(`SELECT COUNT(*) AS n FROM "Article" WHERE userId = ? AND isRead = 0`).get(userId) as { n: number }).n;
+  } finally {
+    db.close();
+  }
+}
+
+/** Ids of all unread articles of a user (to assert undo restores *exactly* the changed set). */
+export function unreadIds(userKey: string): string[] {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    return (db.prepare(`SELECT id FROM "Article" WHERE userId = ? AND isRead = 0 ORDER BY id`).all(userId) as { id: string }[]).map((r) => r.id);
+  } finally {
+    db.close();
+  }
+}
+
+/** Unread articles of one feed (by feed name). */
+export function unreadCountForFeed(userKey: string, feedName: string): number {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    return (
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM "Article" a JOIN "Feed" f ON f.id = a.feedId WHERE a.userId = ? AND a.isRead = 0 AND f.name = ?`,
+        )
+        .get(userId, feedName) as { n: number }
+    ).n;
+  } finally {
+    db.close();
+  }
+}
+
+/** Make every article unread (so the unread count exceeds the 200-row list cap). */
+export function markEverythingUnread(userKey: string) {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    db.prepare(`UPDATE "Article" SET isRead = 0, readAt = NULL WHERE userId = ?`).run(userId);
+  } finally {
+    db.close();
+  }
+}
+
+export function setUserSettings(userKey: string, values: { markReadOnAdvance?: boolean; defaultViewMode?: string }) {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    if (values.markReadOnAdvance !== undefined)
+      db.prepare(`UPDATE "User" SET markReadOnAdvance = ? WHERE id = ?`).run(values.markReadOnAdvance ? 1 : 0, userId);
+    if (values.defaultViewMode !== undefined)
+      db.prepare(`UPDATE "User" SET defaultViewMode = ? WHERE id = ?`).run(values.defaultViewMode, userId);
+  } finally {
+    db.close();
+  }
+}
+
+export function userSettings(userKey: string): { markReadOnAdvance: boolean } {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    const row = db.prepare(`SELECT markReadOnAdvance FROM "User" WHERE id = ?`).get(userId) as { markReadOnAdvance: number };
+    return { markReadOnAdvance: !!row.markReadOnAdvance };
+  } finally {
+    db.close();
+  }
+}
+
+/** Unread articles of a user whose title contains `text` (search-scope assertions). */
+export function unreadIdsMatching(userKey: string, text: string): string[] {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    return (
+      db.prepare(`SELECT id FROM "Article" WHERE userId = ? AND isRead = 0 AND title LIKE ? ORDER BY id`).all(userId, `%${text}%`) as { id: string }[]
+    ).map((r) => r.id);
+  } finally {
+    db.close();
+  }
+}
+
+/** Turn the last `count` unread articles into spoilers (so the "Spoiler" view exists). Reset by resetArticleState. */
+export function makeSpoilers(userKey: string, count: number) {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    db.prepare(
+      `UPDATE "Article" SET isSpoiler = 1, spoilerAt = CURRENT_TIMESTAMP WHERE id IN
+         (SELECT id FROM "Article" WHERE userId = ? AND isRead = 0 ORDER BY id DESC LIMIT ?)`,
+    ).run(userId, count);
   } finally {
     db.close();
   }

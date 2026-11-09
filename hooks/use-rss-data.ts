@@ -1,8 +1,9 @@
 "use client"
 
+import { useCallback } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
-import { getFeeds, getArticles, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, markArticlesAsUnread, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers, suggestFeedFromUrl, createFeedFromPage, proposeAiFeedConfig, proposeAiFullTextSelector, getRsshubStatus, previewRsshubFeed, getChangedetectionStatus, createChangedetectionFeed } from "@/app/actions/feeds"
+import { getFeeds, getArticles, getViewUnreadCount, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, markArticlesAsUnread, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers, suggestFeedFromUrl, createFeedFromPage, proposeAiFeedConfig, proposeAiFullTextSelector, getRsshubStatus, previewRsshubFeed, getChangedetectionStatus, createChangedetectionFeed } from "@/app/actions/feeds"
 import { updateProfile, changePassword, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, previewDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getContentFetchSettings, updateContentFetchSettings, testContentFetchConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
 import { getExportSettings, updateExportSettings, testWallabagExportConnection, buildObsidianExportLink, exportArticleToWallabag } from "@/app/actions/export"
 import { updateUiLanguage } from "@/app/actions/locale"
@@ -86,6 +87,21 @@ export function useArticles(feedId?: string | null, category?: string, search?: 
     })
 }
 
+/**
+ * Unread count of a whole list view, computed on the server with the same
+ * scope as `getArticles`. The article query is capped (200 rows), so counting
+ * unread rows client-side under-reports big views and disagreed with the
+ * sidebar. Keyed under "articles" so every article invalidation refreshes it.
+ */
+export function useViewUnreadCount(feedId?: string | null, category?: string, search?: string, enabled = true) {
+    return useQuery({
+        queryKey: ["articles", "unread-count", feedId ?? null, category ?? null, search ?? null],
+        queryFn: () => getViewUnreadCount(feedId, category, search),
+        staleTime: 30_000,
+        enabled,
+    })
+}
+
 export function useToggleRead() {
     const queryClient = useQueryClient()
     return useMutation({
@@ -117,6 +133,22 @@ export function useToggleRead() {
                     article.id === articleId ? { ...article, isRead, readAt } : article
                 ))
             })
+
+            // Keep the list-header count (server count, see useViewUnreadCount) in step.
+            // Only views that certainly contain the article are adjusted; the
+            // rest are corrected by the invalidation in onSuccess.
+            if (affectedFeedId) {
+                const delta = isRead ? -1 : 1
+                queryClient.getQueriesData<number>({ queryKey: ["articles", "unread-count"] }).forEach(([key, count]) => {
+                    if (typeof count !== "number") return
+                    const [, , keyFeed, keyCategory, keySearch] = key as [string, string, string | null, string | null, string | null]
+                    const containsArticle =
+                        !keySearch &&
+                        (keyFeed === affectedFeedId ||
+                            (!keyFeed && (keyCategory === null || keyCategory === "All" || keyCategory === "All Articles")))
+                    if (containsArticle) queryClient.setQueryData(key, Math.max(0, count + delta))
+                })
+            }
 
             // Optimistically adjust the feed's unread count so sidebar badge updates immediately (#19)
             if (affectedFeedId && Array.isArray(feedsSnapshot)) {
@@ -156,6 +188,7 @@ export function useToggleRead() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
             queryClient.invalidateQueries({ queryKey: ["labels"] })
+            queryClient.invalidateQueries({ queryKey: ["articles", "unread-count"] })
         },
     })
 }
@@ -487,11 +520,12 @@ export function useUpdateDisplayTimezone() {
 export function useMarkAllAsRead() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: (scope?: { feedId?: string | null; category?: string | null }) => markAllAsRead(scope),
+        mutationFn: (scope?: MarkViewScope) => markAllAsRead(scope),
         onMutate: async (scope) => {
             await queryClient.cancelQueries({ queryKey: ["feeds"] })
             const feedsSnapshot = queryClient.getQueryData<any[]>(["feeds"])
-            if (Array.isArray(feedsSnapshot)) {
+            // Search scopes can't be mapped to sidebar badges: invalidation in onSuccess fixes them.
+            if (Array.isArray(feedsSnapshot) && !scope?.search) {
                 // Optimistic: zero unread on the affected feed(s) so badge updates instantly (#19)
                 const next = feedsSnapshot.map((f: any) => {
                     if (scope?.feedId) {
@@ -538,21 +572,77 @@ export function useMarkAllAsRead() {
     })
 }
 
-// Powers the "Undo" action on the auto-mark-all-read toast shown when
-// swiping to the next feed (see app/page.tsx navigateFeed).
+export type MarkViewScope = { feedId?: string | null; category?: string | null; search?: string | null }
+
+/** Fired after every bulk mark-read / undo so views holding local article copies can reconcile. */
+export const ARTICLES_READ_CHANGED_EVENT = "feedferret:articles-read-changed"
+export type ArticlesReadChangedDetail = { ids: string[]; isRead: boolean }
+
+function announceReadChange(detail: ArticlesReadChangedDetail) {
+    if (typeof window !== "undefined" && detail.ids.length > 0) {
+        window.dispatchEvent(new CustomEvent<ArticlesReadChangedDetail>(ARTICLES_READ_CHANGED_EVENT, { detail }))
+    }
+}
+
+// Powers the "Undo" action of the mark-all-read toast. Takes the opaque
+// server-issued undo token, never article ids.
 export function useMarkArticlesAsUnread() {
     const queryClient = useQueryClient()
+    const t = useTranslations("sidebar")
     return useMutation({
-        mutationFn: (articleIds: string[]) => markArticlesAsUnread(articleIds),
-        onSuccess: () => {
+        mutationFn: (undoToken: string) => markArticlesAsUnread(undoToken),
+        onSuccess: (result) => {
+            announceReadChange({ ids: result.ids, isRead: false })
             queryClient.invalidateQueries({ queryKey: ["articles"] })
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
             queryClient.invalidateQueries({ queryKey: ["labels"] })
         },
         onError: () => {
-            toast.error("Could not undo mark-as-read. Try refreshing the page.")
+            toast.error(t("undoFailed"))
         },
     })
+}
+
+/**
+ * The ONE way to bulk-mark a view read (header, end-of-list card, command
+ * palette, keyboard shortcut, sidebar menus). Always shows the Undo toast and
+ * reconciles local state. Returns a function: `markViewRead({ feedId, category, search })`.
+ */
+export function useMarkViewRead() {
+    const queryClient = useQueryClient()
+    const t = useTranslations("sidebar")
+    const markAll = useMarkAllAsRead()
+    const undo = useMarkArticlesAsUnread()
+    const { mutateAsync } = markAll
+    const { mutate: undoMutate } = undo
+
+    const markViewRead = useCallback(
+        (scope: MarkViewScope) => {
+            mutateAsync(scope)
+                .then((result) => {
+                    const ids = result?.ids ?? []
+                    if (ids.length === 0) return
+                    announceReadChange({ ids, isRead: true })
+                    const undoToken = result.undoToken
+                    toast(t("undoMarkAllReadMessage", { count: ids.length }), {
+                        duration: 6000,
+                        action: undoToken
+                            ? { label: t("undo"), onClick: () => undoMutate(undoToken) }
+                            : undefined,
+                    })
+                })
+                .catch(() => {
+                    // Nothing was changed (the server update is atomic); re-sync what the UI shows.
+                    queryClient.invalidateQueries({ queryKey: ["articles"] })
+                    queryClient.invalidateQueries({ queryKey: ["feeds"] })
+                    queryClient.invalidateQueries({ queryKey: ["labels"] })
+                    toast.error(t("markAllReadFailed"))
+                })
+        },
+        [mutateAsync, undoMutate, queryClient, t],
+    )
+
+    return { markViewRead, isPending: markAll.isPending }
 }
 
 export function useFetchFullText() {

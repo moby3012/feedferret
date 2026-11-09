@@ -47,8 +47,6 @@ interface RssHeaderProps {
   onShowShortcuts?: () => void;
   sortOrder?: "newest" | "oldest";
   onToggleSort?: () => void;
-  onSwipeNextFeed?: () => void;
-  onSwipePreviousFeed?: () => void;
 }
 
 export function RssHeader({
@@ -70,8 +68,6 @@ export function RssHeader({
   onShowShortcuts,
   sortOrder = "newest",
   onToggleSort,
-  onSwipeNextFeed,
-  onSwipePreviousFeed,
 }: RssHeaderProps) {
   const t = useTranslations("rssHeader");
   const format = useFormatter();
@@ -91,32 +87,9 @@ export function RssHeader({
     ? `${t("lastSynced")} ${format.dateTime(lastRefreshed, { hour: "2-digit", minute: "2-digit" })}`
     : t("refreshFeeds");
 
-  const swipeStart = useRef<{ x: number; y: number } | null>(null);
-  const handleTitleSwipeStart = (e: React.TouchEvent) => {
-    const t = e.touches[0];
-    swipeStart.current = { x: t.clientX, y: t.clientY };
-  };
-  const handleTitleSwipeEnd = (e: React.TouchEvent) => {
-    if (!swipeStart.current) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - swipeStart.current.x;
-    const dy = t.clientY - swipeStart.current.y;
-    swipeStart.current = null;
-    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
-    
-    const isRtl = typeof document !== "undefined" && document.documentElement.getAttribute("dir") === "rtl";
-    const goNext = isRtl ? dx > 0 : dx < 0;
-    if (goNext) onSwipeNextFeed?.();
-    else onSwipePreviousFeed?.();
-  };
-
   return (
     <header className="min-h-16 flex items-center justify-between px-4 sm:px-5 pt-[env(safe-area-inset-top)] border-b border-border/60 bg-card/75 backdrop-blur-2xl animate-fade-in relative z-20">
-      <div
-        className="flex items-center gap-3 min-w-0 flex-1"
-        onTouchStart={handleTitleSwipeStart}
-        onTouchEnd={handleTitleSwipeEnd}
-      >
+      <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-foreground tracking-[-0.02em] truncate">
             {title}
@@ -215,6 +188,7 @@ export function RssHeader({
         </Button>
 
         {/* Mark all read – visible at xl+, hidden at lg-xl */}
+        {onMarkAllRead && (
         <Button
           variant="ghost"
           size="icon"
@@ -226,6 +200,7 @@ export function RssHeader({
         >
           <CheckCheck className={cn("w-4 h-4", isMarkingAllRead && "animate-pulse")} />
         </Button>
+        )}
 
         {/* Save search – visible at xl+ when active search */}
         {searchQuery.trim() && onSaveSearch && (
@@ -284,14 +259,16 @@ export function RssHeader({
               )}
               {sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              className="rounded-xl gap-2 cursor-pointer"
-              onClick={() => onMarkAllRead?.()}
-              disabled={isMarkingAllRead}
-            >
-              <CheckCheck className="w-4 h-4" />
-              {t("markAllAsRead")}
-            </DropdownMenuItem>
+            {onMarkAllRead && (
+              <DropdownMenuItem
+                className="rounded-xl gap-2 cursor-pointer"
+                onClick={() => onMarkAllRead?.()}
+                disabled={isMarkingAllRead}
+              >
+                <CheckCheck className="w-4 h-4" />
+                {t("markAllAsRead")}
+              </DropdownMenuItem>
+            )}
             {searchQuery.trim() && onSaveSearch && (
               <>
                 <DropdownMenuSeparator />

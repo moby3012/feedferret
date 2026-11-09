@@ -27,6 +27,8 @@ import { createPageFeedForUser } from "@/lib/page-feed-create";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs } from "@/lib/webhooks";
 import { buildXPathArticles } from "@/lib/feed-fetcher";
 import { buildAdvancedSearchWhere } from "@/lib/search";
+import { createUndoToken, claimUndoToken, releaseUndoToken } from "@/lib/undo-tokens";
+import { isMarkAllAllowed } from "@/lib/view-scope";
 import { applyRetentionPoliciesForUser } from "@/lib/retention";
 import { randomBytes } from "crypto";
 import { decryptIfValue } from "@/lib/crypto";
@@ -970,16 +972,24 @@ export async function toggleArticleStarred(articleId: string, isStarred: boolean
 }
 
 
-export async function getArticles(feedId?: string | null, category?: string, search?: string, filters?: { dateFrom?: string; dateTo?: string; isRead?: boolean; isStarred?: boolean; limit?: number }) {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-
+/**
+ * Builds the Prisma `where` + `orderBy` for an article "view" (feed, category,
+ * label, saved search, …). Shared by `getArticles` (the list) and
+ * `getViewUnreadCount` (the header count) so both always describe exactly the
+ * same set of articles.
+ */
+async function buildViewScope(
+    userId: string,
+    feedId?: string | null,
+    category?: string,
+    search?: string,
+) {
     const userPrefs = await db.user.findUnique({
-        where: { id: session.user.id },
+        where: { id: userId },
         select: { hideDuplicates: true },
     });
 
-    const where: any = { userId: session.user.id };
+    const where: any = { userId };
 
     // Hide duplicates that have a known canonical article
     if (userPrefs?.hideDuplicates ?? true) {
@@ -988,25 +998,9 @@ export async function getArticles(feedId?: string | null, category?: string, sea
         }];
     }
 
-    const advancedSearchWhere = await buildAdvancedSearchWhere(session.user.id, search);
+    const advancedSearchWhere = await buildAdvancedSearchWhere(userId, search);
     if (Object.keys(advancedSearchWhere).length) {
         where.AND = [...(where.AND || []), advancedSearchWhere];
-    }
-
-    // Date filters
-    if (filters?.dateFrom) {
-        where.publishedAt = { ...where.publishedAt, gte: new Date(filters.dateFrom) };
-    }
-    if (filters?.dateTo) {
-        where.publishedAt = { ...where.publishedAt, lte: new Date(filters.dateTo) };
-    }
-
-    // Read/Starred filters
-    if (filters?.isRead !== undefined) {
-        where.isRead = filters.isRead;
-    }
-    if (filters?.isStarred !== undefined) {
-        where.isStarred = filters.isStarred;
     }
 
     // Stable tiebreaker: feeds whose items lack a parseable date all share the
@@ -1055,15 +1049,15 @@ export async function getArticles(feedId?: string | null, category?: string, sea
             where.labels = {
                 some: {
                     labelId: category.slice("Label:".length),
-                    userId: session.user.id,
+                    userId,
                 },
             };
         } else if (category.startsWith("Search:")) {
             const savedSearch = await db.savedSearch.findUnique({
-                where: { id: category.slice("Search:".length), userId: session.user.id },
+                where: { id: category.slice("Search:".length), userId },
             });
             if (savedSearch) {
-                const savedWhere = await buildAdvancedSearchWhere(session.user.id, savedSearch.query);
+                const savedWhere = await buildAdvancedSearchWhere(userId, savedSearch.query);
                 where.AND = [...(where.AND || []), savedWhere];
             }
         } else {
@@ -1079,6 +1073,32 @@ export async function getArticles(feedId?: string | null, category?: string, sea
     // dedicated Spoiler category so users do not accidentally read them.
     if (!isSpoilerCategory && where.isSpoiler !== true) {
         where.AND = [...(where.AND || []), { isSpoiler: false }];
+    }
+
+    return { where, orderBy };
+}
+
+export async function getArticles(feedId?: string | null, category?: string, search?: string, filters?: { dateFrom?: string; dateTo?: string; isRead?: boolean; isStarred?: boolean; limit?: number }) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    const { where, orderBy } = await buildViewScope(session.user.id, feedId, category, search);
+
+    // Date filters
+    if (filters?.dateFrom) {
+        where.publishedAt = { ...where.publishedAt, gte: new Date(filters.dateFrom) };
+    }
+    if (filters?.dateTo) {
+        where.publishedAt = { ...where.publishedAt, lte: new Date(filters.dateTo) };
+    }
+
+    // Read/Starred filters. The view scope wins where it pins the same field
+    // (e.g. "Starred", "Recently Read"), as it did before the scope was shared.
+    if (filters?.isRead !== undefined && where.isRead === undefined) {
+        where.isRead = filters.isRead;
+    }
+    if (filters?.isStarred !== undefined && where.isStarred === undefined) {
+        where.isStarred = filters.isStarred;
     }
 
     return await db.article.findMany({
@@ -1100,6 +1120,24 @@ export async function getArticles(feedId?: string | null, category?: string, sea
         orderBy,
         take: filters?.limit || 200,
     });
+}
+
+/**
+ * Server-side unread count for a list view. `getArticles` returns at most 200
+ * rows, so counting unread rows client-side under-reports big views; this
+ * counts the whole view instead.
+ */
+export async function getViewUnreadCount(feedId?: string | null, category?: string, search?: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+
+    // Read-only views ("Recently Read", "Spoiler") have nothing to mark read:
+    // report 0 instead of counting unrelated unread rows.
+    if (!isMarkAllAllowed(feedId, category)) return 0;
+
+    const { where } = await buildViewScope(session.user.id, feedId, category, search);
+    where.isRead = false;
+    return db.article.count({ where });
 }
 
 export async function exportOpml(selectedFeedIds?: string[]) {
@@ -1321,102 +1359,119 @@ export async function fetchFullText(articleId: string) {
     return { ...article, suggestAutoFullText };
 }
 
-export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null }) {
+/**
+ * Marks exactly the current list view read: the scope is built by the same
+ * `buildViewScope` as `getArticles` / `getViewUnreadCount`, so feed / category /
+ * label / saved search / free-text search / "hide duplicates" / spoiler rules
+ * all match what the user sees. Read-only views ("Recently Read", "Spoiler")
+ * change nothing.
+ *
+ * The select + update run in one transaction (all or nothing) and the result
+ * lists the ids that were really changed plus a server-side, user-scoped
+ * `undoToken` for `markArticlesAsUnread`.
+ */
+export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null; search?: string | null }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+    const userId = session.user.id;
 
-    const where: any = { 
-        userId: session.user.id,
-        isRead: false 
-    };
-    
-    if (scope?.feedId) {
-        where.feedId = scope.feedId;
-    } else if (scope?.category && scope.category !== "All" && scope.category !== "All Articles") {
-        if (scope.category === "Starred") {
-            where.isStarred = true;
-        } else if (scope.category === "New Articles") {
-            where.isRead = false;
-        } else if (scope.category.startsWith("Label:")) {
-            where.labels = {
-                some: {
-                    labelId: scope.category.slice("Label:".length),
-                    userId: session.user.id,
-                },
-            };
-        } else if (scope.category.startsWith("Search:")) {
-            const savedSearch = await db.savedSearch.findUnique({
-                where: { id: scope.category.slice("Search:".length), userId: session.user.id },
-            });
-            if (savedSearch) {
-                const savedWhere = await buildAdvancedSearchWhere(session.user.id, savedSearch.query);
-                where.AND = [...(where.AND || []), savedWhere];
+    const feedId = scope?.feedId || null;
+    const category = scope?.category || undefined;
+    const search = scope?.search?.trim() || undefined;
+
+    if (!isMarkAllAllowed(feedId, category)) return { ids: [] as string[], undoToken: null as string | null };
+
+    const { where } = await buildViewScope(userId, feedId, category, search);
+    where.isRead = false;
+
+    const readAt = new Date();
+    const ids = await db.$transaction(
+        async (tx) => {
+            const affected = await tx.article.findMany({ where, select: { id: true } });
+            const candidates = affected.map((a) => a.id);
+            const changed: string[] = [];
+            for (const chunk of chunkIds(candidates)) {
+                const result = await tx.article.updateMany({
+                    where: { id: { in: chunk }, userId, isRead: false },
+                    data: { isRead: true, readAt },
+                });
+                if (result.count === chunk.length) {
+                    changed.push(...chunk);
+                } else if (result.count > 0) {
+                    // Another writer got to some rows first: keep only the ones this call changed.
+                    const mine = await tx.article.findMany({
+                        where: { id: { in: chunk }, userId, isRead: true, readAt },
+                        select: { id: true },
+                    });
+                    changed.push(...mine.map((a) => a.id));
+                }
             }
-        } else if (scope.category !== "Recently Read") {
-            where.feed = {
-                category: {
-                    name: scope.category,
-                },
-            };
-        }
-    }
-
-    // Mirror getArticles: for the global "All Articles" / "All" / no-scope view,
-    // exclude feeds/categories marked as hidden from the all-feeds view. Without
-    // this, "Mark all read" on All Articles would silently mark articles from
-    // hidden feeds as read. Category-specific scopes (Starred, Label:, etc.) are
-    // deliberately NOT filtered here — the user explicitly navigated to them.
-    if (!scope?.feedId && (!scope?.category || scope.category === "All" || scope.category === "All Articles")) {
-        where.AND = [...(where.AND || []), {
-            feed: {
-                hideFromAllFeeds: false,
-                OR: [
-                    { categoryId: null },
-                    { category: { hideFromAllFeeds: false } },
-                ],
-            },
-        }];
-    }
-
-    // Capture the affected article ids before the bulk update so callers can
-    // offer an "undo" (re-mark as unread) without needing to re-derive the
-    // same scope/where clause.
-    const affected = await db.article.findMany({
-        where,
-        select: { id: true },
-    });
-    const ids = affected.map((a) => a.id);
-
-    if (ids.length > 0) {
-        await db.article.updateMany({
-            where: { id: { in: ids }, userId: session.user.id },
-            data: { isRead: true, readAt: new Date() },
-        });
-    }
+            return changed;
+        },
+        { timeout: 60_000, maxWait: 10_000 },
+    );
 
     revalidatePath("/");
 
-    return { ids };
+    // Note: rows are attributed to this call via `readAt`. Two concurrent mark-all
+    // calls of the same user in the same millisecond could share it; worst case
+    // an Undo restores a few rows the other call also marked. Acceptable for a
+    // user-initiated action; revisit with UPDATE … RETURNING if it ever matters.
+    return { ids, undoToken: createUndoToken(userId, ids) };
 }
 
 /**
- * Re-mark a specific set of articles as unread. Used to power "undo" for
- * bulk mark-all-read actions (e.g. auto-mark-as-read on swipe-to-next-feed).
+ * Undo for `markAllAsRead`. Takes only the opaque token that call returned
+ * (random, bound to the signed-in user, valid ~10 minutes) — never article ids
+ * from the client. Restores exactly the articles that call changed and that are
+ * still read; returns their ids.
  */
-export async function markArticlesAsUnread(articleIds: string[]) {
+export async function markArticlesAsUnread(undoToken: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+    const userId = session.user.id;
 
-    if (!Array.isArray(articleIds) || articleIds.length === 0) return { count: 0 };
+    const claim = claimUndoToken(userId, undoToken);
+    if (!claim) throw new Error("Undo expired");
+    const candidates = claim.ids;
 
-    const result = await db.article.updateMany({
-        where: { id: { in: articleIds }, userId: session.user.id },
-        data: { isRead: false, readAt: null },
-    });
+    let ids: string[];
+    try {
+    ids = await db.$transaction(
+        async (tx) => {
+            const restored: string[] = [];
+            for (const chunk of chunkIds(candidates)) {
+                const stillRead = await tx.article.findMany({
+                    where: { id: { in: chunk }, userId, isRead: true },
+                    select: { id: true },
+                });
+                if (stillRead.length === 0) continue;
+                const restoreIds = stillRead.map((a) => a.id);
+                await tx.article.updateMany({
+                    where: { id: { in: restoreIds }, userId },
+                    data: { isRead: false, readAt: null },
+                });
+                restored.push(...restoreIds);
+            }
+            return restored;
+        },
+        { timeout: 60_000, maxWait: 10_000 },
+    );
+    } catch (error) {
+        releaseUndoToken(undoToken, claim);
+        throw error;
+    }
 
     revalidatePath("/");
 
-    return { count: result.count };
+    return { count: ids.length, ids };
+}
+
+// Keeps `IN (...)` lists below SQLite's bound-variable limit for huge views.
+function chunkIds(ids: string[], size = 500): string[][] {
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += size) chunks.push(ids.slice(i, i + size));
+    return chunks;
 }
 
 // ─── Auto-Read Rules ────────────────────────────────────────────────────────

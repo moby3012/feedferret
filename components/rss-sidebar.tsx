@@ -83,7 +83,7 @@ import {
   useLabels,
   useSavedSearches,
   useRefreshFeed,
-  useMarkAllAsRead,
+  useMarkViewRead,
   useDeleteFeed,
   useImportOpml,
   useNotifications,
@@ -260,7 +260,8 @@ export function RssSidebar({
   const { data: labels = [] } = useLabels();
   const { data: savedSearches = [] } = useSavedSearches();
   const refreshFeed = useRefreshFeed();
-  const markAllRead = useMarkAllAsRead();
+  // Same handler (and Undo toast) as the header / end-of-list card / shortcuts.
+  const { markViewRead } = useMarkViewRead();
   const { data: notifications = [] } = useNotifications();
   const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
   const markNotificationRead = useMarkNotificationRead();
@@ -393,7 +394,7 @@ export function RssSidebar({
       isSelected={selectedFeed === feed.id}
       onSelect={() => onSelectFeed(feed.id)}
       onRefresh={() => refreshFeed.mutate(feed.id)}
-      onMarkRead={() => markAllRead.mutate({ feedId: feed.id })}
+      onMarkRead={() => markViewRead({ feedId: feed.id, category: null })}
       onEdit={() => router.push(`/manage-feeds?feedId=${feed.id}`)}
       onShowHealth={() => router.push("/manage-feeds?tab=health")}
       onDelete={() => setFeedToDelete({ id: feed.id, name: feed.name })}
@@ -412,6 +413,7 @@ export function RssSidebar({
   );
 
   const [feedToDelete, setFeedToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const visibleFeeds = hideEmptyFeeds ? feeds.filter((f) => f.unreadCount > 0) : feeds;
@@ -941,7 +943,7 @@ export function RssSidebar({
                     variant="ghost"
                     size="icon"
                     className="h-11 w-11 rounded-xl sm:h-9 sm:w-9"
-                    onClick={() => signOut()}
+                    onClick={() => setSignOutConfirmOpen(true)}
                     aria-label={t("sidebar.signOut")}
                   >
                     <LogOut className="w-4 h-4" />
@@ -1216,6 +1218,23 @@ export function RssSidebar({
             }}
           >
             {t("sidebar.deleteFeed")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog open={signOutConfirmOpen} onOpenChange={setSignOutConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("sidebar.signOutConfirmTitle")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("sidebar.signOutConfirmDescription")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction onClick={() => signOut()}>
+            {t("sidebar.signOut")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
