@@ -149,7 +149,9 @@ describe("story clustering performance (5k articles / 48 h, SQLite)", () => {
     for (let k = 0; k < 3; k++) {
       await insert(buildSeeds(NEW_ARTICLES, `n${k}`, 0.4, 1.5, k * 0.5));
       const t0 = performance.now();
-      const tick = await clusterUser(userId, { budgetMs: 400, now: NOW });
+      // The job's own budget gets the same CI slack as the assertion below,
+      // otherwise a slow runner stops the tick early (processed < batch).
+      const tick = await clusterUser(userId, { budgetMs: BUDGET_MS, now: NOW });
       samples.push(performance.now() - t0);
       expect(tick.processed).toBe(NEW_ARTICLES);
       expect(tick.morePending).toBe(false);
@@ -164,7 +166,8 @@ describe("story clustering performance (5k articles / 48 h, SQLite)", () => {
 
   it("pure engine: 200 pending against a 5k window", async () => {
     const rows = await state.db.article.findMany({
-      where: { userId, publishedAt: { gte: new Date(NOW - 48 * H) } },
+      // Only rows the job has signed (independent of how the previous test ended).
+      where: { userId, publishedAt: { gte: new Date(NOW - 48 * H) }, storySig: { not: null } },
       select: { id: true, feedId: true, publishedAt: true, clusterId: true, storySig: true, title: true },
     });
     const window: WindowItem[] = rows.map((r) => ({ id: r.id, feedId: r.feedId, publishedAt: r.publishedAt.getTime(), clusterId: r.clusterId, sig: JSON.parse(r.storySig!) }));
