@@ -9,6 +9,7 @@
  *   compact <48rem: all panes stack in one cell; reader / Feeds→scope push over;
  *     the floating tab bar (Neu · Gemerkt · Feeds · Suche) is the navigation.
  *   medium 48–75rem: [rail 72 | list | reader] — the feeds tree opens as a drawer.
+ *     48–60rem (portrait tablets): [rail 72 | list], the reader pushes over the list.
  *   expanded ≥75rem: [sidebar | list | reader]; data-sources="rail" (`[`,
  *     ff_ui cookie → SSR) collapses the sidebar to the rail.
  * ------------------------------------------------------------------------- */
@@ -102,6 +103,62 @@
   }
   .ff-shell > [data-pane="reader"] {
     grid-area: reader;
+  }
+}
+
+/* ------------------------------------------------- medium, stacked reader
+ * Portrait tablets (768–959 px: iPad / Air / Pro 11" portrait). Rail 72 +
+ * list 360 would leave the reader ~300 px of text (audit R5), so the list
+ * takes the whole content column and the reader pushes over it as a layer
+ * (rail stays visible); Close / Esc / system Back pop it. Same push / pop
+ * timing as compact. JS twin: isReaderStacked() (layout-class.ts).
+ * ≥ 960 px (iPad Pro 12.9" portrait, every landscape iPad): two panes.
+ * ------------------------------------------------------------------------- */
+@media (width >= 48rem) and (width < 60rem) {
+  .ff-shell {
+    grid-template-columns: var(--sources-w) minmax(0, 1fr) 0;
+  }
+  .ff-shell > [data-pane="reader"] {
+    grid-column: list-start / reader-end;
+    grid-row: 1;
+    z-index: var(--z-reader);
+    background: var(--surface-base);
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(100%);
+    transition:
+      transform var(--dur-base) var(--ease-in),
+      visibility 0s linear var(--dur-base);
+  }
+  .ff-shell[data-reader="open"] > [data-pane="reader"] {
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    transition:
+      transform var(--dur-slow) var(--ease-out),
+      visibility 0s;
+  }
+  [dir="rtl"] .ff-shell > [data-pane="reader"] {
+    transform: translateX(-100%);
+  }
+  [dir="rtl"] .ff-shell[data-reader="open"] > [data-pane="reader"] {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) and (width >= 48rem) and (width < 60rem) {
+  .ff-shell > [data-pane="reader"],
+  [dir="rtl"] .ff-shell > [data-pane="reader"] {
+    transform: none;
+    opacity: 0;
+    transition:
+      opacity 120ms linear,
+      visibility 0s linear 120ms;
+  }
+  .ff-shell[data-reader="open"] > [data-pane="reader"] {
+    opacity: 1;
+    transition:
+      opacity 120ms linear,
+      visibility 0s;
   }
 }
 
@@ -259,8 +316,8 @@ html[data-nav-anim="none"] .ff-shell > [data-pane] {
 .ff-rail-tab:focus-visible,
 .ff-rail-btn:focus-visible,
 .ff-tab:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: -2px;
+  outline: var(--focus-ring-width) solid var(--ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* ---------------------------------------------------------------------------
@@ -430,8 +487,8 @@ html[data-nav-anim="none"] .ff-shell > [data-pane] {
 }
 .ff-feeds-row:focus-visible,
 .ff-feeds-chevron:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: -2px;
+  outline: var(--focus-ring-width) solid var(--ring);
+  outline-offset: var(--focus-ring-offset);
 }
 @media (hover: hover) and (pointer: fine) {
   .ff-feeds-row:hover,
@@ -505,8 +562,8 @@ html[data-nav-anim="none"] .ff-shell > [data-pane] {
   opacity: 1;
 }
 .ff-feeds-actions:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: -2px;
+  outline: var(--focus-ring-width) solid var(--ring);
+  outline-offset: var(--focus-ring-offset);
 }
 @media (pointer: coarse) and (any-hover: none) {
   .ff-feeds-actions {
@@ -522,7 +579,6 @@ html[data-nav-anim="none"] .ff-shell > [data-pane] {
     width: auto;
     padding: 0 10px;
     background: var(--surface-raised);
-    box-shadow: inset 0 0 0 2px var(--ring);
   }
   .ff-feeds-actions:focus-visible .ff-feeds-actions-label {
     position: static;
@@ -562,8 +618,8 @@ html[data-nav-anim="none"] .ff-shell > [data-pane] {
   background: var(--surface-sunken);
 }
 .ff-settings-nav-item:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: -2px;
+  outline: var(--focus-ring-width) solid var(--ring);
+  outline-offset: var(--focus-ring-offset);
 }
 @media (width < 48rem) {
   .ff-settings-nav-list {

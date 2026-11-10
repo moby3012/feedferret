@@ -11,6 +11,8 @@ export type LayoutClass = "compact" | "medium" | "expanded";
 
 const MEDIUM = "(min-width: 48rem)";
 const EXPANDED = "(min-width: 75rem)";
+/** Below this the reader cannot sit beside rail + list at a readable measure. */
+const READER_BESIDE_LIST = "(min-width: 60rem)";
 
 /** Sync read for handlers/effects. SSR → "compact". */
 export function getLayoutClass(): LayoutClass {
@@ -22,6 +24,17 @@ export function getLayoutClass(): LayoutClass {
 
 export function isCompactLayout(): boolean {
   return getLayoutClass() === "compact";
+}
+
+/**
+ * The reader is a layer over the list (not a column beside it): compact, and
+ * the narrow end of medium — portrait tablets 768–959 px (iPad, iPad Air,
+ * iPad Pro 11"), where rail 72 + list 360 would leave the reader a ~300 px
+ * text column (audit R5 / A-05). Mirrors app/styles/shell.css "stacked".
+ */
+export function isReaderStacked(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return true;
+  return !window.matchMedia(READER_BESIDE_LIST).matches;
 }
 
 /** Touch-first input at this moment (overlays push a history entry only then on wide). */
@@ -36,7 +49,7 @@ export function subscribeLayoutClass(onChange: () => void): () => void {
 
 function subscribe(onChange: () => void) {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
-  const lists = [window.matchMedia(MEDIUM), window.matchMedia(EXPANDED)];
+  const lists = [window.matchMedia(MEDIUM), window.matchMedia(READER_BESIDE_LIST), window.matchMedia(EXPANDED)];
   lists.forEach((l) => l.addEventListener("change", onChange));
   return () => lists.forEach((l) => l.removeEventListener("change", onChange));
 }
@@ -50,4 +63,11 @@ const serverSnapshot = () => null;
  */
 export function useLayoutClass(): LayoutClass | null {
   return useSyncExternalStore(subscribe, getLayoutClass, serverSnapshot);
+}
+
+const stackedServerSnapshot = () => null;
+
+/** `isReaderStacked()` for post-mount widgets (`null` during SSR / hydration). */
+export function useReaderStacked(): boolean | null {
+  return useSyncExternalStore(subscribe, isReaderStacked, stackedServerSnapshot);
 }

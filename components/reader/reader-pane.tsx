@@ -8,7 +8,7 @@ import { toLegacyArticle, withDetail } from "@/features/articles/legacy-adapter"
 import { useArticleActions, useIsFetchingFullText } from "@/features/articles/mutations";
 import { prefetchArticle } from "@/features/articles/prefetch";
 import { useArticle } from "@/features/articles/queries";
-import { getLayoutClass } from "@/features/reader/layout/layout-class";
+import { isReaderStacked } from "@/features/reader/layout/layout-class";
 import { getNavState, nav, useNav } from "@/features/reader/nav/store";
 import { ReaderEmptyState } from "./reader-empty";
 import { preloadReaderChunks, ReaderLazyWarmup, ReaderView } from "./reader-view";
@@ -21,7 +21,8 @@ import { preloadReaderChunks, ReaderLazyWarmup, ReaderView } from "./reader-view
 
 /**
  * Reader container: the open article comes from the URL (`a`). On compact it
- * is a fixed layer above the (still mounted) list; on wide the right column.
+ * is a fixed layer above the (still mounted) list; on portrait tablets a layer
+ * over the list column (rail stays); from 960 px the right column.
  * Keeps the last article while the compact close transition runs.
  */
 export const ReaderPane = memo(function ReaderPane() {
@@ -181,7 +182,7 @@ function usePreloadReader() {
 }
 
 /**
- * Compact: the reader is a layer over the (then inert) list. Opening moves
+ * Compact / portrait tablet: the reader is a layer over the (then inert) list. Opening moves
  * focus into the reader; closing returns it to the row the article was
  * opened from (or the last one stepped to). Wide keeps focus where it is
  * (both panes are visible and j/k drive the list).
@@ -191,7 +192,7 @@ function useReaderFocus(paneRef: RefObject<HTMLElement | null>, articleId: strin
   useEffect(() => {
     const prev = previous.current;
     previous.current = articleId;
-    if (getLayoutClass() !== "compact" || !!prev === !!articleId) return;
+    if (!isReaderStacked() || !!prev === !!articleId) return;
     if (articleId) {
       const pane = paneRef.current;
       if (pane && !pane.contains(document.activeElement)) pane.focus({ preventScroll: true });
