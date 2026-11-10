@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ArticleDetail, ArticleListItem, ArticlePage } from "@/features/articles/types";
-import { itemsForScope } from "@/features/offline/offline";
+import { isFailedReadQuery, itemsForScope, storedInFull } from "@/features/offline/offline";
 import {
   SESSION_KEY,
   OFFLINE_MAX_AGE_MS,
@@ -90,6 +90,22 @@ describe("itemsForScope (offline list fallback)", () => {
 
   it("scopes the store cannot answer fall through to the network error", () => {
     for (const k of ["cat:c1", "ss:s1", "q:rust", "v:spoiler"]) expect(itemsForScope(rows, key(k))).toBeNull();
+  });
+
+  it("only Später lesen and Zuletzt gelesen are stored in full (starred is a sample)", () => {
+    expect(storedInFull("v:later")).toBe(true);
+    expect(storedInFull("v:recent")).toBe(true);
+    for (const k of ["v:starred", "all", "feed:f1", "label:L"]) expect(storedInFull(k)).toBe(false);
+  });
+});
+
+describe("isFailedReadQuery (retry on the online edge)", () => {
+  const q = (status: string, ...queryKey: unknown[]) => ({ state: { status }, queryKey });
+  it("matches failed lists and article bodies only", () => {
+    expect(isFailedReadQuery(q("error", "list", "all", "unread", "new"))).toBe(true);
+    expect(isFailedReadQuery(q("error", "article", "a1"))).toBe(true);
+    expect(isFailedReadQuery(q("success", "list", "all", "unread", "new"))).toBe(false);
+    expect(isFailedReadQuery(q("error", "counts"))).toBe(false);
   });
 });
 

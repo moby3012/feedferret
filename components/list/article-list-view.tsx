@@ -453,9 +453,9 @@ export function ArticleListView(props: ArticleListViewProps) {
         </div>
       ) : (
         <div className="ff-list" data-density={density}>
-          {/* Above the briefing card: the tip must be seen without scrolling. */}
-          <GestureHint swipeMap={swipeMap} scrollRoot={scrollRoot} active={!!props.gestureHint} />
           {props.header && <div className="ff-span-all px-3 pb-2 pt-2">{props.header}</div>}
+          {/* Right above the rows it explains (the nudge waits until the first row is on screen). */}
+          <GestureHint swipeMap={swipeMap} scrollRoot={scrollRoot} active={!!props.gestureHint} />
           {visibleRows.map(({ article, story }) => {
             const open = !!story && expanded.has(story.clusterId);
             return (

@@ -37,6 +37,10 @@ export interface ArticleListResult {
   /** `status: "error"` and a retry is on the wire. */
   isRetrying: boolean;
   retry(): void;
+  /** The rows came from the offline store (offline, or the server unreachable) — see `ArticlePage.fromStore`. */
+  fromStore: "full" | "sample" | null;
+  /** A refetch of the whole list is on the wire (retry of a store-sourced list). */
+  isRefetching: boolean;
 }
 
 /**
@@ -117,6 +121,8 @@ export function useArticleList(key: ListKey | null, o: { active: boolean }): Art
     snapshotAt: data?.pages[0]?.snapshotAt ?? null,
     isRetrying: query.isError && !data && query.isFetching,
     retry,
+    fromStore: data?.pages[0]?.fromStore ?? null,
+    isRefetching: query.isFetching && !isFetchingNextPage,
   };
 }
 

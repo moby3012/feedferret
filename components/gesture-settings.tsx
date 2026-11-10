@@ -7,7 +7,7 @@ import { Bookmark, Check, Hand, MousePointer2, MoveHorizontal, Star, type Lucide
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { SWIPE_ACTIONS, resetGestureHint, setGesturePref, useGesturePrefs, type SwipeActionId } from "@/lib/gestures";
+import { SWIPE_ACTIONS, resetGestureHint, setGesturePref, useGesturePrefs, useTouchRows, type SwipeActionId } from "@/lib/gestures";
 
 const ACTION_ICON: Record<Exclude<SwipeActionId, "none">, LucideIcon> = { read: Check, later: Bookmark, star: Star };
 
@@ -22,6 +22,8 @@ export function GestureSettings() {
   const t = useTranslations("settings.gestures");
   const tHint = useTranslations("gestureHint");
   const prefs = useGesturePrefs();
+  // The first-use tip only ever shows where rows have no buttons (touch, no mouse).
+  const touchRows = useTouchRows();
   const [rtl, setRtl] = useState(false);
   useEffect(() => {
     setRtl(document.documentElement.dir === "rtl");
@@ -91,19 +93,21 @@ export function GestureSettings() {
               </div>
               <Switch aria-label={t("haptics")} checked={prefs.haptics} onCheckedChange={(checked) => setGesturePref("haptics", checked)} />
             </div>
-            <div className="pt-1">
-              <Button
-                type="button"
-                variant="outline"
-                data-testid="gesture-hint-reset"
-                onClick={() => {
-                  resetGestureHint();
-                  toast.success(t("hintReset"));
-                }}
-              >
-                {t("showHint")}
-              </Button>
-            </div>
+            {touchRows && (
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  data-testid="gesture-hint-reset"
+                  onClick={() => {
+                    resetGestureHint();
+                    toast.success(t("hintReset"));
+                  }}
+                >
+                  {t("showHint")}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>

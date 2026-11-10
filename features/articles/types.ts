@@ -93,4 +93,11 @@ export interface ArticlePage {
    * list's snapshot. "Alles bis hier" never reaches rows created after it.
    */
   snapshotAt?: number;
+  /**
+   * Client-side only: the page was answered from the offline store, not the
+   * server. "full" = the store holds the whole list (Später lesen, Zuletzt
+   * gelesen); "sample" = only what happens to be stored (feed, label, all,
+   * starred). A stored page is never "caught up".
+   */
+  fromStore?: "full" | "sample";
 }

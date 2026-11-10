@@ -24,7 +24,7 @@ import { nav, useNav } from "@/features/reader/nav/store";
 import { useOnline } from "@/features/bootstrap/online";
 import { useReleaseArticleSpoiler } from "@/hooks/use-rss-data";
 import { ArticleListView } from "./article-list-view";
-import { EmptyListState, ListErrorState, NoFeedsState, type EmptyKind } from "./list-states";
+import { EmptyListState, ListErrorState, NoFeedsState, StoredListBanner, StoredListEnd, type EmptyKind } from "./list-states";
 import { ListTopBar } from "./list-top-bar";
 import { scopeTitle } from "./scope-title";
 import { SpoilerGate } from "./spoiler-gate";
@@ -305,11 +305,13 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
           ? "label"
           : "generic"
         : null;
-  // Offline, an empty answer came from the device store: the list is simply
-  // not stored here — never "caught up" (Gemerkt views are stored in full).
-  const offlineEmpty = empty && !online && scope.kind !== "later" && scope.kind !== "starred";
-  const endOfList = offlineEmpty ? (
-    <ListErrorState offline retrying={list.isRetrying} onRetry={list.retry} />
+  // Rows from the device store (offline, or the server unreachable) are what
+  // happens to be stored — never "caught up", never the end-of-list actions.
+  // (A sampled scope with nothing stored never gets here: the store answers
+  // nothing and the query fails into the error / offline state.)
+  const fromStore = list.fromStore;
+  const endOfList = fromStore ? (
+    empty && emptyKind ? <EmptyListState kind={emptyKind} /> : <StoredListEnd full={fromStore === "full"} />
   ) : empty && data.feedsLoaded && data.feeds.length === 0 && scope.kind !== "query" ? (
       <NoFeedsState onAddFeed={() => shell.requestAddFeed()} onDiscover={() => shell.requestAddFeed(undefined, "discover")} />
     ) : empty && emptyKind ? (
@@ -323,6 +325,19 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
         onContinue={continueToNext}
         continueMarksRead={data.prefs?.markReadOnAdvance ?? false}
       />
+    );
+  // Online but served from the store: the server did not answer. Offline the
+  // chip in the top bar already says where the rows come from.
+  const storedBanner = fromStore && online ? <StoredListBanner retrying={list.isRefetching} onRetry={list.retry} /> : null;
+  const briefing = p.showBriefing ? <BriefingCard scopeKey="new" active={active} /> : null;
+  const header =
+    storedBanner && briefing ? (
+      <div className="flex flex-col gap-2">
+        {storedBanner}
+        {briefing}
+      </div>
+    ) : (
+      (storedBanner ?? briefing ?? undefined)
     );
   return (
     <>
@@ -356,14 +371,14 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
           onPullToRefresh={shell.refresh}
           endOfList={endOfList}
           hasFeeds={data.feeds.length > 0}
-          header={p.showBriefing ? <BriefingCard scopeKey="new" active={active} /> : undefined}
+          header={header}
         />
       )}
     </>
   );
 }, (prev, next) => (!prev.active && !next.active) || shallowEqual(prev, next));
 
-const LIST_FIELDS = ["items", "status", "isPlaceholder", "hasMore", "isFetchingMore", "isRetrying"] as const;
+const LIST_FIELDS = ["items", "status", "isPlaceholder", "hasMore", "isFetchingMore", "isRetrying", "fromStore", "isRefetching"] as const;
 
 function shallowEqual(a: ViewProps, b: ViewProps): boolean {
   return (Object.keys(a) as (keyof ViewProps)[]).every((key) =>

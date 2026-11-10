@@ -108,7 +108,7 @@
     "storyReadModeDescription": "Wenn du eine Story liest oder markierst, werden auch alle ihre Quellen als gelesen markiert. Aus: nur der geöffnete Artikel.",
     "gestures": {
       "title": "Wischgesten",
-      "description": "Gilt für dieses Gerät. Auf Touch-Geräten haben die Zeilen keine Knöpfe – du wischst oder drückst lange.",
+      "description": "Gilt für dieses Gerät. Auf Touch-Geräten ohne Maus haben die Zeilen keine Knöpfe – du wischst oder drückst lange.",
       "swipeRight": "Nach rechts wischen",
       "swipeLeft": "Nach links wischen",
       "actions": {
@@ -122,7 +122,7 @@
       "demoLabel": "So funktionieren die Gesten",
       "demoSwipe": "Wischen und loslassen, sobald die Farbe voll ist. Zurückziehen bricht ab.",
       "demoLongPress": "Lange drücken öffnet das Menü mit allen Aktionen. Screenreader finden es an jeder Zeile als „Aktionen“.",
-      "demoMouse": "Mit Maus und Tastatur bleiben die Knöpfe sichtbar; Rechtsklick oder die Kontextmenü-Taste öffnet dasselbe Menü.",
+      "demoMouse": "Mit Maus oder Trackpad – auch an einem Tablet – bleiben die Knöpfe sichtbar; Rechtsklick oder die Kontextmenü-Taste öffnet dasselbe Menü.",
       "showHint": "Tipp erneut zeigen",
       "hintReset": "Der Tipp erscheint beim nächsten Öffnen der Liste wieder."
     },
@@ -879,7 +879,8 @@
     "kindImage": "Bild",
     "kindSocial": "Beitrag",
     "duration": "Dauer {time}",
-    "rowActions": "Aktionen: {title}"
+    "rowActions": "Aktionen: {title}",
+    "rowActionsShort": "Aktionen"
   },
   "articleReader": {
     "loadingBody": "Artikel wird geladen…",
@@ -2005,11 +2006,15 @@
     "labelEmptyTitle": "Keine Artikel mit diesem Label",
     "labelEmptyDescription": "Labels vergibst du im Artikel über „…“ → Labels.",
     "emptyTitle": "Keine Artikel",
-    "emptyDescription": "Hier ist noch nichts erschienen."
+    "emptyDescription": "Hier ist noch nichts erschienen.",
+    "storedTitle": "Gespeicherter Stand – Server nicht erreichbar",
+    "storedEndFull": "Ende der auf diesem Gerät gespeicherten Artikel",
+    "storedEndSample": "Nur auf diesem Gerät gespeicherte Artikel – die vollständige Liste lädt, sobald der Server erreichbar ist"
   },
   "gestureHint": {
     "label": "Tipp: Gesten",
     "title": "Wischen statt Knöpfe",
+    "titleLongPress": "Aktionen per langem Drücken",
     "swipe": "Wischen: ← {left} · → {right}",
     "longPress": "Lange drücken: alle Aktionen",
     "dismiss": "Verstanden",

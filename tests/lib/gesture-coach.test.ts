@@ -39,4 +39,22 @@ describe("gesture hint store", () => {
     coach.completeGestureHint();
     expect(setItem).not.toHaveBeenCalled();
   });
+
+  it("the nudge plays at most once per session; 'show again' allows it again", async () => {
+    const { win } = fakeWindow();
+    const session = fakeWindow().win.localStorage;
+    vi.stubGlobal("window", { ...win, sessionStorage: session });
+    const coach = await import("@/lib/gestures/coach");
+    expect(coach.claimGestureNudge()).toBe(true);
+    expect(coach.claimGestureNudge()).toBe(false);
+    coach.resetGestureHint();
+    expect(coach.claimGestureNudge()).toBe(true);
+  });
+
+  it("without sessionStorage there is no nudge (never a loop)", async () => {
+    const { win } = fakeWindow();
+    vi.stubGlobal("window", win);
+    const coach = await import("@/lib/gestures/coach");
+    expect(coach.claimGestureNudge()).toBe(false);
+  });
 });

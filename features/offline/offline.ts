@@ -40,6 +40,11 @@ export function onServedOffline(listener: () => void): () => void {
   return () => servedListeners.delete(listener);
 }
 
+/** A list page or an article body that failed to load (shown with a retry button) — retried when the server is back. */
+export function isFailedReadQuery(query: { state: { status: string }; queryKey: readonly unknown[] }): boolean {
+  return query.state.status === "error" && (query.queryKey[0] === "list" || query.queryKey[0] === "article");
+}
+
 /** Hands out (and forgets) the cache entries that were served from the store. */
 export function takeServedOffline(): { lists: ListKey[]; details: string[] } {
   const out = { lists: [...servedLists.values()], details: [...servedDetails] };
@@ -95,20 +100,30 @@ export function itemsForScope(rows: readonly IndexRow[], key: Pick<ListKey, "sco
   return key.sort === "old" ? items.reverse() : items;
 }
 
+/**
+ * Scopes the store holds in full: every Read-later article is mirrored and
+ * "Zuletzt gelesen" is the store's own history. Everything else (feed, label,
+ * all, starred — a starred article is stored only when it was opened or is in
+ * Später lesen) is a sample of what happened to be stored.
+ */
+export function storedInFull(scopeKey: string): boolean {
+  return scopeKey === "v:later" || scopeKey === "v:recent";
+}
+
 /** A single page with everything stored for `key` — `null` when there is nothing to show instead of the network. */
 export async function readStoredPage(key: ListKey): Promise<ArticlePage | null> {
   const userId = readableUser();
   if (!userId) return null;
   const items = itemsForScope(await listRows(userId), key);
   if (!items) return null;
-  // Nothing stored for a scope the store only holds a sample of (a feed, a
-  // label, all): that is "not available offline", not an empty list — the
-  // caller fails and the list shows its offline / error state (audit R1).
-  // "Später lesen" and "Zuletzt gelesen" are stored in full: empty is true.
-  if (items.length === 0 && key.scopeKey !== "v:later" && key.scopeKey !== "v:recent") return null;
+  const full = storedInFull(key.scopeKey);
+  // Nothing stored for a scope the store only holds a sample of: that is "not
+  // available offline", not an empty list — the caller fails and the list
+  // shows its offline / error state (audit R1). For full scopes empty is true.
+  if (items.length === 0 && !full) return null;
   servedLists.set(key.id + key.sort, key);
   served();
-  return { items, nextCursor: null };
+  return { items, nextCursor: null, fromStore: full ? "full" : "sample" };
 }
 
 /**

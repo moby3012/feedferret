@@ -192,8 +192,7 @@ test("a single toggle is one action call: no feeds / labels / counts refetch aft
   // The offline-reading boot pass (4 s after mount: session check, Read-later
   // list, then the bodies, paced) must not land in the window: a touch toggle
   // goes through the long-press menu and takes ~1 s longer than a click.
-  await page.waitForTimeout(4500);
-  await page.waitForLoadState("networkidle");
+  await app.offlinePassDone();
   const actions = countActions(page);
   const gets: string[] = [];
   page.on("request", (r) => {

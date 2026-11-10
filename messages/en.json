@@ -108,7 +108,7 @@
     "storyReadModeDescription": "When you read or mark a story, all of its sources are marked as read too. Off: only the article you opened.",
     "gestures": {
       "title": "Swipe gestures",
-      "description": "Applies to this device. On touch devices rows have no buttons – you swipe or long-press.",
+      "description": "Applies to this device. On touch devices without a mouse, rows have no buttons – you swipe or long-press.",
       "swipeRight": "Swipe right",
       "swipeLeft": "Swipe left",
       "actions": {
@@ -122,7 +122,7 @@
       "demoLabel": "How the gestures work",
       "demoSwipe": "Swipe and let go once the colour is full. Pull back to cancel.",
       "demoLongPress": "A long press opens the menu with every action. Screen readers find it on each row as “Actions”.",
-      "demoMouse": "With a mouse and keyboard the buttons stay visible; right-click or the context-menu key opens the same menu.",
+      "demoMouse": "With a mouse or trackpad – on a tablet too – the buttons stay visible; right-click or the context-menu key opens the same menu.",
       "showHint": "Show tip again",
       "hintReset": "The tip appears again the next time you open the list."
     },
@@ -879,7 +879,8 @@
     "kindImage": "Image",
     "kindSocial": "Post",
     "duration": "Duration {time}",
-    "rowActions": "Actions: {title}"
+    "rowActions": "Actions: {title}",
+    "rowActionsShort": "Actions"
   },
   "articleReader": {
     "loadingBody": "Loading article…",
@@ -2005,11 +2006,15 @@
     "labelEmptyTitle": "No articles with this label",
     "labelEmptyDescription": "Add labels in the article via “…” → Labels.",
     "emptyTitle": "No articles",
-    "emptyDescription": "Nothing has been published here yet."
+    "emptyDescription": "Nothing has been published here yet.",
+    "storedTitle": "Saved copy – server unreachable",
+    "storedEndFull": "End of the articles saved on this device",
+    "storedEndSample": "Only articles saved on this device – the full list loads once the server is reachable"
   },
   "gestureHint": {
     "label": "Tip: gestures",
     "title": "Swipe instead of buttons",
+    "titleLongPress": "Actions with a long press",
     "swipe": "Swipe: ← {left} · → {right}",
     "longPress": "Long press: all actions",
     "dismiss": "Got it",

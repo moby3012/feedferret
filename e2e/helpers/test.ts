@@ -83,6 +83,14 @@ export class App {
     await expect(this.page.locator("html")).toHaveAttribute("data-nav-ready", "true");
     expect(await this.page.evaluate(() => !!(history.state as { ff?: unknown } | null)?.ff)).toBe(true);
   }
+  /**
+   * The offline-reading boot pass (4 s after mount: session check, Read-later
+   * list, paced bodies) has finished everything it planned — its requests can
+   * no longer land in a measuring window (features/offline/offline-sync.tsx).
+   */
+  async offlinePassDone() {
+    await expect(this.page.locator("html")).toHaveAttribute("data-offline-sync", "idle", { timeout: 30_000 });
+  }
   /** Current URL as path + search ("/?feed=…"). */
   where(): string {
     const url = new URL(this.page.url());

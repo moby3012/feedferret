@@ -42,6 +42,12 @@ export function completeGestureHint() {
 
 /** Settings: show the hint again next time a list is shown. */
 export function resetGestureHint() {
+  try {
+    // Asked for explicitly: the nudge may play again too.
+    window.sessionStorage.removeItem(GESTURE_NUDGE_KEY);
+  } catch {
+    /* ignore */
+  }
   write(false);
 }
 
@@ -66,4 +72,40 @@ export function useGestureHintDue(): boolean {
     () => !(snapshot ??= read()),
     () => false,
   );
+}
+
+// The nudge (first row slides open once) plays at most once per browser
+// session, even when the hint stays due across lists / reloads.
+export const GESTURE_NUDGE_KEY = "ff:gesture-nudged";
+
+/** Claims this session's one nudge: `true` the first time, `false` after (or when the claim cannot be stored). */
+export function claimGestureNudge(): boolean {
+  try {
+    if (window.sessionStorage.getItem(GESTURE_NUDGE_KEY) === "1") return false;
+    window.sessionStorage.setItem(GESTURE_NUDGE_KEY, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Rows without action buttons: a touch-first device with no hover-capable
+ * input. A tablet / Chromebook with a mouse or trackpad attached keeps the
+ * buttons (a mouse never swipes — lib/gestures/swipe-row.ts). Mirrors the
+ * media query in app/styles/list.css.
+ */
+export const TOUCH_ROWS_QUERY = "(pointer: coarse) and (any-hover: none)";
+
+function subscribeTouchRows(onChange: () => void) {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const list = window.matchMedia(TOUCH_ROWS_QUERY);
+  list.addEventListener("change", onChange);
+  return () => list.removeEventListener("change", onChange);
+}
+const isTouchRows = () => typeof window.matchMedia === "function" && window.matchMedia(TOUCH_ROWS_QUERY).matches;
+
+/** Rows are touch-only (no buttons, gestures only); `false` on the server and during hydration. */
+export function useTouchRows(): boolean {
+  return useSyncExternalStore(subscribeTouchRows, isTouchRows, () => false);
 }

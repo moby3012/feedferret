@@ -521,15 +521,18 @@
 
 /* ---------------------------------------------------------------------------
  * Touch rows without buttons (owner decision 2026-11-10, audit A-06): on a
- * coarse pointer the read / star / later buttons are gone — swipe, long-press
- * and the row menu carry the actions. The meta line collapses when the
- * buttons were all it held. Screen readers get one "Aktionen" button per row
- * (visually hidden until focused) that opens the same menu.
+ * touch-only device (coarse primary pointer, no hover-capable input) the
+ * read / star / later buttons are gone — swipe, long-press and the row menu
+ * carry the actions. A tablet with a mouse / trackpad attached keeps them (a
+ * mouse never swipes). Same query as TOUCH_ROWS_QUERY in lib/gestures/coach.ts.
+ * The meta line collapses when the buttons were all it held. Screen readers
+ * get one "Aktionen" button per row, after the row content: visually hidden
+ * until focused, but a 44 px box at the row's end so touch exploration finds it.
  * ------------------------------------------------------------------------- */
 .ff-row-sr-actions {
   display: none;
 }
-@media (pointer: coarse) {
+@media (pointer: coarse) and (any-hover: none) {
   .ff-row-actions,
   .ff-row-meta[data-actions-only] {
     display: none;
@@ -540,18 +543,22 @@
   .ff-row-sr-actions {
     display: block;
     position: absolute;
-    top: 4px;
-    inset-inline-end: var(--gutter);
+    bottom: 0;
+    inset-inline-end: 0;
     z-index: 1;
-    width: 1px;
-    height: 1px;
+    width: 44px;
+    height: 44px;
     overflow: hidden;
+    /* Paints nothing and takes no taps (clip-path clips hit testing). */
     clip-path: inset(50%);
     white-space: nowrap;
   }
   .ff-row-sr-actions:focus-visible {
+    bottom: 4px;
+    inset-inline-end: var(--gutter);
     width: auto;
     height: auto;
+    min-height: 32px;
     overflow: visible;
     clip-path: none;
     padding: 6px 10px;
@@ -600,6 +607,10 @@
 .ff-row[data-coach="lead"] > .ff-row-reveal[data-side="leading"],
 .ff-row[data-coach="trail"] > .ff-row-reveal[data-side="trailing"] {
   opacity: 1;
+}
+/* 96 px leave no room for "Später lesen": the coach shows the icon in its colour, the chip names the action. */
+.ff-row[data-coach] .ff-row-reveal-label {
+  display: none;
 }
 
 /* Settings → Lesen → Gesten: miniature half-swiped rows (components/gesture-settings.tsx). */

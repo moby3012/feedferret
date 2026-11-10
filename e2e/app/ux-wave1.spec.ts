@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import { test, expect, ACTIVE_LIST } from "../helpers/test";
-import { articleFlags, clearSaved, createEmptyUser, manifest, unreadCountInDb } from "../helpers/db";
+import { articleFlags, clearSaved, createEmptyUser, manifest, resetArticleState, unreadCountInDb } from "../helpers/db";
 import { touchSwipeOn } from "../helpers/gestures";
 
 /**
@@ -75,6 +75,48 @@ test.describe("error and empty states", () => {
       }).toPass({ timeout: 20_000 });
     } finally {
       await context.setOffline(false);
+    }
+  });
+
+  test("server unreachable (5xx): stored rows carry a 'saved copy' banner with retry — never the end card", async ({ app, page }) => {
+    await app.open();
+    try {
+      // Star a row and open it: the opened article (with its flags) is now in the device store.
+      if (!articleFlags(app.articleId(4)).isStarred) {
+        await app.toggle(4, "star");
+        await app.expectRow(4, { starred: true });
+      }
+      const title = (await app.row(4).locator("h3").first().textContent())!.trim();
+      await app.activate(app.row(4));
+      const reader = page.locator('[data-pane="reader"]');
+      await expect(reader.locator(".article-content").first()).toBeVisible({ timeout: 15_000 });
+      await page.waitForTimeout(500); // recordOpened → IndexedDB
+      await page.goBack();
+      await app.navReady();
+
+      const down = (route: Route) =>
+        isListRequest(new URL(route.request().url())) ? route.fulfill({ status: 503, body: "upstream down" }) : route.continue();
+      await page.route("**/api/app/articles**", down);
+      // Favorites were never loaded in this page: the list request fails and the store answers.
+      await app.selectSidebar(/^Starred/);
+      const list = page.locator(ACTIVE_LIST);
+      const banner = list.getByTestId("list-stored-banner");
+      await expect(banner).toBeVisible({ timeout: 30_000 });
+      await expect(banner).toContainText("Saved copy – server unreachable");
+      await expect(list.locator(".ff-row h3", { hasText: title })).toBeVisible();
+      await expect(list.getByTestId("list-stored-end")).toContainText("Only articles saved on this device");
+      await expect(list.getByTestId("end-of-list-card")).toHaveCount(0);
+      await expect(list.getByText("You're all caught up")).toHaveCount(0);
+      // Still down: retry answers from the store again.
+      await app.activate(banner.getByRole("button", { name: "Try again" }));
+      await expect(banner).toBeVisible();
+      // Back up: retry loads the real list, the banner goes.
+      await page.unroute("**/api/app/articles**", down);
+      await app.activate(banner.getByRole("button", { name: "Try again" }));
+      await expect(banner).toHaveCount(0, { timeout: 15_000 });
+      await expect(list.getByTestId("list-stored-end")).toHaveCount(0);
+    } finally {
+      resetArticleState(app.userKey);
     }
   });
 
@@ -296,8 +338,38 @@ test.describe("links and settings", () => {
     await expect(section.getByTestId("gesture-demo")).toContainText("long press opens the menu with every action");
     await expect(section.getByTestId("gesture-demo")).toContainText("Screen readers");
     expect(await page.evaluate(() => localStorage.getItem("ff:gesture-hint"))).toBe("done");
+    if (!app.isMobile) {
+      // Rows keep their buttons with a mouse: there is no tip to show again.
+      await expect(section.getByTestId("gesture-hint-reset")).toHaveCount(0);
+      return;
+    }
     await section.getByTestId("gesture-hint-reset").click();
     expect(await page.evaluate(() => localStorage.getItem("ff:gesture-hint"))).toBeNull();
+  });
+});
+
+test.describe("app badge and the service worker", () => {
+  test.use({ serviceWorkers: "allow" });
+
+  test("the worker learns the badge switch on every shell start, not only on toggle", async ({ app, page }) => {
+    void app; // fixture: PWA prompt + gesture hint off
+    // The headless shell's renderer crashes when the worker calls the real Badge API (see
+    // offline-reading.spec.ts): the badge messages stay out, and the switch stays ON here — "off" makes the
+    // worker clear the badge. Off is covered against a fake Badge API in tests/features/service-worker.test.ts.
+    await page.addInitScript(() => {
+      const post = ServiceWorker.prototype.postMessage;
+      ServiceWorker.prototype.postMessage = function (this: ServiceWorker, message: unknown, ...rest: unknown[]) {
+        const type = (message as { type?: string } | null)?.type;
+        if (type === "SET_BADGE" || type === "CLEAR_BADGE") return;
+        return (post as (...a: unknown[]) => void).call(this, message, ...rest);
+      } as typeof post;
+    });
+    await page.goto("/");
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    // Nobody touched the switch: only the shell's start-up message can have stored it.
+    const stored = () =>
+      page.evaluate(async () => (await (await caches.open("feedferret-settings-v1")).match("/__feedferret/badge-pref"))?.text() ?? null);
+    await expect.poll(stored, { timeout: 30_000 }).toBe("1");
   });
 });
 
@@ -337,14 +409,20 @@ test.describe("first-use gesture hint", () => {
     await expect(hint).toBeVisible();
     await expect(hint.getByTestId("gesture-hint-swipe")).toHaveText("Swipe: ← Later · → Read");
     await expect(hint).toContainText("Long press: all actions");
-    // The nudge opens the first row to one side, then the other.
+    // The nudge waits until the first row is on screen (the briefing card is above it on Neu)…
     const first = page.locator(`${ACTIVE_LIST} .ff-row`).first();
+    await page.waitForTimeout(1500);
+    await expect(page.locator(`${ACTIVE_LIST} .ff-row[data-coach]`)).toHaveCount(0);
+    // …then opens it to one side, then the other.
+    await first.evaluate((el) => el.scrollIntoView({ block: "center" }));
     await expect(first).toHaveAttribute("data-coach", "lead", { timeout: 5_000 });
     await expect(first).toHaveAttribute("data-coach", "trail", { timeout: 5_000 });
     await expect(first).not.toHaveAttribute("data-coach", /.*/, { timeout: 5_000 });
 
     await app.activate(hint.getByRole("button", { name: "Got it" }));
     await expect(hint).toHaveCount(0);
+    // Focus lands on the first row, not on <body>.
+    await expect(page.locator(`${ACTIVE_LIST} .ff-row-content`).first()).toBeFocused();
     expect(await page.evaluate(() => localStorage.getItem("ff:gesture-hint"))).toBe("done");
     await page.reload();
     await expect(app.row(1)).toBeVisible({ timeout: 30_000 });
@@ -364,11 +442,41 @@ test.describe("first-use gesture hint", () => {
     expect(await page.evaluate(() => localStorage.getItem("ff:gesture-hint"))).toBe("done");
   });
 
+  test("touch: the nudge plays once per session — a reload keeps the hint but not the nudge", async ({ app, page }) => {
+    test.skip(!app.isMobile, "touch");
+    await app.open();
+    const first = page.locator(`${ACTIVE_LIST} .ff-row`).first();
+    await first.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await expect(first).toHaveAttribute("data-coach", "lead", { timeout: 5_000 });
+    await page.reload();
+    await expect(page.locator(ACTIVE_LIST).getByTestId("gesture-hint")).toBeVisible({ timeout: 30_000 });
+    await page.locator(`${ACTIVE_LIST} .ff-row`).first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await page.waitForTimeout(3000);
+    await expect(page.locator(`${ACTIVE_LIST} .ff-row[data-coach]`)).toHaveCount(0);
+  });
+
+  test("touch: with both swipes off the hint only explains long-press and nothing moves", async ({ app, page }) => {
+    test.skip(!app.isMobile, "touch");
+    await page.addInitScript(() => {
+      localStorage.setItem("ff:swipe-start", "none");
+      localStorage.setItem("ff:swipe-end", "none");
+    });
+    await app.open();
+    const hint = page.locator(ACTIVE_LIST).getByTestId("gesture-hint");
+    await expect(hint).toBeVisible();
+    await expect(hint).toContainText("Actions with a long press");
+    await expect(hint.getByTestId("gesture-hint-swipe")).toHaveCount(0);
+    await page.locator(`${ACTIVE_LIST} .ff-row`).first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await page.waitForTimeout(1500);
+    await expect(page.locator(`${ACTIVE_LIST} .ff-row[data-coach]`)).toHaveCount(0);
+  });
+
   test("touch + reduced motion: the hint shows, the row never moves", async ({ app, page }) => {
     test.skip(!app.isMobile, "touch");
     await page.emulateMedia({ reducedMotion: "reduce" });
     await app.open();
     await expect(page.locator(ACTIVE_LIST).getByTestId("gesture-hint")).toBeVisible();
+    await page.locator(`${ACTIVE_LIST} .ff-row`).first().evaluate((el) => el.scrollIntoView({ block: "center" }));
     await page.waitForTimeout(1500);
     await expect(page.locator(`${ACTIVE_LIST} .ff-row[data-coach]`)).toHaveCount(0);
   });

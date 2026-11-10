@@ -175,18 +175,6 @@ export const ArticleRow = memo(function ArticleRow(p: ArticleRowProps) {
     >
       <SwipeReveal side="leading" action={p.swipeMap.end} article={article} />
       <SwipeReveal side="trailing" action={p.swipeMap.start} article={article} />
-      {/* Touch rows have no action buttons (swipe / long-press): screen readers
-          get the row menu here; visible only when focused (app/styles/list.css). */}
-      <button
-        type="button"
-        className="ff-row-sr-actions"
-        aria-haspopup="menu"
-        aria-label={t("rowActions", { title: shownTitle })}
-        onClick={(e) => {
-          const r = e.currentTarget.parentElement!.getBoundingClientRect();
-          handlers.openMenu(article.id, { x: r.left + Math.min(48, r.width / 2), y: r.top + Math.min(48, r.height / 2), pointerType: "touch" }, contentRef.current ?? e.currentTarget);
-        }}
-      />
       <div
         ref={contentRef}
         role="button"
@@ -205,6 +193,21 @@ export const ArticleRow = memo(function ArticleRow(p: ArticleRowProps) {
         )}
         {density === "minimal" ? <MinimalBody {...p} shownTitle={shownTitle} /> : density === "magazine" ? <MagazineBody {...p} shownTitle={shownTitle} /> : <ListBody {...p} shownTitle={shownTitle} />}
       </div>
+      {/* Touch rows have no action buttons (swipe / long-press): screen readers
+          get the row menu here, after the row it belongs to; visible only when
+          focused (app/styles/list.css). */}
+      <button
+        type="button"
+        className="ff-row-sr-actions"
+        aria-haspopup="menu"
+        aria-label={t("rowActions", { title: shownTitle })}
+        onClick={(e) => {
+          const r = e.currentTarget.parentElement!.getBoundingClientRect();
+          handlers.openMenu(article.id, { x: r.left + Math.min(48, r.width / 2), y: r.top + Math.min(48, r.height / 2), pointerType: "touch" }, contentRef.current ?? e.currentTarget);
+        }}
+      >
+        {t("rowActionsShort")}
+      </button>
     </div>
   );
 });

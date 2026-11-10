@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { AlertCircle, Bookmark, Compass, FileUp, Inbox, Plus, RotateCw, Rss, Star, Tag, WifiOff, type LucideIcon } from "lucide-react";
+import { AlertCircle, Archive, Bookmark, CloudOff, Compass, FileUp, Inbox, Plus, RotateCw, Rss, Star, Tag, WifiOff, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // List states (audit A-01): what the list shows instead of rows. Each one makes
@@ -103,4 +103,38 @@ export function EmptyListState({ kind }: { kind: EmptyKind }) {
   };
   const [icon, title, description] = map[kind];
   return <StateFrame testId={`list-empty-${kind}`} icon={icon} title={title} description={description} />;
+}
+
+/**
+ * The rows came from the device store although the browser is online: the
+ * server did not answer (5xx, proxy, lie-fi). Says so, offers a retry — the
+ * list may be incomplete and must never read as the full list (audit R1).
+ */
+export function StoredListBanner({ retrying, onRetry }: { retrying: boolean; onRetry(): void }) {
+  const t = useTranslations("listStates");
+  return (
+    <div
+      role="status"
+      data-testid="list-stored-banner"
+      className="flex items-center gap-3 rounded-row border border-warning/30 bg-warning-subtle px-3 py-2 text-body-sm text-foreground"
+    >
+      <CloudOff className="size-4 shrink-0 text-warning" aria-hidden />
+      <span className="min-w-0 flex-1">{t("storedTitle")}</span>
+      <Button type="button" variant="outline" size="sm" onClick={onRetry} disabled={retrying} aria-busy={retrying || undefined}>
+        <RotateCw className={retrying ? "animate-spin" : undefined} aria-hidden />
+        {t("retry")}
+      </Button>
+    </div>
+  );
+}
+
+/** End of a store-sourced list: only what is on this device — never "caught up". */
+export function StoredListEnd({ full }: { full: boolean }) {
+  const t = useTranslations("listStates");
+  return (
+    <p data-testid="list-stored-end" className="flex items-center justify-center gap-2 px-6 py-8 text-center text-footnote text-muted-foreground">
+      <Archive className="size-4 shrink-0" aria-hidden />
+      {full ? t("storedEndFull") : t("storedEndSample")}
+    </p>
+  );
 }
