@@ -139,9 +139,11 @@ describe("N3: connector keys stay server-side", () => {
     expect(yt.url).toBe("https://rsshub.test/youtube/channel/abc");
   });
 
-  it("migration strips the configured key once, skips clashes, and is idempotent", async () => {
+  it("migration strips the key (current or rotated) once, skips clashes, and is idempotent", async () => {
+    const stale = await state.db.feed.create({ data: { name: "Stale", url: "https://rsshub.test/reddit/r/x?key=rotated-old-key", userId: ids.bob } });
     const first = await migrateConnectorFeedUrls(state.db as never);
-    expect(first.migrated).toBe(1);
+    expect(first.migrated).toBe(2);
+    expect((await state.db.feed.findUniqueOrThrow({ where: { id: stale.id } })).url).toBe("https://rsshub.test/reddit/r/x");
     const yt = await state.db.feed.findUniqueOrThrow({ where: { id: ids.rsshubFeed } });
     expect(yt.url).toBe("https://rsshub.test/youtube/channel/abc");
     const dup = await state.db.feed.findUniqueOrThrow({ where: { id: ids.dupFeed } });

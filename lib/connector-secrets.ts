@@ -241,15 +241,16 @@ type MigrationDb = {
 
 /**
  * One-off, idempotent rewrite of legacy keyed connector feed URLs to their
- * secret-free form. Only strips a param whose value equals the configured
- * secret; skips rows whose stripped URL already exists for the same user
- * (the @@unique([userId, url]) would reject it — output redaction still
- * covers those). Returns counts; never throws.
+ * secret-free form. Strips the secret param whatever its value (a key that
+ * was rotated since is dead weight; the fetcher sets the current one), skips
+ * rows whose stripped URL already exists for the same user (the
+ * @@unique([userId, url]) would reject it — output redaction still covers
+ * those). Returns counts; never throws.
  */
 export async function migrateConnectorFeedUrls(db: MigrationDb, rulesInput?: ConnectorSecretRule[]) {
   const result = { scanned: 0, migrated: 0, skipped: 0 };
   try {
-    const rules = (rulesInput ?? (await getConnectorSecretRules())).filter((rule) => rule.value);
+    const rules = rulesInput ?? (await getConnectorSecretRules());
     for (const rule of rules) {
       const candidates = await db.feed.findMany({
         where: { url: { startsWith: `${rule.origin}${rule.basePath}`, contains: `${rule.param}=` } },
@@ -258,7 +259,7 @@ export async function migrateConnectorFeedUrls(db: MigrationDb, rulesInput?: Con
       for (const feed of candidates) {
         result.scanned += 1;
         const url = parse(feed.url);
-        if (!url || !matches(url, rule) || url.searchParams.get(rule.param) !== rule.value) continue;
+        if (!url || !matches(url, rule) || !url.searchParams.has(rule.param)) continue;
         url.searchParams.delete(rule.param);
         const stripped = url.toString();
         const clash = await db.feed.findFirst({ where: { userId: feed.userId, url: stripped }, select: { id: true } });
@@ -310,7 +311,7 @@ export async function scrubConnectorSecretsFromArticleLinks(
 ) {
   const result = { scanned: 0, scrubbed: 0 };
   try {
-    const rules = (rulesInput ?? (await getConnectorSecretRules())).filter((rule) => rule.value);
+    const rules = rulesInput ?? (await getConnectorSecretRules());
     for (const rule of rules) {
       let cursor: string | null = null;
       for (;;) {

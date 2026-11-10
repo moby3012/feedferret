@@ -33,6 +33,8 @@ test("changing the email asks for step-up and refuses without it", async ({ page
     await page.getByRole("tab", { name: /account/i }).click();
   }
   const section = page.getByTestId("email-change-section");
+  // The e2e instance has no mail delivery: the dialog says no confirmation goes out.
+  await expect(section.getByTestId("email-change-no-mail")).toContainText("no confirmation will be sent");
   await section.getByLabel("New email address").fill("attacker@evil.test");
   await expect(section.getByLabel("Current password or 2FA code")).toBeVisible();
   await section.getByRole("button", { name: "Update email" }).click();
