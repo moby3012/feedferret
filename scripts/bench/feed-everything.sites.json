@@ -1,0 +1,530 @@
+[
+  {
+    "id": "news-de-1",
+    "category": "news-de",
+    "url": "https://www.tagesschau.de/",
+    "expectation": "native/discovered; cookie wall may block"
+  },
+  {
+    "id": "news-de-2",
+    "category": "news-de",
+    "url": "https://www.spiegel.de/",
+    "expectation": "native/discovered; cookie wall may block"
+  },
+  {
+    "id": "news-de-3",
+    "category": "news-de",
+    "url": "https://www.heise.de/",
+    "expectation": "native/discovered; cookie wall may block"
+  },
+  {
+    "id": "news-de-4",
+    "category": "news-de",
+    "url": "https://www.zeit.de/",
+    "expectation": "native/discovered; cookie wall may block"
+  },
+  {
+    "id": "news-de-5",
+    "category": "news-de",
+    "url": "https://www.sueddeutsche.de/",
+    "expectation": "native/discovered; cookie wall may block"
+  },
+  {
+    "id": "news-de-6",
+    "category": "news-de",
+    "url": "https://www.faz.net/",
+    "expectation": "native/discovered; cookie wall may block"
+  },
+  {
+    "id": "news-de-7",
+    "category": "news-de",
+    "url": "https://www.deutschlandfunk.de/",
+    "expectation": "native/discovered; cookie wall may block"
+  },
+  {
+    "id": "news-de-8",
+    "category": "news-de",
+    "url": "https://www.taz.de/",
+    "expectation": "native/discovered; cookie wall may block"
+  },
+  {
+    "id": "news-intl-1",
+    "category": "news-intl",
+    "url": "https://www.nytimes.com/",
+    "expectation": "native/discovered; paywall may limit content"
+  },
+  {
+    "id": "news-intl-2",
+    "category": "news-intl",
+    "url": "https://www.bbc.com/news",
+    "expectation": "native/discovered; paywall may limit content"
+  },
+  {
+    "id": "news-intl-3",
+    "category": "news-intl",
+    "url": "https://www.reuters.com/",
+    "expectation": "native/discovered; paywall may limit content"
+  },
+  {
+    "id": "news-intl-4",
+    "category": "news-intl",
+    "url": "https://www.theguardian.com/international",
+    "expectation": "native/discovered; paywall may limit content"
+  },
+  {
+    "id": "news-intl-5",
+    "category": "news-intl",
+    "url": "https://www.npr.org/",
+    "expectation": "native/discovered; paywall may limit content"
+  },
+  {
+    "id": "news-intl-6",
+    "category": "news-intl",
+    "url": "https://apnews.com/",
+    "expectation": "native/discovered; paywall may limit content"
+  },
+  {
+    "id": "news-intl-7",
+    "category": "news-intl",
+    "url": "https://www.aljazeera.com/",
+    "expectation": "native/discovered; paywall may limit content"
+  },
+  {
+    "id": "news-intl-8",
+    "category": "news-intl",
+    "url": "https://www.lemonde.fr/",
+    "expectation": "native/discovered; paywall may limit content"
+  },
+  {
+    "id": "blogs-1",
+    "category": "blogs",
+    "url": "https://wordpress.org/news/",
+    "expectation": "native/discovered blog posts"
+  },
+  {
+    "id": "blogs-2",
+    "category": "blogs",
+    "url": "https://ghost.org/changelog/",
+    "expectation": "native/discovered blog posts"
+  },
+  {
+    "id": "blogs-3",
+    "category": "blogs",
+    "url": "https://www.oneusefulthing.org/",
+    "expectation": "native/discovered blog posts"
+  },
+  {
+    "id": "blogs-4",
+    "category": "blogs",
+    "url": "https://astralcodexten.substack.com/",
+    "expectation": "native/discovered blog posts"
+  },
+  {
+    "id": "blogs-5",
+    "category": "blogs",
+    "url": "https://medium.com/@ev",
+    "expectation": "native/discovered blog posts"
+  },
+  {
+    "id": "blogs-6",
+    "category": "blogs",
+    "url": "https://gohugo.io/news/",
+    "expectation": "native/discovered blog posts"
+  },
+  {
+    "id": "blogs-7",
+    "category": "blogs",
+    "url": "https://jekyllrb.com/news/",
+    "expectation": "native/discovered blog posts"
+  },
+  {
+    "id": "blogs-8",
+    "category": "blogs",
+    "url": "https://simonwillison.net/",
+    "expectation": "native/discovered blog posts"
+  },
+  {
+    "id": "blogs-9",
+    "category": "blogs",
+    "url": "https://daringfireball.net/",
+    "expectation": "native/discovered blog posts"
+  },
+  {
+    "id": "blogs-10",
+    "category": "blogs",
+    "url": "https://www.schneier.com/",
+    "expectation": "native/discovered blog posts"
+  },
+  {
+    "id": "company-1",
+    "category": "company",
+    "url": "https://www.apple.com/newsroom/",
+    "expectation": "feed or selector; must preserve requested section"
+  },
+  {
+    "id": "company-2",
+    "category": "company",
+    "url": "https://stripe.com/blog",
+    "expectation": "feed or selector; must preserve requested section"
+  },
+  {
+    "id": "company-3",
+    "category": "company",
+    "url": "https://github.blog/changelog/",
+    "expectation": "feed or selector; must preserve requested section"
+  },
+  {
+    "id": "company-4",
+    "category": "company",
+    "url": "https://linear.app/changelog",
+    "expectation": "feed or selector; must preserve requested section"
+  },
+  {
+    "id": "company-5",
+    "category": "company",
+    "url": "https://www.anthropic.com/news",
+    "expectation": "feed or selector; must preserve requested section"
+  },
+  {
+    "id": "company-6",
+    "category": "company",
+    "url": "https://cursor.com/changelog",
+    "expectation": "feed or selector; must preserve requested section"
+  },
+  {
+    "id": "company-7",
+    "category": "company",
+    "url": "https://www.mozilla.org/en-US/firefox/new/",
+    "expectation": "feed or selector; must preserve requested section"
+  },
+  {
+    "id": "company-8",
+    "category": "company",
+    "url": "https://www.apple.com/careers/us/",
+    "expectation": "feed or selector; must preserve requested section"
+  },
+  {
+    "id": "shops-1",
+    "category": "shops",
+    "url": "https://www.allbirds.com/collections/mens",
+    "expectation": "selector/change monitoring; prices/stock require field support"
+  },
+  {
+    "id": "shops-2",
+    "category": "shops",
+    "url": "https://www.gymshark.com/collections/new-releases/mens",
+    "expectation": "selector/change monitoring; prices/stock require field support"
+  },
+  {
+    "id": "shops-3",
+    "category": "shops",
+    "url": "https://www.amazon.de/dp/B0C8V9JFMG",
+    "expectation": "selector/change monitoring; prices/stock require field support"
+  },
+  {
+    "id": "shops-4",
+    "category": "shops",
+    "url": "https://www.ikea.com/de/de/cat/neuheiten/",
+    "expectation": "selector/change monitoring; prices/stock require field support"
+  },
+  {
+    "id": "shops-5",
+    "category": "shops",
+    "url": "https://www.raspberrypi.com/products/raspberry-pi-5/",
+    "expectation": "selector/change monitoring; prices/stock require field support"
+  },
+  {
+    "id": "shops-6",
+    "category": "shops",
+    "url": "https://books.toscrape.com/",
+    "expectation": "selector/change monitoring; prices/stock require field support"
+  },
+  {
+    "id": "social-1",
+    "category": "social",
+    "url": "https://www.youtube.com/channel/UCsXVk37bltHxD1rDPwtNM8Q",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-2",
+    "category": "social",
+    "url": "https://www.youtube.com/@Computerphile",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-3",
+    "category": "social",
+    "url": "https://www.youtube.com/playlist?list=PL96C35uN7xGLLeET0dOWaKHkAlPsrkcha",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-4",
+    "category": "social",
+    "url": "https://www.reddit.com/r/rust/",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-5",
+    "category": "social",
+    "url": "https://www.reddit.com/r/selfhosted/new/",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-6",
+    "category": "social",
+    "url": "https://mastodon.social/@Gargron",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-7",
+    "category": "social",
+    "url": "https://bsky.app/profile/bsky.app",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-8",
+    "category": "social",
+    "url": "https://x.com/NASA",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-9",
+    "category": "social",
+    "url": "https://www.instagram.com/nasa/",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-10",
+    "category": "social",
+    "url": "https://www.tiktok.com/@nasa",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-11",
+    "category": "social",
+    "url": "https://www.linkedin.com/company/microsoft/",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "social-12",
+    "category": "social",
+    "url": "https://www.threads.net/@nasa",
+    "expectation": "native converter or RSSHub; closed platforms may fail"
+  },
+  {
+    "id": "podcasts-1",
+    "category": "podcasts",
+    "url": "https://changelog.com/podcast",
+    "expectation": "native podcast feed or directory resolver"
+  },
+  {
+    "id": "podcasts-2",
+    "category": "podcasts",
+    "url": "https://freakshow.fm/",
+    "expectation": "native podcast feed or directory resolver"
+  },
+  {
+    "id": "podcasts-3",
+    "category": "podcasts",
+    "url": "https://podcasts.apple.com/us/podcast/99-invisible/id394775318",
+    "expectation": "native podcast feed or directory resolver"
+  },
+  {
+    "id": "podcasts-4",
+    "category": "podcasts",
+    "url": "https://open.spotify.com/show/2VRS1IJCTn2Nlkg33ZVfkM",
+    "expectation": "native podcast feed or directory resolver"
+  },
+  {
+    "id": "github-1",
+    "category": "github",
+    "url": "https://github.com/vercel/next.js/releases",
+    "expectation": "native releases/commits; issues need RSSHub; check scope"
+  },
+  {
+    "id": "github-2",
+    "category": "github",
+    "url": "https://github.com/nodejs/node/commits/main/",
+    "expectation": "native releases/commits; issues need RSSHub; check scope"
+  },
+  {
+    "id": "github-3",
+    "category": "github",
+    "url": "https://github.com/moby/moby/issues",
+    "expectation": "native releases/commits; issues need RSSHub; check scope"
+  },
+  {
+    "id": "github-4",
+    "category": "github",
+    "url": "https://github.com/prisma/prisma",
+    "expectation": "native releases/commits; issues need RSSHub; check scope"
+  },
+  {
+    "id": "forums-1",
+    "category": "forums",
+    "url": "https://meta.discourse.org/",
+    "expectation": "native/discovered topics"
+  },
+  {
+    "id": "forums-2",
+    "category": "forums",
+    "url": "https://discuss.python.org/",
+    "expectation": "native/discovered topics"
+  },
+  {
+    "id": "forums-3",
+    "category": "forums",
+    "url": "https://news.ycombinator.com/",
+    "expectation": "native/discovered topics"
+  },
+  {
+    "id": "forums-4",
+    "category": "forums",
+    "url": "https://lobste.rs/",
+    "expectation": "native/discovered topics"
+  },
+  {
+    "id": "forums-5",
+    "category": "forums",
+    "url": "https://stackoverflow.com/questions/tagged/rss",
+    "expectation": "native/discovered topics"
+  },
+  {
+    "id": "government-1",
+    "category": "government",
+    "url": "https://www.bundesregierung.de/breg-de/aktuelles",
+    "expectation": "native/discovered or selector announcements"
+  },
+  {
+    "id": "government-2",
+    "category": "government",
+    "url": "https://www.bundestag.de/presse",
+    "expectation": "native/discovered or selector announcements"
+  },
+  {
+    "id": "government-3",
+    "category": "government",
+    "url": "https://www.rki.de/",
+    "expectation": "native/discovered or selector announcements"
+  },
+  {
+    "id": "government-4",
+    "category": "government",
+    "url": "https://www.gov.uk/government/announcements",
+    "expectation": "native/discovered or selector announcements"
+  },
+  {
+    "id": "government-5",
+    "category": "government",
+    "url": "https://www.nasa.gov/news/",
+    "expectation": "native/discovered or selector announcements"
+  },
+  {
+    "id": "government-6",
+    "category": "government",
+    "url": "https://www.ecb.europa.eu/press/html/index.en.html",
+    "expectation": "native/discovered or selector announcements"
+  },
+  {
+    "id": "events-1",
+    "category": "events",
+    "url": "https://fosdem.org/2026/schedule/",
+    "expectation": "selector or calendar; iCal support uncertain"
+  },
+  {
+    "id": "events-2",
+    "category": "events",
+    "url": "https://www.berlin.de/tickets/",
+    "expectation": "selector or calendar; iCal support uncertain"
+  },
+  {
+    "id": "events-3",
+    "category": "events",
+    "url": "https://www.eventbrite.com/d/germany--berlin/technology/",
+    "expectation": "selector or calendar; iCal support uncertain"
+  },
+  {
+    "id": "events-4",
+    "category": "events",
+    "url": "https://www.meetup.com/find/?location=de--Berlin&source=EVENTS",
+    "expectation": "selector or calendar; iCal support uncertain"
+  },
+  {
+    "id": "jobs-1",
+    "category": "jobs",
+    "url": "https://weworkremotely.com/remote-jobs",
+    "expectation": "selector or platform feed; verify jobs rather than company news"
+  },
+  {
+    "id": "jobs-2",
+    "category": "jobs",
+    "url": "https://remoteok.com/remote-dev-jobs",
+    "expectation": "selector or platform feed; verify jobs rather than company news"
+  },
+  {
+    "id": "jobs-3",
+    "category": "jobs",
+    "url": "https://jobs.lever.co/spotify",
+    "expectation": "selector or platform feed; verify jobs rather than company news"
+  },
+  {
+    "id": "jobs-4",
+    "category": "jobs",
+    "url": "https://boards.greenhouse.io/stripe",
+    "expectation": "selector or platform feed; verify jobs rather than company news"
+  },
+  {
+    "id": "js-heavy-1",
+    "category": "js-heavy",
+    "url": "https://www.notion.so/",
+    "expectation": "render likely; no guaranteed feed"
+  },
+  {
+    "id": "js-heavy-2",
+    "category": "js-heavy",
+    "url": "https://www.figma.com/community",
+    "expectation": "render likely; no guaranteed feed"
+  },
+  {
+    "id": "js-heavy-3",
+    "category": "js-heavy",
+    "url": "https://www.google.com/maps",
+    "expectation": "render likely; no guaranteed feed"
+  },
+  {
+    "id": "js-heavy-4",
+    "category": "js-heavy",
+    "url": "https://app.tldraw.com/",
+    "expectation": "render likely; no guaranteed feed"
+  },
+  {
+    "id": "no-feed-1",
+    "category": "no-feed",
+    "url": "https://example.com/",
+    "expectation": "expected unsupported/single-page; avoid false positives"
+  },
+  {
+    "id": "no-feed-2",
+    "category": "no-feed",
+    "url": "https://www.iana.org/help/example-domains",
+    "expectation": "expected unsupported/single-page; avoid false positives"
+  },
+  {
+    "id": "no-feed-3",
+    "category": "no-feed",
+    "url": "https://www.wikipedia.org/",
+    "expectation": "expected unsupported/single-page; avoid false positives"
+  },
+  {
+    "id": "no-feed-4",
+    "category": "no-feed",
+    "url": "https://www.berlin.de/aktuelles/",
+    "expectation": "expected unsupported/single-page; avoid false positives"
+  },
+  {
+    "id": "news-keyword-1",
+    "category": "news-keyword",
+    "url": "https://news.google.com/rss/search?q=Energiewende&hl=de&gl=DE&ceid=DE:de",
+    "expectation": "topic candidates exist on main; PR249 publisher resolution unmerged"
+  }
+]
