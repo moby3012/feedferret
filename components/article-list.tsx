@@ -310,7 +310,10 @@ export function ArticleList({
     <div
       ref={setScrollRoot}
       data-testid="list-scroller"
-      className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
+      // Compact: the floating bottom bar (h-16 + its bottom inset) covers the
+      // scroller's last ~5rem. scroll-padding keeps scrollIntoView / focus /
+      // keyboard paging from parking a row underneath it.
+      className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain scroll-pb-[calc(5rem_+_var(--safe-b))] wide:scroll-pb-0"
     >
       {showPullIndicator && (
         <div className="pointer-events-none absolute inset-x-0 top-3 z-(--z-sticky) flex justify-center px-3">

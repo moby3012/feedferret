@@ -125,6 +125,15 @@ describe("deep-link stack seeding", () => {
     expect(history.here()).toBe("/?tab=search&q=x");
   });
 
+  it("<html data-nav-ready> is set once the stack is seeded and cleared on unmount", async () => {
+    await boot("/?feed=F&a=X");
+    const dataset = (globalThis as unknown as { document: { documentElement: { dataset: Record<string, string> } } }).document.documentElement.dataset;
+    expect(dataset.navReady).toBe("true");
+    stop();
+    expect(dataset.navReady).toBeUndefined();
+    stop = () => {};
+  });
+
   it("UI up() walks the same levels and never writes past the root", async () => {
     await boot("/?feed=F&a=X");
     await store.nav.up();

@@ -7,7 +7,7 @@
 import { createContext, createElement, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { showApplies } from "@/features/articles/scope";
 import { getLayoutClass, isCoarsePointer, subscribeLayoutClass } from "../layout/layout-class";
-import { isIOS, keepFfAcrossRouterWrites, pushEntry, readFf, replaceEntry, setNavAnim, whenRouterReady, type FfState } from "./history";
+import { isIOS, keepFfAcrossRouterWrites, pushEntry, readFf, replaceEntry, setNavAnim, setNavReady, whenRouterReady, type FfState } from "./history";
 import {
   TAB_ROOTS,
   entryKindOf,
@@ -410,6 +410,7 @@ export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
     }
     setNavAnim("none");
     commit({ loc, overlay: null, index, cause: "init" });
+    setNavReady(true);
     if (intents.addFeed || intents.sharedUrl) onIntents(intents);
   };
   const cancel = whenRouterReady(() => {
@@ -431,6 +432,7 @@ export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
     unguard();
     unwatchLayout();
     disposed = true;
+    setNavReady(false);
     stackLayout = null;
     reconcileQueued = false;
     window.removeEventListener("popstate", onPopState);

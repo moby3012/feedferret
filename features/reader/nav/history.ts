@@ -19,7 +19,8 @@ export interface FfState {
   o?: OverlayId;
 }
 
-const NEXT_KEYS = new Set(["__NA", "__PRIVATE_NEXTJS_INTERNALS_TREE", "_N"]);
+/** Next's own history-state keys (pinned by tests/features/next-history-contract.test.ts). */
+export const NEXT_KEYS: ReadonlySet<string> = new Set(["__NA", "__PRIVATE_NEXTJS_INTERNALS_TREE", "_N"]);
 
 export function readFf(): FfState | null {
   const ff = (window.history.state as { ff?: unknown } | null)?.ff;
@@ -139,4 +140,10 @@ export function keepFfAcrossRouterWrites(): () => void {
   return () => {
     if (window.history.replaceState === guarded) window.history.replaceState = next;
   };
+}
+
+/** Explicit boot signal (`<html data-nav-ready>`): the shell's stack is seeded (deep-link parents, alias rewrite done). */
+export function setNavReady(ready: boolean) {
+  if (ready) document.documentElement.dataset.navReady = "true";
+  else delete document.documentElement.dataset.navReady;
 }
