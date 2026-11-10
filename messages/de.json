@@ -99,7 +99,7 @@
     "newPasswordHint": "Mindestens 8 Zeichen.",
     "updatePassword": "Passwort aktualisieren",
     "updating": "Wird aktualisiert…",
-    "passwordChanged": "Passwort geändert",
+    "passwordChanged": "Passwort geändert. Ausgestellte GReader-Tokens wurden widerrufen; dein API-Passwort bleibt unverändert.",
     "passwordChangeFailed": "Passwort konnte nicht geändert werden. Bitte versuche es erneut.",
     "passwordTooShort": "Das neue Passwort muss mindestens 8 Zeichen lang sein",
     "noPasswordSet": "Dieses Konto meldet sich per SSO/OAuth an und hat kein Passwort zum Ändern.",
@@ -1764,9 +1764,9 @@
   },
   "apiPassword": {
     "title": "API-Passwort",
-    "description": "Nutze ein separates Passwort für Google-Reader- und Fever-Clients. Mit Zwei-Faktor-Anmeldung ist es erforderlich. Ohne API-Passwort und Zwei-Faktor-Anmeldung funktioniert dein Anmeldepasswort, solange du kein API-Passwort verlangst. Rotation, Widerruf und Richtlinienänderungen trennen Google-Reader-Clients. Nach einem Widerruf bleibt das API-Passwort erforderlich.",
-    "password": "Neues API-Passwort (16–72 Bytes)",
-    "required": "API-Passwort verlangen",
+    "description": "Nutze ein separates Passwort für Google-Reader- und Fever-Clients. Mit Zwei-Faktor-Anmeldung ist es erforderlich. Ohne API-Passwort und Zwei-Faktor-Anmeldung funktioniert dein Anmeldepasswort, solange du kein API-Passwort verlangst. Rotation, Widerruf und Richtlinienänderungen trennen Google-Reader-Clients. Nach einem Widerruf bleibt das API-Passwort erforderlich. Wenn ein API-Passwort existiert, funktioniert das Anmeldepasswort nie für API-Zugriffe. Eine Änderung des Anmeldepassworts behält das API-Passwort und widerruft ausgestellte GReader-Tokens.",
+    "password": "Neues API-Passwort (24–72 Bytes; leer lassen zum Generieren)",
+    "required": "API-Zugriff per Anmeldepasswort auch ohne API-Passwort deaktivieren",
     "rotate": "Passwort setzen / erneuern",
     "revoke": "Passwort widerrufen",
     "savePolicy": "Anforderung speichern",
@@ -1774,6 +1774,8 @@
     "unconfigured": "Kein API-Passwort eingerichtet",
     "lastUsed": "Zuletzt genutzt: {date}",
     "saved": "API-Zugangsdaten aktualisiert",
-    "failed": "API-Zugangsdaten konnten nicht aktualisiert werden"
+    "failed": "API-Zugangsdaten konnten nicht aktualisiert werden",
+    "stepUp": "Aktuelles Anmeldepasswort oder TOTP-Code",
+    "shownOnce": "API-Passwort jetzt kopieren. Es wird nur einmal angezeigt."
   }
 }

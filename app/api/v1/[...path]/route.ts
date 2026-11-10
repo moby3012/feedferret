@@ -9,7 +9,7 @@ import { checkRateLimit, getClientIdentifier, rateLimitHeaders, rateLimitRespons
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
-import { generateOpml, OpmlParseError } from "@/lib/opml";
+import { generateApiOpml, OpmlParseError } from "@/lib/opml";
 import { handleFreshRssUpload } from "@/lib/import/freshrss-upload";
 import { importOpmlXml, OpmlImportInputError } from "@/lib/import/opml-import";
 import { validateFeedUrl } from "@/lib/validation";
@@ -623,7 +623,7 @@ async function exportOpml(user: ApiUser) {
     db.feed.findMany({ where: { userId: user.id }, include: { category: true }, orderBy: [{ category: { name: "asc" } }, { name: "asc" }] }),
     db.category.findMany({ where: { userId: user.id }, orderBy: [{ order: "asc" }, { name: "asc" }] }),
   ]);
-  return new NextResponse(generateOpml(feeds, categories), { headers: { "content-type": "application/xml; charset=utf-8" } });
+  return new NextResponse(generateApiOpml(feeds, categories), { headers: { "content-type": "application/xml; charset=utf-8" } });
 }
 
 async function importOpml(user: ApiUser, request: Request) {

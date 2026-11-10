@@ -71,3 +71,34 @@ Keep AUTH_SECRET stable across instances. Failed-login and discovery limits are
 process-local, consistent with the existing limiter; use a proxy-level shared
 limit for multiple instances. Suspension through both admin and internal routes
 invalidates GReader tokens. API password revocation is independent of web sessions.
+
+
+### Credential security
+
+API password creation, rotation, revocation and fallback policy changes require the
+current login password or an enabled TOTP code, with 10 attempts per user per 15
+minutes. Leaving the new password blank generates a 43-character random secret,
+returned once with `Cache-Control: no-store`; chosen passwords need 24–72 bytes.
+An existing API password always replaces login-password API authentication. The
+checkbox disables login-password fallback even when there is no API password.
+Changing the login password retains the independent API password but increments
+`apiTokenVersion`, revoking issued GReader Auth/T tokens. Disabling 2FA does too.
+
+Fever credential keys (including API-token keys) are stored as SHA-256 hashes.
+Previously stored plaintext keys cease to authenticate after this upgrade: rotate
+API passwords/tokens to provision hashed keys. Changing an email clears all Fever
+keys and revokes GReader Auth/T tokens; rotate credentials to derive new Fever keys
+from the new email. Raw secrets are unavailable for automatic key recomputation.
+
+Fever, ClientLogin and Basic share the failed-auth IP budget (10 per 15 minutes),
+checked before database lookup. Successful Basic verification is cached in memory
+for 60 seconds by user, secret digest and current token version. User status,
+policy and version are loaded on each request; a version change discards older
+cache entries. Last-used writes are conditional and occur at most every 5 minutes.
+These in-memory limiters/caches are per process, as with the existing API limits.
+
+API OPML exports (GReader and v1, including read-scope bearers) omit HTTP options
+and unknown extensions and remove URL userinfo. Settings backup exports retain
+the full configuration. GReader imports allow 5 attempts/hour/user and at most
+2000 feeds/document before any write. No existing per-user total-feed cap exists.
+Tag edits accept at most 10 add/remove tags and 100 streams per request.

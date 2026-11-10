@@ -41,6 +41,16 @@ export function verifyGReaderToken(token: string) {
   return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)) ? userId : null;
 }
 
+const passwordCache = new Map<string, number>();
+
+/** Conditional update avoids a write on every poll, including across instances. */
+export async function touchApiPassword(userId: string, lastUsed: Date | null) {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 5 * 60_000);
+  if (lastUsed && lastUsed > cutoff) return;
+  await db.user.updateMany({ where: { id: userId, OR: [{ apiPasswordLastUsedAt: null }, { apiPasswordLastUsedAt: { lte: cutoff } }] }, data: { apiPasswordLastUsedAt: now } });
+}
+
 /** Shared password path: throttle both identity and source before bcrypt. */
 export async function authenticateGReaderPassword(request: Request, email: string, password: string) {
   const ip = getClientIdentifier(request);
@@ -58,8 +68,18 @@ export async function authenticateGReaderPassword(request: Request, email: strin
     else if (!user.isActive) failReason = "inactive";
     else {
       const hash = user.apiPasswordHash || (!user.twoFactorEnabled && !user.apiPasswordRequired ? user.password : null);
-      if (!hash || !(await bcrypt.compare(password, hash))) failReason = "password";
-      else if (user.apiPasswordHash) await db.user.update({ where: { id: user.id }, data: { apiPasswordLastUsedAt: new Date() } });
+      const prefix = `${user.id}:`;
+      const key = `${prefix}${user.apiTokenVersion}:${hashApiToken(password)}`;
+      // Always reload user/policy/version before consulting cached verification.
+      for (const [cached, expiry] of passwordCache) {
+        if (expiry <= Date.now() || (cached.startsWith(prefix) && !cached.startsWith(`${prefix}${user.apiTokenVersion}:`))) passwordCache.delete(cached);
+      }
+      if (!hash || (!(passwordCache.get(key)! > Date.now()) && !(await bcrypt.compare(password, hash)))) failReason = "password";
+      else {
+        if (passwordCache.size >= 5000) passwordCache.delete(passwordCache.keys().next().value!);
+        if (!passwordCache.has(key)) passwordCache.set(key, Date.now() + 60_000);
+        if (user.apiPasswordHash) await touchApiPassword(user.id, user.apiPasswordLastUsedAt);
+      }
     }
   }
   if (!failReason) return user;
@@ -129,7 +149,8 @@ export function parseGReaderStreamId(streamId?: string | null) {
   if (streamId === GREADER_STARRED) return { type: "starred" as const };
   if (streamId === GREADER_READ) return { type: "read" as const };
   if (streamId.startsWith("feed/")) return { type: "feed" as const, value: streamId.slice(5) };
-  if (streamId.startsWith(GREADER_LABEL_PREFIX)) return { type: "label" as const, value: streamId.slice(GREADER_LABEL_PREFIX.length) };
+  const label = normalizeCategoryNameFromTag(streamId);
+  if (label) return { type: "label" as const, value: label };
   return { type: "unknown" as const, value: streamId };
 }
 
@@ -158,6 +179,7 @@ export function greaderLimit(value: string | null, idsOnly = true) {
 }
 
 export function normalizeCategoryNameFromTag(tag: string) {
+  tag = tag.replace(/^user\/[^/]+\/label\//, GREADER_LABEL_PREFIX);
   if (!tag.startsWith(GREADER_LABEL_PREFIX)) return null;
   let name: string;
   try { name = decodeURIComponent(tag.slice(GREADER_LABEL_PREFIX.length)).trim(); } catch { name = tag.slice(GREADER_LABEL_PREFIX.length).trim(); }

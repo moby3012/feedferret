@@ -14,7 +14,8 @@ vi.mock("@/lib/db", async () => {
   const raw = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: fixture.url }) });
   return { db: withExternalIds(raw) };
 });
-vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: () => ({ success: true }), getClientIdentifier: () => "u", RATE_LIMITS: { fever: {} } }));
+vi.mock("@/lib/rate-limit", () => ({ peekRateLimit: () => ({ success: true }), checkRateLimit: () => ({ success: true }), getClientIdentifier: () => "u", RATE_LIMITS: { fever: {} } }));
+import { hashApiToken } from "@/lib/token";
 import { db } from "@/lib/db";
 import { POST } from "@/app/api/fever/route";
 import { backfillExternalIds } from "@/lib/external-id-store";
@@ -25,7 +26,7 @@ const raw = db as unknown as PrismaClient;
 beforeAll(async () => {
   execFileSync("node_modules/.bin/prisma", ["db", "push"], { env: { ...process.env, DATABASE_URL: fixture.url }, stdio: "pipe" });
   for (const id of ["u", "v"]) await db.user.create({ data: { id, email: `${id}@test.org` } });
-  await db.apiToken.create({ data: { userId: "u", name: "test", tokenHash: "hash", feverKey: "key", scope: "write" } });
+  await db.apiToken.create({ data: { userId: "u", name: "test", tokenHash: "hash", feverKey: hashApiToken("key"), scope: "write" } });
 }, 30000);
 afterAll(async () => { await db.$disconnect(); rmSync(fixture.dir, { recursive: true, force: true }); });
 async function call(values: Record<string, string>, multipart = false) {

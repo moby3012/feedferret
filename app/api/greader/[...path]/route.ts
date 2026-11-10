@@ -1,8 +1,9 @@
+import { timingSafeEqual } from "crypto";
 import { readGReaderBody } from "@/lib/bounded-body";
 import { manageGReaderTag } from "@/lib/greader-management";
 import { discoverFeeds } from "@/lib/feed-discovery";
 import { assertSafeFetchUrl } from "@/lib/ssrf";
-import { generateOpml } from "@/lib/opml";
+import { generateApiOpml } from "@/lib/opml";
 import { importOpmlXml } from "@/lib/import/opml-import";
 import { decimalExternalId, externalItemWhere, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
@@ -234,8 +235,8 @@ async function applyTagEdit(userId: string, ids: string[], add: string[], remove
 }
 
 async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
-  let feedUrl = String(form.get("quickadd") || form.get("url") || "").trim();
-  if (!feedUrl || feedUrl.length > 2048) return textResponse("Invalid quickadd parameter", 400);
+  let feedUrl = String(form.get("quickadd") || form.get("url") || "").trim().replace(/^feed\//, "");
+  if (!feedUrl || feedUrl.length > 2048) return NextResponse.json({ numResults: 0, error: "Invalid quickadd parameter" });
   const limit = checkRateLimit(`greader-add:${userId}`, RATE_LIMITS.urlDiscover);
   if (!limit.success) return rateLimitResponse(limit);
 
@@ -247,14 +248,14 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
       await db.feed.updateMany({ where: { id: existing.id, extId: null }, data: { extId } });
       existing.extId = (await db.feed.findUniqueOrThrow({ where: { id: existing.id } })).extId;
     }
-    return NextResponse.json({ numResults: 1, query: feedUrl, streamId: `feed/${decimalExternalId(existing.extId)}`, numSubscribers: 1, title: existing.name });
+    return NextResponse.json({ numResults: 1, query: feedUrl, streamId: `feed/${decimalExternalId(existing.extId)}`, numSubscribers: 1, streamName: existing.name, title: existing.name });
   }
 
   const discovery = await discoverFeeds(feedUrl);
   feedUrl = discovery.feeds[0]?.url || feedUrl;
-  try { await assertSafeFetchUrl(feedUrl); } catch { return textResponse("Unsafe feed URL", 400); }
+  try { await assertSafeFetchUrl(feedUrl); } catch { return NextResponse.json({ numResults: 0, error: "Unsafe feed URL" }); }
   const resolvedExisting = await db.feed.findFirst({ where: { userId, url: feedUrl } });
-  if (resolvedExisting?.extId) return NextResponse.json({ numResults: 1, streamId: `feed/${decimalExternalId(resolvedExisting.extId)}`, title: resolvedExisting.name });
+  if (resolvedExisting?.extId) return NextResponse.json({ numResults: 1, streamId: `feed/${decimalExternalId(resolvedExisting.extId)}`, streamName: resolvedExisting.name, title: resolvedExisting.name });
   const remoteFeed = await fetchFeedArticles({ url: feedUrl });
   const order = await db.feed.count({ where: { userId } });
   const feed = await db.feed.create({
@@ -274,7 +275,7 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
     query: feedUrl,
     streamId: `feed/${decimalExternalId(feed.extId)}`,
     numSubscribers: 1,
-    title: feed.name,
+    streamName: feed.name, title: feed.name,
   });
 }
 
@@ -282,15 +283,19 @@ async function handleSubscriptionEdit(userId: string, form: FormData) {
   const streams = [...new Set(form.getAll("s").map(String))];
   const action = String(form.get("ac") || "edit").toLowerCase();
   if (!streams.length || streams.length > 100 || streams.some((s) => !s.startsWith("feed/") || s.length > 2053) || !["subscribe", "unsubscribe", "edit"].includes(action)) return textResponse("Invalid subscriptions", 400);
-  for (const stream of streams) {
+  const titles = form.getAll("t").map(String);
+  for (const [index, stream] of streams.entries()) {
     const single = new FormData();
     for (const [key, value] of form) if (key !== "s") single.append(key, value);
     single.set("s", stream);
+    if (titles[index] !== undefined) single.set("t", titles[index]);
     if (action === "subscribe") {
       single.set("quickadd", stream.slice(5));
       const response = await handleSubscriptionQuickAdd(userId, single);
       if (!response.ok) return response;
-      single.set("s", (await response.json()).streamId);
+      const result = await response.json();
+      if (!result.streamId) return NextResponse.json(result);
+      single.set("s", result.streamId);
     }
     const response = await handleSingleSubscriptionEdit(userId, single);
     if (!response.ok) return response;
@@ -318,7 +323,7 @@ async function handleSingleSubscriptionEdit(userId: string, form: FormData) {
   if (title.length > 512 || [...addTags, ...removeTags].some((tag) => !normalizeCategoryNameFromTag(tag))) return textResponse("Invalid title or folder", 400);
 
   let nextCategoryId: string | null | undefined = undefined;
-  const addedCategoryTag = [...addTags].reverse().find((tag) => tag.startsWith(GREADER_LABEL_PREFIX));
+  const addedCategoryTag = [...addTags].reverse().find((tag) => normalizeCategoryNameFromTag(tag) !== null);
   if (addedCategoryTag) {
     const categoryName = normalizeCategoryNameFromTag(addedCategoryTag);
     const category = categoryName ? await getOrCreateCategory(userId, categoryName) : null;
@@ -409,7 +414,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
         db.feed.findMany({ where: { userId: user.id }, include: { category: true } }),
         db.category.findMany({ where: { userId: user.id } }),
       ]);
-      return new NextResponse(generateOpml(feeds, categories), { headers: { "content-type": "text/x-opml; charset=utf-8", "content-disposition": 'attachment; filename="subscriptions.opml"' } });
+      return new NextResponse(generateApiOpml(feeds, categories), { headers: { "content-type": "text/x-opml; charset=utf-8", "content-disposition": 'attachment; filename="subscriptions.opml"' } });
     }
     if (path.endsWith("subscription/list")) {
       const feeds = await db.feed.findMany({
@@ -421,7 +426,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
       return NextResponse.json({
         subscriptions: feeds.filter((feed) => feed.extId).map((feed: { id: string; extId: string | null; url: string; name: string; category: { name: string } | null }) => ({
           id: `feed/${decimalExternalId(feed.extId)}`,
-          title: feed.name,
+          streamName: feed.name, title: feed.name,
           categories: feed.category
             ? [{ id: `${GREADER_LABEL_PREFIX}${feed.category.name}`, label: feed.category.name }]
             : [],
@@ -491,16 +496,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
     try { raw = await readGReaderBody(request, path.endsWith("subscription/import") ? 5 * 1024 * 1024 : 128 * 1024); }
     catch { return textResponse("Request too large", 413); }
     if (path.endsWith("subscription/import")) {
-      try { return NextResponse.json(await importOpmlXml(user.id, raw, { trust: "remote" })); }
+      const importLimit = checkRateLimit(user.id, { prefix: "greader-import", limit: 5, windowSecs: 3600 });
+      if (!importLimit.success) return rateLimitResponse(importLimit);
+      try { return NextResponse.json(await importOpmlXml(user.id, raw, { trust: "remote", maxFeeds: 2000 })); }
       catch { return textResponse("Invalid OPML", 400); }
     }
     const form = await new Request(request.url, { method: "POST", headers: request.headers, body: raw }).formData();
+    const query = new URL(request.url).searchParams;
+    for (const key of ["s", "a", "r"]) for (const value of query.getAll(key)) form.append(key, value);
+    if (form.getAll("a").length > 10 || form.getAll("r").length > 10 || form.getAll("s").length > 100) return textResponse("Too many tags or streams", 400);
     const actionToken = form.get("T");
-    if (actionToken && actionToken !== "x" && actionToken !== createGReaderToken(user.id, user.apiTokenVersion)) return textResponse("Invalid action token", 401);
+    if (actionToken && actionToken !== "x") {
+      const actual = Buffer.from(String(actionToken));
+      const expected = Buffer.from(createGReaderToken(user.id, user.apiTokenVersion));
+      if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return textResponse("Invalid action token", 401);
+    }
     if (path.endsWith("rename-tag") || path.endsWith("disable-tag")) return await manageGReaderTag(user.id, form, path.endsWith("rename-tag"));
 
     if (path.endsWith("subscription/quickadd")) {
-      return await handleSubscriptionQuickAdd(user.id, form);
+      try { return await handleSubscriptionQuickAdd(user.id, form); }
+      catch { return NextResponse.json({ numResults: 0, error: "Unable to add feed" }); }
     }
 
     if (path.endsWith("subscription/edit")) {

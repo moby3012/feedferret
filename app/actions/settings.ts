@@ -21,9 +21,14 @@ async function requireUser() {
 export async function updateProfile(data: { name?: string; email?: string }) {
   const session = await requireUser();
 
-  await db.user.update({
-    where: { id: session.user.id },
-    data,
+  await db.$transaction(async (tx) => {
+    const previous = await tx.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { email: true } });
+    const emailChanged = data.email !== undefined && data.email !== previous.email;
+    await tx.user.update({ where: { id: session.user.id }, data: {
+      ...data, ...(emailChanged ? { apiFeverKey: null, apiTokenVersion: { increment: 1 } } : {}),
+    } });
+    // Hashes cannot be recomputed without the original secret. Rotate after email changes.
+    if (emailChanged) await tx.apiToken.updateMany({ where: { userId: session.user.id }, data: { feverKey: null } });
   });
 
   revalidatePath("/");
@@ -53,7 +58,8 @@ export async function changePassword(data: {
   const hashedPassword = await bcrypt.hash(parsed.data.newPassword, 10);
   await db.user.update({
     where: { id: session.user.id },
-    data: { password: hashedPassword, sessionVersion: { increment: 1 } },
+    // Keep the independent API password; revoke issued GReader Auth/T tokens.
+    data: { password: hashedPassword, sessionVersion: { increment: 1 }, apiTokenVersion: { increment: 1 } },
   });
 
   return { success: true };
@@ -238,6 +244,7 @@ export async function disableTwoFactor(code: string) {
       twoFactorEnabled: false,
       twoFactorSecret: null,
       sessionVersion: { increment: 1 },
+      apiTokenVersion: { increment: 1 },
     },
   });
 

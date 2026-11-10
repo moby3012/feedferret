@@ -99,7 +99,7 @@
     "newPasswordHint": "At least 8 characters.",
     "updatePassword": "Update password",
     "updating": "Updating…",
-    "passwordChanged": "Password changed",
+    "passwordChanged": "Password changed. Issued GReader tokens were revoked; your API password is unchanged.",
     "passwordChangeFailed": "Could not change password. Please try again.",
     "passwordTooShort": "New password must be at least 8 characters",
     "noPasswordSet": "This account signs in via SSO/OAuth and has no password to change.",
@@ -1764,9 +1764,9 @@
   },
   "apiPassword": {
     "title": "API password",
-    "description": "Use a separate password for Google Reader and Fever clients. Two-factor accounts require it. Without an API password or two-factor authentication, your login password works unless you require an API password. Rotating, revoking, or changing this policy disconnects Google Reader clients. Revoking keeps API passwords required.",
-    "password": "New API password (16–72 bytes)",
-    "required": "Require an API password",
+    "description": "Use a separate password for Google Reader and Fever clients. Two-factor accounts require it. Without an API password or two-factor authentication, your login password works unless you require an API password. Rotating, revoking, or changing this policy disconnects Google Reader clients. Revoking keeps API passwords required. When an API password exists, the login password never works for API access. Changing your login password keeps the API password and revokes issued GReader tokens.",
+    "password": "New API password (24–72 bytes; leave blank to generate)",
+    "required": "Disable login-password API access even when no API password exists",
     "rotate": "Set / rotate password",
     "revoke": "Revoke password",
     "savePolicy": "Save requirement",
@@ -1774,6 +1774,8 @@
     "unconfigured": "No API password configured",
     "lastUsed": "Last used: {date}",
     "saved": "API credentials updated",
-    "failed": "Could not update API credentials"
+    "failed": "Could not update API credentials",
+    "stepUp": "Current login password or TOTP code",
+    "shownOnce": "Copy this API password now. It is shown only once."
   }
 }

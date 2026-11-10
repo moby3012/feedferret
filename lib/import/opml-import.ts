@@ -526,10 +526,12 @@ export class OpmlImportInputError extends Error {}
 export async function importOpmlXml(
   userId: string,
   xml: string,
-  options: ApplyOptions & { trust?: ImportTrust } = {},
+  options: ApplyOptions & { trust?: ImportTrust; maxFeeds?: number } = {},
 ): Promise<OpmlImportReport> {
   const sizeError = validateOpml(xml);
   if (sizeError) throw new OpmlImportInputError(sizeError);
   const outlines = await parseOpml(xml);
-  return applyOpmlImportPlan(userId, planOpmlImport(outlines, { trust: options.trust }), options);
+  const plan = planOpmlImport(outlines, { trust: options.trust });
+  if (options.maxFeeds !== undefined && countFeeds(plan) > options.maxFeeds) throw new OpmlImportInputError("Too many feeds");
+  return applyOpmlImportPlan(userId, plan, options);
 }

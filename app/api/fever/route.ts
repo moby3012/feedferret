@@ -4,8 +4,10 @@ export const runtime = "nodejs";
 import { decimalExternalId, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { hashApiToken } from "@/lib/token";
+import { touchApiPassword } from "@/lib/greader";
 import { logger } from "@/lib/logger";
-import { checkRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
+import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 
 function numericIds(value: string): string[] {
@@ -23,13 +25,13 @@ async function authenticateFever(
   const apiKey = body.api_key || params.get("api_key");
   if (!apiKey) return null;
 
-  const passwordUser = await db.user.findUnique({ where: { apiFeverKey: apiKey } });
+  const passwordUser = await db.user.findUnique({ where: { apiFeverKey: hashApiToken(apiKey) } });
   if (passwordUser?.isActive && passwordUser.apiPasswordHash) {
-    await db.user.update({ where: { id: passwordUser.id }, data: { apiPasswordLastUsedAt: new Date() } });
+    await touchApiPassword(passwordUser.id, passwordUser.apiPasswordLastUsedAt);
     return { id: passwordUser.id, email: passwordUser.email, tokenScope: "write" };
   }
   const token = await db.apiToken.findFirst({
-    where: { feverKey: apiKey },
+    where: { feverKey: hashApiToken(apiKey) },
     include: { user: { select: { id: true, email: true, isActive: true } } },
   });
   if (token?.user?.isActive && (!token.expiresAt || token.expiresAt > new Date())) return { ...token.user, tokenScope: token.scope };
@@ -255,8 +257,12 @@ async function handle(request: Request) {
       );
     }
 
+    const ip = getClientIdentifier(request);
+    const authLimit = { ...RATE_LIMITS.authSignIn, prefix: "greader-ip" };
+    if (!peekRateLimit(ip, authLimit).success) return NextResponse.json(baseResponse(0));
     const user = await authenticateFever(params, body);
     if (!user) {
+      checkRateLimit(ip, authLimit);
       return NextResponse.json(baseResponse(0));
     }
 
