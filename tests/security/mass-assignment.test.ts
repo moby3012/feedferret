@@ -20,7 +20,7 @@ vi.mock("@/auth", () => ({ auth: vi.fn(async () => state.session) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }));
 
 import { updateDigestSettings, updateGlobalSettings, updateProfile } from "../../app/actions/settings";
-import { updateCategory, updateCategoryOrder, updateFeed } from "../../app/actions/feeds";
+import { addCategory, updateCategory, updateCategoryOrder, updateFeed, updateFeedOrder } from "../../app/actions/feeds";
 
 const dir = mkdtempSync(join(tmpdir(), "feedferret-mass-assign-"));
 const ids = { alice: "", bob: "", feed: "", cat: "", bobCat: "" };
@@ -102,5 +102,18 @@ describe("server actions ignore non-allowlisted fields", () => {
     const f = await state.db.feed.findUniqueOrThrow({ where: { id: ids.feed } });
     expect(f.maxSizeKb).toBe(20 * 1024);
     expect(f.fetchTimeoutSecs).toBe(120);
+  });
+
+  it("addCategory / updateFeedOrder refuse another account's category", async () => {
+    await expect(addCategory("Child", ids.bobCat)).rejects.toThrow(/Invalid category/);
+    await expect(updateFeedOrder([{ id: ids.feed, order: 0, categoryId: ids.bobCat }])).rejects.toThrow(/Invalid category/);
+    const f = await state.db.feed.findUniqueOrThrow({ where: { id: ids.feed } });
+    expect(f.categoryId).not.toBe(ids.bobCat);
+  });
+
+  it("reorder actions cap the number of items", async () => {
+    const many = Array.from({ length: 2001 }, (_, i) => ({ id: `x${i}`, order: i }));
+    await expect(updateFeedOrder(many)).rejects.toThrow(/Too many/);
+    await expect(updateCategoryOrder(many)).rejects.toThrow(/Too many/);
   });
 });

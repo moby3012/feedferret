@@ -19,6 +19,8 @@ import { OpmlParseError } from "@/lib/opml";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactWebhookConfigs } from "@/lib/webhooks";
 import { AI_OPERATOR_DELETE_ERROR, ruleHasAiDeleteConflict } from "@/lib/rule-ai-operators";
 import { parseRuleActions } from "@/lib/auto-read-rules";
+import { assertOwnedCategories } from "@/lib/owned-categories";
+import { clampFeedLimits } from "@/lib/feed-limits";
 
 function rpc(id: unknown, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result });
@@ -338,6 +340,8 @@ async function callTool(user: ApiUser, name: string, args: any) {
       for (const key of FEED_WRITABLE_KEYS) {
         if (args[key] !== undefined) data[key] = args[key];
       }
+      if (data.categoryId) await assertOwnedCategories(user.id, [data.categoryId]);
+      clampFeedLimits(data);
       const result = await db.feed.updateMany({ where: { id: String(args.feedId), userId: user.id }, data });
       if (!result.count) throw new Error("Feed not found");
       const feed = await db.feed.findFirst({ where: { id: String(args.feedId), userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } } });
@@ -347,12 +351,17 @@ async function callTool(user: ApiUser, name: string, args: any) {
     case "feedferret.create_category": {
       const name = typeof args.name === "string" ? args.name.trim() : "";
       if (!name) throw new Error("name is required");
+      if (typeof args.parentId === "string") await assertOwnedCategories(user.id, [args.parentId]);
       return db.category.create({ data: { userId: user.id, name, parentId: typeof args.parentId === "string" ? args.parentId : undefined } });
     }
     case "feedferret.update_category": {
       const data: any = {};
       if (typeof args.name === "string") data.name = args.name.trim();
       if (args.parentId !== undefined) data.parentId = args.parentId;
+      if (data.parentId) {
+        if (data.parentId === String(args.categoryId)) throw new Error("Invalid category");
+        await assertOwnedCategories(user.id, [data.parentId]);
+      }
       if (typeof args.order === "number") data.order = args.order;
       const result = await db.category.updateMany({ where: { id: String(args.categoryId), userId: user.id }, data });
       if (!result.count) throw new Error("Category not found");

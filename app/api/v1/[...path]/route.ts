@@ -533,7 +533,12 @@ async function createCategory(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
   const name = allowedString(body?.name);
   if (!name) return apiError("name is required", 400);
-  const category = await db.category.create({ data: { userId: user.id, name, parentId: allowedString(body?.parentId), order: Number.isFinite(Number(body?.order)) ? Number(body.order) : 0 } });
+  const parentId = allowedString(body?.parentId);
+  if (parentId) {
+    const owned = await db.category.findFirst({ where: { id: parentId, userId: user.id }, select: { id: true } });
+    if (!owned) return apiError("Invalid parent category", 422);
+  }
+  const category = await db.category.create({ data: { userId: user.id, name, parentId, order: Number.isFinite(Number(body?.order)) ? Number(body.order) : 0 } });
   return NextResponse.json(category, { status: 201 });
 }
 

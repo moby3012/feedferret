@@ -35,6 +35,7 @@ import { getSanitizer } from "@/lib/sanitize-html";
 import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-fetch";
 import { pickFields } from "@/lib/pick-fields";
 import { clampFeedLimits } from "@/lib/feed-limits";
+import { assertOwnedCategories, MAX_REORDER_ITEMS } from "@/lib/owned-categories";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -818,6 +819,7 @@ export async function addCategory(name: string, parentId?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
+    if (parentId) await assertOwnedCategories(session.user.id, [parentId]);
     const category = await db.category.create({
         data: {
             name,
@@ -860,10 +862,11 @@ export async function updateCategoryOrder(orders: { id: string; order: number; p
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     // parentId must be one of the user's own categories (never another account's).
-    const parentIds = [...new Set(orders.map((o) => o.parentId).filter((p): p is string => typeof p === "string"))];
-    if (parentIds.length) {
-        const owned = await db.category.count({ where: { id: { in: parentIds }, userId: session.user.id } });
-        if (owned !== parentIds.length) throw new Error("Invalid parent category");
+    if (!Array.isArray(orders) || orders.length > MAX_REORDER_ITEMS) throw new Error("Too many items");
+    try {
+        await assertOwnedCategories(session.user.id, orders.map((o) => o.parentId));
+    } catch {
+        throw new Error("Invalid parent category");
     }
 
     await db.$transaction(
@@ -881,6 +884,8 @@ export async function updateCategoryOrder(orders: { id: string; order: number; p
 export async function updateFeedOrder(orders: { id: string; order: number; categoryId?: string | null }[]) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+    if (!Array.isArray(orders) || orders.length > MAX_REORDER_ITEMS) throw new Error("Too many items");
+    await assertOwnedCategories(session.user.id, orders.map((o) => o.categoryId));
 
     await db.$transaction(
         orders.map((o) =>
