@@ -113,8 +113,8 @@ export function PwaInstallPrompt() {
         else setOpen(true);
       }}
     >
-      <DialogContent className="max-w-[calc(100%-2rem)] rounded-[2rem] border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur-2xl sm:max-w-md" showCloseButton={false}>
-        <div className="relative overflow-hidden rounded-[2rem] p-6">
+      <DialogContent className="max-w-[calc(100%-2rem)] rounded-sheet border-border/70 bg-background/95 p-0 shadow-overlay backdrop-blur-overlay sm:max-w-md" showCloseButton={false}>
+        <div className="relative overflow-hidden rounded-sheet p-6">
           <button
             type="button"
             onClick={closeAndRemember}
@@ -129,7 +129,7 @@ export function PwaInstallPrompt() {
           </div>
 
           <DialogHeader className="pe-8 text-start">
-            <DialogTitle className="text-2xl tracking-[-0.04em]">
+            <DialogTitle className="text-2xl tracking-title">
               {t("title")}
             </DialogTitle>
             <DialogDescription className="text-sm leading-6">

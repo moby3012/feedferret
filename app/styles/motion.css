@@ -1,0 +1,190 @@
+/*
+ * Motion tokens + the keyframe utilities that still exist. Spec §4.4.
+ * Rules: no animation or transition longer than --dur-slow (320 ms, a hard
+ * ceiling); state changes are attributes + CSS, no JS timer waits for motion;
+ * under prefers-reduced-motion nothing translates/scales (see bottom).
+ */
+:root {
+  --dur-press: 80ms;
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 320ms; /* hard ceiling */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+/* Gesture release springs live in JS (lib/gestures/spring.ts, k=320 c=32 m=1). */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-out-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+@keyframes pulse-gentle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes feed-flip-in {
+  from {
+    opacity: 0;
+    transform: translateX(28px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes filter-swap {
+  0% {
+    opacity: 0.4;
+    transform: translateY(8px) scale(0.985);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1.002);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes article-enter-from-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(32px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes article-enter-from-top {
+  from {
+    opacity: 0;
+    transform: translateY(-32px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* A-1.1: All animations only run when the user has not requested reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  .animate-fade-in {
+    animation: fade-in var(--dur-slow) var(--ease-out);
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up var(--dur-slow) var(--ease-out);
+  }
+
+  .animate-feed-flip {
+    animation: feed-flip-in var(--dur-slow) var(--ease-out);
+  }
+
+  .animate-filter-swap {
+    animation: filter-swap var(--dur-slow) var(--ease-out);
+  }
+
+  .animate-scale-in {
+    animation: scale-in var(--dur-slow) var(--ease-out);
+  }
+
+  .animate-slide-in-right {
+    /* No fill-mode: forwards here on purpose: the animation's resting state is
+       already translateX(0), and a lingering `forwards` transform would make
+       this fixed panel a new containing block for its nested `fixed` children
+       (e.g. the mobile reader's bottom nav), desyncing them from the viewport
+       on iOS/Android when the URL bar shows/hides. */
+    animation: slide-in-right var(--dur-slow) var(--ease-out);
+  }
+
+  .animate-slide-out-right {
+    animation: slide-out-right var(--dur-base) var(--ease-out) forwards;
+  }
+
+  /* Looping loading affordance (not an entrance): exempt from the 320 ms cap. */
+  .animate-pulse-gentle {
+    animation: pulse-gentle 2s ease-in-out infinite;
+  }
+
+  .animate-article-enter-bottom {
+    animation: article-enter-from-bottom var(--dur-slow) var(--ease-out);
+  }
+
+  .animate-article-enter-top {
+    animation: article-enter-from-top var(--dur-slow) var(--ease-out);
+  }
+
+  /* Staggered animation delays (deleted together with the animations that use
+     them in the list/reader PRs). */
+  .animation-delay-100 { animation-delay: 100ms; animation-fill-mode: backwards; }
+  .animation-delay-200 { animation-delay: 200ms; animation-fill-mode: backwards; }
+  .animation-delay-300 { animation-delay: 300ms; animation-fill-mode: backwards; }
+  .animation-delay-400 { animation-delay: 400ms; animation-fill-mode: backwards; }
+}
+
+/* Reduced motion: nothing translates, scales or rotates. Pane transitions
+   become a short opacity fade, springs snap (JS), Radix / tw-animate / vaul
+   enter-exit animations collapse to 1 ms (kept non-zero so animationend and
+   Radix Presence still fire). Finger-tracking stays: it is user-driven inline
+   transform without a transition. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-in,
+  .animate-out,
+  [data-vaul-drawer],
+  [data-vaul-overlay] {
+    animation-duration: 1ms !important;
+    animation-delay: 0s !important;
+    transition-duration: 1ms !important;
+  }
+  /* Spinners keep signalling "busy" without rotating. */
+  .animate-spin,
+  .animate-bounce {
+    animation: pulse-gentle 1.5s ease-in-out infinite !important;
+  }
+}

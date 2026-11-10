@@ -1,76 +1,114 @@
 # FeedFerret Design System
 
-> Single source of truth for the visual conventions the codebase already follows. It formalizes the scales and component patterns so new code stays consistent instead of drifting. Created 2026-07-15 to close design-audit findings V-14 (radius), V-15 (icon sizes) and V-16 (modal convention) — those audit items were about **documenting** the existing, deliberate scales rather than rewriting them.
-
-All colors, radii and spacing come from the design tokens in [`app/globals.css`](../app/globals.css). Prefer semantic Tailwind classes (`bg-background`, `text-muted-foreground`, `border-border`, …) over hardcoded values so both light and dark themes stay correct — see the token reference at the bottom of `globals.css` and the notes in [`archive/design-audit-todo.md`](archive/design-audit-todo.md).
+> Single source of truth for the visual conventions. Values live in exactly two files — [`app/styles/tokens.css`](../app/styles/tokens.css) and [`app/styles/motion.css`](../app/styles/motion.css), imported by [`app/globals.css`](../app/globals.css). Everything else uses the utilities those tokens generate. A lint guard enforces it (§9).
+> Rewritten with the token foundation (spec: `.pm/spec-shell-design.md` §4; audit: `.pm/audit-ux.md` §3.7). Direction: FDL, Reeder-inspired — flat list, quiet chrome, brand only on actionable things.
 
 ---
 
-## 1. Border radius
+## 1. Colour roles
 
-The base token is `--radius: 1rem`, with the shadcn-derived steps `--radius-sm/md/lg/xl` (`globals.css`). On top of that, the app uses an intentional, consistently-reused scale — **not** an accident, which is why it is documented rather than "normalized":
+Light = `:root`, dark = `.dark` (next-themes class on `<html>`). The shadcn names (`--background`, `--card`, `--popover`, `--muted-foreground`, …) are **aliases** of the roles, so existing utilities keep working.
 
-| Class | ~Value | Use for |
+| Role (utility) | Light | Dark | Use |
+|---|---|---|---|
+| `--surface-base` (`bg-surface-base`, = `bg-background`) | `oklch(.975 .004 250)` | `oklch(.13 .012 255)` | page, list, reader |
+| `--surface-raised` (`bg-surface-raised`, = `bg-card`) | `oklch(.995 .002 250)` | `oklch(.18 .012 255)` | cards, segmented thumb. **Opaque** |
+| `--surface-sunken` (`bg-surface-sunken`) | `oklch(.945 .006 250)` | `oklch(.105 .012 255)` | placeholders, inputs, pressed row |
+| `--surface-bar` (`bg-surface-bar`) | base @ 82 % | @ 80 % | top bars, pills (+ blur-bar) |
+| `--surface-overlay` (`bg-surface-overlay`, = `bg-popover`) | @ 94 % | @ 94 % | sheets, menus, dialogs (+ blur-overlay) |
+| `--text-primary` / `--text-secondary` (`text-foreground` / `text-muted-foreground`) | `.18` / `.46` (6.7:1) | `.95` / `.68` (7.0:1) | body / meta |
+| `--divider` (`border-divider`) | hairline | hairline | 1 px lines |
+| `--unread` (`bg-unread`) | `--primary` | `--brand` | the only unread colour — **never red** |
+| `--selected` (`bg-selected`) | `--sidebar-accent` | same | the single selected style |
+| `--accent-subtle` (`bg-accent-subtle`) | brand 14 % | brand 20 % | active tab background |
+| `--success` / `--warning` / `--danger` / `--info` (+ `-subtle`) | dark enough for text on light | light enough for text on dark | status, never palette colours |
+| `--scrim` / `--scrim-reader` | black .55 / .08 | .6 / .3 | overlays / list under compact reader |
+
+- **Status colours:** `bg-warning/10 border-warning/20 text-warning`, not `bg-amber-500/10 text-amber-700 dark:text-amber-400`. The roles already adapt to dark, so no `dark:` twin is needed. `danger` is the text/icon-safe red (`destructive` remains the fill for destructive buttons).
+- **User accent (Settings → Appearance):** `ThemeColorApplier` writes `--brand`, `--brand-secondary`, `--brand-foreground` (+ `-secondary-foreground`) inline on `<html>`. All accent-derived roles are expressions of `--brand` (`--unread` in dark, `--accent-subtle`, `--primary`/`--accent` in dark, `--ring`, `--sidebar-accent`). **Never hard-code a brand colour; never re-declare `--brand` in CSS.**
+- `@supports not (backdrop-filter)` and `prefers-reduced-transparency` make bar/overlay surfaces opaque.
+- Never hard-code `bg-black`/`text-white`/`zinc-*`/hex in app UI. The Google OAuth `#4285F4` is the one sanctioned literal.
+- `viewport.themeColor` = `#f5f7f9` / `#05080c` (matches `--surface-base`, no status-bar seam).
+- Focus: `focus-visible:ring-2 focus-visible:ring-ring`; never remove an indicator without a replacement (WCAG 2.4.7).
+
+## 2. Type scale
+
+Utilities `text-<name>` set size, line-height, weight and tracking in one go; an explicit `font-*` / `leading-*` / `tracking-*` utility on the same element wins. Arbitrary `text-[…]` / `tracking-[…]` are banned. **11 px is the minimum size anywhere.**
+
+| Token | Size / line | Weight · tracking | Use |
+|---|---|---|---|
+| `text-caption` | 11/14 | 500 · 0 | tab labels, chips, duration badge |
+| `text-footnote` | 12/16 | 500 · 0 (`tabular-nums` for times/counts) | source line, time, meta |
+| `text-body-sm` | 14/20 | 400 | summary, secondary menu text |
+| `text-body` | 16/24 | 400 | inputs (≥16 px: no iOS zoom), buttons, sheets |
+| `text-row-title` | 16/21 → 17/22 ≥768 | 600 (unread) / 500 (read) · −0.01em | list titles |
+| `text-title-sm` | 17/22 | 600 · −0.01em | bar titles |
+| `text-title` | 20/26 | 600 · −0.02em | sheet titles |
+| `text-headline` | 24/30 | 700 · −0.02em | compact large titles |
+| `text-display` | 26/32 → 32/38 ≥768 | 700 · −0.02em | reader headline |
+
+Tracking utilities: `tracking-title` (−0.02em, ≥20 px) · `tracking-subtitle` (−0.01em, 17–19 px) · `tracking-overline` (+0.06em — the only allowed tracking for uppercase). Tailwind's `text-xs/sm/base/…` still exist for legacy code; new code uses the scale above.
+Reader body tokens (consumed by the reader PR): `--reader-size` 17/19 px, `--reader-leading` 1.6, `--reader-measure` 68ch.
+
+## 3. Space, safe area, targets
+
+Plain custom properties on `:root`: `--gutter` 16/20/24 · `--row-pad-y` 12 · `--row-gap` 12 · `--bar-h` 52/56 · `--tabbar-h` 60 · `--tabbar-inset` 12 · `--rail-w` 72 · `--sidebar-w` 280 · `--list-w` 380 · `--list-w-medium` 360 · `--reader-gutter` 20/32/48 · `--content-pad-bottom`.
+
+- **Safe areas:** `var(--safe-t|r|b|l)` (and `--titlebar-h`, `--keyboard-inset`). Tailwind: `pt-(--safe-t)`, `pb-[max(0.75rem,var(--safe-b))]`. Never write `env(safe-area-inset-*)` in components.
+- **Touch targets:** every interactive element ≥ 44×44 on coarse pointers. `Button` carries `.hit-slop` (an invisible `::after`, `max(100%, var(--hit-min))`, coarse only); visual sizes stay 32/36/44. For raw `<button>`s in bars add `hit-slop` (+ nothing else).
+- **Layout variants** (CSS only): `compact:` <768 · `medium:` 768–1199 · `expanded:` ≥1200 · `wide:` ≥768 · `fine:` `(hover:hover) and (pointer:fine)` · `coarse:` `(pointer:coarse)` · `standalone:`. Do not use `sm:`/`lg:` to mean "has a mouse" / "is desktop" in shell code.
+
+## 4. Radius (monotonic)
+
+Role utilities for all new code:
+
+| Utility | px | Use |
 |---|---|---|
-| `rounded-md` | 0.5rem | Small inline chips, badges, compact controls |
-| `rounded-lg` | ~0.875rem | Buttons, inputs, select triggers, small controls |
-| `rounded-xl` | ~1.25rem | Standard cards, list rows, popovers, menu surfaces |
-| `rounded-2xl` | ~1.5rem | Larger cards, section panels, primary content surfaces |
-| `rounded-3xl` / `rounded-[2rem]` | ~1.75–2rem | Full dialogs, sheets, hero/onboarding surfaces, mobile bottom bars |
-| `rounded-full` | pill | Avatars, icon-only round buttons, toggle knobs, count pills |
+| `rounded-chip` | 6 | chips, badges, checkboxes |
+| `rounded-control` | 10 | buttons, inputs, thumbs |
+| `rounded-row` | 14 | cards, covers |
+| `rounded-panel` | 20 | popovers, menus, grouped panels |
+| `rounded-sheet` | 28 | sheets, dialogs, pills (`rounded-t-sheet` for bottom sheets) |
+| `rounded-full` | ∞ | avatars, round buttons, knobs |
+| `rounded-icon` | 28 % | app-icon squircle marks |
 
-**Guidance for new code**
-- Reach for a named step (`rounded-lg`/`xl`/`2xl`/`3xl`) before an arbitrary value.
-- The large one-off values (`rounded-[2rem]`, `rounded-[1.5rem]`) are the established "big surface" radius — reuse the existing value in that context (e.g. match the sibling dialog) rather than inventing a new arbitrary radius.
-- Buttons/inputs → `rounded-lg`; cards/rows → `rounded-xl`/`2xl`; dialogs/sheets → `rounded-3xl`/`[2rem]`.
+Legacy Tailwind keys are re-pinned so nothing is inverted: `sm 10 · md 14 · lg 16 · xl 20 · 2xl 20 · 3xl 28 · 4xl 28`. `rounded-[…]` is banned (`rounded-inherit` exists for ScrollArea-style inheritance).
 
----
+## 5. Elevation and blur
 
-## 2. Icon sizes
+Two levels only. Everything else is flat (hairline at most). **Rows, cards and list panels never blur.**
 
-Icons are `lucide-react` SVGs. The app uses three sizes by context; keep to them:
-
-| Class | Size | Use for |
+| Level | Recipe | Utilities |
 |---|---|---|
-| `size-3` (`w-3 h-3`) | 12px | Badge/metadata icons, timestamps, dense inline hints |
-| `size-4` (`w-4 h-4`) | 16px | **Default** — form-field icons, inline-with-text icons, buttons, menu items |
-| `size-5` (`w-5 h-5`) | 20px | Section/step headers, primary nav, prominent affordances |
+| bar | `--surface-bar` + `blur(20px) saturate(1.4)` + `--shadow-bar` + 1 px `--divider` | `bg-surface-bar backdrop-blur-bar shadow-bar` or `elev-bar` |
+| overlay | `--surface-overlay` + `blur(28px) saturate(1.4)` + `--shadow-overlay` | `bg-surface-overlay backdrop-blur-overlay shadow-overlay` or `elev-overlay` |
 
-Larger avatar/button wrappers (`h-7`/`h-8`/`h-9`) are container sizes, not icon sizes — the icon inside still uses one of the three above.
+`.ui-surface`, `.ui-floating-surface`, `.ui-overlay` (scrim) in `globals.css` use the same tokens. Raw `backdrop-blur-xl`, `shadow-2xl` etc. are not used.
 
-**Guidance for new code**
-- Default to `size-4`. Only go to `size-5` for headers/primary emphasis, `size-3` for badges/metadata.
-- Prefer the `size-N` shorthand over `w-N h-N` in new code (both exist in the tree; `size-N` is the direction of travel).
-- The `Button` component already enforces `size-4` for un-sized child SVGs — don't override unless the context calls for `size-3`/`size-5`.
+## 6. z-index
 
----
+Only via `z-(--z-*)`: `sticky 10 · bar 30 · reader 40 · overlay 50 · toast 60 · skip 100`. `z-[…]`, numeric `z-10…`, and inline `zIndex: 50` are banned. Inline: `style={{ zIndex: "var(--z-overlay)" }}`.
 
-## 3. Dialogs & modals
+## 7. Motion
 
-Two primitives, chosen by intent — do not hand-roll a modal:
+`--dur-press 80ms · --dur-fast 140ms · --dur-base 220ms · --dur-slow 320ms` (hard ceiling) and `--ease-out / --ease-in / --ease-standard`. Tailwind: `duration-(--dur-base)`, `ease-(--ease-out)`. Rules:
 
-| Primitive | Use when |
-|---|---|
-| **`Dialog`** (`components/ui/dialog.tsx`) | The user is doing something — editing a feed, viewing settings, running a flow. Dismissible by backdrop/Escape/X. |
-| **`AlertDialog`** (`components/ui/alert-dialog.tsx`) | You need an explicit yes/no decision, especially destructive or irreversible ones — delete feed/label/account, revoke token, discard unsaved changes. Not dismissible by backdrop; forces a Cancel/Confirm choice. |
+- Nothing animates or transitions longer than 320 ms (looping loaders excepted).
+- State changes are attributes; CSS transitions on them. No JS timer waits for an animation.
+- No `hover:scale`, no `hover:-translate` on new code; press = background within `--dur-press`.
+- **Reduced motion:** transitions collapse to 1 ms; `animate-in/out` (tw-animate, Radix, vaul) to 1 ms; spinners/bounce become an opacity pulse; keyframe utilities only exist under `prefers-reduced-motion: no-preference`. User-driven finger tracking stays.
+- `html` no longer sets `scroll-behavior: smooth`; call `scrollTo({ behavior: "smooth" })` explicitly where wanted.
 
-**Conventions**
-- Every modal renders through `DialogContent` / `AlertDialogContent` — never a bare positioned `div`.
-- Destructive confirms use the destructive button styling (`bg-destructive text-destructive-foreground`) on the confirm action and a clear "Cancel"/"Keep …" on the cancel action. See the delete-feed confirm in [`components/feed-management.tsx`](../components/feed-management.tsx) and the unsaved-changes confirm in [`components/feed-edit-dialog.tsx`](../components/feed-edit-dialog.tsx) as the reference patterns.
-- When a form dialog can hold unsaved edits, guard its close with an `AlertDialog` (dirty-check → "Discard unsaved changes?") — pattern established in `feed-edit-dialog.tsx`.
-- The frosted-glass surface treatments `.ui-surface` (anchored) and `.ui-floating-surface` (popovers/menus) in `globals.css` are the app's standard elevated-surface look; reuse them instead of ad-hoc gradient/shadow/blur stacks.
-- Focus management, Escape handling and scroll-locking come from the Radix primitives — don't reimplement them.
+## 8. Icons, dialogs, wording (unchanged conventions)
 
----
+- **Icons:** `lucide-react`. `size-3` (12) badges/meta · `size-4` (16) **default** · `size-5` (20) headers/primary nav; `Button` already sizes bare child SVGs to `size-4`. Prefer `size-N` over `w-N h-N`.
+- **Dialogs:** `Dialog` for tasks, `AlertDialog` for explicit yes/no (destructive, irreversible). Always through `DialogContent`/`AlertDialogContent`; guard dirty forms with an `AlertDialog`. Focus management, Escape and scroll-lock come from Radix.
+- **Wording (de):** star = "Favorit"; refresh = "Aktualisieren" ("Volltext abrufen" stays its own action); always "du".
 
-## 4. Color & theming (reference)
+## 9. The guard
 
-- Use semantic tokens (`bg-background`, `text-foreground`, `text-muted-foreground`, `border-border`, `bg-card`, `bg-muted`, `bg-accent`, `text-primary`, `ring-ring`, sidebar tokens). They have both light and dark definitions in `globals.css`.
-- Never hardcode `bg-black`/`text-white`/`text-zinc-*`/hex colors in app UI — they break one of the two themes. (The audit fixed the auth pages that violated this; keep new code compliant.)
-- Focus states use `focus-visible:ring-2 focus-visible:ring-ring` — never remove a focus indicator with `focus:ring-0`/`outline-none` without a replacement (WCAG 2.4.7).
-- The Google OAuth icon's `#4285F4` is the one sanctioned hardcoded color (mandated brand color).
-- Animations are gated behind `@media (prefers-reduced-motion: no-preference)` — keep new motion inside that guard.
+`eslint-rules/no-raw-design-values.mjs` (rule `ff/no-raw-design-values`, **error**, wired in `eslint.config.mjs` for `app/ components/ hooks/ lib/ features/`) rejects in string/template literals and inline styles:
 
----
+`rounded-[…]` · `z-[…]`/`z-10`/`zIndex: 50` · `text-[12px]` (sizes; `text-[var(--x)]` colours are fine) · `tracking-[…]` · palette status colours (`amber|emerald|green|red|yellow|orange|blue|sky|…-NNN`) · raw `backdrop-blur[-xl…]` · `env(safe-area-inset-…)` · `duration-NNN`.
 
-*This document formalizes existing conventions; it does not mandate a sweeping rewrite. When touching a component, bring it in line with the tables above rather than doing a separate large-scale refactor.*
+Fix by using the token, never by disabling the rule. Need a new value? Add a token to `app/styles/` in its own PR, with the design owner's sign-off. Tests: `tests/design/token-guard.test.ts`, `tests/design/tokens-css.test.ts`.

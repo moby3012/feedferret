@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @plugin "@tailwindcss/typography";
 @import 'tw-animate-css';
+@import './styles/tokens.css';
+@import './styles/motion.css';
 
 .article-content {
   @apply prose prose-neutral dark:prose-invert max-w-none;
@@ -87,296 +89,6 @@
   @apply block text-muted-foreground mt-[-1.5rem] mb-8 text-sm leading-relaxed;
 }
 
-@custom-variant dark (&:is(.dark *));
-
-:root {
-  --brand: #5BA4CF;
-  --brand-secondary: #F0963C;
-  --brand-foreground: #08111d;
-  --brand-secondary-foreground: #140b02;
-  --background: oklch(0.975 0.004 250);
-  --foreground: oklch(0.18 0.012 255);
-  --card: oklch(0.995 0.002 250 / 0.86);
-  --card-foreground: oklch(0.18 0.012 255);
-  --popover: oklch(0.995 0.002 250 / 0.96);
-  --popover-foreground: oklch(0.18 0.012 255);
-  /* Color-foundation fixes (design-polish-2): darker/more saturated brand
-     fills so brand-on-fill text is text-safe. Computed (OKLCH -> linear
-     sRGB -> WCAG relative luminance): near-black (--brand-foreground,
-     #08111d) on this --primary is ~5.3:1 and on this --accent is ~4.52:1 —
-     both clear AA (4.5:1), so --primary-foreground/--accent-foreground stay
-     near-black in light mode (near-white text on these fills only reaches
-     ~3.4:1/~4.0:1, i.e. worse — near-black is the correct choice here). */
-  --primary: oklch(0.62 0.11 235);
-  --primary-foreground: var(--brand-foreground);
-  --secondary: oklch(0.94 0.006 250);
-  --secondary-foreground: oklch(0.18 0.012 255);
-  --muted: oklch(0.93 0.006 250);
-  /* was oklch(0.52 0.012 255); darkened so muted-foreground clears 4.5:1
-     against both --background (~6.6:1) and --muted (~5.8:1). */
-  --muted-foreground: oklch(0.46 0.012 255);
-  --accent: oklch(0.58 0.115 235);
-  --accent-foreground: var(--brand-foreground);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.88 0.006 250);
-  --input: oklch(0.88 0.006 250);
-  --ring: color-mix(in oklab, var(--brand) 76%, black 10%);
-  /* Dedicated link color: distinct from --accent/--primary so body/prose
-     links stay text-safe (~5.3:1 on --background) independent of future
-     accent/primary retuning. */
-  --link: oklch(0.5 0.13 235);
-  --chart-1: var(--brand);
-  --chart-2: var(--brand-secondary);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 1rem;
-  --sidebar: oklch(0.985 0.003 250 / 0.84);
-  --sidebar-foreground: oklch(0.15 0.01 250);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: color-mix(in oklab, var(--sidebar) 88%, var(--brand) 12%);
-  --sidebar-accent-foreground: oklch(0.15 0.01 250);
-  --sidebar-border: oklch(0.92 0.002 240);
-  --sidebar-ring: var(--ring);
-}
-
-.dark {
-  --background: oklch(0.13 0.012 255);
-  --foreground: oklch(0.95 0.003 250);
-  --card: oklch(0.18 0.012 255 / 0.82);
-  --card-foreground: oklch(0.95 0.002 240);
-  --popover: oklch(0.18 0.012 255 / 0.96);
-  --popover-foreground: oklch(0.95 0.002 240);
-  --primary: color-mix(in oklab, var(--brand) 86%, black 4%);
-  --primary-foreground: var(--brand-foreground);
-  --secondary: oklch(0.24 0.012 255);
-  --secondary-foreground: oklch(0.95 0.002 240);
-  --muted: oklch(0.24 0.012 255);
-  /* was oklch(0.6 0.01 250); lightened so muted-foreground clears 4.5:1
-     against --muted (~5.7:1). */
-  --muted-foreground: oklch(0.68 0.01 250);
-  --accent: color-mix(in oklab, var(--brand) 72%, black 16%);
-  /* Bug fix: this token previously fell through to --brand-foreground
-     (near-black, #08111d) on a mid-luminance dark accent fill — a
-     computed ~3.1-4.2:1 depending on measurement, i.e. an AA fail/near-fail.
-     Override with a near-white so accent-foreground text (toggle on-state,
-     dropdown/command/calendar focus, segmented buttons) stays legible. */
-  --accent-foreground: oklch(0.97 0.005 250);
-  --destructive: oklch(0.5 0.2 25);
-  --destructive-foreground: oklch(0.95 0 0);
-  --border: oklch(0.29 0.012 255);
-  --input: oklch(0.29 0.012 255);
-  --ring: color-mix(in oklab, var(--brand) 82%, white 8%);
-  /* Dark counterpart of --link: brighter/lighter for dark backgrounds
-     (~9.2:1 on the dark --background). */
-  --link: oklch(0.75 0.11 235);
-  --chart-1: var(--brand);
-  --chart-2: var(--brand-secondary);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.15 0.012 255 / 0.86);
-  --sidebar-foreground: oklch(0.95 0.002 240);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: color-mix(in oklab, var(--sidebar) 80%, var(--brand) 20%);
-  --sidebar-accent-foreground: oklch(0.95 0.002 240);
-  --sidebar-border: oklch(0.25 0.01 250);
-  --sidebar-ring: var(--ring);
-}
-
-@theme inline {
-  --font-sans: var(--font-geist-sans, system-ui, sans-serif);
-  --font-mono: var(--font-geist-mono, ui-monospace, monospace);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-brand: var(--brand);
-  --color-brand-secondary: var(--brand-secondary);
-  --color-brand-foreground: var(--brand-foreground);
-  --color-link: var(--link);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-}
-
-/* Apple-like animations */
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes fade-in-up {
-  from { 
-    opacity: 0; 
-    transform: translateY(12px);
-  }
-  to { 
-    opacity: 1; 
-    transform: translateY(0);
-  }
-}
-
-@keyframes scale-in {
-  from { 
-    opacity: 0; 
-    transform: scale(0.96);
-  }
-  to { 
-    opacity: 1; 
-    transform: scale(1);
-  }
-}
-
-@keyframes slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-@keyframes slide-out-right {
-  from { transform: translateX(0); }
-  to { transform: translateX(100%); }
-}
-
-@keyframes pulse-gentle {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-/* A-1.1: All animations only run when the user has not requested reduced motion */
-@media (prefers-reduced-motion: no-preference) {
-  .animate-fade-in {
-    animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .animate-fade-in-up {
-    animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .animate-feed-flip {
-    animation: feed-flip-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .animate-filter-swap {
-    animation: filter-swap 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .animate-scale-in {
-    animation: scale-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .animate-slide-in-right {
-    /* No fill-mode: forwards here on purpose: the animation's resting state is
-       already translateX(0), and a lingering `forwards` transform would make
-       this fixed panel a new containing block for its nested `fixed` children
-       (e.g. the mobile reader's bottom nav), desyncing them from the viewport
-       on iOS/Android when the URL bar shows/hides. */
-    animation: slide-in-right 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .animate-slide-out-right {
-    animation: slide-out-right 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
-  .animate-pulse-gentle {
-    animation: pulse-gentle 2s ease-in-out infinite;
-  }
-
-  .animate-article-enter-bottom {
-    animation: article-enter-from-bottom 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .animate-article-enter-top {
-    animation: article-enter-from-top 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  /* Staggered animation delays */
-  .animation-delay-100 { animation-delay: 100ms; animation-fill-mode: backwards; }
-  .animation-delay-200 { animation-delay: 200ms; animation-fill-mode: backwards; }
-  .animation-delay-300 { animation-delay: 300ms; animation-fill-mode: backwards; }
-  .animation-delay-400 { animation-delay: 400ms; animation-fill-mode: backwards; }
-}
-
-@keyframes feed-flip-in {
-  from {
-    opacity: 0;
-    transform: translateX(28px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-@keyframes filter-swap {
-  0% {
-    opacity: 0.4;
-    transform: translateY(8px) scale(0.985);
-  }
-  60% {
-    opacity: 1;
-    transform: translateY(-1px) scale(1.002);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes article-enter-from-bottom {
-  from {
-    opacity: 0;
-    transform: translateY(32px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes article-enter-from-top {
-  from {
-    opacity: 0;
-    transform: translateY(-32px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -385,7 +97,6 @@
     cursor: pointer;
   }
   html {
-    scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
     /* Last-resort net: individual flex/truncate chains are fixed as they're
        found (see .article-content, .reader-page), but a missed one anywhere
@@ -426,21 +137,21 @@
 .ui-overlay {
   /* Neutral scrim for dialogs/sheets — no brand tint on a modal backdrop. */
   background: color-mix(in oklab, black 55%, transparent);
-  backdrop-filter: blur(18px) saturate(145%);
+  backdrop-filter: blur(var(--blur-bar)) saturate(145%);
 }
 
 .ui-surface {
   background: var(--card);
   border-color: var(--border);
-  box-shadow: 0 30px 80px -42px color-mix(in oklab, black 45%, transparent);
-  backdrop-filter: blur(28px) saturate(140%);
+  box-shadow: var(--shadow-overlay);
+  backdrop-filter: blur(var(--blur-overlay)) saturate(140%);
 }
 
 .ui-floating-surface {
   background: var(--popover);
   border-color: var(--border);
-  box-shadow: 0 24px 60px -36px color-mix(in oklab, black 45%, transparent);
-  backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: var(--shadow-overlay);
+  backdrop-filter: blur(var(--blur-overlay)) saturate(140%);
 }
 
 .ui-control-surface {

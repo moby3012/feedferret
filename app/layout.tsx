@@ -67,9 +67,13 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Soft keyboards resize the layout viewport instead of overlaying it, so
+  // fixed bars follow the keyboard (--keyboard-inset is the iOS fallback).
+  interactiveWidget: "resizes-content",
+  // Match --surface-base (tokens.css) so the status bar has no seam.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f8f9fc" },
-    { media: "(prefers-color-scheme: dark)", color: "#1a1b23" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f7f9" },
+    { media: "(prefers-color-scheme: dark)", color: "#05080c" },
   ],
 };
 
@@ -87,7 +91,7 @@ export default async function RootLayout({
       <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}>
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:start-4 focus:z-[9999] focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-lg focus:outline-none"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:start-4 focus:z-(--z-skip) focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-lg focus:outline-none"
         >
           {t("skipToContent")}
         </a>
@@ -110,7 +114,7 @@ export default async function RootLayout({
                     clear of them on small screens (UX audit U-12). */}
                 <Toaster
                   position="bottom-right"
-                  mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 88px)" }}
+                  mobileOffset={{ bottom: "calc(var(--safe-b) + 88px)" }}
                 />
               </ThemeProvider>
             </Providers>

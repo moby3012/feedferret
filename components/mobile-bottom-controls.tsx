@@ -82,8 +82,8 @@ export function MobileBottomControls({
 
   if (isSearchActive && !isEditingSearch) {
     return (
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 bg-background/95 backdrop-blur-xl pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
-        <nav className="pointer-events-auto flex h-16 items-center gap-1.5 rounded-[2rem] border border-border/70 bg-background/90 px-2 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-(--z-reader) bg-background/95 backdrop-blur-bar pl-[max(1rem,var(--safe-l))] pr-[max(1rem,var(--safe-r))] pb-[max(0.75rem,var(--safe-b))] lg:hidden">
+        <nav className="pointer-events-auto flex h-16 items-center gap-1.5 rounded-sheet border border-border/70 bg-background/90 px-2 shadow-overlay backdrop-blur-bar supports-[backdrop-filter]:bg-background/75">
           <Button
             type="button"
             variant="ghost"
@@ -136,9 +136,9 @@ export function MobileBottomControls({
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 bg-background/95 backdrop-blur-xl pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-(--z-reader) bg-background/95 backdrop-blur-bar pl-[max(1rem,var(--safe-l))] pr-[max(1rem,var(--safe-r))] pb-[max(0.75rem,var(--safe-b))] lg:hidden">
       {searchOpen && (
-        <div className="pointer-events-auto mb-2 rounded-[1.65rem] border border-border/70 bg-background/95 p-2 shadow-2xl shadow-black/20 backdrop-blur-2xl">
+        <div className="pointer-events-auto mb-2 rounded-sheet border border-border/70 bg-background/95 p-2 shadow-overlay backdrop-blur-bar">
           <div className="relative">
             <Search className="absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -168,7 +168,7 @@ export function MobileBottomControls({
         </div>
       )}
 
-      <nav className="pointer-events-auto flex h-16 items-center gap-1.5 rounded-[2rem] border border-border/70 bg-background/90 px-2 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
+      <nav className="pointer-events-auto flex h-16 items-center gap-1.5 rounded-sheet border border-border/70 bg-background/90 px-2 shadow-overlay backdrop-blur-bar supports-[backdrop-filter]:bg-background/75">
         <Button
           type="button"
           variant="ghost"
@@ -195,7 +195,7 @@ export function MobileBottomControls({
           type="button"
           variant="ghost"
           className={cn(
-            "h-10 min-w-0 flex-1 rounded-2xl px-3 text-xs font-bold uppercase tracking-wider active:scale-[0.98] transition-all duration-200",
+            "h-10 min-w-0 flex-1 rounded-2xl px-3 text-xs font-bold uppercase tracking-wider active:scale-[0.98] transition-all duration-(--dur-base)",
             unreadOnly
               ? "bg-accent text-accent-foreground shadow-lg shadow-accent/20"
               : "bg-muted/70 text-foreground",

@@ -366,7 +366,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
         : t("fetch.transparency.statusPending");
   const statusToneClass =
     lastStatus === "ok"
-      ? "bg-emerald-500"
+      ? "bg-success"
       : lastStatus === "error"
         ? "bg-destructive"
         : "bg-muted-foreground";
@@ -374,9 +374,9 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   return (
     <>
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="flex h-[min(92dvh,760px)] w-[calc(100vw-1rem)] max-w-2xl flex-col rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl">
-        <DialogHeader className="border-b border-border/60 bg-card/95 px-5 py-5 backdrop-blur-2xl sm:px-8 sm:py-6">
-          <DialogTitle className="text-xl font-semibold tracking-[-0.04em] sm:text-2xl">
+      <DialogContent className="flex h-[min(92dvh,760px)] w-[calc(100vw-1rem)] max-w-2xl flex-col rounded-sheet border border-border/70 bg-background p-0 shadow-overlay">
+        <DialogHeader className="border-b border-border/60 bg-card/95 px-5 py-5 backdrop-blur-bar sm:px-8 sm:py-6">
+          <DialogTitle className="text-xl font-semibold tracking-title sm:text-2xl">
             {feed.name}
           </DialogTitle>
           <DialogDescription className="mt-1 text-sm text-muted-foreground truncate">
@@ -668,7 +668,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                     <Sparkles className="size-5" />
                   </div>
                   <div>
-                    <h3 className="font-semibold tracking-[-0.02em]">{t("fulltext.scoutStudioTitle")}</h3>
+                    <h3 className="font-semibold tracking-title">{t("fulltext.scoutStudioTitle")}</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {t("fulltext.scoutStudioDescription")}
                     </p>
@@ -691,7 +691,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 </Select>
                 <p className="text-xs text-muted-foreground">{t("fulltext.fullTextModeDescription")}</p>
                 {fullTextMode === "ai" && (
-                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+                  <div className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
                     {t("fulltext.fullTextModeAiWarning")}
                   </div>
                 )}
@@ -810,7 +810,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                           >
                             <div className="flex items-center justify-between gap-3">
                               <code className="truncate font-mono text-xs">{candidate.selector}</code>
-                              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-caption font-medium text-muted-foreground">
                                 {candidate.charCount.toLocaleString()} {t("fulltext.chars")}
                               </span>
                             </div>
@@ -839,7 +839,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
 
             <TabsContent value="scout" className="mt-0 space-y-5">
               <div className="rounded-2xl ui-control-surface border p-4">
-                <h3 className="font-semibold tracking-[-0.02em]">{t("scout.scoutAdvanced")}</h3>
+                <h3 className="font-semibold tracking-title">{t("scout.scoutAdvanced")}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {t("scout.customHandling")}
                 </p>

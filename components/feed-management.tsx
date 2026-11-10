@@ -607,7 +607,7 @@ function SortableCategoryItem({
   const style = {
     transform: CSS.Translate.toString(transform),
     transition,
-    zIndex: isDragging ? 50 : undefined,
+    zIndex: isDragging ? "var(--z-overlay)" : undefined,
     opacity: isDragging ? 0.5 : 1,
   };
 
@@ -637,7 +637,7 @@ function SortableCategoryItem({
             <Button
               size="icon"
               variant="ghost"
-              className="h-9 w-9 rounded-xl text-green-500 hover:bg-green-500/10"
+              className="h-9 w-9 rounded-xl text-success hover:bg-success/10"
               onClick={() => {
                 updateCategory.mutate({
                   categoryId: cat.id,
@@ -660,7 +660,7 @@ function SortableCategoryItem({
         ) : (
           <>
             <div className="min-w-0 flex-1">
-              <span className="block font-semibold tracking-[-0.01em]">{cat.name}</span>
+              <span className="block font-semibold tracking-subtitle">{cat.name}</span>
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 {t("health.sync")} {cat.updateFrequency ? `${cat.updateFrequency} min` : t("health.default")}
               </span>
@@ -708,11 +708,11 @@ function SortableCategoryItem({
     </div>
     {/* Category settings dialog (#17) */}
     <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-      <DialogContent className="max-w-sm rounded-[2rem] border border-border/70 bg-background p-6 shadow-2xl">
+      <DialogContent className="max-w-sm rounded-sheet border border-border/70 bg-background p-6 shadow-overlay">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <Folder className="size-5 text-primary" />
-            <DialogTitle className="font-semibold tracking-[-0.02em]">{t("categories.categorySettingsTitle")} — {cat.name}</DialogTitle>
+            <DialogTitle className="font-semibold tracking-title">{t("categories.categorySettingsTitle")} — {cat.name}</DialogTitle>
           </div>
         </DialogHeader>
         <div className="space-y-1.5">
@@ -1081,7 +1081,7 @@ export function FeedManagement({
                           onClick={() => toggleCategory(groupId)}
                           className="flex w-full items-center gap-2 py-1.5 text-start text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
                         >
-                          <ChevronRight className={cn("w-4 h-4 transition-transform duration-200", expanded && "rotate-90")} />
+                          <ChevronRight className={cn("w-4 h-4 transition-transform duration-(--dur-base)", expanded && "rotate-90")} />
                           <Folder className="size-4 text-foreground" />
                           {groupName}
                           <span className="text-xs font-normal text-muted-foreground/60">({groupFeeds.length})</span>
@@ -1104,7 +1104,7 @@ export function FeedManagement({
                                     {feed.icon || "📰"}
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="truncate font-semibold tracking-[-0.01em] text-foreground text-sm">
+                                    <div className="truncate font-semibold tracking-subtitle text-foreground text-sm">
                                       {feed.name}
                                     </div>
                                     <div className="truncate text-xs text-muted-foreground">
@@ -1263,7 +1263,7 @@ export function FeedManagement({
                   <div className="mb-5 flex items-center gap-3">
                     <Tag className="h-5 w-5 text-primary" />
                     <div>
-                      <h3 className="font-semibold tracking-[-0.02em]">{t("labels.title")}</h3>
+                      <h3 className="font-semibold tracking-title">{t("labels.title")}</h3>
                       <p className="text-sm text-muted-foreground">{t("labels.description")}</p>
                     </div>
                   </div>
@@ -1321,7 +1321,7 @@ export function FeedManagement({
                   <div className="mb-5 flex items-center gap-3">
                     <Bookmark className="h-5 w-5 text-primary" />
                     <div>
-                      <h3 className="font-semibold tracking-[-0.02em]">{t("savedSearches.title")}</h3>
+                      <h3 className="font-semibold tracking-title">{t("savedSearches.title")}</h3>
                       <p className="text-sm text-muted-foreground">{t("savedSearches.description")}</p>
                     </div>
                   </div>
@@ -1421,7 +1421,7 @@ export function FeedManagement({
                   <div className="flex items-center gap-3">
                     <Activity className="h-5 w-5 text-primary" />
                     <div>
-                      <h3 className="font-semibold tracking-[-0.02em]">{t("health.title")}</h3>
+                      <h3 className="font-semibold tracking-title">{t("health.title")}</h3>
                       <p className="text-sm text-muted-foreground">{t("health.description")}</p>
                     </div>
                   </div>
@@ -1482,17 +1482,17 @@ export function FeedManagement({
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="truncate font-semibold tracking-[-0.01em]">{feed.name}</h4>
+                              <h4 className="truncate font-semibold tracking-subtitle">{feed.name}</h4>
                               <span className={cn(
-                                "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                                "rounded-full px-2 py-0.5 text-caption font-bold uppercase",
                                 feed.lastStatus === "error"
                                   ? "bg-destructive/10 text-destructive"
-                                  : "bg-green-500/10 text-green-600",
+                                  : "bg-success/10 text-success",
                               )}>
                                 {feed.lastStatus || "unknown"}
                               </span>
                               {feed.autoMuted && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-600">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-caption font-bold uppercase text-warning">
                                   <BellOff className="h-2.5 w-2.5" />
                                   {t("health.autoMuted")}
                                 </span>
@@ -1546,7 +1546,7 @@ export function FeedManagement({
                 <MigrationWizard onUpload={handleImport} isImporting={importOpml.isPending} />
 
                 <div className="space-y-4 rounded-2xl border border-border/60 bg-card p-7 shadow-sm">
-                  <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em] text-primary">
+                  <div className="flex items-center gap-3 text-xl font-semibold tracking-title text-primary">
                     <Upload className="w-6 h-6" />
                     {t("importExport.genericOpmlImport")}
                   </div>
@@ -1557,7 +1557,7 @@ export function FeedManagement({
                     <div className="rounded-2xl border border-border/60 bg-background/70 p-4 text-sm space-y-2">
                       <p className="font-medium">{t("importExport.importResult")}</p>
                       <div className="flex flex-wrap gap-3 text-xs">
-                        <span className="rounded-full bg-green-500/10 text-green-600 px-2.5 py-1 font-medium">
+                        <span className="rounded-full bg-success/10 text-success px-2.5 py-1 font-medium">
                           +{lastImportReport.feedsAdded} {t("importExport.new")}
                         </span>
                         <span className="rounded-full bg-accent/10 text-foreground px-2.5 py-1 font-medium">
@@ -1597,7 +1597,7 @@ export function FeedManagement({
 
                 <div className="space-y-4 rounded-2xl border border-border/60 bg-card p-7 shadow-sm">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em]">
+                    <div className="flex items-center gap-3 text-xl font-semibold tracking-title">
                       <Download className="w-6 h-6 text-muted-foreground" />
                       {t("importExport.exportSubscriptions")}
                     </div>
@@ -1654,7 +1654,7 @@ export function FeedManagement({
                 </div>
 
                 <div className="space-y-4 rounded-2xl border border-border/60 bg-card p-7 shadow-sm">
-                  <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em]">
+                  <div className="flex items-center gap-3 text-xl font-semibold tracking-title">
                     <Download className="w-6 h-6 text-muted-foreground" />
                     {t("importExport.exportAllDataJson")}
                   </div>
@@ -1728,18 +1728,18 @@ export function FeedManagement({
                       the -400 shades alone read fine on a dark background but
                       have poor contrast against a light one — same fix as the
                       privacy-warning banners elsewhere in settings. */}
-                  <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+                  <div className="rounded-2xl border border-info/20 bg-info/5 p-4 space-y-3">
                     <button
                       type="button"
                       onClick={() => setShowRuleTutorial((v) => !v)}
-                      className="flex w-full items-center justify-between gap-2 text-sm font-medium text-blue-700 dark:text-blue-400 active:scale-[0.99] transition-transform"
+                      className="flex w-full items-center justify-between gap-2 text-sm font-medium text-info active:scale-[0.99] transition-transform"
                       aria-expanded={showRuleTutorial}
                     >
                       <span className="flex items-center gap-2">
                         <Info className="w-4 h-4 shrink-0" />
                         {t("rules.howRulesWork")}
                       </span>
-                      <span className="text-xs text-blue-700/70 dark:text-blue-300/70">
+                      <span className="text-xs text-info">
                         {showRuleTutorial ? t("rules.hide") : t("rules.show")}
                       </span>
                     </button>
@@ -1898,7 +1898,7 @@ export function FeedManagement({
                           <label className="text-xs font-medium text-muted-foreground">
                             {t("rules.actionsRunInOrder")}
                             {newRuleTrigger === "feed_error" && (
-                              <span className="ms-2 text-xs font-semibold uppercase tracking-wider text-amber-500">{t("rules.notifyWebhookOnly")}</span>
+                              <span className="ms-2 text-xs font-semibold uppercase tracking-wider text-warning">{t("rules.notifyWebhookOnly")}</span>
                             )}
                           </label>
                           <ActionListEditor
@@ -2010,9 +2010,9 @@ export function FeedManagement({
                   )}
 
                   {keywordAlerts.length > 0 && (
-                    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="rounded-2xl border border-warning/30 bg-warning/5 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                        <p className="text-sm font-medium text-warning">
                           {t("rules.legacyAlertsFound", { count: keywordAlerts.length })}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -2097,26 +2097,26 @@ export function FeedManagement({
                                 <div className="mt-1.5 flex flex-wrap gap-1">
                                   <span
                                     className={cn(
-                                      "text-[10px] px-1.5 py-0.5 rounded-full",
+                                      "text-caption px-1.5 py-0.5 rounded-full",
                                       rule.trigger === "feed_error"
-                                        ? "bg-amber-500/10 text-amber-600"
+                                        ? "bg-warning/10 text-warning"
                                         : "bg-primary/10 text-foreground",
                                     )}
                                   >
                                     {rule.trigger === "feed_error" ? t("rules.onFeedError") : t("rules.onArticleMatch")}
                                   </span>
                                   {scopeLabel && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/10 text-foreground">
+                                    <span className="text-caption px-1.5 py-0.5 rounded-full bg-accent/10 text-foreground">
                                       {scopeLabel}
                                     </span>
                                   )}
                                   {ruleActions.length === 0 ? (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">—</span>
+                                    <span className="text-caption px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">—</span>
                                   ) : (
                                     ruleActions.map((a, idx) => (
                                       <span
                                         key={`${rule.id}-act-${idx}-${a}`}
-                                        className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground"
+                                        className="text-caption px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground"
                                       >
                                         {idx + 1}. {actionLabel(a, catalog, labels, t)}
                                       </span>
@@ -2248,7 +2248,7 @@ export function FeedManagement({
                                   <label className="text-xs font-medium text-muted-foreground">
                                     {t("rules.actionsRunInOrder")}
                                     {editRuleTrigger === "feed_error" && (
-                                      <span className="ms-2 text-xs font-semibold uppercase tracking-wider text-amber-500">{t("rules.notifyWebhookOnly")}</span>
+                                      <span className="ms-2 text-xs font-semibold uppercase tracking-wider text-warning">{t("rules.notifyWebhookOnly")}</span>
                                     )}
                                   </label>
                                   <ActionListEditor
@@ -2342,11 +2342,10 @@ export function FeedManagement({
                     </Button>
                   </div>
 
-                  {/* text-amber-700 in light mode / dark:text-amber-400 in dark
-                      mode: -400 alone has poor contrast on a light background —
-                      same fix as the blue tutorial banner above. */}
-                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
+                  {/* text-warning is a role token (darker in light mode, lighter in
+                      dark mode), so it keeps contrast on both backgrounds. */}
+                  <div className="rounded-2xl border border-warning/20 bg-warning/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-warning">
                       <Info className="w-4 h-4 shrink-0" />
                       {t("alerts.howAlertsWork")}
                     </div>
@@ -2685,7 +2684,7 @@ export function FeedManagement({
                                   <div className="flex min-w-0 items-center gap-2">
                                     <p className="font-medium text-sm truncate">{alert.name}</p>
                                     {matchCount > 0 && (
-                                      <span className="shrink-0 rounded-full bg-primary/10 text-foreground text-[10px] font-medium px-1.5 py-0.5">
+                                      <span className="shrink-0 rounded-full bg-primary/10 text-foreground text-caption font-medium px-1.5 py-0.5">
                                         {t("alerts.matchCount", { count: matchCount })}
                                       </span>
                                     )}
@@ -2972,7 +2971,7 @@ function MigrationWizard({
   return (
     <div className="space-y-4 rounded-3xl border border-primary/20 bg-primary/[0.04] p-7 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3 text-xl font-semibold tracking-[-0.02em] text-primary">
+        <div className="flex items-center gap-3 text-xl font-semibold tracking-title text-primary">
           <Compass className="w-6 h-6" />
           {t("migration.migrationWizard")}
         </div>
