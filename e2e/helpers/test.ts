@@ -43,9 +43,14 @@ export class App {
   readerScroller(): Locator {
     return this.page.locator('[data-pane="reader"] [data-testid="reader-scroller"]');
   }
-  /** The shell has written its history entry (`history.state.ff`): seeding / alias rewrite done. */
+  /**
+   * The shell has booted its history (`<html data-nav-ready>`): seeding / alias
+   * rewrite are done, and from here on every nav op writes history exactly
+   * once, synchronously (no late router write a Back could race with).
+   */
   async navReady() {
-    await expect.poll(() => this.page.evaluate(() => !!(history.state as { ff?: unknown } | null)?.ff)).toBe(true);
+    await expect(this.page.locator("html")).toHaveAttribute("data-nav-ready", "true");
+    expect(await this.page.evaluate(() => !!(history.state as { ff?: unknown } | null)?.ff)).toBe(true);
   }
   /** Current URL as path + search ("/?feed=…"). */
   where(): string {

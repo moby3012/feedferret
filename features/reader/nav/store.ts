@@ -7,7 +7,7 @@
 import { createContext, createElement, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { showApplies } from "@/features/articles/scope";
 import { getLayoutClass, isCoarsePointer, subscribeLayoutClass } from "../layout/layout-class";
-import { isIOS, keepFfAcrossRouterWrites, pushEntry, readFf, replaceEntry, setNavAnim, whenRouterReady, type FfState } from "./history";
+import { isIOS, keepFfAcrossRouterWrites, pushEntry, readFf, replaceEntry, setNavAnim, setNavReady, whenRouterReady, type FfState } from "./history";
 import {
   TAB_ROOTS,
   entryKindOf,
@@ -153,7 +153,16 @@ function run(task: () => void | Promise<void>): Promise<void> {
   return p;
 }
 
-function onPopState() {
+/**
+ * The single popstate listener (capture phase: it runs before Next's). A
+ * traversal between two shell entries is ours alone — Next's router would
+ * `restore` it and replaceState() the landed entry once that commits, i.e. a
+ * second, late history write after every Back. Traversals to another route
+ * (no `ff` / another path) are left to Next, which unmounts the shell.
+ */
+function onPopState(event?: Event) {
+  const ownEntry = window.location.pathname === "/" && !!readFf();
+  if (ownEntry) event?.stopImmediatePropagation?.();
   if (pending) {
     const p = pending;
     pending = null;
@@ -389,7 +398,7 @@ export const nav = {
  */
 export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
   if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
-  window.addEventListener("popstate", onPopState);
+  window.addEventListener("popstate", onPopState, { capture: true });
   let unguard = () => {};
   let disposed = false;
   const settleBoot = () => {
@@ -410,6 +419,7 @@ export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
     }
     setNavAnim("none");
     commit({ loc, overlay: null, index, cause: "init" });
+    setNavReady(true);
     if (intents.addFeed || intents.sharedUrl) onIntents(intents);
   };
   const cancel = whenRouterReady(() => {
@@ -431,9 +441,10 @@ export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
     unguard();
     unwatchLayout();
     disposed = true;
+    setNavReady(false);
     stackLayout = null;
     reconcileQueued = false;
-    window.removeEventListener("popstate", onPopState);
+    window.removeEventListener("popstate", onPopState, { capture: true });
     if (pending) window.clearTimeout(pending.timer);
     pending = null;
     queue = null;

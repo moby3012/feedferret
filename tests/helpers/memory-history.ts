@@ -9,6 +9,11 @@
 const ORIGIN = "https://feedferret.test";
 const EXTERNAL = "https://elsewhere.test/page";
 
+export interface PopEvent {
+  type: string;
+  stopImmediatePropagation: () => void;
+}
+
 interface Entry {
   url: URL;
   state: unknown;
@@ -19,7 +24,7 @@ const clone = <T>(value: T): T => (value === undefined ? value : structuredClone
 export class MemoryHistory {
   entries: Entry[];
   index: number;
-  private listeners = new Set<(e: { type: string }) => void>();
+  private listeners = new Set<(e: PopEvent) => void>();
 
   constructor(initialPath: string) {
     this.entries = [
@@ -52,7 +57,13 @@ export class MemoryHistory {
       const target = Math.max(0, Math.min(this.entries.length - 1, this.index + delta));
       if (target === this.index) return;
       this.index = target;
-      this.listeners.forEach((l) => l({ type: "popstate" }));
+      // Like a DOM event: a listener can stop the ones registered after it.
+      let stopped = false;
+      const event = { type: "popstate", stopImmediatePropagation: () => void (stopped = true) };
+      for (const l of [...this.listeners]) {
+        if (stopped) break;
+        l(event);
+      }
     }, 0);
   }
   back() {
@@ -85,10 +96,10 @@ export class MemoryHistory {
     return this.current.url.pathname + this.current.url.search;
   }
 
-  addListener(fn: (e: { type: string }) => void) {
+  addListener(fn: (e: PopEvent) => void) {
     this.listeners.add(fn);
   }
-  removeListener(fn: (e: { type: string }) => void) {
+  removeListener(fn: (e: PopEvent) => void) {
     this.listeners.delete(fn);
   }
 }
@@ -110,10 +121,10 @@ export function installMemoryWindow(history: MemoryHistory): () => void {
       const u = history.current.url;
       return { href: u.href, pathname: u.pathname, search: u.search, origin: u.origin };
     },
-    addEventListener: (type: string, fn: (e: { type: string }) => void) => {
+    addEventListener: (type: string, fn: (e: PopEvent) => void) => {
       if (type === "popstate") history.addListener(fn);
     },
-    removeEventListener: (type: string, fn: (e: { type: string }) => void) => {
+    removeEventListener: (type: string, fn: (e: PopEvent) => void) => {
       if (type === "popstate") history.removeListener(fn);
     },
     setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms) as unknown as number,

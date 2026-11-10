@@ -16,7 +16,11 @@
   inset: 0;
   display: grid;
   grid-template: "list" minmax(0, 1fr) / minmax(0, 1fr);
-  overflow: hidden;
+  /* clip, not hidden: an overflow:hidden box is still a scroll container that
+     scrollIntoView / focus() / find-in-page can scroll programmatically. The
+     off-canvas panes (translateX(100%)) give the shell a horizontal overflow,
+     so any such scroll slid the whole shell sideways. */
+  overflow: clip;
   background: var(--surface-base);
 }
 
@@ -26,7 +30,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .ff-shell > [data-pane^="list-"][data-active="false"] {
@@ -58,6 +62,9 @@
   .ff-shell > [data-pane="list-feeds"],
   .ff-shell > [data-pane="reader"] {
     visibility: hidden;
+    /* visibility flips only after the pop transition: until then the closing
+       layer must not swallow taps meant for the list it reveals. */
+    pointer-events: none;
     transform: translateX(100%);
     transition:
       transform var(--dur-base) var(--ease-in),

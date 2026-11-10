@@ -120,9 +120,51 @@ describe("deep-link stack seeding", () => {
     expect(history.here()).toBe("/");
     expect((history.state as { ff: unknown }).ff).toEqual({ i: 0, k: "root" });
     expect(here().articleId).toBeNull();
-    // Next writes without custom state (refresh / navigation) are not pinned.
+    // Next's router does not follow in-shell entries: its own later writes of
+    // the shell path (refresh / server-action commit) carry a stale URL and no
+    // custom state — the entry keeps its URL and `ff`.
     routerHistory.replaceState({ __NA: true }, "", "/?tab=search&q=x");
-    expect(history.here()).toBe("/?tab=search&q=x");
+    expect(history.here()).toBe("/");
+    expect((history.state as { ff: unknown }).ff).toEqual({ i: 0, k: "root" });
+    // A router navigation to another path passes unchanged.
+    routerHistory.replaceState({ __NA: true }, "", "/login");
+    expect(history.here()).toBe("/login");
+  });
+
+  it("every write carries Next's keys (its history patch then skips the router sync: no late echo write)", async () => {
+    layout.current = "expanded";
+    history = new MemoryHistory("/?a=X");
+    const tree = { tree: ["", {}], renderedSearch: "?a=X" };
+    history.current.state = { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: tree };
+    uninstall = installMemoryWindow(history);
+    vi.resetModules();
+    store = await import("../../features/reader/nav/store");
+    stop = store.bootNav(() => {});
+    await settle();
+    expect(history.backStack()).toEqual(["/", "/?a=X"]);
+    await store.nav.stepArticle("Y");
+    for (const entry of history.entries.slice(1)) expect(entry.state).toMatchObject({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: tree });
+  });
+
+  it("a traversal between shell entries is not passed on to Next's popstate listener", async () => {
+    await boot("/?a=X", "expanded");
+    const routerPop = vi.fn();
+    (globalThis as unknown as { window: Window }).window.addEventListener("popstate", routerPop);
+    await systemBack(); // article → seeded list: ours alone
+    expect(history.here()).toBe("/");
+    expect(routerPop).not.toHaveBeenCalled();
+    await systemBack(); // leaving the app: not a shell entry
+    expect(history.exited).toBe(true);
+    expect(routerPop).toHaveBeenCalledTimes(1);
+  });
+
+  it("<html data-nav-ready> is set once the stack is seeded and cleared on unmount", async () => {
+    await boot("/?feed=F&a=X");
+    const dataset = (globalThis as unknown as { document: { documentElement: { dataset: Record<string, string> } } }).document.documentElement.dataset;
+    expect(dataset.navReady).toBe("true");
+    stop();
+    expect(dataset.navReady).toBeUndefined();
+    stop = () => {};
   });
 
   it("UI up() walks the same levels and never writes past the root", async () => {
