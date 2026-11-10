@@ -309,11 +309,15 @@ export function useUpdateFeedOrder() {
     })
 }
 
-export function useReadingPreferences(enabled = true) {
+type ReadingPreferences = Awaited<ReturnType<typeof getReadingPreferences>>
+
+/** `initialData`: the server's copy (root layout), so the first render already has it — no request at boot. */
+export function useReadingPreferences(enabled = true, initialData?: ReadingPreferences | null) {
     return useQuery({
         queryKey: ["reading-preferences"],
         queryFn: () => getReadingPreferences(),
         enabled,
+        initialData: initialData ?? undefined,
     })
 }
 

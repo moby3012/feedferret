@@ -22,6 +22,7 @@ import { buildXPathArticles } from "@/lib/feed-fetcher";
 import { createUndoToken, claimUndoToken, releaseUndoToken } from "@/lib/undo-tokens";
 import { isMarkAllAllowed } from "@/lib/view-scope";
 import { buildViewScope, legacyViewScopeInput } from "@/server/articles/view-scope";
+import { loadCategories, loadFeeds, loadLabels, loadNotifications, loadSavedSearches } from "@/server/bootstrap";
 import { applyRetentionPoliciesForUser } from "@/lib/retention";
 import { randomBytes } from "crypto";
 import { decryptIfValue } from "@/lib/crypto";
@@ -58,68 +59,19 @@ export async function refreshFeed(feedId: string) {
 export async function getFeeds() {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
-
-    // Unread counts via a single userId-scoped groupBy (served by the
-    // (userId, isRead, isSpoiler, feedId) index) instead of a per-feed
-    // relation _count subquery that scans Article across all users.
-    const [feeds, unreadCounts] = await Promise.all([
-        db.feed.findMany({
-            where: { userId: session.user.id },
-            include: { category: true },
-            orderBy: [
-                { order: "asc" },
-                { name: "asc" }
-            ],
-        }),
-        db.article.groupBy({
-            by: ["feedId"],
-            where: { userId: session.user.id, isRead: false, isSpoiler: false },
-            _count: { _all: true },
-        }),
-    ]);
-    const unreadByFeed = new Map<string, number>(
-        unreadCounts.map((item: { feedId: string; _count: { _all: number } }) => [item.feedId, item._count._all])
-    );
-    return feeds.map((feed) => ({
-        ...feed,
-        _count: { articles: unreadByFeed.get(feed.id) ?? 0 },
-    }));
+    return loadFeeds(session.user.id);
 }
 
 export async function getCategories() {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
-
-    return await db.category.findMany({
-        where: { userId: session.user.id },
-        include: {
-            children: {
-                orderBy: { order: "asc" }
-            },
-        },
-        orderBy: { order: "asc" },
-    });
+    return loadCategories(session.user.id);
 }
 
 export async function getLabels() {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
-
-    return await db.label.findMany({
-        where: { userId: session.user.id },
-        include: {
-            _count: {
-                select: {
-                    articles: {
-                        where: {
-                            article: { isRead: false },
-                        },
-                    },
-                },
-            },
-        },
-        orderBy: { name: "asc" },
-    });
+    return loadLabels(session.user.id);
 }
 
 export async function createLabel(data: { name: string; color?: string }) {
@@ -214,11 +166,7 @@ export async function setArticleLabels(articleId: string, labelIds: string[]) {
 export async function getSavedSearches() {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
-
-    return await db.savedSearch.findMany({
-        where: { userId: session.user.id },
-        orderBy: [{ order: "asc" }, { name: "asc" }],
-    });
+    return loadSavedSearches(session.user.id);
 }
 
 export async function createSavedSearch(data: { name: string; query: string }) {
@@ -1496,23 +1444,7 @@ export async function getAlertHistory(alertId: string, limit = 20) {
 export async function getNotifications(limit = 20) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
-
-    return db.notification.findMany({
-        where: { userId: session.user.id },
-        include: {
-            article: {
-                select: {
-                    id: true,
-                    title: true,
-                    link: true,
-                    feed: { select: { name: true, icon: true } },
-                },
-            },
-            alert: { select: { name: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: Math.min(Math.max(limit, 1), 100),
-    });
+    return loadNotifications(session.user.id, limit);
 }
 
 export async function markNotificationRead(notificationId: string) {

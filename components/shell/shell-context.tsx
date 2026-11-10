@@ -103,6 +103,10 @@ function normalizeViewMode(value?: string | null): ViewMode {
   return value === "grid" ? "magazine" : "list";
 }
 
+function sortOrderOf(prefs: { defaultArticleSort?: string | null } | undefined): SortOrder {
+  return prefs?.defaultArticleSort === "oldest" ? "oldest" : "newest";
+}
+
 export function ShellProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const router = useRouter();
@@ -118,14 +122,17 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const createSavedSearch = useCreateSavedSearch();
   const refreshMutation = useRefresh();
 
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
-  const prefsApplied = useRef(false);
+  // Prefs are in the cache at the first render after a cold start (server
+  // bootstrap): start with the user's view mode / sort, so the server-rendered
+  // rows are the ones that stay (no re-render, no layout shift, same list key).
+  const [viewMode, setViewMode] = useState<ViewMode>(() => normalizeViewMode(prefs?.defaultViewMode));
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() => sortOrderOf(prefs));
+  const prefsApplied = useRef(!!prefs);
   useEffect(() => {
     if (!prefs || prefsApplied.current) return;
     prefsApplied.current = true;
     setViewMode(normalizeViewMode(prefs.defaultViewMode));
-    setSortOrder(prefs.defaultArticleSort === "oldest" ? "oldest" : "newest");
+    setSortOrder(sortOrderOf(prefs));
   }, [prefs]);
 
   const [session, setSession] = useState<{ key: string | null; ids: string[] }>({ key: null, ids: [] });

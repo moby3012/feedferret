@@ -1,5 +1,141 @@
+import { cache } from "react";
 import { db } from "@/lib/db";
 import type { Counts } from "@/features/bootstrap/types";
+
+// Per-user entity reads of the reader shell. The read server actions
+// (app/actions/feeds.ts, app/actions/settings.ts) and the server-side cold-start
+// bootstrap (components/shell/bootstrap-hydrator.tsx) share them, so a hydrated
+// cache entry has exactly the shape a client refetch returns.
+
+export async function loadFeeds(userId: string) {
+  // Unread counts via a single userId-scoped groupBy (served by the
+  // (userId, isRead, isSpoiler, feedId) index) instead of a per-feed
+  // relation _count subquery that scans Article across all users.
+  const [feeds, unreadCounts] = await Promise.all([
+    db.feed.findMany({
+      where: { userId },
+      include: { category: true },
+      orderBy: [{ order: "asc" }, { name: "asc" }],
+    }),
+    db.article.groupBy({
+      by: ["feedId"],
+      where: { userId, isRead: false, isSpoiler: false },
+      _count: { _all: true },
+    }),
+  ]);
+  const unreadByFeed = new Map<string, number>(
+    unreadCounts.map((item: { feedId: string; _count: { _all: number } }) => [item.feedId, item._count._all]),
+  );
+  return feeds.map((feed) => ({
+    ...feed,
+    _count: { articles: unreadByFeed.get(feed.id) ?? 0 },
+  }));
+}
+
+export async function loadCategories(userId: string) {
+  return db.category.findMany({
+    where: { userId },
+    include: { children: { orderBy: { order: "asc" } } },
+    orderBy: { order: "asc" },
+  });
+}
+
+export async function loadLabels(userId: string) {
+  return db.label.findMany({
+    where: { userId },
+    include: {
+      _count: {
+        select: {
+          articles: { where: { article: { isRead: false } } },
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+}
+
+export async function loadSavedSearches(userId: string) {
+  return db.savedSearch.findMany({
+    where: { userId },
+    orderBy: [{ order: "asc" }, { name: "asc" }],
+  });
+}
+
+/** The sidebar's notification list (newest first). */
+export async function loadNotifications(userId: string, limit = 20) {
+  return db.notification.findMany({
+    where: { userId },
+    include: {
+      article: {
+        select: {
+          id: true,
+          title: true,
+          link: true,
+          feed: { select: { name: true, icon: true } },
+        },
+      },
+      alert: { select: { name: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(Math.max(limit, 1), 100),
+  });
+}
+
+export async function loadReadingPreferences(userId: string) {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      openOriginalByDefault: true,
+      markReadAfterDelaySecs: true,
+      defaultViewMode: true,
+      readerWidth: true,
+      readerFontSize: true,
+      defaultArticleSort: true,
+      accentColor: true,
+      secondaryColor: true,
+      hideDuplicates: true,
+      markReadOnScroll: true,
+      markReadOnAdvance: true,
+      storyClustering: true,
+      clusterReadMode: true,
+      layoutDirection: true,
+      hideEmptyFeeds: true,
+      hideEmptyLabels: true,
+      uiLanguage: true,
+      displayTimezone: true,
+      autoMuteFailingFeedsAfter: true,
+    },
+  });
+  return {
+    openOriginalByDefault: user?.openOriginalByDefault ?? false,
+    markReadAfterDelaySecs: user?.markReadAfterDelaySecs ?? null,
+    defaultViewMode: user?.defaultViewMode ?? "list",
+    readerWidth: user?.readerWidth ?? "normal",
+    readerFontSize: user?.readerFontSize ?? "medium",
+    defaultArticleSort: user?.defaultArticleSort ?? "newest",
+    accentColor: user?.accentColor ?? "#5BA4CF",
+    secondaryColor: user?.secondaryColor ?? "#F0963C",
+    hideDuplicates: user?.hideDuplicates ?? true,
+    markReadOnScroll: user?.markReadOnScroll ?? false,
+    markReadOnAdvance: user?.markReadOnAdvance ?? false,
+    storyClustering: user?.storyClustering ?? true,
+    clusterReadMode: (user?.clusterReadMode === "story" ? "story" : "article") as "story" | "article",
+    layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
+    hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
+    hideEmptyLabels: user?.hideEmptyLabels ?? false,
+    uiLanguage: user?.uiLanguage ?? "en",
+    displayTimezone: user?.displayTimezone ?? null,
+    autoMuteFailingFeedsAfter: user?.autoMuteFailingFeedsAfter ?? 10,
+  };
+}
+
+export type ReadingPreferences = Awaited<ReturnType<typeof loadReadingPreferences>>;
+
+/**
+ * Request-scoped (React `cache`): the root layout (theme / accent / text
+ * direction) and the reader page's bootstrap share one query per request.
+ */
+export const readingPreferencesFor = cache((userId: string) => loadReadingPreferences(userId));
 
 /**
  * All sidebar / header / badge counts of one user in one round of parallel,
@@ -35,3 +171,19 @@ export async function getCounts(userId: string): Promise<Counts> {
   }
   return { unreadTotal, byFeed, byLabel, later, starred, spoiler, notifications };
 }
+
+/** Everything the reader shell reads at boot except the article list itself. */
+export async function getBootstrap(userId: string) {
+  const [feeds, categories, labels, savedSearches, prefs, counts, notifications] = await Promise.all([
+    loadFeeds(userId),
+    loadCategories(userId),
+    loadLabels(userId),
+    loadSavedSearches(userId),
+    readingPreferencesFor(userId),
+    getCounts(userId),
+    loadNotifications(userId),
+  ]);
+  return { feeds, categories, labels, savedSearches, prefs, counts, notifications };
+}
+
+export type AppBootstrap = Awaited<ReturnType<typeof getBootstrap>>;

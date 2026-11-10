@@ -8,10 +8,12 @@ import { ReaderPane } from "@/components/reader/reader-pane";
 import { useCounts, useScopeUnread } from "@/features/bootstrap/queries";
 import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import type { UiPrefs } from "@/features/reader/layout/ui-prefs";
+import { UiPrefsProvider } from "@/features/reader/layout/ui-prefs-context";
 import { TAB_IDS } from "@/features/reader/nav/location";
 import { NavProvider, bootNav, useNav } from "@/features/reader/nav/store";
 import { useAppBadge } from "@/hooks/use-app-badge";
 import { markInAppNavigation } from "@/lib/in-app-back";
+import { browserStorage, recordSyncResult, syncedWithin } from "@/features/sync/last-sync";
 import { BottomBar } from "./bottom-bar";
 import { PaneResizer } from "./pane-resizer";
 import { ShellOverlays } from "./shell-overlays";
@@ -24,6 +26,8 @@ interface ReaderShellProps {
   /** Request URL (`/?…`) — the nav store's server snapshot, so SSR and hydration agree. */
   initialHref: string;
   initialUi: UiPrefs;
+  /** Signed-in user (the page gates on the session): keys per-user browser state. */
+  userId: string;
 }
 
 /**
@@ -31,17 +35,19 @@ interface ReaderShellProps {
  * shell.css) places the panes from the root's data attributes; nothing here
  * branches on the viewport before mount, so there is no layout spinner.
  */
-export function ReaderShell({ initialHref, initialUi }: ReaderShellProps) {
+export function ReaderShell({ initialHref, initialUi, userId }: ReaderShellProps) {
   return (
     <NavProvider initialHref={initialHref}>
-      <ShellProvider>
-        <ShellRoot initialUi={initialUi} />
-      </ShellProvider>
+      <UiPrefsProvider initialUi={initialUi}>
+        <ShellProvider>
+          <ShellRoot initialUi={initialUi} userId={userId} />
+        </ShellProvider>
+      </UiPrefsProvider>
     </NavProvider>
   );
 }
 
-function ShellRoot({ initialUi }: { initialUi: UiPrefs }) {
+function ShellRoot({ initialUi, userId }: { initialUi: UiPrefs; userId: string }) {
   const tab = useNav((s) => s.loc.tab);
   const hasScope = useNav((s) => !!s.loc.scope);
   const readerOpen = useNav((s) => !!s.loc.articleId);
@@ -51,7 +57,7 @@ function ShellRoot({ initialUi }: { initialUi: UiPrefs }) {
   useShellKeys(shell);
   useSearchCommit();
   useBoot(shell);
-  useBackgroundWork();
+  useBackgroundWork(userId);
 
   const style = useMemo(
     () => (initialUi.listW ? ({ "--list-w": `${initialUi.listW}px` } as CSSProperties) : undefined),
@@ -98,8 +104,11 @@ function useBoot(shell: ShellActions) {
   }, [shell]);
 }
 
-/** Lazy sync on load + app badge. */
-function useBackgroundWork() {
+/** Boot sync is skipped when the last one finished less than this ago. */
+const BOOT_SYNC_MIN_INTERVAL_MS = 5 * 60_000;
+
+/** Lazy sync on load (at most every 5 min per user) + app badge. */
+function useBackgroundWork(userId: string) {
   const t = useTranslations("sidebar");
   const counts = useCounts(true);
   const unreadBadge = useMemo(() => Object.values(counts.byFeed).reduce((sum, n) => sum + n, 0), [counts.byFeed]);
@@ -107,17 +116,22 @@ function useBackgroundWork() {
 
   const toastShown = useRef(false);
   useEffect(() => {
+    // A reload / reopen within minutes of this user's last completed sync
+    // does not sync again (spec §2.5.4); the server's background sync keeps
+    // feeds fresh meanwhile.
+    if (syncedWithin(browserStorage(), userId, BOOT_SYNC_MIN_INTERVAL_MS)) return;
     fetch("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" } })
-      .then((res) => {
+      .then(async (res) => {
         if (!res.ok) throw new Error(`Sync request failed (${res.status})`);
-        localStorage.setItem("lastSync", new Date().toISOString());
+        // Stamped only for a sync that ran for this user (not `already_syncing`).
+        recordSyncResult(browserStorage(), userId, await res.json().catch(() => null));
       })
       .catch(() => {
         if (toastShown.current) return;
         toastShown.current = true;
         toast.error(t("syncFailedToast"));
       });
-  }, [t]);
+  }, [t, userId]);
 }
 
 /** Announces the unread count of the bound scope (spec §4.9.8: on scope change, not per mark-read). */

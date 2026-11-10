@@ -1,13 +1,13 @@
 "use client";
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArticleList } from "@/components/article-list";
 import { EndOfListCard } from "@/components/end-of-list-card";
 import { BriefingCard } from "@/components/briefing/briefing-card";
 import { RssHeader } from "@/components/rss-header";
-import { SearchResultsView } from "@/components/search-results-view";
 import { OfflineChip } from "@/components/shell/offline-chip";
 import { useShellActions, useShellData, type ShellData } from "@/components/shell/shell-context";
 import { clearSearch, searchDraft, useSearchDraft } from "@/components/shell/search-draft";
@@ -15,6 +15,7 @@ import { toLegacyArticle } from "@/features/articles/legacy-adapter";
 import { useArticleActions, useIsMarkingViewRead } from "@/features/articles/mutations";
 import { prefetchArticle } from "@/features/articles/prefetch";
 import { useArticleList, type ArticleListResult } from "@/features/articles/queries";
+import { showsBriefing } from "@/features/briefing/api";
 import { useBriefing } from "@/features/briefing/queries";
 import { showApplies, type ListKey } from "@/features/articles/scope";
 import { useCounts, useOnline, useScopeUnread } from "@/features/bootstrap/queries";
@@ -25,6 +26,9 @@ import { nav, useNav } from "@/features/reader/nav/store";
 import { useReleaseArticleSpoiler } from "@/hooks/use-rss-data";
 import { scopeTitle } from "./scope-title";
 import { SpoilerGate } from "./spoiler-gate";
+
+// Search results only render for `?q=`: their own chunk.
+const SearchResultsView = dynamic(() => import("@/components/search-results-view").then((m) => m.SearchResultsView));
 
 /**
  * One list pane per tab (Neu · Gemerkt · Feeds · Suche). Mounts on first
@@ -87,7 +91,7 @@ function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: bool
   // K2 card: shown on the Neu list (all, unread) from the first row paint on.
   // Its GET starts here, together with the list query, so a fast answer is
   // part of the first paint (the card then opens by itself).
-  const showBriefing = tab === "new" && loc.scope?.kind === "all" && loc.show === "unread";
+  const showBriefing = showsBriefing(tab, loc);
   useBriefing("new", showBriefing);
   const counts = useCounts(true);
   const scopeUnread = useScopeUnread(loc.scope, data.feeds, true);

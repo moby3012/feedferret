@@ -52,7 +52,7 @@ async function sampleRows(page: Page) {
     const tick = () => {
       const pane = document.querySelector('[data-pane^="list-"][data-active="true"]');
       const row = pane?.querySelector("[data-article-id]");
-      if (row) {
+      if (row && row.getClientRects().length > 0) {
         const c = pane?.querySelector('[data-testid="briefing-card"]');
         samples.push({
           y: Math.round(row.getBoundingClientRect().top * 10) / 10,
@@ -70,6 +70,20 @@ async function sampleRows(page: Page) {
 
 const samplesOf = (page: Page) => page.evaluate(() => (window as unknown as { __rowSamples: RowSample[] }).__rowSamples.slice());
 const ys = (samples: RowSample[]) => [...new Set(samples.map((s) => s.y))];
+
+/**
+ * Document load of `/` without the server bootstrap (as when its prefetch
+ * failed): list and card load through their own GETs, as before the cold-start
+ * cache. The request carries a router fetch's Fetch Metadata, which skips it.
+ */
+async function withoutBootstrap(page: Page) {
+  await page.route("**/*", async (route) => {
+    const r = route.request();
+    if (r.resourceType() !== "document" || new URL(r.url()).pathname !== "/") return route.fallback();
+    const response = await route.fetch({ headers: { ...(await r.allHeaders()), "sec-fetch-dest": "empty" } });
+    await route.fulfill({ response });
+  });
+}
 
 /** Slow briefing GET (the list answers first); POSTs untouched. */
 async function delayBriefingGet(page: Page, ms = 700) {
@@ -203,6 +217,7 @@ test.describe("briefing card", () => {
 
   test("slow briefing GET: the card header is there from the first row paint, stays collapsed, rows never move", async ({ app, page }) => {
     resetBriefing(app.userKey);
+    await withoutBootstrap(page);
     await delayBriefingGet(page);
     await sampleRows(page);
     await page.goto("/");
@@ -254,6 +269,7 @@ test.describe("briefing card", () => {
   test("local provider: auto-generation after mount streams into the header only; rows never move", async ({ app, page }) => {
     setAiProvider(app.userKey, "fake", "fake-local");
     const posts = trackBriefingPosts(page);
+    await withoutBootstrap(page);
     await delayBriefingGet(page);
     await sampleRows(page);
     await page.goto("/");
@@ -276,6 +292,7 @@ test.describe("briefing card", () => {
 
   test("rows move only after the user expands the card", async ({ app, page }) => {
     resetBriefing(app.userKey);
+    await withoutBootstrap(page);
     await delayBriefingGet(page);
     await sampleRows(page);
     await page.goto("/");

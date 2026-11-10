@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState, memo } from "react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
-import { RssSidebar } from "@/components/rss-sidebar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useCounts } from "@/features/bootstrap/queries";
 import { useLayoutClass } from "@/features/reader/layout/layout-class";
@@ -14,6 +14,11 @@ import { useShellActions, useShellData } from "./shell-context";
 // SourcesView lands (PR 7): the sources column on expanded / the Feeds root on
 // compact (`SourcesPane`), and a drawer on medium + the compact feed sheet
 // (`SourcesSheet`). Selection goes through the nav store.
+
+// The sidebar (with dnd-kit reordering) only ever mounts after hydration —
+// expanded column, compact Feeds root, sheet / drawer — so it is a chunk of
+// its own instead of part of the cold-start bundle.
+const RssSidebar = dynamic(() => import("@/components/rss-sidebar").then((m) => m.RssSidebar), { ssr: false });
 
 function useSidebarProps() {
   const t = useTranslations("sidebar");

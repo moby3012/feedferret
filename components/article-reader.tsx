@@ -38,6 +38,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ReaderEmptyState } from "@/components/reader/reader-empty";
+// KaTeX math (fonts + layout CSS; no colours of its own — it inherits
+// .article-content's theme-aware text colour) and the syntax-highlighting
+// theme of fenced code blocks (one dark theme: prose code blocks have a fixed
+// dark background in both site themes). Imported here, not in the root
+// layout: they ship with the lazily loaded reader chunk, off the critical path.
+import "katex/dist/katex.min.css";
+import "highlight.js/styles/atom-one-dark.css";
 
 interface ArticleReaderProps {
   article: Article | null;
@@ -294,29 +302,7 @@ export function ArticleReader({
     };
   }, [article?.id, hasNextArticle, hasPreviousArticle, handleNextArticle, handlePreviousArticle]);
 
-  if (!article) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-background animate-fade-in">
-        <div className="text-center max-w-md px-8">
-          <div className="w-24 h-24 rounded-3xl bg-muted flex items-center justify-center mx-auto mb-8 shadow-lg overflow-hidden p-6 border border-border/50">
-            <Image
-              src="/logo.svg"
-              alt="FeedFerret Logo"
-              width={48}
-              height={48}
-              className="w-12 h-12 invert dark:invert-0"
-            />
-          </div>
-          <h2 className="text-2xl font-semibold text-foreground mb-3 text-balance">
-            {t("selectArticle")}
-          </h2>
-          <p className="text-lg text-muted-foreground leading-relaxed">
-            {t("selectArticleDescription")}
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (!article) return <ReaderEmptyState />;
 
   const openOriginal = () => {
     if (!article.link) return;

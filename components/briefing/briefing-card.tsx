@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Sparkles, Square, Volume2 } from "lucide-react";
@@ -8,28 +8,22 @@ import { Button } from "@/components/ui/button";
 import { postBriefingSeen, briefingKey } from "@/features/briefing/api";
 import { useBriefing } from "@/features/briefing/queries";
 import { useBriefingStream } from "@/features/briefing/use-briefing-stream";
-import { readUiPrefsFromDocument, writeUiPrefs } from "@/features/reader/layout/ui-prefs";
+import { updateUiPrefs, useUiPrefs } from "@/features/reader/layout/ui-prefs-context";
 import { nav } from "@/features/reader/nav/store";
 import type { BriefingContent, BriefingResponse } from "@/lib/briefing/types";
 import { cn } from "@/lib/utils";
 import { BriefingSection } from "./briefing-section";
 
 const SEEN_AFTER_MS = 5_000;
+const noopSubscribe = () => () => {};
+const hasSpeech = () => "speechSynthesis" in window;
+const noSpeech = () => false;
 const TOP_SLOP_PX = 8;
-
-function initialExpanded(): boolean {
-  if (typeof document === "undefined") return true;
-  try {
-    return readUiPrefsFromDocument().bc !== 1;
-  } catch {
-    return true;
-  }
-}
 
 /**
  * K2 "catch me up" hero card at the top of the Neu list (inside the list
  * scroller, not sticky). Self-contained: owns its query, the generation
- * stream, collapse state (`ff_ui` cookie `bc`) and the seen signal. Model
+ * stream, collapse state (`ff_ui` cookie `bc`, via the page's UI prefs) and the seen signal. Model
  * text arrives validated from the server and is rendered as plain text plus
  * citation chips; a chip opens the cited article via the nav store.
  *
@@ -50,8 +44,11 @@ export function BriefingCard({ scopeKey = "new", active = true }: { scopeKey?: s
   const query = useBriefing(scopeKey, true);
   const data = query.data;
   const { state, start } = useBriefingStream(scopeKey);
-  // Opens by itself only when the content is part of the first paint.
-  const [expanded, setExpanded] = useState(() => !!data && initialExpanded());
+  const uiPrefs = useUiPrefs();
+  // Opens by itself only when the content is part of the first paint (server-
+  // prefetched on a cold start) and the user did not collapse it (`ff_ui.bc`,
+  // parsed on the server, so SSR and hydration agree).
+  const [expanded, setExpanded] = useState(() => !!data && uiPrefs.current.bc !== 1);
   // What the body renders; replaced only at mount and on user actions.
   const [pinned, setPinned] = useState<BriefingResponse | null>(data ?? null);
   // The body follows the stream only for a generation the user started.
@@ -89,11 +86,7 @@ export function BriefingCard({ scopeKey = "new", active = true }: { scopeKey?: s
   const setOpen = (open: boolean) => {
     if (open && !userGen) setPinned(qc.getQueryData<BriefingResponse>(briefingKey(scopeKey)) ?? data ?? null);
     setExpanded(open);
-    try {
-      writeUiPrefs({ bc: open ? 0 : 1 });
-    } catch {
-      /* cookie blocked: session-only */
-    }
+    updateUiPrefs(uiPrefs, { bc: open ? 0 : 1 });
   };
 
   /** Explicit "Erstellen" / "Aktualisieren": the body opens and follows the stream (height-capped). */
@@ -157,7 +150,9 @@ export function BriefingCard({ scopeKey = "new", active = true }: { scopeKey?: s
     [markSeen],
   );
 
-  const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window;
+  // The body can be server-rendered (bootstrap-prefetched briefing): false on
+  // the server and during hydration, then the browser's answer.
+  const canSpeak = useSyncExternalStore(noopSubscribe, hasSpeech, noSpeech);
   const toggleSpeech = () => {
     const synth = window.speechSynthesis;
     if (speaking) {

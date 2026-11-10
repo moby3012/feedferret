@@ -1,7 +1,13 @@
 import { ApiError, getJson } from "@/features/articles/api";
+import type { Loc, TabId } from "@/features/reader/nav/location";
 import type { BriefingEvent, BriefingResponse } from "@/lib/briefing/types";
 
 export const briefingKey = (scopeKey: string) => ["briefing", scopeKey] as const;
+
+/** The K2 card sits on the Neu list (all, unread) only. Shared by the list pane and the server bootstrap. */
+export function showsBriefing(tab: TabId, loc: Loc): boolean {
+  return tab === "new" && loc.scope?.kind === "all" && loc.show === "unread";
+}
 
 export function fetchBriefing(scopeKey: string, signal?: AbortSignal): Promise<BriefingResponse> {
   return getJson<BriefingResponse>(`/api/app/briefing?scope=${encodeURIComponent(scopeKey)}`, signal);

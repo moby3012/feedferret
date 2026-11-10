@@ -1,11 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState, memo } from "react";
+import { useCallback, useEffect, useMemo, useState, memo } from "react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { Search as SearchIcon, X as XIcon } from "lucide-react";
-import { AddFeedDialog } from "@/components/add-feed-dialog";
-import { CommandPalette } from "@/components/command-palette";
-import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useArticleList } from "@/features/articles/queries";
@@ -26,7 +24,43 @@ function useOverlay(id: OverlayId): [boolean, (open: boolean) => Promise<void>] 
   return [open, onOpenChange];
 }
 
+// Rarely opened overlays are their own chunks, loaded (and mounted) on first use.
+const AddFeedDialog = dynamic(() => import("@/components/add-feed-dialog").then((m) => m.AddFeedDialog), { ssr: false });
+const CommandPalette = dynamic(() => import("@/components/command-palette").then((m) => m.CommandPalette), { ssr: false });
+const KeyboardShortcutsDialog = dynamic(
+  () => import("@/components/keyboard-shortcuts-dialog").then((m) => m.KeyboardShortcutsDialog),
+  { ssr: false },
+);
+
 const togglePalette = () => void nav.toggleOverlay("palette");
+
+/**
+ * Global ⌘K / Ctrl-K: open the palette, or close it when open. Deliberately
+ * fires regardless of focus (including inside inputs) — the convention of most
+ * command palettes; the app's single-key shortcuts bail out whenever a
+ * modifier key is held. Lives here (not in the lazily loaded palette) so the
+ * very first ⌘K works before the palette's chunk exists.
+ */
+function usePaletteHotkey() {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        togglePalette();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+}
+
+/** Mounted from the first time `open` is true on (keeps its close transition afterwards). */
+function useUsed(open: boolean): boolean {
+  const [used, setUsed] = useState(open);
+  if (open && !used) setUsed(true);
+  return used;
+}
 
 /** Every shell overlay. Open state lives in the nav store (`history.state.ff` on touch / compact). */
 export const ShellOverlays = memo(function ShellOverlays() {
@@ -38,34 +72,38 @@ export const ShellOverlays = memo(function ShellOverlays() {
   const [paletteOpen, setPaletteOpen] = useOverlay("palette");
   const [addFeedOpen, setAddFeedOpen] = useOverlay("add-feed");
   const subscribedUrls = useMemo(() => new Set<string>(feeds.map((f: any) => f.url).filter(Boolean)), [feeds]);
-  // Mounted on first use only: its connector-status queries stay off the cold-start path.
-  const [addFeedUsed, setAddFeedUsed] = useState(false);
-  if (addFeedOpen && !addFeedUsed) setAddFeedUsed(true);
+  usePaletteHotkey();
+  // Mounted on first use only: their chunks (and the Add Feed connector-status
+  // queries) stay off the cold-start path.
+  const addFeedUsed = useUsed(addFeedOpen);
+  const shortcutsUsed = useUsed(shortcutsOpen);
+  const paletteUsed = useUsed(paletteOpen);
   return (
     <>
       <SourcesSheet />
       <SearchDialog />
-      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      {shortcutsUsed && <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
       {addFeedUsed && (
         <AddFeedDialog open={addFeedOpen} onOpenChange={setAddFeedOpen} subscribedUrls={subscribedUrls} initialUrl={addFeed.url} requestId={addFeed.n} />
       )}
-      <CommandPalette
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
-        onToggle={togglePalette}
-        feeds={feeds}
-        categories={categories}
-        labels={labels}
-        onRefresh={shell.refresh}
-        onMarkAllRead={scope && canMarkAll(scope) ? () => markViewRead(markViewScopeOf(scope)) : undefined}
-        onFocusSearch={shell.openSearch}
-        onAddFeed={() => shell.requestAddFeed()}
-        onOpenSettings={shell.openSettings}
-        onShowShortcuts={() => shell.setShortcutsOpen(true)}
-        onSelectFeed={(id) => void nav.goScope({ kind: "feed", id })}
-        onSelectCategory={(id) => void nav.goScope(scopeFromSidebarKey(categoryKey(id)))}
-        onSelectLabel={(id) => void nav.goScope({ kind: "label", id })}
-      />
+      {paletteUsed && (
+        <CommandPalette
+          open={paletteOpen}
+          onOpenChange={setPaletteOpen}
+          feeds={feeds}
+          categories={categories}
+          labels={labels}
+          onRefresh={shell.refresh}
+          onMarkAllRead={scope && canMarkAll(scope) ? () => markViewRead(markViewScopeOf(scope)) : undefined}
+          onFocusSearch={shell.openSearch}
+          onAddFeed={() => shell.requestAddFeed()}
+          onOpenSettings={shell.openSettings}
+          onShowShortcuts={() => shell.setShortcutsOpen(true)}
+          onSelectFeed={(id) => void nav.goScope({ kind: "feed", id })}
+          onSelectCategory={(id) => void nav.goScope(scopeFromSidebarKey(categoryKey(id)))}
+          onSelectLabel={(id) => void nav.goScope({ kind: "label", id })}
+        />
+      )}
     </>
   );
 });
