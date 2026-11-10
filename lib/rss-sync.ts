@@ -22,7 +22,7 @@ import { persistEnrichment } from "./article-enrichment";
 import { AiBudgetError } from "./ai/errors";
 import { warnBudgetOnce } from "./ai/usage";
 import { isGoogleNewsFeedUrl } from "./google-news";
-import { prepareGoogleNewsArticles, type GoogleNewsPreparedArticle } from "./google-news-ingest";
+import { googleNewsStableKey, prepareGoogleNewsArticles, type GoogleNewsPreparedArticle } from "./google-news-ingest";
 import { GOOGLE_NEWS_MIN_UPDATE_MINUTES } from "./google-news-url";
 import type { ResolveOptions } from "./google-news";
 
@@ -417,7 +417,8 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         const remoteFeed = await fetchFeedArticles(feed);
         // G1: Google News keyword feeds — resolve redirect links to publisher
         // URLs (bounded, cached; falls back to the Google link).
-        if (!remoteFeed.notModified && isGoogleNewsFeedUrl(feed.url) && remoteFeed.articles.length > 0) {
+        const isGoogleNews = isGoogleNewsFeedUrl(feed.url);
+        if (!remoteFeed.notModified && isGoogleNews && remoteFeed.articles.length > 0) {
             remoteFeed.articles = await prepareGoogleNewsArticles(feed, userId, remoteFeed.articles, options.googleNews);
         }
 
@@ -468,7 +469,10 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             const excerpt = DOMPurify.sanitize(content, { ALLOWED_TAGS: [] }).substring(0, 200);
 
             const externalId = item.externalId || item.link || null;
-            const dedupeKey = buildDedupeKey(feed, item, externalId);
+            // Google News: identity was fixed in the pre-pass from the raw item
+            // (guid), so resolving the link / cleaning the title never changes it.
+            const dedupeKey = (item as GoogleNewsPreparedArticle).dedupeKey
+                ?? (isGoogleNews ? googleNewsStableKey(item) : buildDedupeKey(feed, item, externalId));
             // Linkless items get a synthetic link from the feed URL — without
             // connector secrets (legacy rows may still carry the RSSHub key).
             const link = item.link || `${publicFeedUrl}#${encodeURIComponent(dedupeKey)}`;

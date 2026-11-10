@@ -49,6 +49,7 @@ import {
   resetGoogleNewsResolverState,
   resolveGoogleNewsLinks,
   safePublisherUrl,
+  GOOGLE_NEWS_LOOKUPS_PER_MINUTE,
 } from "@/lib/google-news";
 import { prepareGoogleNewsArticles } from "@/lib/google-news-ingest";
 import { politeUpdateFrequency } from "@/lib/rss-sync";
@@ -270,6 +271,49 @@ describe("resolveGoogleNewsLinks", () => {
   });
 });
 
+describe("process-wide limits", () => {
+  beforeEach(() => resetGoogleNewsResolverState());
+  const manyLinks = (n: number) => Array.from({ length: n }, (_, i) => link(`CBMiQUFVX3lxTHRva2Vu${String(i).padStart(4, "0")}`));
+
+  it("a token bucket caps Google requests across calls (feeds) per minute, POST included", async () => {
+    const google = fakeGoogle();
+    await resolveGoogleNewsLinks(manyLinks(30), { fetchImpl: google.fetchImpl, maxNetwork: 30 });
+    const splash = google.calls.filter((u) => u.includes("/rss/articles/")).length;
+    const posts = google.calls.filter((u) => u.includes("batchexecute")).length;
+    expect(posts).toBe(1);
+    expect(splash + posts).toBe(GOOGLE_NEWS_LOOKUPS_PER_MINUTE);
+    // A second feed in the same tick gets nothing: the bucket is empty.
+    const second = fakeGoogle();
+    await resolveGoogleNewsLinks(manyLinks(40).slice(30), { fetchImpl: second.fetchImpl });
+    expect(second.calls).toHaveLength(0);
+  });
+
+  it("waiting for a concurrency slot respects the caller's deadline; reset frees slots", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const hanging = vi.fn(async () => {
+      await gate;
+      throw new Error("Fetch failed: 500");
+    });
+    const busy = resolveGoogleNewsLinks(manyLinks(3), { fetchImpl: hanging, budgetMs: 60_000 });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(hanging).toHaveBeenCalledTimes(3); // all 3 slots held
+
+    const blocked = fakeGoogle();
+    const t0 = Date.now();
+    const result = await resolveGoogleNewsLinks([link(ID_WELT)], { fetchImpl: blocked.fetchImpl, budgetMs: 400 });
+    expect(Date.now() - t0).toBeLessThan(1_000);
+    expect(result.size).toBe(0);
+    expect(blocked.calls).toHaveLength(0);
+
+    resetGoogleNewsResolverState(); // drops the held slots
+    const free = fakeGoogle();
+    expect((await resolveGoogleNewsLinks([link(ID_WELT)], { fetchImpl: free.fetchImpl })).size).toBe(1);
+    release();
+    await busy;
+  });
+});
+
 describe("prepareGoogleNewsArticles (ingest pre-pass)", () => {
   const feed = { id: "feed-1", url: "https://news.google.com/rss/search?q=Elektroauto&hl=de&gl=DE&ceid=DE%3Ade", unicityCriteria: "id" };
 
@@ -358,6 +402,9 @@ describe("admin origin override", () => {
     expect(isTrustedGoogleNewsOverrideUrl("https://news.google.com/rss/search?q=x")).toBe(false);
     process.env.FEEDFERRET_GOOGLE_NEWS_BASE_URL = "http://127.0.0.1:4092/anything";
     expect(isTrustedGoogleNewsOverrideUrl("http://127.0.0.1:4092/rss/search?q=x")).toBe(true);
+    // Only RSS paths on the override host are trusted for feed fetches.
+    expect(isTrustedGoogleNewsOverrideUrl("http://127.0.0.1:4092/admin")).toBe(false);
+    expect(isTrustedGoogleNewsOverrideUrl("http://127.0.0.1:4092/")).toBe(false);
     expect(isTrustedGoogleNewsOverrideUrl("http://127.0.0.1:4093/rss/search?q=x")).toBe(false);
     expect(isTrustedGoogleNewsOverrideUrl("https://news.google.com/rss/search?q=x")).toBe(false);
     expect(extractGoogleNewsArticleId(`http://127.0.0.1:4092/rss/articles/${ID_MM}`)).toBe(ID_MM);

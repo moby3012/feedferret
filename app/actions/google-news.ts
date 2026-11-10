@@ -86,6 +86,10 @@ export async function addGoogleNewsFeed(raw: SearchInput & { categoryId?: string
   const built = buildFromInput(raw);
   if (!built) return { success: false as const, error: "invalidQuery" as GoogleNewsErrorCode };
 
+  // Each add/edit fetches Google (feed + link resolution): same per-user bucket as preview.
+  if (!checkRateLimit(`user:${userId}`, RATE_LIMITS.urlDiscover).success) {
+    return { success: false as const, error: "rateLimited" as GoogleNewsErrorCode };
+  }
   const categoryId = typeof raw?.categoryId === "string" && raw.categoryId ? raw.categoryId : undefined;
   if (categoryId) {
     const category = await db.category.findFirst({ where: { id: categoryId, userId }, select: { id: true } });
@@ -131,6 +135,9 @@ export async function updateGoogleNewsFeedQuery(feedId: string, raw: SearchInput
   const built = buildFromInput(raw);
   if (!built) return { success: false as const, error: "invalidQuery" as GoogleNewsErrorCode };
 
+  if (!checkRateLimit(`user:${userId}`, RATE_LIMITS.urlDiscover).success) {
+    return { success: false as const, error: "rateLimited" as GoogleNewsErrorCode };
+  }
   const feed = await db.feed.findFirst({ where: { id: feedId, userId }, select: { id: true, url: true, name: true } });
   if (!feed || !isGoogleNewsFeedUrl(feed.url)) return { success: false as const, error: "notFound" as GoogleNewsErrorCode };
   if (feed.url === built.url) return { success: true as const, changed: false };

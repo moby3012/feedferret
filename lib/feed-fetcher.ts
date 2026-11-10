@@ -324,8 +324,10 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
     // Applies to untrusted rows too (legacy keyed URL on a no-longer-allowed route).
     connector = { url: stripConnectorSecretsWith(secretRules, connector.url), trusted: false };
   }
-  // The admin-configured Google News origin override (e2e fixture / mirror) is
-  // trusted like a connector; the public news.google.com never needs it.
+  // TEST-ONLY Google News origin override (FEEDFERRET_GOOGLE_NEWS_BASE_URL, the
+  // e2e fixture server; never set in production): only its `/rss/…` paths are
+  // trusted past the private-address block, redirects stay on them. The
+  // public news.google.com never needs it.
   const googleNewsOverride = !trustedInstance && !connector.trusted && isTrustedGoogleNewsOverrideUrl(connector.url);
   const allowInternal = trustedInstance || connector.trusted || googleNewsOverride;
   // Trusted connector request: the internal allowance (and the secret) only

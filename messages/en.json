@@ -2124,7 +2124,8 @@
     "customize": "Customize",
     "editTitle": "Google News search",
     "editDescription": "Change the keywords, language or time window of this feed. Articles already loaded stay.",
-    "saveSearch": "Save search",
+    "saveSearch": "Apply search",
+    "editApplyHint": "Applies right away and refreshes the feed — separate from “Save settings” below.",
     "saved": "Search updated.",
     "errors": {
       "invalidQuery": "Enter at least one keyword.",

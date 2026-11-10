@@ -301,6 +301,7 @@ export function GoogleNewsQueryEditor({ feedId, onSaved }: { feedId: string; onS
       </div>
       <SearchFields value={search} onChange={(next) => { setSearch(next); setMessage(null); }} idPrefix="gn-edit" />
       {dirty && <PreviewCard state={preview} />}
+      <p className="text-caption text-muted-foreground">{t("editApplyHint")}</p>
       <div className="flex items-center justify-end gap-2">
         {message && (
           <p className={message.tone === "ok" ? "me-auto text-xs text-success" : "me-auto text-xs text-warning"} role="status">

@@ -106,6 +106,7 @@ export default defineConfig({
         FEEDFERRET_E2E_HARNESS: HARNESS_TOKEN,
         // G1: Google News keyword feeds talk to the fixture server's fake
         // Google (search RSS + link-decoding RPC) instead of the internet.
+        // Test-only: never set this variable in a deployment.
         FEEDFERRET_GOOGLE_NEWS_BASE_URL: `http://127.0.0.1:${FIXTURE_PORT}`,
         NEXT_TELEMETRY_DISABLED: "1",
         NODE_ENV: "production",

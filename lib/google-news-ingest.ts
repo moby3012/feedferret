@@ -16,13 +16,29 @@
 import { db } from "./db";
 import { buildDedupeKey } from "./dedupe-key";
 import type { FetchedFeedArticle } from "./feed-fetcher";
-import { cleanGoogleNewsTitle, isGoogleNewsArticleLink, parseGoogleNewsFeedUrl, resolveGoogleNewsLinks, type ResolveOptions } from "./google-news";
+import { cleanGoogleNewsTitle, extractGoogleNewsArticleId, isGoogleNewsArticleLink, parseGoogleNewsFeedUrl, resolveGoogleNewsLinks, type ResolveOptions } from "./google-news";
 import { logger } from "./logger";
 
 export type GoogleNewsPreparedArticle = FetchedFeedArticle & {
+  /**
+   * The row identity, computed ONCE here from the raw item and used verbatim
+   * by syncFeed — never re-derived from the resolved link / cleaned title.
+   */
+  dedupeKey?: string;
   /** Link-only rewrite of an existing row (resolution caught up): keep updatedAt. */
   linkCosmetic?: boolean;
 };
+
+/**
+ * Stable identity of a Google News item, independent of the feed's
+ * unicityCriteria and of link resolution / title cleanup: the guid, else the
+ * Google article id, else the raw link. Google News feeds always use it
+ * (a link- or title-based key would change once the link resolves or the
+ * " - Publisher" suffix is stripped, re-creating the article as unread).
+ */
+export function googleNewsStableKey(item: { externalId?: string | null; link?: string | null; title?: string | null }): string {
+  return item.externalId || extractGoogleNewsArticleId(item.link) || item.link || item.title || "";
+}
 
 /** How long after creation a row still on a Google link is retried. */
 const RETRY_WINDOW_MS = 48 * 60 * 60_000;
@@ -33,18 +49,21 @@ export async function prepareGoogleNewsArticles(
   articles: FetchedFeedArticle[],
   options: ResolveOptions = {},
 ): Promise<GoogleNewsPreparedArticle[]> {
+  // Identity first, from the raw items, so even the fallback path is stable.
+  const prepared: GoogleNewsPreparedArticle[] = articles.map((item) => {
+    // Pin identity to the guid / original Google link before the link changes.
+    const pinned = { ...item, externalId: item.externalId || item.link || null };
+    return { ...pinned, dedupeKey: googleNewsStableKey(pinned) };
+  });
+  // Rows stored before keys were forced stable (feed with link/title
+  // criteria) keep their old key: computed exactly as the old sync did.
+  const legacyKeys = prepared.map((item) => buildDedupeKey(feed, item, item.externalId ?? null));
   try {
     const edition = parseGoogleNewsFeedUrl(feed.url)?.edition;
-    const prepared: GoogleNewsPreparedArticle[] = articles.map((item) => ({
-      ...item,
-      // Pin identity to the guid / original Google link before the link changes.
-      externalId: item.externalId || item.link || null,
-    }));
-    const keyOf = (item: GoogleNewsPreparedArticle) => buildDedupeKey(feed, { ...item, link: item.link }, item.externalId ?? null);
-    const keys = prepared.map(keyOf);
+    const keys = prepared.map((item) => item.dedupeKey!);
 
     const existing = await db.article.findMany({
-      where: { userId, feedId: feed.id, dedupeKey: { in: keys } },
+      where: { userId, feedId: feed.id, dedupeKey: { in: [...new Set([...keys, ...legacyKeys])] } },
       select: { dedupeKey: true, link: true, title: true, author: true, createdAt: true },
     });
     const byKey = new Map(existing.map((row) => [row.dedupeKey as string, row] as const));
@@ -53,7 +72,11 @@ export async function prepareGoogleNewsArticles(
     const retry: GoogleNewsPreparedArticle[] = [];
     const cutoff = Date.now() - RETRY_WINDOW_MS;
     prepared.forEach((item, index) => {
-      const row = byKey.get(keys[index]);
+      let row = byKey.get(keys[index]);
+      if (!row && legacyKeys[index] !== keys[index]) {
+        row = byKey.get(legacyKeys[index]);
+        if (row) item.dedupeKey = legacyKeys[index];
+      }
       if (!row) {
         item.title = cleanGoogleNewsTitle(item.title, item.sourceName);
         if (!item.author && item.sourceName) item.author = item.sourceName;
@@ -83,6 +106,6 @@ export async function prepareGoogleNewsArticles(
   } catch (error) {
     // Never fail a sync over link resolution: fall back to the Google links.
     logger.warn("[google-news] link pre-pass failed:", String(error).slice(0, 200));
-    return articles;
+    return prepared;
   }
 }

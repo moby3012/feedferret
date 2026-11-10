@@ -131,7 +131,7 @@ test.describe("Google News keyword feeds", () => {
     await expect(keywords).toHaveValue("Wasserstoff");
     await keywords.fill("Wasserstoff -Auto");
     await expect(editor.getByTestId("google-news-preview").getByText("3 results")).toBeVisible({ timeout: 20_000 });
-    await tapOrClick(editor.getByRole("button", { name: "Save search" }), app.isMobile);
+    await tapOrClick(editor.getByRole("button", { name: "Apply search" }), app.isMobile);
     await expect(editor.getByText("Search updated.")).toBeVisible({ timeout: 30_000 });
 
     const [updated] = googleFeeds(app.user.userId);

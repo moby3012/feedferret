@@ -28,10 +28,14 @@ import { logger } from "./logger";
 /* -------------------------------------------------------------------------- */
 
 /**
- * The Google News origin this instance talks to. Admin-only override
- * (`FEEDFERRET_GOOGLE_NEWS_BASE_URL`, an origin) for a mirror or the e2e
- * fixture server; that one origin is then also trusted past the SSRF private
- * address block, like a configured connector.
+ * The Google News origin this instance talks to.
+ *
+ * `FEEDFERRET_GOOGLE_NEWS_BASE_URL` is a TEST-ONLY override (the e2e harness
+ * points it at the local fixture server's fake Google). Never set it in
+ * production: that one origin is trusted past the SSRF private-address block
+ * (feed fetches only on its `/rss/…` paths; the link resolver only calls its
+ * fixed `/rss/articles/…` and batchexecute endpoints, redirects confined to
+ * the origin).
  */
 export function googleNewsOrigin(): string {
   const raw = process.env.FEEDFERRET_GOOGLE_NEWS_BASE_URL?.trim();
@@ -60,12 +64,16 @@ export function parseGoogleNewsFeedUrl(url: string | null | undefined) {
   return parseGoogleNewsSearchUrl(url, overrideOrigins());
 }
 
-/** True only for the admin-configured override origin (never for the public one). */
+/**
+ * True only for an RSS path (`/rss/…`) on the test-only override origin —
+ * never for the public origin, never for any other path on the override host.
+ */
 export function isTrustedGoogleNewsOverrideUrl(url: string): boolean {
   const extra = overrideOrigins();
   if (extra.length === 0) return false;
   try {
-    return new URL(url).origin === extra[0];
+    const u = new URL(url);
+    return u.origin === extra[0] && u.pathname.startsWith("/rss/");
   } catch {
     return false;
   }
@@ -227,7 +235,16 @@ const POSITIVE_CACHE_MAX = 5_000;
 const NEGATIVE_TTL_MS = 60 * 60_000;
 const BLOCK_BACKOFF_MS = 15 * 60_000;
 const GLOBAL_CONCURRENCY = 3;
-const SPLASH_MAX_BYTES = 3 * 1024 * 1024;
+/**
+ * Process-wide request budget towards Google (splash GETs + batchexecute
+ * POSTs), shared by every feed and sync tick: a token bucket refilling
+ * LOOKUPS_PER_MINUTE tokens per minute (burst = one minute's worth). With N
+ * keyword feeds syncing in one tick the total stays bounded; whatever does not
+ * fit keeps its Google link and is retried on later syncs.
+ */
+export const GOOGLE_NEWS_LOOKUPS_PER_MINUTE = 20;
+// Live splash pages are ~600 KB; anything far bigger is not a splash page.
+const SPLASH_MAX_BYTES = 1024 * 1024;
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
@@ -235,7 +252,22 @@ const positiveCache = new Map<string, string>();
 const negativeCache = new Map<string, number>();
 let blockedUntil = 0;
 let active = 0;
-const waiters: Array<() => void> = [];
+type Waiter = { grant: (ok: boolean) => void };
+const waiters: Waiter[] = [];
+let tokens = GOOGLE_NEWS_LOOKUPS_PER_MINUTE;
+let tokensAt = Date.now();
+
+/** Takes `n` request tokens from the process-wide bucket, all or nothing. */
+function takeTokens(n: number, now: number): boolean {
+  const refill = ((now - tokensAt) / 60_000) * GOOGLE_NEWS_LOOKUPS_PER_MINUTE;
+  if (refill > 0) {
+    tokens = Math.min(GOOGLE_NEWS_LOOKUPS_PER_MINUTE, tokens + refill);
+    tokensAt = now;
+  }
+  if (tokens < n) return false;
+  tokens -= n;
+  return true;
+}
 
 function cacheGet(id: string): string | null | undefined {
   const hit = positiveCache.get(id);
@@ -263,14 +295,46 @@ function cachePut(id: string, url: string | null) {
   }
 }
 
-async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
-  if (active >= GLOBAL_CONCURRENCY) await new Promise<void>((resolve) => waiters.push(resolve));
-  active++;
+/**
+ * Acquires one of the GLOBAL_CONCURRENCY slots, waiting at most `waitMs`.
+ * Resolves false (no slot held) when the wait runs out.
+ */
+function acquireSlot(waitMs: number): Promise<boolean> {
+  if (active < GLOBAL_CONCURRENCY) {
+    active++;
+    return Promise.resolve(true);
+  }
+  if (waitMs <= 0) return Promise.resolve(false);
+  return new Promise<boolean>((resolve) => {
+    const waiter: Waiter = {
+      grant: (ok) => {
+        clearTimeout(timer);
+        resolve(ok);
+      },
+    };
+    const timer = setTimeout(() => {
+      const index = waiters.indexOf(waiter);
+      if (index >= 0) waiters.splice(index, 1);
+      resolve(false);
+    }, waitMs);
+    waiters.push(waiter);
+  });
+}
+
+/** Releases a slot: handed straight to the next waiter (no window for a newcomer to jump in). */
+function releaseSlot() {
+  const next = waiters.shift();
+  if (next) next.grant(true);
+  else active = Math.max(0, active - 1);
+}
+
+/** Runs `fn` in a slot, or returns `undefined` when no slot frees up within `waitMs`. */
+async function withSlot<T>(waitMs: number, fn: () => Promise<T>): Promise<T | undefined> {
+  if (!(await acquireSlot(waitMs))) return undefined;
   try {
     return await fn();
   } finally {
-    active--;
-    waiters.shift()?.();
+    releaseSlot();
   }
 }
 
@@ -283,6 +347,10 @@ export function resetGoogleNewsResolverState() {
   positiveCache.clear();
   negativeCache.clear();
   blockedUntil = 0;
+  for (const waiter of waiters.splice(0)) waiter.grant(false);
+  active = 0;
+  tokens = GOOGLE_NEWS_LOOKUPS_PER_MINUTE;
+  tokensAt = Date.now();
 }
 
 export type ResolveOptions = {
@@ -346,14 +414,21 @@ export async function resolveGoogleNewsLinks(links: string[], options: ResolveOp
   // Step 1: signatures, bounded by the global gate and the time budget.
   const params: DecodingParams[] = [];
   let throttled = false;
+  let outOfTokens = false;
+  // The batchexecute POST needs a token too: reserved with the first splash GET.
+  let postReserved = false;
   let cursor = 0;
   const worker = async () => {
-    while (cursor < work.length && !throttled) {
+    while (cursor < work.length && !throttled && !outOfTokens) {
       const item = work[cursor++];
-      const left = remaining();
-      if (left < 150) return;
-      await withSlot(async () => {
-        if (throttled || remaining() < 150) return;
+      if (remaining() < 150) return;
+      await withSlot(remaining() - 150, async () => {
+        if (throttled || outOfTokens || remaining() < 150) return;
+        if (!takeTokens(postReserved ? 1 : 2, now())) {
+          outOfTokens = true;
+          return;
+        }
+        postReserved = true;
         try {
           const page = await fetchImpl(
             `${origin}/rss/articles/${item.id}?hl=${encodeURIComponent(hl)}&gl=${encodeURIComponent(gl)}&ceid=${encodeURIComponent(ceid)}`,
@@ -380,7 +455,7 @@ export async function resolveGoogleNewsLinks(links: string[], options: ResolveOp
   // Step 2: one batched RPC for every signature we got.
   if (params.length > 0 && remaining() >= 100) {
     try {
-      const response = await withSlot(() =>
+      const response = await withSlot(remaining() - 100, () =>
         fetchImpl(
           `${origin}/_/DotsSplashUi/data/batchexecute`,
           {
@@ -391,8 +466,11 @@ export async function resolveGoogleNewsLinks(links: string[], options: ResolveOp
           { allowInternal, maxRedirects: 0, maxBytes: 512 * 1024, timeoutMs: Math.max(100, Math.min(6_000, remaining())), context: "Google News link" },
         ),
       );
-      const urls = response.notModified ? new Map<string, string>() : parseBatchExecuteResponse(response.text, params);
-      for (const p of params) cachePut(p.id, urls.get(p.id) ?? null);
+      // No slot within the budget: leave these uncached so a later sync retries.
+      if (response) {
+        const urls = response.notModified ? new Map<string, string>() : parseBatchExecuteResponse(response.text, params);
+        for (const p of params) cachePut(p.id, urls.get(p.id) ?? null);
+      }
     } catch (error) {
       if (isThrottleError(error)) {
         blockedUntil = now() + BLOCK_BACKOFF_MS;

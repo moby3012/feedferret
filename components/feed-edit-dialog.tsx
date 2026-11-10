@@ -413,10 +413,11 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="flex h-[min(92dvh,760px)] w-[calc(100vw-1rem)] max-w-2xl flex-col rounded-sheet border border-border/70 bg-background p-0 shadow-overlay">
         <DialogHeader className="border-b border-border/60 bg-card/95 px-5 py-5 backdrop-blur-bar sm:px-8 sm:py-6">
-          <DialogTitle className="text-xl font-semibold tracking-title sm:text-2xl">
+          {/* pe-10: long names never run under the close button. */}
+          <DialogTitle className="pe-10 text-xl font-semibold tracking-title break-words sm:text-2xl">
             {feed.name}
           </DialogTitle>
-          <DialogDescription className="mt-1 text-sm text-muted-foreground truncate">
+          <DialogDescription className="mt-1 pe-10 text-sm text-muted-foreground truncate">
             {feed.url}
           </DialogDescription>
         </DialogHeader>
