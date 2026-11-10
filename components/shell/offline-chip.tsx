@@ -3,7 +3,9 @@
 import { WifiOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { Chip } from "@/components/ui/chip";
 import { useOnline } from "@/features/bootstrap/online";
+import { cn } from "@/lib/utils";
 
 /**
  * Shown in the top bar while the device is offline. Owner decision: offline is
@@ -20,17 +22,18 @@ export function OfflineChip({ className = "" }: { className?: string }) {
   const detail = t("offlineReadOnly");
   return (
     <span role="status" className="contents">
-      <button
-        type="button"
+      <Chip
+        size="sm"
+        tone="warning"
         data-testid="offline-chip"
         aria-label={detail}
         title={detail}
         onClick={() => toast.info(detail, { id: "offline-detail" })}
-        className={`ff-offline-chip hit-slop inline-flex h-7 shrink-0 items-center gap-1 self-center rounded-chip bg-warning-subtle px-2 text-footnote font-medium text-warning ${className}`}
+        className={cn("ff-offline-chip self-center", className)}
       >
         <WifiOff className="size-3.5 shrink-0" aria-hidden />
         <span className="ff-offline-chip-label">{t("offline")}</span>
-      </button>
+      </Chip>
     </span>
   );
 }

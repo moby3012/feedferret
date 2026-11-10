@@ -33,7 +33,7 @@ export function ShellSkeleton({ href, ui, viewMode }: { href: string; ui: UiPref
       <section data-pane={`list-${loc.tab}`} data-active="true" className="relative flex flex-col border-e border-border/60 bg-card/70">
         <div className="ff-list-bar">
           <div className="ff-list-bar-row">
-            <div className="h-5 w-36 rounded bg-muted animate-pulse" />
+            <div className="h-5 w-36 rounded-chip bg-muted animate-pulse" />
           </div>
         </div>
         {loc.scope && <ArticleListSkeleton viewMode={mode} count={8} />}

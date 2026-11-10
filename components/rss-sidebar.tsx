@@ -310,7 +310,7 @@ export function RssSidebar({
     // Keep internal collapsed view as-is for now, maybe add tooltips
     return (
       <aside className="w-20 h-full bg-sidebar border-e border-sidebar-border flex flex-col items-center py-6 gap-3">
-        <div className="mb-6 shadow-sm">
+        <div className="mb-6">
           <Image
             src="/logo.svg"
             alt="Logo"
@@ -327,7 +327,7 @@ export function RssSidebar({
             variant="ghost"
             size="icon"
             className={cn(
-              "w-12 h-12 rounded-xl relative transition-all duration-(--dur-base)",
+              "w-12 h-12 rounded-panel relative transition-all duration-(--dur-base)",
               isActiveNav && "bg-sidebar-accent ring-2 ring-sidebar-ring/50",
             )}
             onClick={() => {
@@ -358,7 +358,7 @@ export function RssSidebar({
               <img
                 src={branding.instanceIconDataUrl}
                 alt={`${branding.instanceName} logo`}
-                className="h-12 w-12 rounded-2xl object-cover"
+                className="h-12 w-12 rounded-panel object-cover"
               />
             ) : (
               <Image
@@ -370,11 +370,11 @@ export function RssSidebar({
               />
             )}
             <div>
-              <h1 className="text-xl font-semibold text-sidebar-foreground tracking-title">
+              <h1 className="text-title font-semibold text-sidebar-foreground tracking-title">
                 {branding.instanceName}
               </h1>
               <p
-                className="text-sm text-muted-foreground"
+                className="text-body-sm text-muted-foreground"
                 // No aria-live: the shell's live region announces the count on scope change only (spec §4.9.8).
                 aria-label={showsCount(countDisplay, "total") ? t("sidebar.unreadAriaLabel", { count: totalUnread }) : undefined}
               >
@@ -393,7 +393,7 @@ export function RssSidebar({
             <Button
               variant="ghost"
               size="icon"
-              className="w-8 h-8 rounded-xl shrink-0"
+              className="w-8 h-8 rounded-panel shrink-0"
               onClick={() => window.dispatchEvent(new Event('focus-search'))}
               aria-label={t("sidebar.searchArticles")}
             >
@@ -416,10 +416,10 @@ export function RssSidebar({
                   onSelectCategory(item.categoryId);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm transition-all",
+                  "w-full flex items-center gap-3 px-3.5 py-2 rounded-panel text-body-sm transition-all",
                   selectedFeed === null &&
                     selectedCategory === item.categoryId
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
               >
@@ -435,7 +435,7 @@ export function RssSidebar({
               {savedSearches.length > 0 && (
                 <div className="space-y-1">
                   <div className="px-4 pb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="text-footnote font-bold uppercase tracking-wider text-muted-foreground">
                       {t("sidebar.savedSearches")}
                     </span>
                   </div>
@@ -447,10 +447,10 @@ export function RssSidebar({
                         onSelectCategory(`Search:${item.id}`);
                       }}
                       className={cn(
-                        "w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm transition-all",
+                        "w-full flex items-center gap-3 px-3.5 py-2 rounded-panel text-body-sm transition-all",
                         selectedFeed === null &&
                           selectedCategory === `Search:${item.id}`
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
                           : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                       )}
                     >
@@ -466,7 +466,7 @@ export function RssSidebar({
               {visibleLabels.length > 0 && (
                 <div className="space-y-1">
                   <div className="px-4 pb-1">
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    <span className="text-footnote font-bold uppercase tracking-wider text-muted-foreground">
                       {t("sidebar.labels")}
                     </span>
                   </div>
@@ -478,10 +478,10 @@ export function RssSidebar({
                         onSelectCategory(`Label:${item.id}`);
                       }}
                       className={cn(
-                        "w-full flex items-center gap-3 px-3.5 py-2 rounded-2xl text-sm transition-all",
+                        "w-full flex items-center gap-3 px-3.5 py-2 rounded-panel text-body-sm transition-all",
                         selectedFeed === null &&
                           selectedCategory === `Label:${item.id}`
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold shadow-sm"
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
                           : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                       )}
                     >
@@ -500,13 +500,13 @@ export function RssSidebar({
           {/* Feeds Section */}
           <div className="space-y-4">
             <div className="flex items-center justify-between px-4">
-              <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              <span className="text-body-sm font-bold uppercase tracking-wider text-muted-foreground">
                 {t("sidebar.feeds")}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
-                className="w-8 h-8 rounded-xl"
+                className="w-8 h-8 rounded-panel"
                 onClick={onAddFeed}
                 aria-label={t("sidebar.addFeed")}
               >
@@ -523,7 +523,7 @@ export function RssSidebar({
                   <EmptyDescription>{t("sidebar.noFeedsYetDescription")}</EmptyDescription>
                   <Button
                     size="sm"
-                    className="mt-3 rounded-xl"
+                    className="mt-3 rounded-panel"
                     onClick={onAddFeed}
                   >
                     <Plus className="w-4 h-4 me-1.5" />
@@ -587,7 +587,7 @@ export function RssSidebar({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-11 w-11 rounded-xl sm:h-9 sm:w-9"
+                      className="h-11 w-11 rounded-panel sm:h-9 sm:w-9"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
                         <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5">
@@ -609,7 +609,7 @@ export function RssSidebar({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-11 w-11 rounded-xl sm:h-9 sm:w-9"
+                    className="h-11 w-11 rounded-panel sm:h-9 sm:w-9"
                     aria-label={t("sidebar.manageFeeds")}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -627,7 +627,7 @@ export function RssSidebar({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-11 w-11 rounded-xl sm:h-9 sm:w-9"
+                      className="h-11 w-11 rounded-panel sm:h-9 sm:w-9"
                       aria-label={t("sidebar.serverSettings")}
                     >
                       <Cog className="w-4 h-4" />
@@ -645,25 +645,25 @@ export function RssSidebar({
                       variant="ghost"
                       size="icon"
                       className={cn(
-                        "h-11 w-11 rounded-xl sm:h-9 sm:w-9 relative",
+                        "h-11 w-11 rounded-panel sm:h-9 sm:w-9 relative",
                         unreadNotifications ? "bg-accent text-accent-foreground" : "",
                       )}
                       aria-label={t("sidebar.notifications")}
                     >
                       <Bell className="w-4 h-4" />
                       {unreadNotifications > 0 && (
-                        <span className="absolute -end-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-destructive px-1 text-caption font-bold leading-none text-destructive-foreground shadow-sm">
+                        <span className="absolute -end-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-destructive px-1 text-caption font-bold leading-none text-destructive-foreground">
                           {unreadNotifications > 9 ? "9+" : unreadNotifications}
                         </span>
                       )}
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" side="top" className="w-80 rounded-2xl border-border/70 p-2">
+                  <DropdownMenuContent align="end" side="top" className="w-80 rounded-panel border-border/70 p-2">
                     <div className="flex items-center justify-between px-2 py-1.5">
-                      <p className="text-sm font-semibold">{t("sidebar.notifications")}</p>
+                      <p className="text-body-sm font-semibold">{t("sidebar.notifications")}</p>
                       {unreadNotifications > 0 && (
                         <button
-                          className="hidden sm:inline text-xs text-link hover:underline"
+                          className="hidden sm:inline text-footnote text-link hover:underline"
                           onClick={() => markAllNotificationsRead.mutate()}
                         >
                           {t("sidebar.markAllRead")}
@@ -673,11 +673,11 @@ export function RssSidebar({
                     <DropdownMenuSeparator />
                     {notifications.length === 0 ? (
                       <div className="px-2 py-8 text-center">
-                        <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                        <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-row bg-muted">
                           <Bell className="h-4 w-4 text-muted-foreground" />
                         </div>
-                        <p className="text-sm font-medium text-foreground">{t("sidebar.noNotifications")}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{t("sidebar.noNotificationsDescription")}</p>
+                        <p className="text-body-sm font-medium text-foreground">{t("sidebar.noNotifications")}</p>
+                        <p className="mt-0.5 text-footnote text-muted-foreground">{t("sidebar.noNotificationsDescription")}</p>
                       </div>
                     ) : (
                       (notifications as any[]).slice(0, 8).map((notification: any) => {
@@ -693,7 +693,7 @@ export function RssSidebar({
                         return (
                           <DropdownMenuItem
                             key={notification.id}
-                            className="items-start gap-3 rounded-xl px-2 py-2"
+                            className="items-start gap-3 rounded-panel px-2 py-2"
                             onClick={() => {
                               if (!notification.isRead) markNotificationRead.mutate(notification.id);
                               if (notification.articleId) {
@@ -712,8 +712,8 @@ export function RssSidebar({
                               {typeIcon}
                             </span>
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-medium">{notification.title}</span>
-                              <span className="line-clamp-2 text-xs text-muted-foreground">
+                              <span className="block truncate text-body-sm font-medium">{notification.title}</span>
+                              <span className="line-clamp-2 text-footnote text-muted-foreground">
                                 {notification.body}
                               </span>
                             </span>
@@ -726,7 +726,7 @@ export function RssSidebar({
                         <DropdownMenuSeparator className="sm:hidden" />
                         <button
                           type="button"
-                          className="sm:hidden mt-1 w-full rounded-xl bg-primary px-3 py-3 text-sm font-semibold text-primary-foreground active:scale-[0.98] transition-transform"
+                          className="sm:hidden mt-1 w-full rounded-panel bg-primary px-3 py-3 text-body-sm font-semibold text-primary-foreground active:scale-[0.98] transition-transform"
                           onClick={() => markAllNotificationsRead.mutate()}
                         >
                           {t("sidebar.markAllAsRead")}
@@ -744,7 +744,7 @@ export function RssSidebar({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-11 w-11 rounded-xl sm:h-9 sm:w-9"
+                    className="h-11 w-11 rounded-panel sm:h-9 sm:w-9"
                     onClick={() => setSignOutConfirmOpen(true)}
                     aria-label={t("sidebar.signOut")}
                   >
@@ -873,7 +873,7 @@ function SortableCategory({
     >
       <div
         className={cn(
-          "flex items-center gap-2 px-4 py-2 rounded-lg transition-colors",
+          "flex items-center gap-2 px-4 py-2 rounded-row transition-colors",
           isActiveCategory
             ? "border-s-2 border-s-brand"
             : "hover:bg-sidebar-accent/30",
@@ -882,14 +882,14 @@ function SortableCategory({
         <div
           {...attributes}
           {...listeners}
-          className="cursor-grab active:cursor-grabbing hover:bg-muted p-1 rounded transition-colors"
+          className="cursor-grab active:cursor-grabbing hover:bg-muted p-1 rounded-chip transition-colors"
         >
           <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
         </div>
         <button
           onClick={() => onSelectCategory?.(categoryKey(category.id))}
           className={cn(
-            "flex-1 flex items-center text-xs font-bold uppercase tracking-wider transition-colors",
+            "flex-1 flex items-center text-footnote font-bold uppercase tracking-wider transition-colors",
             isActiveCategory
               ? "text-brand"
               : "text-muted-foreground hover:text-foreground",
@@ -900,7 +900,7 @@ function SortableCategory({
         {!expanded && showsCount(countDisplay, "group") && <UnreadCount count={categoryUnreadCount} />}
         <button
           onClick={onToggle}
-          className="p-1 rounded hover:bg-muted transition-colors"
+          className="p-1 rounded-chip hover:bg-muted transition-colors"
           aria-expanded={expanded}
           aria-label={expanded ? t("sidebar.collapseCategory", { name: category.name }) : t("sidebar.expandCategory", { name: category.name })}
         >
@@ -928,7 +928,7 @@ function SortableCategory({
             ))}
           </SortableContext>
           {feeds.length === 0 && (
-            <p className="text-xs text-muted-foreground px-3 py-1 italic">
+            <p className="text-footnote text-muted-foreground px-3 py-1 italic">
               {t("sidebar.noFeeds")}
             </p>
           )}
@@ -983,13 +983,13 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
     <button
       onClick={onSelect}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm transition-all group min-w-0",
+        "w-full flex items-center gap-3 px-3 py-1.5 rounded-row text-body-sm transition-all group min-w-0",
         isSelected
-          ? "bg-primary text-primary-foreground shadow-sm"
+          ? "bg-primary text-primary-foreground"
           : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-sidebar-foreground",
       )}
     >
-      <div className="w-5 h-5 shrink-0 rounded-sm overflow-hidden bg-muted flex items-center justify-center">
+      <div className="w-5 h-5 shrink-0 rounded-control overflow-hidden bg-muted flex items-center justify-center">
         {feed.url ? (() => {
           try {
             const hostname = new URL(feed.url).hostname;
@@ -1004,10 +1004,10 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
               />
             );
           } catch {
-            return <span className="text-xs">{feed.icon || "📰"}</span>;
+            return <span className="text-footnote">{feed.icon || "📰"}</span>;
           }
         })() : (
-          <span className="text-xs">{feed.icon || "📰"}</span>
+          <span className="text-footnote">{feed.icon || "📰"}</span>
         )}
       </div>
       <span className={cn("flex-1 text-start truncate font-medium", isSelected && "font-semibold")}>{feed.name}</span>
@@ -1082,7 +1082,7 @@ function FeedQuickActions({
           });
           setOpen(true);
         }}
-        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/80 hover:text-foreground hover:bg-sidebar-accent/60 transition-colors"
+        className="shrink-0 w-7 h-7 rounded-row flex items-center justify-center text-muted-foreground/80 hover:text-foreground hover:bg-sidebar-accent/60 transition-colors"
       >
         <MoreHorizontal className="w-4 h-4" />
       </button>
@@ -1150,7 +1150,7 @@ function UncategorizedGroup({ feeds, renderFeedRow }: any) {
   return (
     <div className="py-2">
       <div className="px-4 py-2">
-        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+        <h3 className="text-footnote font-bold text-muted-foreground uppercase tracking-wider">
           {t("sidebar.uncategorized")}
         </h3>
       </div>

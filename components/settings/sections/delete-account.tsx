@@ -42,15 +42,15 @@ export function DeleteAccountSection() {
 
   return (
     <>
-      <section className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5 shadow-sm sm:p-6">
+      <section className="rounded-panel border border-destructive/25 bg-destructive/5 p-5 sm:p-6">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-panel bg-destructive/10 text-destructive">
               <AlertTriangle className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-title">{t("deleteAccount.title")}</h2>
-              <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+              <h2 className="text-title-sm font-semibold tracking-title">{t("deleteAccount.title")}</h2>
+              <p className="mt-1 max-w-xl text-body-sm leading-6 text-muted-foreground">
                 {t("deleteAccount.description")}
               </p>
             </div>
@@ -58,7 +58,7 @@ export function DeleteAccountSection() {
           <Button
             variant="outline"
             onClick={() => setOpen(true)}
-            className="h-11 rounded-2xl border-destructive/40 text-destructive hover:bg-destructive/10 px-5 shrink-0"
+            className="h-11 rounded-panel border-destructive/40 text-destructive hover:bg-destructive/10 px-5 shrink-0"
           >
             <Trash2 className="me-2 h-4 w-4" />
             {t("deleteAccount.deleteMyAccount")}
@@ -67,7 +67,7 @@ export function DeleteAccountSection() {
       </section>
 
       <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent className="rounded-3xl border-border/70 bg-background">
+        <AlertDialogContent className="rounded-sheet border-border/70 bg-background">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
@@ -78,23 +78,23 @@ export function DeleteAccountSection() {
                 {t("deleteAccount.confirmDialogDescription")}
                 <strong> {t("deleteAccount.cannotBeUndone")}</strong>
               </span>
-              <span className="block mt-3 text-sm font-medium text-foreground">
+              <span className="block mt-3 text-body-sm font-medium text-foreground">
                 {t("deleteAccount.typeToConfirm")}
               </span>
               <Input
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder={confirmPhrase}
-                className="rounded-2xl border-border/70 bg-background/70"
+                className="rounded-panel border-border/70 bg-background/70"
               />
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-2xl" onClick={() => setConfirmText("")}>
+            <AlertDialogCancel className="rounded-panel" onClick={() => setConfirmText("")}>
               {t("deleteAccount.cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
-              className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="rounded-panel bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDelete}
               disabled={!confirmMatches || loading}
             >

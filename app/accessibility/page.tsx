@@ -71,7 +71,7 @@ export default async function AccessibilityPage() {
           <li>{t("technicalSpecs.eslint")}</li>
         </ul>
 
-        <p className="text-sm text-muted-foreground mt-12">
+        <p className="text-body-sm text-muted-foreground mt-12">
           {t("lastUpdated")} &mdash;{" "}
           <Link href="/" className="underline">
             {t("backToApp")}

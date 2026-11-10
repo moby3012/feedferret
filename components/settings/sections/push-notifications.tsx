@@ -158,19 +158,19 @@ export function PushNotificationSection() {
   if (!loading && status && !status.configured) return null;
 
   return (
-    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6">
+    <section className="rounded-panel border border-border/65 bg-card/85 p-5 sm:p-6">
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
-            <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+            <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-panel">
               {enabled ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-title">{t("push.title")}</h2>
-              <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+              <h2 className="text-title-sm font-semibold tracking-title">{t("push.title")}</h2>
+              <p className="mt-1 max-w-xl text-body-sm leading-6 text-muted-foreground">
                 {t("push.description")}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-footnote text-muted-foreground">
                 {t("push.status")}: {loading ? t("push.checking") : !supported ? t("push.unsupported") : !status?.configured ? t("push.serverNotConfigured") : permission}
                 {status ? ` · ${status.activeSubscriptions} ${status.activeSubscriptions === 1 ? t("push.activeDevice") : t("push.activeDevices")}` : ""}
               </p>
@@ -182,16 +182,16 @@ export function PushNotificationSection() {
                 type="button"
                 onClick={enable}
                 disabled={busy || loading || !supported || !status?.configured}
-                className="h-11 rounded-2xl px-5"
+                className="h-11 rounded-panel px-5"
               >
                 {t("push.enable")}
               </Button>
             ) : (
               <>
-                <Button type="button" variant="outline" onClick={sendTest} disabled={busy} className="h-11 rounded-2xl px-5">
+                <Button type="button" variant="outline" onClick={sendTest} disabled={busy} className="h-11 rounded-panel px-5">
                   {t("push.test")}
                 </Button>
-                <Button type="button" variant="outline" onClick={disable} disabled={busy} className="h-11 rounded-2xl px-5">
+                <Button type="button" variant="outline" onClick={disable} disabled={busy} className="h-11 rounded-panel px-5">
                   {t("push.disableDevice")}
                 </Button>
               </>
@@ -202,15 +202,15 @@ export function PushNotificationSection() {
         {status && (
           <div className="ui-control-surface grid gap-4 rounded-panel border p-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="push-frequency-select">{t("push.frequency")}</label>
+              <label className="text-body-sm font-medium" htmlFor="push-frequency-select">{t("push.frequency")}</label>
               <Select
                 value={status.settings.pushFrequency}
                 onValueChange={(value) => updateSettings({ pushFrequency: value })}
               >
-                <SelectTrigger id="push-frequency-select" className="rounded-2xl border-border/70 bg-background/70">
+                <SelectTrigger id="push-frequency-select" className="rounded-panel border-border/70 bg-background/70">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="rounded-2xl">
+                <SelectContent className="rounded-panel">
                   <SelectItem value="immediate">{t("push.frequencies.immediately")}</SelectItem>
                   <SelectItem value="hourly">{t("push.frequencies.hourly")}</SelectItem>
                   <SelectItem value="daily">{t("push.frequencies.daily")}</SelectItem>
@@ -218,10 +218,10 @@ export function PushNotificationSection() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="ui-control-surface flex items-center justify-between rounded-2xl border px-4 py-3">
+            <div className="ui-control-surface flex items-center justify-between rounded-panel border px-4 py-3">
               <div>
-                <p className="text-sm font-medium">{t("push.includeArticleTitles")}</p>
-                <p className="text-xs text-muted-foreground">{t("push.includeArticleTitlesDescription")}</p>
+                <p className="text-body-sm font-medium">{t("push.includeArticleTitles")}</p>
+                <p className="text-footnote text-muted-foreground">{t("push.includeArticleTitlesDescription")}</p>
               </div>
               <Switch
                 checked={status.settings.pushPrivatePayloads}
@@ -229,9 +229,9 @@ export function PushNotificationSection() {
               />
             </div>
             <div className="sm:col-span-2">
-              <p className="mb-2 text-sm font-medium">{t("push.feeds")}</p>
-              <div className="max-h-44 overflow-y-auto rounded-2xl border border-border/70 bg-background/70 p-3">
-                <label className="mb-2 flex items-center gap-2 text-sm">
+              <p className="mb-2 text-body-sm font-medium">{t("push.feeds")}</p>
+              <div className="max-h-44 overflow-y-auto rounded-panel border border-border/70 bg-background/70 p-3">
+                <label className="mb-2 flex items-center gap-2 text-body-sm">
                   <input
                     type="checkbox"
                     checked={feedIds.size === 0}
@@ -243,7 +243,7 @@ export function PushNotificationSection() {
                   {feeds.map((feed: any) => (
                     <label
                       key={feed.id}
-                      className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"
+                      className="flex min-w-0 items-center gap-2 text-body-sm text-muted-foreground"
                       title={feed.name}
                     >
                       <input

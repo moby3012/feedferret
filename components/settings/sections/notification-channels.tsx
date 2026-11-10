@@ -62,14 +62,14 @@ export function NotificationChannelsSection() {
   if (isLoading) return null;
 
   return (
-    <section className="rounded-2xl border border-border/65 bg-card/85 shadow-sm">
+    <section className="rounded-panel border border-border/65 bg-card/85">
       <div className="flex items-start gap-4 p-5 sm:p-6">
-        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-panel">
           <Bell className="h-5 w-5" />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-semibold tracking-title">{t("notifications.title")}</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          <h2 className="text-title-sm font-semibold tracking-title">{t("notifications.title")}</h2>
+          <p className="mt-1 text-body-sm leading-6 text-muted-foreground">
             {t("notifications.description")}
           </p>
         </div>
@@ -91,24 +91,24 @@ export function NotificationChannelsSection() {
           {form.telegramEnabled && (
             <div className="mt-3 space-y-2">
               <div className="space-y-1">
-                <Label htmlFor="telegram-bot-token" className="text-sm font-medium">{t("notifications.botTokenPlaceholder")}</Label>
+                <Label htmlFor="telegram-bot-token" className="text-body-sm font-medium">{t("notifications.botTokenPlaceholder")}</Label>
                 <Input
                   id="telegram-bot-token"
                   placeholder={t("notifications.botTokenPlaceholder")}
                   {...field("telegramBotToken")}
-                  className="h-9 font-mono text-xs"
+                  className="h-9 font-mono text-footnote"
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="telegram-chat-id" className="text-sm font-medium">{t("notifications.chatIdPlaceholder")}</Label>
+                <Label htmlFor="telegram-chat-id" className="text-body-sm font-medium">{t("notifications.chatIdPlaceholder")}</Label>
                 <Input
                   id="telegram-chat-id"
                   placeholder={t("notifications.chatIdPlaceholder")}
                   {...field("telegramChatId")}
-                  className="h-9 font-mono text-xs"
+                  className="h-9 font-mono text-footnote"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-footnote text-muted-foreground">
                 {t("notifications.telegramHint")}
               </p>
               <Button
@@ -117,7 +117,7 @@ export function NotificationChannelsSection() {
                 variant="outline"
                 onClick={() => test("telegram")}
                 disabled={testChannel.isPending || update.isPending || !form.telegramBotToken || !form.telegramChatId}
-                className="h-8 rounded-xl text-xs"
+                className="h-8 rounded-panel text-footnote"
               >
                 {t("notifications.sendTestMessage")}
               </Button>
@@ -140,21 +140,21 @@ export function NotificationChannelsSection() {
           {form.gotifyEnabled && (
             <div className="mt-3 space-y-2">
               <div className="space-y-1">
-                <Label htmlFor="gotify-server-url" className="text-sm font-medium">{t("notifications.serverUrlPlaceholder")}</Label>
+                <Label htmlFor="gotify-server-url" className="text-body-sm font-medium">{t("notifications.serverUrlPlaceholder")}</Label>
                 <Input
                   id="gotify-server-url"
                   placeholder={t("notifications.serverUrlPlaceholder")}
                   {...field("gotifyUrl")}
-                  className="h-9 font-mono text-xs"
+                  className="h-9 font-mono text-footnote"
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="gotify-app-token" className="text-sm font-medium">{t("notifications.appToken")}</Label>
+                <Label htmlFor="gotify-app-token" className="text-body-sm font-medium">{t("notifications.appToken")}</Label>
                 <Input
                   id="gotify-app-token"
                   placeholder={t("notifications.appToken")}
                   {...field("gotifyToken")}
-                  className="h-9 font-mono text-xs"
+                  className="h-9 font-mono text-footnote"
                 />
               </div>
               <Button
@@ -163,7 +163,7 @@ export function NotificationChannelsSection() {
                 variant="outline"
                 onClick={() => test("gotify")}
                 disabled={testChannel.isPending || update.isPending || !form.gotifyUrl || !form.gotifyToken}
-                className="h-8 rounded-xl text-xs"
+                className="h-8 rounded-panel text-footnote"
               >
                 {t("notifications.sendTestNotification")}
               </Button>
@@ -186,24 +186,24 @@ export function NotificationChannelsSection() {
           {form.ntfyEnabled && (
             <div className="mt-3 space-y-2">
               <div className="space-y-1">
-                <Label htmlFor="ntfy-topic-url" className="text-sm font-medium">{t("notifications.topicUrlPlaceholder")}</Label>
+                <Label htmlFor="ntfy-topic-url" className="text-body-sm font-medium">{t("notifications.topicUrlPlaceholder")}</Label>
                 <Input
                   id="ntfy-topic-url"
                   placeholder={t("notifications.topicUrlPlaceholder")}
                   {...field("ntfyUrl")}
-                  className="h-9 font-mono text-xs"
+                  className="h-9 font-mono text-footnote"
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="ntfy-token" className="text-sm font-medium">{t("notifications.tokenOptionalPlaceholder")}</Label>
+                <Label htmlFor="ntfy-token" className="text-body-sm font-medium">{t("notifications.tokenOptionalPlaceholder")}</Label>
                 <Input
                   id="ntfy-token"
                   placeholder={t("notifications.tokenOptionalPlaceholder")}
                   {...field("ntfyToken")}
-                  className="h-9 font-mono text-xs"
+                  className="h-9 font-mono text-footnote"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-footnote text-muted-foreground">
                 {t("notifications.ntfyHint")}
               </p>
               <Button
@@ -212,7 +212,7 @@ export function NotificationChannelsSection() {
                 variant="outline"
                 onClick={() => test("ntfy")}
                 disabled={testChannel.isPending || update.isPending || !form.ntfyUrl}
-                className="h-8 rounded-xl text-xs"
+                className="h-8 rounded-panel text-footnote"
               >
                 {t("notifications.sendTestNotification")}
               </Button>
@@ -226,7 +226,7 @@ export function NotificationChannelsSection() {
           type="button"
           onClick={save}
           disabled={update.isPending}
-          className="h-9 rounded-2xl px-5 text-sm"
+          className="h-9 rounded-panel px-5 text-body-sm"
         >
           {update.isPending ? t("notifications.saving") : t("notifications.saveChannels")}
         </Button>

@@ -38,12 +38,12 @@ export function EndOfListCard({
     <section
       data-testid="end-of-list-card"
       aria-label={caughtUp ? t("caughtUp") : t("endOfList")}
-      className="col-span-full mt-2 flex flex-col items-center gap-4 rounded-2xl border border-border/60 bg-card/60 px-5 py-8 text-center"
+      className="col-span-full mt-2 flex flex-col items-center gap-4 rounded-panel border border-border/60 bg-card/60 px-5 py-8 text-center"
     >
       <div className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
         {caughtUp ? <PartyPopper className="size-5" aria-hidden="true" /> : <CheckCheck className="size-5" aria-hidden="true" />}
       </div>
-      <p className="text-sm font-semibold text-foreground">
+      <p className="text-body-sm font-semibold text-foreground">
         {caughtUp ? t("caughtUp") : t("endOfList")}
       </p>
       {(showMarkAll || showContinue) && (
@@ -52,7 +52,7 @@ export function EndOfListCard({
             <Button
               type="button"
               variant="outline"
-              className="h-11 rounded-xl"
+              className="h-11 rounded-panel"
               disabled={isMarkingAllRead}
               onClick={() => onMarkAllRead?.()}
             >
@@ -63,7 +63,7 @@ export function EndOfListCard({
           {showContinue && (
             <Button
               type="button"
-              className="h-11 min-w-0 rounded-xl"
+              className="h-11 min-w-0 rounded-panel"
               onClick={() => onContinue?.()}
             >
               <span className="truncate">{t("continueTo", { name: nextFeedName ?? "" })}</span>
@@ -71,7 +71,7 @@ export function EndOfListCard({
             </Button>
           )}
           {showContinue && continueMarksRead && showMarkAll && (
-            <p className="text-xs text-muted-foreground">{t("continueMarksReadHint")}</p>
+            <p className="text-footnote text-muted-foreground">{t("continueMarksReadHint")}</p>
           )}
         </div>
       )}

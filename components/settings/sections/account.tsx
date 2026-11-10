@@ -22,15 +22,15 @@ export function AccountSettings() {
   return (
     <>
       {/* User Profile */}
-      <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6">
+      <section className="rounded-panel border border-border/65 bg-card/85 p-5 sm:p-6">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
-            <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+            <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-panel">
               <User className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold tracking-title">{t("settings.userProfile")}</h2>
-              <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+              <h2 className="text-title-sm font-semibold tracking-title">{t("settings.userProfile")}</h2>
+              <p className="mt-1 max-w-xl text-body-sm leading-6 text-muted-foreground">
                 {t("settings.signedInAs")}{" "}
                 <span className="font-medium text-foreground">
                   {session?.user?.email || t("settings.unknownUser")}
@@ -41,7 +41,7 @@ export function AccountSettings() {
           <Button
             variant="outline"
             onClick={() => signOut({ callbackUrl: "/" })}
-            className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
+            className="h-11 rounded-panel border-border/70 bg-background/70 px-5"
           >
             <LogOut className="me-2 h-4 w-4" />
             {t("settings.signOut")}
@@ -72,7 +72,7 @@ export function AccountSettings() {
           type="button"
           variant="outline"
           onClick={() => window.dispatchEvent(new Event(SHOW_PWA_INSTALL_PROMPT_EVENT))}
-          className="h-11 rounded-2xl border-border/70 bg-background/70 px-5"
+          className="h-11 rounded-panel border-border/70 bg-background/70 px-5"
         >
           {t("pwa.showInstructions")}
         </Button>

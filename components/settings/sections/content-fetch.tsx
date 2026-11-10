@@ -48,14 +48,14 @@ export function ContentFetchSection() {
   };
 
   return (
-    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6">
+    <section className="rounded-panel border border-border/65 bg-card/85 p-5 sm:p-6">
       <div className="flex items-start gap-4 mb-6">
-        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-panel">
           <Cloud className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-title">{t("contentFetch.title")}</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          <h2 className="text-title-sm font-semibold tracking-title">{t("contentFetch.title")}</h2>
+          <p className="mt-1 text-body-sm leading-6 text-muted-foreground">
             {t("contentFetch.description")}
           </p>
         </div>
@@ -64,9 +64,9 @@ export function ContentFetchSection() {
       <div className="space-y-4">
         {/* Provider */}
         <div className="grid gap-1.5">
-          <label className="text-sm font-medium" htmlFor="content-fetch-provider-select">{t("contentFetch.provider")}</label>
+          <label className="text-body-sm font-medium" htmlFor="content-fetch-provider-select">{t("contentFetch.provider")}</label>
           <Select value={provider} onValueChange={setProvider}>
-            <SelectTrigger id="content-fetch-provider-select" className="h-10 rounded-2xl">
+            <SelectTrigger id="content-fetch-provider-select" className="h-10 rounded-panel">
               <SelectValue placeholder={t("contentFetch.provider")} />
             </SelectTrigger>
             <SelectContent>
@@ -79,18 +79,18 @@ export function ContentFetchSection() {
 
         {provider !== "none" && (
           <>
-            <div className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+            <div className="rounded-panel border border-warning/30 bg-warning/10 px-4 py-3 text-body-sm text-warning">
               {t("contentFetch.privacyWarning")}
             </div>
 
             <div className="grid gap-1.5">
-              <label className="text-sm font-medium" htmlFor="content-fetch-api-key-input">
+              <label className="text-body-sm font-medium" htmlFor="content-fetch-api-key-input">
                 {t("contentFetch.apiKey")}
                 {provider === "firecrawl" && (
-                  <span className="ms-2 text-xs font-normal text-muted-foreground">({t("contentFetch.optional")})</span>
+                  <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("contentFetch.optional")})</span>
                 )}
                 {contentFetch?.hasApiKey && !apiKey && (
-                  <span className="ms-2 text-xs font-normal text-muted-foreground">({t("ai.currentlySet")})</span>
+                  <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("ai.currentlySet")})</span>
                 )}
               </label>
               <Input
@@ -99,17 +99,17 @@ export function ContentFetchSection() {
                 placeholder={contentFetch?.hasApiKey ? t("ai.leaveBlankToKeep") : "jina_... / fc-..."}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className="h-10 rounded-2xl font-mono text-sm"
+                className="h-10 rounded-panel font-mono text-body-sm"
               />
               {provider === "firecrawl" && !apiKey && !contentFetch?.hasApiKey && (
-                <p className="text-xs text-muted-foreground">{t("contentFetch.firecrawlKeylessHint")}</p>
+                <p className="text-footnote text-muted-foreground">{t("contentFetch.firecrawlKeylessHint")}</p>
               )}
             </div>
 
-            <div className="ui-control-surface flex items-center justify-between rounded-2xl border px-4 py-3">
+            <div className="ui-control-surface flex items-center justify-between rounded-panel border px-4 py-3">
               <div>
-                <p className="text-sm font-medium">{t("contentFetch.autoUse")}</p>
-                <p className="text-xs text-muted-foreground">{t("contentFetch.autoUseDescription")}</p>
+                <p className="text-body-sm font-medium">{t("contentFetch.autoUse")}</p>
+                <p className="text-footnote text-muted-foreground">{t("contentFetch.autoUseDescription")}</p>
               </div>
               <Switch checked={autoUse} onCheckedChange={setAutoUse} />
             </div>
@@ -118,7 +118,7 @@ export function ContentFetchSection() {
 
         {testResult && (
           <div className={cn(
-            "flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm",
+            "flex items-center gap-2 rounded-panel border px-4 py-3 text-body-sm",
             testResult.success
               ? "border-success/30 bg-success/10 text-success"
               : testResult.rateLimited
@@ -136,7 +136,7 @@ export function ContentFetchSection() {
           <Button
             onClick={handleSave}
             disabled={updateContentFetch.isPending}
-            className="rounded-2xl h-10"
+            className="rounded-panel h-10"
           >
             {updateContentFetch.isPending ? t("ai.saving") : t("ai.save")}
           </Button>
@@ -145,7 +145,7 @@ export function ContentFetchSection() {
               variant="outline"
               onClick={handleTest}
               disabled={testContentFetch.isPending}
-              className="rounded-2xl h-10"
+              className="rounded-panel h-10"
             >
               <Cloud className="w-4 h-4 me-2" />
               {testContentFetch.isPending ? t("ai.testing") : t("ai.testConnection")}

@@ -85,7 +85,7 @@ export default function RegisterPage() {
               no dark variant, so it needs a background that's never
               near-white — bg-card is near-white in light mode and made the
               logo effectively invisible there. */}
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl border border-border bg-accent p-3 mb-6 shadow-overlay transition-transform duration-(--dur-slow) group-hover:scale-105">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-panel border border-border bg-accent p-3 mb-6 shadow-overlay transition-transform duration-(--dur-slow) group-hover:scale-105">
             <Image
               src="/logo.svg"
               alt="FeedFerret"
@@ -94,17 +94,17 @@ export default function RegisterPage() {
               className="w-full h-full opacity-90"
             />
           </div>
-          <h1 className="text-2xl font-bold tracking-title text-foreground">
+          <h1 className="text-headline font-bold tracking-title text-foreground">
             {t("subtitle")}
           </h1>
-          <p className="text-muted-foreground mt-2 text-sm font-medium tracking-tight">
+          <p className="text-muted-foreground mt-2 text-body-sm font-medium tracking-tight">
             {t("title")}
           </p>
         </div>
 
         <Card className="border-border bg-card backdrop-blur-bar shadow-overlay overflow-hidden ring-1 ring-border">
           <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-start">
-            <CardTitle className="text-lg font-semibold tracking-title text-foreground flex items-center justify-center sm:justify-start gap-2">
+            <CardTitle className="text-title-sm font-semibold tracking-title text-foreground flex items-center justify-center sm:justify-start gap-2">
               <UserPlus className="w-4 h-4 text-muted-foreground" />
               {t("registration")}
             </CardTitle>
@@ -115,7 +115,7 @@ export default function RegisterPage() {
                 <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within/input:text-foreground transition-colors" />
                 <Input
                   placeholder={t("name")}
-                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground transition-all h-11 rounded-panel text-body-sm focus-ring"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -126,7 +126,7 @@ export default function RegisterPage() {
                 <Input
                   type="email"
                   placeholder={t("email")}
-                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground transition-all h-11 rounded-panel text-body-sm focus-ring"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -137,7 +137,7 @@ export default function RegisterPage() {
                 <Input
                   type="password"
                   placeholder={t("password")}
-                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground transition-all h-11 rounded-panel text-body-sm focus-ring"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -148,7 +148,7 @@ export default function RegisterPage() {
                 <Input
                   type="password"
                   placeholder={t("confirmPassword")}
-                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 transition-all h-11 rounded-2xl text-sm"
+                  className="pl-10 bg-muted border-border text-foreground placeholder:text-muted-foreground transition-all h-11 rounded-panel text-body-sm focus-ring"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
@@ -156,7 +156,7 @@ export default function RegisterPage() {
               </div>
 
               {error && (
-                <div className="p-3 rounded-2xl bg-danger/10 border border-danger/20 text-danger text-xs font-medium animate-shake">
+                <div className="p-3 rounded-panel bg-danger/10 border border-danger/20 text-danger text-footnote font-medium animate-shake">
                   {error}
                 </div>
               )}
@@ -164,7 +164,7 @@ export default function RegisterPage() {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold text-sm rounded-2xl transition-all active:scale-95"
+                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold text-body-sm rounded-panel transition-all active:scale-95"
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">
@@ -181,7 +181,7 @@ export default function RegisterPage() {
             </form>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4 border-t border-border pt-6 pb-8 bg-muted/30">
-            <div className="text-muted-foreground text-xs font-medium text-center w-full">
+            <div className="text-muted-foreground text-footnote font-medium text-center w-full">
               {t("alreadyHaveAccount")}{" "}
               <Link
                 href="/login"

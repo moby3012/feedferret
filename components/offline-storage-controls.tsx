@@ -25,7 +25,7 @@ export function OfflineStorageControls() {
 
   return (
     <div className="flex flex-col gap-2 sm:items-end" data-testid="offline-storage">
-      <p className="text-sm text-muted-foreground" data-testid="offline-usage">
+      <p className="text-body-sm text-muted-foreground" data-testid="offline-usage">
         {usage === null ? "…" : usage.count === 0 ? t("offlineUsageEmpty") : t("offlineUsage", { count: usage.count, size: formatBytes(usage.bytes) })}
       </p>
       {estimate?.usage != null && estimate.quota != null && (

@@ -1,0 +1,183 @@
+/*
+ * Shared controls (UX wave 2b, audit A-12 / X11): ONE focus ring, ONE
+ * segmented control, ONE chip. Components: components/ui/segmented.tsx,
+ * components/ui/chip.tsx. Every value comes from tokens.css.
+ */
+
+/* ------------------------------------------------------------ focus ring
+ * Keyboard focus is always a 2 px --ring outline drawn just inside the
+ * element's edge (inset, so it is never clipped by overflow:hidden parents
+ * or scroll containers). Mouse/touch focus shows nothing (:focus-visible).
+ * `focus-ring` is the utility for class strings; plain elements get it from
+ * the base rule, which also replaces the UA default on chips and segments.
+ */
+@layer base {
+  :focus-visible {
+    outline: var(--focus-ring-width) solid var(--ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+}
+@utility focus-ring {
+  &:focus-visible {
+    outline: var(--focus-ring-width) solid var(--ring);
+    outline-offset: var(--focus-ring-offset);
+    box-shadow: none;
+  }
+}
+
+@layer components {
+  /* ------------------------------------------------------- segmented
+   * Track --surface-sunken, thumb --surface-raised (spec §4.6).
+   * size sm = 32 px (bars; hit-slop grows it to 44 on coarse),
+   * size md = 36 px fine / 44 px coarse (sheets, settings).
+   */
+  .ff-seg {
+    display: inline-grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--radius-control);
+    background: var(--surface-sunken);
+  }
+  .ff-seg[data-block] {
+    display: grid;
+    width: 100%;
+  }
+  .ff-seg-item {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    padding-inline: 12px;
+    border-radius: calc(var(--radius-control) - 2px);
+    color: var(--text-secondary);
+    font-size: var(--text-body-sm);
+    line-height: var(--text-body-sm--line-height);
+    font-weight: 500;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+  .ff-seg[data-size="sm"] .ff-seg-item {
+    height: 28px;
+  }
+  .ff-seg[data-size="md"] .ff-seg-item {
+    min-height: 36px;
+    padding-inline: 8px;
+  }
+  @media (pointer: coarse) {
+    .ff-seg[data-size="md"] .ff-seg-item {
+      min-height: var(--hit-min);
+    }
+  }
+  .ff-seg-item:where([aria-checked="true"], [aria-selected="true"], [data-state="active"]) {
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-thumb);
+  }
+  .ff-seg-item:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .ff-seg-item:not([aria-checked="true"], [aria-selected="true"], [data-state="active"]):hover {
+      color: var(--text-primary);
+    }
+  }
+  .ff-seg-item > svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  /* ------------------------------------------------------------- chip
+   * size md (32) = bar chips: filter, label, offline (rounded-full).
+   * size sm (28) = in-content chips (label row, cluster toggle).
+   * size xs (16, one footnote line) = row meta badges: sponsored, duplicate, labels (rounded-chip).
+   * Tones: neutral (hairline), warning, muted (filled). Pressed = accent-subtle.
+   */
+  .ff-chip {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    border: 1px solid var(--divider);
+    border-radius: 9999px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+  .ff-chip[data-size="md"] {
+    height: 32px;
+    padding-inline: 12px;
+    font-size: var(--text-body-sm);
+    line-height: var(--text-body-sm--line-height);
+  }
+  .ff-chip[data-size="sm"] {
+    height: 28px;
+    padding-inline: 10px;
+    font-size: var(--text-footnote);
+    line-height: var(--text-footnote--line-height);
+  }
+  .ff-chip[data-size="xs"] {
+    height: 16px;
+    gap: 4px;
+    padding-inline: 6px;
+    border-radius: var(--radius-chip);
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
+  }
+  .ff-chip[data-tone="muted"] {
+    border-color: transparent;
+    background: var(--muted);
+    color: var(--muted-foreground);
+  }
+  .ff-chip[data-tone="warning"] {
+    border-color: transparent;
+    background: var(--warning-subtle);
+    color: var(--warning);
+  }
+  .ff-chip[aria-pressed="true"],
+  .ff-chip[aria-expanded="true"] {
+    border-color: transparent;
+    background: var(--accent-subtle);
+    color: var(--text-primary);
+  }
+  .ff-chip > svg {
+    flex-shrink: 0;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    button.ff-chip:not([aria-pressed="true"], [aria-expanded="true"]):hover {
+      color: var(--text-primary);
+    }
+  }
+}
+
+/* Scrollable segmented (settings tab navigation): content-width items in one
+   row that scrolls horizontally on narrow screens. */
+@layer components {
+  .ff-seg[data-scroll] {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .ff-seg[data-scroll]::-webkit-scrollbar {
+    display: none;
+  }
+  .ff-seg[data-scroll] .ff-seg-item {
+    flex: 0 0 auto;
+    padding-inline: 14px;
+  }
+}

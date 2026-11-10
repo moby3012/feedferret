@@ -542,12 +542,12 @@ export function ServerManagementDialog({
             ) : (
               <>
                 {/* ── USERS ── */}
-                <TabsContent value="users" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="users" className="animate-filter-swap h-full mt-0 focus-ring">
                   <div className="px-6 sm:px-8 flex flex-col h-full">
                     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <Input
                         placeholder={t("users.searchPlaceholder")}
-                        className="h-11 w-full rounded-2xl bg-card border-border/70 sm:max-w-md"
+                        className="h-11 w-full rounded-panel bg-card border-border/70 sm:max-w-md"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                       />
@@ -567,14 +567,14 @@ export function ServerManagementDialog({
                           <div
                             key={user.id}
                             className={cn(
-                              "flex flex-col gap-4 p-4 rounded-2xl border shadow-sm transition-all hover:border-border sm:flex-row sm:items-center",
+                              "flex flex-col gap-4 p-4 rounded-panel border transition-all hover:border-border sm:flex-row sm:items-center",
                               user.isActive
                                 ? "bg-card border-border/60"
                                 : "bg-muted/30 border-border/40 opacity-70",
                             )}
                           >
                             <div className="flex w-full min-w-0 items-center gap-3 sm:flex-1">
-                              <div className="w-10 h-10 shrink-0 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground font-semibold">
+                              <div className="w-10 h-10 shrink-0 rounded-panel bg-primary flex items-center justify-center text-primary-foreground font-semibold">
                                 {user.name?.[0] || user.email?.[0]?.toUpperCase()}
                               </div>
                               <div className="min-w-0 flex-1">
@@ -591,14 +591,14 @@ export function ServerManagementDialog({
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-xs text-muted-foreground truncate">{user.email}</div>
+                                <div className="text-footnote text-muted-foreground truncate">{user.email}</div>
                               </div>
                             </div>
                             <div className="flex w-full justify-end gap-2 sm:w-auto">
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className={cn("rounded-lg transition-colors", user.role === "ADMIN" ? "text-foreground" : "text-muted-foreground")}
+                                className={cn("rounded-row transition-colors", user.role === "ADMIN" ? "text-foreground" : "text-muted-foreground")}
                                 onClick={() => handleToggleRole(user)}
                                 title={user.role === "ADMIN" ? t("users.removeAdmin") : t("users.makeAdmin")}
                               >
@@ -607,7 +607,7 @@ export function ServerManagementDialog({
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className={cn("rounded-lg transition-colors", user.isActive ? "text-warning hover:bg-warning/10" : "text-success hover:bg-success/10")}
+                                className={cn("rounded-row transition-colors", user.isActive ? "text-warning hover:bg-warning/10" : "text-success hover:bg-success/10")}
                                 onClick={() => handleToggleSuspend(user)}
                                 title={user.isActive ? t("users.suspendUser") : t("users.reactivateUser")}
                               >
@@ -616,7 +616,7 @@ export function ServerManagementDialog({
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="rounded-lg text-destructive hover:bg-destructive/10"
+                                className="rounded-row text-destructive hover:bg-destructive/10"
                                 onClick={() => setPendingDeleteUser(user)}
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -630,13 +630,13 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── ACCESS / REGISTRATIONS ── */}
-                <TabsContent value="registrations" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="registrations" className="animate-filter-swap h-full mt-0 focus-ring">
                   <ScrollArea className="h-full">
                     <div className="max-w-2xl space-y-8 px-6 py-6 sm:px-8">
-                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-title">{t("registrations.allowNewRegistrations")}</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <h4 className="text-title-sm font-semibold tracking-title">{t("registrations.allowNewRegistrations")}</h4>
+                        <p className="text-body-sm text-muted-foreground">
                           {t("registrations.registrationsDescription")}
                         </p>
                       </div>
@@ -645,10 +645,10 @@ export function ServerManagementDialog({
                         onCheckedChange={(checked) => handleUpdateSettings({ registrationsEnabled: checked })}
                       />
                     </div>
-                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-title">{t("registrations.require2FA")}</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <h4 className="text-title-sm font-semibold tracking-title">{t("registrations.require2FA")}</h4>
+                        <p className="text-body-sm text-muted-foreground">
                           {t("registrations.require2FADescription")}
                         </p>
                       </div>
@@ -657,10 +657,10 @@ export function ServerManagementDialog({
                         onCheckedChange={(checked) => handleUpdateSettings({ require2FAForAdmins: checked })}
                       />
                     </div>
-                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-title">{t("registrations.publicSavedSearches")}</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <h4 className="text-title-sm font-semibold tracking-title">{t("registrations.publicSavedSearches")}</h4>
+                        <p className="text-body-sm text-muted-foreground">
                           {t("registrations.publicSavedSearchesDescription")}
                         </p>
                       </div>
@@ -669,10 +669,10 @@ export function ServerManagementDialog({
                         onCheckedChange={(checked) => handleUpdateSettings({ disablePublicSharedSearches: !checked })}
                       />
                     </div>
-                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-title">{t("registrations.defaultUiLanguage")}</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <h4 className="text-title-sm font-semibold tracking-title">{t("registrations.defaultUiLanguage")}</h4>
+                        <p className="text-body-sm text-muted-foreground">
                           {t("registrations.defaultUiLanguageDescription")}
                         </p>
                       </div>
@@ -680,21 +680,21 @@ export function ServerManagementDialog({
                         value={settings?.defaultUiLanguage ?? "en"}
                         onValueChange={(value) => handleUpdateSettings({ defaultUiLanguage: value })}
                       >
-                        <SelectTrigger className="w-40 rounded-2xl bg-background/70 border-border/70">
+                        <SelectTrigger className="w-40 rounded-panel bg-background/70 border-border/70">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="rounded-2xl">
+                        <SelectContent className="rounded-panel">
                           <SelectItem value="en">English</SelectItem>
                           <SelectItem value="de">Deutsch</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="p-6 rounded-2xl bg-warning/10 border border-warning/20 space-y-3">
+                    <div className="p-6 rounded-panel bg-warning/10 border border-warning/20 space-y-3">
                       <div className="flex items-center gap-2 text-warning">
                         <AlertCircle className="w-5 h-5" />
                         <h4 className="font-bold">{t("registrations.securityNote")}</h4>
                       </div>
-                      <p className="text-sm text-warning leading-relaxed">
+                      <p className="text-body-sm text-warning leading-relaxed">
                         {t("registrations.disableRegistrations")}
                       </p>
                     </div>
@@ -703,14 +703,14 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── EMAIL ── */}
-                <TabsContent value="email" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="email" className="animate-filter-swap h-full mt-0 focus-ring">
                   <ScrollArea className="h-full">
                     <div className="px-6 sm:px-8 py-6 space-y-6 max-w-2xl">
                       {/* Enable toggle */}
-                      <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
-                          <h4 className="text-lg font-semibold tracking-title">{t("email.mailService")}</h4>
-                          <p className="text-sm text-muted-foreground">
+                          <h4 className="text-title-sm font-semibold tracking-title">{t("email.mailService")}</h4>
+                          <p className="text-body-sm text-muted-foreground">
                             {t("email.enableMailService")}
                           </p>
                         </div>
@@ -721,7 +721,7 @@ export function ServerManagementDialog({
                       </div>
 
                       {settings?.mailServiceEnabled && (
-                        <div className="grid gap-6 p-6 rounded-2xl bg-card border border-border/60 shadow-sm">
+                        <div className="grid gap-6 p-6 rounded-panel bg-card border border-border/60">
                           {/* Provider selection */}
                           <div className="space-y-2">
                             <Label>{t("email.emailProvider")}</Label>
@@ -729,10 +729,10 @@ export function ServerManagementDialog({
                               value={settings.mailProvider || "smtp"}
                               onValueChange={(value) => setSettings({ ...settings, mailProvider: value })}
                             >
-                              <SelectTrigger className="rounded-2xl bg-background/70 border-border/70">
+                              <SelectTrigger className="rounded-panel bg-background/70 border-border/70">
                                 <SelectValue placeholder={t("email.chooseProvider")} />
                               </SelectTrigger>
-                              <SelectContent className="rounded-2xl">
+                              <SelectContent className="rounded-panel">
                                 <SelectItem value="smtp">{t("email.smtp")}</SelectItem>
                                 <SelectItem value="resend">{t("email.resend")}</SelectItem>
                                 <SelectItem value="postmark">{t("email.postmark")}</SelectItem>
@@ -761,10 +761,10 @@ export function ServerManagementDialog({
                                     value={settings.smtpSecure ?? "auto"}
                                     onValueChange={(val) => setSettings({ ...settings, smtpSecure: val === "auto" ? null : val })}
                                   >
-                                    <SelectTrigger className="rounded-2xl bg-background/70 border-border/70">
+                                    <SelectTrigger className="rounded-panel bg-background/70 border-border/70">
                                       <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="rounded-2xl">
+                                    <SelectContent className="rounded-panel">
                                       <SelectItem value="auto">{t("email.smtpSecureAuto")}</SelectItem>
                                       <SelectItem value="ssl">{t("email.smtpSecureSsl")}</SelectItem>
                                       <SelectItem value="starttls">{t("email.smtpSecureStarttls")}</SelectItem>
@@ -821,7 +821,7 @@ export function ServerManagementDialog({
                           <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
                             <Button
                               variant="outline"
-                              className="rounded-2xl px-6 gap-2"
+                              className="rounded-panel px-6 gap-2"
                               onClick={handleSendTestEmail}
                               disabled={isSaving}
                             >
@@ -829,7 +829,7 @@ export function ServerManagementDialog({
                               {t("email.sendTestEmail")}
                             </Button>
                             <Button
-                              className="rounded-2xl px-8"
+                              className="rounded-panel px-8"
                               onClick={() => handleUpdateSettings(settings)}
                               disabled={isSaving}
                             >
@@ -843,7 +843,7 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── NOTIFICATIONS ── */}
-                <TabsContent value="notifications" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="notifications" className="animate-filter-swap h-full mt-0 focus-ring">
                   <ScrollArea className="h-full">
                     <div className="px-6 py-6 sm:px-8 max-w-2xl">
                       <NotificationsAdminPanel />
@@ -852,14 +852,14 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── INSTANCE ── */}
-                <TabsContent value="instance" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="instance" className="animate-filter-swap h-full mt-0 focus-ring">
                   <ScrollArea className="h-full">
                     <div className="px-6 py-6 sm:px-8">
-                  <div className="max-w-2xl grid gap-6 p-6 rounded-2xl bg-card border border-border/60 shadow-sm">
+                  <div className="max-w-2xl grid gap-6 p-6 rounded-panel bg-card border border-border/60">
                     <div className="grid gap-3">
                       <Label>{t("instance.sidebarLogo")}</Label>
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-background/70">
+                        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-panel border border-border/70 bg-background/70">
                           {settings?.instanceIconDataUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={settings.instanceIconDataUrl} alt="Instance logo preview" className="h-full w-full object-cover" />
@@ -868,7 +868,7 @@ export function ServerManagementDialog({
                           )}
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <Label className="inline-flex h-10 cursor-pointer items-center rounded-2xl border border-border/70 bg-background/70 px-4 text-sm font-medium hover:bg-muted">
+                          <Label className="inline-flex h-10 cursor-pointer items-center rounded-panel border border-border/70 bg-background/70 px-4 text-body-sm font-medium hover:bg-muted">
                             {t("instance.uploadIcon")}
                             <Input
                               type="file"
@@ -881,7 +881,7 @@ export function ServerManagementDialog({
                             <Button
                               type="button"
                               variant="outline"
-                              className="rounded-2xl"
+                              className="rounded-panel"
                               onClick={() => setSettings({ ...settings, instanceIconDataUrl: null })}
                             >
                               {t("instance.reset")}
@@ -889,7 +889,7 @@ export function ServerManagementDialog({
                           )}
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">{t("instance.logoDescription")}</p>
+                      <p className="text-footnote text-muted-foreground">{t("instance.logoDescription")}</p>
                     </div>
                     <SettingsField
                       label={t("instance.instanceName")}
@@ -914,7 +914,7 @@ export function ServerManagementDialog({
                     />
                     <div className="flex justify-end pt-2">
                       <Button
-                        className="rounded-2xl px-8"
+                        className="rounded-panel px-8"
                         onClick={() => handleUpdateSettings({
                           instanceName: settings?.instanceName,
                           instanceUrl: settings?.instanceUrl,
@@ -932,21 +932,21 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── STARTER PACKS ── */}
-                <TabsContent value="starter-packs" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="starter-packs" className="animate-filter-swap h-full mt-0 focus-ring">
                   <ScrollArea className="h-full">
                     <div className="space-y-4 px-6 py-6 sm:px-8">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <h4 className="text-lg font-semibold tracking-title">{t("starterPacks.title")}</h4>
-                          <p className="text-sm text-muted-foreground">
+                          <h4 className="text-title-sm font-semibold tracking-title">{t("starterPacks.title")}</h4>
+                          <p className="text-body-sm text-muted-foreground">
                             {t("starterPacks.description")}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <Button type="button" variant="outline" className="rounded-2xl" onClick={resetStarterPacks}>
+                          <Button type="button" variant="outline" className="rounded-panel" onClick={resetStarterPacks}>
                             {t("starterPacks.resetDefaults")}
                           </Button>
-                          <Button type="button" className="rounded-2xl" onClick={addPack}>
+                          <Button type="button" className="rounded-panel" onClick={addPack}>
                             <Plus className="me-2 h-4 w-4" /> {t("starterPacks.addPack")}
                           </Button>
                         </div>
@@ -954,7 +954,7 @@ export function ServerManagementDialog({
 
                       {(starterPackValidation.errors.length > 0 || starterPackValidation.warnings.length > 0) && (
                         <div className={cn(
-                          "rounded-2xl border px-4 py-3 text-sm",
+                          "rounded-panel border px-4 py-3 text-body-sm",
                           starterPackValidation.errors.length > 0
                             ? "border-destructive/25 bg-destructive/10 text-destructive"
                             : "border-warning/20 bg-warning/10 text-warning",
@@ -971,12 +971,12 @@ export function ServerManagementDialog({
                       )}
 
                       {starterPacks.map((pack, packIndex) => (
-                        <div key={pack.id} className="space-y-4 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+                        <div key={pack.id} className="space-y-4 rounded-panel border border-border/60 bg-card p-5">
                           <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
                             <div className="space-y-1.5">
                               <Label>{t("starterPacks.name")}</Label>
                               <Input
-                                className="rounded-2xl bg-background/70 border-border/70"
+                                className="rounded-panel bg-background/70 border-border/70"
                                 value={pack.name}
                                 onChange={(event) => updatePack(packIndex, { name: event.target.value })}
                               />
@@ -984,29 +984,29 @@ export function ServerManagementDialog({
                             <div className="space-y-1.5">
                               <Label>{t("starterPacks.description")}</Label>
                               <Input
-                                className="rounded-2xl bg-background/70 border-border/70"
+                                className="rounded-panel bg-background/70 border-border/70"
                                 value={pack.description || ""}
                                 onChange={(event) => updatePack(packIndex, { description: event.target.value })}
                               />
                             </div>
                             <div className="flex items-center justify-end gap-3">
                               <div className="flex items-center gap-1">
-                                <Button type="button" variant="ghost" size="icon" className="rounded-xl" disabled={packIndex === 0} onClick={() => movePack(packIndex, packIndex - 1)}>
+                                <Button type="button" variant="ghost" size="icon" className="rounded-panel" disabled={packIndex === 0} onClick={() => movePack(packIndex, packIndex - 1)}>
                                   <ArrowUp className="h-4 w-4" />
                                 </Button>
-                                <Button type="button" variant="ghost" size="icon" className="rounded-xl" disabled={packIndex === starterPacks.length - 1} onClick={() => movePack(packIndex, packIndex + 1)}>
+                                <Button type="button" variant="ghost" size="icon" className="rounded-panel" disabled={packIndex === starterPacks.length - 1} onClick={() => movePack(packIndex, packIndex + 1)}>
                                   <ArrowDown className="h-4 w-4" />
                                 </Button>
                               </div>
-                              <div className="ui-control-surface flex items-center gap-2 rounded-2xl border px-3 py-2">
-                                <span className="text-sm">{t("starterPacks.enabled")}</span>
+                              <div className="ui-control-surface flex items-center gap-2 rounded-panel border px-3 py-2">
+                                <span className="text-body-sm">{t("starterPacks.enabled")}</span>
                                 <Switch checked={pack.enabled} onCheckedChange={(checked) => updatePack(packIndex, { enabled: checked })} />
                               </div>
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="rounded-xl"
+                                className="rounded-panel"
                                 onClick={() => duplicatePack(packIndex)}
                                 title={t("starterPacks.duplicatePack")}
                               >
@@ -1016,7 +1016,7 @@ export function ServerManagementDialog({
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="rounded-xl text-destructive hover:bg-destructive/10"
+                                className="rounded-panel text-destructive hover:bg-destructive/10"
                                 onClick={() => setStarterPacks(starterPacks.filter((_, i) => i !== packIndex))}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1025,7 +1025,7 @@ export function ServerManagementDialog({
                           </div>
 
                           {pack.path && (
-                            <div className="rounded-2xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
+                            <div className="rounded-panel border border-warning/20 bg-warning/10 px-3 py-2 text-footnote text-warning">
                               This default pack imports from <code>{pack.path}</code>. Add custom feeds below to override future custom pack content, or remove/reset as needed.
                             </div>
                           )}
@@ -1034,7 +1034,7 @@ export function ServerManagementDialog({
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <Label>{t("starterPacks.feeds")} ({pack.feeds.length})</Label>
                               <div className="flex flex-wrap gap-2">
-                                <Label className="inline-flex h-9 cursor-pointer items-center rounded-xl border border-border/70 bg-background/70 px-3 text-sm font-medium hover:bg-muted">
+                                <Label className="inline-flex h-9 cursor-pointer items-center rounded-panel border border-border/70 bg-background/70 px-3 text-body-sm font-medium hover:bg-muted">
                                   <Upload className="me-1.5 h-4 w-4" /> {t("starterPacks.importOpml")}
                                   <Input
                                     type="file"
@@ -1046,56 +1046,56 @@ export function ServerManagementDialog({
                                     }}
                                   />
                                 </Label>
-                                <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => exportStarterPack(pack)} disabled={pack.feeds.length === 0}>
+                                <Button type="button" size="sm" variant="outline" className="rounded-panel" onClick={() => exportStarterPack(pack)} disabled={pack.feeds.length === 0}>
                                   <Download className="me-1.5 h-4 w-4" /> {t("starterPacks.export")}
                                 </Button>
-                                <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => addPackFeed(packIndex)}>
+                                <Button type="button" size="sm" variant="outline" className="rounded-panel" onClick={() => addPackFeed(packIndex)}>
                                   <Plus className="me-1.5 h-4 w-4" /> {t("starterPacks.addFeed")}
                                 </Button>
                               </div>
                             </div>
                             <div className="space-y-2">
                               {pack.feeds.map((feed, feedIndex) => (
-                                <div key={`${pack.id}-${feedIndex}`} className="ui-control-surface grid gap-2 rounded-2xl border p-3 lg:grid-cols-[auto_1fr_1.4fr_1fr_1fr_auto]">
+                                <div key={`${pack.id}-${feedIndex}`} className="ui-control-surface grid gap-2 rounded-panel border p-3 lg:grid-cols-[auto_1fr_1.4fr_1fr_1fr_auto]">
                                   <div className="flex gap-1 lg:flex-col">
-                                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl" disabled={feedIndex === 0} onClick={() => movePackFeed(packIndex, feedIndex, feedIndex - 1)}>
+                                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-panel" disabled={feedIndex === 0} onClick={() => movePackFeed(packIndex, feedIndex, feedIndex - 1)}>
                                       <ArrowUp className="h-4 w-4" />
                                     </Button>
-                                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-xl" disabled={feedIndex === pack.feeds.length - 1} onClick={() => movePackFeed(packIndex, feedIndex, feedIndex + 1)}>
+                                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 rounded-panel" disabled={feedIndex === pack.feeds.length - 1} onClick={() => movePackFeed(packIndex, feedIndex, feedIndex + 1)}>
                                       <ArrowDown className="h-4 w-4" />
                                     </Button>
                                   </div>
                                   <Input
                                     placeholder={t("starterPacks.feedTitle")}
-                                    className="rounded-xl bg-background/70 border-border/70"
+                                    className="rounded-panel bg-background/70 border-border/70"
                                     value={feed.title}
                                     onChange={(event) => updatePackFeed(packIndex, feedIndex, { title: event.target.value })}
                                   />
                                   <Input
                                     placeholder={t("starterPacks.feedUrl")}
-                                    className="rounded-xl bg-background/70 border-border/70"
+                                    className="rounded-panel bg-background/70 border-border/70"
                                     value={feed.xmlUrl}
                                     onChange={(event) => updatePackFeed(packIndex, feedIndex, { xmlUrl: event.target.value })}
                                   />
                                   <Input
                                     placeholder={t("starterPacks.feedWebsiteUrl")}
-                                    className="rounded-xl bg-background/70 border-border/70"
+                                    className="rounded-panel bg-background/70 border-border/70"
                                     value={feed.htmlUrl || ""}
                                     onChange={(event) => updatePackFeed(packIndex, feedIndex, { htmlUrl: event.target.value })}
                                   />
                                   <Input
                                     placeholder={t("starterPacks.feedCategory")}
-                                    className="rounded-xl bg-background/70 border-border/70"
+                                    className="rounded-panel bg-background/70 border-border/70"
                                     value={feed.category || ""}
                                     onChange={(event) => updatePackFeed(packIndex, feedIndex, { category: event.target.value })}
                                   />
-                                  <Button type="button" variant="ghost" size="icon" className="rounded-xl text-destructive hover:bg-destructive/10" onClick={() => removePackFeed(packIndex, feedIndex)}>
+                                  <Button type="button" variant="ghost" size="icon" className="rounded-panel text-destructive hover:bg-destructive/10" onClick={() => removePackFeed(packIndex, feedIndex)}>
                                     <X className="h-4 w-4" />
                                   </Button>
                                 </div>
                               ))}
                               {pack.feeds.length === 0 && !pack.path && (
-                                <Empty className="rounded-2xl border border-dashed border-border/70 py-6">
+                                <Empty className="rounded-panel border border-dashed border-border/70 py-6">
                                   <EmptyMedia variant="icon"><PackagePlus className="size-5" /></EmptyMedia>
                                   <EmptyContent>
                                     <EmptyTitle>{t("starterPacks.noFeedsYet")}</EmptyTitle>
@@ -1109,7 +1109,7 @@ export function ServerManagementDialog({
 
                       <div className="flex justify-end pb-4">
                         <Button
-                          className="rounded-2xl px-8"
+                          className="rounded-panel px-8"
                           disabled={isSaving}
                           onClick={saveStarterPacks}
                         >
@@ -1121,13 +1121,13 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── SYNC ── */}
-                <TabsContent value="sync" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="sync" className="animate-filter-swap h-full mt-0 focus-ring">
                   <ScrollArea className="h-full">
                     <div className="max-w-2xl space-y-6 px-6 py-6 sm:px-8">
-                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-title">{t("sync.backgroundSync")}</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <h4 className="text-title-sm font-semibold tracking-title">{t("sync.backgroundSync")}</h4>
+                        <p className="text-body-sm text-muted-foreground">
                           {t("sync.automaticallyFetch")}
                         </p>
                       </div>
@@ -1137,25 +1137,25 @@ export function ServerManagementDialog({
                       />
                     </div>
                     {settings?.backgroundSyncEnabled !== false && (
-                      <div className="p-6 rounded-2xl bg-card border border-border/60 shadow-sm space-y-4">
+                      <div className="p-6 rounded-panel bg-card border border-border/60 space-y-4">
                         <div className="space-y-2">
                           <Label>{t("sync.syncInterval")}</Label>
                           <Input
                             type="number"
                             min={1}
                             max={1440}
-                            className="w-full rounded-2xl bg-background/70 border-border/70 sm:w-40"
+                            className="w-full rounded-panel bg-background/70 border-border/70 sm:w-40"
                             value={settings?.backgroundSyncIntervalMinutes ?? 5}
                             onChange={(e) => {
                               const v = parseInt(e.target.value);
                               setSettings({ ...settings, backgroundSyncIntervalMinutes: Number.isFinite(v) && v >= 1 ? v : 1 });
                             }}
                           />
-                          <p className="text-xs text-muted-foreground">{t("sync.minOneMinute")}</p>
+                          <p className="text-footnote text-muted-foreground">{t("sync.minOneMinute")}</p>
                         </div>
                         <div className="flex justify-end">
                           <Button
-                            className="rounded-2xl px-8"
+                            className="rounded-panel px-8"
                             onClick={() => handleUpdateSettings({ backgroundSyncIntervalMinutes: settings?.backgroundSyncIntervalMinutes })}
                             disabled={isSaving}
                           >
@@ -1164,10 +1164,10 @@ export function ServerManagementDialog({
                         </div>
                       </div>
                     )}
-                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pe-6">
-                        <h4 className="text-lg font-semibold tracking-title">{t("sync.trustedInternalFeeds")}</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <h4 className="text-title-sm font-semibold tracking-title">{t("sync.trustedInternalFeeds")}</h4>
+                        <p className="text-body-sm text-muted-foreground">
                           {t("sync.allowInternalIps")}
                         </p>
                       </div>
@@ -1177,22 +1177,22 @@ export function ServerManagementDialog({
                       />
                     </div>
                     {settings?.allowInternalFeedUrls && (
-                      <div className="p-6 rounded-2xl bg-destructive/10 border border-destructive/20 space-y-2">
+                      <div className="p-6 rounded-panel bg-destructive/10 border border-destructive/20 space-y-2">
                         <div className="flex items-center gap-2 text-destructive">
                           <AlertCircle className="w-5 h-5" />
                           <h4 className="font-bold">{t("sync.internalUrlFetching")}</h4>
                         </div>
-                        <p className="text-sm text-destructive/80 leading-relaxed">
+                        <p className="text-body-sm text-destructive/80 leading-relaxed">
                           {t("sync.internalUrlWarning")}
                         </p>
                       </div>
                     )}
 
                     {/* ── Browser-render sidecar (M7-T2) ── */}
-                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pe-6">
-                        <h4 className="text-lg font-semibold tracking-title">{t("sync.renderSidecar")}</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <h4 className="text-title-sm font-semibold tracking-title">{t("sync.renderSidecar")}</h4>
+                        <p className="text-body-sm text-muted-foreground">
                           {t("sync.renderSidecarDescription")}
                         </p>
                       </div>
@@ -1203,19 +1203,19 @@ export function ServerManagementDialog({
                     </div>
 
                     {/* Step-by-step setup guide (visible whether or not enabled) */}
-                    <Collapsible className="rounded-2xl bg-card border border-border/60 shadow-sm">
+                    <Collapsible className="rounded-panel bg-card border border-border/60">
                       <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 p-5 text-start">
-                        <span className="flex items-center gap-2 text-sm font-semibold">
+                        <span className="flex items-center gap-2 text-body-sm font-semibold">
                           <BookOpen className="w-4 h-4 text-muted-foreground" />
                           {t("sync.renderSidecarGuideTitle")}
                         </span>
                         <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
                       </CollapsibleTrigger>
                       <CollapsibleContent className="px-5 pb-5 space-y-4">
-                        <p className="text-xs text-muted-foreground leading-relaxed">
+                        <p className="text-footnote text-muted-foreground leading-relaxed">
                           {t("sync.renderSidecarGuideIntro")}
                         </p>
-                        <ol className="list-decimal space-y-1.5 ps-5 text-xs text-muted-foreground marker:text-muted-foreground/70">
+                        <ol className="list-decimal space-y-1.5 ps-5 text-footnote text-muted-foreground marker:text-muted-foreground/70">
                           <li>{t("sync.renderSidecarGuideStep1")}</li>
                           <li>{t("sync.renderSidecarGuideStep2")}</li>
                           <li>{t("sync.renderSidecarGuideStep3")}</li>
@@ -1228,20 +1228,20 @@ export function ServerManagementDialog({
                               type="button"
                               size="sm"
                               variant="ghost"
-                              className="h-7 rounded-lg px-2 text-xs"
+                              className="h-7 rounded-row px-2 text-footnote"
                               onClick={() => handleCopyText(RENDER_SIDECAR_COMPOSE)}
                             >
                               <ClipboardCopy className="w-3.5 h-3.5 me-1" />
                               {t("sync.renderSidecarGuideCopy")}
                             </Button>
                           </div>
-                          <pre className="rounded-xl bg-background/60 border border-border/50 p-3 text-caption font-mono whitespace-pre overflow-x-auto">{RENDER_SIDECAR_COMPOSE}</pre>
+                          <pre className="rounded-panel bg-background/60 border border-border/50 p-3 text-caption font-mono whitespace-pre overflow-x-auto">{RENDER_SIDECAR_COMPOSE}</pre>
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-caption uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideCommandLabel")}</Label>
                           <div className="flex items-center gap-2">
-                            <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">docker compose up -d render-sidecar</code>
-                            <Button type="button" size="icon" variant="outline" className="rounded-xl shrink-0" onClick={() => handleCopyText("docker compose up -d render-sidecar")}>
+                            <code className="flex-1 truncate rounded-panel bg-background border border-border/50 px-3 py-2 text-footnote font-mono">docker compose up -d render-sidecar</code>
+                            <Button type="button" size="icon" variant="outline" className="rounded-panel shrink-0" onClick={() => handleCopyText("docker compose up -d render-sidecar")}>
                               <ClipboardCopy className="w-4 h-4" />
                             </Button>
                           </div>
@@ -1249,8 +1249,8 @@ export function ServerManagementDialog({
                         <div className="space-y-1.5">
                           <Label className="text-caption uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideUrlLabel")}</Label>
                           <div className="flex items-center gap-2">
-                            <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">http://render-sidecar:8080/</code>
-                            <Button type="button" size="icon" variant="outline" className="rounded-xl shrink-0" onClick={() => handleCopyText("http://render-sidecar:8080/")}>
+                            <code className="flex-1 truncate rounded-panel bg-background border border-border/50 px-3 py-2 text-footnote font-mono">http://render-sidecar:8080/</code>
+                            <Button type="button" size="icon" variant="outline" className="rounded-panel shrink-0" onClick={() => handleCopyText("http://render-sidecar:8080/")}>
                               <ClipboardCopy className="w-4 h-4" />
                             </Button>
                           </div>
@@ -1262,7 +1262,7 @@ export function ServerManagementDialog({
                     </Collapsible>
 
                     {settings?.renderSidecarEnabled && (
-                      <div className="p-6 rounded-2xl bg-card border border-border/60 shadow-sm space-y-4">
+                      <div className="p-6 rounded-panel bg-card border border-border/60 space-y-4">
                         <SettingsField
                           label={t("sync.renderSidecarUrl")}
                           placeholder="http://render-sidecar:8080/"
@@ -1279,19 +1279,19 @@ export function ServerManagementDialog({
                           type="password"
                           isSecret
                         />
-                        <p className="text-xs text-muted-foreground leading-relaxed">
+                        <p className="text-footnote text-muted-foreground leading-relaxed">
                           {t("sync.renderSidecarHint")}
                         </p>
                         <div className="flex flex-wrap justify-end gap-2">
                           <Button
                             variant="outline"
-                            className="rounded-2xl px-6"
+                            className="rounded-panel px-6"
                             onClick={handleTestSidecar}
                             disabled={isSaving}
                           >
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.renderSidecarTest")}
                           </Button>
-                          <Button className="rounded-2xl px-8" onClick={handleSaveSidecar} disabled={isSaving}>
+                          <Button className="rounded-panel px-8" onClick={handleSaveSidecar} disabled={isSaving}>
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.save")}
                           </Button>
                         </div>
@@ -1299,10 +1299,10 @@ export function ServerManagementDialog({
                     )}
 
                     {/* ── RSSHub connector (M5a) ── */}
-                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pe-6">
-                        <h4 className="text-lg font-semibold tracking-title">{t("sync.rsshub")}</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <h4 className="text-title-sm font-semibold tracking-title">{t("sync.rsshub")}</h4>
+                        <p className="text-body-sm text-muted-foreground">
                           {t("sync.rsshubDescription")}
                         </p>
                       </div>
@@ -1313,7 +1313,7 @@ export function ServerManagementDialog({
                     </div>
 
                     {settings?.rsshubEnabled && (
-                      <div className="p-6 rounded-2xl bg-card border border-border/60 shadow-sm space-y-4">
+                      <div className="p-6 rounded-panel bg-card border border-border/60 space-y-4">
                         <SettingsField
                           label={t("sync.rsshubBaseUrl")}
                           placeholder="http://rsshub:1200/"
@@ -1330,19 +1330,19 @@ export function ServerManagementDialog({
                           type="password"
                           isSecret
                         />
-                        <p className="text-xs text-muted-foreground leading-relaxed">
+                        <p className="text-footnote text-muted-foreground leading-relaxed">
                           {t("sync.rsshubHint")}
                         </p>
                         <div className="flex flex-wrap justify-end gap-2">
                           <Button
                             variant="outline"
-                            className="rounded-2xl px-6"
+                            className="rounded-panel px-6"
                             onClick={handleTestRsshub}
                             disabled={isSaving}
                           >
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.rsshubTest")}
                           </Button>
-                          <Button className="rounded-2xl px-8" onClick={handleSaveRsshub} disabled={isSaving}>
+                          <Button className="rounded-panel px-8" onClick={handleSaveRsshub} disabled={isSaving}>
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.save")}
                           </Button>
                         </div>
@@ -1350,10 +1350,10 @@ export function ServerManagementDialog({
                     )}
 
                     {/* ── changedetection.io connector (M5b) ── */}
-                    <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pe-6">
-                        <h4 className="text-lg font-semibold tracking-title">{t("sync.changedetection")}</h4>
-                        <p className="text-sm text-muted-foreground">
+                        <h4 className="text-title-sm font-semibold tracking-title">{t("sync.changedetection")}</h4>
+                        <p className="text-body-sm text-muted-foreground">
                           {t("sync.changedetectionDescription")}
                         </p>
                       </div>
@@ -1364,7 +1364,7 @@ export function ServerManagementDialog({
                     </div>
 
                     {settings?.changedetectionEnabled && (
-                      <div className="p-6 rounded-2xl bg-card border border-border/60 shadow-sm space-y-4">
+                      <div className="p-6 rounded-panel bg-card border border-border/60 space-y-4">
                         <SettingsField
                           label={t("sync.changedetectionBaseUrl")}
                           placeholder="http://changedetection:5000/"
@@ -1390,19 +1390,19 @@ export function ServerManagementDialog({
                           type="password"
                           isSecret
                         />
-                        <p className="text-xs text-muted-foreground leading-relaxed">
+                        <p className="text-footnote text-muted-foreground leading-relaxed">
                           {t("sync.changedetectionHint")}
                         </p>
                         <div className="flex flex-wrap justify-end gap-2">
                           <Button
                             variant="outline"
-                            className="rounded-2xl px-6"
+                            className="rounded-panel px-6"
                             onClick={handleTestChangedetection}
                             disabled={isSaving}
                           >
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.changedetectionTest")}
                           </Button>
-                          <Button className="rounded-2xl px-8" onClick={handleSaveChangedetection} disabled={isSaving}>
+                          <Button className="rounded-panel px-8" onClick={handleSaveChangedetection} disabled={isSaving}>
                             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("sync.save")}
                           </Button>
                         </div>
@@ -1413,22 +1413,22 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── DISCOVERY CATALOG ── */}
-                <TabsContent value="discovery" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="discovery" className="animate-filter-swap h-full mt-0 focus-ring">
                   <DiscoveryCatalogTab />
                 </TabsContent>
 
                 {/* ── AUDIT LOG ── */}
-                <TabsContent value="audit" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="audit" className="animate-filter-swap h-full mt-0 focus-ring">
                   <ScrollArea className="h-full">
                     <div className="px-6 sm:px-8 py-6 max-w-4xl space-y-8">
                       {/* Admin Actions */}
                       <div>
-                        <h3 className="text-base font-semibold mb-4">{t("audit.adminActions")}</h3>
+                        <h3 className="text-body font-semibold mb-4">{t("audit.adminActions")}</h3>
                         {auditLog.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">{t("audit.noAdminActionsRecorded")}</p>
+                          <p className="text-body-sm text-muted-foreground">{t("audit.noAdminActionsRecorded")}</p>
                         ) : (
-                          <div className="rounded-2xl border border-border/60 overflow-hidden">
-                            <table className="w-full text-sm">
+                          <div className="rounded-panel border border-border/60 overflow-hidden">
+                            <table className="w-full text-body-sm">
                               <thead className="bg-muted/40">
                                 <tr>
                                   <th className="text-start px-4 py-2 font-medium text-muted-foreground">{t("audit.time")}</th>
@@ -1443,7 +1443,7 @@ export function ServerManagementDialog({
                                     <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">{new Date(entry.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</td>
                                     <td className="px-4 py-2 truncate max-w-[140px]">{entry.actor?.name || entry.actor?.email || "—"}</td>
                                     <td className="px-4 py-2">
-                                      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", {
+                                      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-footnote font-medium", {
                                         "bg-destructive/15 text-destructive": entry.action === "user.delete",
                                         "bg-warning/15 text-warning": entry.action === "user.suspend" || entry.action === "user.role_change",
                                         "bg-success/15 text-success": entry.action === "user.unsuspend",
@@ -1464,12 +1464,12 @@ export function ServerManagementDialog({
 
                       {/* Login Attempts */}
                       <div>
-                        <h3 className="text-base font-semibold mb-4">{t("audit.recentLoginAttempts")}</h3>
+                        <h3 className="text-body font-semibold mb-4">{t("audit.recentLoginAttempts")}</h3>
                         {loginAttempts.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">{t("audit.noLoginAttemptsRecorded")}</p>
+                          <p className="text-body-sm text-muted-foreground">{t("audit.noLoginAttemptsRecorded")}</p>
                         ) : (
-                          <div className="rounded-2xl border border-border/60 overflow-hidden">
-                            <table className="w-full text-sm">
+                          <div className="rounded-panel border border-border/60 overflow-hidden">
+                            <table className="w-full text-body-sm">
                               <thead className="bg-muted/40">
                                 <tr>
                                   <th className="text-start px-4 py-2 font-medium text-muted-foreground">{t("audit.time")}</th>
@@ -1485,11 +1485,11 @@ export function ServerManagementDialog({
                                     <td className="px-4 py-2 truncate max-w-[180px]">{attempt.email}</td>
                                     <td className="px-4 py-2">
                                       {attempt.success ? (
-                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-success/15 text-success">
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-footnote font-medium bg-success/15 text-success">
                                           <CheckCircle2 className="w-3 h-3" /> {t("audit.success")}
                                         </span>
                                       ) : (
-                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-destructive/15 text-destructive">
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-footnote font-medium bg-destructive/15 text-destructive">
                                           <AlertTriangle className="w-3 h-3" /> {attempt.failReason || t("audit.failed")}
                                         </span>
                                       )}
@@ -1506,16 +1506,16 @@ export function ServerManagementDialog({
                   </ScrollArea>
                 </TabsContent>
 
-                <TabsContent value="storage" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="storage" className="animate-filter-swap h-full mt-0 focus-ring">
                   <div className="px-6 sm:px-8 flex flex-col h-full">
                     <div className="mb-4">
-                      <p className="text-sm text-muted-foreground">{t("storage.description")}</p>
+                      <p className="text-body-sm text-muted-foreground">{t("storage.description")}</p>
                     </div>
                     <ScrollArea className="flex-1">
                       {!storageLoaded ? (
                         <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span className="text-sm">{t("storage.loading")}</span>
+                          <span className="text-body-sm">{t("storage.loading")}</span>
                         </div>
                       ) : storageStats.length === 0 ? (
                         <Empty className="border-0 py-8">
@@ -1526,7 +1526,7 @@ export function ServerManagementDialog({
                         </Empty>
                       ) : (
                         <div className="pb-8">
-                          <div className="grid grid-cols-5 gap-2 mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          <div className="grid grid-cols-5 gap-2 mb-2 px-2 text-footnote font-semibold text-muted-foreground uppercase tracking-wide">
                             <div className="col-span-2">{t("storage.user")}</div>
                             <div className="text-right">{t("storage.articles")}</div>
                             <div className="text-right">{t("storage.feeds")}</div>
@@ -1538,11 +1538,11 @@ export function ServerManagementDialog({
                               .map((stat) => (
                                 <div
                                   key={stat.id}
-                                  className="grid grid-cols-5 gap-2 items-center rounded-2xl border border-border/50 bg-card/70 px-4 py-3 text-sm"
+                                  className="grid grid-cols-5 gap-2 items-center rounded-panel border border-border/50 bg-card/70 px-4 py-3 text-body-sm"
                                 >
                                   <div className="col-span-2 min-w-0">
                                     <div className="font-medium truncate">{stat.name || stat.email}</div>
-                                    {stat.name && <div className="text-xs text-muted-foreground truncate">{stat.email}</div>}
+                                    {stat.name && <div className="text-footnote text-muted-foreground truncate">{stat.email}</div>}
                                   </div>
                                   <div className="text-right tabular-nums text-brand font-semibold">{format.number(stat.articles)}</div>
                                   <div className="text-right tabular-nums text-brand font-semibold">{format.number(stat.feeds)}</div>
@@ -1550,7 +1550,7 @@ export function ServerManagementDialog({
                                 </div>
                               ))}
                           </div>
-                          <div className="ui-control-surface mt-4 rounded-2xl border px-4 py-3 text-xs text-muted-foreground">
+                          <div className="ui-control-surface mt-4 rounded-panel border px-4 py-3 text-footnote text-muted-foreground">
                             <strong>Total:</strong>{" "}
                             <span className="text-brand font-semibold">{format.number(storageStats.reduce((s, r) => s + r.articles, 0))}</span> {t("storage.articles").toLowerCase()} ·{" "}
                             <span className="text-brand font-semibold">{format.number(storageStats.reduce((s, r) => s + r.feeds, 0))}</span> {t("storage.feeds").toLowerCase()} ·{" "}
@@ -1563,7 +1563,7 @@ export function ServerManagementDialog({
                 </TabsContent>
 
                 {/* ── SYSTEM LOGS ── */}
-                <TabsContent value="logs" className="animate-filter-swap h-full mt-0 focus-visible:outline-none">
+                <TabsContent value="logs" className="animate-filter-swap h-full mt-0 focus-ring">
                   <div className="px-6 sm:px-8 flex flex-col h-full">
                     <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex flex-wrap gap-2">
@@ -1572,7 +1572,7 @@ export function ServerManagementDialog({
                             key={cat ?? "all"}
                             size="sm"
                             variant={logsCategory === cat ? "default" : "outline"}
-                            className="rounded-2xl"
+                            className="rounded-panel"
                             onClick={() => {
                               setLogsCategory(cat);
                               loadSystemLogs(cat);
@@ -1585,7 +1585,7 @@ export function ServerManagementDialog({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-2xl gap-2"
+                        className="rounded-panel gap-2"
                         onClick={() => loadSystemLogs(logsCategory)}
                       >
                         <RefreshCw className="h-4 w-4" />
@@ -1606,8 +1606,8 @@ export function ServerManagementDialog({
                         </Empty>
                       ) : (
                         <div className="pb-8">
-                          <div className="rounded-2xl border border-border/60 overflow-hidden">
-                            <table className="w-full text-sm">
+                          <div className="rounded-panel border border-border/60 overflow-hidden">
+                            <table className="w-full text-body-sm">
                               <thead className="bg-muted/40">
                                 <tr>
                                   <th className="text-start px-4 py-2 font-medium text-muted-foreground whitespace-nowrap">Time</th>
@@ -1619,9 +1619,9 @@ export function ServerManagementDialog({
                               <tbody>
                                 {systemLogs.map((entry, i) => (
                                   <tr key={entry.id} className={cn("border-t border-border/40", i % 2 === 0 ? "" : "bg-muted/20")}>
-                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap text-xs">{new Date(entry.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</td>
+                                    <td className="px-4 py-2 text-muted-foreground whitespace-nowrap text-footnote">{new Date(entry.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</td>
                                     <td className="px-4 py-2">
-                                      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", {
+                                      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-footnote font-medium", {
                                         "bg-info/15 text-info": entry.level === "info",
                                         "bg-warning/15 text-warning": entry.level === "warn",
                                         "bg-destructive/15 text-destructive": entry.level === "error",
@@ -1649,7 +1649,7 @@ export function ServerManagementDialog({
           open={!!pendingDeleteUser}
           onOpenChange={(nextOpen) => { if (!nextOpen) setPendingDeleteUser(null); }}
         >
-          <AlertDialogContent className="rounded-3xl border-border/70 bg-background">
+          <AlertDialogContent className="rounded-sheet border-border/70 bg-background">
             <AlertDialogHeader>
               <AlertDialogTitle>{t("users.deleteUserTitle")}</AlertDialogTitle>
               <AlertDialogDescription>
@@ -1657,9 +1657,9 @@ export function ServerManagementDialog({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="rounded-2xl">{t("users.cancelButton")}</AlertDialogCancel>
+              <AlertDialogCancel className="rounded-panel">{t("users.cancelButton")}</AlertDialogCancel>
               <AlertDialogAction
-                className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="rounded-panel bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={() => {
                   if (!pendingDeleteUser) return;
                   handleDeleteUser(pendingDeleteUser.id);
@@ -1706,12 +1706,12 @@ function SettingsField({
       <Input
         type={isSecret ? "password" : type}
         placeholder={hasStoredValue ? "••••••••  (stored — enter new value to change)" : placeholder}
-        className="rounded-2xl bg-background/70 border-border/70"
+        className="rounded-panel bg-background/70 border-border/70"
         value={hasStoredValue ? "" : (rawValue ?? "")}
         onChange={(e) => setSettings({ ...settings, [field]: e.target.value })}
       />
       {hasStoredValue && (
-        <p className="text-xs text-success">✓ Value stored securely. Leave blank to keep existing.</p>
+        <p className="text-footnote text-success">✓ Value stored securely. Leave blank to keep existing.</p>
       )}
     </div>
   );
@@ -1790,8 +1790,8 @@ function DiscoveryCatalogTab() {
     <ScrollArea className="h-full">
       <div className="px-6 sm:px-8 py-6 space-y-6">
         <div>
-          <h3 className="text-lg font-semibold mb-1">{t("discovery.title")}</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="text-title-sm font-semibold mb-1">{t("discovery.title")}</h3>
+          <p className="text-body-sm text-muted-foreground">
             {t("discovery.description")}
           </p>
         </div>
@@ -1800,20 +1800,20 @@ function DiscoveryCatalogTab() {
         {isLoading ? (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="text-sm">{t("discovery.loadingStats")}</span>
+            <span className="text-body-sm">{t("discovery.loadingStats")}</span>
           </div>
         ) : stats ? (
-          <div className="ui-control-surface p-4 rounded-2xl border">
+          <div className="ui-control-surface p-4 rounded-panel border">
             <div className="flex items-center justify-between mb-3">
               <span className="font-medium">{t("discovery.catalogStatus")}</span>
-              <span className="text-2xl font-bold">{stats.totalFeeds} {t("discovery.feeds")}</span>
+              <span className="text-headline font-bold">{stats.totalFeeds} {t("discovery.feeds")}</span>
             </div>
             {stats.byCategory.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {stats.byCategory.map((cat) => (
                   <span
                     key={cat.category}
-                    className="px-2 py-1 text-xs rounded-lg bg-background border border-border/50"
+                    className="px-2 py-1 text-footnote rounded-row bg-background border border-border/50"
                   >
                     {cat.category}: {cat.count}
                   </span>
@@ -1828,7 +1828,7 @@ function DiscoveryCatalogTab() {
           <Button
             onClick={handleImport}
             disabled={isImporting}
-            className="rounded-2xl"
+            className="rounded-panel"
           >
             {isImporting ? (
               <>
@@ -1846,7 +1846,7 @@ function DiscoveryCatalogTab() {
             <Button
               variant="outline"
               onClick={handleClear}
-              className="rounded-2xl"
+              className="rounded-panel"
             >
               <Trash2 className="w-4 h-4 me-2" />
               {t("discovery.clearCatalog")}
@@ -1856,12 +1856,12 @@ function DiscoveryCatalogTab() {
 
         {/* Import Result */}
         {importResult && (
-          <div className="p-4 rounded-2xl bg-success/10 border border-success/20 space-y-3">
+          <div className="p-4 rounded-panel bg-success/10 border border-success/20 space-y-3">
             <div className="flex items-center gap-2 text-success">
               <ShieldCheck className="w-5 h-5" />
               <span className="font-medium">{t("discovery.importComplete")}</span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-body-sm">
               <div>
                 <span className="text-muted-foreground">{t("discovery.fetched")}</span>
                 <p className="font-medium">{importResult.totalFetched}</p>
@@ -1880,10 +1880,10 @@ function DiscoveryCatalogTab() {
               </div>
             </div>
             <div className="pt-2 border-t border-success/20">
-              <p className="text-xs text-muted-foreground mb-2">{t("discovery.sources")}</p>
+              <p className="text-footnote text-muted-foreground mb-2">{t("discovery.sources")}</p>
               <div className="space-y-1">
                 {importResult.sources.map((src) => (
-                  <div key={src.name} className="flex items-center justify-between text-xs">
+                  <div key={src.name} className="flex items-center justify-between text-footnote">
                     <span>{src.name}</span>
                     {src.error ? (
                       <span className="text-destructive">{src.error}</span>
@@ -1898,7 +1898,7 @@ function DiscoveryCatalogTab() {
         )}
 
         {/* Info */}
-        <div className="ui-control-surface p-4 rounded-2xl border text-sm text-muted-foreground">
+        <div className="ui-control-surface p-4 rounded-panel border text-body-sm text-muted-foreground">
           <p className="mb-2">
             <strong>{t("discovery.sources")}</strong> awesome-rss-feeds, awesome-tech-rss (GitHub)
           </p>
@@ -1968,29 +1968,29 @@ function NotificationsAdminPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xl font-semibold tracking-title">{t("pushNotifications.title")}</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h3 className="text-title font-semibold tracking-title">{t("pushNotifications.title")}</h3>
+        <p className="mt-1 text-body-sm text-muted-foreground">
           {t("pushNotifications.description")}
         </p>
       </div>
 
-      <div className="rounded-2xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-4">
+      <div className="rounded-panel border border-border/60 bg-card/85 p-5 sm:p-6 space-y-4">
         <div className="flex items-start gap-3">
           <div className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-panel",
             diag?.configured ? "bg-success/10 text-success" : "bg-warning/10 text-warning",
           )}>
             {diag?.configured ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
           </div>
           <div className="flex-1">
-            <div className="text-sm font-semibold">
+            <div className="text-body-sm font-semibold">
               {loading ? t("pushNotifications.checking") : diag?.configured ? t("pushNotifications.configured") : t("pushNotifications.notConfigured")}
             </div>
             {!loading && diag && (
-              <div className="mt-1 text-xs text-muted-foreground space-y-0.5">
-                <p>{t("pushNotifications.publicKey")} <code className="rounded bg-background/60 px-1">{diag.publicKey || "—"}</code></p>
+              <div className="mt-1 text-footnote text-muted-foreground space-y-0.5">
+                <p>{t("pushNotifications.publicKey")} <code className="rounded-chip bg-background/60 px-1">{diag.publicKey || "—"}</code></p>
                 <p>{t("pushNotifications.privateKey")} {diag.privateKeyConfigured ? t("pushNotifications.set") : t("pushNotifications.missing")}</p>
-                <p>{t("pushNotifications.contact")} <code className="rounded bg-background/60 px-1">{diag.contact || "—"}</code></p>
+                <p>{t("pushNotifications.contact")} <code className="rounded-chip bg-background/60 px-1">{diag.contact || "—"}</code></p>
                 <p>{diag.activeSubscriptions} active subscription{diag.activeSubscriptions === 1 ? "" : "s"} across {diag.totalUsers} user{diag.totalUsers === 1 ? "" : "s"}</p>
               </div>
             )}
@@ -1998,18 +1998,18 @@ function NotificationsAdminPanel() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-4">
+      <div className="rounded-panel border border-border/60 bg-card/85 p-5 sm:p-6 space-y-4">
         <div className="flex items-start gap-3">
           <KeyRound className="w-5 h-5 text-muted-foreground mt-0.5" />
           <div className="flex-1 space-y-2">
-            <h4 className="text-sm font-semibold">{t("pushNotifications.setupVapid")}</h4>
-            <p className="text-xs text-muted-foreground">
+            <h4 className="text-body-sm font-semibold">{t("pushNotifications.setupVapid")}</h4>
+            <p className="text-footnote text-muted-foreground">
               Generate a key pair and add the values to your environment, then restart the server.
             </p>
-            <ol className="list-decimal list-inside text-xs text-muted-foreground space-y-1 mt-2">
+            <ol className="list-decimal list-inside text-footnote text-muted-foreground space-y-1 mt-2">
               <li>Click <strong className="text-foreground/80">Generate keys</strong> below.</li>
               <li>Copy the keys and your contact email into your environment file:
-                <pre className="mt-1 rounded-xl bg-background/60 border border-border/50 p-2 text-caption font-mono whitespace-pre overflow-x-auto">{`WEB_PUSH_VAPID_PUBLIC_KEY=…
+                <pre className="mt-1 rounded-panel bg-background/60 border border-border/50 p-2 text-caption font-mono whitespace-pre overflow-x-auto">{`WEB_PUSH_VAPID_PUBLIC_KEY=…
 WEB_PUSH_VAPID_PRIVATE_KEY=…
 WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
               </li>
@@ -2020,46 +2020,46 @@ WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button type="button" className="rounded-2xl" onClick={handleGenerate} disabled={generating}>
+          <Button type="button" className="rounded-panel" onClick={handleGenerate} disabled={generating}>
             {generating ? <Loader2 className="w-4 h-4 animate-spin me-2" /> : <KeyRound className="w-4 h-4 me-2" />}
             {t("pushNotifications.generateKeys")}
           </Button>
         </div>
 
         {generated && (
-          <div className="ui-control-surface rounded-2xl border p-4 space-y-3">
+          <div className="ui-control-surface rounded-panel border p-4 space-y-3">
             <div>
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("pushNotifications.publicKeyLabel")}</Label>
+              <Label className="text-footnote uppercase tracking-wider text-muted-foreground">{t("pushNotifications.publicKeyLabel")}</Label>
               <div className="flex items-center gap-2 mt-1">
-                <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">
+                <code className="flex-1 truncate rounded-panel bg-background border border-border/50 px-3 py-2 text-footnote font-mono">
                   {generated.publicKey}
                 </code>
-                <Button type="button" size="icon" variant="outline" className="rounded-xl" onClick={() => copy("public key", generated.publicKey)}>
+                <Button type="button" size="icon" variant="outline" className="rounded-panel" onClick={() => copy("public key", generated.publicKey)}>
                   <ClipboardCopy className="w-4 h-4" />
                 </Button>
               </div>
             </div>
             <div>
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("pushNotifications.privateKeyLabel")}</Label>
+              <Label className="text-footnote uppercase tracking-wider text-muted-foreground">{t("pushNotifications.privateKeyLabel")}</Label>
               <div className="flex items-center gap-2 mt-1">
-                <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">
+                <code className="flex-1 truncate rounded-panel bg-background border border-border/50 px-3 py-2 text-footnote font-mono">
                   {generated.privateKey}
                 </code>
-                <Button type="button" size="icon" variant="outline" className="rounded-xl" onClick={() => copy("private key", generated.privateKey)}>
+                <Button type="button" size="icon" variant="outline" className="rounded-panel" onClick={() => copy("private key", generated.privateKey)}>
                   <ClipboardCopy className="w-4 h-4" />
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-footnote text-muted-foreground">
               {t("pushNotifications.generatedKeysNote")}
             </p>
           </div>
         )}
       </div>
 
-      <div className="rounded-2xl border border-border/60 bg-card/85 p-5 sm:p-6 space-y-2">
-        <h4 className="text-sm font-semibold">{t("pushNotifications.pwaAppBadge")}</h4>
-        <p className="text-xs text-muted-foreground">
+      <div className="rounded-panel border border-border/60 bg-card/85 p-5 sm:p-6 space-y-2">
+        <h4 className="text-body-sm font-semibold">{t("pushNotifications.pwaAppBadge")}</h4>
+        <p className="text-footnote text-muted-foreground">
           {t("pushNotifications.badgeDescription")}
         </p>
       </div>

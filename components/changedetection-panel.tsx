@@ -49,7 +49,7 @@ export function ChangedetectionPanel({ onAddFeed, isAddingFeed }: Changedetectio
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground leading-relaxed">{t("intro")}</p>
+      <p className="text-footnote text-muted-foreground leading-relaxed">{t("intro")}</p>
       <Input
         placeholder={t("urlPlaceholder")}
         value={url}
@@ -61,21 +61,21 @@ export function ChangedetectionPanel({ onAddFeed, isAddingFeed }: Changedetectio
         onKeyDown={(e) => {
           if (e.key === "Enter" && url.trim()) handleCreate();
         }}
-        className="h-9 text-sm w-full"
+        className="h-9 text-body-sm w-full"
       />
       <Button size="sm" className="h-9 px-3 w-full" disabled={!url.trim() || create.isPending} onClick={handleCreate}>
         {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : t("monitorButton")}
       </Button>
 
       {error && !created && (
-        <div className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
+        <div className="rounded-panel border border-warning/20 bg-warning/10 px-3 py-2 text-footnote text-warning">
           {error}
         </div>
       )}
 
       {created && (
-        <div className="ui-control-surface space-y-2 rounded-xl border px-3 py-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+        <div className="ui-control-surface space-y-2 rounded-panel border px-3 py-2">
+          <p className="flex items-center gap-1.5 text-footnote font-medium text-foreground">
             <Eye className="size-3.5 shrink-0 text-muted-foreground" />
             {t("watchCreated")}
           </p>

@@ -62,77 +62,77 @@ export function ExportDestinationsSection() {
   };
 
   return (
-    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6">
+    <section className="rounded-panel border border-border/65 bg-card/85 p-5 sm:p-6">
       <div className="flex items-start gap-4 mb-6">
-        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-panel">
           <Send className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-title">{t("title")}</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">{t("description")}</p>
+          <h2 className="text-title-sm font-semibold tracking-title">{t("title")}</h2>
+          <p className="mt-1 text-body-sm leading-6 text-muted-foreground">{t("description")}</p>
         </div>
       </div>
 
       <div className="space-y-6">
         {/* Obsidian */}
-        <div className="space-y-3 rounded-2xl border border-border/60 p-4">
+        <div className="space-y-3 rounded-panel border border-border/60 p-4">
           <div>
-            <h3 className="text-sm font-semibold">{t("obsidianTitle")}</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">{t("obsidianDescription")}</p>
+            <h3 className="text-body-sm font-semibold">{t("obsidianTitle")}</h3>
+            <p className="mt-0.5 text-footnote text-muted-foreground">{t("obsidianDescription")}</p>
           </div>
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="export-obsidian-vault-input">{t("obsidianVaultLabel")}</label>
+            <label className="text-body-sm font-medium" htmlFor="export-obsidian-vault-input">{t("obsidianVaultLabel")}</label>
             <Input
               id="export-obsidian-vault-input"
               placeholder={t("obsidianVaultPlaceholder")}
               value={obsidianVault}
               onChange={(e) => setObsidianVault(e.target.value)}
-              className="h-10 rounded-2xl"
+              className="h-10 rounded-panel"
             />
           </div>
           <Button
             onClick={handleSaveObsidian}
             disabled={updateExport.isPending}
             size="sm"
-            className="rounded-2xl h-9"
+            className="rounded-panel h-9"
           >
             {updateExport.isPending ? t("saving") : t("save")}
           </Button>
         </div>
 
         {/* Wallabag */}
-        <div className="space-y-3 rounded-2xl border border-border/60 p-4">
+        <div className="space-y-3 rounded-panel border border-border/60 p-4">
           <div>
-            <h3 className="text-sm font-semibold">{t("wallabagTitle")}</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">{t("wallabagDescription")}</p>
+            <h3 className="text-body-sm font-semibold">{t("wallabagTitle")}</h3>
+            <p className="mt-0.5 text-footnote text-muted-foreground">{t("wallabagDescription")}</p>
           </div>
 
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="export-wallabag-url-input">{t("wallabagUrlLabel")}</label>
+            <label className="text-body-sm font-medium" htmlFor="export-wallabag-url-input">{t("wallabagUrlLabel")}</label>
             <Input
               id="export-wallabag-url-input"
               placeholder={t("wallabagUrlPlaceholder")}
               value={wallabagUrl}
               onChange={(e) => setWallabagUrl(e.target.value)}
-              className="h-10 rounded-2xl"
+              className="h-10 rounded-panel"
             />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <label className="text-sm font-medium" htmlFor="export-wallabag-client-id-input">{t("wallabagClientIdLabel")}</label>
+              <label className="text-body-sm font-medium" htmlFor="export-wallabag-client-id-input">{t("wallabagClientIdLabel")}</label>
               <Input
                 id="export-wallabag-client-id-input"
                 value={wallabagClientId}
                 onChange={(e) => setWallabagClientId(e.target.value)}
-                className="h-10 rounded-2xl font-mono text-sm"
+                className="h-10 rounded-panel font-mono text-body-sm"
               />
             </div>
             <div className="grid gap-1.5">
-              <label className="text-sm font-medium" htmlFor="export-wallabag-client-secret-input">
+              <label className="text-body-sm font-medium" htmlFor="export-wallabag-client-secret-input">
                 {t("wallabagClientSecretLabel")}
                 {exportSettings?.hasWallabagClientSecret && !wallabagClientSecret && (
-                  <span className="ms-2 text-xs font-normal text-muted-foreground">({t("currentlySet")})</span>
+                  <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("currentlySet")})</span>
                 )}
               </label>
               <Input
@@ -141,23 +141,23 @@ export function ExportDestinationsSection() {
                 placeholder={exportSettings?.hasWallabagClientSecret ? t("leaveBlankToKeep") : undefined}
                 value={wallabagClientSecret}
                 onChange={(e) => setWallabagClientSecret(e.target.value)}
-                className="h-10 rounded-2xl font-mono text-sm"
+                className="h-10 rounded-panel font-mono text-body-sm"
               />
             </div>
             <div className="grid gap-1.5">
-              <label className="text-sm font-medium" htmlFor="export-wallabag-username-input">{t("wallabagUsernameLabel")}</label>
+              <label className="text-body-sm font-medium" htmlFor="export-wallabag-username-input">{t("wallabagUsernameLabel")}</label>
               <Input
                 id="export-wallabag-username-input"
                 value={wallabagUsername}
                 onChange={(e) => setWallabagUsername(e.target.value)}
-                className="h-10 rounded-2xl"
+                className="h-10 rounded-panel"
               />
             </div>
             <div className="grid gap-1.5">
-              <label className="text-sm font-medium" htmlFor="export-wallabag-password-input">
+              <label className="text-body-sm font-medium" htmlFor="export-wallabag-password-input">
                 {t("wallabagPasswordLabel")}
                 {exportSettings?.hasWallabagPassword && !wallabagPassword && (
-                  <span className="ms-2 text-xs font-normal text-muted-foreground">({t("currentlySet")})</span>
+                  <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("currentlySet")})</span>
                 )}
               </label>
               <Input
@@ -166,14 +166,14 @@ export function ExportDestinationsSection() {
                 placeholder={exportSettings?.hasWallabagPassword ? t("leaveBlankToKeep") : undefined}
                 value={wallabagPassword}
                 onChange={(e) => setWallabagPassword(e.target.value)}
-                className="h-10 rounded-2xl"
+                className="h-10 rounded-panel"
               />
             </div>
           </div>
 
           {wallabagTestResult && (
             <div className={cn(
-              "flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm",
+              "flex items-center gap-2 rounded-panel border px-4 py-3 text-body-sm",
               wallabagTestResult.success
                 ? "border-success/30 bg-success/10 text-success"
                 : "border-destructive/30 bg-destructive/10 text-destructive"
@@ -190,7 +190,7 @@ export function ExportDestinationsSection() {
               onClick={handleSaveWallabag}
               disabled={updateExport.isPending}
               size="sm"
-              className="rounded-2xl h-9"
+              className="rounded-panel h-9"
             >
               {updateExport.isPending ? t("saving") : t("save")}
             </Button>
@@ -199,7 +199,7 @@ export function ExportDestinationsSection() {
               onClick={handleTestWallabag}
               disabled={testWallabag.isPending}
               size="sm"
-              className="rounded-2xl h-9"
+              className="rounded-panel h-9"
             >
               {testWallabag.isPending ? t("testing") : t("testConnection")}
             </Button>

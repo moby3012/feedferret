@@ -56,7 +56,7 @@ export function highlightText(text: string, terms: string[]): ReactNode {
 
   return parts.map((part, i) =>
     i % 2 === 1 ? (
-      <mark key={i} className="rounded-xs bg-accent/30 px-0.5 text-foreground">
+      <mark key={i} className="rounded-chip bg-accent/30 px-0.5 text-foreground">
         {part}
       </mark>
     ) : (

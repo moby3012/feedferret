@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { LegacyArticle } from "@/features/articles/legacy-adapter";
+import { Chip, ChipLabel } from "@/components/ui/chip";
 import { createSwipeRow, documentDir, type LongPressPoint, type SwipeAction, type SwipeActionId } from "@/lib/gestures";
 import { highlightText } from "@/lib/highlight-search-terms";
 import { cn } from "@/lib/utils";
@@ -256,13 +257,9 @@ function titleTone(read: boolean) {
 function SponsoredChip() {
   const t = useTranslations("articleList");
   return (
-    <span
-      data-testid="sponsored-chip"
-      title={t("sponsoredHint")}
-      className="inline-flex h-4 shrink-0 items-center rounded-chip bg-warning-subtle px-1.5 text-caption font-semibold text-warning"
-    >
+    <ChipLabel tone="warning" data-testid="sponsored-chip" title={t("sponsoredHint")}>
       {t("sponsored")}
-    </span>
+    </ChipLabel>
   );
 }
 
@@ -289,19 +286,16 @@ function SourceLine({ article, faviconSize = 14, minimal = false }: { article: L
       <span className="min-w-0 truncate">{article.feedName}</span>
       {article.isSponsored && <SponsoredChip />}
       {(article.duplicateCount ?? 0) > 0 && (
-        <span
-          className="inline-flex shrink-0 items-center gap-0.5 rounded-chip bg-muted px-1 text-caption"
-          title={`${t("alsoIn")} ${article.duplicateCount} ${t("otherFeeds", { count: article.duplicateCount ?? 0 })}`}
-        >
+        <ChipLabel title={`${t("alsoIn")} ${article.duplicateCount} ${t("otherFeeds", { count: article.duplicateCount ?? 0 })}`}>
           <Layers className="size-2.5" aria-hidden />
           {article.duplicateCount}
-        </span>
+        </ChipLabel>
       )}
       {article.isDuplicate && article.canonicalFeedName && (
-        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-chip bg-muted/60 px-1 text-caption" title={`${t("firstSeenIn")}: ${article.canonicalFeedName}`}>
+        <ChipLabel title={`${t("firstSeenIn")}: ${article.canonicalFeedName}`}>
           <Layers className="size-2.5" aria-hidden />
           {t("duplicateBadge")}
-        </span>
+        </ChipLabel>
       )}
       <span aria-hidden className="shrink-0 opacity-50">
         ·
@@ -329,8 +323,8 @@ function StateGlyphs({ article }: { article: LegacyArticle }) {
 function ClusterChip({ cluster, onToggle }: { cluster: RowCluster; onToggle(): void }) {
   const t = useTranslations("articleList");
   return (
-    <button
-      type="button"
+    <Chip
+      size="sm"
       data-testid="cluster-toggle"
       aria-expanded={cluster.expanded}
       aria-label={`${cluster.expanded ? t("hideSources") : t("showSources")} (${t("moreSources", { count: cluster.more })})`}
@@ -338,14 +332,10 @@ function ClusterChip({ cluster, onToggle }: { cluster: RowCluster; onToggle(): v
         e.stopPropagation();
         onToggle();
       }}
-      className={cn(
-        "hit-slop inline-flex h-6 shrink-0 items-center gap-1 rounded-chip border border-divider px-1.5 text-caption font-semibold transition-colors duration-(--dur-fast)",
-        cluster.expanded ? "bg-accent-subtle text-foreground" : "text-muted-foreground hover:text-foreground",
-      )}
     >
       <Layers className="size-3" aria-hidden />
       {t("moreSources", { count: cluster.more })}
-    </button>
+    </Chip>
   );
 }
 
@@ -362,7 +352,7 @@ function ActionButton({ label, onClick, children, active, tone, size }: { label:
       className={cn(
         "hit-slop inline-flex shrink-0 items-center justify-center transition-colors duration-(--dur-fast)",
         size === "md" ? "size-8 rounded-control" : "size-7 rounded-chip",
-        "text-muted-foreground hover:bg-surface-sunken hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "text-muted-foreground hover:bg-surface-sunken hover:text-foreground focus-ring",
         active && tone === "star" && "text-brand-secondary hover:text-brand-secondary",
         active && tone === "later" && "bg-accent-subtle text-foreground",
         tone === "warn" && "text-warning hover:text-warning",
@@ -401,10 +391,10 @@ function Labels({ article }: { article: LegacyArticle }) {
   return (
     <div className="mt-1.5 flex flex-wrap gap-1.5">
       {article.labels.slice(0, 2).map((item) => (
-        <span key={item.label.id} className="inline-flex h-5 items-center gap-1 rounded-chip bg-muted px-1.5 text-caption text-muted-foreground">
+        <ChipLabel key={item.label.id}>
           <span className="size-1.5 rounded-full" style={{ backgroundColor: item.label.color }} />
           {item.label.name}
-        </span>
+        </ChipLabel>
       ))}
     </div>
   );

@@ -72,14 +72,14 @@ export function AiSummarySection() {
   };
 
   return (
-    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6">
+    <section className="rounded-panel border border-border/65 bg-card/85 p-5 sm:p-6">
       <div className="flex items-start gap-4 mb-6">
-        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-panel">
           <Sparkles className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-title">{t("ai.title")}</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          <h2 className="text-title-sm font-semibold tracking-title">{t("ai.title")}</h2>
+          <p className="mt-1 text-body-sm leading-6 text-muted-foreground">
             {t("ai.description")}
           </p>
         </div>
@@ -88,9 +88,9 @@ export function AiSummarySection() {
       <div className="space-y-4">
         {/* Provider */}
         <div className="grid gap-1.5">
-          <label className="text-sm font-medium" htmlFor="ai-provider-select">{t("ai.provider")}</label>
+          <label className="text-body-sm font-medium" htmlFor="ai-provider-select">{t("ai.provider")}</label>
           <Select value={provider} onValueChange={setProvider}>
-            <SelectTrigger id="ai-provider-select" className="h-10 rounded-2xl">
+            <SelectTrigger id="ai-provider-select" className="h-10 rounded-panel">
               <SelectValue placeholder={t("ai.provider")} />
             </SelectTrigger>
             <SelectContent>
@@ -106,17 +106,17 @@ export function AiSummarySection() {
         </div>
 
         {provider !== "none" && provider !== "ollama" && (
-          <div className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <div className="rounded-panel border border-warning/30 bg-warning/10 px-4 py-3 text-body-sm text-warning">
             {t("ai.privacyWarning")}
           </div>
         )}
 
         {provider !== "none" && provider !== "ollama" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-api-key-input">
+            <label className="text-body-sm font-medium" htmlFor="ai-api-key-input">
               {t("ai.apiKey")}
               {ai?.hasApiKey && !apiKey && (
-                <span className="ms-2 text-xs font-normal text-muted-foreground">({t("ai.currentlySet")})</span>
+                <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("ai.currentlySet")})</span>
               )}
             </label>
             <Input
@@ -125,29 +125,29 @@ export function AiSummarySection() {
               placeholder={ai?.hasApiKey ? t("ai.leaveBlankToKeep") : "sk-..."}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              className="h-10 rounded-2xl font-mono text-sm"
+              className="h-10 rounded-panel font-mono text-body-sm"
             />
           </div>
         )}
 
         {provider === "ollama" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-ollama-base-url-input">{t("ai.ollamaBaseUrl")}</label>
+            <label className="text-body-sm font-medium" htmlFor="ai-ollama-base-url-input">{t("ai.ollamaBaseUrl")}</label>
             <Input
               id="ai-ollama-base-url-input"
               placeholder="http://localhost:11434"
               value={ollamaBaseUrl}
               onChange={(e) => setOllamaBaseUrl(e.target.value)}
-              className="h-10 rounded-2xl font-mono text-sm"
+              className="h-10 rounded-panel font-mono text-body-sm"
             />
           </div>
         )}
 
         {provider !== "none" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-model-input">
+            <label className="text-body-sm font-medium" htmlFor="ai-model-input">
               {t("ai.model")}
-              <span className="ms-1 text-xs font-normal text-muted-foreground">
+              <span className="ms-1 text-footnote font-normal text-muted-foreground">
                 {provider === "openai" && "(default: gpt-4o-mini)"}
                 {provider === "anthropic" && "(default: claude-haiku-4-5-20251001)"}
                 {provider === "gemini" && "(default: gemini-1.5-flash)"}
@@ -160,16 +160,16 @@ export function AiSummarySection() {
               placeholder="optional override"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="h-10 rounded-2xl font-mono text-sm"
+              className="h-10 rounded-panel font-mono text-body-sm"
             />
           </div>
         )}
 
         {provider !== "none" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-language-select">{t("ai.summaryLanguage")}</label>
+            <label className="text-body-sm font-medium" htmlFor="ai-language-select">{t("ai.summaryLanguage")}</label>
             <Select value={language} onValueChange={setLanguage}>
-              <SelectTrigger id="ai-language-select" className="h-10 rounded-2xl">
+              <SelectTrigger id="ai-language-select" className="h-10 rounded-panel">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -186,10 +186,10 @@ export function AiSummarySection() {
         )}
 
         {provider !== "none" && (
-          <div className="ui-control-surface flex items-center justify-between rounded-2xl border px-4 py-3">
+          <div className="ui-control-surface flex items-center justify-between rounded-panel border px-4 py-3">
             <div>
-              <p className="text-sm font-medium">{t("ai.autoSummarize")}</p>
-              <p className="text-xs text-muted-foreground">{t("ai.autoSummarizeDescription")}</p>
+              <p className="text-body-sm font-medium">{t("ai.autoSummarize")}</p>
+              <p className="text-footnote text-muted-foreground">{t("ai.autoSummarizeDescription")}</p>
             </div>
             <Switch
               checked={autoSummarize}
@@ -199,10 +199,10 @@ export function AiSummarySection() {
         )}
 
         {provider !== "none" && (
-          <div className="ui-control-surface flex items-center justify-between rounded-2xl border px-4 py-3">
+          <div className="ui-control-surface flex items-center justify-between rounded-panel border px-4 py-3">
             <div>
-              <p className="text-sm font-medium">{t("ai.autoTag")}</p>
-              <p className="text-xs text-muted-foreground">{t("ai.autoTagDescription")}</p>
+              <p className="text-body-sm font-medium">{t("ai.autoTag")}</p>
+              <p className="text-footnote text-muted-foreground">{t("ai.autoTagDescription")}</p>
             </div>
             <Switch
               checked={autoTag}
@@ -212,21 +212,21 @@ export function AiSummarySection() {
         )}
 
         {provider !== "none" && (
-          <div className="ui-control-surface flex items-center justify-between rounded-2xl border px-4 py-3">
+          <div className="ui-control-surface flex items-center justify-between rounded-panel border px-4 py-3">
             <div>
-              <p className="text-sm font-medium">{t("ai.cleanTitles")}</p>
-              <p className="text-xs text-muted-foreground">{t("ai.cleanTitlesDescription")}</p>
+              <p className="text-body-sm font-medium">{t("ai.cleanTitles")}</p>
+              <p className="text-footnote text-muted-foreground">{t("ai.cleanTitlesDescription")}</p>
             </div>
             <Switch checked={cleanTitles} onCheckedChange={setCleanTitles} />
           </div>
         )}
 
         {provider !== "none" && (
-          <div className="ui-control-surface flex items-center justify-between gap-4 rounded-2xl border px-4 py-3">
+          <div className="ui-control-surface flex items-center justify-between gap-4 rounded-panel border px-4 py-3">
             <div>
-              <p className="text-sm font-medium" id="ai-briefing-auto-label">{t("ai.briefingAuto")}</p>
-              <p className="text-xs text-muted-foreground">{t("ai.briefingAutoDescription")}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{t("ai.briefingPrivacy")}</p>
+              <p className="text-body-sm font-medium" id="ai-briefing-auto-label">{t("ai.briefingAuto")}</p>
+              <p className="text-footnote text-muted-foreground">{t("ai.briefingAutoDescription")}</p>
+              <p className="mt-1 text-footnote text-muted-foreground">{t("ai.briefingPrivacy")}</p>
             </div>
             <Switch checked={briefingAuto} onCheckedChange={setBriefingAuto} aria-labelledby="ai-briefing-auto-label" />
           </div>
@@ -234,7 +234,7 @@ export function AiSummarySection() {
 
         {provider !== "none" && (
           <div className="grid gap-1.5">
-            <label className="text-sm font-medium" htmlFor="ai-daily-cap-input">{t("ai.dailyCap")}</label>
+            <label className="text-body-sm font-medium" htmlFor="ai-daily-cap-input">{t("ai.dailyCap")}</label>
             <Input
               id="ai-daily-cap-input"
               type="number"
@@ -244,19 +244,19 @@ export function AiSummarySection() {
               value={dailyCap}
               placeholder={String(ai?.defaultDailyCap ?? 150000)}
               onChange={(e) => setDailyCap(e.target.value)}
-              className="h-10 rounded-2xl"
+              className="h-10 rounded-panel"
               aria-describedby="ai-daily-cap-hint"
             />
-            <p id="ai-daily-cap-hint" className="text-xs text-muted-foreground">
+            <p id="ai-daily-cap-hint" className="text-footnote text-muted-foreground">
               {t("ai.dailyCapDescription", { default: (ai?.defaultDailyCap ?? 150000).toLocaleString() })}{" "}
               {t("ai.dailyCapDay", { time: ai?.budgetResetsAt ? format.dateTime(new Date(ai.budgetResetsAt), { hour: "2-digit", minute: "2-digit" }) : "00:00 UTC" })}
             </p>
-            <p className="text-xs text-muted-foreground" data-testid="ai-usage-today">
+            <p className="text-footnote text-muted-foreground" data-testid="ai-usage-today">
               {t("ai.usageTodayCloud", { count: (ai?.usedToday ?? 0).toLocaleString() })}
               {(ai?.localUsedToday ?? 0) > 0 && <> · {t("ai.usageTodayLocal", { count: (ai?.localUsedToday ?? 0).toLocaleString() })}</>}
             </p>
             {ai?.budgetPaused && (
-              <p role="status" className="rounded-2xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-foreground" data-testid="ai-budget-paused">
+              <p role="status" className="rounded-panel border border-warning/30 bg-warning/10 px-3 py-2 text-footnote text-foreground" data-testid="ai-budget-paused">
                 {t("ai.budgetPaused", { time: format.dateTime(new Date(ai.budgetResetsAt), { weekday: "short", hour: "2-digit", minute: "2-digit" }) })}
               </p>
             )}
@@ -265,7 +265,7 @@ export function AiSummarySection() {
 
         {testResult && (
           <div className={cn(
-            "flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm",
+            "flex items-center gap-2 rounded-panel border px-4 py-3 text-body-sm",
             testResult.success
               ? "border-success/30 bg-success/10 text-success"
               : "border-destructive/30 bg-destructive/10 text-destructive"
@@ -281,7 +281,7 @@ export function AiSummarySection() {
           <Button
             onClick={handleSave}
             disabled={updateAi.isPending}
-            className="rounded-2xl h-10"
+            className="rounded-panel h-10"
           >
             {updateAi.isPending ? t("ai.saving") : t("ai.save")}
           </Button>
@@ -290,7 +290,7 @@ export function AiSummarySection() {
               variant="outline"
               onClick={handleTest}
               disabled={testAi.isPending}
-              className="rounded-2xl h-10"
+              className="rounded-panel h-10"
             >
               <Sparkles className="w-4 h-4 me-2" />
               {testAi.isPending ? t("ai.testing") : t("ai.testConnection")}

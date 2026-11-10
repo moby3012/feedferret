@@ -195,7 +195,7 @@ export function FreshRssMigration() {
   const busy = phase.step === "analyzing" || phase.step === "importing";
 
   return (
-    <div className="space-y-4 rounded-panel border border-border/60 bg-card p-7 shadow-sm" data-testid="freshrss-migration">
+    <div className="space-y-4 rounded-panel border border-border/60 bg-card p-7" data-testid="freshrss-migration">
       <div className="flex items-center gap-3 text-title-sm font-semibold tracking-title text-primary">
         <FileArchive className="size-6" aria-hidden />
         <h3>{t("title")}</h3>

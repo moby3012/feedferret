@@ -71,7 +71,7 @@ export function RsshubPanel({ onAddFeed, isAddingFeed }: RsshubPanelProps) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground leading-relaxed">
+      <p className="text-footnote text-muted-foreground leading-relaxed">
         {aiConfigured ? t("introWithAi") : t("introManualOnly")}
       </p>
       <Input
@@ -85,7 +85,7 @@ export function RsshubPanel({ onAddFeed, isAddingFeed }: RsshubPanelProps) {
         onKeyDown={(e) => {
           if (e.key === "Enter" && source.trim()) handlePropose();
         }}
-        className="h-9 text-sm w-full font-mono"
+        className="h-9 text-body-sm w-full font-mono"
       />
       <Button
         size="sm"
@@ -103,20 +103,20 @@ export function RsshubPanel({ onAddFeed, isAddingFeed }: RsshubPanelProps) {
       </Button>
 
       {error && !preview && (
-        <div className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
+        <div className="rounded-panel border border-warning/20 bg-warning/10 px-3 py-2 text-footnote text-warning">
           {error}
         </div>
       )}
 
       {preview && (
-        <div className="ui-control-surface space-y-2 rounded-xl border px-3 py-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+        <div className="ui-control-surface space-y-2 rounded-panel border px-3 py-2">
+          <p className="flex items-center gap-1.5 text-footnote font-medium text-foreground">
             <Rss className="size-3.5 shrink-0 text-muted-foreground" />
             {preview.title || preview.route}
           </p>
           <p className="text-caption text-muted-foreground">{t("itemsFound", { count: preview.itemCount })}</p>
           {preview.sampleTitles.slice(0, 3).map((title, i) => (
-            <p key={i} className="text-xs text-muted-foreground truncate">{title}</p>
+            <p key={i} className="text-footnote text-muted-foreground truncate">{title}</p>
           ))}
           <Button size="sm" className="w-full" disabled={isAddingFeed} onClick={handleAdd}>
             {isAddingFeed && <Loader2 className="w-4 h-4 animate-spin me-1.5" />}

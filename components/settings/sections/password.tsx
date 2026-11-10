@@ -34,14 +34,14 @@ export function PasswordSection() {
   };
 
   return (
-    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6">
+    <section className="rounded-panel border border-border/65 bg-card/85 p-5 sm:p-6">
       <div className="flex items-start gap-4 mb-6">
-        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-panel">
           <Lock className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-title">{t("profile.changePassword")}</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          <h2 className="text-title-sm font-semibold tracking-title">{t("profile.changePassword")}</h2>
+          <p className="mt-1 text-body-sm leading-6 text-muted-foreground">
             {t("profile.changePasswordDescription")}
           </p>
         </div>
@@ -49,33 +49,33 @@ export function PasswordSection() {
 
       <div className="grid gap-4 sm:max-w-sm">
         <div className="grid gap-1.5">
-          <label className="text-sm font-medium" htmlFor="current-password-input">{t("profile.currentPassword")}</label>
+          <label className="text-body-sm font-medium" htmlFor="current-password-input">{t("profile.currentPassword")}</label>
           <Input
             id="current-password-input"
             type="password"
             autoComplete="current-password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
-            className="h-10 rounded-2xl"
+            className="h-10 rounded-panel"
           />
         </div>
         <div className="grid gap-1.5">
-          <label className="text-sm font-medium" htmlFor="new-password-input">{t("profile.newPassword")}</label>
+          <label className="text-body-sm font-medium" htmlFor="new-password-input">{t("profile.newPassword")}</label>
           <Input
             id="new-password-input"
             type="password"
             autoComplete="new-password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            className="h-10 rounded-2xl"
+            className="h-10 rounded-panel"
           />
-          <p className="text-xs text-muted-foreground">{t("profile.newPasswordHint")}</p>
+          <p className="text-footnote text-muted-foreground">{t("profile.newPasswordHint")}</p>
         </div>
         <Button
           type="button"
           onClick={handleSubmit}
           disabled={changePassword.isPending || !currentPassword || !newPassword}
-          className="h-11 w-fit rounded-2xl px-5"
+          className="h-11 w-fit rounded-panel px-5"
         >
           {changePassword.isPending ? t("profile.updating") : t("profile.updatePassword")}
         </Button>

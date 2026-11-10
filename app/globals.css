@@ -6,13 +6,14 @@
 @import './styles/shell.css';
 @import './styles/list.css';
 @import './styles/reader.css';
+@import './styles/controls.css';
 
 .article-content {
   @apply prose prose-neutral dark:prose-invert max-w-none;
   @apply prose-headings:font-bold prose-headings:tracking-tight;
   @apply prose-p:leading-[1.8] prose-p:mb-6 prose-p:text-foreground/90;
   @apply prose-a:text-link prose-a:no-underline hover:prose-a:underline;
-  @apply prose-img:rounded-2xl prose-img:shadow-lg prose-img:my-8;
+  @apply prose-img:rounded-row prose-img:my-8;
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
@@ -89,7 +90,7 @@
 }
 
 .article-content small {
-  @apply block text-muted-foreground mt-[-1.5rem] mb-8 text-sm leading-relaxed;
+  @apply block text-muted-foreground mt-[-1.5rem] mb-8 text-body-sm leading-relaxed;
 }
 
 @layer base {
@@ -166,20 +167,9 @@
   background: var(--muted);
 }
 
-.ui-segmented-surface {
-  background: var(--muted);
-  border-color: var(--border);
-}
-
-.ui-segmented-trigger[data-state="active"] {
-  background: var(--background);
-  color: var(--foreground);
-}
-
 .ui-brand-button {
   background: var(--primary);
   color: var(--primary-foreground);
-  box-shadow: 0 4px 12px -6px color-mix(in oklab, black 35%, transparent);
 }
 
 .ui-brand-button:hover {

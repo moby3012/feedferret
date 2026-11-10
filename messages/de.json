@@ -1003,6 +1003,7 @@
     "themeDark": "Dunkel",
     "themeSepia": "Sepia",
     "resetTypography": "Zurücksetzen",
+    "typographyDeviceNote": "Gilt nur für dieses Gerät.",
     "pullToNext": "Nach oben ziehen für den nächsten Artikel",
     "releaseForNext": "Loslassen für den nächsten Artikel",
     "bodyErrorTitle": "Artikel konnte nicht geladen werden",

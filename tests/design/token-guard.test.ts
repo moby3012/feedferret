@@ -28,12 +28,18 @@ describe("design-token lint guard", () => {
     ["zIndex ternary", "const s = { zIndex: dragging ? 50 : undefined };"],
     ["zIndex logical", "const s = { zIndex: open && 10 };"],
     ["backdrop-blur-[12px]", '<div className="backdrop-blur-[12px]" />'],
+    ["legacy rounded-xl", '<div className="rounded-xl" />'],
+    ["legacy rounded-t-lg", '<div className="sm:rounded-t-lg" />'],
+    ["legacy text-sm", '<p className="text-sm" />'],
+    ["legacy text-2xl", '<h1 className={cn("md:text-2xl", x)} />'],
+    ["legacy shadow-sm", '<div className="hover:shadow-sm" />'],
   ])("rejects %s", async (_name, code) => {
     expect((await lint(code)).length).toBeGreaterThan(0);
   });
 
   it.each([
-    '<div className="rounded-sheet rounded-t-sheet rounded-full rounded-xl" />',
+    '<div className="rounded-sheet rounded-t-sheet rounded-full rounded-chip md:rounded-panel" />',
+    '<div className="shadow-none shadow-bar text-body/relaxed text-row-title text-display" />',
     '<div className="z-(--z-overlay) focus:z-(--z-skip)" />',
     '<span className="text-caption text-body-sm tracking-title text-[var(--x)]" />',
     '<div className="bg-warning/10 text-danger border-success/20 text-info bg-surface-bar" />',

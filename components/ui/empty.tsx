@@ -7,7 +7,7 @@ function Empty({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot="empty"
       className={cn(
-        'flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed p-6 text-center text-balance md:p-12',
+        'flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-row border-dashed p-6 text-center text-balance md:p-12',
         className,
       )}
       {...props}
@@ -34,7 +34,7 @@ const emptyMediaVariants = cva(
     variants: {
       variant: {
         default: 'bg-transparent',
-        icon: "bg-muted text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg [&_svg:not([class*='size-'])]:size-6",
+        icon: "bg-muted text-foreground flex size-10 shrink-0 items-center justify-center rounded-row [&_svg:not([class*='size-'])]:size-6",
       },
     },
     defaultVariants: {
@@ -62,7 +62,7 @@ function EmptyTitle({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="empty-title"
-      className={cn('text-lg font-medium tracking-tight', className)}
+      className={cn('text-title-sm font-medium tracking-tight', className)}
       {...props}
     />
   )
@@ -73,7 +73,7 @@ function EmptyDescription({ className, ...props }: React.ComponentProps<'p'>) {
     <div
       data-slot="empty-description"
       className={cn(
-        'text-muted-foreground [&>a:hover]:text-link text-sm/relaxed [&>a]:underline [&>a]:underline-offset-4',
+        'text-muted-foreground [&>a:hover]:text-link text-body-sm/relaxed [&>a]:underline [&>a]:underline-offset-4',
         className,
       )}
       {...props}
@@ -86,7 +86,7 @@ function EmptyContent({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot="empty-content"
       className={cn(
-        'flex w-full max-w-sm min-w-0 flex-col items-center gap-4 text-sm text-balance',
+        'flex w-full max-w-sm min-w-0 flex-col items-center gap-4 text-body-sm text-balance',
         className,
       )}
       {...props}

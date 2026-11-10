@@ -132,7 +132,7 @@ function SaveSearchDialog() {
             void setOpen(false);
           }}
         >
-          <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("name")} placeholder={t("name")} className="h-11 text-base" autoFocus />
+          <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={t("name")} placeholder={t("name")} className="h-11 text-body" autoFocus />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => void setOpen(false)}>
               {tSearch("cancel")}

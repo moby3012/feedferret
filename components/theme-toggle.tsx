@@ -25,7 +25,7 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="w-9 h-9 relative overflow-hidden transition-all duration-(--dur-slow) hover:bg-black/35 dark:hover:bg-white/10 active:scale-95 rounded-xl"
+      className="w-9 h-9 relative overflow-hidden transition-all duration-(--dur-slow) hover:bg-black/35 dark:hover:bg-white/10 active:scale-95 rounded-panel"
       onClick={toggleTheme}
     >
       <div className="relative h-4 w-4">
