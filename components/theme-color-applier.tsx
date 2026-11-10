@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useSession } from "next-auth/react";
 import { useReadingPreferences } from "@/hooks/use-rss-data";
-import { THEME_COLOR } from "@/lib/theme-color";
+import { themeColorFor } from "@/lib/theme-color";
 
 function normalizeHexColor(value: string | null | undefined, fallback: string) {
   const raw = value?.trim();
@@ -91,16 +91,21 @@ export function ThemeColorApplier() {
     if (root.getAttribute("dir") !== dir) {
       root.setAttribute("dir", dir);
     }
+  }, [prefs]);
 
-    // OS chrome (Android status bar / task switcher, iOS standalone bar)
-    // matches the app's bar surface of the resolved theme — not the user's
-    // accent (PM decision; the accent stays for in-app UI). Every theme-color
-    // meta gets it: with a forced theme the OS media query may disagree.
-    const barColor = resolvedTheme === "dark" ? THEME_COLOR.dark : THEME_COLOR.light;
+  // OS chrome (Android status bar / task switcher, iOS standalone bar)
+  // matches the app's bar surface of the resolved theme — not the user's
+  // accent (PM decision; the accent stays for in-app UI). Every theme-color
+  // meta gets it: with a forced theme the OS media query may disagree.
+  // Independent of the session: public pages (login, register, setup) follow
+  // the persisted next-themes choice (localStorage) too.
+  useEffect(() => {
+    if (!resolvedTheme) return;
+    const barColor = themeColorFor(resolvedTheme);
     document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
       if (meta.getAttribute("content") !== barColor) meta.setAttribute("content", barColor);
     });
-  }, [prefs, resolvedTheme]);
+  }, [resolvedTheme]);
 
   return null;
 }

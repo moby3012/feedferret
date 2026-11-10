@@ -4,7 +4,7 @@ import { useTranslations, useFormatter } from "next-intl";
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
 import Image from "next/image";
 import { Article } from "@/lib/rss-data";
-import { startsInPannableContent } from "@/lib/gesture-guards";
+import { startsAtSystemEdge, startsInPannableContent } from "@/lib/gesture-guards";
 import { useAiSettings, useSummarizeArticle, useExportSettings, useBuildObsidianExportLink, useExportArticleToWallabag } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
 import {
@@ -138,12 +138,15 @@ export function ArticleReader({
   // Swipe right → back (mobile). There is deliberately no left-swipe action:
   // opening the original is only ever an explicit button / the `o` shortcut.
   // Touches that start in code blocks, tables or other horizontal scrollers
-  // are the user panning content, not navigating.
+  // are the user panning content, not navigating. Touches starting in the
+  // OS edge band belong to the system back gesture (iOS edge-swipe): handling
+  // them too would go back twice.
   const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
     const touch = e.touches[0];
-    touchStartRef.current = startsInPannableContent(e.target, rootRef.current)
-      ? null
-      : { x: touch.clientX, y: touch.clientY };
+    touchStartRef.current =
+      startsInPannableContent(e.target, rootRef.current) || startsAtSystemEdge(touch.clientX, window.innerWidth)
+        ? null
+        : { x: touch.clientX, y: touch.clientY };
   };
 
   const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {

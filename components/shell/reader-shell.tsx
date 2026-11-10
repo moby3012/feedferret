@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ListPane } from "@/components/list/list-pane";
 import { ReaderPane } from "@/components/reader/reader-pane";
 import { useCounts, useScopeUnread } from "@/features/bootstrap/queries";
+import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import type { UiPrefs } from "@/features/reader/layout/ui-prefs";
 import { TAB_IDS } from "@/features/reader/nav/location";
 import { NavProvider, bootNav, useNav } from "@/features/reader/nav/store";
@@ -44,6 +45,8 @@ function ShellRoot({ initialUi }: { initialUi: UiPrefs }) {
   const tab = useNav((s) => s.loc.tab);
   const hasScope = useNav((s) => !!s.loc.scope);
   const readerOpen = useNav((s) => !!s.loc.articleId);
+  // Compact reader covers the bottom controls: out of focus order / a11y tree.
+  const bottomCovered = useLayoutClass() === "compact" && readerOpen;
   const shell = useShellActions();
   useShellKeys(shell);
   useSearchCommit();
@@ -72,7 +75,7 @@ function ShellRoot({ initialUi }: { initialUi: UiPrefs }) {
       ))}
       <ReaderPane />
       <PaneResizer initialWidth={initialUi.listW} />
-      <div className="ff-shell-bottom">
+      <div className="ff-shell-bottom" inert={bottomCovered || undefined} aria-hidden={bottomCovered || undefined}>
         <BottomBar />
       </div>
       <ShellOverlays />

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
 import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers, RefreshCw, ShieldOff } from "lucide-react";
-import { useScrollMemory } from "@/features/reader/nav/scroll-memory";
+import { useRestoreGate, useScrollMemory } from "@/features/reader/nav/scroll-memory";
 import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { extractHighlightTerms, highlightText } from "@/lib/highlight-search-terms";
@@ -176,7 +176,14 @@ export function ArticleList({
 
   // Native scroller (no Radix ScrollArea): the list keeps its DOM (and so
   // its offset) under the reader; scroll memory covers rebinding a key.
-  useScrollMemory(scrollRoot, scrollMemoryKey, articles.length > 0);
+  const articleIds = useMemo(() => articles.map((a) => a.id), [articles]);
+  const restoreReady = useRestoreGate(scrollMemoryKey, articleIds, visibleCount, {
+    reveal: (count) => setVisibleCount((prev) => Math.max(prev, count + (pageSize ?? 30))),
+    loadMore: onLoadMore,
+    hasMorePages,
+    isFetching: isFetchingMore || isLoading,
+  });
+  useScrollMemory(scrollRoot, scrollMemoryKey, restoreReady);
 
   useEffect(() => {
     if (!isRefreshing) setPullTriggered(false);

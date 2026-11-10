@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, memo } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, memo, type RefObject } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArticleReader } from "@/components/article-reader";
@@ -9,7 +9,8 @@ import { toLegacyArticle, withDetail } from "@/features/articles/legacy-adapter"
 import { useArticleActions, useIsFetchingFullText } from "@/features/articles/mutations";
 import { prefetchArticle } from "@/features/articles/prefetch";
 import { useArticle } from "@/features/articles/queries";
-import { nav, useNav } from "@/features/reader/nav/store";
+import { getLayoutClass } from "@/features/reader/layout/layout-class";
+import { getNavState, nav, useNav } from "@/features/reader/nav/store";
 
 /**
  * Reader container: the open article comes from the URL (`a`). On compact it
@@ -47,6 +48,8 @@ export const ReaderPane = memo(function ReaderPane() {
       pane.removeEventListener("transitioncancel", done);
     };
   }, [articleId, shownId]);
+
+  useReaderFocus(paneRef, articleId);
 
   const list = useSyncExternalStore(shell.activeList.subscribe, shell.activeList.get, shell.activeList.get);
   const { item, detail, status } = useArticle(shownId);
@@ -93,7 +96,14 @@ export const ReaderPane = memo(function ReaderPane() {
   };
 
   return (
-    <section ref={paneRef} data-pane="reader" role="region" aria-label={tA11y("articleReader")} className="flex bg-background">
+    <section
+      ref={paneRef}
+      data-pane="reader"
+      role="region"
+      aria-label={tA11y("articleReader")}
+      tabIndex={-1}
+      className="flex bg-background outline-none"
+    >
       <ArticleReader
         article={readerArticle}
         isBodyLoading={!!article && status === "pending"}
@@ -118,3 +128,27 @@ export const ReaderPane = memo(function ReaderPane() {
     </section>
   );
 });
+
+/**
+ * Compact: the reader is a layer over the (then inert) list. Opening moves
+ * focus into the reader; closing returns it to the row the article was
+ * opened from (or the last one stepped to). Wide keeps focus where it is
+ * (both panes are visible and j/k drive the list).
+ */
+function useReaderFocus(paneRef: RefObject<HTMLElement | null>, articleId: string | null) {
+  const previous = useRef<string | null>(articleId);
+  useEffect(() => {
+    const prev = previous.current;
+    previous.current = articleId;
+    if (getLayoutClass() !== "compact" || !!prev === !!articleId) return;
+    if (articleId) {
+      const pane = paneRef.current;
+      if (pane && !pane.contains(document.activeElement)) pane.focus({ preventScroll: true });
+      return;
+    }
+    const tab = getNavState().loc.tab;
+    const row = document.querySelector<HTMLElement>(`[data-pane="list-${tab}"] [data-article-id="${CSS.escape(prev!)}"]`);
+    const target = row?.querySelector<HTMLElement>('[tabindex="0"]') ?? row;
+    target?.focus({ preventScroll: true });
+  }, [articleId, paneRef]);
+}

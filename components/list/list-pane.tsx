@@ -17,6 +17,7 @@ import { useArticleList, type ArticleListResult } from "@/features/articles/quer
 import { showApplies, type ListKey } from "@/features/articles/scope";
 import { useCounts, useOnline, useScopeUnread } from "@/features/bootstrap/queries";
 import { formatLoc, listKeyOfLoc, type Loc, type TabId } from "@/features/reader/nav/location";
+import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import { canMarkAll, markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
 import { useReleaseArticleSpoiler } from "@/hooks/use-rss-data";
@@ -42,6 +43,12 @@ export const ListPane = memo(function ListPane({ tab }: { tab: TabId }) {
   }
   const [mounted, setMounted] = useState(active);
   if (active && !mounted) setMounted(true);
+  // Compact: the reader is a layer above the list — the covered list leaves
+  // the focus order and the a11y tree (focus moves into the reader).
+  const layout = useLayoutClass();
+  // (Inactive panes are inert anyway: only the active one subscribes to the reader.)
+  const covered = useNav((s) => s.loc.tab === tab && !!s.loc.articleId) && layout === "compact";
+  const inert = !active || covered;
 
   // Prefetch on intent: a row's body starts loading on pointerdown.
   const onPointerDown = useCallback(
@@ -59,8 +66,8 @@ export const ListPane = memo(function ListPane({ tab }: { tab: TabId }) {
     <section
       data-pane={`list-${tab}`}
       data-active={active ? "true" : "false"}
-      inert={!active || undefined}
-      aria-hidden={!active || undefined}
+      inert={inert || undefined}
+      aria-hidden={inert || undefined}
       role="region"
       aria-label={tA11y("articleList")}
       onPointerDownCapture={onPointerDown}
