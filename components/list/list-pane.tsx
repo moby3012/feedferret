@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArticleList } from "@/components/article-list";
@@ -16,7 +16,7 @@ import { prefetchArticle } from "@/features/articles/prefetch";
 import { useArticleList, type ArticleListResult } from "@/features/articles/queries";
 import { showApplies, type ListKey } from "@/features/articles/scope";
 import { useCounts, useOnline, useScopeUnread } from "@/features/bootstrap/queries";
-import { listKeyOfLoc, type Loc, type TabId } from "@/features/reader/nav/location";
+import { formatLoc, listKeyOfLoc, type Loc, type TabId } from "@/features/reader/nav/location";
 import { canMarkAll, markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
 import { useReleaseArticleSpoiler } from "@/hooks/use-rss-data";
@@ -29,13 +29,17 @@ import { SpoilerGate } from "./spoiler-gate";
  * focus order) so its scroll offset survives; an inactive pane renders
  * nothing new — cache writes do not re-render hidden rows.
  */
-export function ListPane({ tab }: { tab: TabId }) {
+export const ListPane = memo(function ListPane({ tab }: { tab: TabId }) {
   const tA11y = useTranslations("accessibility");
   const qc = useQueryClient();
   const liveLoc = useNav((s) => (s.loc.tab === tab ? s.loc : null));
   const active = liveLoc !== null;
-  const lastLoc = useRef<Loc | null>(liveLoc);
-  if (liveLoc) lastLoc.current = liveLoc;
+  // The list binding ignores the open article: opening / stepping articles
+  // must not re-render the list (INP of the tap that opens the reader).
+  const lastLoc = useRef<Loc | null>(liveLoc ? { ...liveLoc, articleId: null } : null);
+  if (liveLoc && (!lastLoc.current || formatLoc(lastLoc.current) !== formatLoc({ ...liveLoc, articleId: null }))) {
+    lastLoc.current = { ...liveLoc, articleId: null };
+  }
   const [mounted, setMounted] = useState(active);
   if (active && !mounted) setMounted(true);
 
@@ -56,6 +60,7 @@ export function ListPane({ tab }: { tab: TabId }) {
       data-pane={`list-${tab}`}
       data-active={active ? "true" : "false"}
       inert={!active || undefined}
+      aria-hidden={!active || undefined}
       role="region"
       aria-label={tA11y("articleList")}
       onPointerDownCapture={onPointerDown}
@@ -64,7 +69,7 @@ export function ListPane({ tab }: { tab: TabId }) {
       {mounted && lastLoc.current && <ListPaneData tab={tab} loc={lastLoc.current} active={active} />}
     </section>
   );
-}
+});
 
 function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: boolean }) {
   const data = useShellData();
@@ -75,7 +80,8 @@ function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: bool
   const isMarkingAllRead = useIsMarkingViewRead();
   const online = useOnline();
   const [draft] = useSearchDraft();
-  const selectedId = useNav((s) => (s.loc.tab === tab ? s.loc.articleId : null));
+  // Selection highlight follows in a deferred render, after the reader painted.
+  const selectedId = useDeferredValue(useNav((s) => (s.loc.tab === tab ? s.loc.articleId : null)));
   return (
     <ListPaneView
       tab={tab}
@@ -264,5 +270,13 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
       )}
     </>
   );
-}, (prev, next) => !prev.active && !next.active);
+}, (prev, next) => (!prev.active && !next.active) || shallowEqual(prev, next));
+
+const LIST_FIELDS = ["items", "status", "isPlaceholder", "hasMore", "isFetchingMore"] as const;
+
+function shallowEqual(a: ViewProps, b: ViewProps): boolean {
+  return (Object.keys(a) as (keyof ViewProps)[]).every((key) =>
+    key === "list" ? LIST_FIELDS.every((f) => Object.is(a.list[f], b.list[f])) : Object.is(a[key], b[key]),
+  );
+}
 

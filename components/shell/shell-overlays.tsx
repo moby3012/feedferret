@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, memo } from "react";
 import { useTranslations } from "next-intl";
 import { Search as SearchIcon, X as XIcon } from "lucide-react";
 import { CommandPalette } from "@/components/command-palette";
@@ -18,7 +18,7 @@ import { commitSearch, searchDraft, useSearchDraft } from "./search-draft";
 import { SourcesSheet } from "./sources-pane";
 
 /** Every shell overlay. History-backed ones (sources, search) read their open state from the nav store. */
-export function ShellOverlays() {
+export const ShellOverlays = memo(function ShellOverlays() {
   const { feeds, categories, labels, shortcutsOpen } = useShellData();
   const shell = useShellActions();
   const { markViewRead } = useArticleActions();
@@ -44,7 +44,7 @@ export function ShellOverlays() {
       />
     </>
   );
-}
+});
 
 /** Search dialog: edits the draft, previews the match count, commits on submit (replace `?q=`). */
 function SearchDialog() {
@@ -79,7 +79,10 @@ function SearchDialog() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (draft.trim()) void commitSearch(draft);
+            if (!draft.trim()) return;
+            // Keys typed while the dialog animates out must not land in its input.
+            (document.activeElement as HTMLElement | null)?.blur();
+            void commitSearch(draft);
           }}
         >
           <div className="flex items-center gap-3 px-5 pt-5 pb-3 border-b border-border/50">

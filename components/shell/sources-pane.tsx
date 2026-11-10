@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, memo } from "react";
 import { useTranslations } from "next-intl";
 import { RssSidebar } from "@/components/rss-sidebar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -54,7 +54,7 @@ const selectCategory = (key: string) => void nav.goScope(scopeFromSidebarKey(key
  * (post-mount widget: the grid column is CSS, so nothing shifts) and only
  * where it is shown: never on medium, on compact once the Feeds root opened.
  */
-export function SourcesPane() {
+export const SourcesPane = memo(function SourcesPane() {
   const layout = useLayoutClass();
   const atFeedsRoot = useNav((s) => s.loc.tab === "feeds" && !s.loc.scope);
   const [visitedRoot, setVisitedRoot] = useState(false);
@@ -62,11 +62,11 @@ export function SourcesPane() {
   const mounted = layout === "expanded" || (layout === "compact" && (visitedRoot || atFeedsRoot));
   const inert = layout === "compact" && !atFeedsRoot;
   return (
-    <div data-pane="sources" inert={inert || undefined} className="overflow-hidden">
+    <div data-pane="sources" inert={inert || undefined} aria-hidden={inert || undefined} className="overflow-hidden">
       {mounted && <SourcesHost host="inline" />}
     </div>
   );
-}
+});
 
 function SourcesHost({ host }: { host: AddFeedHost }) {
   const props = useSidebarProps(host);

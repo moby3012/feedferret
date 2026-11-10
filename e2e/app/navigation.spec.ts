@@ -158,6 +158,7 @@ test("reload restores selected feed and open article (P1-03)", async ({ app, pag
   await page.reload();
   expect(app.where()).toBe(url);
   await expect(reader(page, 8)).toBeVisible({ timeout: 30_000 });
+  await app.navReady();
   if (!app.isMobile) await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
   // Back after the reload still lands on the feed list.
   await page.goBack();
@@ -169,6 +170,7 @@ test("reload restores selected feed and open article (P1-03)", async ({ app, pag
 test("cold deep link ?a=<id> opens the reader with the list underneath; back stays in the app", async ({ app, page }) => {
   await page.goto(`/?a=${app.articleId(3)}`);
   await expect(reader(page, 3)).toBeVisible({ timeout: 30_000 });
+  await app.navReady();
   // The list is mounted under the reader (compact) / beside it (wide).
   await expect(app.row(1)).toHaveCount(1);
   await page.goBack(); // seeded parent entry
@@ -184,6 +186,7 @@ test("cold deep link into a feed article: back goes to that feed's list", async 
   await page.goto("about:blank");
   await page.goto(`${feedUrl}&a=${app.articleId(8)}`);
   await expect(reader(page, 8)).toBeVisible({ timeout: 30_000 });
+  await app.navReady();
   await page.goBack();
   expect(app.where()).toBe(feedUrl);
   await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();

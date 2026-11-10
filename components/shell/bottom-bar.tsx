@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 import { MobileBottomControls } from "@/components/mobile-bottom-controls";
 import { useArticleActions, useIsMarkingViewRead } from "@/features/articles/mutations";
 import { canMarkAll, markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
@@ -11,7 +13,7 @@ import { clearSearch, useSearchDraft } from "./search-draft";
  * Compact list controls (today's bottom bar, kept until the tab bar in PR 7).
  * Hidden on wide (CSS) and on the Feeds root; the reader covers it.
  */
-export function BottomBar() {
+export const BottomBar = memo(function BottomBar() {
   const scope = useNav((s) => s.loc.scope);
   const show = useNav((s) => s.loc.show);
   const sourcesOpen = useNav((s) => s.overlay === "sources");
@@ -39,4 +41,4 @@ export function BottomBar() {
       onEditSearch={shell.openSearch}
     />
   );
-}
+});

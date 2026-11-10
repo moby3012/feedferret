@@ -43,6 +43,10 @@ export class App {
   readerScroller(): Locator {
     return this.page.locator('[data-pane="reader"] [data-testid="reader-scroller"]');
   }
+  /** The shell has written its history entry (`history.state.ff`): seeding / alias rewrite done. */
+  async navReady() {
+    await expect.poll(() => this.page.evaluate(() => !!(history.state as { ff?: unknown } | null)?.ff)).toBe(true);
+  }
   /** Current URL as path + search ("/?feed=…"). */
   where(): string {
     const url = new URL(this.page.url());
@@ -73,6 +77,7 @@ export class App {
     // The list (GET /api/app/articles) can paint before the sidebar's feed
     // counts (server action) arrive; specs read those badges right away.
     await this.page.waitForLoadState("networkidle");
+    await this.navReady();
   }
 
   /** Desktop: sidebar is always visible. Mobile: it is a sheet behind the "Feeds" button. */

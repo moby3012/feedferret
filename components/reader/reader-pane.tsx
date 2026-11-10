@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, memo } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArticleReader } from "@/components/article-reader";
@@ -16,7 +16,7 @@ import { nav, useNav } from "@/features/reader/nav/store";
  * is a fixed layer above the (still mounted) list; on wide the right column.
  * Keeps the last article while the compact close transition runs.
  */
-export function ReaderPane() {
+export const ReaderPane = memo(function ReaderPane() {
   const tA11y = useTranslations("accessibility");
   const qc = useQueryClient();
   const articleId = useNav((s) => s.loc.articleId);
@@ -117,4 +117,4 @@ export function ReaderPane() {
       />
     </section>
   );
-}
+});
