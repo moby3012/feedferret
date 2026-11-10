@@ -121,9 +121,11 @@ describe("N3: connector secrets", () => {
       { id: "a1", link: "http://rsshub:1200/youtube/x?key=rsskey#item-1", updatedAt },
       { id: "a2", link: "http://rsshub:1200/youtube/x#item-2", updatedAt },
     ];
-    const update = vi.fn(async ({ where, data }: { where: { id: string }; data: { link: string } }) => {
-      const row = rows.find((r) => r.id === where.id)!;
+    const updateMany = vi.fn(async ({ where, data }: { where: { id: string; link: string; updatedAt: Date }; data: { link: string } }) => {
+      const row = rows.find((r) => r.id === where.id && r.link === where.link && r.updatedAt === where.updatedAt);
+      if (!row) return { count: 0 };
       row.link = data.link;
+      return { count: 1 };
     });
     const feedFindMany = vi.fn(async (_args: unknown) => [{ id: "f1" }]);
     const fakeDb = {
@@ -134,16 +136,44 @@ describe("N3: connector secrets", () => {
             (r) => where.feedId.in.includes("f1") && r.link.startsWith(where.link.startsWith) && r.link.includes(where.link.contains) && (!where.id || r.id > where.id.gt),
           ),
         ),
-        update,
+        updateMany,
       },
     };
     expect(await scrubConnectorSecretsFromArticleLinks(fakeDb, rules)).toEqual({ scanned: 1, scrubbed: 1 });
     expect(rows[0].link).toBe("http://rsshub:1200/youtube/x#item-1");
-    expect(update).toHaveBeenCalledWith({ where: { id: "a1" }, data: { link: "http://rsshub:1200/youtube/x#item-1", updatedAt } });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "a1", link: "http://rsshub:1200/youtube/x?key=rsskey#item-1", updatedAt },
+      data: { link: "http://rsshub:1200/youtube/x#item-1", updatedAt },
+    });
     expect(await scrubConnectorSecretsFromArticleLinks(fakeDb, rules)).toEqual({ scanned: 0, scrubbed: 0 });
     // Only feeds on a connector origin + base path are considered.
     expect(feedFindMany).toHaveBeenCalledWith({ where: { url: { startsWith: "http://rsshub:1200" } }, select: { id: true } });
     expect(feedFindMany).toHaveBeenCalledWith({ where: { url: { startsWith: "https://cd.example/cd" } }, select: { id: true } });
+  });
+
+  it("article link cleanup never rolls back a row changed concurrently by sync", async () => {
+    const readAt = new Date("2026-01-01T00:00:00Z");
+    const syncedAt = new Date("2026-01-02T00:00:00Z");
+    const stored = { id: "a1", link: "http://rsshub:1200/youtube/x?key=rsskey#item-1", updatedAt: readAt };
+    const updateMany = vi.fn(async ({ where }: { where: { id: string; link: string; updatedAt: Date } }) =>
+      ({ count: where.link === stored.link && where.updatedAt.getTime() === stored.updatedAt.getTime() ? 1 : 0 }),
+    );
+    const fakeDb = {
+      feed: { findMany: vi.fn(async () => [{ id: "f1" }]) },
+      article: {
+        findMany: vi.fn(async ({ where }: { where: { id?: { gt: string } } }) => {
+          if (where.id) return [];
+          const snapshot = { ...stored };
+          // Sync updates the article between the scrub's read and write.
+          stored.updatedAt = syncedAt;
+          return [snapshot];
+        }),
+        updateMany,
+      },
+    };
+    const result = await scrubConnectorSecretsFromArticleLinks(fakeDb, rules.slice(0, 1));
+    expect(result.scrubbed).toBe(0);
+    expect(stored.updatedAt).toBe(syncedAt);
   });
 
   it("strips connector secrets from article links on output (API payloads)", async () => {

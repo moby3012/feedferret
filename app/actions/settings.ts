@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
-import { db, getDatabaseProvider } from "@/lib/db";
+import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
@@ -40,15 +40,11 @@ function isUniqueViolation(error: unknown): boolean {
 /**
  * Case-insensitive "address already in use" check (`email` is already
  * lower-cased). Older rows may hold mixed-case addresses, and both providers
- * compare `=` case-sensitively: Postgres uses `mode: "insensitive"`, SQLite a
- * `lower()` comparison.
+ * compare `=` case-sensitively.
  */
 async function emailTakenByOtherUser(email: string, userId: string): Promise<boolean> {
-  if (getDatabaseProvider() === "postgresql") {
-    // `mode` only exists in the Postgres-generated client types.
-    const emailFilter = { equals: email, mode: "insensitive" } as unknown as string;
-    return Boolean(await db.user.findFirst({ where: { email: emailFilter, NOT: { id: userId } }, select: { id: true } }));
-  }
+  // Raw `lower(email) = $1` on both providers: Prisma's `mode: "insensitive"` maps to
+  // ILIKE on Postgres, where `_` / `%` in an address would act as wildcards.
   const rows = await db.$queryRaw<Array<{ id: string }>>`SELECT id FROM "User" WHERE lower(email) = ${email} AND id <> ${userId} LIMIT 1`;
   return rows.length > 0;
 }

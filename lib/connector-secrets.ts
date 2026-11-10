@@ -170,7 +170,9 @@ export function resolveConnectorRequestWith(rules: ConnectorSecretRule[], rawUrl
   let changed = false;
   for (const rule of rules) {
     if (!matches(url, rule)) continue;
-    if (routeErrorFor(rule, url)) return { url: rawUrl, trusted: false };
+    // Not an allowed route: never trusted, and a legacy stored secret is stripped so it
+    // can't travel to a disallowed path (or through a user-chosen proxy).
+    if (routeErrorFor(rule, url)) return { url: stripConnectorSecretsWith(rules, rawUrl), trusted: false };
     trusted = true;
     if (rule.value && url.searchParams.get(rule.param) !== rule.value) {
       url.searchParams.set(rule.param, rule.value);
@@ -335,7 +337,7 @@ type ArticleScrubDb = {
   feed: { findMany(args: unknown): Promise<Array<{ id: string }>> };
   article: {
     findMany(args: unknown): Promise<ArticleLinkRow[]>;
-    update(args: unknown): Promise<unknown>;
+    updateMany(args: unknown): Promise<{ count: number }>;
   };
 };
 
@@ -383,8 +385,13 @@ export async function scrubConnectorSecretsFromArticleLinks(
             const scrubbed = stripConnectorSecretsWith([rule], row.link);
             if (scrubbed === row.link) continue;
             // Explicit updatedAt overrides @updatedAt: the row's sync clock stays as it was.
-            await db.article.update({ where: { id: row.id }, data: { link: scrubbed, updatedAt: row.updatedAt } });
-            result.scrubbed += 1;
+            // Conditional on the row being unchanged since it was read, so a concurrent sync
+            // update (newer updatedAt / link) is never rolled back.
+            const { count } = await db.article.updateMany({
+              where: { id: row.id, link: row.link, updatedAt: row.updatedAt },
+              data: { link: scrubbed, updatedAt: row.updatedAt },
+            });
+            result.scrubbed += count;
           }
           cursor = rows[rows.length - 1].id;
           if (rows.length < batchSize) break;

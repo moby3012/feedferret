@@ -313,12 +313,13 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
   const { getConnectorSecretRules, resolveConnectorRequestWith, stripConnectorSecretsWith } = await import("./connector-secrets");
   const secretRules = await getConnectorSecretRules();
   let connector = resolveConnectorRequestWith(secretRules, feed.url);
-  if (http.CURLOPT_PROXY && connector.trusted) {
+  if (http.CURLOPT_PROXY) {
     // A user-chosen proxy sees the full request URL (plain HTTP, or the
     // CONNECT target), so it would receive the admin's connector secret. Such
     // a feed is fetched like any external URL instead: keyless (legacy keyed
     // rows stripped too), no internal-network allowance.
-    connector = { url: stripConnectorSecretsWith(secretRules, feed.url), trusted: false };
+    // Applies to untrusted rows too (legacy keyed URL on a no-longer-allowed route).
+    connector = { url: stripConnectorSecretsWith(secretRules, connector.url), trusted: false };
   }
   const allowInternal = trustedInstance || connector.trusted;
   // Trusted connector request: the internal allowance (and the secret) only
@@ -344,7 +345,9 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
     } catch (error) {
       logger.warn("[feed-fetcher] proxy requested but undici ProxyAgent failed", error);
     }
-  } else if (feed.sslVerify === false) {
+  } else if (feed.sslVerify === false && !connector.trusted) {
+    // Never send the connector secret over unverified TLS: sslVerify=false is ignored
+    // for trusted connector requests.
     try {
       const { Agent } = await import("undici");
       (init as any).dispatcher = new Agent({ connect: { rejectUnauthorized: false } });

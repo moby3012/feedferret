@@ -85,6 +85,23 @@ describe("feed fetch: a user-chosen proxy never receives the connector secret", 
     expect(options.allowInternal).toBe(false);
   });
 
+  it("legacy keyed row on a disallowed route: key stripped, with and without proxy", async () => {
+    const url = "http://rsshub:1200/rsshub/transform/html/x/y?key=oldkey";
+    expect(await requestFor(url)).toEqual({ requestUrl: "http://rsshub:1200/rsshub/transform/html/x/y", allowInternal: false });
+    mocks.fetchWith.mockClear();
+    const { requestUrl, options } = await optionsFor({ url, httpOptions: JSON.stringify({ CURLOPT_PROXY: "http://8.8.8.8:3128" }) });
+    expect(requestUrl).toBe("http://rsshub:1200/rsshub/transform/html/x/y");
+    expect(options.allowInternal).toBe(false);
+  });
+
+  it("sslVerify=false is ignored for trusted connector requests (secret never over unverified TLS)", async () => {
+    const { requestUrl, options } = await optionsFor({ url: "http://rsshub:1200/youtube/channel/UC1", sslVerify: false });
+    expect(requestUrl).toContain("key=rsskey");
+    expect((options as unknown as { allowInternal: boolean }).allowInternal).toBe(true);
+    const [, init] = mocks.fetchWith.mock.calls[0];
+    expect((init as { dispatcher?: unknown }).dispatcher).toBeUndefined();
+  });
+
   it("changedetection watch feed via proxy: no token, no internal access", async () => {
     const url = "http://changedetection:5000/rss/watch/0b8f6c2e-1d3a-4a5b-9c7d-112233445566";
     const { requestUrl, options } = await optionsFor({ url, httpOptions: JSON.stringify({ CURLOPT_PROXY: "http://8.8.8.8:3128" }) });
