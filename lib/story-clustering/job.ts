@@ -60,6 +60,11 @@ export interface ClusterRunOptions {
 
 type TouchlessItem = { id: string; data: Record<string, unknown> };
 
+/** In-memory check of the `extraWhere` equality filters used by touchlessUpdate (null / scalar). */
+function matchesExtraWhere(row: Record<string, unknown>, extraWhere: Record<string, unknown>): boolean {
+  return Object.entries(extraWhere).every(([key, value]) => row[key] === value);
+}
+
 /**
  * `updateMany` per row that leaves `Article.updatedAt` untouched: reads the
  * current value, writes `data` plus that same `updatedAt` with `updatedAt` in
@@ -73,11 +78,16 @@ async function touchlessUpdate(userId: string, items: TouchlessItem[], extraWher
   for (let attempt = 0; attempt < TOUCHLESS_ATTEMPTS && open.length > 0; attempt++) {
     const stamps = new Map<string, Date>();
     for (let i = 0; i < open.length; i += 500) {
+      // Looked up by primary key only and filtered in memory: with `userId` + `clusterId IS NULL` in
+      // the WHERE, SQLite picks the (userId, clusterId) index — a scan over most of the user's
+      // articles (35–40 ms per call at 50 k rows) — instead of a handful of PK lookups.
       const rows = await db.article.findMany({
-        where: { userId, ...extraWhere, id: { in: open.slice(i, i + 500).map((o) => o.id) } },
-        select: { id: true, updatedAt: true },
+        where: { id: { in: open.slice(i, i + 500).map((o) => o.id) } },
+        select: { id: true, updatedAt: true, userId: true, clusterId: true, clusteredAt: true },
       });
-      for (const r of rows) stamps.set(r.id, r.updatedAt);
+      for (const r of rows) {
+        if (r.userId === userId && matchesExtraWhere(r, extraWhere)) stamps.set(r.id, r.updatedAt);
+      }
     }
     const writable = open.filter((o) => stamps.has(o.id));
     const retry: TouchlessItem[] = [];
@@ -202,8 +212,9 @@ export async function clusterUser(userId: string, opts: ClusterRunOptions & { de
   const missing = batch.filter((r) => !parseSig(r.storySig)).map((r) => r.id);
   const bodies = new Map<string, string>();
   if (missing.length > 0) {
-    const rows = await db.article.findMany({ where: { userId, id: { in: missing } }, select: { id: true, content: true } });
-    for (const r of rows) bodies.set(r.id, r.content);
+    // PK lookup + in-memory user check (see touchlessUpdate: a `userId` predicate steers SQLite to a scan).
+    const rows = await db.article.findMany({ where: { id: { in: missing } }, select: { id: true, content: true, userId: true } });
+    for (const r of rows) if (r.userId === userId) bodies.set(r.id, r.content);
   }
   const pending: PendingItem[] = [];
   const freshSigs = new Map<string, string>(); // id → serialized sig to persist with the claim

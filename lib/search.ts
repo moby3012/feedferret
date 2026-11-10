@@ -1,4 +1,5 @@
 import { db, getDatabaseProvider } from "./db";
+import { isSqliteFtsReady } from "./search-indexes";
 
 // PostgreSQL's LIKE is case-sensitive; Prisma supports mode:'insensitive' (ILIKE) there.
 // SQLite's LIKE is already case-insensitive for ASCII and does NOT support mode:'insensitive'.
@@ -43,15 +44,38 @@ export function buildFtsMatchQuery(term: string): string {
     return `"${term.replace(/"/g, '""')}"`;
 }
 
-async function ftsMatchIds(term: string): Promise<string[] | null> {
+// Prisma refuses queries with more than 32 766 bind variables (P2029 → HTTP 500).
+// The FTS hit list is passed to Prisma as `id IN (…)`, so it has to stay far below
+// that, for ALL free-text terms of one query together. Per term we therefore accept at
+// most MAX_FTS_IDS_PER_TERM hits (and at most FTS_ID_BUDGET / terms when a query has
+// several terms). A term with more matches than that is not "refined" or truncated:
+// it simply takes the LIKE path below, which has no list to bind, so results stay
+// complete for any term. Broad terms hit on page one quickly via the publishedAt index;
+// only their exact total (count) costs a scan.
+const MAX_FTS_IDS_PER_TERM = 5000;
+const FTS_ID_BUDGET = 20_000;
+
+/**
+ * Ids of the user's articles matching `term` in the SQLite FTS index, or null when the
+ * caller must use the plain LIKE path: Postgres, term < 3 chars, index missing/still
+ * being backfilled, or more than `cap` matches. Scoped to `userId` in SQL so other
+ * users' hits never count against the cap.
+ */
+async function ftsMatchIds(userId: string, term: string, cap: number): Promise<string[] | null> {
     if (isPostgres) return null;
     if (Array.from(term).length < MIN_FTS_TERM_LENGTH) return null;
 
     try {
+        if (!(await isSqliteFtsReady())) return null;
         const rows = await db.$queryRawUnsafe<{ id: string }[]>(
-            `SELECT id FROM article_fts WHERE article_fts MATCH ?`,
-            buildFtsMatchQuery(term)
+            `SELECT a.id AS id FROM "Article" a
+             WHERE a.userId = ? AND a.rowid IN (SELECT rowid FROM article_fts WHERE article_fts MATCH ?)
+             LIMIT ?`,
+            userId,
+            buildFtsMatchQuery(term),
+            cap + 1
         );
+        if (rows.length > cap) return null;
         return rows.map((row) => row.id);
     } catch {
         // article_fts missing/broken — fall back to the unaccelerated query.
@@ -59,8 +83,8 @@ async function ftsMatchIds(term: string): Promise<string[] | null> {
     }
 }
 
-async function buildFreeTextCondition(userId: string, term: string): Promise<object> {
-    const ftsIds = await ftsMatchIds(term);
+async function buildFreeTextCondition(userId: string, term: string, ftsCap: number): Promise<object> {
+    const ftsIds = await ftsMatchIds(userId, term, ftsCap);
     if (ftsIds !== null) {
         return {
             OR: [
@@ -115,7 +139,7 @@ export function parseDateToken(value: string) {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-async function processGroupTokens(userId: string, tokens: string[]): Promise<object> {
+async function processGroupTokens(userId: string, tokens: string[], ftsCap: number): Promise<object> {
     const and: any[] = [];
     const freeText: string[] = [];
 
@@ -240,7 +264,7 @@ async function processGroupTokens(userId: string, tokens: string[]): Promise<obj
     }
 
     const freeTextConditions = await Promise.all(
-        freeText.map((term) => buildFreeTextCondition(userId, term))
+        freeText.map((term) => buildFreeTextCondition(userId, term, ftsCap))
     );
     and.push(...freeTextConditions);
 
@@ -251,6 +275,8 @@ export async function buildAdvancedSearchWhere(userId: string, query?: string) {
     if (!query?.trim()) return {};
 
     const allTokens = tokenizeSearch(query.trim());
+    // Every token may become a free-text term; share the bind-variable budget between them.
+    const ftsCap = Math.max(100, Math.min(MAX_FTS_IDS_PER_TERM, Math.floor(FTS_ID_BUDGET / Math.max(1, allTokens.length))));
 
     // Split token list by "OR" (case-insensitive, exact token match) into groups
     const groups: string[][] = [];
@@ -269,10 +295,10 @@ export async function buildAdvancedSearchWhere(userId: string, query?: string) {
     const nonEmptyGroups = groups.filter(g => g.length > 0);
 
     if (nonEmptyGroups.length === 0) return {};
-    if (nonEmptyGroups.length === 1) return processGroupTokens(userId, nonEmptyGroups[0]);
+    if (nonEmptyGroups.length === 1) return processGroupTokens(userId, nonEmptyGroups[0], ftsCap);
 
     // Multiple groups: process each and OR the results
-    const allResults = await Promise.all(nonEmptyGroups.map(g => processGroupTokens(userId, g)));
+    const allResults = await Promise.all(nonEmptyGroups.map(g => processGroupTokens(userId, g, ftsCap)));
     const results = allResults.filter(r => Object.keys(r).length > 0);
 
     if (results.length === 0) return {};

@@ -173,10 +173,13 @@ export function createContinuationToken(article: { createdAt: Date; id: string }
 }
 
 // ID pages cap the FreshRSS unlimited convention; contents retain a default page.
+// Contents carry whole article bodies (n=1000 was 3–9 MB raw per call), so they are capped at
+// 250 per request; clients page through the rest with the continuation token (`c=`).
+export const GREADER_MAX_CONTENTS = 250;
 export function greaderLimit(value: string | null, idsOnly = true) {
   const n = value?.trim() ? Math.trunc(Number(value)) : NaN;
   if (!Number.isFinite(n)) return 20;
-  return Math.min(n > 0 ? n : idsOnly ? 10000 : 20, idsOnly ? 10000 : 1000);
+  return Math.min(n > 0 ? n : idsOnly ? 10000 : 20, idsOnly ? 10000 : GREADER_MAX_CONTENTS);
 }
 
 export function normalizeCategoryNameFromTag(tag: string) {

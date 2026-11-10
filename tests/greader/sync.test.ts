@@ -209,7 +209,7 @@ it("counts folder/label overlap once, includes labels outside folders, and handl
 });
 it("bounds content pages but preserves large ID pages", async () => {
   await db.article.createMany({ data: Array.from({ length: 1002 }, (_, i) => ({ id: `limit${i}`, userId: "u", feedId: "f", title: "Item", content: "body", link: "https://example.org", publishedAt: date(epoch), createdAt: date(epoch) })) });
-  expect((await request("stream/contents", { n: "10000" })).items).toHaveLength(1000);
+  expect((await request("stream/contents", { n: "10000" })).items).toHaveLength(250);
   for (const n of ["0", "-1"]) expect((await request("stream/contents", { n })).items).toHaveLength(20);
   expect(refs(await request("stream/items/ids", { n: "10000" }))).toHaveLength(1002);
 });
@@ -330,7 +330,7 @@ it("caps ID pages at 10000 with continuations for nonpositive and huge n", async
   for (const n of ["0", "-1"]) {
     expect(greaderLimit(n)).toBe(10000); expect(greaderLimit(n, false)).toBe(20);
   }
-  expect(greaderLimit("100000", false)).toBe(1000);
+  expect(greaderLimit("100000", false)).toBe(250);
 }, 30000);
 
 it("skips null article/feed identities until a repeatable backfill catches up", async () => {
