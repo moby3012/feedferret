@@ -13,6 +13,20 @@ export interface ArticleStateOp {
   isRead?: boolean;
   isStarred?: boolean;
   isReadLater?: boolean;
+  /**
+   * With `isRead: true`: this article stands for its whole story (the story
+   * card in the list, which shows a non-lead source when the lead is not
+   * loaded) — cascade to its cluster even though it is not the lead.
+   */
+  story?: boolean;
+}
+
+/** Story cascade result of one originating op: the cluster's other sources it marked read. */
+export interface StoryCascade {
+  /** The op's article id (the lead, or the source a story card stood for). */
+  origin: string;
+  clusterId: string;
+  ids: string[];
 }
 
 /** Upper bound of members one batch may mark read through story cascading (clusters are capped at 50 sources). */
@@ -20,7 +34,7 @@ export const MAX_CASCADE_MEMBERS = 500;
 
 /** Upper bound of ops per call. The batcher flushes at least every second, so a real client stays far below. */
 export const MAX_STATE_OPS = 200;
-const MAX_ID_LENGTH = 128;
+export const MAX_ID_LENGTH = 128;
 
 const OpSchema = z
   .object({
@@ -28,6 +42,7 @@ const OpSchema = z
     isRead: z.boolean().optional(),
     isStarred: z.boolean().optional(),
     isReadLater: z.boolean().optional(),
+    story: z.boolean().optional(),
   })
   .strict()
   .refine((op) => STATE_FIELDS.some((f) => op[f] !== undefined), { message: "Op sets no field" });
@@ -79,36 +94,63 @@ function dataFor(field: StateField, value: boolean, now: Date) {
 }
 
 /**
- * Story cascade (K1, `User.clusterReadMode === "story"`): marking the lead of a
- * cluster read also marks its other unread sources read. Returns the member
- * ids to add — user-scoped, bounded, never an id the batch already touches
+ * Story cascade (K1, `User.clusterReadMode === "story"`): marking a story read
+ * — its lead, or any source sent with `story: true` (the story card) — also
+ * marks the cluster's other unread sources read. Returns one group per
+ * originating story so the client can attribute Undo per story. User-scoped
+ * (the cluster comes from the user's own article), bounded (at most
+ * MAX_CASCADE_MEMBERS ids per batch), never an id the batch already touches
  * (an explicit op for a member wins). Costs nothing for unclustered articles.
  */
-async function storyCascadeIds(
+async function storyCascades(
   userId: string,
   ops: ArticleStateOp[],
   owned: Array<{ id: string; clusterId?: string | null; cluster?: { leadArticleId: string } | null }>,
-): Promise<string[]> {
+): Promise<StoryCascade[]> {
   // Last isRead op per id decides ([true, false, true] ends as read, [true, false] as unread) —
   // the same "later op wins" rule `groupStateOps` applies to the write itself.
-  const lastRead = new Map<string, boolean>();
-  for (const op of ops) if (op.isRead !== undefined) lastRead.set(op.id, op.isRead);
-  const readOps = new Set([...lastRead].filter(([, value]) => value).map(([id]) => id));
-  const clusterIds = new Set<string>();
+  const lastRead = new Map<string, ArticleStateOp>();
+  for (const op of ops) if (op.isRead !== undefined) lastRead.set(op.id, op);
+  // clusterId → origin op id (the lead wins over a story-card source of the same cluster).
+  const origins = new Map<string, { id: string; lead: boolean }>();
   for (const row of owned) {
-    if (readOps.has(row.id) && row.clusterId && row.cluster?.leadArticleId === row.id) clusterIds.add(row.clusterId);
+    const op = lastRead.get(row.id);
+    if (!op?.isRead || !row.clusterId) continue;
+    const lead = row.cluster?.leadArticleId === row.id;
+    if (!lead && !op.story) continue;
+    const current = origins.get(row.clusterId);
+    if (!current || (!current.lead && lead)) origins.set(row.clusterId, { id: row.id, lead });
   }
-  if (clusterIds.size === 0) return [];
+  if (origins.size === 0) return [];
   const user = await db.user.findUnique({ where: { id: userId }, select: { clusterReadMode: true } });
   if (user?.clusterReadMode !== "story") return [];
   const touched = new Set(ops.map((op) => op.id));
   const members = await db.article.findMany({
-    where: { userId, clusterId: { in: [...clusterIds] }, isRead: false },
-    select: { id: true },
+    where: { userId, clusterId: { in: [...origins.keys()] }, isRead: false },
+    select: { id: true, clusterId: true },
     orderBy: { id: "asc" },
     take: MAX_CASCADE_MEMBERS + touched.size,
   });
-  return members.map((m) => m.id).filter((id) => !touched.has(id)).slice(0, MAX_CASCADE_MEMBERS);
+  const groups = new Map<string, StoryCascade>();
+  let total = 0;
+  for (const m of members) {
+    if (touched.has(m.id) || !m.clusterId || total >= MAX_CASCADE_MEMBERS) continue;
+    const origin = origins.get(m.clusterId);
+    if (!origin) continue;
+    const group = groups.get(m.clusterId) ?? { origin: origin.id, clusterId: m.clusterId, ids: [] };
+    group.ids.push(m.id);
+    groups.set(m.clusterId, group);
+    total++;
+  }
+  return [...groups.values()];
+}
+
+export interface StateOpsResult {
+  failed: string[];
+  /** Every id the story cascade marked read (flat; = all `cascades[].ids`). */
+  affected: string[];
+  /** The same ids grouped by originating story. */
+  cascades: StoryCascade[];
 }
 
 /**
@@ -118,11 +160,12 @@ async function storyCascadeIds(
  * repeating an op keeps `readAt` / `readLaterSavedAt` stable. All updates run
  * in one transaction.
  *
- * With `User.clusterReadMode = "story"`, marking a story's lead read cascades
- * to the cluster's other unread sources; their ids come back in `affected` so
- * the client can patch its cache (and undo them with explicit ops).
+ * With `User.clusterReadMode = "story"`, marking a story read (its lead, or a
+ * source sent with `story: true`) cascades to the cluster's other unread
+ * sources; they come back in `cascades` (per story) and `affected` (flat) so
+ * the client can patch its cache and undo them with explicit ops.
  */
-export async function applyArticleStateOps(userId: string, ops: ArticleStateOp[]): Promise<{ failed: string[]; affected: string[] }> {
+export async function applyArticleStateOps(userId: string, ops: ArticleStateOp[]): Promise<StateOpsResult> {
   const ids = [...new Set(ops.map((op) => op.id))];
   const owned = await db.article.findMany({
     where: { userId, id: { in: ids } },
@@ -132,9 +175,10 @@ export async function applyArticleStateOps(userId: string, ops: ArticleStateOp[]
   const failed = ids.filter((id) => !ownedIds.has(id));
 
   const ownedOps = ops.filter((op) => ownedIds.has(op.id));
-  const affected = ownedOps.some((op) => op.isRead === true) ? await storyCascadeIds(userId, ownedOps, owned) : [];
+  const cascades = ownedOps.some((op) => op.isRead === true) ? await storyCascades(userId, ownedOps, owned) : [];
+  const affected = cascades.flatMap((c) => c.ids);
   const groups = groupStateOps([...ownedOps, ...affected.map((id) => ({ id, isRead: true }))]);
-  if (groups.size === 0) return { failed, affected };
+  if (groups.size === 0) return { failed, affected, cascades };
 
   const now = new Date();
   await db.$transaction(
@@ -147,7 +191,7 @@ export async function applyArticleStateOps(userId: string, ops: ArticleStateOp[]
       });
     }),
   );
-  return { failed, affected };
+  return { failed, affected, cascades };
 }
 
 /** Upper bound of ids one "mark up to here" call may send (loaded rows of a list, not a whole view). */

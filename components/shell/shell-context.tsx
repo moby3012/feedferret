@@ -76,7 +76,8 @@ export interface ShellData {
 export interface ShellActions {
   activeList: ActiveListStore;
   selectArticle(article: { id: string; feedId: string; link?: string }): void;
-  toggleRead(id: string): void;
+  /** `story`: the row is a story card (the server cascades the read to its cluster). */
+  toggleRead(id: string, opts?: { story?: boolean }): void;
   toggleStar(id: string): void;
   toggleLater(id: string): void;
   /** Auto / scroll mark-read; respects the session snapshot and the suppression set. */
@@ -164,7 +165,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
         if (openOriginal && article.link) window.open(article.link, "_blank", "noopener,noreferrer");
         void nav.openArticle(article.id);
       },
-      toggleRead(id) {
+      toggleRead(id, opts) {
         const article = findCachedArticle(qc, id);
         if (!article) return;
         const next = !article.isRead;
@@ -177,7 +178,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
             return Array.from(new Set([...prev, id]));
           });
         }
-        a.setRead(id, next, "tap"); // offline: refused with the offline toast
+        a.setRead(id, next, "tap", opts); // offline: refused with the offline toast
       },
       toggleStar: (id) => live.current.articleActions.toggleStar(id),
       toggleLater: (id) => live.current.articleActions.toggleLater(id),

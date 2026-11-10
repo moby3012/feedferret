@@ -10,7 +10,7 @@ import { RssHeader } from "@/components/rss-header";
 import { OfflineChip } from "@/components/shell/offline-chip";
 import { useShellActions, useShellData, type ShellData } from "@/components/shell/shell-context";
 import { clearSearch, searchDraft, useSearchDraft } from "@/components/shell/search-draft";
-import { toLegacyArticle } from "@/features/articles/legacy-adapter";
+import { toLegacyArticle, type LegacyArticle } from "@/features/articles/legacy-adapter";
 import { useArticleActions, useIsMarkingViewRead } from "@/features/articles/mutations";
 import { prefetchArticle } from "@/features/articles/prefetch";
 import { useArticleList, type ArticleListResult } from "@/features/articles/queries";
@@ -160,9 +160,14 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
   useEffect(() => {
     if (active && listKey) shell.bindSession(listKey.id);
   }, [active, listKey, shell]);
+  // Keyboard order (j/k/n/p): the list view reports its display order (members
+  // folded under a collapsed story card are skipped); until then the flat list.
+  const [navOrder, setNavOrder] = useState<{ source: LegacyArticle[]; order: LegacyArticle[] } | null>(null);
+  const onNavOrderChange = useCallback((order: LegacyArticle[]) => setNavOrder({ source: filtered, order }), [filtered]);
+  const navArticles = navOrder && navOrder.source === filtered ? navOrder.order : filtered;
   useEffect(() => {
-    if (active) shell.activeList.set({ key: listKey?.id ?? null, articles: filtered });
-  }, [active, listKey, filtered, shell]);
+    if (active) shell.activeList.set({ key: listKey?.id ?? null, articles: navArticles });
+  }, [active, listKey, navArticles, shell]);
 
   const [spoilerRevealed, setSpoilerRevealed] = useState<string | null>(null);
   const isSpoiler = scope?.kind === "spoiler";
@@ -208,6 +213,7 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
     );
   }
 
+  const markRange = listKey ? { listKey: listKey.id, sort: listKey.sort } : null;
   const listProps = {
     articles: filtered,
     selectedArticle,
@@ -225,6 +231,7 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
     loadedCount: list.items.length,
     clusterReadMode: data.prefs?.clusterReadMode === "article" ? ("article" as const) : ("story" as const),
     legacyContext: data.legacyContext,
+    markRange,
   };
 
   if (scope.kind === "query") {
@@ -274,6 +281,7 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
         <ArticleListView
           {...listProps}
           groupStories={scope.kind !== "later" && scope.kind !== "starred" && scope.kind !== "recent"}
+          onNavOrderChange={onNavOrderChange}
           viewMode={data.viewMode}
           onReleaseSpoiler={isSpoiler ? (id) => releaseArticleSpoiler.mutate(id) : undefined}
           enablePullToRefresh

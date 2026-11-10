@@ -168,6 +168,8 @@ export interface ClusterMembersResult {
  * the card is expanded. Cached as a one-page list (`qk.cluster`) so toggles on
  * member rows go through the same optimistic patch as every list row.
  */
+const NO_MEMBERS: ArticleListItem[] = [];
+
 export function useClusterMembers(clusterId: string | null): ClusterMembersResult {
   const qc = useQueryClient();
   const query = useQuery({
@@ -190,7 +192,7 @@ export function useClusterMembers(clusterId: string | null): ClusterMembersResul
     void refetch();
   }, [refetch]);
   return {
-    items: query.data?.pages[0]?.items ?? [],
+    items: query.data?.pages[0]?.items ?? NO_MEMBERS,
     status: query.data ? "ready" : query.isError ? "error" : "pending",
     retry,
   };

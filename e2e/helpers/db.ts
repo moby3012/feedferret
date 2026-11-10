@@ -221,9 +221,11 @@ export function patchArticles(articleIds: string[], values: Partial<Record<Artic
  * Creates a story cluster over `articleIds` (lead first) for one user and
  * returns a cleanup that detaches the members and deletes the cluster.
  */
+let clusterSeq = 0;
 export function makeStoryCluster(userKey: string, articleIds: string[]): () => void {
   const { userId } = manifest().users[userKey];
-  const id = `e2e-cluster-${userKey}-${Date.now()}`;
+  // Two clusters in the same millisecond must not share an id.
+  const id = `e2e-cluster-${userKey}-${Date.now()}-${clusterSeq++}`;
   const now = new Date().toISOString();
   const db = open();
   try {
@@ -268,4 +270,61 @@ export function setUserFlags(userKey: string, values: { aiCleanTitles?: boolean;
       c.close();
     }
   };
+}
+
+/**
+ * Creates a feed with `count` unread articles for one user ("Bulk n" titles,
+ * newest first = n 0) and returns its id, the article ids in list order and a
+ * cleanup that deletes both. Callers clean up in `finally` (resetArticleState
+ * only knows the seeded rows).
+ */
+export function insertBulkFeed(userKey: string, count: number): { feedId: string; ids: string[]; cleanup: () => void } {
+  const { userId } = manifest().users[userKey];
+  const feedId = `e2e-bulk-feed-${userKey}-${Date.now()}`;
+  const ids = Array.from({ length: count }, (_, i) => `e2e-bulk-${userKey}-${String(i).padStart(5, "0")}`);
+  const db = open();
+  try {
+    const now = new Date();
+    // Prisma's SQLite text format ("…+00:00", not "…Z"): DateTime filters compare as text.
+    const iso = (d: Date) => d.toISOString().replace("Z", "+00:00");
+    const created = iso(new Date(now.getTime() - 60_000));
+    db.prepare(`INSERT INTO "Feed" (id, url, name, userId, updatedAt) VALUES (?, ?, ?, ?, ?)`).run(feedId, `https://bulk.e2e.test/${feedId}`, "Bulk feed", userId, iso(now));
+    const insert = db.prepare(
+      `INSERT INTO "Article" (id, feedId, userId, title, link, content, excerpt, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?)`,
+    );
+    db.prepare("BEGIN").run();
+    ids.forEach((id, i) => insert.run(id, feedId, userId, `Bulk ${i}`, `https://bulk.e2e.test/${id}`, iso(new Date(now.getTime() - (i + 1) * 60_000)), created, created));
+    db.prepare("COMMIT").run();
+  } finally {
+    db.close();
+  }
+  return {
+    feedId,
+    ids,
+    cleanup: () => {
+      const c = open();
+      try {
+        c.prepare(`DELETE FROM "Article" WHERE feedId = ?`).run(feedId);
+        c.prepare(`DELETE FROM "Feed" WHERE id = ?`).run(feedId);
+      } finally {
+        c.close();
+      }
+    },
+  };
+}
+
+/** Read flags of many articles at once (id → isRead). */
+export function readFlags(articleIds: string[]): Map<string, boolean> {
+  const db = open();
+  try {
+    const out = new Map<string, boolean>();
+    for (let i = 0; i < articleIds.length; i += 500) {
+      const chunk = articleIds.slice(i, i + 500);
+      const rows = db.prepare(`SELECT id, isRead FROM "Article" WHERE id IN (${chunk.map(() => "?").join(",")})`).all(...chunk) as { id: string; isRead: number }[];
+      for (const r of rows) out.set(r.id, !!r.isRead);
+    }
+    return out;
+  } finally {
+    db.close();
+  }
 }

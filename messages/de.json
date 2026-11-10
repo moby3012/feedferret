@@ -851,6 +851,7 @@
     "copyLink": "Link kopieren",
     "linkCopied": "Link kopiert",
     "markUpToHere": "Alles bis hier als gelesen",
+    "markUpToHereClamped": "Nur die ersten {count} Artikel als gelesen markiert",
     "kindVideo": "Video",
     "kindAudio": "Audio",
     "kindImage": "Bild",

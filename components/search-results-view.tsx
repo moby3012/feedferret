@@ -27,6 +27,8 @@ interface SearchResultsViewProps {
   isFetchingMore?: boolean;
   onLoadMore?: () => void;
   loadedCount?: number;
+  /** Bound list for the server-side "Alles bis hier" range. */
+  markRange?: { listKey: string; sort: "new" | "old" } | null;
 }
 
 export function SearchResultsView({
@@ -49,6 +51,7 @@ export function SearchResultsView({
   isFetchingMore,
   onLoadMore,
   loadedCount,
+  markRange,
 }: SearchResultsViewProps) {
   const t = useTranslations("searchResults");
   const tA11y = useTranslations("accessibility");
@@ -161,6 +164,7 @@ export function SearchResultsView({
             isFetchingMore={isFetchingMore}
             onLoadMore={onLoadMore}
             loadedCount={loadedCount}
+            markRange={markRange}
           />
         </div>
       )}

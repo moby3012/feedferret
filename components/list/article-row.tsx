@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { useFormatter, useNow, useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   Bookmark,
   BookmarkMinus,
@@ -24,6 +24,7 @@ import { createSwipeRow, documentDir, type LongPressPoint, type SwipeAction, typ
 import { highlightText } from "@/lib/highlight-search-terms";
 import { cn } from "@/lib/utils";
 import { FeedFavicon } from "./feed-favicon";
+import { useRowNow } from "./row-clock";
 
 // Row v2 (spec §4.5): five content kinds × three densities. Flat, full-bleed
 // rows (magazine = cards); unread = brand dot + weight; read = secondary text
@@ -86,7 +87,7 @@ export function formatDuration(secs: number | null | undefined): string | null {
 
 function useRowTime(iso: string): string {
   const format = useFormatter();
-  const now = useNow();
+  const now = useRowNow();
   const date = new Date(iso);
   const age = now.getTime() - date.getTime();
   if (age >= 0 && age < DAY_MS) return format.relativeTime(date, { now, style: "narrow" });

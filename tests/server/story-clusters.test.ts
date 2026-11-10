@@ -24,7 +24,7 @@ import { GET as clusterGET } from "../../app/api/app/clusters/[id]/route";
 import { clusterUser, cleanupStoryClusters, reconcileCluster, runStoryClustering, PENDING_BATCH, STEP_SIZE } from "../../lib/story-clustering/job";
 import { applyArticleStateOps } from "../../server/articles/state";
 import { getReadingPreferences, updateGlobalSettings } from "../../app/actions/settings";
-import { markArticleIdsRead } from "../../app/actions/article-state";
+import { markArticleIdsRead, markListRangeRead } from "../../app/actions/article-state";
 import { markArticlesAsUnread } from "../../app/actions/feeds";
 import type { ArticlePage, ClusterDetail } from "../../features/articles/types";
 
@@ -554,8 +554,139 @@ describe("story read cascade (clusterReadMode)", () => {
 
   it("is user-scoped: another user's lead id cascades nothing and is reported failed", async () => {
     const res = await applyArticleStateOps(ids.bob, [{ id: lead, isRead: true }]);
-    expect(res).toEqual({ failed: [lead], affected: [] });
+    expect(res).toEqual({ failed: [lead], affected: [], cascades: [] });
     for (const id of ["s-0", "s-1", "s-2"]) expect(await isRead(id)).toBe(false);
+  });
+});
+
+describe("story cascade: per-story groups and story-card ops (story: true)", () => {
+  const isRead = async (id: string) => (await state.db.article.findUniqueOrThrow({ where: { id } })).isRead;
+  /** A hand-built cluster (deterministic, no clustering heuristics involved). */
+  async function story(userId: string, feeds: string[], prefix: string, size: number, leadIndex = 0) {
+    const articleIds: string[] = [];
+    for (let i = 0; i < size; i++) articleIds.push((await addArticle(userId, feeds[i % feeds.length], `${prefix}-${i}`, `${prefix} headline ${i}`, 10 - i)).id);
+    const cluster = await state.db.storyCluster.create({
+      data: { userId, leadArticleId: articleIds[leadIndex], size, feedCount: size, firstSeenAt: new Date(NOW - 10 * H), lastSeenAt: new Date(NOW), sig: "{}" },
+    });
+    await state.db.article.updateMany({ where: { id: { in: articleIds } }, data: { clusterId: cluster.id } });
+    return { clusterId: cluster.id, lead: articleIds[leadIndex], ids: articleIds };
+  }
+
+  beforeEach(async () => {
+    await resetUser(ids.alice);
+    await resetUser(ids.bob);
+    await state.db.user.update({ where: { id: ids.alice }, data: { clusterReadMode: "story" } });
+  });
+
+  it("two stories in one batch: cascade ids come back grouped by the story that caused them", async () => {
+    const a = await story(ids.alice, ids.aF, "ga", 3);
+    const b = await story(ids.alice, ids.aF, "gb", 4);
+    const res = await applyArticleStateOps(ids.alice, [{ id: a.lead, isRead: true }, { id: b.lead, isRead: true }]);
+    const byOrigin = Object.fromEntries(res.cascades.map((c) => [c.origin, c.ids.sort()]));
+    expect(byOrigin).toEqual({ [a.lead]: a.ids.filter((x) => x !== a.lead).sort(), [b.lead]: b.ids.filter((x) => x !== b.lead).sort() });
+    expect(res.cascades.find((c) => c.origin === a.lead)?.clusterId).toBe(a.clusterId);
+    expect(res.affected.sort()).toEqual(res.cascades.flatMap((c) => c.ids).sort());
+  });
+
+  it("a story card standing for a NON-lead source cascades with story: true (and only then)", async () => {
+    const a = await story(ids.alice, ids.aF, "nl", 3, 0);
+    const rep = a.ids[2];
+    expect((await applyArticleStateOps(ids.alice, [{ id: rep, isRead: true }])).cascades).toEqual([]);
+    expect(await isRead(a.lead)).toBe(false);
+    await state.db.article.update({ where: { id: rep }, data: { isRead: false, readAt: null } });
+    const res = await applyArticleStateOps(ids.alice, [{ id: rep, isRead: true, story: true }]);
+    expect(res.cascades).toEqual([{ origin: rep, clusterId: a.clusterId, ids: [a.ids[0], a.ids[1]].sort() }]);
+    for (const id of a.ids) expect(await isRead(id)).toBe(true);
+  });
+
+  it("lead and story-card source of the same story in one batch: one group, attributed to the lead", async () => {
+    const a = await story(ids.alice, ids.aF, "one", 4, 1);
+    const res = await applyArticleStateOps(ids.alice, [{ id: a.ids[3], isRead: true, story: true }, { id: a.lead, isRead: true }]);
+    expect(res.cascades).toHaveLength(1);
+    expect(res.cascades[0].origin).toBe(a.lead);
+    expect(res.cascades[0].ids.sort()).toEqual([a.ids[0], a.ids[2]].sort());
+  });
+
+  it("story: true is user-scoped (foreign id fails, nothing cascades), needs isRead: true and the 'story' mode", async () => {
+    const a = await story(ids.alice, ids.aF, "us", 3);
+    expect(await applyArticleStateOps(ids.bob, [{ id: a.ids[1], isRead: true, story: true }])).toEqual({ failed: [a.ids[1]], affected: [], cascades: [] });
+    for (const id of a.ids) expect(await isRead(id)).toBe(false);
+    expect((await applyArticleStateOps(ids.alice, [{ id: a.ids[1], isRead: false, story: true }])).cascades).toEqual([]);
+    await state.db.user.update({ where: { id: ids.alice }, data: { clusterReadMode: "article" } });
+    expect((await applyArticleStateOps(ids.alice, [{ id: a.ids[1], isRead: true, story: true }])).cascades).toEqual([]);
+    expect(await isRead(a.ids[0])).toBe(false);
+  });
+});
+
+describe("markListRangeRead (\"Alles bis hier\" as a server-side range)", () => {
+  const isRead = async (id: string) => (await state.db.article.findUniqueOrThrow({ where: { id } })).isRead;
+  const feedKey = () => `/?feed=${ids.aF[0]}`;
+  let rows: string[] = [];
+  let maxCreatedAt = 0;
+
+  beforeEach(async () => {
+    await resetUser(ids.alice);
+    await resetUser(ids.bob);
+    rows = [];
+    // 1200 rows in one feed, newest first = r-0000 … r-1199 (beyond the 1000-id cap of the id path).
+    const base = Date.now() - 60_000;
+    await state.db.article.createMany({
+      data: Array.from({ length: 1200 }, (_, i) => ({
+        id: `r-${String(i).padStart(4, "0")}`,
+        userId: ids.alice,
+        feedId: ids.aF[0],
+        title: `Row ${i}`,
+        link: `https://example.test/r-${i}`,
+        content: "",
+        excerpt: "",
+        publishedAt: new Date(NOW - i * 60_000),
+        createdAt: new Date(base),
+      })),
+    });
+    for (let i = 0; i < 1200; i++) rows.push(`r-${String(i).padStart(4, "0")}`);
+    maxCreatedAt = base;
+    await addArticle(ids.alice, ids.aF[1], "r-other-feed", "Other feed", 0.5);
+  });
+
+  it("marks every unread row from the top down to toId (inclusive, > 1000) with ONE undo token", async () => {
+    await state.db.article.update({ where: { id: rows[5] }, data: { isRead: true, readAt: new Date(NOW - 99 * H) } });
+    const result = await markListRangeRead({ listKey: feedKey(), sort: "new", fromId: rows[0], toId: rows[1099], maxCreatedAt, extraIds: [] });
+    expect(result.ids).toHaveLength(1099); // 1100 rows, one was read already
+    expect(result.undoToken).toEqual(expect.any(String));
+    expect(await isRead(rows[1099])).toBe(true);
+    expect(await isRead(rows[1100])).toBe(false);
+    expect(await isRead("r-other-feed")).toBe(false); // other scope
+    expect((await state.db.article.findUniqueOrThrow({ where: { id: rows[5] } })).readAt?.getTime()).toBe(NOW - 99 * H);
+    const undone = await markArticlesAsUnread(result.undoToken!);
+    expect(undone.ids).toHaveLength(1099);
+    expect(await isRead(rows[0])).toBe(false);
+    expect(await isRead(rows[5])).toBe(true);
+  });
+
+  it("follows the list order (sort=old reverses the range) and adds folded extra ids", async () => {
+    const result = await markListRangeRead({ listKey: feedKey(), sort: "old", fromId: rows[1199], toId: rows[1190], maxCreatedAt, extraIds: [rows[3]] });
+    expect(result.ids.sort()).toEqual([...rows.slice(1190), rows[3]].sort());
+  });
+
+  it("never marks rows that arrived after the list was loaded (newer createdAt), even inside the range", async () => {
+    await addArticle(ids.alice, ids.aF[0], "r-late", "Late backdated arrival", (NOW - (NOW - 10 * 60_000)) / H, { createdAt: new Date(maxCreatedAt + 5_000) });
+    const result = await markListRangeRead({ listKey: feedKey(), sort: "new", fromId: rows[0], toId: rows[50], maxCreatedAt, extraIds: [] });
+    expect(result.ids).toHaveLength(51);
+    expect(await isRead("r-late")).toBe(false);
+  });
+
+  it("is user-scoped and validated", async () => {
+    state.session = { user: { id: ids.bob } };
+    const foreign = await markListRangeRead({ listKey: feedKey(), sort: "new", fromId: rows[0], toId: rows[10], maxCreatedAt, extraIds: [rows[20]] });
+    expect(foreign).toEqual({ ids: [], undoToken: null });
+    expect(await isRead(rows[0])).toBe(false);
+    expect(await isRead(rows[20])).toBe(false);
+    state.session = { user: { id: ids.alice } };
+    await expect(markListRangeRead({ listKey: "https://evil.test/?feed=x", sort: "new", fromId: "a", toId: "b", maxCreatedAt, extraIds: [] })).rejects.toThrow(/Invalid range/);
+    await expect(markListRangeRead({ listKey: "/?feed=a&cat=b", sort: "new", fromId: "a", toId: "b", maxCreatedAt, extraIds: [] })).rejects.toThrow(/Invalid range/);
+    await expect(markListRangeRead({ listKey: feedKey(), sort: "new", fromId: "a", toId: "b", maxCreatedAt, extraIds: Array(1001).fill("x") })).rejects.toThrow(/Invalid range/);
+    state.session = null;
+    await expect(markListRangeRead({ listKey: feedKey(), sort: "new", fromId: rows[0], toId: rows[1], maxCreatedAt, extraIds: [] })).rejects.toThrow(/Unauthorized/);
   });
 });
 

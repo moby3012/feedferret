@@ -119,13 +119,19 @@ export function createPull(scroller: HTMLElement, o: PullOptions): () => void {
 
   scroller.addEventListener("touchstart", onStart, { passive: true });
   scroller.addEventListener("touchmove", onMove, { passive: false });
+  // The OS took the touch (scroll start, call, gesture): spring back, never refresh.
+  const onCancel = () => {
+    if (owning) reset(true);
+    tracking = false;
+  };
+
   scroller.addEventListener("touchend", onEnd);
-  scroller.addEventListener("touchcancel", onEnd);
+  scroller.addEventListener("touchcancel", onCancel);
   return () => {
     scroller.removeEventListener("touchstart", onStart);
     scroller.removeEventListener("touchmove", onMove);
     scroller.removeEventListener("touchend", onEnd);
-    scroller.removeEventListener("touchcancel", onEnd);
+    scroller.removeEventListener("touchcancel", onCancel);
     stopSpring?.();
     reset(false);
   };

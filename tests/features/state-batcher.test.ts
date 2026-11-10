@@ -15,7 +15,7 @@ describe("StateBatcher", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  const setup = (send?: (ops: WireStateOp[]) => Promise<{ failed: string[]; affected?: string[] }>) => {
+  const setup = (send?: (ops: WireStateOp[]) => Promise<{ failed: string[]; affected?: string[]; cascades?: Array<{ origin: string; ids: string[] }> }>) => {
     const calls: WireStateOp[][] = [];
     const settled: SettledFlush[] = [];
     const batcher = new StateBatcher({
@@ -50,6 +50,26 @@ describe("StateBatcher", () => {
     await vi.advanceTimersByTimeAsync(TRAILING_MS);
     expect(settled[1].affected).toEqual([]);
     expect(settled[1].failed).toHaveLength(1);
+  });
+
+  it("passes per-story cascade groups through; `affected` falls back to their ids", async () => {
+    const groups = [{ origin: "lead-a", ids: ["a1"] }, { origin: "card-b", ids: ["b1", "b2"] }];
+    const { batcher, settled } = setup(() => Promise.resolve({ failed: [], cascades: groups }));
+    batcher.enqueue({ id: "lead-a", field: "isRead", value: true }, false);
+    batcher.enqueue({ id: "card-b", field: "isRead", value: true, story: true }, false);
+    await vi.advanceTimersByTimeAsync(TRAILING_MS);
+    expect(settled[0].cascades).toEqual(groups);
+    expect(settled[0].affected).toEqual(["a1", "b1", "b2"]);
+  });
+
+  it("sends `story` only with isRead: true (latest op per field wins)", async () => {
+    expect(toWireOps([{ id: "c", field: "isRead", value: true, story: true }, { id: "c", field: "isStarred", value: true }])).toEqual([{ id: "c", isRead: true, isStarred: true, story: true }]);
+    expect(toWireOps([{ id: "c", field: "isRead", value: false, story: true }])).toEqual([{ id: "c", isRead: false }]);
+    const { batcher, calls } = setup();
+    batcher.enqueue({ id: "c", field: "isRead", value: true, story: true }, false);
+    batcher.enqueue({ id: "c", field: "isRead", value: true }, false);
+    await vi.advanceTimersByTimeAsync(TRAILING_MS);
+    expect(calls).toEqual([[{ id: "c", isRead: true }]]);
   });
 
   it("a toggle followed by its inverse cancels: nothing is sent", async () => {

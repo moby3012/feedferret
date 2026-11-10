@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect, ACTIVE_LIST } from "../helpers/test";
-import { articleFlags, makeStoryCluster, patchArticles, setUserFlags } from "../helpers/db";
+import { articleFlags, insertBulkFeed, makeStoryCluster, patchArticles, readFlags, setUserFlags } from "../helpers/db";
 import { touchDrag, touchHoldOn, touchSwipeOn } from "../helpers/gestures";
 
 /**
@@ -148,6 +148,25 @@ test.describe("touch swipes (mobile)", () => {
     await expect(toast).toBeVisible();
     await toast.getByRole("button", { name: "Undo" }).tap();
     for (const n of [1, 2, 3, 4]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(false);
+  });
+
+  test("system Back closes the row menu (nav overlay) and stays on the list", async ({ app, page }) => {
+    await openSettled(app);
+    const before = app.where();
+    await touchHoldOn(page, app.row(2));
+    const menu = page.getByTestId("article-context-menu");
+    await expect(menu).toBeVisible();
+    await page.goBack();
+    await expect(menu).toBeHidden();
+    await expect.poll(() => app.where()).toBe(before);
+    await expect(app.row(2)).toBeVisible();
+    // Nothing was selected or opened by the Back.
+    expect(articleFlags(app.articleId(2))).toMatchObject({ isRead: false, isReadLater: false, isStarred: false });
+    // The menu opens again normally afterwards.
+    await touchHoldOn(page, app.row(3));
+    await expect(menu).toBeVisible();
+    await page.goBack();
+    await expect(menu).toBeHidden();
   });
 
   test("offline: swipes are disabled", async ({ app, page }) => {
@@ -370,5 +389,104 @@ test("settings: swipe mapping per direction is honoured, haptics can be switched
       localStorage.removeItem("ff:swipe-end");
       localStorage.removeItem("ff:haptics");
     });
+  }
+});
+
+test("story cascade: two stories in one batch keep their own Undo / restore sets", async ({ app, page }) => {
+  // Story A: lead #003 + #005 (loaded) + #120 (not loaded); story B: lead #007 + #009 + #160 (not loaded).
+  // (#121 is read in the seed; #120 / #150 / #160 are unread and beyond the loaded pages.)
+  const cleanA = makeStoryCluster(app.userKey, [3, 5, 120].map((n) => app.articleId(n)));
+  const cleanB = makeStoryCluster(app.userKey, [7, 9, 160].map((n) => app.articleId(n)));
+  try {
+    await app.open();
+    // Both cards inside one batcher window (400 ms trailing): one server call, two cascades.
+    await app.activate(app.rowActions(3).read);
+    await app.activate(app.rowActions(7).read);
+    for (const n of [3, 5, 120, 7, 9, 160]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(true);
+    const toast = page.locator("[data-sonner-toast]").filter({ hasText: /2 more sources of this story marked as read/ });
+    await expect(toast).toBeVisible();
+
+    // Story B taken back: only B's server-cascaded source returns (not A's).
+    await app.activate(app.rowActions(7).read);
+    for (const n of [7, 9, 160]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(false);
+    expect(articleFlags(app.articleId(120)).isRead).toBe(true);
+
+    // Undo still restores what is left of the flush: A's cascaded source.
+    await app.activate(toast.getByRole("button", { name: "Undo" }));
+    await expect.poll(() => articleFlags(app.articleId(120)).isRead).toBe(false);
+    expect(articleFlags(app.articleId(3)).isRead).toBe(true);
+  } finally {
+    cleanA();
+    cleanB();
+  }
+});
+
+test("story card that shows a NON-lead source cascades to the whole story on the server", async ({ app, page }) => {
+  // Lead #150 is not on the first page: the card stands on #003 (first loaded member).
+  const members = [150, 3, 5, 160].map((n) => app.articleId(n));
+  const cleanup = makeStoryCluster(app.userKey, members);
+  try {
+    await app.open();
+    await expect(app.row(3).getByTestId("cluster-toggle")).toBeVisible();
+    await expect(app.row(5)).toHaveCount(0);
+    await app.activate(app.rowActions(3).read);
+    for (const n of [3, 5, 150, 160]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(true);
+    const toast = page.locator("[data-sonner-toast]").filter({ hasText: /2 more sources of this story marked as read/ });
+    await expect(toast).toBeVisible();
+    // Marking the card unread again brings the whole story back (loaded + server-cascaded).
+    await app.activate(app.rowActions(3).read);
+    for (const n of [3, 5, 150, 160]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(false);
+  } finally {
+    cleanup();
+  }
+});
+
+test("keyboard j/k skips story members folded under a collapsed card", async ({ app, page, isMobile }) => {
+  test.skip(isMobile, "keyboard shortcut; desktop only");
+  const cleanup = makeStoryCluster(app.userKey, [3, 5].map((n) => app.articleId(n)));
+  try {
+    await app.open();
+    await expect(app.row(5)).toHaveCount(0);
+    await app.activate(app.row(4));
+    await expect.poll(() => app.where()).toBe(`/?a=${app.articleId(4)}`);
+    await page.keyboard.press("j");
+    await expect.poll(() => app.where()).toBe(`/?a=${app.articleId(6)}`);
+    await page.keyboard.press("k");
+    await expect.poll(() => app.where()).toBe(`/?a=${app.articleId(4)}`);
+    await page.keyboard.press("k");
+    await expect.poll(() => app.where()).toBe(`/?a=${app.articleId(3)}`);
+  } finally {
+    cleanup();
+  }
+});
+
+test("'Alles bis hier' beyond 1000 loaded rows: one server-side range, one Undo", async ({ app, page, isMobile }) => {
+  test.skip(isMobile, "1100 rows: desktop only (same code path)");
+  test.setTimeout(180_000);
+  const bulk = insertBulkFeed(app.userKey, 1100);
+  try {
+    await page.goto(`/?feed=${bulk.feedId}`);
+    await app.navReady();
+    const rows = page.locator(`${ACTIVE_LIST} [data-article-id^="e2e-bulk-"]`);
+    await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+    const scroller = app.listScroller();
+    // Page through the whole feed (50 per request, revealed 30 at a time).
+    for (let i = 0; i < 200 && (await rows.count()) < 1100; i++) {
+      await scroller.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+      await page.waitForTimeout(100);
+    }
+    await expect(rows).toHaveCount(1100);
+    const last = page.locator(`${ACTIVE_LIST} [data-article-id="${bulk.ids[1099]}"] [role="button"]`).first();
+    await last.scrollIntoViewIfNeeded();
+    await last.click({ button: "right", position: { x: 200, y: 20 } });
+    const menu = page.getByTestId("article-context-menu");
+    await menu.getByRole("menuitem", { name: "Mark all up to here as read" }).click();
+    const toast = page.locator("[data-sonner-toast]").filter({ hasText: "Marked 1,100 articles as read" });
+    await expect(toast).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => [...readFlags(bulk.ids).values()].filter(Boolean).length).toBe(1100);
+    await toast.getByRole("button", { name: "Undo" }).click();
+    await expect.poll(() => [...readFlags(bulk.ids).values()].filter(Boolean).length, { timeout: 20_000 }).toBe(0);
+  } finally {
+    bulk.cleanup();
   }
 });

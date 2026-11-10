@@ -37,6 +37,67 @@ export function cancelActiveGesture() {
   current?.cancel();
 }
 
+// --- pointer tracking: every pointer down anywhere in the document, so a
+// second finger cancels the running gesture even when it lands outside the
+// row (or the scroller) that owns the first one.
+
+const pointersDown = new Set<number>();
+/** Sequences that started but have not claimed yet (pending swipe, tracking pull). */
+const watchers = new Set<() => void>();
+let pointerListening = false;
+
+function ensurePointerListener() {
+  if (pointerListening || typeof document === "undefined") return;
+  pointerListening = true;
+  const down = (e: PointerEvent) => {
+    // A primary pointer starts a new sequence: forget pointers whose up we missed.
+    if (e.isPrimary) pointersDown.clear();
+    pointersDown.add(e.pointerId);
+    if (pointersDown.size > 1) {
+      cancelActiveGesture();
+      for (const cancel of [...watchers]) cancel();
+    }
+  };
+  const up = (e: PointerEvent) => {
+    pointersDown.delete(e.pointerId);
+  };
+  // Capture on the document: runs before any row handler, sees captured pointers too.
+  document.addEventListener("pointerdown", down, { capture: true, passive: true });
+  document.addEventListener("pointerup", up, { capture: true, passive: true });
+  document.addEventListener("pointercancel", up, { capture: true, passive: true });
+}
+
+/** Number of pointers currently down in the document. */
+export function pointersDownCount(): number {
+  ensurePointerListener();
+  return pointersDown.size;
+}
+
+/**
+ * Registers a started (not yet claimed) sequence: a second pointer anywhere
+ * calls `cancel`. Returns the unregister function.
+ */
+export function watchSequence(cancel: () => void): () => void {
+  ensurePointerListener();
+  watchers.add(cancel);
+  return () => {
+    watchers.delete(cancel);
+  };
+}
+
+/** Installs the document listeners early (gesture module setup). */
+export function initGestureTracking() {
+  ensurePointerListener();
+  ensureScrollListener();
+}
+
+/** Test hook: forget all tracked pointers and watchers. */
+export function resetGestureTracking() {
+  pointersDown.clear();
+  watchers.clear();
+  active = null;
+}
+
 // --- scroll guard: no swipe starts within 100 ms of the last scroll (momentum)
 
 let lastScrollAt = -Infinity;

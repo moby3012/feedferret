@@ -11,13 +11,14 @@ import { findCachedArticle } from "@/features/articles/cache";
 import { qk } from "@/features/articles/keys";
 import { toLegacyArticle, type LegacyArticle, type LegacyContext } from "@/features/articles/legacy-adapter";
 import { useArticleActions } from "@/features/articles/mutations";
+import { nav, useNav } from "@/features/reader/nav/store";
 import type { ArticlePage } from "@/features/articles/types";
 import { isOnline } from "@/features/bootstrap/online";
 import { useRestoreGate, useScrollMemory } from "@/features/reader/nav/scroll-memory";
 import { createPull, useGesturePrefs, type LongPressPoint } from "@/lib/gestures";
 import { extractHighlightTerms } from "@/lib/highlight-search-terms";
 import { cn } from "@/lib/utils";
-import { ArticleRow, type Density, type RowHandlers, type RowSwipeMap } from "./article-row";
+import { ArticleRow, type Density, type RowCluster, type RowHandlers, type RowSwipeMap } from "./article-row";
 import { ArticleListSkeleton } from "./article-skeleton";
 import { ClusterMembers, groupStories, type DisplayRow } from "./story-cluster";
 
@@ -33,7 +34,8 @@ export interface ArticleListViewProps {
   articles: LegacyArticle[];
   selectedArticle: { id: string } | null;
   onSelectArticle: (article: LegacyArticle) => void;
-  onToggleRead?: (articleId: string) => void;
+  /** `story`: the row is a story card in "story" mode (the server cascades to its cluster). */
+  onToggleRead?: (articleId: string, opts?: { story?: boolean }) => void;
   onToggleStar?: (articleId: string) => void;
   onToggleReadLater?: (articleId: string) => void;
   onReleaseSpoiler?: (articleId: string) => void;
@@ -68,7 +70,21 @@ export interface ArticleListViewProps {
   clusterReadMode?: "story" | "article";
   /** Feed / label lookup for cluster member rows. */
   legacyContext?: LegacyContext;
+  /**
+   * The bound list (canonical key + sort): "Alles bis hier" then runs as one
+   * server-side range instead of an id list (no id cap, one undo token).
+   */
+  markRange?: { listKey: string; sort: "new" | "old" } | null;
+  /**
+   * Keyboard order of the rows (j/k/n/p): story members folded under a
+   * collapsed card are skipped; an expanded card's loaded members follow it.
+   */
+  onNavOrderChange?: (articles: LegacyArticle[]) => void;
 }
+
+/** Upper bound of ids one "Alles bis hier" id call may send (server `MAX_MARK_IDS`). */
+const MAX_MARK_IDS = 1000;
+const MENU_OVERLAY = "article-menu";
 
 const EMPTY_CONTEXT: LegacyContext = { feedsById: new Map(), labelsById: new Map(), labelsReady: true };
 
@@ -117,7 +133,15 @@ export function ArticleListView(props: ArticleListViewProps) {
   const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  // The row menu is a nav overlay (history entry on touch / compact): system Back closes it.
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const menuOpen = useNav((s) => s.overlay === MENU_OVERLAY);
+  const menuWasOpen = useRef(false);
+  useEffect(() => {
+    // Closed by Back, Escape or another overlay taking over: drop the row it belonged to.
+    if (menuWasOpen.current && !menuOpen) setMenu(null);
+    menuWasOpen.current = menuOpen;
+  }, [menuOpen]);
   const [pullTriggered, setPullTriggered] = useState(false);
 
   const firstArticleId = articles[0]?.id ?? null;
@@ -150,13 +174,19 @@ export function ArticleListView(props: ArticleListViewProps) {
     return [...ids];
   }, []);
 
-  /** Read toggle; on a story card in "story" mode the whole story follows. */
+  /**
+   * Read toggle; on a story card in "story" mode the whole story follows: the
+   * loaded members flip optimistically here, and the card's op carries
+   * `story` so the server cascades to the rest of the cluster even when the
+   * card shows a non-lead source.
+   */
   const toggleRead = useCallback(
     (id: string) => {
-      const { props: p, qc: client } = live.current;
+      const { props: p, qc: client, rows: rs } = live.current;
       const before = findCachedArticle(client, id);
-      p.onToggleRead?.(id);
-      if (!before || p.clusterReadMode !== "story") return;
+      const story = p.clusterReadMode === "story" && !!rs.find((r) => r.article.id === id)?.story;
+      p.onToggleRead?.(id, story ? { story: true } : undefined);
+      if (!before || !story) return;
       const next = !before.isRead;
       for (const memberId of storyMembers(id)) {
         if (findCachedArticle(client, memberId)?.isRead === !next) p.onToggleRead?.(memberId);
@@ -197,7 +227,10 @@ export function ArticleListView(props: ArticleListViewProps) {
       toggleStar: (id) => live.current.props.onToggleStar?.(id),
       toggleLater: (id) => live.current.props.onToggleReadLater?.(id),
       releaseSpoiler: (id) => live.current.props.onReleaseSpoiler?.(id),
-      openMenu: (id, point, returnFocus) => setMenu({ id, point, returnFocus }),
+      openMenu: (id, point, returnFocus) => {
+        setMenu({ id, point, returnFocus });
+        void nav.openOverlay(MENU_OVERLAY);
+      },
       toggleCluster: (clusterId) =>
         setExpanded((prev) => {
           const next = new Set(prev);
@@ -266,6 +299,34 @@ export function ArticleListView(props: ArticleListViewProps) {
     const story = displayIndex >= 0 ? rows[displayIndex].story : null;
     const upToHere = displayIndex >= 0 ? rows.slice(0, displayIndex + 1).flatMap((r) => [r.article, ...(r.story?.siblings ?? [])]) : [a];
     const unreadUpToHere = upToHere.filter((x) => !x.isRead).map((x) => x.id);
+    const markUpToHere = () => {
+      const range = props.markRange;
+      if (range && displayIndex >= 0 && articles.length > 0) {
+        // Server-side range over the list's own order: from the first loaded row
+        // down to the row this card sits at (a story card sits at its first
+        // member in list order, which is not necessarily the lead it shows).
+        // Members folded under a card here that sort below that row go along
+        // as explicit ids.
+        const flatIndex = new Map(articles.map((x, i) => [x.id, i]));
+        const row = rows[displayIndex];
+        const anchor = Math.min(...[row.article, ...(row.story?.siblings ?? [])].map((x) => flatIndex.get(x.id) ?? Infinity));
+        if (Number.isFinite(anchor)) {
+          const extraIds = upToHere.filter((x) => !x.isRead && (flatIndex.get(x.id) ?? Infinity) > anchor).map((x) => x.id);
+          articleActions.markRangeRead({
+            listKey: range.listKey,
+            sort: range.sort,
+            fromId: articles[0].id,
+            toId: articles[anchor].id,
+            maxCreatedAt: Math.max(...articles.map((x) => x.createdAtRaw).filter(Number.isFinite)),
+            extraIds: extraIds.slice(0, MAX_MARK_IDS),
+          });
+          return;
+        }
+      }
+      // No bound list (e.g. a member row of an expanded card): explicit ids, capped.
+      if (unreadUpToHere.length > MAX_MARK_IDS) toast.info(t("markUpToHereClamped", { count: MAX_MARK_IDS }));
+      articleActions.markIdsRead(unreadUpToHere.slice(0, MAX_MARK_IDS));
+    };
     const items: OverlayMenuItem[] = [
       { id: "read", label: a.isRead ? t("markAsUnread") : t("markAsRead"), icon: a.isRead ? Circle : CheckCircle2, onSelect: () => toggleRead(a.id) },
       { id: "later", label: a.isReadLater ? t("removeFromReadLater") : t("saveToReadLater"), icon: a.isReadLater ? BookmarkMinus : Bookmark, onSelect: () => props.onToggleReadLater?.(a.id) },
@@ -301,12 +362,35 @@ export function ArticleListView(props: ArticleListViewProps) {
       icon: CheckCheck,
       separated: true,
       disabled: unreadUpToHere.length === 0,
-      onSelect: () => articleActions.markIdsRead(unreadUpToHere),
+      onSelect: markUpToHere,
     });
     return items;
     // `props` callbacks are stable shell actions.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menu, menuArticle, rows, expanded, t, toggleRead, handlers, articleActions]);
+  }, [menu, menuArticle, rows, articles, expanded, t, toggleRead, handlers, articleActions]);
+
+  // ---------------------------------------------------- keyboard order
+  const onNavOrderChange = props.onNavOrderChange;
+  const navOrder = useMemo(
+    () => rows.flatMap((r) => (r.story && expanded.has(r.story.clusterId) ? [r.article, ...r.story.siblings] : [r.article])),
+    [rows, expanded],
+  );
+  useEffect(() => {
+    onNavOrderChange?.(navOrder);
+  }, [navOrder, onNavOrderChange]);
+
+  // ------------------------------------------------- stable row props
+  // Regrouping (any cache write to the list) builds new story objects; the
+  // memoized rows must get the SAME cluster object while id / more / expanded
+  // are unchanged, or every card re-renders on every toggle anywhere.
+  const clusterProps = useRef(new Map<string, RowCluster>());
+  const clusterProp = (id: string, more: number, open: boolean): RowCluster => {
+    const hit = clusterProps.current.get(id);
+    if (hit && hit.more === more && hit.expanded === open) return hit;
+    const next = { id, more, expanded: open };
+    clusterProps.current.set(id, next);
+    return next;
+  };
 
   // ----------------------------------------------------------- render
   const legacyContext = props.legacyContext ?? EMPTY_CONTEXT;
@@ -363,7 +447,7 @@ export function ArticleListView(props: ArticleListViewProps) {
                   selected={selectedId === article.id}
                   handlers={handlers}
                   swipeMap={swipeMap}
-                  cluster={story && story.more > 0 ? { id: story.clusterId, more: story.more, expanded: open } : null}
+                  cluster={story && story.more > 0 ? clusterProp(story.clusterId, story.more, open) : null}
                   highlightTerms={highlightTerms}
                   canReleaseSpoiler={!!props.onReleaseSpoiler}
                 />
@@ -383,11 +467,11 @@ export function ArticleListView(props: ArticleListViewProps) {
           )}
         </div>
       )}
-      {menu && menuArticle && (
+      {menu && menuOpen && menuArticle && (
         <ResponsiveMenu
           open
           onOpenChange={(o) => {
-            if (!o) setMenu(null);
+            if (!o) void nav.closeOverlay(MENU_OVERLAY);
           }}
           mode={menu.point.pointerType === "touch" || menu.point.pointerType === "pen" ? "sheet" : "menu"}
           title={menuArticle.displayTitle || menuArticle.title}

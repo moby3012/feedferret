@@ -12,7 +12,7 @@ import {
   velocityOf,
   type Sample,
 } from "./math";
-import { cancelActiveGesture, claimGesture, recentlyScrolled, releaseGesture, startsInPannableContent, type GestureOwner } from "./guards";
+import { claimGesture, initGestureTracking, pointersDownCount, recentlyScrolled, releaseGesture, startsInPannableContent, watchSequence, type GestureOwner } from "./guards";
 import { haptic } from "./haptics";
 import { springBack } from "./spring";
 
@@ -51,7 +51,13 @@ export interface SwipeRowOptions {
 
 type Phase = "idle" | "pending" | "locked" | "settling";
 
-const CLICK_SUPPRESS_MS = 600;
+/**
+ * How long after the END of a swipe / long-press sequence its release click
+ * is still swallowed (the browser dispatches it right after pointerup; this is
+ * slack for slow devices). A new pointerdown drops the guard at once, so a
+ * real tap right after a swipe is never eaten.
+ */
+export const CLICK_SUPPRESS_MS = 400;
 
 export function createSwipeRow(el: HTMLElement, o: SwipeRowOptions): () => void {
   let phase: Phase = "idle";
@@ -71,19 +77,42 @@ export function createSwipeRow(el: HTMLElement, o: SwipeRowOptions): () => void 
   let offset = 0;
 
   const owner: GestureOwner = { kind: "swipe", cancel: () => cancel() };
+  let unwatch: (() => void) | null = null;
+  initGestureTracking();
 
   const clearLongPress = () => {
     if (longPressTimer !== null) clearTimeout(longPressTimer);
     longPressTimer = null;
   };
 
+  // Release-click guard: armed when the sequence becomes a swipe / long-press,
+  // kept for the whole sequence however long it lasts, and dropped
+  // CLICK_SUPPRESS_MS after the sequence ENDS (or at the next pointerdown).
+  let clickGuard = false;
+  let clickGuardTimer: ReturnType<typeof setTimeout> | null = null;
+  const swallowClick = (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropClickGuard();
+  };
+  const dropClickGuard = () => {
+    if (clickGuardTimer !== null) clearTimeout(clickGuardTimer);
+    clickGuardTimer = null;
+    if (!clickGuard) return;
+    clickGuard = false;
+    el.removeEventListener("click", swallowClick, { capture: true });
+  };
   const suppressNextClick = () => {
-    const swallow = (e: Event) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    el.addEventListener("click", swallow, { capture: true, once: true });
-    setTimeout(() => el.removeEventListener("click", swallow, { capture: true }), CLICK_SUPPRESS_MS);
+    if (clickGuardTimer !== null) clearTimeout(clickGuardTimer);
+    clickGuardTimer = null;
+    if (clickGuard) return;
+    clickGuard = true;
+    el.addEventListener("click", swallowClick, { capture: true });
+  };
+  /** Sequence over: the release click (if any) arrives now; drop the guard shortly after. */
+  const releaseClickGuard = () => {
+    if (!clickGuard || clickGuardTimer !== null) return;
+    clickGuardTimer = setTimeout(dropClickGuard, CLICK_SUPPRESS_MS);
   };
 
   const write = (x: number) => {
@@ -151,6 +180,9 @@ export function createSwipeRow(el: HTMLElement, o: SwipeRowOptions): () => void 
     if (pointerId !== -1 && el.hasPointerCapture?.(pointerId)) el.releasePointerCapture(pointerId);
     pointerId = -1;
     clearLongPress();
+    unwatch?.();
+    unwatch = null;
+    releaseClickGuard();
     releaseGesture(owner);
     if (raf) cancelAnimationFrame(raf);
     raf = 0;
@@ -164,13 +196,15 @@ export function createSwipeRow(el: HTMLElement, o: SwipeRowOptions): () => void 
   }
 
   const onPointerDown = (e: PointerEvent) => {
+    // A new sequence: the previous one's release click is long gone.
+    dropClickGuard();
     if (pointerId !== -1 && e.pointerId !== pointerId) {
-      // Second pointer: the active gesture springs back, nothing commits.
-      cancelActiveGesture();
+      // Second pointer on this row (the document tracker already cancelled us).
       cancel();
       return;
     }
-    if (!e.isPrimary || e.button !== 0) return;
+    // Another pointer is down somewhere (pinch, two-finger scroll): never a swipe.
+    if (!e.isPrimary || e.button !== 0 || pointersDownCount() > 1) return;
     if (e.pointerType !== "touch" && e.pointerType !== "pen") return; // mouse never swipes
     if (inEdgeInset(e.clientX, window.innerWidth)) return; // the OS back gesture owns the edges
     if (startsInPannableContent(e.target, el)) return;
@@ -186,6 +220,8 @@ export function createSwipeRow(el: HTMLElement, o: SwipeRowOptions): () => void 
     longPressFired = false;
     // Momentum scroll still running: this touch stops the scroll, it is not a swipe.
     phase = recentlyScrolled() ? "idle" : "pending";
+    // A second pointer anywhere in the document cancels this sequence.
+    unwatch = watchSequence(owner.cancel);
     if (o.onLongPress) {
       const point = { x: e.clientX, y: e.clientY, pointerType: e.pointerType };
       longPressTimer = setTimeout(() => {
@@ -302,6 +338,7 @@ export function createSwipeRow(el: HTMLElement, o: SwipeRowOptions): () => void 
     document.removeEventListener("visibilitychange", onVisibility);
     stopSpring?.();
     endSequence();
+    dropClickGuard();
     write(0);
     resetAttrs();
   };
