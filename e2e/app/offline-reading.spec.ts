@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Page } from "@playwright/test";
@@ -243,6 +244,11 @@ function otherUserKey(app: App) {
 
 async function signInAs(page: Page, userKey: string) {
   const m = manifest();
+  // Sign-in is rate limited per client IP (10 per 15 min, in memory in the one server of the run). Every
+  // sign-in of this file comes from its own address so the budget shared with the rest of the suite (and
+  // with --repeat-each) can never decide the outcome. Only the address differs: the limiter itself
+  // is still what the app ships (covered in tests/lib/rate-limit.test.ts).
+  await page.context().setExtraHTTPHeaders({ "x-forwarded-for": `10.${randomInt(256)}.${randomInt(256)}.${1 + randomInt(254)}` });
   await page.goto("/login");
   await page.getByPlaceholder("Email").fill(m.users[userKey].email);
   await page.getByPlaceholder("Password").fill(m.password);
@@ -304,7 +310,11 @@ test("sign-out in another tab: a prefetch still in flight in this tab leaves not
   await secondApp.navReady();
   await secondApp.openSidebar();
   await secondApp.activate(second.getByRole("button", { name: "Sign out" }).first());
+  // Sign-out must be accepted by the server: its own rate-limit budget, never the sign-in one (a refused
+  // sign-out answers 429, leaves the session cookie valid and this tab on "/" — the original flake).
+  const signOutResponse = second.waitForResponse((r) => r.url().endsWith("/api/auth/signout") && r.request().method() === "POST");
   await secondApp.activate(second.getByRole("alertdialog", { name: "Sign out?" }).getByRole("button", { name: "Sign out" }));
+  expect((await signOutResponse).status()).toBe(200);
   await second.waitForURL(/\/login/, { timeout: 30_000 });
   // The signed-out tab leaves by itself, even though it never saw a response.
   await page.waitForURL(/\/login/, { timeout: 30_000 });
