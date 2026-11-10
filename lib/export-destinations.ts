@@ -20,7 +20,7 @@
 // shipped as if confirmed working." See the PR description / roadmap for the
 // follow-up note.
 
-import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed, readTextWithLimit } from "@/lib/ssrf";
 
 export type ObsidianExportInput = {
   vault: string;
@@ -100,10 +100,11 @@ async function getWallabagAccessToken(config: WallabagConfig, timeoutMs = 15_000
       signal: controller.signal,
     });
     if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      return { ok: false, error: `Wallabag authentication failed (HTTP ${res.status}): ${errText.slice(0, 200)}` };
+      // Status only: echoing the body of a user-chosen host is a read-SSRF channel (N10).
+      await res.body?.cancel().catch(() => {});
+      return { ok: false, error: `Wallabag authentication failed (HTTP ${res.status})` };
     }
-    const json = (await res.json().catch(() => null)) as { access_token?: string } | null;
+    const json = (await readTextWithLimit(res, 64 * 1024).then((text) => JSON.parse(text)).catch(() => null)) as { access_token?: string } | null;
     if (!json?.access_token) return { ok: false, error: "Wallabag did not return an access token" };
     return { ok: true, token: json.access_token };
   } catch (err) {
@@ -147,8 +148,8 @@ export async function sendToWallabag(config: WallabagConfig, article: WallabagAr
       signal: controller.signal,
     });
     if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      return { success: false, error: `Wallabag rejected the entry (HTTP ${res.status}): ${errText.slice(0, 200)}` };
+      await res.body?.cancel().catch(() => {});
+      return { success: false, error: `Wallabag rejected the entry (HTTP ${res.status})` };
     }
     return { success: true };
   } catch (err) {

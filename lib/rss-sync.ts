@@ -10,7 +10,7 @@ import { computeContentHash } from "./content-hash";
 import { buildDedupeKey } from "./dedupe-key";
 import { decryptIfValue } from "./crypto";
 import type { AiConfig } from "./ai-summary";
-import { logger } from "./logger";
+import { logger, urlForLog } from "./logger";
 import { getSanitizer } from "./sanitize-html";
 import { resolveFullTextMode } from "./full-text-mode";
 import { fetchAndExtractReadable } from "./readability-extract";
@@ -526,7 +526,8 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
 
         return { success: true, count: articles.length, createdArticleIds };
     } catch (error) {
-        logger.error(`Error syncing feed ${feed.url}:`, error);
+        // Log origin only: feed URLs can carry private tokens / userinfo (N15).
+        logger.error(`Error syncing feed ${feed.id} (${urlForLog(feed.url)}):`, error);
         const failureUpdate = applySyncFailure(
             { consecutiveFailureCount: feed.consecutiveFailureCount, autoMuted: feed.autoMuted },
             feed.user.autoMuteFailingFeedsAfter,

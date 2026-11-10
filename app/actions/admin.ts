@@ -430,7 +430,7 @@ export async function testRsshubConnection(config: { baseUrl?: string; apiKey?: 
   }
 
   const testRoute = String(config.testRoute || "").trim() || RSSHUB_TEST_ROUTE;
-  const result = await validateRsshubRoute({ baseUrl, apiKey }, testRoute);
+  const result = await validateRsshubRoute({ baseUrl, apiKey }, testRoute, { includeErrorBody: true });
   if (!result.ok) {
     return { success: false as const, error: result.reason };
   }

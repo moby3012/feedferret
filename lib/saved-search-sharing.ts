@@ -10,7 +10,7 @@ export async function getSharedSavedSearch(token: string, limit = 100) {
   const savedSearch = await db.savedSearch.findUnique({
     where: { shareToken: token },
     include: {
-      user: { select: { name: true, email: true } },
+      user: { select: { name: true } },
     },
   });
   if (!savedSearch?.shareToken) return null;
@@ -21,7 +21,8 @@ export async function getSharedSavedSearch(token: string, limit = 100) {
       userId: savedSearch.userId,
       AND: [searchWhere],
     },
-    include: { feed: true, labels: { include: { label: true } } },
+    // Public page: only what it renders (never feed credentials / URLs).
+    include: { feed: { select: { name: true, icon: true } }, labels: { include: { label: true } } },
     orderBy: { publishedAt: "desc" },
     take: limit,
   });

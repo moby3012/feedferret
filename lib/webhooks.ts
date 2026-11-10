@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from "crypto";
 import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { urlForLog } from "@/lib/logger";
 
 export type WebhookConfig = {
   url: string;
@@ -28,21 +29,42 @@ export function verifyWebhookSignature(secret: string, body: string, signature: 
   return signature === expected;
 }
 
+export type InterpolationEncoding = "raw" | "json" | "url";
+
+function encodeValue(value: string, encoding: InterpolationEncoding): string {
+  if (encoding === "json") return JSON.stringify(value).slice(1, -1);
+  if (encoding === "url") return encodeURIComponent(value);
+  return value;
+}
+
 /**
  * Substitute `{{var}}` placeholders in a template.
  * Unknown keys are left as the literal string `{{key}}` so the user can
  * spot typos in the request log instead of getting an empty value.
+ *
+ * Values come from feeds (article titles, feed names) — i.e. from whoever
+ * publishes the feed — so they are encoded for the target context (N5):
+ * `json` escapes them as the inside of a JSON string literal (a title like
+ * `x","rule":"deploy` can no longer add keys to an HMAC-signed body), `url`
+ * percent-encodes them (no path/query injection toward the webhook target).
  */
-export function interpolate(template: string, vars: Record<string, unknown>): string {
+export function interpolate(
+  template: string,
+  vars: Record<string, unknown>,
+  encoding: InterpolationEncoding = "raw",
+): string {
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (full, key: string) => {
     if (Object.prototype.hasOwnProperty.call(vars, key)) {
       const value = (vars as Record<string, unknown>)[key];
       if (value == null) return "";
-      return typeof value === "string" ? value : JSON.stringify(value);
+      return encodeValue(typeof value === "string" ? value : JSON.stringify(value), encoding);
     }
     return full;
   });
 }
+
+/** Webhook URL for logs: origin only — Discord/Slack-style URLs carry their token in the path (N15). */
+export const redactWebhookUrl = urlForLog;
 
 function parseConfigs(raw: string | null | undefined): WebhookConfig[] {
   if (!raw) return [];
@@ -153,17 +175,31 @@ export function redactWebhookConfigs(
   }));
 }
 
-const DEFAULT_BODY = JSON.stringify({
-  event: "{{event}}",
-  rule: "{{rule_name}}",
-  timestamp: "{{timestamp}}",
-  article: {
-    id: "{{article_id}}",
-    title: "{{article_title}}",
-    link: "{{article_link}}",
-    feed: "{{feed_name}}",
-  },
-});
+/** Default payload, built as an object and serialized once — never by string concatenation (N5). */
+export function buildDefaultWebhookBody(vars: Record<string, unknown>): string {
+  const str = (key: string) => {
+    const value = vars[key];
+    return value == null ? "" : typeof value === "string" ? value : String(value);
+  };
+  return JSON.stringify({
+    event: str("event"),
+    rule: str("rule_name"),
+    timestamp: str("timestamp"),
+    article: {
+      id: str("article_id"),
+      title: str("article_title"),
+      link: str("article_link"),
+      feed: str("feed_name"),
+    },
+  });
+}
+
+function bodyEncoding(headers: Record<string, string>): InterpolationEncoding {
+  const contentType = Object.entries(headers).find(([name]) => name.toLowerCase() === "content-type")?.[1] ?? "";
+  if (/json/i.test(contentType)) return "json";
+  if (/x-www-form-urlencoded/i.test(contentType)) return "url";
+  return "raw";
+}
 
 /**
  * Fire a single inline webhook synchronously. Returns success/failure but
@@ -174,17 +210,20 @@ export async function executeWebhookCall(
   config: WebhookConfig,
   vars: Record<string, unknown>,
 ): Promise<WebhookExecutionResult> {
-  const url = interpolate(config.url, vars);
+  const url = interpolate(config.url, vars, "url");
   const method = (config.method ?? "POST").toUpperCase();
   const supportsBody = method !== "GET" && method !== "HEAD";
-  const bodyTemplate = config.bodyTemplate ?? (supportsBody ? DEFAULT_BODY : "");
-  const body = supportsBody ? interpolate(bodyTemplate, vars) : undefined;
 
   const headers: Record<string, string> = {
     "User-Agent": "FeedFerret-Rules/1.0",
     ...(supportsBody ? { "Content-Type": "application/json" } : {}),
     ...(config.headers ?? {}),
   };
+  const body = !supportsBody
+    ? undefined
+    : config.bodyTemplate !== undefined
+      ? interpolate(config.bodyTemplate, vars, bodyEncoding(headers))
+      : buildDefaultWebhookBody(vars);
   if (config.secret && body) {
     headers["X-FeedFerret-Signature"] = signPayload(config.secret, body);
   }

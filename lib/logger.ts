@@ -14,3 +14,16 @@ export const logger = {
   warn:  (...args: unknown[]) => console.warn(...fmt("warn", ...args)),
   error: (...args: unknown[]) => console.error(...fmt("error", ...args)),
 };
+
+/**
+ * Origin only, for log lines: feed and webhook URLs can carry tokens in the
+ * query (`?key=`, `?token=`), userinfo (`user:pass@`) or path (Discord /
+ * Slack webhooks), and logs are readable by more people than the DB (N15).
+ */
+export function urlForLog(rawUrl: string | null | undefined): string {
+  try {
+    return new URL(String(rawUrl)).origin;
+  } catch {
+    return "(invalid URL)";
+  }
+}

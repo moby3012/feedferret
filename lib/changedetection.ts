@@ -90,6 +90,15 @@ export function buildWatchFeedUrl(config: ChangedetectionConfig, uuid: string): 
   return `${base}/rss/watch/${uuid}?token=${encodeURIComponent(config.rssToken)}`;
 }
 
+/**
+ * Per-watch feed URL WITHOUT the RSS token — what is stored and shown. The
+ * feed fetcher adds the token server-side (lib/connector-secrets.ts).
+ */
+export function buildWatchFeedPublicUrl(config: ChangedetectionConfig, uuid: string): string {
+  const base = config.baseUrl.replace(/\/+$/, "");
+  return `${base}/rss/watch/${encodeURIComponent(uuid)}`;
+}
+
 export type CreateWatchInput = {
   url: string;
   title?: string;

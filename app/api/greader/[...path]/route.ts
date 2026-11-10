@@ -39,7 +39,11 @@ import {
   toGReaderArticle,
   toGReaderItemRef,
   upsertGReaderStreamPref,
+  GReaderLimitError,
+  GREADER_MAX_LABELS,
+  MAX_GREADER_LABEL_NAME,
 } from "@/lib/greader";
+import { redactFeedsForClient } from "@/lib/connector-secrets";
 
 
 class UnauthorizedError extends Error {}
@@ -161,7 +165,7 @@ async function getOrCreateCategory(userId: string, name: string) {
 
 async function getOrCreateLabel(userId: string, name: string) {
   const trimmed = name.trim();
-  if (!trimmed) return null;
+  if (!trimmed || trimmed.length > MAX_GREADER_LABEL_NAME) return null;
 
   let label = await db.label.findFirst({
     where: { userId, name: trimmed },
@@ -169,6 +173,8 @@ async function getOrCreateLabel(userId: string, name: string) {
   });
 
   if (!label) {
+    // N11: an API client must not create labels without bound.
+    if ((await db.label.count({ where: { userId } })) >= GREADER_MAX_LABELS) return null;
     label = await db.label.create({
       data: { userId, name: trimmed },
     });
@@ -414,14 +420,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
         db.feed.findMany({ where: { userId: user.id }, include: { category: true } }),
         db.category.findMany({ where: { userId: user.id } }),
       ]);
-      return new NextResponse(generateApiOpml(feeds, categories), { headers: { "content-type": "text/x-opml; charset=utf-8", "content-disposition": 'attachment; filename="subscriptions.opml"' } });
+      return new NextResponse(generateApiOpml(await redactFeedsForClient(feeds), categories), { headers: { "content-type": "text/x-opml; charset=utf-8", "content-disposition": 'attachment; filename="subscriptions.opml"' } });
     }
     if (path.endsWith("subscription/list")) {
-      const feeds = await db.feed.findMany({
+      // Connector secrets (RSSHub key, changedetection token) never leave the server (N3).
+      const feeds = await redactFeedsForClient(await db.feed.findMany({
         where: { userId: user.id },
         include: { category: true },
         orderBy: [{ order: "asc" }, { name: "asc" }],
-      });
+      }));
 
       return NextResponse.json({
         subscriptions: feeds.filter((feed) => feed.extId).map((feed: { id: string; extId: string | null; url: string; name: string; category: { name: string } | null }) => ({
@@ -527,7 +534,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
       const key = String(form.get("k") || form.get("key") || "").trim();
       const value = String(form.get("v") || form.get("value") || "");
       if (!streamId || !key) return textResponse("Missing stream preference parameters", 400);
-      await upsertGReaderStreamPref(user.id, streamId, key, value);
+      try {
+        await upsertGReaderStreamPref(user.id, streamId, key, value);
+      } catch (error) {
+        if (error instanceof GReaderLimitError) return textResponse(error.message, 400);
+        throw error;
+      }
       return okResponse();
     }
 

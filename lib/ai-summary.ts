@@ -1,4 +1,4 @@
-import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed, readTextWithLimit } from "@/lib/ssrf";
 import { fakePrompt, isFakeAiEnabled } from "@/lib/ai/fake";
 import { classifyAiError } from "@/lib/ai/errors";
 import { estimateTokens, reserveBudget, settleUsage, type AiFeature } from "@/lib/ai/usage";
@@ -216,10 +216,11 @@ async function summarizeOllama(prompt: string, config: AiConfig, maxTokens = 300
     signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) {
-    const err = await res.text().catch(() => "");
-    throw new Error(`Ollama ${res.status}: ${err.slice(0, 200)}`);
+    // Status only: the Ollama host is user-chosen (N10).
+    await res.body?.cancel().catch(() => {});
+    throw new Error(`Ollama ${res.status}`);
   }
-  const data = await res.json();
+  const data = JSON.parse(await readTextWithLimit(res, 4 * 1024 * 1024));
   return String(data.message?.content ?? "").trim();
 }
 

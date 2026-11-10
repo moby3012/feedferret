@@ -36,6 +36,8 @@ import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-
 import { pickFields } from "@/lib/pick-fields";
 import { clampFeedLimits } from "@/lib/feed-limits";
 import { assertOwnedCategories, MAX_REORDER_ITEMS } from "@/lib/owned-categories";
+import { redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
+import { FEED_CLIENT_SELECT, stripFeedSecrets } from "@/lib/feed-secrets";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -160,7 +162,7 @@ export async function setArticleLabels(articleId: string, labelIds: string[]) {
     return await db.article.findUnique({
         where: { id: articleId, userId: session.user.id },
         include: {
-            feed: true,
+            feed: { select: { id: true, name: true, icon: true, htmlUrl: true } },
             labels: { include: { label: true } },
         },
     });
@@ -266,8 +268,8 @@ export async function addFeed(url: string, categoryId?: string) {
     }
 
     try {
-        const { applyRsshubKey } = await import("@/lib/rsshub");
-        url = await applyRsshubKey(url);
+        // Stored URLs never carry connector secrets; the fetcher adds them (N3).
+        url = await stripConnectorSecrets(url);
         const remoteFeed = await fetchFeedArticles({ url });
 
         const feed = await db.feed.create({
@@ -282,7 +284,7 @@ export async function addFeed(url: string, categoryId?: string) {
 
         await syncFeed(session.user.id, feed.id);
         revalidatePath("/");
-        return { success: true, feed };
+        return { success: true, feed: await redactFeedForClient(stripFeedSecrets(feed)) };
     } catch (error) {
         logger.error("Failed to add feed:", error);
         return { success: false, error: "Invalid RSS/Atom feed URL" };
@@ -363,7 +365,7 @@ export async function createFeedFromPage(input: {
             categoryId: input.categoryId,
         });
         revalidatePath("/");
-        return { success: true, feed };
+        return { success: true, feed: feed ? await redactFeedForClient(stripFeedSecrets(feed)) : feed };
     } catch (error) {
         logger.error("Failed to create feed from page:", error);
         return { success: false, error: "Could not create feed from that page" };
@@ -755,7 +757,8 @@ export async function getFeedHealth() {
 
     const feeds = await db.feed.findMany({
         where: { userId: session.user.id },
-        include: {
+        select: {
+            ...FEED_CLIENT_SELECT,
             category: true,
             _count: {
                 select: { articles: true },
@@ -787,7 +790,7 @@ export async function getFeedHealth() {
     });
     const oldestMap = new Map(oldestByFeed.map((item: { feedId: string; _min: { publishedAt: Date | null } }) => [item.feedId, item._min.publishedAt]));
 
-    return feeds.map((feed) => {
+    return redactFeedsForClient(feeds.map((feed) => {
         const oldest = oldestMap.get(feed.id);
         const totalArticles = feed._count.articles;
         let avgArticlesPerDay: number | null = null;
@@ -802,7 +805,31 @@ export async function getFeedHealth() {
             articleCount: totalArticles,
             avgArticlesPerDay,
         };
+    }));
+}
+
+/**
+ * The owner-only, on-demand part of the feed settings dialog (N4): fetch
+ * credentials and Scout-Studio options are no longer in the feed list / SSR
+ * bootstrap. The Basic-Auth password is write-only — only whether one is
+ * stored is returned; `updateFeed` keeps it when `authPassword` is omitted.
+ */
+export async function getFeedEditConfig(feedId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    if (typeof feedId !== "string" || !feedId) throw new Error("Feed not found");
+
+    const feed = await db.feed.findFirst({
+        where: { id: feedId, userId: session.user.id },
+        select: { authUsername: true, authPassword: true, scraperConfig: true, httpOptions: true },
     });
+    if (!feed) throw new Error("Feed not found");
+    return {
+        authUsername: feed.authUsername ?? null,
+        hasAuthPassword: Boolean(feed.authPassword),
+        scraperConfig: feed.scraperConfig ?? null,
+        httpOptions: feed.httpOptions ?? null,
+    };
 }
 
 export async function applyRetentionPolicies(dryRun = false) {
@@ -946,7 +973,9 @@ export async function exportOpml(selectedFeedIds?: string[]) {
         }),
     ]);
 
-    return generateOpml(feeds, selectedFeedIds?.length ? [] : categories);
+    // Connector secrets are not the user's to export (N3); the user's own feed
+    // options (Scout Studio extension attributes) still are.
+    return generateOpml(await redactFeedsForClient(feeds), selectedFeedIds?.length ? [] : categories);
 }
 
 export async function exportUserData() {
@@ -969,7 +998,7 @@ export async function exportUserData() {
         {
             exportedAt: new Date().toISOString(),
             version: 1,
-            feeds: feeds.map((f: { name: string; url: string; category?: { name: string } | null; icon: string | null; updateFrequency: number | null; retentionDays: number | null }) => ({
+            feeds: (await redactFeedsForClient(feeds)).map((f: { name: string; url: string; category?: { name: string } | null; icon: string | null; updateFrequency: number | null; retentionDays: number | null }) => ({
                 name: f.name,
                 url: f.url,
                 category: f.category?.name ?? null,
@@ -1013,7 +1042,7 @@ export async function fetchFullText(articleId: string) {
     // the extraction-engine + improvement-check rationale. The UI caller expects
     // the article fields spread at the top level plus `suggestAutoFullText`.
     const { article, suggestAutoFullText } = await refetchArticleFullText(session.user.id, articleId);
-    return { ...article, suggestAutoFullText };
+    return { ...article, feed: await redactFeedForClient(article.feed), suggestAutoFullText };
 }
 
 /**
@@ -1704,8 +1733,8 @@ export async function getRsshubStatus() {
  * showing success — either from an explicit route path (power users who
  * know RSSHub's route syntax) or, given a source URL/description, via the
  * user's BYOK AI provider proposing one (never trusted without the same
- * validation). Returns the fully-built route URL (including the admin's
- * configured access key, if any) ready to hand to the normal add-feed flow —
+ * validation). Returns the route URL WITHOUT the admin's access key (the
+ * fetcher adds it server-side), ready to hand to the normal add-feed flow —
  * an RSSHub-backed feed is just a plain RSS/Atom feed once the route works.
  */
 export async function previewRsshubFeed(input: { routePath?: string; sourceDescription?: string }) {
@@ -1717,7 +1746,7 @@ export async function previewRsshubFeed(input: { routePath?: string; sourceDescr
     if (!checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.urlDiscover).success) {
         return { success: false as const, error: "Too many requests. Please wait a moment." };
     }
-    const { getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute, proposeAndValidateRoute, resolveRadarRoute } = await import("@/lib/rsshub");
+    const { getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute, proposeAndValidateRoute, resolveRadarRoute } = await import("@/lib/rsshub");
     const rsshubConfig = await getRsshubConfig();
     if (!rsshubConfig) {
         return { success: false as const, error: "RSSHub is not configured on this server." };
@@ -1730,7 +1759,7 @@ export async function previewRsshubFeed(input: { routePath?: string; sourceDescr
         return {
             success: true as const,
             route: routePath,
-            url: buildRsshubRouteUrl(rsshubConfig, routePath),
+            url: buildRsshubPublicRouteUrl(rsshubConfig, routePath),
             title: validation.title,
             itemCount: validation.itemCount,
             sampleTitles: validation.sampleTitles,
@@ -1752,7 +1781,7 @@ export async function previewRsshubFeed(input: { routePath?: string; sourceDescr
         return {
             success: true as const,
             route: radar.route,
-            url: buildRsshubRouteUrl(rsshubConfig, radar.route),
+            url: buildRsshubPublicRouteUrl(rsshubConfig, radar.route),
             title: radar.validation.title,
             itemCount: radar.validation.itemCount,
             sampleTitles: radar.validation.sampleTitles,
@@ -1798,7 +1827,7 @@ export async function previewRsshubFeed(input: { routePath?: string; sourceDescr
     return {
         success: true as const,
         route: result.route,
-        url: buildRsshubRouteUrl(rsshubConfig, result.route),
+        url: buildRsshubPublicRouteUrl(rsshubConfig, result.route),
         title: result.validation.title,
         itemCount: result.validation.itemCount,
         sampleTitles: result.validation.sampleTitles,
@@ -1836,7 +1865,7 @@ export async function createChangedetectionFeed(input: { url: string; useAiSelec
     const urlError = validateFeedUrl(input.url);
     if (urlError) return { success: false as const, error: urlError };
 
-    const { getChangedetectionConfig, createWatch, buildWatchFeedUrl } = await import("@/lib/changedetection");
+    const { getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } = await import("@/lib/changedetection");
     const config = await getChangedetectionConfig();
     if (!config) {
         return { success: false as const, error: "changedetection.io is not configured on this server." };
@@ -1879,7 +1908,7 @@ export async function createChangedetectionFeed(input: { url: string; useAiSelec
 
     return {
         success: true as const,
-        url: buildWatchFeedUrl(config, result.uuid),
+        url: buildWatchFeedPublicUrl(config, result.uuid),
         usedAiSelector: !!includeFilters,
         aiNotes,
     };

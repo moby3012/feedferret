@@ -143,7 +143,16 @@
     "passwordChangeFailed": "Could not change password. Please try again.",
     "passwordTooShort": "New password must be at least 8 characters",
     "noPasswordSet": "This account signs in via SSO/OAuth and has no password to change.",
-    "currentPasswordIncorrect": "Current password is incorrect"
+    "currentPasswordIncorrect": "Current password is incorrect",
+    "changeEmail": "Change email",
+    "newEmail": "New email address",
+    "emailStepUp": "Current password or 2FA code",
+    "emailStepUpHint": "Required to change your sign-in email. Accounts without a password or 2FA: sign in again, then change it within 10 minutes (leave this empty).",
+    "updateEmail": "Update email",
+    "emailChanged": "Email changed. Reconnect your Google Reader and Fever clients.",
+    "emailChangeFailed": "Could not change the email. Please try again.",
+    "emailChangeRateLimited": "Too many attempts. Wait 15 minutes and try again.",
+    "invalidEmail": "Enter a valid email address."
   },
   "twoFactor": {
     "title": "Two-factor authentication",
@@ -1349,7 +1358,9 @@
       "password": "Password",
       "usernamePlaceholder": "username",
       "passwordPlaceholder": "••••••••",
-      "credentialsUsage": "Credentials used when fetching this feed's RSS/Atom URL."
+      "credentialsUsage": "Credentials used when fetching this feed's RSS/Atom URL.",
+      "passwordStoredPlaceholder": "Saved — leave blank to keep",
+      "passwordStoredHint": "A password is saved. It is never shown again; type a new one to replace it."
     },
     "behavior": {
       "hideFromAllArticles": "Hide from All Articles",
@@ -1481,7 +1492,8 @@
       "saved": "Feed settings saved",
       "failedToSave": "Failed to save feed settings",
       "previewFailed": "Preview failed",
-      "selectorApplied": "Selector applied"
+      "selectorApplied": "Selector applied",
+      "loadConfigFailed": "Couldn't load this feed's fetch settings. Credentials and source options stay unchanged."
     },
     "unsavedChanges": {
       "title": "Discard unsaved changes?",

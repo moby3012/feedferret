@@ -162,7 +162,7 @@ export function proxyFromHttpOptions(httpOptions: unknown): string | null {
   return proxy === undefined || proxy === null || String(proxy).trim() === "" ? null : String(proxy).trim();
 }
 
-async function readTextWithLimit(response: FetchResponseLike, maxBytes?: number) {
+export async function readTextWithLimit(response: FetchResponseLike, maxBytes?: number) {
   if (!maxBytes || !response.body) return response.text();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -265,7 +265,7 @@ export async function fetchWithSsrfProtection(
     }
   }
 
-  throw new Error(`Too many redirects fetching ${rawUrl}`);
+  throw new Error(`Too many redirects fetching ${urlWithoutQuery(rawUrl)}`);
 }
 
 export async function fetchTextWithSsrfProtection(
@@ -278,4 +278,14 @@ export async function fetchTextWithSsrfProtection(
   // would be unexpected; preserve the previous "non-2xx throws" behavior for them.
   if (result.notModified) throw new Error("Fetch failed: 304");
   return result.text;
+}
+
+/** Origin + path only: error messages end up in feed.lastError, which users see. */
+function urlWithoutQuery(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return "URL";
+  }
 }

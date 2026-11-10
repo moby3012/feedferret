@@ -143,7 +143,16 @@
     "passwordChangeFailed": "Passwort konnte nicht geändert werden. Bitte versuche es erneut.",
     "passwordTooShort": "Das neue Passwort muss mindestens 8 Zeichen lang sein",
     "noPasswordSet": "Dieses Konto meldet sich per SSO/OAuth an und hat kein Passwort zum Ändern.",
-    "currentPasswordIncorrect": "Aktuelles Passwort ist falsch"
+    "currentPasswordIncorrect": "Aktuelles Passwort ist falsch",
+    "changeEmail": "E-Mail-Adresse ändern",
+    "newEmail": "Neue E-Mail-Adresse",
+    "emailStepUp": "Aktuelles Passwort oder 2FA-Code",
+    "emailStepUpHint": "Nötig, um deine Anmelde-E-Mail zu ändern. Konten ohne Passwort und 2FA: Melde dich neu an und ändere sie innerhalb von 10 Minuten (Feld leer lassen).",
+    "updateEmail": "E-Mail aktualisieren",
+    "emailChanged": "E-Mail-Adresse geändert. Verbinde deine Google-Reader- und Fever-Clients neu.",
+    "emailChangeFailed": "Die E-Mail-Adresse konnte nicht geändert werden. Bitte versuch es noch einmal.",
+    "emailChangeRateLimited": "Zu viele Versuche. Warte 15 Minuten und versuch es dann erneut.",
+    "invalidEmail": "Gib eine gültige E-Mail-Adresse ein."
   },
   "twoFactor": {
     "title": "Zwei-Faktor-Authentifizierung",
@@ -1349,7 +1358,9 @@
       "password": "Passwort",
       "usernamePlaceholder": "benutzername",
       "passwordPlaceholder": "••••••••",
-      "credentialsUsage": "Zugangsdaten beim Abrufen der RSS/Atom-URL dieses Feeds."
+      "credentialsUsage": "Zugangsdaten beim Abrufen der RSS/Atom-URL dieses Feeds.",
+      "passwordStoredPlaceholder": "Gespeichert – leer lassen zum Behalten",
+      "passwordStoredHint": "Ein Passwort ist gespeichert. Es wird nie wieder angezeigt; gib ein neues ein, um es zu ersetzen."
     },
     "behavior": {
       "hideFromAllArticles": "Aus allen Artikeln ausblenden",
@@ -1481,7 +1492,8 @@
       "saved": "Feed-Einstellungen gespeichert",
       "failedToSave": "Feed-Einstellungen konnten nicht gespeichert werden",
       "previewFailed": "Vorschau fehlgeschlagen",
-      "selectorApplied": "Selektor angewendet"
+      "selectorApplied": "Selektor angewendet",
+      "loadConfigFailed": "Die Abruf-Einstellungen dieses Feeds konnten nicht geladen werden. Zugangsdaten und Quell-Optionen bleiben unverändert."
     },
     "unsavedChanges": {
       "title": "Nicht gespeicherte Änderungen verwerfen?",

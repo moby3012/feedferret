@@ -2,6 +2,8 @@ import { parseCountDisplay } from "@/lib/count-display";
 import { cache } from "react";
 import { db } from "@/lib/db";
 import type { Counts } from "@/features/bootstrap/types";
+import { FEED_CLIENT_SELECT } from "@/lib/feed-secrets";
+import { redactFeedsForClient } from "@/lib/connector-secrets";
 
 // Per-user entity reads of the reader shell. The read server actions
 // (app/actions/feeds.ts, app/actions/settings.ts) and the server-side cold-start
@@ -13,9 +15,11 @@ export async function loadFeeds(userId: string) {
   // (userId, isRead, isSpoiler, feedId) index) instead of a per-feed
   // relation _count subquery that scans Article across all users.
   const [feeds, unreadCounts] = await Promise.all([
+    // Explicit allowlist (N4): this payload is embedded in every page's SSR
+    // HTML, so credentials, fetch options and connector secrets stay out.
     db.feed.findMany({
       where: { userId },
-      include: { category: true },
+      select: { ...FEED_CLIENT_SELECT, category: true },
       orderBy: [{ order: "asc" }, { name: "asc" }],
     }),
     db.article.groupBy({
@@ -27,10 +31,12 @@ export async function loadFeeds(userId: string) {
   const unreadByFeed = new Map<string, number>(
     unreadCounts.map((item: { feedId: string; _count: { _all: number } }) => [item.feedId, item._count._all]),
   );
-  return feeds.map((feed) => ({
-    ...feed,
-    _count: { articles: unreadByFeed.get(feed.id) ?? 0 },
-  }));
+  return redactFeedsForClient(
+    feeds.map((feed) => ({
+      ...feed,
+      _count: { articles: unreadByFeed.get(feed.id) ?? 0 },
+    })),
+  );
 }
 
 export async function loadCategories(userId: string) {

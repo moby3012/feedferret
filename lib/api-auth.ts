@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { hashApiToken } from "@/lib/token";
+import { isSameOriginRequest } from "@/lib/same-origin";
 import { promisify } from "node:util";
 import { gzip as gzipCallback } from "node:zlib";
 
@@ -17,8 +18,20 @@ export type ApiUser = {
   authenticatedAt?: number;
 };
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * Session cookie OR `Authorization: Bearer <apiToken>`.
+ *
+ * CSRF: the session cookie is ambient, so for state-changing methods it only
+ * counts when the request is same-origin (`isSameOriginRequest`). A
+ * cross-site form/fetch POST to /api/v1, /api/mcp or /api/read-later is then
+ * treated as unauthenticated unless it carries a bearer token — which a
+ * cross-site page cannot attach.
+ */
 export async function resolveApiUser(request: Request): Promise<ApiUser | null> {
-  const session = await auth();
+  const cookieAuthAllowed = SAFE_METHODS.has(request.method.toUpperCase()) || isSameOriginRequest(request);
+  const session = cookieAuthAllowed ? await auth() : null;
   if (session?.user?.id) {
     const user = await db.user.findUnique({
       where: { id: session.user.id },

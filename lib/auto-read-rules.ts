@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { buildAdvancedSearchWhere } from "./search";
-import { executeWebhookCall, getWebhookConfig } from "./webhooks";
+import { executeWebhookCall, getWebhookConfig, redactWebhookUrl } from "./webhooks";
 import { sendPushToUser } from "./push";
 import { sendSystemEmail } from "./mail";
 import {
@@ -218,7 +218,7 @@ async function applySingleAction(
                 feed_name: article.feed.name,
             });
             if (result.ok) fired += 1;
-            else logger.warn(`[auto-read-rules] webhook ${config.url} failed (${result.status ?? "no-response"}): ${result.error}`);
+            else logger.warn(`[auto-read-rules] webhook ${redactWebhookUrl(config.url)} failed (${result.status ?? "no-response"}): ${result.error}`);
         }
         return fired;
     }
@@ -489,7 +489,7 @@ export async function applyFeedErrorRules(
                     error: payload.error,
                 });
                 if (result.ok) ruleFired = true;
-                else logger.warn(`[auto-read-rules] webhook ${config.url} failed (${result.status ?? "no-response"}): ${result.error}`);
+                else logger.warn(`[auto-read-rules] webhook ${redactWebhookUrl(config.url)} failed (${result.status ?? "no-response"}): ${result.error}`);
             } else if (action === "notify_telegram") {
                 const ch = await loadChannelConfig(userId, cache);
                 if (ch.telegram.enabled && ch.telegram.botToken && ch.telegram.chatId) {

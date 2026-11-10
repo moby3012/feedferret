@@ -103,6 +103,27 @@ export function applyRsshubKeyWith(config: RsshubConfig | null, feedUrl: string)
   }
 }
 
+/**
+ * Rejects route paths that are not ordinary platform routes: RSSHub's own
+ * built-in `/rsshub/*` routes (incl. `/rsshub/transform/*`, which fetch an
+ * arbitrary URL from inside the RSSHub network), path traversal, absolute or
+ * scheme-relative URLs, and an attempt to pass its own `key`. Returns the
+ * reason, or null when the path is acceptable. Pure (exported for tests).
+ */
+export function rsshubRouteError(routePath: string): string | null {
+  const route = String(routePath ?? "").trim();
+  if (!route.startsWith("/") || route.startsWith("//")) return "RSSHub route must start with a single \"/\"";
+  if (route.length > 512) return "RSSHub route is too long";
+  if (/[\\\s#]/.test(route) || /(^|\/)(\.|%2e){1,2}(\/|$|\?)/i.test(route) || /%5c/i.test(route)) {
+    return "RSSHub route contains characters that are not allowed";
+  }
+  const [path, query = ""] = route.split("?", 2);
+  const first = path.split("/")[1]?.toLowerCase() ?? "";
+  if (!first || first === "rsshub" || first === "api") return "This RSSHub route is not allowed";
+  if (new URLSearchParams(query).has("key")) return "RSSHub route must not contain an access key";
+  return null;
+}
+
 export type RsshubValidation =
   | { ok: true; title: string | null; itemCount: number; sampleTitles: string[] }
   | { ok: false; reason: string };
@@ -111,7 +132,13 @@ export type RsshubValidation =
  * Fetches and validates a candidate RSSHub route: it must be reachable
  * (SSRF-safe) and parse as a real feed with at least one item. Never throws.
  */
-export async function validateRsshubRoute(config: RsshubConfig, routePath: string): Promise<RsshubValidation> {
+export async function validateRsshubRoute(
+  config: RsshubConfig,
+  routePath: string,
+  options: { includeErrorBody?: boolean } = {},
+): Promise<RsshubValidation> {
+  const routeError = rsshubRouteError(routePath);
+  if (routeError) return { ok: false, reason: routeError };
   let url: string;
   try {
     url = buildRsshubRouteUrl(config, routePath);
@@ -133,9 +160,10 @@ export async function validateRsshubRoute(config: RsshubConfig, routePath: strin
 
   try {
     // includeErrorBody surfaces RSSHub's own message ("Twitter API is not
-    // configured", "This channel does not exist", …) instead of a bare 503,
-    // so a failed route tells the user what's actually wrong.
-    const feed = await fetchFeedArticles({ url, allowInternal: true, includeErrorBody: true });
+    // configured", …) instead of a bare 503 — but only for the admin's own
+    // connection test. User-supplied routes are fetched with allowInternal, so
+    // echoing the upstream body would turn RSSHub into a read-SSRF oracle (N3).
+    const feed = await fetchFeedArticles({ url, allowInternal: true, includeErrorBody: options.includeErrorBody === true });
     if (!feed.articles.length) {
       return { ok: false, reason: "RSSHub returned a feed with no items for this route" };
     }

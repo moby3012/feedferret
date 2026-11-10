@@ -45,6 +45,17 @@ export async function register() {
         })().catch((error) => console.error("[external-ids] startup backfill failed; will retry during background sync", error));
     }
 
+    // Security audit #2 N3: legacy feed URLs carried the RSSHub key /
+    // changedetection.io token; strip them once (idempotent, background).
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+        void (async () => {
+            const { db } = await import("./lib/db");
+            const { migrateConnectorFeedUrls } = await import("./lib/connector-secrets");
+            const result = await migrateConnectorFeedUrls(db as never);
+            if (result.migrated || result.skipped) console.info("[connector-secrets] feed URL migration", result);
+        })().catch((error) => console.error("[connector-secrets] feed URL migration failed; secrets stay redacted on output", error));
+    }
+
     const { startBackgroundSync } = await import("./lib/background-sync");
     startBackgroundSync();
 

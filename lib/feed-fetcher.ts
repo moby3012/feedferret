@@ -329,7 +329,12 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
     }
   }
 
-  return fetchWithSsrfProtection(feed.url, init, {
+  // Connector secrets (RSSHub key, changedetection.io token) are never stored
+  // in feed URLs or shown to users; they are added here, server-side only.
+  const { applyConnectorSecrets } = await import("./connector-secrets");
+  const requestUrl = await applyConnectorSecrets(feed.url);
+
+  return fetchWithSsrfProtection(requestUrl, init, {
     allowInternal,
     includeErrorBody: feed.includeErrorBody,
     context: "Feed fetch",
