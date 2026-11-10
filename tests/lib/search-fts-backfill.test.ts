@@ -19,9 +19,10 @@ vi.mock("@/lib/db", () => ({
   getDatabaseProvider: () => "sqlite",
 }));
 
-import { ensureSearchIndexes, isSqliteFtsReady, runSqliteFtsBackfill } from "../../lib/search-indexes";
-import { buildAdvancedSearchWhere } from "../../lib/search";
+import { checkSqliteFtsAndRepair, checkSqliteFtsConsistency, ensureSearchIndexes, isSqliteFtsReady, runSqliteFtsBackfill } from "../../lib/search-indexes";
+import { buildAdvancedSearchWhere, MAX_SEARCH_TOKENS } from "../../lib/search";
 import { optimizeSqlitePlannerStats } from "../../lib/db-maintenance";
+import { SQLITE_EXTERNAL_TABLES } from "../../prisma/cli-config.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "feedferret-search-scale-"));
 const template = join(dir, "template.db");
@@ -198,6 +199,145 @@ describe("FTS table dropped behind our back", () => {
     await runSqliteFtsBackfill({ yieldMs: 0 });
     expect(await isSqliteFtsReady()).toBe(true);
     expect((await ftsMatches(db, "wombat")).length).toBe(120);
+  }, 60_000);
+});
+
+describe("startup `prisma db push` with the FTS index in place", () => {
+  it("is repeatable and leaves article_fts + its shadow/bookkeeping tables intact (was a restart loop)", async () => {
+    const db = await openFreshDb("push.db");
+    await seedUsers(db);
+    await bulkArticles(db, U.alice, U.feed, 60, (i) => ({ title: `Story ${i}`, content: `<p>body ${i} fossa</p>` }), "p");
+    await ensureSearchIndexes({ backfill: "await" });
+    const ftsTables = async () =>
+      (await db.$queryRawUnsafe<{ name: string }[]>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'article_fts%' ORDER BY name`)).map((r) => r.name);
+    const before = await ftsTables();
+    // Every FTS object on disk must be declared external, or db push would try to drop it.
+    expect(before).toEqual([...SQLITE_EXTERNAL_TABLES].filter((t) => before.includes(t)).sort());
+    expect(before.every((t) => SQLITE_EXTERNAL_TABLES.includes(t))).toBe(true);
+    const file = join(dir, "push.db");
+    await db.$disconnect();
+
+    for (let boot = 0; boot < 2; boot++) {
+      execFileSync("pnpm", ["exec", "prisma", "db", "push", "--config", "prisma/startup.config.mjs", "--accept-data-loss"], {
+        env: { ...process.env, DATABASE_PROVIDER: "sqlite", DATABASE_URL: `file:${file}` },
+        stdio: "pipe",
+      });
+    }
+
+    state.db = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: `file:${file}` }) });
+    expect(await ftsTables()).toEqual(before);
+    resetProcessCaches();
+    expect(await isSqliteFtsReady()).toBe(true);
+    await state.db.$executeRawUnsafe(`INSERT INTO article_fts(article_fts, rank) VALUES ('integrity-check', 1)`);
+    expect((await ftsMatches(state.db, "fossa")).length).toBe(60);
+  }, 60_000);
+});
+
+describe("boot-time FTS consistency check", () => {
+  const updatedAts = async (db: PrismaClient) =>
+    (await db.article.findMany({ select: { id: true, updatedAt: true }, orderBy: { id: "asc" } })).map((r) => `${r.id}@${r.updatedAt.toISOString()}`);
+
+  it("passes on a healthy index and leaves it alone", async () => {
+    const db = await openFreshDb("check-ok.db");
+    await seedUsers(db);
+    await bulkArticles(db, U.alice, U.feed, 150, (i) => ({ title: `Healthy "quoted" story ${i}`, content: `<p>body ${i} ocelot</p>` }), "h");
+    await ensureSearchIndexes({ backfill: "await" });
+    expect(await checkSqliteFtsConsistency()).toEqual({ ok: true });
+    expect(await checkSqliteFtsAndRepair({ backfill: "await" })).toEqual({ ok: true });
+    expect(await isSqliteFtsReady()).toBe(true);
+    // The next boot runs the check (await mode) and keeps the marker.
+    resetProcessCaches();
+    await ensureSearchIndexes({ backfill: "await" });
+    expect(await isSqliteFtsReady()).toBe(true);
+    expect(await db.$queryRawUnsafe(`SELECT 1 FROM article_fts_backfill`)).toEqual([]);
+  }, 60_000);
+
+  it("rebuilds an index with missing rows on the next boot, without touching Article.updatedAt", async () => {
+    const db = await openFreshDb("check-missing.db");
+    await seedUsers(db);
+    await bulkArticles(db, U.alice, U.feed, 200, (i) => ({ title: `Story ${i}`, content: `<p>body ${i} tapir</p>` }), "m");
+    await ensureSearchIndexes({ backfill: "await" });
+    const before = await updatedAts(db);
+
+    // Lose 3 rows from the index (what a crash between Article write and index write, or a
+    // restored partial backup, looks like).
+    await db.$executeRawUnsafe(
+      `INSERT INTO article_fts(article_fts, rowid, id, title, content, excerpt, author)
+       SELECT 'delete', rowid, id, title, content, excerpt, author FROM "Article" WHERE id IN ('m000005', 'm000006', 'm000007')`
+    );
+    expect(await checkSqliteFtsConsistency()).toEqual({ ok: false, reason: "indexed 197 of 200 articles" });
+
+    resetProcessCaches();
+    await ensureSearchIndexes({ backfill: "await" }); // "next boot"
+    expect(await isSqliteFtsReady()).toBe(true);
+    expect(await checkSqliteFtsConsistency()).toEqual({ ok: true });
+    await db.$executeRawUnsafe(`INSERT INTO article_fts(article_fts, rank) VALUES ('integrity-check', 1)`);
+    expect((await ftsMatches(db, "tapir")).length).toBe(200);
+    expect(await updatedAts(db)).toEqual(before);
+  }, 60_000);
+
+  it("detects an index whose content no longer matches the newest article and rebuilds it in the background", async () => {
+    const db = await openFreshDb("check-stale.db");
+    await seedUsers(db);
+    await bulkArticles(db, U.alice, U.feed, 50, (i) => ({ title: `Story ${i}`, content: `<p>body ${i} margay</p>` }), "s");
+    await ensureSearchIndexes({ backfill: "await" });
+    // Same row count, but the newest row was indexed with other text (e.g. trigger missing during an update).
+    await db.$executeRawUnsafe(`DROP TRIGGER article_fts_au`);
+    await db.article.update({ where: { id: "s000049" }, data: { title: "Completely different headline" } });
+    const result = await checkSqliteFtsConsistency();
+    expect(result.ok).toBe(false);
+
+    const repaired = await checkSqliteFtsAndRepair({ backfill: "none" });
+    expect(repaired.ok).toBe(false);
+    // Search stops trusting the index immediately and uses the LIKE path…
+    expect(await isSqliteFtsReady()).toBe(false);
+    const where = await buildAdvancedSearchWhere(U.alice, "different headline");
+    expect(JSON.stringify(where)).not.toContain('"in"');
+    // …until the background rebuild is done.
+    await ensureSearchIndexes({ backfill: "none" }); // restores the trigger
+    await runSqliteFtsBackfill({ yieldMs: 0 });
+    expect(await isSqliteFtsReady()).toBe(true);
+    expect(await ftsMatches(db, "different headline")).toEqual(["s000049"]);
+    expect(await checkSqliteFtsConsistency()).toEqual({ ok: true });
+  }, 60_000);
+});
+
+describe("terms with a mid-sized hit count (SQLite: 999 bind variables in Prisma 7)", () => {
+  it("does not fail (P2029) for a term with 3 000 hits and still uses FTS for one with 400", async () => {
+    const db = await openFreshDb("mid.db");
+    await seedUsers(db);
+    await bulkArticles(db, U.alice, U.feed, 3000, (i) => ({ title: `Story ${i} jaguarundi${i < 400 ? " kinkajou" : ""}`, content: `<p>body ${i}</p>` }), "j");
+    await ensureSearchIndexes({ backfill: "await" });
+    for (const [term, expected, usesFts] of [["jaguarundi", 3000, false], ["kinkajou", 400, true]] as const) {
+      const where = await buildAdvancedSearchWhere(U.alice, term);
+      expect(JSON.stringify(where).includes('"in"')).toBe(usesFts);
+      const scoped = { AND: [{ userId: U.alice }, where] };
+      expect(await db.article.count({ where: scoped })).toBe(expected);
+      expect(await db.article.findMany({ where: scoped, take: 5, orderBy: { publishedAt: "desc" } })).toHaveLength(5);
+    }
+  }, 60_000);
+});
+
+describe("query size caps", () => {
+  it("huge queries (many tokens, very long terms) neither throw nor exceed SQLite limits", async () => {
+    const db = await openFreshDb("caps.db");
+    await seedUsers(db);
+    // 300 hits per term: with a naive per-term id list, 24 such terms would need 7 200 binds.
+    await bulkArticles(db, U.alice, U.feed, 300, (i) => ({ title: `Story ${i} serval`, content: `<p>body ${i}</p>` }), "c");
+    await ensureSearchIndexes({ backfill: "await" });
+
+    const manyTokens = Array.from({ length: 2000 }, (_, i) => `serval${i % 3 === 0 ? "" : ` -nomatch${i}`}`).join(" ");
+    const longTerm = "serval".repeat(20_000); // 120 000 chars, > SQLITE_MAX_LIKE_PATTERN_LENGTH
+    const orGroups = Array.from({ length: 500 }, (_, i) => `story${i}`).join(" OR ");
+    for (const q of [manyTokens, longTerm, orGroups]) {
+      const where = await buildAdvancedSearchWhere(U.alice, q);
+      const scoped = { AND: [{ userId: U.alice }, where] };
+      await expect(db.article.count({ where: scoped })).resolves.toBeTypeOf("number");
+      await expect(db.article.findMany({ where: scoped, take: 20, select: { id: true } })).resolves.toBeInstanceOf(Array);
+    }
+    // Tokens past the cap are ignored: the query only gets broader.
+    const capped = Array.from({ length: MAX_SEARCH_TOKENS }, () => "serval").join(" ") + " nothingmatchesthis";
+    expect(await db.article.count({ where: { AND: [{ userId: U.alice }, await buildAdvancedSearchWhere(U.alice, capped)] } })).toBe(300);
   }, 60_000);
 });
 

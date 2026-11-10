@@ -14,7 +14,7 @@
     "pwa:check": "node scripts/check-pwa.mjs",
     "prisma:prepare": "node scripts/prepare-prisma-schema.mjs",
     "prisma:generate": "pnpm run prisma:prepare && prisma generate --schema prisma/schema.generated.prisma",
-    "prisma:push": "pnpm run prisma:prepare && prisma db push --schema prisma/schema.generated.prisma --accept-data-loss",
+    "prisma:push": "sh scripts/db-sync.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

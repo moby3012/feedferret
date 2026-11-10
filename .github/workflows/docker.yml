@@ -1,8 +1,10 @@
 name: Docker
 
 # Builds the production image and boots it like production (start.sh ->
-# prisma db push -> server.js). Guards against a repeat of the 2026-11-09
-# outage, where the image built fine but never became healthy.
+# prisma db push -> server.js), then starts a second container on the same
+# database like a redeploy. Guards against a repeat of the 2026-11-09 outage,
+# where the image built fine but never became healthy, and against the
+# second-start failures of `db push` (SQLite FTS tables, Postgres pg_trgm indexes).
 
 on:
   pull_request:
@@ -47,7 +49,7 @@ jobs:
           cache-from: type=gha,scope=docker-${{ matrix.provider }}
           cache-to: type=gha,scope=docker-${{ matrix.provider }},mode=max
 
-      - name: Smoke test (static content + /api/health)
+      - name: Smoke test (static content, /api/health, restart on the same DB)
         run: scripts/docker-smoke.sh feedferret:smoke-${{ matrix.provider }} ${{ matrix.provider }}
         env:
-          SMOKE_TIMEOUT: 90
+          SMOKE_TIMEOUT: 120

@@ -62,13 +62,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # scripts/docker-smoke.sh, which fails CI if this file or any source tree ships).
 # The globally installed Prisma CLI would then auto-load it at startup and fail to
 # resolve "prisma/config" (not in the standalone node_modules), so `db push` in
-# start.sh aborts and the container never starts. start.sh passes the URL via --url,
-# so the runner must not contain this file.
+# start.sh aborts and the container never starts. The runner must not contain this file.
 RUN rm -f ./prisma.config.ts ./prisma.config.js ./prisma.config.mjs
-# Copy Prisma schema and startup script
-# Note: prisma.config.ts is NOT copied here — the CLI receives the URL via --url flag in start.sh
+# Copy Prisma schema and startup scripts.
+# The CLI config used at startup is prisma/startup.config.mjs (+ prisma/cli-config.mjs):
+# a plain object without any `prisma/config` import, so the global CLI can load it here.
+# It marks the SQLite FTS tables as external so `db push` leaves them alone.
 COPY --chown=nextjs:nodejs prisma ./prisma
 COPY --chown=nextjs:nodejs scripts/prepare-prisma-schema.mjs ./scripts/prepare-prisma-schema.mjs
+COPY --chown=nextjs:nodejs scripts/db-sync.sh ./scripts/db-sync.sh
 COPY --chown=nextjs:nodejs start.sh ./start.sh
 RUN chmod +x ./start.sh
 

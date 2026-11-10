@@ -53,13 +53,10 @@ s.on('error', () => { s.destroy(); process.exit(1); });
     log "✅ PostgreSQL is ready."
 fi
 
-log "🧬 Preparing Prisma schema..."
-node scripts/prepare-prisma-schema.mjs
 log "🔄 Running database sync (db push)..."
-
-# Sync schema with database
-# Pass --url explicitly so the CLI does not need prisma.config.ts in the runner
-$PRISMA_CMD db push --schema prisma/schema.generated.prisma --url "$DATABASE_URL" --accept-data-loss
+# Prepares the provider schema and runs `prisma db push`; keeps the app's own search
+# objects (SQLite FTS5 tables, Postgres pg_trgm indexes) intact. See scripts/db-sync.sh.
+PRISMA_CMD="$PRISMA_CMD" sh scripts/db-sync.sh
 
 log "✅ Database is ready."
 log "🌟 Starting Next.js server..."

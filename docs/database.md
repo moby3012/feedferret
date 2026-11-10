@@ -82,8 +82,13 @@ Supported `DATABASE_PROVIDER` values: `postgresql`, `postgres`, `sqlite`, `file`
 
 ## Schema changes: `db push`, not `prisma/migrations`
 
-Startup (`pnpm run start` → `prisma:push`) applies the schema with
-`prisma db push --schema prisma/schema.generated.prisma --accept-data-loss`.
+Startup (`start.sh` in the Docker image, `pnpm run start` → `prisma:push`) runs
+`scripts/db-sync.sh`, which prepares the provider schema and applies it with
+`prisma db push --config prisma/startup.config.mjs --accept-data-loss`.
+The config (`prisma/cli-config.mjs`) declares the SQLite FTS tables as external
+tables, so `db push` never touches them; on Postgres the script creates the
+`pg_trgm` extension first, because the trigram search indexes are part of the
+Postgres schema variant (see [Full-text search](#full-text-search)).
 `prisma/schema.prisma` is therefore the **source of truth** for both SQLite and
 PostgreSQL, and every schema change must be **additive** (new nullable /
 defaulted columns, new tables) so `db push` never needs to drop data.
@@ -100,9 +105,11 @@ history, but the schema file is what actually reaches users' databases.
 
 Article search (`lib/search.ts`) supports structured operators (`author:`, `intitle:`, `is:unread`, `label:`, date ranges, `OR` groups) plus free-text terms. Free-text terms are accelerated with an index appropriate to the active provider. Setup is automatic and idempotent — it runs once at server startup (`instrumentation.ts` → `ensureSearchIndexes()` in `lib/search-indexes.ts`) and is safe to run on every restart. If it fails for any reason, it logs a warning and search keeps working unaccelerated — a broken index setup never blocks startup or feed sync.
 
-**PostgreSQL:** `CREATE EXTENSION IF NOT EXISTS pg_trgm` plus GIN trigram indexes (`gin_trgm_ops`) on `Article.title`, `.content`, `.excerpt`, and `.author`. This accelerates the existing `ILIKE '%term%'` queries with no change to query logic. Requires the connecting role to have privileges to create the extension (true for the default superuser role in the bundled Docker image; a restricted/managed Postgres role without `CREATE EXTENSION` rights will just log the startup warning and fall back to unaccelerated `ILIKE`).
+**PostgreSQL:** `CREATE EXTENSION IF NOT EXISTS pg_trgm` plus GIN trigram indexes (`gin_trgm_ops`) on `Article.title`, `.content`, `.excerpt`, `.author` and `.entities`. The indexes are declared in `prisma/schema.prisma` as `//@postgresql @@index(...)` lines that `scripts/prepare-prisma-schema.mjs` enables only for Postgres, so `db push` keeps them across deploys (they used to be dropped and rebuilt on every start); `scripts/db-sync.sh` creates the extension before `db push`, and if that is not allowed it leaves the indexes out (`PRISMA_PG_TRGM=0`) and logs a warning. `ensureSearchIndexes()` still creates the same indexes idempotently as a fallback. This accelerates the existing `ILIKE '%term%'` queries with no change to query logic. Requires the connecting role to have privileges to create the extension (true for the default superuser role in the bundled Docker image; a restricted/managed Postgres role without `CREATE EXTENSION` rights will just log the startup warning and fall back to unaccelerated `ILIKE`).
 
 **SQLite:** an FTS5 virtual table (`article_fts`) using the `trigram` tokenizer (requires SQLite ≥ 3.34, bundled with `better-sqlite3`), kept in sync via `AFTER INSERT/UPDATE/DELETE` triggers on `Article`, with a one-time backfill for pre-existing rows on first setup. The `trigram` tokenizer was specifically chosen because — unlike SQLite's default word-based tokenizers — it matches arbitrary substrings the same way `LIKE '%term%'` does, so switching a term over to the FTS index doesn't change what counts as a match. Two cases still use the original `LIKE`-based query directly, both simply falling back to (never returning less than) the pre-FTS behavior: terms shorter than 3 characters (the trigram tokenizer can't index anything shorter), and any runtime error against `article_fts` (e.g. before the first startup has provisioned it). `link` and feed/label names aren't part of the FTS index, so those always stay on the `LIKE` path and are OR'd together with the FTS match for title/content/excerpt/author.
+
+The FTS objects (`article_fts`, its shadow tables `article_fts_data/_idx/_docsize/_config/_content`, and the bookkeeping tables `article_fts_meta`/`article_fts_backfill`) are not in the Prisma schema; they are listed as external tables in `prisma/cli-config.mjs` so `db push` leaves them alone. On every start, once the index is complete, a cheap background consistency check (indexed row count vs. `Article` row count, plus a probe `MATCH` on the newest article) runs after a short grace period; if it fails, the index is reset and rebuilt with the same chunked background backfill as on first setup, while search uses the `LIKE` path. The full FTS5 `integrity-check` is not run at boot: it is O(index) and synchronous (≈6 s for 50 k articles), which would stall the server's event loop and hold the write lock. Free-text queries are capped at 32 tokens / 1000 characters, which keeps every query below SQLite's bind-variable and expression limits.
 
 ---
 

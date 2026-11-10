@@ -27,7 +27,7 @@ import { db, getDatabaseProvider } from "./db";
 // that operator stays a plain LIKE on purpose: article_fts only serves the
 // free-text path (lib/search.ts ftsMatchIds), and entities are short, so adding
 // the column to the FTS table would just bloat the index and force a rebuild.
-const ARTICLE_TEXT_COLUMNS = ["title", "content", "excerpt", "author", "entities"] as const;
+export const ARTICLE_TEXT_COLUMNS = ["title", "content", "excerpt", "author", "entities"] as const;
 
 export type EnsureSearchIndexesOptions = {
     /**
@@ -209,7 +209,22 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
         `),
     ]);
 
-    if (complete || mode === "none") return;
+    if (mode === "none") return;
+    if (complete) {
+        // The index claims to be complete: check that cheaply once per boot and rebuild in the
+        // background if it is not (e.g. a crash mid-write, a restored backup, a manual edit).
+        if (mode === "await") {
+            await checkSqliteFtsAndRepair({ backfill: "await" });
+        } else {
+            const timer = setTimeout(() => {
+                void checkSqliteFtsAndRepair({ backfill: "background" }).catch((err) => {
+                    console.warn("[search-indexes] FTS consistency check failed; search keeps working.", err);
+                });
+            }, BACKFILL_START_DELAY_MS);
+            timer.unref?.();
+        }
+        return;
+    }
     if (mode === "await") {
         await runSqliteFtsBackfill({ yieldMs: 0 });
     } else {
@@ -222,6 +237,94 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
         }, BACKFILL_START_DELAY_MS);
         timer.unref?.();
     }
+}
+
+// ── Boot-time consistency check ──────────────────────────────────────────────
+//
+// FTS5's own `INSERT INTO article_fts(article_fts) VALUES('integrity-check')` reads the
+// whole index and compares it with "Article": ~6 s for 50 k articles, synchronously on the
+// single better-sqlite3 connection (event loop blocked, write lock held). Not acceptable on
+// every boot. Instead two cheap probes that catch the realistic failure modes (rows missing
+// from or left over in the index, an index that no longer matches the content):
+//   1. the number of indexed documents (article_fts_docsize, one row per indexed rowid)
+//      equals the number of articles — both counted in one read transaction;
+//   2. the newest article with a title of >= 3 characters is found by an FTS MATCH on
+//      (a prefix of) its title.
+// On a mismatch the index is reset and rebuilt by the normal chunked background backfill;
+// search uses the LIKE path meanwhile. Only FTS tables are written, never "Article", so
+// Article.updatedAt is untouched.
+
+export type SqliteFtsCheckResult = { ok: true } | { ok: false; reason: string };
+
+const FTS_PROBE_TITLE_CHARS = 48;
+
+export async function checkSqliteFtsConsistency(): Promise<SqliteFtsCheckResult> {
+    const [indexed, articles] = await db.$transaction([
+        db.$queryRawUnsafe<{ n: number | bigint }[]>(`SELECT COUNT(*) AS n FROM article_fts_docsize`),
+        db.$queryRawUnsafe<{ n: number | bigint }[]>(`SELECT COUNT(*) AS n FROM "Article"`),
+    ]);
+    const indexedCount = Number(indexed[0]?.n ?? 0);
+    const articleCount = Number(articles[0]?.n ?? 0);
+    if (indexedCount !== articleCount) {
+        return { ok: false, reason: `indexed ${indexedCount} of ${articleCount} articles` };
+    }
+
+    // One statement, so a concurrent delete of that article cannot produce a false alarm.
+    const probe = await db.$queryRawUnsafe<{ rowid: number | bigint; found: number | bigint }[]>(
+        `SELECT a.rowid AS rowid,
+                EXISTS (
+                    SELECT 1 FROM article_fts
+                    WHERE article_fts MATCH ('"' || replace(substr(a.title, 1, ?), '"', '""') || '"')
+                      AND article_fts.rowid = a.rowid
+                ) AS found
+         FROM "Article" a WHERE length(a.title) >= 3 ORDER BY a.rowid DESC LIMIT 1`,
+        FTS_PROBE_TITLE_CHARS
+    );
+    if (probe.length > 0 && !Number(probe[0].found)) {
+        return { ok: false, reason: `newest article (rowid ${probe[0].rowid}) not found in the index` };
+    }
+    return { ok: true };
+}
+
+/**
+ * Runs checkSqliteFtsConsistency() and, on failure, resets the index and starts the chunked
+ * backfill again. Never throws for check failures; returns what it found. Exposed for tests.
+ */
+export async function checkSqliteFtsAndRepair(
+    options: { backfill: "background" | "await" | "none" }
+): Promise<SqliteFtsCheckResult> {
+    // A backfill (first build or an earlier repair) is running or pending: nothing to verify yet.
+    const pending = await db.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM article_fts_backfill WHERE id = 1`);
+    if (pending.length > 0) return { ok: true };
+
+    let result: SqliteFtsCheckResult;
+    try {
+        result = await checkSqliteFtsConsistency();
+    } catch (err) {
+        result = { ok: false, reason: `check failed: ${err instanceof Error ? err.message : String(err)}` };
+    }
+    if (result.ok) return result;
+
+    console.warn(`[search-indexes] FTS index inconsistent (${result.reason}); rebuilding it in the background. Search uses the unaccelerated path meanwhile.`);
+    delete (globalThis as unknown as Record<string, unknown>)[FTS_READY_KEY];
+    // Same reset as a first-time build, in one transaction with the "not complete" marker, so
+    // search stops trusting the index and the triggers skip pending rows from here on.
+    await db.$transaction([
+        db.$executeRawUnsafe(`DELETE FROM article_fts_meta`),
+        db.$executeRawUnsafe(`INSERT INTO article_fts(article_fts) VALUES ('delete-all')`),
+        db.$executeRawUnsafe(
+            `INSERT OR REPLACE INTO article_fts_backfill (id, upper_rowid, done_rowid)
+             SELECT 1, COALESCE(MAX(rowid), 0), 0 FROM "Article"`
+        ),
+    ]);
+    if (options.backfill === "await") {
+        await runSqliteFtsBackfill({ yieldMs: 0 });
+    } else if (options.backfill === "background") {
+        void runSqliteFtsBackfill().catch((err) => {
+            console.warn("[search-indexes] FTS rebuild failed; search stays on the LIKE path and the rebuild resumes on next start.", err);
+        });
+    }
+    return result;
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => {
