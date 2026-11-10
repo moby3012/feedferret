@@ -20,10 +20,10 @@ vi.mock("@/auth", () => ({ auth: vi.fn(async () => state.session) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }));
 
 import { updateDigestSettings, updateGlobalSettings, updateProfile } from "../../app/actions/settings";
-import { updateFeed } from "../../app/actions/feeds";
+import { updateCategory, updateCategoryOrder, updateFeed } from "../../app/actions/feeds";
 
 const dir = mkdtempSync(join(tmpdir(), "feedferret-mass-assign-"));
-const ids = { alice: "", bob: "", feed: "" };
+const ids = { alice: "", bob: "", feed: "", cat: "", bobCat: "" };
 
 beforeAll(async () => {
   const url = `file:${join(dir, "test.db")}`;
@@ -35,6 +35,8 @@ beforeAll(async () => {
   ids.alice = (await state.db.user.create({ data: { email: "alice@test", name: "Alice" } })).id;
   ids.bob = (await state.db.user.create({ data: { email: "bob@test", name: "Bob" } })).id;
   ids.feed = (await state.db.feed.create({ data: { name: "A", url: "https://a.example/feed", userId: ids.alice } })).id;
+  ids.cat = (await state.db.category.create({ data: { name: "Mine", userId: ids.alice } })).id;
+  ids.bobCat = (await state.db.category.create({ data: { name: "Bobs", userId: ids.bob } })).id;
   state.session = { user: { id: ids.alice } };
 }, 120_000);
 
@@ -81,5 +83,24 @@ describe("server actions ignore non-allowlisted fields", () => {
 
   it("rejects wrong value types for allowlisted settings", async () => {
     await expect(updateGlobalSettings({ hideDuplicates: "yes" } as never)).rejects.toThrow(/Invalid hideDuplicates/);
+  });
+
+  it("updateCategory ignores userId/parentId and clamps limits", async () => {
+    await updateCategory(ids.cat, { name: "Renamed", ...{ userId: ids.bob, parentId: ids.bobCat }, updateFrequency: 1 } as never);
+    const c = await state.db.category.findUniqueOrThrow({ where: { id: ids.cat } });
+    expect(c.userId).toBe(ids.alice);
+    expect(c.parentId).toBeNull();
+    expect(c.updateFrequency).toBe(5);
+  });
+
+  it("updateCategoryOrder refuses another account's category as parent", async () => {
+    await expect(updateCategoryOrder([{ id: ids.cat, order: 1, parentId: ids.bobCat }])).rejects.toThrow(/Invalid parent/);
+  });
+
+  it("updateFeed clamps fetch limits", async () => {
+    await updateFeed(ids.feed, { maxSizeKb: 10_000_000, fetchTimeoutSecs: 99999 } as never);
+    const f = await state.db.feed.findUniqueOrThrow({ where: { id: ids.feed } });
+    expect(f.maxSizeKb).toBe(20 * 1024);
+    expect(f.fetchTimeoutSecs).toBe(120);
   });
 });

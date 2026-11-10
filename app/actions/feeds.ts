@@ -34,6 +34,7 @@ import { parseRuleActions } from "@/lib/auto-read-rules";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-fetch";
 import { pickFields } from "@/lib/pick-fields";
+import { clampFeedLimits } from "@/lib/feed-limits";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -713,7 +714,7 @@ export async function updateFeed(feedId: string, data: {
 
     // Allowlist: server-action input is untrusted at runtime; spreading it let a
     // caller set userId (re-assign the feed to another account) or internal fields.
-    const allowed = pickFields(data, UPDATE_FEED_FIELDS);
+    const allowed = clampFeedLimits(pickFields(data, UPDATE_FEED_FIELDS));
     await db.feed.update({
         where: { id: feedId, userId: session.user.id },
         data: {
@@ -833,9 +834,11 @@ export async function updateCategory(categoryId: string, data: { name?: string; 
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
+    const allowed = pickFields(data, ["name", "updateFrequency"] as const);
+    if (allowed.name !== undefined && typeof allowed.name !== "string") throw new Error("Invalid name");
     await db.category.update({
         where: { id: categoryId, userId: session.user.id },
-        data,
+        data: clampFeedLimits(allowed),
     });
 
     revalidatePath("/");
@@ -855,6 +858,13 @@ export async function deleteCategory(categoryId: string) {
 export async function updateCategoryOrder(orders: { id: string; order: number; parentId?: string | null }[]) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+
+    // parentId must be one of the user's own categories (never another account's).
+    const parentIds = [...new Set(orders.map((o) => o.parentId).filter((p): p is string => typeof p === "string"))];
+    if (parentIds.length) {
+        const owned = await db.category.count({ where: { id: { in: parentIds }, userId: session.user.id } });
+        if (owned !== parentIds.length) throw new Error("Invalid parent category");
+    }
 
     await db.$transaction(
         orders.map((o) =>
