@@ -75,7 +75,7 @@ export function scrollTabToTop(tab: TabId) {
   const { loc } = getNavState();
   const root =
     tab === "feeds" && !loc.scope
-      ? document.querySelector<HTMLElement>('[data-pane="sources"] [data-radix-scroll-area-viewport]')
+      ? document.querySelector<HTMLElement>('[data-pane="sources"] .ff-feeds-scroller, [data-pane="sources"] [data-radix-scroll-area-viewport]')
       : document.querySelector<HTMLElement>(`[data-pane="list-${tab}"] [data-testid="list-scroller"]`);
   root?.scrollTo({ top: 0, behavior: reducedMotion() ? "instant" : "smooth" });
 }

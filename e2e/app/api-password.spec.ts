@@ -1,14 +1,9 @@
 import { test, expect } from "../helpers/greader-test";
+import { openSettingsSection } from "../helpers/test";
 
 test("sets, uses and revokes an API password from account settings", async ({ page, isMobile }) => {
   await page.addInitScript(() => localStorage.setItem("feedferret:pwa-install-prompt-dismissed", "1"));
-  await page.goto("/settings");
-  if (isMobile) {
-    await page.getByRole("combobox").first().click();
-    await page.getByRole("option", { name: "Account", exact: true }).click();
-  } else {
-    await page.getByRole("tab", { name: /account/i }).click();
-  }
+  await openSettingsSection(page, isMobile, "Account");
   const section = page.locator("section").filter({ has: page.getByRole("heading", { name: "API password", exact: true }) });
   await section.getByLabel("New API password (24–72 bytes; leave blank to generate)").fill("playwright-api-password-long-secret");
   await section.getByLabel("Current login password or TOTP code").fill("e2e-password-123");

@@ -61,14 +61,7 @@ test("the dialog and settings expose a draggable bookmarklet that targets the sh
   expect(href).toMatch(/^javascript:/);
   expect(href).toContain(`${new URL(page.url()).origin}/?sharedUrl=`);
 
-  await page.goto("/settings");
-  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible({ timeout: 20_000 });
-  if (app.isMobile) {
-    await page.getByRole("combobox").first().tap();
-    await page.getByRole("option", { name: "Account" }).tap();
-  } else {
-    await page.getByRole("tab", { name: "Account" }).click();
-  }
+  await app.openSettings("Account");
   const settingsLink = page.getByRole("link", { name: "Subscribe in FeedFerret" });
   await expect(settingsLink).toHaveAttribute("href", /^javascript:.*sharedUrl=/);
 });

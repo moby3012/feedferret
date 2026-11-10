@@ -3,9 +3,9 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, memo } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
-import { PanelLeftClose, Plus, Settings } from "lucide-react";
+import { MoreHorizontal, PanelLeftClose, Plus, Settings } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { useCounts } from "@/features/bootstrap/queries";
+import { useCounts, useCountsQuery } from "@/features/bootstrap/queries";
 import { parseCountDisplay } from "@/lib/count-display";
 import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import { scopeFromSidebarKey, sidebarSelectionOf } from "@/features/reader/nav/sidebar-keys";
@@ -28,6 +28,9 @@ import { useShellActions, useShellData, useSourcesCollapsed } from "./shell-cont
 // Exported so the offline layer can warm the very same chunk (a bare import() resolves to a different chunk group).
 export const loadRssSidebar = () => import("@/components/rss-sidebar");
 const RssSidebar = dynamic(() => loadRssSidebar().then((m) => m.RssSidebar), { ssr: false });
+// The compact Feeds screen (Feeds tab root): its own chunk too, mounted on the first visit.
+export const loadFeedsScreen = () => import("@/components/feeds/feeds-screen");
+const FeedsScreen = dynamic(() => loadFeedsScreen().then((m) => m.FeedsScreen), { ssr: false });
 
 function useSidebarProps() {
   const t = useTranslations("sidebar");
@@ -91,17 +94,20 @@ export const SourcesPane = memo(function SourcesPane() {
         aria-labelledby={layout === "compact" ? tabLabelIdOf("feeds", layout, sourcesCollapsed) ?? undefined : undefined}
       >
         <FeedsHeader />
-        {mounted && <SourcesHost />}
+        {mounted && (layout === "compact" ? <FeedsScreen /> : <SourcesHost />)}
       </div>
     </div>
   );
 });
 
-/** Compact Feeds root: large title + add feed + settings (spec §4.6). */
+/** Compact Feeds root: large title + add feed + settings + "…" (Feeds verwalten, Server, Benachrichtigungen, Abmelden). */
 function FeedsHeader() {
   const t = useTranslations("tabs");
   const tSidebar = useTranslations("sidebar");
+  const tScreen = useTranslations("feedsScreen");
   const shell = useShellActions();
+  // Unread notifications: a quiet brand dot on "…", never a red number (anti-anxiety rule 1).
+  const notifications = useCountsQuery(true).data?.notifications ?? 0;
   const btn = "hit-slop inline-flex size-11 items-center justify-center rounded-control text-muted-foreground active:bg-surface-sunken";
   return (
     <header className="ff-feeds-header items-center gap-1 ps-(--gutter) pe-2 pt-[max(var(--safe-t),8px)] pb-1">
@@ -111,6 +117,24 @@ function FeedsHeader() {
       </button>
       <button type="button" className={btn} onClick={shell.openSettings} aria-label={t("settings")} title={t("settings")}>
         <Settings className="size-5" aria-hidden />
+      </button>
+      <button
+        type="button"
+        className={btn}
+        data-testid="feeds-menu-button"
+        aria-haspopup="menu"
+        aria-label={notifications > 0 ? tScreen("moreWithNotifications", { count: notifications }) : tScreen("more")}
+        title={tScreen("more")}
+        onClick={(e) => {
+          const trigger = e.currentTarget;
+          const pointerType = (e.nativeEvent as PointerEvent).pointerType || (e.detail === 0 ? "keyboard" : "mouse");
+          void loadFeedsScreen().then((m) => m.openFeedsMenu(trigger, pointerType));
+        }}
+      >
+        <span className="relative">
+          <MoreHorizontal className="size-5" aria-hidden />
+          {notifications > 0 && <span className="ff-tab-dot" data-testid="feeds-notification-dot" aria-hidden />}
+        </span>
       </button>
     </header>
   );

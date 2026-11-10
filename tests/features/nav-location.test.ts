@@ -3,6 +3,7 @@ import {
   TAB_ROOTS,
   entryKindOf,
   formatLoc,
+  inFeedsTab,
   listKeyOfLoc,
   locOf,
   normalizeSearch,
@@ -33,6 +34,9 @@ const CANONICAL = [
   "/?ss=s1",
   "/?q=rust+async",
   "/?q=rust&a=a9",
+  "/?tab=feeds&v=later",
+  "/?tab=feeds&label=l1&show=all&a=z",
+  "/?tab=feeds&v=all&show=all",
 ];
 
 describe("parseLoc / formatLoc", () => {
@@ -62,6 +66,17 @@ describe("parseLoc / formatLoc", () => {
   it("tab=… only describes a scope-less tab root", () => {
     expect(parseLoc("tab=feeds&feed=f").scope).toEqual({ kind: "feed", id: "f" });
     expect(formatLoc({ ...TAB_ROOTS.feeds, articleId: null })).toBe("/?tab=feeds");
+  });
+
+  it("tab=feeds keeps a smart view / label opened from the Feeds screen in the Feeds tab", () => {
+    expect(parseLoc("tab=feeds&v=starred")).toEqual({ tab: "feeds", scope: { kind: "starred" }, show: "unread", articleId: null });
+    expect(parseLoc("tab=feeds&label=l").tab).toBe("feeds");
+    // A search never lives in Feeds; a feed's own tab is Feeds already (no marker).
+    expect(parseLoc("tab=feeds&q=x").tab).toBe("search");
+    expect(formatLoc(parseLoc("tab=feeds&feed=f"))).toBe("/?feed=f");
+    expect(formatLoc(inFeedsTab(locOf({ kind: "later" })))).toBe("/?tab=feeds&v=later");
+    // compact: Back from it lands on the Feeds root.
+    expect(parentOf(parseLoc("tab=feeds&v=later"), "compact")).toEqual(TAB_ROOTS.feeds);
   });
 });
 

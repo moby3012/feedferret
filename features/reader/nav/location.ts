@@ -9,6 +9,9 @@
 //   show  all                       include read items (all/feed/cat/label/ss only)
 //   q     <text>                    ad-hoc search
 //   a     <articleId>               open article (also on a tab root: /?tab=feeds&a=X)
+//   tab   feeds (with a scope)      a smart view / label opened from the compact
+//                                   Feeds screen stays in the Feeds tab
+//                                   (/?tab=feeds&v=later): Back → Feeds root
 //
 // Old links (manifest shortcuts, notifications, push) keep working through
 // aliases that the shell rewrites with replaceState at boot.
@@ -59,6 +62,15 @@ export function tabOf(loc: Loc): TabId {
   return loc.tab;
 }
 
+/**
+ * The same scope as a level of the Feeds tab (compact Feeds screen: smart
+ * views and labels drill down there instead of jumping to Neu / Gemerkt).
+ * Searches never live in Feeds.
+ */
+export function inFeedsTab(loc: Loc): Loc {
+  return loc.scope && loc.scope.kind !== "query" ? { ...loc, tab: "feeds" } : loc;
+}
+
 /** Builds a canonical Loc for a scope (show is dropped where it does not apply). */
 export function locOf(scope: Scope | null, show: Show = "unread", articleId: string | null = null, rootTab: TabId = "new"): Loc {
   const canonicalShow: Show = scope && showApplies(scope) && show === "all" ? "all" : "unread";
@@ -91,6 +103,7 @@ export function parseLoc(search: string): Loc {
   const v = sp.get("v");
   const q = sp.get("q")?.trim();
   if (v && SMART.has(v)) scope = { kind: v as "later" | "starred" | "recent" | "spoiler" };
+  else if (v === "all" && sp.get("tab") === "feeds") scope = { kind: "all" };
   else if (validId(sp.get("feed"))) scope = { kind: "feed", id: sp.get("feed")! };
   else if (validId(sp.get("cat"))) scope = { kind: "category", id: sp.get("cat")! };
   else if (validId(sp.get("label"))) scope = { kind: "label", id: sp.get("label")! };
@@ -112,7 +125,8 @@ export function parseLoc(search: string): Loc {
     if (rawTab === "feeds" || rawTab === "search") return { tab: rawTab, scope: null, show: "unread", articleId };
     scope = { kind: "all" };
   }
-  return locOf(scope, show, articleId);
+  const loc = locOf(scope, show, articleId);
+  return rawTab === "feeds" ? inFeedsTab(loc) : loc;
 }
 
 /** Canonical URL (path `/`) of a Loc; params in the order of §1.3. */
@@ -121,6 +135,9 @@ export function formatLoc(loc: Loc): string {
   if (!loc.scope) {
     if (loc.tab === "feeds" || loc.tab === "search") params.push(["tab", loc.tab]);
   } else {
+    // A smart view / label opened from the Feeds screen (its own tab is not Feeds).
+    // "Alle Artikel" has no scope param of its own: `v=all` keeps it apart from the Feeds root.
+    if (loc.tab === "feeds" && tabOfScope(loc.scope) !== "feeds") params.push(["tab", "feeds"], ...(loc.scope.kind === "all" ? ([["v", "all"]] as [string, string][]) : []));
     params.push(...scopeParams(loc.scope, loc.show));
   }
   if (loc.articleId) params.push(["a", loc.articleId]);

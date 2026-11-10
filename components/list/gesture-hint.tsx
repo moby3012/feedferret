@@ -104,7 +104,7 @@ export function GestureHint({ swipeMap, scrollRoot, active }: { swipeMap: RowSwi
           </Button>
           <Button asChild size="sm" variant="outline">
             <Link
-              href="/settings?tab=reading#gestures"
+              href="/settings?tab=gestures"
               onClick={() => {
                 markInAppNavigation();
                 completeGestureHint();

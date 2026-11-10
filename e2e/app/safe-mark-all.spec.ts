@@ -168,12 +168,13 @@ test.describe("every bulk mark-read path is undoable and scoped to the visible v
     await app.open();
     const before = unreadIds(app.userKey);
     const solo = unreadCountForFeed(app.userKey, "Solo Blog");
-    await app.openSidebar();
-    const feedButton = app.sidebar().getByRole("button", { name: /^Solo Blog\s*\d+$/ }).first();
-    const row = feedButton.locator('xpath=ancestor::div[contains(@class,"group/row")][1]');
-    await row.hover();
-    await app.activate(row.getByRole("button", { name: "Feed actions" }));
-    await app.activate(page.getByRole("menuitem", { name: "Mark all as read" }));
+    const menu = await app.openFeedMenu("Solo Blog");
+    // A feed's "Mark all as read" always asks first (Feeds screen and desktop sidebar alike).
+    await app.activate(menu.getByRole("menuitem", { name: "Mark all as read…" }));
+    const confirm = page.getByTestId("feeds-mark-all-confirm");
+    await expect(confirm).toContainText(`${solo} unread articles in “Solo Blog”`);
+    expect(unreadCountForFeed(app.userKey, "Solo Blog")).toBe(solo); // nothing marked before the confirm
+    await app.activate(confirm.getByRole("button", { name: "Mark as read" }));
 
     await expect.poll(() => unreadCountForFeed(app.userKey, "Solo Blog")).toBe(0);
     expect(unreadCountInDb(app.userKey)).toBe(before.length - solo);
@@ -297,14 +298,7 @@ test.describe("setting: mark as read when moving on", () => {
   test("can be toggled in Settings → Reading and is persisted (default off)", async ({ app, page }) => {
     expect(userSettings(app.userKey).markReadOnAdvance).toBe(false);
     await app.open();
-    await page.goto("/settings");
-    await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible({ timeout: 20_000 });
-    if (app.isMobile) {
-      await page.getByRole("combobox").first().tap();
-      await page.getByRole("option", { name: "Reading" }).tap();
-    } else {
-      await page.getByRole("tab", { name: "Reading" }).click();
-    }
+    await app.openSettings("Reading");
     const toggle = page.getByRole("switch", { name: "Mark as read when moving on" });
     await expect(toggle).toBeVisible();
     await expect(toggle).not.toBeChecked();
@@ -400,13 +394,11 @@ test.describe("reader gestures (P1-02)", () => {
 
 test("sign-out asks for confirmation first", async ({ app, page }) => {
   await app.open();
-  await app.openSidebar();
-  await app.activate(page.getByRole("button", { name: "Sign out" }).first());
-  const dialog = page.getByRole("alertdialog", { name: "Sign out?" });
-  await expect(dialog).toBeVisible();
+  const dialog = await app.startSignOut();
   await app.activate(dialog.getByRole("button", { name: "Cancel" }));
   await expect(dialog).toBeHidden();
-  // Still where it was (mobile: the Feeds tab hosts the sign-out button).
+  // Still where it was (mobile: the Feeds tab hosts the sign-out entry, in its header "…").
   await expect(page).toHaveURL(app.isMobile ? /\/\?tab=feeds$/ : /\/$/);
-  await expect(page.getByRole("button", { name: "Sign out" }).first()).toBeVisible(); // still signed in
+  if (app.isMobile) await expect(page.getByTestId("feeds-menu-button")).toBeVisible(); // still signed in
+  else await expect(page.getByRole("button", { name: "Sign out" }).first()).toBeVisible();
 });

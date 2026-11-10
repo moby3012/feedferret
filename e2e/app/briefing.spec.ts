@@ -253,7 +253,7 @@ test.describe("briefing card", () => {
       };
       requestAnimationFrame(tick);
     });
-    await app.selectSidebar(/^All articles\s*\d*$/);
+    await app.openAllArticles();
     await expect(card(page)).toBeVisible();
     await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
     await expect(card(page).locator("[data-briefing-item]").first()).toBeVisible();

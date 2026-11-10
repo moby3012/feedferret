@@ -1,0 +1,103 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import { useSession } from "next-auth/react";
+import { User, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useUpdateProfile, useEmailChangeMailStatus } from "@/hooks/use-rss-data";
+import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+
+export function EmailSection({ currentEmail }: { currentEmail: string | null }) {
+  const t = useTranslations();
+  const updateProfile = useUpdateProfile();
+  const mailStatus = useEmailChangeMailStatus();
+  const { update: updateSession } = useSession();
+  const [email, setEmail] = useState("");
+  const [proof, setProof] = useState("");
+
+  const handleSubmit = async () => {
+    const next = email.trim().toLowerCase();
+    if (!next || next === currentEmail) return;
+    try {
+      // The proof field takes the current login password or a TOTP code; the
+      // server tries both (passwordless accounts: a sign-in < 10 min ago).
+      const result = await updateProfile.mutateAsync({ email: next, currentPassword: proof, totp: proof });
+      if (result.success) {
+        toast.success(t("profile.emailChanged"));
+        if (result.emailNotice === "failed") toast.warning(t("profile.emailChangeNoticeFailed"));
+        setEmail("");
+        setProof("");
+        await updateSession?.().catch(() => undefined);
+        return;
+      }
+      const messages = {
+        stepUpRequired: t("apiPassword.stepUpRequired"),
+        reloginRequired: t("apiPassword.reloginRequired"),
+        rateLimited: t("profile.emailChangeRateLimited"),
+        invalidEmail: t("profile.invalidEmail"),
+        emailTaken: t("profile.emailTaken"),
+      } as const;
+      toast.error(messages[result.code] ?? t("profile.emailChangeFailed"));
+    } catch {
+      toast.error(t("profile.emailChangeFailed"));
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6" data-testid="email-change-section">
+      <div className="flex items-start gap-4 mb-6">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+          <User className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold tracking-title">{t("profile.changeEmail")}</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{t("apiPassword.emailChangeWarning")}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:max-w-sm">
+        <div className="grid gap-1.5">
+          <label className="text-sm font-medium" htmlFor="new-email-input">{t("profile.newEmail")}</label>
+          <Input
+            id="new-email-input"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={currentEmail ?? undefined}
+            className="h-10 rounded-2xl"
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <label className="text-sm font-medium" htmlFor="email-step-up-input">{t("profile.emailStepUp")}</label>
+          <Input
+            id="email-step-up-input"
+            type="password"
+            autoComplete="current-password"
+            value={proof}
+            onChange={(e) => setProof(e.target.value)}
+            aria-describedby="email-step-up-hint"
+            className="h-10 rounded-2xl"
+          />
+          <p id="email-step-up-hint" className="text-xs text-muted-foreground">{t("profile.emailStepUpHint")}</p>
+        </div>
+        {mailStatus.data && !mailStatus.data.mailConfigured ? (
+          <p role="note" className="flex items-start gap-2 rounded-2xl border border-warning/20 bg-warning/10 p-3 text-sm text-warning" data-testid="email-change-no-mail">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{t("profile.emailChangeNoMail")}</span>
+          </p>
+        ) : null}
+        <Button
+          type="button"
+          onClick={handleSubmit}
+          disabled={updateProfile.isPending || !email.trim() || email.trim().toLowerCase() === currentEmail}
+          className="h-11 w-fit rounded-2xl px-5"
+        >
+          {updateProfile.isPending ? t("profile.updating") : t("profile.updateEmail")}
+        </Button>
+      </div>
+    </section>
+  );
+}

@@ -193,7 +193,8 @@ export function RssSidebar({
       isSelected={selectedFeed === feed.id}
       onSelect={() => onSelectFeed(feed.id)}
       onRefresh={() => refreshFeed.mutate(feed.id)}
-      onMarkRead={() => markViewRead({ feedId: feed.id, category: null })}
+      // The confirm mounts once the menu is gone (a vaul sheet unmounting under it would leave <body> inert).
+      onMarkRead={() => window.requestAnimationFrame(() => window.setTimeout(() => setMarkAllFeed({ id: feed.id, name: feed.name, unread: feed.unreadCount ?? 0 }), 0))}
       onEdit={() => router.push(`/manage-feeds?feedId=${feed.id}`)}
       onShowHealth={() => router.push("/manage-feeds?tab=health")}
       onDelete={() => setFeedToDelete({ id: feed.id, name: feed.name })}
@@ -212,6 +213,8 @@ export function RssSidebar({
   );
 
   const [feedToDelete, setFeedToDelete] = useState<{ id: string; name: string } | null>(null);
+  // "Mark all as read" of a feed always asks first (owner decision 2026-11-10; same as the compact Feeds screen).
+  const [markAllFeed, setMarkAllFeed] = useState<{ id: string; name: string; unread: number } | null>(null);
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   // Bell menu: a nav overlay (system Back closes it, not the Feeds screen).
   const [notificationsOpen, setNotificationsOpen] = useOwnedOverlay("notifications");
@@ -758,6 +761,28 @@ export function RssSidebar({
 
     </aside>
 
+    <AlertDialog open={!!markAllFeed} onOpenChange={(open) => !open && setMarkAllFeed(null)}>
+      <AlertDialogContent data-testid="feeds-mark-all-confirm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("feedsScreen.markAllTitle")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("feedsScreen.markAllDescription", { count: markAllFeed?.unread ?? 0, name: markAllFeed?.name ?? "" })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (markAllFeed) markViewRead({ feedId: markAllFeed.id, category: null });
+              setMarkAllFeed(null);
+            }}
+          >
+            {t("feedsScreen.markAllConfirm")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     <AlertDialog open={!!feedToDelete} onOpenChange={(open) => !open && setFeedToDelete(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -1031,7 +1056,8 @@ function FeedQuickActions({
   const afterClose = (fn: () => void) => () => void nav.closeOverlay("feed-menu").then(fn);
   const items: OverlayMenuItem[] = [
     { id: "refresh", label: t("sidebar.refreshFeed"), icon: RefreshCw, onSelect: onRefresh },
-    { id: "mark-read", label: t("sidebar.markAllAsRead"), icon: CheckCheck, onSelect: onMarkRead },
+    // "…": it asks first. Opened once the menu (a sheet in the tablet drawer on touch) is gone.
+    { id: "mark-read", label: `${t("sidebar.markAllAsRead")}…`, icon: CheckCheck, disabled: !(feed.unreadCount > 0), onSelect: afterClose(onMarkRead) },
     ...(websiteUrl ? [{ id: "website", label: t("sidebar.openWebsite"), icon: ExternalLink, onSelect: () => window.open(websiteUrl, "_blank", "noopener,noreferrer") }] : []),
     { id: "edit", label: t("sidebar.editFeed"), icon: Pencil, separated: true, onSelect: afterClose(onEdit) },
     { id: "health", label: t("sidebar.feedHealth"), icon: Activity, onSelect: afterClose(onShowHealth) },

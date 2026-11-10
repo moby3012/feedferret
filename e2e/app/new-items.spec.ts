@@ -400,7 +400,8 @@ test.describe("calm unread counts", () => {
 
   test("'Show counts': All · Categories only · Off", async ({ app, page }) => {
     const feedName = app.user.firstArticleFeed;
-    const expandTech = () => app.sidebar().getByRole("button", { name: "Expand Tech" });
+    // The compact Feeds screen remembers expanded folders per device: "Expand" or "Collapse".
+    const expandTech = () => app.sidebar().getByRole("button", { name: /^(Expand|Collapse) Tech$/ });
     const techCount = () => expandTech().locator("xpath=..").locator("[data-unread-count]");
     const feedButton = () => app.sidebar().getByRole("button", { name: new RegExp(`^${feedName}`) }).first();
 
@@ -409,7 +410,7 @@ test.describe("calm unread counts", () => {
     await app.openSidebar();
     await expect(app.sidebar().getByRole("button", { name: /^All articles/ }).first().locator("[data-unread-count]")).toBeVisible();
     await expect(techCount()).toBeVisible();
-    await expandTech().click();
+    if ((await expandTech().getAttribute("aria-expanded")) !== "true") await expandTech().click();
     await expect(feedButton()).toBeVisible();
     await expect(feedButton().locator("[data-unread-count]")).toHaveCount(0);
     await app.closeSidebar();
@@ -426,14 +427,7 @@ test.describe("calm unread counts", () => {
     if (app.isMobile) await expect(page.getByTestId("tab-unread-dot")).toBeVisible();
 
     // The setting itself (Settings → Show counts) writes it back.
-    await page.goto("/settings");
-    if (app.isMobile) {
-      // Compact settings: the section tabs are a select.
-      await page.getByRole("combobox").first().tap();
-      await page.getByRole("option", { name: "Reading" }).tap();
-    } else {
-      await page.getByRole("tab", { name: "Reading" }).click();
-    }
+    await app.openSettings("Reading");
     const select = page.getByTestId("count-display-select");
     await select.scrollIntoViewIfNeeded();
     await app.activate(select);
@@ -441,7 +435,7 @@ test.describe("calm unread counts", () => {
     await expect(select).toHaveText("All");
     await app.open();
     await app.openSidebar();
-    await expandTech().click();
+    if ((await expandTech().getAttribute("aria-expanded")) !== "true") await expandTech().click();
     await expect(feedButton().locator("[data-unread-count]")).toBeVisible();
   });
 });

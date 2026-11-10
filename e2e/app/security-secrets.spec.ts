@@ -1,4 +1,4 @@
-import { test, expect } from "../helpers/test";
+import { test, expect, openSettingsSection } from "../helpers/test";
 import { plantFeedSecrets } from "../helpers/db";
 
 // Security wave 3 (audit #2, N4): the reader shell's SSR bootstrap used to
@@ -25,13 +25,7 @@ test("the SSR HTML and the hydrated shell of / carry none of the feed secrets", 
 
 // N17: changing the sign-in email needs the current password (or a TOTP code).
 test("changing the email asks for step-up and refuses without it", async ({ page, isMobile }) => {
-  await page.goto("/settings");
-  if (isMobile) {
-    await page.getByRole("combobox").first().click();
-    await page.getByRole("option", { name: "Account", exact: true }).click();
-  } else {
-    await page.getByRole("tab", { name: /account/i }).click();
-  }
+  await openSettingsSection(page, isMobile, "Account");
   const section = page.getByTestId("email-change-section");
   // The e2e instance has no mail delivery: the dialog says no confirmation goes out.
   await expect(section.getByTestId("email-change-no-mail")).toContainText("no confirmation will be sent");

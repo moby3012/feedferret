@@ -95,7 +95,8 @@
       "reading": "Reading",
       "account": "Account",
       "notifications": "Notifications",
-      "integrations": "Integrations"
+      "integrations": "Integrations",
+      "gestures": "Gestures & help"
     },
     "offlineReading": "Offline reading",
     "offlineReadingDescription": "Read-later articles and the ones you opened last stay readable without a connection. Changes need a connection.",
@@ -129,7 +130,46 @@
     "appBadge": {
       "title": "Badge on the app icon",
       "description": "Shows the number of unread articles on the icon of the installed app. Applies to this device."
-    }
+    },
+    "gesturesHelp": {
+      "title": "How to use FeedFerret",
+      "description": "On a phone or tablet, rows have no buttons: gestures and long-press do the work. With a mouse, hover a row for its buttons and right-click for the menu.",
+      "longPress": "Long-press",
+      "list": {
+        "title": "Article list",
+        "swipe": "Swipe a row",
+        "swipeResult": "Runs the action set above for that direction (e.g. read, later).",
+        "longPressResult": "All actions for the article, incl. “mark read up to here”.",
+        "pull": "Pull down at the top",
+        "pullResult": "Refreshes the feeds."
+      },
+      "feeds": {
+        "title": "Feeds",
+        "longPressResult": "Feed or folder actions: refresh, mark as read, edit, delete.",
+        "arrow": "Tap the arrow of a folder",
+        "arrowResult": "Opens or closes the folder; tapping its name shows all its articles.",
+        "markAll": "Mark all as read",
+        "markAllResult": "Always asks first — there is no gesture for it."
+      },
+      "reader": {
+        "title": "Reader",
+        "pullNext": "Pull up at the end",
+        "pullNextResult": "Opens the next article.",
+        "edge": "Swipe from the left edge",
+        "edgeResult": "Back to the list (system gesture)."
+      },
+      "everywhere": {
+        "title": "Everywhere",
+        "tabTwice": "Tap the active tab again",
+        "tabTwiceResult": "One level up, then back to the top.",
+        "rightClick": "Right-click / context-menu key",
+        "rightClickResult": "Opens the same menu as a long-press."
+      },
+      "showFeedsHint": "Show the Feeds tip again",
+      "feedsHintReset": "The tip shows again on the Feeds screen."
+    },
+    "sectionsNav": "Settings sections",
+    "backToSettings": "Settings"
   },
   "profile": {
     "changePassword": "Change password",
@@ -2045,5 +2085,22 @@
       "star": "Favourite",
       "none": "nothing"
     }
+  },
+  "feedsScreen": {
+    "overview": "Overview",
+    "openFolder": "Open folder",
+    "markAllTitle": "Mark all as read?",
+    "markAllDescription": "{count, plural, one {One unread article} other {# unread articles}} in “{name}” will be marked as read.",
+    "markAllConfirm": "Mark as read",
+    "actionsShort": "Actions",
+    "actionsFor": "Actions for {name}",
+    "hintTitle": "Long-press for actions",
+    "hintBody": "Long-press a feed or folder to refresh it, mark it read, edit or delete it. Tap the arrow to open or close a folder.",
+    "hintHelp": "Gestures & help",
+    "menuTitle": "Feeds",
+    "notificationsUnread": "Notifications ({count} new)",
+    "gesturesHelp": "Gestures & help",
+    "more": "More",
+    "moreWithNotifications": "More, {count} new notifications"
   }
 }
