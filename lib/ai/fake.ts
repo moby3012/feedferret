@@ -40,7 +40,10 @@ function harnessTokenMatches(): boolean {
   if (verified.has(key)) return true;
   let content: string;
   try {
-    content = readFileSync(marker, "utf8").trim();
+    // The marker path is runtime-only (derived from DATABASE_URL). Without the
+    // ignore hint Turbopack treats this as dynamic fs access and traces the
+    // WHOLE project into .next/standalone (source, tests, prisma.config.ts, …).
+    content = readFileSync(/*turbopackIgnore: true*/ marker, "utf8").trim();
   } catch {
     return false;
   }
