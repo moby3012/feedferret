@@ -28,7 +28,8 @@ import { scopeTitle } from "./scope-title";
 import { SpoilerGate } from "./spoiler-gate";
 
 // Search results only render for `?q=`: their own chunk.
-const SearchResultsView = dynamic(() => import("@/components/search-results-view").then((m) => m.SearchResultsView));
+export const loadSearchResults = () => import("@/components/search-results-view");
+const SearchResultsView = dynamic(() => loadSearchResults().then((m) => m.SearchResultsView));
 
 /**
  * One list pane per tab (Neu · Gemerkt · Feeds · Suche). Mounts on first

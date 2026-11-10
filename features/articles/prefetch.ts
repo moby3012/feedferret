@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { fetchArticleDetail, fetchArticlePage, shouldRetry } from "./api";
+import { shouldRetry } from "./api";
+import { fetchDetailOrStored, fetchPageOrStored } from "@/features/offline/offline";
 import { qk } from "./keys";
 import type { ListKey } from "./scope";
 import type { ArticlePage } from "./types";
@@ -10,7 +11,8 @@ import type { ArticlePage } from "./types";
 export function prefetchArticle(qc: QueryClient, id: string) {
   void qc.prefetchQuery({
     queryKey: qk.article(id),
-    queryFn: ({ signal }) => fetchArticleDetail(id, signal),
+    queryFn: ({ signal }) => fetchDetailOrStored(id, signal),
+    networkMode: "always",
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     retry: shouldRetry,
@@ -22,9 +24,10 @@ export function prefetchList(qc: QueryClient, key: ListKey) {
   if (qc.getQueryData(qk.list(key)) !== undefined) return;
   void qc.prefetchInfiniteQuery({
     queryKey: qk.list(key),
-    queryFn: ({ pageParam, signal }) => fetchArticlePage(key, pageParam as string | null, signal),
+    queryFn: ({ pageParam, signal }) => fetchPageOrStored(key, pageParam as string | null, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (last: ArticlePage) => last.nextCursor,
+    networkMode: "always",
     retry: shouldRetry,
   });
 }

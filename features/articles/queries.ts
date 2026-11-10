@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { fetchArticleDetail, fetchArticlePage, shouldRetry } from "./api";
+import { shouldRetry } from "./api";
 import { findCachedArticle, overlayPendingState, pruneReadRows } from "./cache";
 import { qk } from "./keys";
 import type { ListKey } from "./scope";
-import type { ArticleDetail, ArticleListItem } from "./types";
+import type { ArticleDetail, ArticleListItem, ArticlePage } from "./types";
+import { fetchDetailOrStored, fetchPageOrStored, recordOpened } from "@/features/offline/offline";
 
 const DISABLED_KEY = ["list", "__disabled__"] as const;
 
@@ -55,12 +56,14 @@ export function useArticleList(key: ListKey | null, o: { active: boolean }): Art
   const query = useInfiniteQuery({
     queryKey,
     queryFn: async ({ pageParam, signal }) => {
-      const page = await fetchArticlePage(key!, pageParam, signal);
+      const page = await fetchPageOrStored(key!, pageParam, signal);
       return { ...page, items: page.items.map((item) => overlayPendingState(qc, item)) };
     },
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
     enabled: !!key && o.active,
+    // Offline the query still runs: it answers from the offline store (or fails fast) instead of pausing forever.
+    networkMode: "always",
     staleTime: LIST_REBIND_STALE_MS,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -124,8 +127,9 @@ export function useArticle(id: string | null): ArticleResult {
   const qc = useQueryClient();
   const detailQuery = useQuery({
     queryKey: id ? qk.article(id) : ["article", "__none__"],
-    queryFn: async ({ signal }) => overlayPendingState(qc, await fetchArticleDetail(id!, signal)),
+    queryFn: async ({ signal }) => overlayPendingState(qc, await fetchDetailOrStored(id!, signal)),
     enabled: !!id,
+    networkMode: "always",
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     retry: shouldRetry,
@@ -137,6 +141,11 @@ export function useArticle(id: string | null): ArticleResult {
     () => undefined,
   );
   const { refetch } = detailQuery;
+  // Opened = kept for offline reading (last ~50, plus the flags the reader shows).
+  const loaded = detailQuery.data;
+  useEffect(() => {
+    if (id && loaded && loaded.id === id) void recordOpened(loaded);
+  }, [id, loaded]);
   const retry = useCallback(() => {
     void refetch();
   }, [refetch]);

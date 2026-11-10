@@ -89,7 +89,14 @@
       "account": "Account",
       "notifications": "Notifications",
       "integrations": "Integrations"
-    }
+    },
+    "offlineReading": "Offline reading",
+    "offlineReadingDescription": "Read-later articles and the ones you opened last stay readable without a connection. Changes need a connection.",
+    "offlineUsage": "{count, plural, one {# article} other {# articles}} · {size} stored offline",
+    "offlineUsageEmpty": "Nothing stored offline yet.",
+    "offlineBrowserStorage": "Browser storage in use: {used} of {quota}",
+    "offlineClear": "Clear offline data",
+    "offlineQuotaFailed": "Browser storage is full: not everything could be saved for offline reading (older articles were removed to make room)."
   },
   "profile": {
     "changePassword": "Change password",
@@ -1774,7 +1781,7 @@
   },
   "articleState": {
     "toggleFailed": "Couldn't save that change — it was undone.",
-    "offlineReadOnly": "Offline – read only",
+    "offlineReadOnly": "Offline – changes only when back online",
     "offline": "Offline",
     "labelsFailed": "Couldn't update labels."
   },

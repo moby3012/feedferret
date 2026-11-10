@@ -17,7 +17,7 @@ import { ReaderEmptyState } from "./reader-empty";
 // its own chunk: off the cold-start path, preloaded once the shell is idle so
 // the first tap still paints the reader at once. A deep link (`?a=`) renders
 // it on the server and loads the chunk with the page.
-const loadReader = () => import("@/components/article-reader");
+export const loadReader = () => import("@/components/article-reader");
 const ArticleReader = dynamic(() => loadReader().then((m) => m.ArticleReader), {
   loading: () => <div className="flex-1 bg-background" />,
 });

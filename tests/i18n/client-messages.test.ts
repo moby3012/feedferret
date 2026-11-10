@@ -16,6 +16,7 @@ const ROUTE_SCOPED_FILES = new Set([
   "app/settings/page.tsx",
   "components/settings-form.tsx",
   "components/api-password-settings.tsx",
+  "components/offline-storage-controls.tsx",
   "app/manage-feeds/page.tsx",
   "components/feed-management.tsx",
   "components/feed-edit-dialog.tsx",

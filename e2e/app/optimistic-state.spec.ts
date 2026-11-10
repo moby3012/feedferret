@@ -203,7 +203,7 @@ test("offline is read-only: chip shown, toggles refused with a toast", async ({ 
   await context.setOffline(true);
   await expect(page.getByTestId("offline-chip")).toBeVisible();
   await app.activate(app.rowActions(1).star);
-  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Offline – read only" })).toHaveCount(1);
+  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Offline – changes only when back online" })).toHaveCount(1);
   await expect(app.rowActions(1).star).toHaveAccessibleName("Star");
   await context.setOffline(false);
   await expect(page.getByTestId("offline-chip")).toHaveCount(0);

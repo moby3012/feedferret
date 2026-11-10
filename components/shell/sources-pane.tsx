@@ -18,7 +18,9 @@ import { useShellActions, useShellData } from "./shell-context";
 // The sidebar (with dnd-kit reordering) only ever mounts after hydration —
 // expanded column, compact Feeds root, sheet / drawer — so it is a chunk of
 // its own instead of part of the cold-start bundle.
-const RssSidebar = dynamic(() => import("@/components/rss-sidebar").then((m) => m.RssSidebar), { ssr: false });
+// Exported so the offline layer can warm the very same chunk (a bare import() resolves to a different chunk group).
+export const loadRssSidebar = () => import("@/components/rss-sidebar");
+const RssSidebar = dynamic(() => loadRssSidebar().then((m) => m.RssSidebar), { ssr: false });
 
 function useSidebarProps() {
   const t = useTranslations("sidebar");

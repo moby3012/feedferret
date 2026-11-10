@@ -124,6 +124,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.6",
     "eslint-plugin-jsx-a11y": "^6.10.2",
+    "fake-indexeddb": "^6.2.8",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.5",
     "postcss": "^8.5.14",

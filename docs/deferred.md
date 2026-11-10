@@ -106,7 +106,7 @@ All three swipe handlers (`rss-header.tsx`, `article-list.tsx` background and pe
 | Translated AI summary prompts | Prompt engineering effort; stays English for now |
 | In-app translation editor UI | Third-party tools (Weblate, Lokalise) are better suited |
 | WebSub / PubSubHubbub | Requires public callback URL; not self-hosting friendly |
-| Offline-First Mutations (IndexedDB queue) | Service worker complexity; low priority vs other work |
+| Offline-First Mutations (IndexedDB queue) | Owner decision: offline is read-only (offline *reading* shipped); toggles are refused offline, nothing is queued |
 | Website Scraping Feeds (CSS/XPath selectors) | Maintenance burden; legal grey area |
 | Team Shares / Collaboration | Requires invitation flow, XL effort |
 | Native iOS/Android App | Capacitor/RN wrapper; separate project scope |
