@@ -85,6 +85,7 @@ import { Switch } from "@/components/ui/switch";
 import { Empty, EmptyMedia, EmptyTitle, EmptyContent } from "@/components/ui/empty";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { GestureSettings } from "@/components/gesture-settings";
+import { AppBadgeSetting } from "@/components/app-badge-setting";
 import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
 import { MobileFloatingBackButton } from "@/components/mobile-floating-back-button";
 import { toast } from "sonner";
@@ -138,7 +139,9 @@ function PrefRow({
   );
 }
 
-export function SettingsForm() {
+const SETTINGS_TABS = ["appearance", "reading", "account", "notifications", "integrations"] as const;
+
+export function SettingsForm({ initialTab }: { initialTab?: string } = {}) {
   const t = useTranslations();
   const { data: session } = useSession();
   const { theme, setTheme } = useTheme();
@@ -152,7 +155,14 @@ export function SettingsForm() {
   const update = (data: Parameters<typeof updateSettings.mutate>[0]) =>
     updateSettings.mutate(data);
 
-  const [activeTab, setActiveTab] = useState("appearance");
+  const [activeTab, setActiveTab] = useState<string>(() => SETTINGS_TABS.find((tab) => tab === initialTab) ?? "appearance");
+  // Deep links into a section (`/settings?tab=reading#gestures`): scroll it into view once painted.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    const frame = window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: "start" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const tabOptions = [
     { value: "appearance", label: t("settings.tabs.appearance"), icon: <Palette className="h-4 w-4 shrink-0" /> },
@@ -163,7 +173,7 @@ export function SettingsForm() {
   ];
 
   return (
-    <main className="min-h-dvh app-chrome text-foreground overflow-x-hidden">
+    <main className="min-h-dvh app-chrome text-foreground overflow-x-hidden pt-(--safe-t) ps-(--safe-l) pe-(--safe-r)">
       <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-6">
         <header className="mb-8 flex items-center gap-4">
           <Button
@@ -187,7 +197,8 @@ export function SettingsForm() {
         </header>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="sticky top-0 z-(--z-sticky) border-b border-border/60 bg-background/95 backdrop-blur-bar py-3 mb-6">
+          {/* Stuck under the status bar / notch in standalone, never beneath it. */}
+          <div className="sticky top-(--safe-t) z-(--z-sticky) border-b border-border/60 bg-background/95 backdrop-blur-bar py-3 mb-6">
             <ResponsiveTabsNav
               value={activeTab}
               onValueChange={setActiveTab}
@@ -724,6 +735,7 @@ export function SettingsForm() {
           {/* ── Tab: Notifications ── */}
           <TabsContent value="notifications" className="animate-filter-swap grid gap-5">
             <PushNotificationSection />
+            <AppBadgeSetting />
             <DigestSection />
             <NotificationChannelsSection />
           </TabsContent>

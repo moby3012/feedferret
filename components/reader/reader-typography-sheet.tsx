@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId } from "react";
 import { useTranslations } from "next-intl";
 import { Minus, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,6 +16,7 @@ import {
   setReaderTypography,
   type ResolvedTypography,
 } from "@/features/reader/typography/typography";
+import { useOwnedOverlay } from "@/features/reader/nav/use-owned-overlay";
 import { cn } from "@/lib/utils";
 import { ChromeButton } from "./chrome-button";
 import "@/app/styles/reader-aa.css";
@@ -39,7 +40,8 @@ export default function ReaderTypographySheetEntry(p: SheetProps | { warmup: tru
 
 function ReaderTypographySheet({ resolved, effectiveSize }: SheetProps) {
   const t = useTranslations("articleReader");
-  const [open, setOpen] = useState(false);
+  // A nav overlay: system Back closes the sheet, not the reader beneath.
+  const [open, setOpen] = useOwnedOverlay("reader-aa");
   const size = resolved.size ?? effectiveSize();
   return (
     <Popover open={open} onOpenChange={setOpen}>

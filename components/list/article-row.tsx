@@ -57,6 +57,8 @@ export interface RowHandlers {
   openMenu(id: string, point: LongPressPoint, returnFocus: HTMLElement): void;
   toggleCluster(clusterId: string): void;
   swipeEnabled(): boolean;
+  /** A swipe or long-press was used (retires the first-use gesture hint). */
+  gestureUsed?(): void;
   /** Read-on-scroll: registers an unread row with the list's shared observer. */
   observeUnread?(el: HTMLElement, id: string): () => void;
 }
@@ -113,6 +115,7 @@ export const ArticleRow = memo(function ArticleRow(p: ArticleRowProps) {
         id: which,
         commit: () => {
           const { article: a, handlers: h } = live.current;
+          h.gestureUsed?.();
           if (which === "read") h.toggleRead(a.id);
           else if (which === "later") h.toggleLater(a.id);
           else h.toggleStar(a.id);
@@ -125,7 +128,10 @@ export const ArticleRow = memo(function ArticleRow(p: ArticleRowProps) {
       dir: documentDir,
       leading: () => action(live.current.swipeMap.end),
       trailing: () => action(live.current.swipeMap.start),
-      onLongPress: (point) => live.current.handlers.openMenu(live.current.article.id, point, content),
+      onLongPress: (point) => {
+        live.current.handlers.gestureUsed?.();
+        live.current.handlers.openMenu(live.current.article.id, point, content);
+      },
     });
   }, []);
 
@@ -162,6 +168,8 @@ export const ArticleRow = memo(function ArticleRow(p: ArticleRowProps) {
       data-density={density}
       data-kind={article.kind}
       data-unread={article.isRead ? undefined : ""}
+      data-starred={article.isStarred ? "" : undefined}
+      data-later={article.isReadLater ? "" : undefined}
       data-selected={p.selected ? "" : undefined}
       data-nested={p.nested ? "" : undefined}
     >
@@ -185,6 +193,21 @@ export const ArticleRow = memo(function ArticleRow(p: ArticleRowProps) {
         )}
         {density === "minimal" ? <MinimalBody {...p} shownTitle={shownTitle} /> : density === "magazine" ? <MagazineBody {...p} shownTitle={shownTitle} /> : <ListBody {...p} shownTitle={shownTitle} />}
       </div>
+      {/* Touch rows have no action buttons (swipe / long-press): screen readers
+          get the row menu here, after the row it belongs to; visible only when
+          focused (app/styles/list.css). */}
+      <button
+        type="button"
+        className="ff-row-sr-actions"
+        aria-haspopup="menu"
+        aria-label={t("rowActions", { title: shownTitle })}
+        onClick={(e) => {
+          const r = e.currentTarget.parentElement!.getBoundingClientRect();
+          handlers.openMenu(article.id, { x: r.left + Math.min(48, r.width / 2), y: r.top + Math.min(48, r.height / 2), pointerType: "touch" }, contentRef.current ?? e.currentTarget);
+        }}
+      >
+        {t("rowActionsShort")}
+      </button>
     </div>
   );
 });
@@ -354,7 +377,7 @@ function RowActions({ article, handlers, canReleaseSpoiler, size }: { article: L
   const t = useTranslations("articleList");
   const icon = size === "md" ? "size-4" : "size-3.5";
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
+    <div className="ff-row-actions flex shrink-0 items-center gap-0.5">
       <ActionButton size={size} tone="read" label={article.isRead ? t("markAsUnread") : t("markAsRead")} onClick={() => handlers.toggleRead(article.id)}>
         {article.isRead ? <Circle className={icon} /> : <CheckCircle2 className={icon} />}
       </ActionButton>
@@ -429,8 +452,10 @@ function MediaBox({ article, className, children, placeholder }: { article: Lega
 function ListBody(p: BodyProps) {
   const { article } = p;
   const kind = article.kind;
+  // Touch: the buttons are hidden — a line that only held them collapses.
+  const actionsOnly = !(kind === "audio" && formatDuration(article.media?.durationSecs)) && !article.author && !p.cluster;
   const meta = (
-    <div className="mt-1.5 flex min-h-8 min-w-0 items-center gap-2 text-footnote text-muted-foreground">
+    <div className="ff-row-meta mt-1.5 flex min-h-8 min-w-0 items-center gap-2 text-footnote text-muted-foreground" data-actions-only={actionsOnly ? "" : undefined}>
       {kind === "audio" && formatDuration(article.media?.durationSecs) && <span className="tabular-nums">{formatDuration(article.media?.durationSecs)}</span>}
       {article.author && <span className="min-w-0 max-w-32 truncate">{article.author}</span>}
       {p.cluster && <ClusterChip cluster={p.cluster} onToggle={() => p.handlers.toggleCluster(p.cluster!.id)} />}
@@ -531,7 +556,7 @@ function MagazineBody(p: BodyProps) {
   const { article } = p;
   const kind = article.kind;
   const footer = (
-    <div className="mt-auto flex min-h-8 items-center gap-2 pt-2">
+    <div className="ff-row-meta mt-auto flex min-h-8 items-center gap-2 pt-2" data-actions-only={p.cluster ? undefined : ""}>
       {p.cluster && <ClusterChip cluster={p.cluster} onToggle={() => p.handlers.toggleCluster(p.cluster!.id)} />}
       <span className="ms-auto" />
       <RowActions article={article} handlers={p.handlers} canReleaseSpoiler={p.canReleaseSpoiler} size="sm" />

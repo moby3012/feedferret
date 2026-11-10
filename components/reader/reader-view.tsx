@@ -42,6 +42,8 @@ export interface ReaderViewProps extends ReaderNavProps {
   index: number;
   nextTitle: string | null;
   isBodyLoading: boolean;
+  /** The body request failed (the header still shows from list data): inline error + retry, never "Kein Inhalt". */
+  bodyError?: { retrying: boolean; retry: () => void } | null;
   onBack: () => void;
   onOpenFeed: (feedId: string) => void;
   onToggleStar: (id: string) => void;
@@ -174,6 +176,7 @@ export function ReaderView(props: ReaderViewProps) {
           <ReaderBody
             article={article}
             loading={bodyLoading}
+            error={article.content ? null : (props.bodyError ?? null)}
             hideImages={props.hideArticleImage}
             onFetchFullText={props.onFetchFullText}
             isFetchingFullText={props.isFetchingFullText}

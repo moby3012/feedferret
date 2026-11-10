@@ -61,6 +61,8 @@ export type ActiveListStore = ReturnType<typeof createActiveListStore>;
 
 export interface ShellData {
   feeds: any[];
+  /** The feeds query answered (an empty `feeds` then means "no feeds", not "still loading"). */
+  feedsLoaded: boolean;
   categories: any[];
   labels: any[];
   savedSearches: any[];
@@ -74,7 +76,7 @@ export interface ShellData {
   /** Opened articles the user marked unread again: auto mark-read skips them. */
   suppressed: string[];
   /** Last Add Feed request (`n` bumps per request; `url` = share-target prefill). Open state = nav overlay "add-feed". */
-  addFeed: { n: number; url?: string };
+  addFeed: { n: number; url?: string; tab?: "url" | "discover" };
   /** Query the save-search dialog names (open state = nav overlay "save-search"). */
   saveSearchQuery: string;
 }
@@ -97,8 +99,8 @@ export interface ShellActions {
   toggleSourcesCollapsed(): void;
   /** Overlay "shortcuts" (open / close through the nav store). */
   setShortcutsOpen(open: boolean): void;
-  /** Overlay "add-feed" (compact: on the Feeds root, spec §1.3 consumed params). */
-  requestAddFeed(url?: string): void;
+  /** Overlay "add-feed" (compact: on the Feeds root, spec §1.3 consumed params); `tab` picks the dialog tab. */
+  requestAddFeed(url?: string, tab?: "url" | "discover"): void;
   /** Opens the save-search dialog for `q` (no window.prompt). */
   saveSearch(q: string): void;
   /** Saves `q` under `name` (the dialog's submit). */
@@ -129,7 +131,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const articleActions = useArticleActions();
   const online = useOnline();
   // The server page already gated on the session: queries run right away.
-  const { data: feeds = [] } = useFeeds(true);
+  const { data: feeds = [], isSuccess: feedsLoaded } = useFeeds(true);
   const { data: categories = [] } = useCategories(true);
   const { data: labels = [], isSuccess: labelsReady } = useLabels(true);
   const { data: savedSearches = [] } = useSavedSearches(true);
@@ -232,8 +234,8 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       setShortcutsOpen(open) {
         void (open ? nav.openOverlay("shortcuts") : nav.closeOverlay("shortcuts"));
       },
-      requestAddFeed(url) {
-        setAddFeed((prev) => ({ n: prev.n + 1, url }));
+      requestAddFeed(url, tab) {
+        setAddFeed((prev) => ({ n: prev.n + 1, url, tab }));
         const { loc } = getNavState();
         // Compact: the dialog sits on the Feeds root (Back lands there, not on a random list).
         if (getLayoutClass() === "compact" && (loc.tab !== "feeds" || loc.scope || loc.articleId)) void nav.goTo(TAB_ROOTS.feeds);
@@ -269,6 +271,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const data = useMemo<ShellData>(
     () => ({
       feeds,
+      feedsLoaded,
       categories,
       labels,
       savedSearches,
@@ -282,7 +285,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       addFeed,
       saveSearchQuery,
     }),
-    [feeds, categories, labels, savedSearches, prefs, legacyContext, viewMode, sortOrder, isRefreshing, session, suppressed, addFeed, saveSearchQuery],
+    [feeds, feedsLoaded, categories, labels, savedSearches, prefs, legacyContext, viewMode, sortOrder, isRefreshing, session, suppressed, addFeed, saveSearchQuery],
   );
 
   return (

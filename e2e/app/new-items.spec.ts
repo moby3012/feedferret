@@ -247,21 +247,22 @@ test.describe("↑ N neu — races", () => {
       await page.clock.fastForward(POLL);
       await expect(app.newItemsPill()).toHaveText("2 new", { timeout: 15_000 });
       const target = numberOf((await app.firstVisibleRow()).id) + 1;
-      await expect(app.rowActions(target).star).toHaveAccessibleName("Star");
+      await app.expectRow(target, { starred: false });
 
       await app.activate(app.newItemsPill());
       await hold.fetched;
       // Starred after the server read page 1, settled before the page lands.
       const settled = page.waitForResponse((r) => r.request().method() === "POST" && !!r.request().headers()["next-action"]);
-      await app.activate(app.rowActions(target).star);
+      // Fake clock: the long-press timer would not run on touch — toggle at logic level.
+      await app.toggleDirect(target, "star");
       await page.clock.fastForward(1_000); // batcher trailing window
       await settled;
       hold.release();
 
       for (const id of arrivals.ids) await expect(page.locator(`[data-article-id="${id}"]`)).toHaveCount(1);
-      await expect(app.rowActions(target).star).toHaveAccessibleName("Remove star");
+      await app.expectRow(target, { starred: true });
       await page.waitForTimeout(500);
-      await expect(app.rowActions(target).star).toHaveAccessibleName("Remove star");
+      await app.expectRow(target, { starred: true });
     } finally {
       await hold.dispose();
       arrivals.cleanup();
@@ -343,9 +344,9 @@ test.describe("↑ N neu — races", () => {
     await scrollDown(app, page);
     const target = numberOf((await app.firstVisibleRow()).id) + 1;
     const targetId = app.articleId(target);
-    await app.activate(app.rowActions(target).read);
+    await app.toggle(target, "read");
     // Read rows stay (dimmed) in the bound unread list; no announcement per mark-read.
-    await expect(app.rowActions(target).read).toHaveAccessibleName("Mark as unread");
+    await app.expectRow(target, { read: true });
     await page.waitForTimeout(600);
     await expect(live).toHaveText(`${before} unread articles`);
 

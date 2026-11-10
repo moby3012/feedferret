@@ -60,7 +60,7 @@ export const ReaderPane = memo(function ReaderPane() {
   const warm = usePreloadReader();
 
   const list = useSyncExternalStore(shell.activeList.subscribe, shell.activeList.get, shell.activeList.get);
-  const { item, detail, status } = useArticle(shownId);
+  const { item, detail, status, isRetrying, retry } = useArticle(shownId);
   const article = useMemo(() => {
     if (!shownId) return null;
     const inList = list.articles.find((a) => a.id === shownId);
@@ -121,6 +121,7 @@ export const ReaderPane = memo(function ReaderPane() {
           index={index}
           nextTitle={index >= 0 ? (list.articles[index + 1]?.title ?? null) : null}
           isBodyLoading={!!article && status === "pending"}
+          bodyError={status === "error" ? { retrying: isRetrying, retry } : null}
           onToggleStar={shell.toggleStar}
           onToggleLater={shell.toggleLater}
           onToggleRead={shell.toggleRead}

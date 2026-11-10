@@ -105,12 +105,12 @@ test("unread view keeps rows read this session across toggles and focus; an expl
   await expect.poll(() => articleFlags(app.articleId(4)).isRead).toBe(true);
   if (app.isMobile) await app.activate(page.getByRole("button", { name: /^(Back to list|Back)$/ }).first());
   for (const num of [5, 6]) {
-    await app.activate(app.rowActions(num).read);
+    await app.toggle(num, "read");
     await expect.poll(() => articleFlags(app.articleId(num)).isRead).toBe(true);
   }
   await page.waitForLoadState("networkidle");
   // The star click below must not scroll the list itself.
-  await app.rowActions(7).star.scrollIntoViewIfNeeded();
+  await app.row(7).scrollIntoViewIfNeeded();
   const before = await viewport.evaluate((el) => el.scrollTop);
   const rowTop = async () => (await app.row(5).boundingBox())?.y ?? -1;
   const rowTopBefore = await rowTop();
@@ -121,7 +121,7 @@ test("unread view keeps rows read this session across toggles and focus; an expl
   });
   // Star another article (used to invalidate + refetch every list), then
   // bring the window back into focus (used to refetch stale lists).
-  await app.activate(app.rowActions(7).star);
+  await app.toggle(7, "star");
   await expect.poll(() => articleFlags(app.articleId(7)).isStarred).toBe(true);
   await page.evaluate(() => {
     document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
@@ -132,9 +132,9 @@ test("unread view keeps rows read this session across toggles and focus; an expl
 
   for (const num of [4, 5, 6]) {
     await expect(app.row(num)).toHaveCount(1);
-    await expect(app.rowActions(num).read).toHaveAccessibleName("Mark as unread");
+    await app.expectRow(num, { read: true });
   }
-  await expect(app.rowActions(7).star).toHaveAccessibleName("Remove star");
+  await app.expectRow(7, { starred: true });
   // Star is patched into the cache; focus does not refetch the list.
   expect(listRequests).toEqual([]);
   expect(Math.abs((await viewport.evaluate((el) => el.scrollTop)) - before)).toBeLessThanOrEqual(2);

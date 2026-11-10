@@ -108,7 +108,7 @@
     "storyReadModeDescription": "When you read or mark a story, all of its sources are marked as read too. Off: only the article you opened.",
     "gestures": {
       "title": "Swipe gestures",
-      "description": "Applies to this device. Every action is also in the long-press menu and on the row buttons.",
+      "description": "Applies to this device. On touch devices without a mouse, rows have no buttons – you swipe or long-press.",
       "swipeRight": "Swipe right",
       "swipeLeft": "Swipe left",
       "actions": {
@@ -118,7 +118,17 @@
         "none": "Nothing"
       },
       "haptics": "Haptic feedback",
-      "hapticsDescription": "A short vibration when a swipe or pull-to-refresh triggers, where this device supports it."
+      "hapticsDescription": "A short vibration when a swipe or pull-to-refresh triggers, where this device supports it.",
+      "demoLabel": "How the gestures work",
+      "demoSwipe": "Swipe and let go once the colour is full. Pull back to cancel.",
+      "demoLongPress": "A long press opens the menu with every action. Screen readers find it on each row as “Actions”.",
+      "demoMouse": "With a mouse or trackpad – on a tablet too – the buttons stay visible; right-click or the context-menu key opens the same menu.",
+      "showHint": "Show tip again",
+      "hintReset": "The tip appears again the next time you open the list."
+    },
+    "appBadge": {
+      "title": "Badge on the app icon",
+      "description": "Shows the number of unread articles on the icon of the installed app. Applies to this device."
     }
   },
   "profile": {
@@ -868,7 +878,9 @@
     "kindAudio": "Audio",
     "kindImage": "Image",
     "kindSocial": "Post",
-    "duration": "Duration {time}"
+    "duration": "Duration {time}",
+    "rowActions": "Actions: {title}",
+    "rowActionsShort": "Actions"
   },
   "articleReader": {
     "loadingBody": "Loading article…",
@@ -940,7 +952,12 @@
     "themeSepia": "Sepia",
     "resetTypography": "Reset",
     "pullToNext": "Pull up for the next article",
-    "releaseForNext": "Release for the next article"
+    "releaseForNext": "Release for the next article",
+    "bodyErrorTitle": "Couldn't load this article",
+    "bodyErrorDescription": "Headline and source are above – the text didn't arrive.",
+    "bodyOfflineTitle": "Not available offline",
+    "bodyOfflineDescription": "This article isn't stored on this device. Stored are “Read later” and your recently opened articles.",
+    "retry": "Try again"
   },
   "rssHeader": {
     "lastSynced": "Last synced",
@@ -1970,5 +1987,43 @@
     "title": "Save search",
     "name": "Name",
     "save": "Save"
+  },
+  "listStates": {
+    "errorTitle": "Couldn't load this list",
+    "errorDescription": "The server didn't respond. Your articles and their state are safe.",
+    "retry": "Try again",
+    "offlineTitle": "Not available offline",
+    "offlineDescription": "This list isn't stored on this device. Offline you can read “Read later” and your recently opened articles.",
+    "noFeedsTitle": "No feeds yet",
+    "noFeedsDescription": "Add your first feed – by address, from suggestions, or as an OPML import from another reader.",
+    "addFeed": "Add feed",
+    "discover": "Discover feeds",
+    "importOpml": "Import OPML",
+    "laterEmptyTitle": "Nothing saved for later",
+    "laterEmptyDescription": "Save articles with “Read later” – with a swipe, a long press on a row, or in the article.",
+    "starredEmptyTitle": "No favourites yet",
+    "starredEmptyDescription": "Star articles to find them here again.",
+    "labelEmptyTitle": "No articles with this label",
+    "labelEmptyDescription": "Add labels in the article via “…” → Labels.",
+    "emptyTitle": "No articles",
+    "emptyDescription": "Nothing has been published here yet.",
+    "storedTitle": "Saved copy – server unreachable",
+    "storedEndFull": "End of the articles saved on this device",
+    "storedEndSample": "Only articles saved on this device – the full list loads once the server is reachable"
+  },
+  "gestureHint": {
+    "label": "Tip: gestures",
+    "title": "Swipe instead of buttons",
+    "titleLongPress": "Actions with a long press",
+    "swipe": "Swipe: ← {left} · → {right}",
+    "longPress": "Long press: all actions",
+    "dismiss": "Got it",
+    "customize": "Customize",
+    "actions": {
+      "read": "Read",
+      "later": "Later",
+      "star": "Favourite",
+      "none": "nothing"
+    }
   }
 }

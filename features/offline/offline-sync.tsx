@@ -7,7 +7,7 @@ import { useCountsQuery } from "@/features/bootstrap/queries";
 import { isOnline } from "@/features/bootstrap/online";
 import { clearReaderPositions } from "@/features/reader/reader-position";
 import { clearAccountBrowserData } from "@/lib/logout";
-import { onServedOffline, takeServedOffline } from "./offline";
+import { isFailedReadQuery, onServedOffline, takeServedOffline } from "./offline";
 import { createRecoveryProbe } from "./recovery";
 import {
   announceOfflineSession,
@@ -43,6 +43,15 @@ const SIGNED_OUT_RELOAD_DELAY_MS = 1500;
  * for persistent storage once there is something worth keeping, and leaves when the account of
  * this device changes under it (other tab) or the server no longer knows the session.
  */
+/**
+ * `<html data-offline-sync="busy|idle">`: a reconcile pass (session check,
+ * Read-later list, paced bodies) is running / everything it planned is done.
+ * Diagnostics, and the e2e signal that the boot pass is out of the way.
+ */
+function markPass(state: "busy" | "idle") {
+  document.documentElement.dataset.offlineSync = state;
+}
+
 export function OfflineSync({ userId }: { userId: string }) {
   const qc = useQueryClient();
   // Idempotent and needed before any child effect fires a query that falls back to the store.
@@ -104,6 +113,8 @@ export function OfflineSync({ userId }: { userId: string }) {
     if (!scope || scope.userId !== userId || left.current) return;
     running.current = true;
     lastRun.current = Date.now();
+    markPass("busy");
+    let continues = false;
     const controller = new AbortController();
     current.current = { controller, scope };
     const stopped = () => controller.signal.aborted || !alive.current || !isOnline() || getOfflineScope()?.gen !== scope.gen;
@@ -118,12 +129,16 @@ export function OfflineSync({ userId }: { userId: string }) {
       const usage = await getUsage(userId);
       if (!result.failed && usage.count > 0) requestPersistentStorage();
       // More bodies waiting than one run fetches: continue calmly instead of waiting for the next trigger.
-      if (result.saved > 0 && result.missing > 0 && !result.quota && alive.current) continueTimer.current = setTimeout(() => void run.current(), CONTINUE_MS);
+      if (result.saved > 0 && result.missing > 0 && !result.quota && alive.current) {
+        continues = true;
+        continueTimer.current = setTimeout(() => void run.current(), CONTINUE_MS);
+      }
     } catch {
       /* best effort */
     } finally {
       running.current = false;
       if (current.current?.controller === controller) current.current = null;
+      if (!continues && !(rerun.current && alive.current)) markPass("idle");
       if (rerun.current && alive.current) {
         rerun.current = false;
         void run.current();
@@ -137,6 +152,9 @@ export function OfflineSync({ userId }: { userId: string }) {
     const served = takeServedOffline();
     for (const key of served.lists) void qc.invalidateQueries({ queryKey: qk.list(key) });
     for (const id of served.details) void qc.invalidateQueries({ queryKey: qk.article(id) });
+    // Lists / bodies that failed while offline (nothing stored) sit in their
+    // error state with a retry button — retry them for the user now (on screen only).
+    void qc.refetchQueries({ predicate: isFailedReadQuery, type: "active" });
     void run.current();
   };
 

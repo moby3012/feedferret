@@ -108,7 +108,7 @@
     "storyReadModeDescription": "Wenn du eine Story liest oder markierst, werden auch alle ihre Quellen als gelesen markiert. Aus: nur der geöffnete Artikel.",
     "gestures": {
       "title": "Wischgesten",
-      "description": "Gilt für dieses Gerät. Jede Aktion findest du auch im Menü per langem Drücken und an den Knöpfen der Zeile.",
+      "description": "Gilt für dieses Gerät. Auf Touch-Geräten ohne Maus haben die Zeilen keine Knöpfe – du wischst oder drückst lange.",
       "swipeRight": "Nach rechts wischen",
       "swipeLeft": "Nach links wischen",
       "actions": {
@@ -118,7 +118,17 @@
         "none": "Nichts"
       },
       "haptics": "Haptisches Feedback",
-      "hapticsDescription": "Eine kurze Vibration, wenn eine Wischgeste oder das Ziehen zum Aktualisieren auslöst – sofern dein Gerät das kann."
+      "hapticsDescription": "Eine kurze Vibration, wenn eine Wischgeste oder das Ziehen zum Aktualisieren auslöst – sofern dein Gerät das kann.",
+      "demoLabel": "So funktionieren die Gesten",
+      "demoSwipe": "Wischen und loslassen, sobald die Farbe voll ist. Zurückziehen bricht ab.",
+      "demoLongPress": "Lange drücken öffnet das Menü mit allen Aktionen. Screenreader finden es an jeder Zeile als „Aktionen“.",
+      "demoMouse": "Mit Maus oder Trackpad – auch an einem Tablet – bleiben die Knöpfe sichtbar; Rechtsklick oder die Kontextmenü-Taste öffnet dasselbe Menü.",
+      "showHint": "Tipp erneut zeigen",
+      "hintReset": "Der Tipp erscheint beim nächsten Öffnen der Liste wieder."
+    },
+    "appBadge": {
+      "title": "Badge am App-Symbol",
+      "description": "Zeigt die Zahl ungelesener Artikel am Symbol der installierten App. Gilt für dieses Gerät."
     }
   },
   "profile": {
@@ -868,7 +878,9 @@
     "kindAudio": "Audio",
     "kindImage": "Bild",
     "kindSocial": "Beitrag",
-    "duration": "Dauer {time}"
+    "duration": "Dauer {time}",
+    "rowActions": "Aktionen: {title}",
+    "rowActionsShort": "Aktionen"
   },
   "articleReader": {
     "loadingBody": "Artikel wird geladen…",
@@ -940,7 +952,12 @@
     "themeSepia": "Sepia",
     "resetTypography": "Zurücksetzen",
     "pullToNext": "Nach oben ziehen für den nächsten Artikel",
-    "releaseForNext": "Loslassen für den nächsten Artikel"
+    "releaseForNext": "Loslassen für den nächsten Artikel",
+    "bodyErrorTitle": "Artikel konnte nicht geladen werden",
+    "bodyErrorDescription": "Überschrift und Quelle stehen oben – der Text kam nicht an.",
+    "bodyOfflineTitle": "Offline nicht verfügbar",
+    "bodyOfflineDescription": "Dieser Artikel ist nicht auf dem Gerät gespeichert. Gespeichert werden „Später lesen“ und deine zuletzt geöffneten Artikel.",
+    "retry": "Erneut versuchen"
   },
   "rssHeader": {
     "lastSynced": "Zuletzt synchronisiert",
@@ -1970,5 +1987,43 @@
     "title": "Suche speichern",
     "name": "Name",
     "save": "Speichern"
+  },
+  "listStates": {
+    "errorTitle": "Liste konnte nicht geladen werden",
+    "errorDescription": "Der Server hat nicht geantwortet. Deine Artikel und ihr Status sind nicht verloren.",
+    "retry": "Erneut versuchen",
+    "offlineTitle": "Offline nicht verfügbar",
+    "offlineDescription": "Diese Liste ist nicht auf dem Gerät gespeichert. Offline lesen kannst du „Später lesen“ und deine zuletzt geöffneten Artikel.",
+    "noFeedsTitle": "Noch keine Feeds",
+    "noFeedsDescription": "Füge deinen ersten Feed hinzu – per Adresse, aus Vorschlägen oder als OPML-Import aus einem anderen Reader.",
+    "addFeed": "Feed hinzufügen",
+    "discover": "Feeds entdecken",
+    "importOpml": "OPML importieren",
+    "laterEmptyTitle": "Nichts für später gemerkt",
+    "laterEmptyDescription": "Merke dir Artikel mit „Später lesen“ – per Wischgeste, langem Drücken auf eine Zeile oder im Artikel.",
+    "starredEmptyTitle": "Noch keine Favoriten",
+    "starredEmptyDescription": "Markiere Artikel mit dem Stern, um sie hier wiederzufinden.",
+    "labelEmptyTitle": "Keine Artikel mit diesem Label",
+    "labelEmptyDescription": "Labels vergibst du im Artikel über „…“ → Labels.",
+    "emptyTitle": "Keine Artikel",
+    "emptyDescription": "Hier ist noch nichts erschienen.",
+    "storedTitle": "Gespeicherter Stand – Server nicht erreichbar",
+    "storedEndFull": "Ende der auf diesem Gerät gespeicherten Artikel",
+    "storedEndSample": "Nur auf diesem Gerät gespeicherte Artikel – die vollständige Liste lädt, sobald der Server erreichbar ist"
+  },
+  "gestureHint": {
+    "label": "Tipp: Gesten",
+    "title": "Wischen statt Knöpfe",
+    "titleLongPress": "Aktionen per langem Drücken",
+    "swipe": "Wischen: ← {left} · → {right}",
+    "longPress": "Lange drücken: alle Aktionen",
+    "dismiss": "Verstanden",
+    "customize": "Anpassen",
+    "actions": {
+      "read": "Gelesen",
+      "later": "Später",
+      "star": "Favorit",
+      "none": "nichts"
+    }
   }
 }

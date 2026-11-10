@@ -79,7 +79,7 @@ export const ShellOverlays = memo(function ShellOverlays() {
       <SaveSearchDialog />
       {shortcutsUsed && <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
       {addFeedUsed && (
-        <AddFeedDialog open={addFeedOpen} onOpenChange={setAddFeedOpen} subscribedUrls={subscribedUrls} initialUrl={addFeed.url} requestId={addFeed.n} />
+        <AddFeedDialog open={addFeedOpen} onOpenChange={setAddFeedOpen} subscribedUrls={subscribedUrls} initialUrl={addFeed.url} initialTab={addFeed.tab} requestId={addFeed.n} />
       )}
       {paletteUsed && (
         <CommandPalette

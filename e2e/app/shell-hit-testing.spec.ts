@@ -14,31 +14,33 @@ test.skip(({ isMobile }) => !isMobile, "compact layout only");
 const shellScrollLeft = (page: import("@playwright/test").Page) =>
   page.evaluate(() => document.querySelector<HTMLElement>(".ff-shell")!.scrollLeft);
 
-test("a row action scrolled into view is not under the bottom bar; tapping it moves neither list nor shell", async ({ app, page }) => {
+test("a row scrolled into view is not under the bottom bar; its long-press action moves neither list nor shell", async ({ app, page }) => {
   await app.open();
   const scroller = app.listScroller();
-  const star = app.rowActions(7).star;
-  // Park the star 30px above the viewport's bottom edge: under the floating bar.
+  const row = app.row(7);
+  // Park the row's top 30px above the viewport's bottom edge: under the floating bar.
   const vh = page.viewportSize()!.height;
-  const box = (await star.boundingBox())!;
+  const box = (await row.boundingBox())!;
   await scroller.evaluate((el, dy) => el.scrollBy(0, dy), box.y - (vh - 30));
-  await star.scrollIntoViewIfNeeded();
+  await row.scrollIntoViewIfNeeded();
   const bar = (await page.getByRole("navigation").last().boundingBox())!;
-  expect((await star.boundingBox())!.y + (await star.boundingBox())!.height).toBeLessThanOrEqual(bar.y);
+  const parked = (await row.boundingBox())!;
+  expect(parked.y + Math.min(parked.height, 60)).toBeLessThanOrEqual(bar.y);
   const before = await scroller.evaluate((el) => el.scrollTop);
-  await app.activate(star);
-  await expect(star).toHaveAccessibleName("Remove star");
+  // Touch rows have no buttons: the long-press menu is the tap target here.
+  await app.toggle(7, "star");
+  await app.expectRow(7, { starred: true });
   expect(Math.abs((await scroller.evaluate((el) => el.scrollTop)) - before)).toBeLessThanOrEqual(2);
   expect(await shellScrollLeft(page)).toBe(0);
 });
 
-test("a row action tapped right after Back hits the list, not the closing reader", async ({ app, page }) => {
+test("a row tapped right after Back hits the list, not the closing reader", async ({ app, page }) => {
   await app.open();
   await app.activate(app.row(2));
   await expect(page.locator("article").filter({ hasText: "(#002)" })).toBeVisible();
   const back = (await page.getByRole("button", { name: /^(Back to list|Back)$/ }).first().elementHandle())!;
   // CSS, not getByRole: under the open reader the list is inert (out of the a11y tree).
-  const target = (await app.row(3).locator('button[aria-label^="Mark as "]').elementHandle())!;
+  const target = (await app.row(3).elementHandle())!;
   // One synchronous probe: stretch the pop transition (so a busy main thread
   // cannot skip past it), press Back, wait rAF by rAF until the reader is
   // closed but still visible and sliding out OVER the target, and hit-test there.
@@ -72,7 +74,7 @@ test("a row action tapped right after Back hits the list, not the closing reader
   );
   expect(probe).toEqual({ closing: true, covered: true, hit: "row" });
   const before = await app.listScroller().evaluate((el) => el.scrollTop);
-  await app.activate(app.rowActions(3).read);
+  await app.toggle(3, "read");
   expect(await app.listScroller().evaluate((el) => el.scrollTop)).toBe(before);
   expect(await shellScrollLeft(page)).toBe(0);
   await page.evaluate(() => document.documentElement.style.removeProperty("--dur-base"));

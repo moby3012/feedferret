@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ExternalLink, Loader2, Sparkles } from "lucide-react";
+import { AlertCircle, ExternalLink, Loader2, RotateCw, Sparkles, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useOnline } from "@/features/bootstrap/online";
 import { useAiSettings, useSummarizeArticle } from "@/hooks/use-rss-data";
 import type { Article } from "@/lib/rss-data";
 import { SUMMARIZE_EVENT } from "./reader-events";
@@ -19,6 +20,8 @@ export interface ReaderBodyProps {
   article: Article;
   /** The detail is still in flight: render nothing yet (the reader shows the skeleton). */
   loading?: boolean;
+  /** The detail request failed: an inline error with retry instead of the no-content card. */
+  error?: { retrying: boolean; retry: () => void } | null;
   hideImages: boolean;
   onFetchFullText?: (articleId: string) => void;
   isFetchingFullText?: boolean;
@@ -35,9 +38,10 @@ export default function ReaderBodyEntry(p: ReaderBodyProps | { warmup: true }) {
   return "warmup" in p ? null : <ReaderBody {...p} />;
 }
 
-function ReaderBody({ article, loading, hideImages, onFetchFullText, isFetchingFullText, onOpenOriginal }: ReaderBodyProps) {
+function ReaderBody({ article, loading, error, hideImages, onFetchFullText, isFetchingFullText, onOpenOriginal }: ReaderBodyProps) {
   const t = useTranslations("articleReader");
   if (loading) return null;
+  if (error) return <BodyError error={error} hasLink={!!article.link} onOpenOriginal={onOpenOriginal} />;
   const html = article.content ?? "";
   const hasContent = html.trim().length > 0;
   return (
@@ -79,6 +83,31 @@ function ReaderBody({ article, loading, hideImages, onFetchFullText, isFetchingF
         </div>
       )}
     </>
+  );
+}
+
+function BodyError({ error, hasLink, onOpenOriginal }: { error: { retrying: boolean; retry: () => void }; hasLink: boolean; onOpenOriginal: () => void }) {
+  const t = useTranslations("articleReader");
+  const online = useOnline();
+  const Icon = online ? AlertCircle : WifiOff;
+  return (
+    <div className="ff-reader-card text-center" role="alert" data-testid="reader-body-error">
+      <Icon className="mx-auto mb-2 size-5 text-warning" aria-hidden />
+      <p className="mb-1 text-body-sm font-medium text-foreground">{online ? t("bodyErrorTitle") : t("bodyOfflineTitle")}</p>
+      <p className="mb-4 text-body-sm text-muted-foreground">{online ? t("bodyErrorDescription") : t("bodyOfflineDescription")}</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Button onClick={error.retry} disabled={error.retrying} aria-busy={error.retrying || undefined}>
+          <RotateCw className={error.retrying ? "animate-spin" : undefined} />
+          {t("retry")}
+        </Button>
+        {hasLink && online && (
+          <Button onClick={onOpenOriginal} variant="outline">
+            <ExternalLink />
+            {t("openOriginal")}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 

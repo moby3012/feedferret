@@ -150,7 +150,7 @@ test("refresh without Fetch Metadata during an unconfirmed write: the server sna
     read!.click();
     (window as unknown as { next: { router: { refresh(): void } } }).next.router.refresh();
   });
-  await expect(app.rowActions(2).read).toHaveAccessibleName("Mark as unread");
+  await app.expectRow(2, { read: true });
   await refreshed;
   expect(snapshots).toHaveLength(1);
   expect(snapshots[0].isReadInDb).toBe(false);
@@ -160,7 +160,7 @@ test("refresh without Fetch Metadata during an unconfirmed write: the server sna
   await expect.poll(() => articleFlags(id).isRead, { timeout: 15_000 }).toBe(true);
   await page.waitForLoadState("networkidle").catch(() => {});
   // The optimistic state was never replaced by the snapshot's "unread".
-  await expect(app.rowActions(2).read).toHaveAccessibleName("Mark as unread");
+  await app.expectRow(2, { read: true });
   expect(await app.sidebarCount("All articles")).toBe(unreadBefore - 1);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });

@@ -745,12 +745,20 @@ function SortableCategoryItem({
 
 type FeedManagementTab =
   | "feeds"
+  | "opml"
   | "categories"
   | "labels"
   | "saved-searches"
   | "health"
   | "rules"
   | "alerts";
+
+const FEED_MANAGEMENT_TABS: readonly FeedManagementTab[] = ["feeds", "opml", "categories", "labels", "saved-searches", "health", "rules", "alerts"];
+
+/** A `?tab=` value of /manage-feeds, or undefined (→ the first tab). */
+export function parseFeedManagementTab(value: string | null | undefined): FeedManagementTab | undefined {
+  return FEED_MANAGEMENT_TABS.find((tab) => tab === value);
+}
 
 function normalizeInitialTab(tab?: FeedManagementTab) {
   return tab === "saved-searches" ? "labels" : tab ?? "feeds";

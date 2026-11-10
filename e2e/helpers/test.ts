@@ -1,8 +1,18 @@
 import { test as base, expect, type Locator, type Page } from "@playwright/test";
 import { manifest, resetArticleState, type SeedUser } from "./db";
+import { touchHoldOn } from "./gestures";
 
 /** localStorage key that suppresses the (modal) PWA install hint on mobile. */
 export const PWA_DISMISSED_KEY = "feedferret:pwa-install-prompt-dismissed";
+/** localStorage key of the one-time gesture hint (lib/gestures/coach.ts): "done" = never show. */
+export const GESTURE_HINT_KEY = "ff:gesture-hint";
+
+export type RowToggle = "read" | "star" | "later";
+const MENU_ITEM: Record<RowToggle, RegExp> = {
+  read: /^Mark as (read|unread)$/,
+  star: /^(Star|Remove star)$/,
+  later: /^(Save to Read Later|Remove from Read Later)$/,
+};
 
 /**
  * The visible list pane. The shell keeps one list pane per tab mounted (hidden
@@ -73,6 +83,14 @@ export class App {
     await expect(this.page.locator("html")).toHaveAttribute("data-nav-ready", "true");
     expect(await this.page.evaluate(() => !!(history.state as { ff?: unknown } | null)?.ff)).toBe(true);
   }
+  /**
+   * The offline-reading boot pass (4 s after mount: session check, Read-later
+   * list, paced bodies) has finished everything it planned — its requests can
+   * no longer land in a measuring window (features/offline/offline-sync.tsx).
+   */
+  async offlinePassDone() {
+    await expect(this.page.locator("html")).toHaveAttribute("data-offline-sync", "idle", { timeout: 30_000 });
+  }
   /** Current URL as path + search ("/?feed=…"). */
   where(): string {
     const url = new URL(this.page.url());
@@ -82,7 +100,16 @@ export class App {
   articleId(num: number) {
     return `e2e-${this.userKey}-${String(num - 1).padStart(3, "0")}`;
   }
+  /** The row's host (`.ff-row`): carries `data-unread` / `data-starred` / `data-later`. */
+  rowHost(num: number): Locator {
+    return this.row(num).locator("xpath=..");
+  }
+  /**
+   * The in-row action buttons — mouse / fine pointers only. Touch rows have no
+   * buttons (owner decision 2026-11-10): use `toggle()` / `expectRow()`.
+   */
   rowActions(num: number) {
+    if (this.isMobile) throw new Error("rowActions(): touch rows have no buttons — use app.toggle() / app.expectRow()");
     const row = this.row(num);
     return {
       read: row.getByRole("button", { name: /^Mark as (read|unread)$/ }),
@@ -90,6 +117,62 @@ export class App {
       // When saved, a status badge ("Remove from Read Later") precedes the action button: take the last.
       later: row.getByRole("button", { name: /^(Save to Read Later|Remove from Read Later)$/ }).last(),
     };
+  }
+
+  /**
+   * Toggle read / star / later on a row the way the device offers it: the
+   * in-row button with a mouse, the long-press menu on touch.
+   */
+  async toggle(target: number | Locator, action: RowToggle) {
+    const row = typeof target === "number" ? this.row(target) : target;
+    if (!this.isMobile) {
+      await row.getByRole("button", { name: MENU_ITEM[action] }).last().click();
+      return;
+    }
+    if (await this.page.evaluate(() => navigator.onLine)) {
+      await touchHoldOn(this.page, row);
+    } else {
+      // Offline: a CDP touch session would reset Playwright's offline emulation
+      // (navigator.onLine flips back). Use the row's screen-reader "Actions"
+      // button instead — the same menu, keyboard-activated.
+      await row.locator("xpath=..").getByRole("button", { name: /^Actions: / }).focus();
+      await this.page.keyboard.press("Enter");
+    }
+    const menu = this.page.getByTestId("article-context-menu");
+    await expect(menu).toBeVisible();
+    await menu.getByRole("menuitem", { name: MENU_ITEM[action] }).tap();
+    await expect(menu).toBeHidden();
+  }
+  /**
+   * Logic-level toggle for tests that drive timing (fake clock, one batch
+   * window): clicks the row's action button in the page. On touch that button
+   * is hidden (display: none) but still runs the very same handler a mouse
+   * click does; the touch INPUT path is covered by `toggle()` and the gesture specs.
+   */
+  async toggleDirect(num: number, action: RowToggle) {
+    const label = MENU_ITEM[action];
+    await this.row(num).evaluate((row, source) => {
+      const re = new RegExp(source);
+      const buttons = [...row.querySelectorAll("button")].filter((b) => re.test(b.getAttribute("aria-label") ?? ""));
+      buttons[buttons.length - 1]!.click();
+    }, label.source);
+  }
+  /** Row state from the row's data attributes; with a mouse the buttons' labels must agree. */
+  async expectRow(num: number, state: { read?: boolean; starred?: boolean; later?: boolean }) {
+    const host = this.rowHost(num);
+    const flag = async (attr: string, on: boolean | undefined) => {
+      if (on === undefined) return;
+      if (on) await expect(host).toHaveAttribute(attr, "");
+      else await expect(host).not.toHaveAttribute(attr, "");
+    };
+    await flag("data-unread", state.read === undefined ? undefined : !state.read);
+    await flag("data-starred", state.starred);
+    await flag("data-later", state.later);
+    if (this.isMobile) return;
+    const buttons = this.rowActions(num);
+    if (state.read !== undefined) await expect(buttons.read).toHaveAccessibleName(state.read ? "Mark as unread" : "Mark as read");
+    if (state.starred !== undefined) await expect(buttons.star).toHaveAccessibleName(state.starred ? "Remove star" : "Star");
+    if (state.later !== undefined) await expect(buttons.later).toHaveAccessibleName(state.later ? "Remove from Read Later" : "Save to Read Later");
   }
 
   /** Container of the open reader (header toolbar + article): nearest ancestor of <article> that holds the Back button. */
@@ -196,16 +279,26 @@ export class App {
   }
 }
 
-export const test = base.extend<{ app: App }>({
+export const test = base.extend<{ app: App; gestureHint: boolean }>({
+  /** `test.use({ gestureHint: true })`: keep the one-time gesture hint (off everywhere else). */
+  gestureHint: [false, { option: true }],
   // Every test starts from the pristine seeded read/star/read-later state.
-  app: async ({ page, isMobile }, provide, testInfo) => {
+  app: async ({ page, isMobile, gestureHint }, provide, testInfo) => {
     const userKey = String(testInfo.project.metadata.user ?? "desktop");
     resetArticleState(userKey);
     // Headless Chromium shell crashes the renderer on the SW's Badge API call;
     // the SW is not under test here and would add cross-test caching.
-    await page.context().addInitScript(([key]) => {
-      try { localStorage.setItem(key, "1"); } catch { /* ignore */ }
-    }, [PWA_DISMISSED_KEY]);
+    await page.context().addInitScript(
+      ([key, hintKey, hint]) => {
+        try {
+          localStorage.setItem(key, "1");
+          if (!hint) localStorage.setItem(hintKey, "done");
+        } catch {
+          /* ignore */
+        }
+      },
+      [PWA_DISMISSED_KEY, GESTURE_HINT_KEY, gestureHint] as const,
+    );
     await provide(new App(page, isMobile, manifest().users[userKey], userKey));
   },
 });

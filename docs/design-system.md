@@ -54,7 +54,7 @@ Reader body tokens (consumed by the reader PR): `--reader-size` 17/19 px, `--rea
 
 Plain custom properties on `:root`: `--gutter` 16/20/24 · `--row-pad-y` 12 · `--row-gap` 12 · `--bar-h` 52/56 · `--tabbar-h` 60 · `--tabbar-inset` 12 · `--rail-w` 72 · `--sidebar-w` 280 · `--list-w` 380 · `--list-w-medium` 360 · `--reader-gutter` 20/32/48 · `--content-pad-bottom`.
 
-- **Safe areas:** `var(--safe-t|r|b|l)` (and `--titlebar-h`, `--keyboard-inset`). Tailwind: `pt-(--safe-t)`, `pb-[max(0.75rem,var(--safe-b))]`. Never write `env(safe-area-inset-*)` in components.
+- **Safe areas:** `var(--safe-t|r|b|l)` (and `--keyboard-inset`). The installed desktop app uses the normal title bar (no `window-controls-overlay`). Tailwind: `pt-(--safe-t)`, `pb-[max(0.75rem,var(--safe-b))]`. Never write `env(safe-area-inset-*)` in components.
 - **Touch targets:** every interactive element ≥ 44×44 on coarse pointers. `Button` carries `.hit-slop` (an invisible `::after`, `max(100%, var(--hit-min))`, coarse only); visual sizes stay 32/36/44. For raw `<button>`s in bars add `hit-slop` (+ nothing else).
 - **Layout variants** (CSS only): `compact:` <768 · `medium:` 768–1199 · `expanded:` ≥1200 · `wide:` ≥768 · `fine:` `(hover:hover) and (pointer:fine)` · `coarse:` `(pointer:coarse)` · `standalone:`. Do not use `sm:`/`lg:` to mean "has a mouse" / "is desktop" in shell code.
 

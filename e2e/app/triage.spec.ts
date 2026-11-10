@@ -15,14 +15,13 @@ test("star toggle: icon, Starred badge and DB agree", async ({ app }) => {
   const before = await app.sidebarCount("Starred");
   expect(before).toBe(app.user.counts.starred);
 
-  const { star } = app.rowActions(1);
-  await app.activate(star);
-  await expect(app.rowActions(1).star).toHaveAccessibleName("Remove star");
+  await app.toggle(1, "star");
+  await app.expectRow(1, { starred: true });
   await expect.poll(() => articleFlags(app.articleId(1)).isStarred).toBe(true);
   await expect.poll(() => app.sidebarCount("Starred")).toBe(before + 1);
 
-  await app.activate(app.rowActions(1).star);
-  await expect(app.rowActions(1).star).toHaveAccessibleName("Star");
+  await app.toggle(1, "star");
+  await app.expectRow(1, { starred: false });
   await expect.poll(() => articleFlags(app.articleId(1)).isStarred).toBe(false);
   await expect.poll(() => app.sidebarCount("Starred")).toBe(before);
 });
@@ -32,13 +31,13 @@ test("read-later toggle: icon, Read later badge and DB agree", async ({ app }) =
   const before = await app.sidebarCount("Read later");
   expect(before).toBe(app.user.counts.readLater);
 
-  await app.activate(app.rowActions(1).later);
-  await expect(app.rowActions(1).later).toHaveAccessibleName("Remove from Read Later");
+  await app.toggle(1, "later");
+  await app.expectRow(1, { later: true });
   await expect.poll(() => articleFlags(app.articleId(1)).isReadLater).toBe(true);
   await expect.poll(() => app.sidebarCount("Read later")).toBe(before + 1);
 
-  await app.activate(app.rowActions(1).later);
-  await expect(app.rowActions(1).later).toHaveAccessibleName("Save to Read Later");
+  await app.toggle(1, "later");
+  await app.expectRow(1, { later: false });
   await expect.poll(() => articleFlags(app.articleId(1)).isReadLater).toBe(false);
   await expect.poll(() => app.sidebarCount("Read later")).toBe(before);
 });
@@ -48,13 +47,13 @@ test("mark read / unread from the row updates icon, All-articles badge and DB", 
   const before = await app.sidebarCount("All articles");
   expect(before).toBe(app.user.counts.unread);
 
-  await app.activate(app.rowActions(2).read);
-  await expect(app.rowActions(2).read).toHaveAccessibleName("Mark as unread");
+  await app.toggle(2, "read");
+  await app.expectRow(2, { read: true });
   await expect.poll(() => articleFlags(app.articleId(2)).isRead).toBe(true);
   await expect.poll(() => app.sidebarCount("All articles")).toBe(before - 1);
 
-  await app.activate(app.rowActions(2).read);
-  await expect(app.rowActions(2).read).toHaveAccessibleName("Mark as read");
+  await app.toggle(2, "read");
+  await app.expectRow(2, { read: false });
   await expect.poll(() => articleFlags(app.articleId(2)).isRead).toBe(false);
   await expect.poll(() => app.sidebarCount("All articles")).toBe(before);
 });

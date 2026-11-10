@@ -16,13 +16,20 @@ function isTyping(target: EventTarget | null) {
   );
 }
 
-/** A Radix dialog / sheet / menu handles its own Escape. */
-function overlayOpen() {
-  return !!document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"]');
+/**
+ * Any dialog, sheet, popover, menu or listbox is open (Radix / vaul mark theirs
+ * `data-state="open"`), or a nav-store overlay is. It handles its own keys
+ * (Escape included): no global shortcut may act on the list behind it.
+ */
+export function overlayOpen() {
+  if (getNavState().overlay) return true;
+  return !!document.querySelector(
+    '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"][data-state="open"]',
+  );
 }
 
 /**
- * Global keys. Article moves (j/k/n/p) open the first article with a push and
+ * Global keys (none while an overlay is open). Article moves (j/k/n/p) open the first article with a push and
  * then always REPLACE (`nav.openArticle` replaces while one is open), so
  * history never grows while reading. Esc: reader → clear search → nothing.
  * `/` → Suche tab (field focused) · `[` → collapse / expand the sidebar.
@@ -32,6 +39,9 @@ export function useShellKeys(shell: ShellActions) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      // Suspended while any overlay is open — j/k/n/p/r/s/l/m/o, Shift+A,
+      // Shift+S, ?, /, [ and Escape all belong to the overlay then.
+      if (overlayOpen()) return;
       const { loc } = getNavState();
       const articles = shell.activeList.get().articles;
       const current = loc.articleId;
@@ -51,12 +61,11 @@ export function useShellKeys(shell: ShellActions) {
           return;
         case "[":
           // Expanded: sidebar ⇄ rail (persisted in the ff_ui cookie).
-          if (getLayoutClass() !== "expanded" || overlayOpen()) return;
+          if (getLayoutClass() !== "expanded") return;
           e.preventDefault();
           shell.toggleSourcesCollapsed();
           return;
         case "Escape":
-          if (overlayOpen()) return;
           if (current) void nav.up();
           else if (loc.scope?.kind === "query") void clearSearch();
           return;

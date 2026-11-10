@@ -145,7 +145,7 @@ export const ListTopBar = memo(function ListTopBar(p: ListTopBarProps) {
             <ChevronLeft className="size-6" aria-hidden />
           </button>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1" data-testid="list-bar-title">
           {search ? (
             <>
               <h2 className="sr-only">{p.title}</h2>

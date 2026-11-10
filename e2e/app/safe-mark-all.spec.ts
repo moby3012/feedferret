@@ -231,9 +231,9 @@ test.describe("every bulk mark-read path is undoable and scoped to the visible v
     await openSoloBlog(app, page);
     const id = app.articleId(8);
     // read -> unread again leaves a stale "unread" session snapshot behind.
-    await app.activate(app.rowActions(8).read);
+    await app.toggle(8, "read");
     await expect.poll(() => articleFlags(id).isRead).toBe(true);
-    await app.activate(app.rowActions(8).read);
+    await app.toggle(8, "read");
     await expect.poll(() => articleFlags(id).isRead).toBe(false);
     await expect(app.row(8)).toHaveAttribute("aria-label", /^Unread:/);
 
@@ -363,11 +363,10 @@ test.describe("reader gestures (P1-02)", () => {
   // all — back is the chevron, Esc and the system back gesture.
   test("panning a code block never navigates, and neither does the same swipe on plain text", async ({ app, page }) => {
     await app.open();
-    await page
-      .getByRole("button", { name: new RegExp(app.user.sample.code.replace(/[()#]/g, "\\$&")) })
-      .first()
-      .scrollIntoViewIfNeeded();
-    await app.activate(page.getByRole("button", { name: new RegExp(app.user.sample.code.replace(/[()#]/g, "\\$&")) }).first());
+    // The row itself (CSS role): touch rows also hold a screen-reader "Actions: <title>" button.
+    const row = app.rowsMatching(app.user.sample.code).first();
+    await row.scrollIntoViewIfNeeded();
+    await app.activate(row);
     const article = page.locator("article").filter({ hasText: app.user.sample.code });
     await expect(article.locator("pre code")).toBeVisible();
 

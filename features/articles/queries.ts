@@ -34,7 +34,13 @@ export interface ArticleListResult {
   newestCursor: string | null;
   /** Server time of the first page (`ArticlePage.snapshotAt`); renewed only when the list is refetched. */
   snapshotAt: number | null;
+  /** `status: "error"` and a retry is on the wire. */
+  isRetrying: boolean;
   retry(): void;
+  /** The rows came from the offline store (offline, or the server unreachable) — see `ArticlePage.fromStore`. */
+  fromStore: "full" | "sample" | null;
+  /** A refetch of the whole list is on the wire (retry of a store-sourced list). */
+  isRefetching: boolean;
 }
 
 /**
@@ -113,7 +119,10 @@ export function useArticleList(key: ListKey | null, o: { active: boolean }): Art
     refresh,
     newestCursor: items[0]?.id ?? null,
     snapshotAt: data?.pages[0]?.snapshotAt ?? null,
+    isRetrying: query.isError && !data && query.isFetching,
     retry,
+    fromStore: data?.pages[0]?.fromStore ?? null,
+    isRefetching: query.isFetching && !isFetchingNextPage,
   };
 }
 
@@ -215,6 +224,8 @@ export interface ArticleResult {
   item: ArticleListItem | undefined;
   detail: ArticleDetail | undefined;
   status: "pending" | "ready" | "error";
+  /** `status: "error"` and a retry is on the wire. */
+  isRetrying: boolean;
   retry(): void;
 }
 
@@ -251,6 +262,7 @@ export function useArticle(id: string | null): ArticleResult {
     item,
     detail: detailQuery.data,
     status: detailQuery.data ? "ready" : detailQuery.isError ? "error" : "pending",
+    isRetrying: !detailQuery.data && detailQuery.isError && detailQuery.isFetching,
     retry,
   };
 }

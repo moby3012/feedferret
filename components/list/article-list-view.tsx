@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bookmark, BookmarkMinus, CheckCheck, CheckCircle2, Circle, Circle as CircleIcon, ExternalLink, Layers, Link2, RefreshCw, Star, StarOff } from "lucide-react";
+import { Bookmark, BookmarkMinus, CheckCheck, CheckCircle2, Circle, Circle as CircleIcon, ExternalLink, Layers, Link2, RefreshCw, ShieldOff, Star, StarOff } from "lucide-react";
 import { Empty, EmptyContent, EmptyDescription, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { ResponsiveMenu, type OverlayMenuItem } from "@/components/ui/responsive-overlay";
 import { findCachedArticle } from "@/features/articles/cache";
@@ -15,12 +15,13 @@ import { nav, useNav } from "@/features/reader/nav/store";
 import type { ArticlePage } from "@/features/articles/types";
 import { isOnline } from "@/features/bootstrap/online";
 import { useRestoreGate, useScrollMemory } from "@/features/reader/nav/scroll-memory";
-import { createPull, useGesturePrefs, type LongPressPoint } from "@/lib/gestures";
+import { completeGestureHint, createPull, useGesturePrefs, type LongPressPoint } from "@/lib/gestures";
 import { extractHighlightTerms } from "@/lib/highlight-search-terms";
 import { cn } from "@/lib/utils";
 import { ArticleRow, type Density, type RowCluster, type RowHandlers, type RowSwipeMap } from "./article-row";
 import { ArticleListSkeleton } from "./article-skeleton";
 import { ClusterMembers, groupStories, type DisplayRow } from "./story-cluster";
+import { GestureHint } from "./gesture-hint";
 import { planMarkUpToHere } from "./mark-up-to-here";
 import { NewItemsPill, type NewItemsBinding } from "./new-items-pill";
 
@@ -97,6 +98,8 @@ export interface ArticleListViewProps {
   newItems?: NewItemsBinding | null;
   /** A feed sync (pull-to-refresh, "Aktualisieren") is running — not the list's own loading. */
   isSyncing?: boolean;
+  /** The visible list: may show the one-time gesture hint (touch devices only). */
+  gestureHint?: boolean;
 }
 
 const MENU_OVERLAY = "article-menu";
@@ -254,6 +257,7 @@ export function ArticleListView(props: ArticleListViewProps) {
           return next;
         }),
       swipeEnabled: isOnline,
+      gestureUsed: completeGestureHint,
       observeUnread,
     }),
     [toggleRead, observeUnread],
@@ -365,6 +369,9 @@ export function ArticleListView(props: ArticleListViewProps) {
       const open = expanded.has(story.clusterId);
       items.push({ id: "sources", label: open ? t("hideSources") : t("showSources"), icon: Layers, onSelect: () => handlers.toggleCluster(story.clusterId) });
     }
+    if (props.onReleaseSpoiler) {
+      items.push({ id: "release-spoiler", label: t("releaseSpoiler"), icon: ShieldOff, onSelect: () => props.onReleaseSpoiler?.(a.id) });
+    }
     items.push({
       id: "up-to-here",
       label: t("markUpToHere"),
@@ -447,6 +454,8 @@ export function ArticleListView(props: ArticleListViewProps) {
       ) : (
         <div className="ff-list" data-density={density}>
           {props.header && <div className="ff-span-all px-3 pb-2 pt-2">{props.header}</div>}
+          {/* Right above the rows it explains (the nudge waits until the first row is on screen). */}
+          <GestureHint swipeMap={swipeMap} scrollRoot={scrollRoot} active={!!props.gestureHint} />
           {visibleRows.map(({ article, story }) => {
             const open = !!story && expanded.has(story.clusterId);
             return (

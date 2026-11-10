@@ -239,7 +239,7 @@ test("story cluster card: one row per story, +N expands the sources, story read 
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
     // Story mode (the default): reading the card marks every source.
-    await app.activate(app.rowActions(3).read);
+    await app.toggle(3, "read");
     for (const n of [3, 5, 9]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(true);
     // #120 was not loaded: the server cascade marked it and the toast offers Undo.
     await expect.poll(() => articleFlags(app.articleId(120)).isRead).toBe(true);
@@ -259,7 +259,7 @@ test("story cluster card: one row per story, +N expands the sources, story read 
     await expect(group).toBeHidden();
 
     // Marking the card unread brings the loaded sources back too.
-    await app.activate(app.rowActions(3).read);
+    await app.toggle(3, "read");
     for (const n of [3, 5, 9]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(false);
   } finally {
     cleanup();
@@ -271,7 +271,7 @@ test("article mode: marking the card read touches only that article", async ({ a
   const restoreUser = setUserFlags(app.userKey, { clusterReadMode: "article" });
   try {
     await app.open();
-    await app.activate(app.rowActions(3).read);
+    await app.toggle(3, "read");
     await expect.poll(() => articleFlags(app.articleId(3)).isRead).toBe(true);
     await app.page.waitForTimeout(800);
     expect(articleFlags(app.articleId(5)).isRead).toBe(false);
@@ -344,10 +344,10 @@ test("row v2: each content kind renders its variant in every density, without la
         }
         // Toggling state never changes a row's size.
         const h = (await rowOf(5).boundingBox())!.height;
-        await app.activate(app.rowActions(5).read);
+        await app.toggle(5, "read");
         await expect.poll(() => articleFlags(app.articleId(5)).isRead).toBe(true);
         expect((await rowOf(5).boundingBox())!.height).toBe(h);
-        await app.activate(app.rowActions(5).read);
+        await app.toggle(5, "read");
         await expect.poll(() => articleFlags(app.articleId(5)).isRead).toBe(false);
         // Lazy images load into reserved boxes while scrolling.
         const scroller = app.listScroller();
@@ -393,6 +393,9 @@ test("settings: swipe mapping per direction is honoured, haptics can be switched
 });
 
 test("story cascade: two stories in one batch keep their own Undo / restore sets", async ({ app, page }) => {
+  // Two toggles inside one 400 ms batch window: touch toggles (long-press menu,
+  // ~1 s each) cannot hit it, so touch flips at logic level (same handler).
+  const flip = (n: number) => (app.isMobile ? app.toggleDirect(n, "read") : app.toggle(n, "read"));
   // Story A: lead #003 + #005 (loaded) + #120 (not loaded); story B: lead #007 + #009 + #160 (not loaded).
   // (#121 is read in the seed; #120 / #150 / #160 are unread and beyond the loaded pages.)
   const cleanA = makeStoryCluster(app.userKey, [3, 5, 120].map((n) => app.articleId(n)));
@@ -400,14 +403,14 @@ test("story cascade: two stories in one batch keep their own Undo / restore sets
   try {
     await app.open();
     // Both cards inside one batcher window (400 ms trailing): one server call, two cascades.
-    await app.activate(app.rowActions(3).read);
-    await app.activate(app.rowActions(7).read);
+    await flip(3);
+    await flip(7);
     for (const n of [3, 5, 120, 7, 9, 160]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(true);
     const toast = page.locator("[data-sonner-toast]").filter({ hasText: /2 more sources of this story marked as read/ });
     await expect(toast).toBeVisible();
 
     // Story B taken back: only B's server-cascaded source returns (not A's).
-    await app.activate(app.rowActions(7).read);
+    await app.toggle(7, "read");
     for (const n of [7, 9, 160]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(false);
     expect(articleFlags(app.articleId(120)).isRead).toBe(true);
 
@@ -429,12 +432,12 @@ test("story card that shows a NON-lead source cascades to the whole story on the
     await app.open();
     await expect(app.row(3).getByTestId("cluster-toggle")).toBeVisible();
     await expect(app.row(5)).toHaveCount(0);
-    await app.activate(app.rowActions(3).read);
+    await app.toggle(3, "read");
     for (const n of [3, 5, 150, 160]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(true);
     const toast = page.locator("[data-sonner-toast]").filter({ hasText: /2 more sources of this story marked as read/ });
     await expect(toast).toBeVisible();
     // Marking the card unread again brings the whole story back (loaded + server-cascaded).
-    await app.activate(app.rowActions(3).read);
+    await app.toggle(3, "read");
     for (const n of [3, 5, 150, 160]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(false);
   } finally {
     cleanup();
