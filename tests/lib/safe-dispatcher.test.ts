@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import http from "node:http";
+import type { Duplex } from "node:stream";
 import https from "node:https";
 import tls from "node:tls";
 import net from "node:net";
@@ -115,7 +116,7 @@ describe("impit CONNECT bridge", () => {
     let path: string | undefined;
     let authorization: string | undefined;
     const upstream = http.createServer();
-    const sockets = new Set<net.Socket>();
+    const sockets = new Set<Duplex>();
     upstream.on("connect", (req, socket) => {
       path = req.url;
       authorization = req.headers["proxy-authorization"];
