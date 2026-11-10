@@ -119,7 +119,7 @@ async function getItemsByIds(userId: string, ids: string[], order: string | null
   const rows = [];
   for (const batch of chunks(itemIds(ids))) {
     rows.push(...await db.article.findMany({
-      where: { userId, ...externalItemWhere(batch) },
+      where: { userId, extId: { not: null }, feed: { extId: { not: null } }, ...externalItemWhere(batch) },
       include: { feed: { include: { category: true } }, labels: { include: { label: true } } },
     }));
   }
@@ -233,6 +233,12 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
 
   const existing = await db.feed.findFirst({ where: { userId, ...(/^\d+$/.test(feedUrl) ? { extId: storedExternalId(feedUrl) } : { url: feedUrl }) } });
   if (existing) {
+    if (!existing.extId) {
+      const { allocateExternalIds } = await import("@/lib/external-id-store");
+      const [extId] = await allocateExternalIds(db as unknown as import("@prisma/client").PrismaClient, 1);
+      await db.feed.updateMany({ where: { id: existing.id, extId: null }, data: { extId } });
+      existing.extId = (await db.feed.findUniqueOrThrow({ where: { id: existing.id } })).extId;
+    }
     return NextResponse.json({ numResults: 1, query: feedUrl, streamId: `feed/${decimalExternalId(existing.extId)}`, numSubscribers: 1, title: existing.name });
   }
 
@@ -371,7 +377,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
       });
 
       return NextResponse.json({
-        subscriptions: feeds.map((feed: { id: string; extId: string | null; url: string; name: string; category: { name: string } | null }) => ({
+        subscriptions: feeds.filter((feed) => feed.extId).map((feed: { id: string; extId: string | null; url: string; name: string; category: { name: string } | null }) => ({
           id: `feed/${decimalExternalId(feed.extId)}`,
           title: feed.name,
           categories: feed.category

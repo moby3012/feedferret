@@ -196,7 +196,7 @@ export function buildStreamWhere(userId: string, streamId?: string | null, inclu
     const lt = new Date((Math.trunc(newestSec) + 1) * 1000);
     AND.push({ createdAt: { lt }, updatedAt: { lt } });
   }
-  return { userId, AND };
+  return { userId, extId: { not: null }, feed: { extId: { not: null } }, AND };
 }
 
 export function buildCursorWhere(continuation: GReaderContinuation, ascending = false) {
@@ -331,7 +331,7 @@ export async function countGReaderFeedsAndTags(userId: string) {
       const tag = tags.get(name)!;
       tag.count += count; tag.newest = Math.max(tag.newest, newest);
     }
-    return feed.priority === "hidden" ? [] : [result(`feed/${decimalExternalId(feed.extId)}`, count, newest)];
+    return !feed.extId || feed.priority === "hidden" ? [] : [result(`feed/${decimalExternalId(feed.extId)}`, count, newest)];
   });
   for (const row of tagged) {
     const tag = tags.get(row.name)!;

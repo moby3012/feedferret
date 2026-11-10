@@ -121,3 +121,7 @@ Timestamps use all articles in each scope, independently of the unread count; a 
 - OPML import/export is available via the FeedFerret web UI; clients that rely on a GReader `opml` endpoint should use the web UI instead.
 
 FreshRSS compat mode uses `summary`; FeedFerret additionally retains `content` and `updated` for existing consumers. `alternate` omits the MIME type as FreshRSS compat mode does. Content is not truncated.
+
+## Numeric IDs and concurrent ingestion
+
+See [numeric API identities](numeric-api-ids.md) for upgrade/full re-sync instructions and the allocation-before-commit limitation. Concurrent writers can commit IDs out of order; Fever since_id consumers need periodic full reconciliation to recover late commits and backfilled rows.

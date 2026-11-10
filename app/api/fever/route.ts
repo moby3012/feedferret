@@ -8,6 +8,12 @@ import { logger } from "@/lib/logger";
 import { checkRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 
+function numericIds(value: string): string[] {
+  return value.split(",").flatMap((part) => {
+    try { return [storedExternalId(part.trim())]; } catch { return []; }
+  });
+}
+
 type FeverUser = { id: string; email: string | null; tokenScope: string };
 
 async function authenticateFever(
@@ -17,15 +23,11 @@ async function authenticateFever(
   const apiKey = body.api_key || params.get("api_key");
   if (!apiKey) return null;
 
-  try {
-    const token = await db.apiToken.findFirst({
-      where: { feverKey: apiKey },
-      include: { user: { select: { id: true, email: true, isActive: true } } },
-    });
-    if (token?.user?.isActive && (!token.expiresAt || token.expiresAt > new Date())) return { ...token.user, tokenScope: token.scope };
-  } catch {
-    // ApiToken model not yet available
-  }
+  const token = await db.apiToken.findFirst({
+    where: { feverKey: apiKey },
+    include: { user: { select: { id: true, email: true, isActive: true } } },
+  });
+  if (token?.user?.isActive && (!token.expiresAt || token.expiresAt > new Date())) return { ...token.user, tokenScope: token.scope };
   return null;
 }
 
@@ -43,7 +45,7 @@ async function getGroups(userId: string) {
     orderBy: { name: "asc" },
     select: { extId: true, name: true },
   });
-  return categories.map((c) => ({ id: decimalExternalId(c.extId), title: c.name }));
+  return categories.filter((c) => c.extId).map((c) => ({ id: decimalExternalId(c.extId), title: c.name }));
 }
 
 async function getFeedsAndGroups(userId: string) {
@@ -53,14 +55,14 @@ async function getFeedsAndGroups(userId: string) {
     orderBy: { name: "asc" },
   });
 
-  const feverFeeds = feeds.map((f) => ({
+  const feverFeeds = feeds.filter((f) => f.extId).map((f) => ({
     id: decimalExternalId(f.extId), favicon_id: decimalExternalId(f.extId),
     title: f.name, url: f.url, site_url: f.htmlUrl || f.url, is_spark: 0,
     last_updated_on_time: f.lastFetchedAt ? Math.floor(f.lastFetchedAt.getTime() / 1000) : 0,
   }));
   const groupMap = new Map<string, string[]>();
-  for (const f of feeds) {
-    const gid = f.category ? decimalExternalId(f.category.extId) : "0";
+  for (const f of feeds.filter((f) => f.extId)) {
+    const gid = f.category?.extId ? decimalExternalId(f.category.extId) : "0";
     if (!groupMap.has(gid)) groupMap.set(gid, []);
     groupMap.get(gid)!.push(decimalExternalId(f.extId));
   }
@@ -86,17 +88,17 @@ async function getItems(
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const where: Record<string, unknown> = { userId };
+  const where: Record<string, unknown> = { userId, extId: { not: null }, feed: { extId: { not: null } } };
 
-  if (withIds?.length) where.extId = { in: withIds.map(storedExternalId) };
-  else where.extId = { ...(sinceId ? { gt: storedExternalId(sinceId) } : {}), ...(maxId && maxId !== "0" ? { lt: storedExternalId(maxId) } : {}) };
+  if (withIds?.length) where.extId = { in: numericIds(withIds.join(",")) };
+  else where.extId = { not: null, ...(sinceId && numericIds(sinceId).length ? { gt: numericIds(sinceId)[0] } : {}), ...(maxId && maxId.trim() !== "0" && numericIds(maxId).length ? { lt: numericIds(maxId)[0] } : {}) };
   const feedIds = params.get("feed_ids")?.split(",").filter(Boolean);
   const groupIds = params.get("group_ids")?.split(",").filter(Boolean);
-  if (feedIds?.length) where.feed = { extId: { in: feedIds.map(storedExternalId) }, userId };
-  if (groupIds?.length) where.AND = [{ feed: { userId, category: { userId, extId: { in: groupIds.map(storedExternalId) } } } }];
+  if (feedIds?.length) where.feed = { extId: { in: numericIds(feedIds.join(",")) }, userId };
+  if (groupIds?.length) where.AND = [{ feed: { userId, category: { userId, extId: { in: numericIds(groupIds.join(",")) } } } }];
 
   const articles = await db.article.findMany({
-    where,
+    where: { AND: [where, { feed: { extId: { not: null } } }] },
     orderBy: { extId: sinceId ? "asc" : "desc" },
     take: 50,
     select: {
@@ -116,7 +118,7 @@ async function getItems(
   });
 
   return Promise.all(
-    articles.map(async (a) => ({
+    articles.filter((a) => a.extId && a.feed.extId).map(async (a) => ({
       id: decimalExternalId(a.extId),
       feed_id: decimalExternalId(a.feed.extId),
       title: a.title,
@@ -136,7 +138,7 @@ async function getUnreadIds(userId: string): Promise<string> {
     select: { extId: true },
     orderBy: { publishedAt: "desc" },
   });
-  return articles.map((a) => decimalExternalId(a.extId)).join(",");
+  return articles.filter((a) => a.extId).map((a) => decimalExternalId(a.extId)).join(",");
 }
 
 async function getSavedIds(userId: string): Promise<string> {
@@ -145,7 +147,7 @@ async function getSavedIds(userId: string): Promise<string> {
     select: { extId: true },
     orderBy: { publishedAt: "desc" },
   });
-  return articles.map((a) => decimalExternalId(a.extId)).join(",");
+  return articles.filter((a) => a.extId).map((a) => decimalExternalId(a.extId)).join(",");
 }
 
 async function handleMark(
@@ -161,7 +163,7 @@ async function handleMark(
   const withIds = params.get("with_ids") || body.with_ids;
   if (!mark || !as_ || (!id && !withIds)) return;
   const beforeDate = before ? new Date(Number(before) * 1000) : new Date();
-  if (!Number.isFinite(beforeDate.getTime())) throw new Error("Invalid before");
+  if (!Number.isFinite(beforeDate.getTime())) return;
 
   if (mark === "item") {
     const data: Record<string, unknown> = {};
@@ -177,12 +179,12 @@ async function handleMark(
       data.isStarred = false;
     }
     if (Object.keys(data).length) {
-      await db.article.updateMany({ where: { extId: { in: (withIds || id!).split(",").map(storedExternalId) }, userId, ...(before ? { createdAt: { lte: beforeDate } } : {}) }, data });
+      await db.article.updateMany({ where: { extId: { in: numericIds(withIds || id!) }, userId, ...(before ? { createdAt: { lte: beforeDate } } : {}) }, data });
     }
   } else if (mark === "feed" && as_ === "read") {
     await db.article.updateMany({
       where: {
-        feed: { userId, extId: storedExternalId(id!) },
+        feed: { userId, extId: { in: numericIds(id || "") } },
         userId,
         isRead: false,
         createdAt: { lte: beforeDate },
@@ -190,7 +192,7 @@ async function handleMark(
       data: { isRead: true, readAt: new Date() },
     });
   } else if (mark === "group" && as_ === "read") {
-    if (id === "0") {
+    if (id?.trim() === "0") {
       // Special group ID 0 = all feeds
       await db.article.updateMany({
         where: { userId, isRead: false, createdAt: { lte: beforeDate } },
@@ -202,7 +204,7 @@ async function handleMark(
           userId,
           isRead: false,
           createdAt: { lte: beforeDate },
-          feed: { userId, category: { userId, extId: storedExternalId(id!) } },
+          feed: { userId, category: { userId, extId: { in: numericIds(id || "") } } },
         },
         data: { isRead: true, readAt: new Date() },
       });
@@ -287,7 +289,7 @@ async function handle(request: Request) {
 
     if (params.has("favicons")) {
       const feeds = await db.feed.findMany({ where: { userId: user.id }, select: { extId: true, icon: true } });
-      result.favicons = feeds.map((feed) => ({ id: decimalExternalId(feed.extId), data: feed.icon?.startsWith("data:") ? feed.icon : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=" }));
+      result.favicons = feeds.filter((feed) => feed.extId).map((feed) => ({ id: decimalExternalId(feed.extId), data: feed.icon?.startsWith("data:") ? feed.icon : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=" }));
     }
 
     if (params.has("unread_item_ids")) {
@@ -304,7 +306,7 @@ async function handle(request: Request) {
     return new NextResponse(JSON.stringify(result).replace(/"(id|feed_id|favicon_id|group_id)":"(\d+)"/g, '"$1":$2'), { headers: { "content-type": "application/json" } });
   } catch (error) {
     logger.error("[api/fever]", error);
-    return NextResponse.json(baseResponse(0), { status: 500 });
+    return NextResponse.json({ ...baseResponse(1), error: "Internal server error" }, { status: 500 });
   }
 }
 

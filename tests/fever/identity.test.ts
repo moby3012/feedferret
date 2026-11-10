@@ -94,3 +94,26 @@ it("returns complete reconciliation lists and bounded numeric pages with feed/gr
   await call({ mark: "feed", id: decimalExternalId(feed.extId), as: "read", before: String(Math.floor(Date.now() / 1000) + 1) });
   expect(await db.article.count({ where: { userId: "u", isRead: false } })).toBe(0);
 }, 30000);
+it("ignores invalid and padded IDs, treats group -1 as a no-op, and skips pending identities", async () => {
+  const feed = await db.feed.findFirstOrThrow({ where: { userId: "u" } });
+  const row = await db.article.create({ data: { userId: "u", feedId: feed.id, title: "input", content: "", link: "https://example.org/input", publishedAt: new Date() } });
+  for (const id of ["-1", "bad", "9223372036854775808"]) {
+    expect(JSON.parse(await call({ mark: "group", as: "read", id })).auth).toBe(1);
+    expect(JSON.parse(await call({ items: "", with_ids: id })).items).toEqual([]);
+  }
+  expect((await db.article.findUniqueOrThrow({ where: { id: row.id } })).isRead).toBe(false);
+  await call({ mark: "item", as: "read", with_ids: `bad, ${decimalExternalId(row.extId)} ,9223372036854775808` });
+  expect((await db.article.findUniqueOrThrow({ where: { id: row.id } })).isRead).toBe(true);
+  await db.article.update({ where: { id: row.id }, data: { extId: null } });
+  expect(JSON.parse(await call({ items: "", feeds: "", groups: "", favicons: "" })).auth).toBe(1);
+  await db.feed.update({ where: { id: feed.id }, data: { extId: null } });
+  expect(JSON.parse(await call({ items: "", feeds: "", groups: "", favicons: "" })).feeds).toEqual([]);
+  await backfillExternalIds(raw);
+});
+it("keeps successful authentication on server failures", async () => {
+  const spy = vi.spyOn(db.article, "findMany").mockRejectedValueOnce(new Error("unavailable"));
+  const response = await POST(new Request("http://localhost/api/fever?api&api_key=key&items"));
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({ auth: 1, error: "Internal server error" });
+  spy.mockRestore();
+});

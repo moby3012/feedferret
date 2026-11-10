@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const fixture = vi.hoisted(() => ({ url: "", queries: 0, sql: [] as { query: string; params: string }[] }));
+const fixture = vi.hoisted(() => ({ url: "", ids: new Map<string, string>(), queries: 0, sql: [] as { query: string; params: string }[] }));
 vi.mock("@/lib/db", async () => {
   const { PrismaClient } = await import("@prisma/client");
   const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
@@ -16,14 +16,19 @@ vi.mock("@/lib/db", async () => {
   fixture.url = `file:${join(dir, "test.db")}`;
   const db = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: fixture.url }), log: [{ emit: "event", level: "query" }] });
   db.$on("query", (event) => { fixture.queries++; if (event.query.includes("ORDER BY") && event.query.includes("LIMIT")) fixture.sql.push({ query: event.query, params: event.params }); });
-    const fixtureId = (id: string) => (/^\d+$/.test(id) ? BigInt(id) : Buffer.from(id).reduce((n, c) => (n * BigInt(257) + BigInt(c)) % BigInt("72057594037927931"), BigInt(0))).toString().padStart(19, "0");
-  return { db: db.$extends({ query: { $allModels: { async $allOperations({ model, operation, args, query }) {
+  const { withExternalIds } = await import("@/lib/external-id-store");
+  const extended = withExternalIds(db);
+  return { db: extended.$extends({ query: { $allModels: { async $allOperations({ model, operation, args, query }) {
+    const result = await query(args);
     if (["Article", "Feed", "Category", "Label"].includes(model) && ["create", "createMany"].includes(operation)) {
       const data = (args as { data: unknown }).data;
-      for (const row of (Array.isArray(data) ? data : [data]) as { id?: string; extId?: string }[]) if (row.id) row.extId = fixtureId(row.id);
+      for (const row of (Array.isArray(data) ? data : [data]) as { id?: string; extId?: string }[]) {
+        if (row.id && row.extId) fixture.ids.set(row.id, BigInt(row.extId).toString());
+      }
     }
-    return query(args);
+    return result;
   } } } }) };
+
 });
 vi.mock("@/lib/greader", async (original) => ({
   ...await original<typeof import("@/lib/greader")>(),
@@ -35,7 +40,7 @@ vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: () => ({ success: true }), 
 import { db } from "@/lib/db";
 import { GET, POST } from "@/app/api/greader/[...path]/route";
 import { authenticateGReaderRequest, parseGReaderItemId, greaderLimit, greaderItemId as encodeItemId } from "@/lib/greader";
-const fixtureId = (id: string) => (/^\d+$/.test(id) ? BigInt(id) : Buffer.from(id).reduce((n, c) => (n * BigInt(257) + BigInt(c)) % BigInt("72057594037927931"), BigInt(0))).toString();
+const fixtureId = (id: string) => fixture.ids.get(id) || id;
 const greaderItemId = (id: string) => encodeItemId(fixtureId(id));
 const state = (s: string) => `user/-/state/com.google/${s}`;
 const label = "user/-/label/Tech";
@@ -51,7 +56,7 @@ async function request(path: string, values: Record<string, string> = {}, method
   return response.headers.get("content-type")?.includes("json") ? response.json() : response.text();
 }
 async function article(id: string, offset = 0, extra = {}) {
-  return db.article.create({ data: { id, userId: "u", feedId: "f", title: id, link: `https://example.org/${id}`, content: "<p>Full body</p>", excerpt: "Short", publishedAt: date(epoch - 10000), createdAt: date(epoch + offset), updatedAt: date(epoch + offset), ...extra } });
+  return db.article.create({ data: { id, ...(/^\d+$/.test(id) ? { extId: id.padStart(19, "0") } : {}), userId: "u", feedId: "f", title: id, link: `https://example.org/${id}`, content: "<p>Full body</p>", excerpt: "Short", publishedAt: date(epoch - 10000), createdAt: date(epoch + offset), updatedAt: date(epoch + offset), ...extra } });
 }
 const refs = (result: { itemRefs: { id: string }[] }) => result.itemRefs.map((r) => encodeItemId(r.id));
 beforeAll(() => {
@@ -326,4 +331,29 @@ it("caps ID pages at 10000 with continuations for nonpositive and huge n", async
     expect(greaderLimit(n)).toBe(10000); expect(greaderLimit(n, false)).toBe(20);
   }
   expect(greaderLimit("100000", false)).toBe(1000);
+}, 30000);
+
+it("skips null article/feed identities until a repeatable backfill catches up", async () => {
+  await article("ready"); await article("pending");
+  await db.article.update({ where: { id: "pending" }, data: { extId: null } });
+  expect(refs(await request("stream/items/ids"))).toEqual([greaderItemId("ready")]);
+  expect((await request("stream/contents")).items).toHaveLength(1);
+  const { backfillExternalIds } = await import("@/lib/external-id-store");
+  await backfillExternalIds(db as unknown as import("@prisma/client").PrismaClient);
+  const assigned = (await db.article.findUniqueOrThrow({ where: { id: "pending" } })).extId;
+  await backfillExternalIds(db as unknown as import("@prisma/client").PrismaClient);
+  expect((await db.article.findUniqueOrThrow({ where: { id: "pending" } })).extId).toBe(assigned);
+  expect((await request("stream/contents")).items).toHaveLength(2);
+  await db.feed.update({ where: { id: "f" }, data: { extId: null } });
+  expect((await request("stream/contents")).items).toHaveLength(0);
+  expect((await request("subscription/list")).subscriptions).toHaveLength(1);
+  await backfillExternalIds(db as unknown as import("@prisma/client").PrismaClient);
+  expect((await request("stream/contents")).items).toHaveLength(2);
+});
+it("allocates unique IDs under concurrent creates and preserves IDs on upsert updates", async () => {
+  const rows = await Promise.all(Array.from({ length: 30 }, (_, i) => article(`concurrent${i}`)));
+  expect(new Set(rows.map(row => row.extId)).size).toBe(30);
+  const before = await db.externalIdSequence.findUniqueOrThrow({ where: { name: "global" } });
+  await db.article.upsert({ where: { id: rows[0].id }, create: { ...rows[0] }, update: { title: "Updated" } });
+  expect((await db.externalIdSequence.findUniqueOrThrow({ where: { name: "global" } })).value).toBe(before.value);
 });
