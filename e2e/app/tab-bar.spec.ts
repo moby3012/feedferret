@@ -32,6 +32,15 @@ test.describe("mobile tab bar", () => {
     for (const name of ["Saved", "Feeds", "Search"] as const) await expect(app.tab(name)).toHaveAttribute("aria-selected", "false");
     await expect(app.tab("New")).toHaveAttribute("aria-controls", "ff-pane-new");
     await expect(page.locator("#ff-pane-new")).toHaveCount(1);
+    // The controlled panes are tabpanels named by their tab — the Feeds root too.
+    await expect(page.locator("#ff-pane-new")).toHaveAttribute("role", "tabpanel");
+    await expect(page.locator("#ff-pane-new")).toHaveAccessibleName("New");
+    await expect(app.tab("Feeds")).toHaveAttribute("aria-controls", "ff-pane-sources ff-pane-feeds");
+    await app.tab("Feeds").tap();
+    await expect.poll(() => app.where()).toBe("/?tab=feeds");
+    await expect(page.getByRole("tabpanel", { name: "Feeds" }).locator(".ff-feeds-header")).toBeVisible();
+    await app.tab("New").tap();
+    await expect.poll(() => app.where()).toBe("/");
     // Anti-anxiety: unread is a dot on Neu, no number anywhere in the bar.
     await expect(bar.getByTestId("tab-unread-dot")).toHaveCount(1);
     expect(await bar.innerText()).not.toMatch(/\d/);
@@ -120,6 +129,9 @@ test.describe("mobile tab bar", () => {
   });
 
   test("Back: feed list → Feeds root → leaves the app; tab switches never stack history", async ({ app, page }) => {
+    // A known page before the app: the final Back must land exactly there.
+    const before = `http://127.0.0.1:${process.env.E2E_FIXTURE_PORT || 4010}/healthz`;
+    await page.goto(before);
     await app.open();
     expect(await ffIndex(page)).toBe(0);
     await app.tab("Feeds").tap();
@@ -138,8 +150,11 @@ test.describe("mobile tab bar", () => {
 
     await page.goBack();
     await expect.poll(() => app.where()).toBe("/?tab=feeds");
-    // At a tab root nothing app-pushed is beneath: the next Back leaves the app (spec §1.4).
+    // At a tab root nothing app-pushed is beneath: the next Back leaves the app (spec §1.4),
+    // even after hopping New → Feeds → New → Feeds above.
     expect(await ffIndex(page)).toBe(0);
+    await page.goBack();
+    await expect(page).toHaveURL(before);
   });
 
   test("re-tapping the active tab pops a pushed level, then scrolls to the top", async ({ app, page }) => {
@@ -170,6 +185,37 @@ test.describe("mobile tab bar", () => {
     await app.openSearch(); // focuses the field: the on-screen keyboard is up
     await expect(bar).toHaveAttribute("data-hidden", "");
     await page.getByTestId("search-field").filter({ visible: true }).blur();
+    await expect(bar).not.toHaveAttribute("data-hidden", "");
+  });
+
+  test("the tab bar comes back when the keyboard is dismissed without a blur (Android Back)", async ({ app, page }) => {
+    await app.open();
+    const bar = app.tabBar();
+    const field = page.getByTestId("search-field").filter({ visible: true });
+    // Emulated keyboard: the visual viewport shrinks / recovers while focus stays put.
+    const keyboard = (up: boolean) =>
+      page.evaluate((up) => {
+        const vv = window.visualViewport!;
+        const w = window as unknown as { __vvH?: number };
+        w.__vvH ??= vv.height;
+        const h = up ? w.__vvH - 340 : w.__vvH;
+        Object.defineProperty(vv, "height", { configurable: true, get: () => h });
+        vv.dispatchEvent(new Event("resize"));
+      }, up);
+
+    await app.openSearch();
+    await expect(field).toBeFocused();
+    await expect(bar).toHaveAttribute("data-hidden", "");
+    await keyboard(true);
+    await expect(bar).toHaveAttribute("data-hidden", "");
+    await keyboard(false); // dismissed, no blur
+    await expect(field).toBeFocused();
+    await expect(bar).not.toHaveAttribute("data-hidden", "");
+    await expect(bar).not.toHaveAttribute("inert", "");
+    // Tapping the still-focused field brings the keyboard (and the hiding) back.
+    await keyboard(true);
+    await expect(bar).toHaveAttribute("data-hidden", "");
+    await keyboard(false);
     await expect(bar).not.toHaveAttribute("data-hidden", "");
   });
 
@@ -257,6 +303,38 @@ test.describe("tablet 820x1180: rail + list + reader", () => {
   });
 });
 
+test.describe("tablet 820x1180: sources drawer focus", () => {
+  test.skip(({ isMobile }) => isMobile, "desktop project drives the viewport");
+  test.use({ viewport: { width: 820, height: 1180 } });
+
+  test("panes are tabpanels of the rail; closing the drawer returns focus to the rail control that opened it", async ({ app, page }) => {
+    await app.open();
+    const rail = page.getByTestId("shell-rail");
+    await expect(page.locator("#ff-pane-new")).toHaveAttribute("role", "tabpanel");
+    await expect(page.locator("#ff-pane-new")).toHaveAttribute("aria-labelledby", "ff-rail-tab-new");
+    const drawer = page.getByRole("dialog", { name: /feed navigation/i });
+
+    // "Show sources" → Escape: focus back on that button.
+    const show = rail.getByRole("button", { name: "Show sources" });
+    await show.focus();
+    await page.keyboard.press("Enter");
+    await expect(drawer).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden();
+    await expect(show).toBeFocused();
+
+    // Feeds tab → pick a feed (the drawer closes through history): focus back on the tab.
+    const feeds = rail.getByRole("tab", { name: "Feeds" });
+    await feeds.focus();
+    await page.keyboard.press("Enter");
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole("button", { name: /^Solo Blog\s*\d+$/ }).click();
+    await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
+    await expect(drawer).toBeHidden();
+    await expect(feeds).toBeFocused();
+  });
+});
+
 test.describe("desktop", () => {
   test.skip(({ isMobile }) => isMobile, "expanded layout");
 
@@ -266,6 +344,8 @@ test.describe("desktop", () => {
     await expect(shell).toHaveAttribute("data-sources", "full");
     await expect(page.getByTestId("shell-rail")).toBeHidden();
     await expect(app.tabBar()).toBeHidden();
+    // No visible tablist with the full sidebar: the list is a plain labelled region.
+    await expect(page.getByRole("region", { name: "Article list" })).toHaveCount(1);
     await page.keyboard.press("[");
     await expect(shell).toHaveAttribute("data-sources", "rail");
     await expect(page.getByTestId("shell-rail")).toBeVisible();

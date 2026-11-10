@@ -68,11 +68,13 @@ function mapListItems(data: unknown, fn: (item: ArticleListItem) => ArticleListI
  */
 function updateListRows(qc: QueryClient, fn: (item: ArticleListItem) => ArticleListItem | null, queryKey: QueryKey = qk.lists) {
   for (const query of qc.getQueryCache().findAll({ queryKey })) {
+    // A list on the wire may bring the row back in its old state even when its
+    // current pages do not hold it (the next page, a first load, an article known
+    // only via another cache): queue the rewrite for every fetching list.
+    if (query.state.fetchStatus === "fetching") reapplyAfterFetch(qc, query, fn);
     const data = query.state.data;
     const next = mapListItems(data, fn);
-    if (next === data) continue;
-    writeRows(qc, query, next);
-    if (query.state.fetchStatus === "fetching") reapplyAfterFetch(qc, query, fn);
+    if (next !== data) writeRows(qc, query, next);
   }
 }
 

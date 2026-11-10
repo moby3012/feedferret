@@ -1,7 +1,7 @@
 "use client";
 
 import { Bookmark, Inbox, Rss, Search, type LucideIcon } from "lucide-react";
-import { getLayoutClass } from "@/features/reader/layout/layout-class";
+import { getLayoutClass, type LayoutClass } from "@/features/reader/layout/layout-class";
 import type { TabId } from "@/features/reader/nav/location";
 import { getNavState, nav } from "@/features/reader/nav/store";
 
@@ -21,6 +21,17 @@ export const TABS: readonly TabDef[] = [
   { id: "feeds", icon: Rss, label: "feeds" },
   { id: "search", icon: Search, label: "search" },
 ];
+
+/**
+ * The tab element that labels a tab's panel (aria-labelledby), or `null` when no
+ * tablist is shown (expanded layout with the full sidebar): the compact tab bar,
+ * else the rail. Both tablists are static markup; the layout decides which one is visible.
+ */
+export function tabLabelIdOf(tab: TabId, layout: LayoutClass | null, sourcesCollapsed: boolean): string | null {
+  if (layout === "compact") return `ff-tab-${tab}`;
+  if (layout === "medium" || (layout === "expanded" && sourcesCollapsed)) return `ff-rail-tab-${tab}`;
+  return null;
+}
 
 /** DOM ids the tabs control (aria-controls). */
 export function paneIdsOf(tab: TabId): string {

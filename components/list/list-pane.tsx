@@ -6,8 +6,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { EndOfListCard } from "@/components/end-of-list-card";
 import { BriefingCard } from "@/components/briefing/briefing-card";
 import { SearchEmpty, SearchHome } from "@/components/search/search-home";
-import { useShellActions, useShellData, type ShellData } from "@/components/shell/shell-context";
-import { scrollTabToTop, sourcesAreRail } from "@/components/shell/tabs";
+import { useShellActions, useShellData, useSourcesCollapsed, type ShellData } from "@/components/shell/shell-context";
+import { scrollTabToTop, sourcesAreRail, tabLabelIdOf } from "@/components/shell/tabs";
 import { toLegacyArticle, type LegacyArticle } from "@/features/articles/legacy-adapter";
 import { useArticleActions, useIsMarkingViewRead } from "@/features/articles/mutations";
 import { prefetchArticle } from "@/features/articles/prefetch";
@@ -51,6 +51,9 @@ export const ListPane = memo(function ListPane({ tab }: { tab: TabId }) {
   // (Inactive panes are inert anyway: only the active one subscribes to the reader.)
   const covered = useNav((s) => s.loc.tab === tab && !!s.loc.articleId) && layout === "compact";
   const inert = !active || covered;
+  // Controlled by the tab bar / rail: a tabpanel named by its tab. Without a
+  // visible tablist (expanded, full sidebar) a plain labelled region.
+  const labelledBy = tabLabelIdOf(tab, layout, useSourcesCollapsed());
 
   // Prefetch on intent: a row's body starts loading on pointerdown.
   const onPointerDown = useCallback(
@@ -71,8 +74,9 @@ export const ListPane = memo(function ListPane({ tab }: { tab: TabId }) {
       data-active={active ? "true" : "false"}
       inert={inert || undefined}
       aria-hidden={inert || undefined}
-      role="region"
-      aria-label={tA11y("articleList")}
+      role={labelledBy ? "tabpanel" : "region"}
+      aria-labelledby={labelledBy ?? undefined}
+      aria-label={labelledBy ? undefined : tA11y("articleList")}
       onPointerDownCapture={onPointerDown}
       className="relative flex flex-col border-e border-border/60 bg-card/70"
     >

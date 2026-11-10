@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, memo } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, memo } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { PanelLeftClose, Plus, Settings } from "lucide-react";
@@ -10,6 +10,7 @@ import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import { scopeFromSidebarKey, sidebarSelectionOf } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
 import { ShellRail } from "./shell-rail";
+import { tabLabelIdOf } from "./tabs";
 import { useShellActions, useShellData, useSourcesCollapsed } from "./shell-context";
 
 // Feeds navigation (the pre-shell RssSidebar tree, reused) in its hosts:
@@ -78,9 +79,15 @@ export const SourcesPane = memo(function SourcesPane() {
   const readerOpen = useNav((s) => !!s.loc.articleId);
   const inert = layout === "compact" && (!atFeedsRoot || readerOpen);
   return (
-    <div id="ff-pane-sources" data-pane="sources" inert={inert || undefined} aria-hidden={inert || undefined} className="overflow-hidden">
+    <div data-pane="sources" inert={inert || undefined} aria-hidden={inert || undefined} className="overflow-hidden">
       <ShellRail />
-      <div className="ff-sources-full">
+      {/* Compact: the Feeds root — the Feeds tab's panel (the rail above is not part of it). */}
+      <div
+        id="ff-pane-sources"
+        className="ff-sources-full"
+        role={layout === "compact" ? "tabpanel" : undefined}
+        aria-labelledby={layout === "compact" ? tabLabelIdOf("feeds", layout, sourcesCollapsed) ?? undefined : undefined}
+      >
         <FeedsHeader />
         {mounted && <SourcesHost />}
       </div>
@@ -139,13 +146,32 @@ export function SourcesSheet() {
     if (next) void nav.openOverlay("sources");
     else void nav.closeOverlay("sources");
   }, []);
+  // Focus returns to the rail control that opened the drawer ("show sources" or the
+  // Feeds tab). Captured in a layout effect — before Radix moves focus into the
+  // drawer — because the drawer also opens and closes through history (Back, a
+  // picked feed re-rendering the rail), where Radix's own restore can land on <body>.
+  const opener = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && active.closest(".ff-rail") ? active : null;
+  }, [open]);
+  const onCloseAutoFocus = useCallback((e: Event) => {
+    const target =
+      (opener.current?.isConnected ? opener.current : null) ??
+      document.querySelector<HTMLElement>('.ff-rail [role="tab"][aria-selected="true"]');
+    opener.current = null;
+    if (!target || target.getClientRects().length === 0) return; // rail hidden (layout changed): Radix default
+    e.preventDefault();
+    target.focus({ preventScroll: true });
+  }, []);
   if (layout === "compact" || layout === null || (layout === "expanded" && !sourcesCollapsed)) return null;
   return (
     // A Radix Sheet (not vaul): the sidebar hosts Radix dialogs (delete /
     // sign-out confirms) that portal to <body>; nested inside vaul they lose
     // text focus on iOS. Add Feed is a shell overlay of its own (never nested).
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="w-(--sidebar-w) max-w-[86vw] p-0 pt-12 gap-0">
+      <SheetContent side="left" className="w-(--sidebar-w) max-w-[86vw] p-0 pt-12 gap-0" onCloseAutoFocus={onCloseAutoFocus}>
         <SheetTitle className="sr-only">{t("feedNavigation")}</SheetTitle>
         {open && <SourcesHost inDrawer />}
       </SheetContent>

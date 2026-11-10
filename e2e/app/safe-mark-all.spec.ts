@@ -25,7 +25,7 @@ import { swipeAt, swipeOn, touchSwipeOn } from "../helpers/gestures";
  * Seed: Solo Blog is the last feed (next with unread wraps to Hacker Dispatch).
  */
 
-const listRegion = (page: Page) => page.getByRole("region", { name: "Article list" });
+const listRegion = (page: Page) => page.locator(ACTIVE_LIST);
 const endCard = (page: Page) => page.getByTestId("end-of-list-card");
 const toast = (page: Page) => page.locator("[data-sonner-toast]").filter({ hasText: /Marked \d+ articles? as read/ });
 
