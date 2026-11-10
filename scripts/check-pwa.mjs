@@ -15,8 +15,11 @@ for (const key of ['name', 'short_name', 'start_url', 'display', 'icons', 'scree
 if (!manifest.icons?.some((icon) => icon.purpose?.includes('maskable'))) fail('manifest needs a maskable icon');
 if (!manifest.screenshots?.some((s) => s.form_factor === 'narrow')) fail('manifest needs a narrow screenshot');
 if (!manifest.screenshots?.some((s) => s.form_factor === 'wide')) fail('manifest needs a wide screenshot');
-if (!manifest.shortcuts?.some((s) => s.url?.includes('view=new'))) fail('manifest needs New Articles shortcut');
-if (!manifest.shortcuts?.some((s) => s.url?.includes('view=readlater'))) fail('manifest needs Read Later shortcut');
+// Canonical shell URLs (spec §1.3); old `?view=` links still work via boot aliases.
+if (manifest.start_url !== '/') fail('manifest start_url must be "/"');
+if (!manifest.shortcuts?.some((s) => s.url === '/')) fail('manifest needs New Articles shortcut (/)');
+if (!manifest.shortcuts?.some((s) => s.url === '/?v=later')) fail('manifest needs Read Later shortcut (/?v=later)');
+if (!manifest.shortcuts?.some((s) => s.url === '/?v=starred')) fail('manifest needs Starred shortcut (/?v=starred)');
 
 for (const screenshot of manifest.screenshots || []) {
   const path = `public${screenshot.src}`;

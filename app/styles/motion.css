@@ -42,45 +42,9 @@
   }
 }
 
-@keyframes slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-@keyframes slide-out-right {
-  from { transform: translateX(0); }
-  to { transform: translateX(100%); }
-}
-
 @keyframes pulse-gentle {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
-}
-
-@keyframes feed-flip-in {
-  from {
-    opacity: 0;
-    transform: translateX(28px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-@keyframes filter-swap {
-  0% {
-    opacity: 0.4;
-    transform: translateY(8px) scale(0.985);
-  }
-  60% {
-    opacity: 1;
-    transform: translateY(-1px) scale(1.002);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 @keyframes article-enter-from-bottom {
@@ -115,29 +79,8 @@
     animation: fade-in-up var(--dur-slow) var(--ease-out);
   }
 
-  .animate-feed-flip {
-    animation: feed-flip-in var(--dur-slow) var(--ease-out);
-  }
-
-  .animate-filter-swap {
-    animation: filter-swap var(--dur-slow) var(--ease-out);
-  }
-
   .animate-scale-in {
     animation: scale-in var(--dur-slow) var(--ease-out);
-  }
-
-  .animate-slide-in-right {
-    /* No fill-mode: forwards here on purpose: the animation's resting state is
-       already translateX(0), and a lingering `forwards` transform would make
-       this fixed panel a new containing block for its nested `fixed` children
-       (e.g. the mobile reader's bottom nav), desyncing them from the viewport
-       on iOS/Android when the URL bar shows/hides. */
-    animation: slide-in-right var(--dur-slow) var(--ease-out);
-  }
-
-  .animate-slide-out-right {
-    animation: slide-out-right var(--dur-base) var(--ease-out) forwards;
   }
 
   /* Looping loading affordance (not an entrance): exempt from the 320 ms cap. */

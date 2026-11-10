@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { signOut } from "@/lib/logout";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
+import { backOrHome } from "@/lib/in-app-back";
 import {
   AlignLeft,
   ALargeSmall,
@@ -163,7 +164,7 @@ export function SettingsForm() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.back()}
+            onClick={() => backOrHome(router)}
             className="h-11 w-11 rounded-2xl bg-card/70 backdrop-blur-bar border border-border/60 shadow-sm"
             aria-label={t("settings.back")}
           >

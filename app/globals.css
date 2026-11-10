@@ -3,6 +3,7 @@
 @import 'tw-animate-css';
 @import './styles/tokens.css';
 @import './styles/motion.css';
+@import './styles/shell.css';
 
 .article-content {
   @apply prose prose-neutral dark:prose-invert max-w-none;

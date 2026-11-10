@@ -1,0 +1,153 @@
+/* ---------------------------------------------------------------------------
+ * App shell placement (.pm/spec-shell-design.md §1.2). Owner: PR 4.
+ *
+ * One flat tree for every form factor; CSS alone decides where panes go and
+ * which one is visible, from the root's data attributes:
+ *   data-tab="new|saved|feeds|search"  data-scope="0|1"  data-reader="open|closed"
+ * and each list pane's data-active. Inactive panes are visibility:hidden (+ inert
+ * in the DOM), never display:none — their scroll offset must survive.
+ *   compact <48rem: all panes stack in one cell; reader / Feeds→scope push over.
+ *   medium 48–75rem: [sources 0 | list | reader] — sources open as a drawer.
+ *   expanded ≥75rem: [sources | list | reader].
+ * ------------------------------------------------------------------------- */
+
+.ff-shell {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template: "list" minmax(0, 1fr) / minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--surface-base);
+}
+
+.ff-shell > [data-pane] {
+  grid-area: list;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ff-shell > [data-pane^="list-"][data-active="false"] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The fixed bottom controls are not a grid item. */
+.ff-shell-bottom {
+  display: contents;
+}
+
+.ff-pane-resizer {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- compact */
+@media (width < 48rem) {
+  .ff-shell > [data-pane="sources"] {
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .ff-shell[data-tab="feeds"][data-scope="0"] > [data-pane="sources"] {
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  /* Closed rules carry the pop timing, open rules the push timing. */
+  .ff-shell > [data-pane="list-feeds"],
+  .ff-shell > [data-pane="reader"] {
+    visibility: hidden;
+    transform: translateX(100%);
+    transition:
+      transform var(--dur-base) var(--ease-in),
+      visibility 0s linear var(--dur-base);
+  }
+  .ff-shell > [data-pane="reader"] {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-reader);
+  }
+  .ff-shell[data-tab="feeds"][data-scope="1"] > [data-pane="list-feeds"],
+  .ff-shell[data-reader="open"] > [data-pane="reader"] {
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    transition:
+      transform var(--dur-slow) var(--ease-out),
+      visibility 0s;
+  }
+  [dir="rtl"] .ff-shell > [data-pane="list-feeds"],
+  [dir="rtl"] .ff-shell > [data-pane="reader"] {
+    transform: translateX(-100%);
+  }
+  [dir="rtl"] .ff-shell[data-tab="feeds"][data-scope="1"] > [data-pane="list-feeds"],
+  [dir="rtl"] .ff-shell[data-reader="open"] > [data-pane="reader"] {
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ wide */
+@media (width >= 48rem) {
+  .ff-shell {
+    grid-template: "sources list reader" minmax(0, 1fr) / 0px var(--list-w-medium) minmax(0, 1fr);
+  }
+  .ff-shell > [data-pane="sources"] {
+    grid-area: sources;
+    visibility: hidden;
+  }
+  .ff-shell > [data-pane="reader"] {
+    grid-area: reader;
+  }
+}
+
+@media (width >= 75rem) {
+  .ff-shell {
+    grid-template-columns: var(--sidebar-w) var(--list-w) minmax(0, 1fr);
+  }
+  .ff-shell > [data-pane="sources"] {
+    visibility: visible;
+  }
+  .ff-pane-resizer {
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    inset-inline-start: calc(var(--sidebar-w) + var(--list-w) - 3px);
+    width: 6px;
+    z-index: var(--z-sticky);
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .ff-pane-resizer:hover,
+  .ff-pane-resizer:focus-visible {
+    outline: none;
+    background: color-mix(in oklab, var(--brand) 35%, transparent);
+  }
+}
+
+/* --------------------------------------------------------------- motion */
+/* replace / iOS OS edge-swipe: the state change is instant. */
+html[data-nav-anim="none"] .ff-shell > [data-pane] {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) and (width < 48rem) {
+  .ff-shell > [data-pane="list-feeds"],
+  .ff-shell > [data-pane="reader"],
+  [dir="rtl"] .ff-shell > [data-pane="list-feeds"],
+  [dir="rtl"] .ff-shell > [data-pane="reader"] {
+    transform: none;
+    opacity: 0;
+    transition:
+      opacity 120ms linear,
+      visibility 0s linear 120ms;
+  }
+  .ff-shell[data-tab="feeds"][data-scope="1"] > [data-pane="list-feeds"],
+  .ff-shell[data-reader="open"] > [data-pane="reader"] {
+    opacity: 1;
+    transition:
+      opacity 120ms linear,
+      visibility 0s;
+  }
+}

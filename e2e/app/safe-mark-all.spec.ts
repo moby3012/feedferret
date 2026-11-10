@@ -1,4 +1,6 @@
-import { test, expect } from "../helpers/test";
+import { test, expect, ACTIVE_LIST } from "../helpers/test";
+
+const ACTIVE_LIST_SCROLLER = `${ACTIVE_LIST} [data-testid="list-scroller"]`;
 import type { Page } from "@playwright/test";
 import {
   articleFlags,
@@ -28,7 +30,7 @@ const endCard = (page: Page) => page.getByTestId("end-of-list-card");
 const toast = (page: Page) => page.locator("[data-sonner-toast]").filter({ hasText: /Marked \d+ articles? as read/ });
 
 async function scrollListToEnd(page: Page) {
-  const viewport = listRegion(page).locator('[data-slot="scroll-area-viewport"]').first();
+  const viewport = page.locator(ACTIVE_LIST_SCROLLER);
   await expect
     .poll(
       async () => {
@@ -53,7 +55,7 @@ test.describe("no gesture or scroll marks anything read in bulk", () => {
     test.skip(app.isMobile, "wheel overscroll is a desktop input");
     await openSoloBlog(app, page);
     const before = unreadCountInDb(app.userKey);
-    const viewport = listRegion(page).locator('[data-slot="scroll-area-viewport"]').first();
+    const viewport = page.locator(ACTIVE_LIST_SCROLLER);
     await viewport.hover();
     await viewport.evaluate((el) => el.scrollTo(0, el.scrollHeight));
     // Far more than the old 500-delta threshold, repeatedly, past the cooldown.
@@ -194,7 +196,7 @@ test.describe("every bulk mark-read path is undoable and scoped to the visible v
     await page.keyboard.type(needle);
     await page.keyboard.press("Enter");
     await expect(page.getByRole("heading", { level: 2, name: new RegExp(needle) })).toBeVisible();
-    await expect(page.locator(`[role="button"][aria-label*="${needle}"]`)).toHaveCount(app.user.sample.needleHits);
+    await expect(app.rowsMatching(needle)).toHaveCount(app.user.sample.needleHits);
 
     // Search view: desktop has the Shift+A shortcut, mobile the bottom-bar button.
     if (app.isMobile) await app.activate(visibleMarkAll(page));

@@ -770,7 +770,8 @@
     "labelFallback": "Label",
     "savedSearchFallback": "Saved Search",
     "feedNavigation": "Feed navigation",
-    "feedActions": "Feed actions"
+    "feedActions": "Feed actions",
+    "recentlyRead": "Recently read"
   },
   "articleList": {
     "noArticles": "No articles",
@@ -854,7 +855,8 @@
     "markAllAsRead": "Mark all as read",
     "saveSearch": "Save search",
     "moreOptions": "More options",
-    "unreadSuffix": "unread"
+    "unreadSuffix": "unread",
+    "openSources": "Feeds"
   },
   "discovery": {
     "searchPlaceholder": "Search feeds…",
@@ -1784,5 +1786,8 @@
     "stepUpRequired": "Enter your current login password or a new, unused TOTP code.",
     "passwordlessHint": "If you sign in without a password and have no two-factor authentication, sign in again and save within 10 minutes. Leave the login password field blank.",
     "emailChangeWarning": "Changing your email disconnects Google Reader clients and clears all Fever keys. Rotate your API password and recreate API tokens used for Fever, then reconnect your clients."
+  },
+  "shell": {
+    "chooseFeed": "Choose a feed or category from the sidebar."
   }
 }

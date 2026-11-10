@@ -21,3 +21,15 @@ export function startsInPannableContent(target: EventTarget | null, boundary?: E
   }
   return false;
 }
+
+/**
+ * Width of the screen-edge band the OS owns for its own back gesture (iOS
+ * Safari / standalone edge-swipe, Android back gesture). App swipes must not
+ * start there, or one gesture would go back twice.
+ */
+export const SYSTEM_EDGE_PX = 24;
+
+/** True when a touch starts within the OS back-gesture band of either screen edge. */
+export function startsAtSystemEdge(clientX: number, viewportWidth: number, edge = SYSTEM_EDGE_PX): boolean {
+  return clientX < edge || clientX > viewportWidth - edge;
+}

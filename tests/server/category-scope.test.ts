@@ -49,7 +49,7 @@ vi.mock("@/lib/full-text-fetch", () => ({}));
 
 import { getViewUnreadCount, markAllAsRead } from "../../app/actions/feeds";
 import { listArticles } from "../../server/articles/list";
-import { legacyScope } from "../../features/articles/legacy-adapter";
+import { categoryKey, markViewScopeOf, scopeFromSidebarKey } from "../../features/reader/nav/sidebar-keys";
 
 const dir = mkdtempSync(join(tmpdir(), "feedferret-category-scope-"));
 const ids = { alice: "", bob: "", tech: "", newsChild: "", newsRoot: "", newsRoot2: "", bobNews: "" };
@@ -113,12 +113,22 @@ beforeEach(async () => {
 const unreadIn = (categoryId: string) => state.db.article.count({ where: { isRead: false, feed: { categoryId } } });
 
 describe(`same-named categories (${PROVIDER})`, () => {
-  it("the list resolves the name to one category id and lists only that category", async () => {
-    const categories = await state.db.category.findMany({ where: { userId: ids.alice }, orderBy: { order: "asc" } });
-    const scope = legacyScope(null, "News", "", categories);
-    expect(scope).toEqual({ kind: "category", id: ids.newsChild });
-    const page = await listArticles(ids.alice, { scope: scope!, show: "unread", sort: "new" });
-    expect(page.items.map((i) => i.id).sort()).toEqual(Array.from({ length: N.newsChild }, (_, i) => `newsChild-${i}`).sort());
+  it("a sidebar selection carries the category id: each same-named folder lists only itself", async () => {
+    for (const [key, n] of [["newsChild", N.newsChild], ["newsRoot", N.newsRoot], ["newsRoot2", N.newsRoot2]] as const) {
+      const scope = scopeFromSidebarKey(categoryKey(ids[key]));
+      expect(scope).toEqual({ kind: "category", id: ids[key] });
+      const page = await listArticles(ids.alice, { scope, show: "unread", sort: "new" });
+      expect(page.items.map((i) => i.id).sort()).toEqual(Array.from({ length: n }, (_, i) => `${key}-${i}`).sort());
+    }
+  });
+
+  it("mark all read from a category scope (by id) marks exactly that folder", async () => {
+    const result = await markAllAsRead(markViewScopeOf({ kind: "category", id: ids.newsRoot }));
+    expect(result.ids).toHaveLength(N.newsRoot);
+    expect(await unreadIn(ids.newsRoot)).toBe(0);
+    expect(await unreadIn(ids.newsChild)).toBe(N.newsChild);
+    expect(await unreadIn(ids.newsRoot2)).toBe(N.newsRoot2);
+    await state.db.article.updateMany({ where: { id: { in: result.ids } }, data: { isRead: false, readAt: null } });
   });
 
   it("header count counts the resolved category only", async () => {

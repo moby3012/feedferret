@@ -4,10 +4,9 @@ import { useTranslations, useFormatter } from "next-intl";
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
 import Image from "next/image";
 import { Article } from "@/lib/rss-data";
-import { startsInPannableContent } from "@/lib/gesture-guards";
+import { startsAtSystemEdge, startsInPannableContent } from "@/lib/gesture-guards";
 import { useAiSettings, useSummarizeArticle, useExportSettings, useBuildObsidianExportLink, useExportArticleToWallabag } from "@/hooks/use-rss-data";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -139,12 +138,15 @@ export function ArticleReader({
   // Swipe right → back (mobile). There is deliberately no left-swipe action:
   // opening the original is only ever an explicit button / the `o` shortcut.
   // Touches that start in code blocks, tables or other horizontal scrollers
-  // are the user panning content, not navigating.
+  // are the user panning content, not navigating. Touches starting in the
+  // OS edge band belong to the system back gesture (iOS edge-swipe): handling
+  // them too would go back twice.
   const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
     const touch = e.touches[0];
-    touchStartRef.current = startsInPannableContent(e.target, rootRef.current)
-      ? null
-      : { x: touch.clientX, y: touch.clientY };
+    touchStartRef.current =
+      startsInPannableContent(e.target, rootRef.current) || startsAtSystemEdge(touch.clientX, window.innerWidth)
+        ? null
+        : { x: touch.clientX, y: touch.clientY };
   };
 
   const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
@@ -212,7 +214,7 @@ export function ArticleReader({
 
     const animationFrame = window.requestAnimationFrame(() => {
       const viewport = rootRef.current?.querySelector<HTMLElement>(
-        '[data-slot="scroll-area-viewport"]',
+        '[data-testid="reader-scroller"]',
       );
       viewport?.scrollTo({ top: 0, left: 0 });
     });
@@ -224,7 +226,7 @@ export function ArticleReader({
   useEffect(() => {
     if (!article?.id) return;
     const viewport = rootRef.current?.querySelector<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
+      '[data-testid="reader-scroller"]',
     );
     if (!viewport) return;
 
@@ -344,7 +346,7 @@ export function ArticleReader({
 
   const scrollReaderToTop = () => {
     const viewport = rootRef.current?.querySelector<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
+      '[data-testid="reader-scroller"]',
     );
     viewport?.scrollTo({ top: 0, left: 0, behavior: "smooth" });
   };
@@ -400,7 +402,7 @@ export function ArticleReader({
             </span>
           </button>
         </div>
-        <div className="hidden lg:flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+        <div className="hidden wide:flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           <Button
             variant="ghost"
             size="icon"
@@ -519,7 +521,7 @@ export function ArticleReader({
             </DropdownMenu>
           )}
           {/* Desktop parity for the mobile more-menu's "Fetch full text": the
-              bottom action bar hosting that menu is lg:hidden, so without this
+              bottom action bar hosting that menu is wide:hidden, so without this
               a desktop reader showing a teaser article has no way to trigger a
               manual full-text fetch at all. */}
           <Button
@@ -591,8 +593,8 @@ export function ArticleReader({
       </header>
 
       {/* Article Content */}
-      <ScrollArea className={cn("flex-1 overflow-hidden min-h-0", articleAnimClass)}>
-        <article aria-labelledby="article-title" className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-[calc(4rem_+_var(--safe-b)_+_1.5rem)] sm:px-8 sm:pt-12 lg:pb-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
+      <div data-testid="reader-scroller" className={cn("flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain", articleAnimClass)}>
+        <article aria-labelledby="article-title" className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-[calc(4rem_+_var(--safe-b)_+_1.5rem)] sm:px-8 sm:pt-12 wide:pb-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">
             <h1
@@ -790,9 +792,9 @@ export function ArticleReader({
             </button>
           </footer>
         </article>
-      </ScrollArea>
+      </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-(--z-toast) bg-background/95 backdrop-blur-bar pl-[max(1rem,var(--safe-l))] pr-[max(1rem,var(--safe-r))] pb-[max(0.75rem,var(--safe-b))] lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-(--z-toast) bg-background/95 backdrop-blur-bar pl-[max(1rem,var(--safe-l))] pr-[max(1rem,var(--safe-r))] pb-[max(0.75rem,var(--safe-b))] wide:hidden">
         {/* overflow-hidden: last-resort net for this row too (see the
             min-w-0 additions below) — if six flex-1 buttons ever don't fit
             (the unread-toggle button is wider than the rest, being the one

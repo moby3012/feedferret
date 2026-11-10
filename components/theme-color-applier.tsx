@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useSession } from "next-auth/react";
 import { useReadingPreferences } from "@/hooks/use-rss-data";
+import { themeColorFor } from "@/lib/theme-color";
 
 function normalizeHexColor(value: string | null | undefined, fallback: string) {
   const raw = value?.trim();
@@ -90,24 +91,33 @@ export function ThemeColorApplier() {
     if (root.getAttribute("dir") !== dir) {
       root.setAttribute("dir", dir);
     }
+  }, [prefs]);
 
-    // Push the personalized accent to the OS chrome (Android status bar /
-    // task-switcher strip) by updating the live theme-color meta(s). layout.tsx
-    // declares one meta per color-scheme media query; update whichever matches
-    // the currently resolved theme so we don't clobber the other scheme's tag.
-    const themeColorMetas = document.querySelectorAll<HTMLMetaElement>(
-      'meta[name="theme-color"]',
-    );
-    if (themeColorMetas.length > 0) {
-      const isDark = resolvedTheme === "dark";
-      const matchingMeta =
-        Array.from(themeColorMetas).find((meta) => {
-          const media = meta.getAttribute("media") || "";
-          return isDark ? media.includes("dark") : media.includes("light");
-        }) ?? themeColorMetas[0];
-      matchingMeta.setAttribute("content", accentColor);
-    }
-  }, [prefs, resolvedTheme]);
+  // OS chrome (Android status bar / task switcher, iOS standalone bar)
+  // matches the app's bar surface of the resolved theme — not the user's
+  // accent (PM decision; the accent stays for in-app UI). Every theme-color
+  // meta gets it: with a forced theme the OS media query may disagree.
+  // Independent of the session: public pages (login, register, setup) follow
+  // the persisted next-themes choice (localStorage) too.
+  // Next re-renders the viewport metadata after hydration (router.refresh —
+  // e.g. TimezoneSync on a first visit —, revalidating server actions,
+  // navigations) and re-inserts fresh metas with the server's
+  // media-query defaults: a one-shot write would be undone, so every
+  // (re)inserted or rewritten theme-color meta is corrected again (in the
+  // observer's microtask, before the next paint).
+  useEffect(() => {
+    if (!resolvedTheme) return;
+    const barColor = themeColorFor(resolvedTheme);
+    const apply = () => {
+      document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
+        if (meta.getAttribute("content") !== barColor) meta.setAttribute("content", barColor);
+      });
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ["content"] });
+    return () => observer.disconnect();
+  }, [resolvedTheme]);
 
   return null;
 }
