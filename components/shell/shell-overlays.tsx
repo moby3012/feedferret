@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, memo } from "react";
+import { useCallback, useMemo, useState, memo } from "react";
 import { useTranslations } from "next-intl";
 import { Search as SearchIcon, X as XIcon } from "lucide-react";
+import { AddFeedDialog } from "@/components/add-feed-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,23 +13,46 @@ import { listKeyOf } from "@/features/articles/scope";
 import { useArticleActions } from "@/features/articles/mutations";
 import { useDebounce } from "@/hooks/use-debounce";
 import { canMarkAll, categoryKey, markViewScopeOf, scopeFromSidebarKey } from "@/features/reader/nav/sidebar-keys";
-import { getNavState, nav, useNav } from "@/features/reader/nav/store";
+import type { OverlayId } from "@/features/reader/nav/overlays";
+import { nav, useNav } from "@/features/reader/nav/store";
 import { useShellActions, useShellData } from "./shell-context";
-import { commitSearch, searchDraft, useSearchDraft } from "./search-draft";
+import { commitSearch, committedQuery } from "./search-draft";
 import { SourcesSheet } from "./sources-pane";
 
-/** Every shell overlay. History-backed ones (sources, search) read their open state from the nav store. */
+/** open/onOpenChange of one nav-store overlay (system Back closes it; opening another swaps it). */
+function useOverlay(id: OverlayId): [boolean, (open: boolean) => Promise<void>] {
+  const open = useNav((s) => s.overlay === id);
+  const onOpenChange = useCallback((next: boolean) => (next ? nav.openOverlay(id) : nav.closeOverlay(id)), [id]);
+  return [open, onOpenChange];
+}
+
+const togglePalette = () => void nav.toggleOverlay("palette");
+
+/** Every shell overlay. Open state lives in the nav store (`history.state.ff` on touch / compact). */
 export const ShellOverlays = memo(function ShellOverlays() {
-  const { feeds, categories, labels, shortcutsOpen } = useShellData();
+  const { feeds, categories, labels, addFeed } = useShellData();
   const shell = useShellActions();
   const { markViewRead } = useArticleActions();
   const scope = useNav((s) => s.loc.scope);
+  const [shortcutsOpen, setShortcutsOpen] = useOverlay("shortcuts");
+  const [paletteOpen, setPaletteOpen] = useOverlay("palette");
+  const [addFeedOpen, setAddFeedOpen] = useOverlay("add-feed");
+  const subscribedUrls = useMemo(() => new Set<string>(feeds.map((f: any) => f.url).filter(Boolean)), [feeds]);
+  // Mounted on first use only: its connector-status queries stay off the cold-start path.
+  const [addFeedUsed, setAddFeedUsed] = useState(false);
+  if (addFeedOpen && !addFeedUsed) setAddFeedUsed(true);
   return (
     <>
       <SourcesSheet />
       <SearchDialog />
-      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={shell.setShortcutsOpen} />
+      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      {addFeedUsed && (
+        <AddFeedDialog open={addFeedOpen} onOpenChange={setAddFeedOpen} subscribedUrls={subscribedUrls} initialUrl={addFeed.url} requestId={addFeed.n} />
+      )}
       <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onToggle={togglePalette}
         feeds={feeds}
         categories={categories}
         labels={labels}
@@ -52,7 +76,14 @@ function SearchDialog() {
   const tA11y = useTranslations("accessibility");
   const tSearch = useTranslations("searchResults");
   const open = useNav((s) => s.overlay === "search");
-  const [draft, setDraft] = useSearchDraft();
+  // The dialog's own draft (not the inline one): seeded from `?q=` on every
+  // open, discarded on every dismissal — only submit commits it.
+  const [draft, setDraft] = useState("");
+  const [seededFor, setSeededFor] = useState(false);
+  if (open !== seededFor) {
+    setSeededFor(open);
+    setDraft(open ? committedQuery() : "");
+  }
   const debounced = useDebounce(draft, 300).trim();
   // Same list (and cache entry) the search pane binds after the commit.
   const previewKey = useMemo(() => (open && debounced ? listKeyOf({ kind: "query", q: debounced }, "all", "new") : null), [open, debounced]);
@@ -60,12 +91,7 @@ function SearchDialog() {
   const count = preview.items.length;
   const unread = preview.items.filter((a) => !a.isRead).length;
 
-  const close = () => {
-    // Cancel: the draft returns to what is committed.
-    const scope = getNavState().loc.scope;
-    searchDraft.set(scope?.kind === "query" ? scope.q : "");
-    void nav.closeOverlay();
-  };
+  const close = () => void nav.closeOverlay("search");
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? void nav.openOverlay("search") : close())}>

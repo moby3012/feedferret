@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import {
@@ -42,6 +42,12 @@ interface CommandPaletteLabel {
 }
 
 interface CommandPaletteProps {
+  /** Controlled: the shell keeps it in the nav store (overlay "palette"), so system Back closes it. */
+  open: boolean;
+  /** May return the pending nav op; actions run after it settled. */
+  onOpenChange: (open: boolean) => void | Promise<void>;
+  /** ⌘K / Ctrl-K: open, or close when open. */
+  onToggle: () => void;
   feeds: CommandPaletteFeed[];
   categories: CommandPaletteCategory[];
   labels: CommandPaletteLabel[];
@@ -58,10 +64,13 @@ interface CommandPaletteProps {
 }
 
 // This component is intentionally "dumb": it renders lists and wires
-// selection to the handlers/data passed in from app/page.tsx, which owns
-// all the actual business logic (feed/category/label selection, refresh,
-// mark-all-read, etc). No state beyond open/closed lives here.
+// selection to the handlers/data passed in from the shell (shell-overlays.tsx),
+// which owns all the actual business logic (feed/category/label selection,
+// refresh, mark-all-read, etc) and the open state (nav overlay "palette").
 export function CommandPalette({
+  open,
+  onOpenChange,
+  onToggle,
   feeds,
   categories,
   labels,
@@ -77,7 +86,6 @@ export function CommandPalette({
 }: CommandPaletteProps) {
   const t = useTranslations("commandPalette");
   const { theme, setTheme } = useTheme();
-  const [open, setOpen] = useState(false);
 
   // Global ⌘K / Ctrl-K listener. Deliberately fires regardless of focus
   // (including inside inputs) — this mirrors the convention used by most
@@ -89,16 +97,18 @@ export function CommandPalette({
       if (e.repeat) return;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((prev) => !prev);
+        onToggle();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [onToggle]);
 
+  // The palette closes first (its history entry is popped), then the action
+  // runs — so an action that navigates or opens another overlay never stacks
+  // on top of the palette's entry.
   const runAction = (fn: () => void) => {
-    setOpen(false);
-    fn();
+    void Promise.resolve(onOpenChange(false)).then(fn);
   };
 
   const toggleTheme = () => {
@@ -110,7 +120,7 @@ export function CommandPalette({
   return (
     <CommandDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={onOpenChange}
       title={t("title")}
       description={t("description")}
     >

@@ -28,7 +28,6 @@ import {
 // actions — no handler props threaded through the shell).
 
 export type SortOrder = "newest" | "oldest";
-export type AddFeedHost = "inline" | "sheet";
 
 /** The list the user is looking at (j/k, reader prev/next, prefetch). */
 export interface ActiveList {
@@ -70,8 +69,8 @@ export interface ShellData {
   session: { key: string | null; ids: string[] };
   /** Opened articles the user marked unread again: auto mark-read skips them. */
   suppressed: string[];
-  addFeed: { n: number; url?: string; host: AddFeedHost };
-  shortcutsOpen: boolean;
+  /** Last Add Feed request (`n` bumps per request; `url` = share-target prefill). Open state = nav overlay "add-feed". */
+  addFeed: { n: number; url?: string };
 }
 
 export interface ShellActions {
@@ -85,7 +84,9 @@ export interface ShellActions {
   bindSession(key: string): void;
   openSources(): void;
   openSearch(): void;
+  /** Overlay "shortcuts" (open / close through the nav store). */
   setShortcutsOpen(open: boolean): void;
+  /** Overlay "add-feed" (compact: on the Feeds root, spec §1.3 consumed params). */
   requestAddFeed(url?: string): void;
   saveSearch(q: string): void;
   openSettings(): void;
@@ -129,8 +130,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
 
   const [session, setSession] = useState<{ key: string | null; ids: string[] }>({ key: null, ids: [] });
   const [suppressed, setSuppressed] = useState<string[]>([]);
-  const [addFeed, setAddFeed] = useState<ShellData["addFeed"]>({ n: 0, host: "inline" });
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [addFeed, setAddFeed] = useState<ShellData["addFeed"]>({ n: 0 });
 
   const legacyContext = useMemo<LegacyContext>(
     () => ({
@@ -186,13 +186,15 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       },
       openSources: () => void nav.openOverlay("sources"),
       openSearch: () => void nav.openOverlay("search"),
-      setShortcutsOpen,
+      setShortcutsOpen(open) {
+        void (open ? nav.openOverlay("shortcuts") : nav.closeOverlay("shortcuts"));
+      },
       requestAddFeed(url) {
-        const layout = getLayoutClass();
-        const host: AddFeedHost = layout === "medium" ? "sheet" : "inline";
-        setAddFeed((prev) => ({ n: prev.n + 1, url, host }));
-        if (layout === "medium") void nav.openOverlay("sources");
-        else if (layout === "compact") void nav.goTo(TAB_ROOTS.feeds); // the Feeds root hosts the dialog
+        setAddFeed((prev) => ({ n: prev.n + 1, url }));
+        const { loc } = getNavState();
+        // Compact: the dialog sits on the Feeds root (Back lands there, not on a random list).
+        if (getLayoutClass() === "compact" && (loc.tab !== "feeds" || loc.scope || loc.articleId)) void nav.goTo(TAB_ROOTS.feeds);
+        void nav.openOverlay("add-feed");
       },
       saveSearch(q) {
         const query = q.trim();
@@ -231,9 +233,8 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       session,
       suppressed,
       addFeed,
-      shortcutsOpen,
     }),
-    [feeds, categories, labels, savedSearches, prefs, legacyContext, viewMode, sortOrder, refreshMutation.isPending, session, suppressed, addFeed, shortcutsOpen],
+    [feeds, categories, labels, savedSearches, prefs, legacyContext, viewMode, sortOrder, refreshMutation.isPending, session, suppressed, addFeed],
   );
 
   return (

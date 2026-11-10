@@ -8,16 +8,17 @@ import { useCounts } from "@/features/bootstrap/queries";
 import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import { scopeFromSidebarKey, sidebarSelectionOf } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
-import { useShellData, type AddFeedHost } from "./shell-context";
+import { useShellActions, useShellData } from "./shell-context";
 
 // Feeds navigation (the pre-shell RssSidebar, reused) in its two hosts until
 // SourcesView lands (PR 7): the sources column on expanded / the Feeds root on
 // compact (`SourcesPane`), and a drawer on medium + the compact feed sheet
 // (`SourcesSheet`). Selection goes through the nav store.
 
-function useSidebarProps(host: AddFeedHost) {
+function useSidebarProps() {
   const t = useTranslations("sidebar");
-  const { feeds, prefs, addFeed } = useShellData();
+  const { feeds, prefs } = useShellData();
+  const shell = useShellActions();
   const counts = useCounts(true);
   const scope = useNav((s) => s.loc.scope);
   const sidebarFeeds = useMemo(
@@ -36,8 +37,7 @@ function useSidebarProps(host: AddFeedHost) {
     feeds: sidebarFeeds,
     selectedFeed,
     selectedCategory,
-    defaultOpenAddFeed: addFeed.host === host ? addFeed.n : 0,
-    initialWebpageUrl: addFeed.host === host ? addFeed.url : undefined,
+    onAddFeed: () => shell.requestAddFeed(),
     hideEmptyFeeds: prefs?.hideEmptyFeeds ?? false,
     hideEmptyLabels: prefs?.hideEmptyLabels ?? false,
     onOpenArticle: (id: string) => void nav.openArticle(id),
@@ -60,16 +60,18 @@ export const SourcesPane = memo(function SourcesPane() {
   const [visitedRoot, setVisitedRoot] = useState(false);
   if (atFeedsRoot && layout === "compact" && !visitedRoot) setVisitedRoot(true);
   const mounted = layout === "expanded" || (layout === "compact" && (visitedRoot || atFeedsRoot));
-  const inert = layout === "compact" && !atFeedsRoot;
+  // Covered on compact by a pushed feed list or the reader (also over the Feeds root).
+  const readerOpen = useNav((s) => !!s.loc.articleId);
+  const inert = layout === "compact" && (!atFeedsRoot || readerOpen);
   return (
     <div data-pane="sources" inert={inert || undefined} aria-hidden={inert || undefined} className="overflow-hidden">
-      {mounted && <SourcesHost host="inline" />}
+      {mounted && <SourcesHost />}
     </div>
   );
 });
 
-function SourcesHost({ host }: { host: AddFeedHost }) {
-  const props = useSidebarProps(host);
+function SourcesHost() {
+  const props = useSidebarProps();
   return <RssSidebar {...props} onSelectFeed={selectFeed} onSelectCategory={selectCategory} />;
 }
 
@@ -85,15 +87,16 @@ export function SourcesSheet() {
   if (layout === "expanded") return null;
   const side = layout === "medium" ? "left" : "bottom";
   return (
-    // A Radix Sheet (not vaul): the sidebar hosts Radix dialogs (Add feed)
-    // that portal to <body>; nested inside vaul they lose text focus on iOS.
+    // A Radix Sheet (not vaul): the sidebar hosts Radix dialogs (delete /
+    // sign-out confirms) that portal to <body>; nested inside vaul they lose
+    // text focus on iOS. Add Feed is a shell overlay of its own (never nested).
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side={side}
         className={side === "bottom" ? "h-[86dvh] rounded-t-sheet border-border/70 p-0 pt-12 gap-0" : "w-(--sidebar-w) max-w-[86vw] p-0 pt-12 gap-0"}
       >
         <SheetTitle className="sr-only">{t("feedNavigation")}</SheetTitle>
-        {open && <SourcesHost host="sheet" />}
+        {open && <SourcesHost />}
       </SheetContent>
     </Sheet>
   );
