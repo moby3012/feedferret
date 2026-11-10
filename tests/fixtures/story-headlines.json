@@ -1,0 +1,1079 @@
+{
+ "_comment": "Realistic-style headline fixtures for story clustering (K1). Not real articles. same = every group item belongs to one cluster; distinct = no two items of the group join (items of other groups/filler never join either).",
+ "feeds": {
+  "spiegel": {
+   "name": "DER SPIEGEL",
+   "host": "spiegel.de",
+   "priority": "main"
+  },
+  "tagesschau": {
+   "name": "tagesschau.de",
+   "host": "tagesschau.de",
+   "priority": "important"
+  },
+  "zeit": {
+   "name": "ZEIT ONLINE",
+   "host": "zeit.de",
+   "priority": "main"
+  },
+  "faz": {
+   "name": "FAZ.NET",
+   "host": "faz.net",
+   "priority": "main"
+  },
+  "heise": {
+   "name": "heise online",
+   "host": "heise.de",
+   "priority": "category"
+  },
+  "golem": {
+   "name": "Golem.de",
+   "host": "golem.de",
+   "priority": "category"
+  },
+  "bbc": {
+   "name": "BBC News",
+   "host": "bbc.co.uk",
+   "priority": "important"
+  },
+  "reuters": {
+   "name": "Reuters",
+   "host": "reuters.com",
+   "priority": "main"
+  },
+  "verge": {
+   "name": "The Verge",
+   "host": "theverge.com",
+   "priority": "category"
+  },
+  "ars": {
+   "name": "Ars Technica",
+   "host": "arstechnica.com",
+   "priority": "category"
+  },
+  "guardian": {
+   "name": "The Guardian",
+   "host": "theguardian.com",
+   "priority": "main"
+  },
+  "techcrunch": {
+   "name": "TechCrunch",
+   "host": "techcrunch.com",
+   "priority": "feed"
+  },
+  "hn": {
+   "name": "Hacker News",
+   "host": "news.ycombinator.com",
+   "priority": "feed"
+  },
+  "kicker": {
+   "name": "kicker",
+   "host": "kicker.de",
+   "priority": "feed"
+  }
+ },
+ "groups": [
+  {
+   "id": "iphone17",
+   "lang": "en",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "verge",
+     "title": "Apple unveils iPhone 17 with thinner design and A19 chip",
+     "hoursAgo": 30
+    },
+    {
+     "feed": "ars",
+     "title": "iPhone 17 announced: Apple's thinnest phone yet runs on A19",
+     "hoursAgo": 29.5
+    },
+    {
+     "feed": "bbc",
+     "title": "Everything Apple announced at today's iPhone 17 event",
+     "hoursAgo": 29
+    }
+   ]
+  },
+  {
+   "id": "fed",
+   "lang": "en",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "reuters",
+     "title": "Fed holds interest rates steady, signals two cuts later this year",
+     "hoursAgo": 20
+    },
+    {
+     "feed": "bbc",
+     "title": "Federal Reserve keeps rates unchanged, still sees two cuts in 2026",
+     "hoursAgo": 19.5
+    }
+   ]
+  },
+  {
+   "id": "openssh",
+   "lang": "en",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "ars",
+     "title": "Critical OpenSSH flaw CVE-2026-1234 lets attackers run code as root",
+     "hoursAgo": 10,
+     "links": [
+      "https://advisories.example.org/openssh/2026/cve-2026-1234-advisory"
+     ]
+    },
+    {
+     "feed": "hn",
+     "title": "Patch now: OpenSSH bug (CVE-2026-1234) enables remote root access",
+     "hoursAgo": 9,
+     "links": [
+      "https://advisories.example.org/openssh/2026/cve-2026-1234-advisory"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ezb",
+   "lang": "de",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "tagesschau",
+     "title": "EZB senkt Leitzins um 0,25 Prozentpunkte",
+     "hoursAgo": 14
+    },
+    {
+     "feed": "zeit",
+     "title": "Zinswende: Europäische Zentralbank senkt Leitzins erneut",
+     "hoursAgo": 13.5
+    },
+    {
+     "feed": "faz",
+     "title": "EZB-Zinsentscheid: Leitzins sinkt auf 2,0 Prozent",
+     "hoursAgo": 13
+    }
+   ]
+  },
+  {
+   "id": "rente",
+   "lang": "de",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "spiegel",
+     "title": "Bundestag beschließt Rentenpaket nach hitziger Debatte",
+     "hoursAgo": 8
+    },
+    {
+     "feed": "zeit",
+     "title": "Rentenpaket: Bundestag stimmt für umstrittene Reform",
+     "hoursAgo": 7.5
+    }
+   ]
+  },
+  {
+   "id": "bahn",
+   "lang": "de",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "spiegel",
+     "title": "Deutsche Bahn streicht Fernverkehr wegen Sturm - SPIEGEL",
+     "hoursAgo": 5
+    },
+    {
+     "feed": "tagesschau",
+     "title": "Sturm: Bahn stellt Fernverkehr in Norddeutschland ein | tagesschau.de",
+     "hoursAgo": 4.5
+    }
+   ]
+  },
+  {
+   "id": "apple-xlang",
+   "lang": "de+en",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "heise",
+     "title": "Apple stellt iPhone 17 vor",
+     "hoursAgo": 31
+    },
+    {
+     "feed": "guardian",
+     "title": "Apple unveils iPhone 17",
+     "hoursAgo": 30
+    }
+   ],
+   "sameStoryAs": "iphone17"
+  },
+  {
+   "id": "tesla-recall",
+   "lang": "en",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "reuters",
+     "title": "Tesla recalls 400,000 vehicles over braking software fault",
+     "hoursAgo": 22
+    },
+    {
+     "feed": "techcrunch",
+     "title": "Tesla issues recall for 400,000 cars due to brake software bug",
+     "hoursAgo": 21
+    },
+    {
+     "feed": "guardian",
+     "title": "Tesla to recall 400,000 vehicles in US after braking software problem",
+     "hoursAgo": 21.5
+    }
+   ]
+  },
+  {
+   "id": "lufthansa",
+   "lang": "de",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "tagesschau",
+     "title": "Lufthansa-Piloten streiken am Donnerstag: Hunderte Flüge fallen aus",
+     "hoursAgo": 16
+    },
+    {
+     "feed": "spiegel",
+     "title": "Pilotenstreik bei Lufthansa: Hunderte Flugausfälle am Donnerstag",
+     "hoursAgo": 15
+    },
+    {
+     "feed": "faz",
+     "title": "Lufthansa: Streik der Piloten lässt am Donnerstag Hunderte Flüge ausfallen",
+     "hoursAgo": 15.5
+    }
+   ]
+  },
+  {
+   "id": "openai-gpt",
+   "lang": "en",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "verge",
+     "title": "OpenAI releases GPT-5.5 with longer context and cheaper API pricing",
+     "hoursAgo": 12
+    },
+    {
+     "feed": "techcrunch",
+     "title": "OpenAI launches GPT-5.5, cutting API prices and expanding context window",
+     "hoursAgo": 11.5
+    }
+   ]
+  },
+  {
+   "id": "nobel",
+   "lang": "de",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "zeit",
+     "title": "Friedensnobelpreis geht an Menschenrechtlerin aus dem Iran",
+     "hoursAgo": 40
+    },
+    {
+     "feed": "tagesschau",
+     "title": "Iranische Menschenrechtlerin erhält Friedensnobelpreis",
+     "hoursAgo": 39.5
+    },
+    {
+     "feed": "spiegel",
+     "title": "Friedensnobelpreis 2026: Iranische Menschenrechtlerin ausgezeichnet",
+     "hoursAgo": 39
+    }
+   ]
+  },
+  {
+   "id": "heise-chip",
+   "lang": "de",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "heise",
+     "title": "Intel verschiebt Panther-Lake-Chips für Notebooks auf 2027",
+     "hoursAgo": 18
+    },
+    {
+     "feed": "golem",
+     "title": "Panther Lake: Intel verzögert neue Notebook-Prozessoren bis 2027",
+     "hoursAgo": 17.5
+    }
+   ]
+  },
+  {
+   "id": "neg-apple",
+   "lang": "en",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "verge",
+     "title": "Apple releases iOS 26.1 with bug fixes",
+     "hoursAgo": 30.5
+    },
+    {
+     "feed": "ars",
+     "title": "Apple unveils new MacBook Pro with M6 chip",
+     "hoursAgo": 29
+    },
+    {
+     "feed": "reuters",
+     "title": "Apple shares fall after weaker iPhone sales forecast",
+     "hoursAgo": 28
+    }
+   ]
+  },
+  {
+   "id": "neg-rates",
+   "lang": "en",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "bbc",
+     "title": "ECB cuts rates by 25 basis points",
+     "hoursAgo": 19
+    },
+    {
+     "feed": "guardian",
+     "title": "Bank of England holds interest rates at 4%",
+     "hoursAgo": 21
+    }
+   ]
+  },
+  {
+   "id": "neg-bayern",
+   "lang": "de",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "kicker",
+     "title": "Bayern München gewinnt 3:1 gegen Dortmund",
+     "hoursAgo": 26
+    },
+    {
+     "feed": "spiegel",
+     "title": "Bayern: Landtag beschließt neues Polizeigesetz",
+     "hoursAgo": 25
+    }
+   ]
+  },
+  {
+   "id": "neg-quake",
+   "lang": "de",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "tagesschau",
+     "title": "Erdbeben der Stärke 6,1 erschüttert Türkei",
+     "hoursAgo": 6
+    },
+    {
+     "feed": "zeit",
+     "title": "Erdbeben in Japan: Stärke 7,0 vor Küste",
+     "hoursAgo": 5
+    }
+   ]
+  },
+  {
+   "id": "neg-google",
+   "lang": "en",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "guardian",
+     "title": "Google fined €2.4bn by EU",
+     "hoursAgo": 33
+    },
+    {
+     "feed": "verge",
+     "title": "Google launches Gemini 3",
+     "hoursAgo": 32
+    }
+   ]
+  },
+  {
+   "id": "neg-bahn",
+   "lang": "de",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "zeit",
+     "title": "Streik bei der Deutschen Bahn ab Montag angekündigt",
+     "hoursAgo": 4
+    },
+    {
+     "feed": "faz",
+     "title": "Deutsche Bahn erhöht Ticketpreise zum Fahrplanwechsel",
+     "hoursAgo": 3
+    }
+   ]
+  },
+  {
+   "id": "neg-bundestag",
+   "lang": "de",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "faz",
+     "title": "Bundestag beschließt Verlängerung der Mietpreisbremse",
+     "hoursAgo": 9
+    },
+    {
+     "feed": "tagesschau",
+     "title": "Bundestag debattiert über neue Wehrpflicht",
+     "hoursAgo": 7
+    },
+    {
+     "feed": "kicker",
+     "title": "Bundestag beschließt Haushalt für 2026",
+     "hoursAgo": 9
+    }
+   ]
+  },
+  {
+   "id": "neg-microsoft",
+   "lang": "de",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "heise",
+     "title": "Microsoft kündigt Entlassungen bei Xbox an",
+     "hoursAgo": 22
+    },
+    {
+     "feed": "golem",
+     "title": "Microsoft stellt neues Surface Laptop vor",
+     "hoursAgo": 21
+    }
+   ]
+  },
+  {
+   "id": "neg-trump",
+   "lang": "en",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "reuters",
+     "title": "Trump signs executive order on AI chip exports",
+     "hoursAgo": 15
+    },
+    {
+     "feed": "bbc",
+     "title": "Trump announces new tariffs on Chinese steel imports",
+     "hoursAgo": 14
+    }
+   ]
+  },
+  {
+   "id": "neg-openai",
+   "lang": "en",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "techcrunch",
+     "title": "OpenAI hires former Meta executive to lead hardware team",
+     "hoursAgo": 11
+    },
+    {
+     "feed": "guardian",
+     "title": "OpenAI faces new lawsuit from authors over training data",
+     "hoursAgo": 10
+    }
+   ]
+  },
+  {
+   "id": "neg-cve",
+   "lang": "en",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "ars",
+     "title": "Critical OpenSSL flaw CVE-2026-9999 lets attackers crash servers",
+     "hoursAgo": 10
+    },
+    {
+     "feed": "hn",
+     "title": "Critical Linux kernel flaw CVE-2026-5678 allows privilege escalation",
+     "hoursAgo": 9
+    }
+   ]
+  },
+  {
+   "id": "neg-wildfire",
+   "lang": "en",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "guardian",
+     "title": "Wildfire forces 20,000 to evacuate in southern California",
+     "hoursAgo": 28
+    },
+    {
+     "feed": "bbc",
+     "title": "Wildfire smoke blankets Canada as fires spread in British Columbia",
+     "hoursAgo": 27
+    }
+   ]
+  },
+  {
+   "id": "neg-liveblog",
+   "lang": "de",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "spiegel",
+     "title": "Liveblog: Alle Entwicklungen zum Nahost-Konflikt",
+     "hoursAgo": 3
+    },
+    {
+     "feed": "tagesschau",
+     "title": "Nahost-Konflikt: Alle Entwicklungen im Überblick",
+     "hoursAgo": 2.5
+    },
+    {
+     "feed": "zeit",
+     "title": "Liveblog zum Nahost-Konflikt: Die aktuellen Entwicklungen",
+     "hoursAgo": 2
+    }
+   ],
+   "note": "liveblog items are excluded from clustering; the two non-live items are not asserted either way"
+  },
+  {
+   "id": "neg-samefeed",
+   "lang": "en",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "verge",
+     "title": "Nintendo announces new Switch 2 bundle for the holidays",
+     "hoursAgo": 11
+    },
+    {
+     "feed": "verge",
+     "title": "Nintendo announces new Switch 2 bundle for the holidays",
+     "hoursAgo": 10
+    }
+   ]
+  }
+ ],
+ "filler": [
+  {
+   "feed": "spiegel",
+   "title": "Scholz-Nachfolger: Union und SPD ringen um Koalitionsvertrag",
+   "hoursAgo": 7.0
+  },
+  {
+   "feed": "zeit",
+   "title": "Warum immer mehr Menschen auf dem Land keine Hausärztin finden",
+   "hoursAgo": 12.0
+  },
+  {
+   "feed": "faz",
+   "title": "Dax schließt im Plus, Rüstungswerte gefragt",
+   "hoursAgo": 3.0
+  },
+  {
+   "feed": "tagesschau",
+   "title": "Hochwasser in Sachsen: Pegel sinken langsam",
+   "hoursAgo": 9.0
+  },
+  {
+   "feed": "heise",
+   "title": "Windows 11 25H2: Neue Funktionen und bekannte Probleme",
+   "hoursAgo": 20.0
+  },
+  {
+   "feed": "golem",
+   "title": "Raspberry Pi 6 vorgestellt: Mehr Leistung zum gleichen Preis",
+   "hoursAgo": 25.0
+  },
+  {
+   "feed": "kicker",
+   "title": "Union Berlin trennt sich von Trainer",
+   "hoursAgo": 18.0
+  },
+  {
+   "feed": "spiegel",
+   "title": "Die Wahrheit über Vitamin D: Was Studien wirklich zeigen",
+   "hoursAgo": 35.0
+  },
+  {
+   "feed": "zeit",
+   "title": "Mieten steigen in Großstädten weiter um fünf Prozent",
+   "hoursAgo": 27.0
+  },
+  {
+   "feed": "faz",
+   "title": "Bundesverfassungsgericht verhandelt über Wahlrechtsreform",
+   "hoursAgo": 31.0
+  },
+  {
+   "feed": "tagesschau",
+   "title": "Lehrermangel: Länder wollen Quereinsteiger stärker fördern",
+   "hoursAgo": 14.0
+  },
+  {
+   "feed": "heise",
+   "title": "Firefox 140 bringt neue Tab-Gruppen und besseren Tracking-Schutz",
+   "hoursAgo": 11.0
+  },
+  {
+   "feed": "golem",
+   "title": "Nvidia stellt RTX 6090 mit 48 GByte Speicher vor",
+   "hoursAgo": 6.0
+  },
+  {
+   "feed": "kicker",
+   "title": "Leverkusen schlägt Stuttgart im Spitzenspiel mit 2:0",
+   "hoursAgo": 2.0
+  },
+  {
+   "feed": "bbc",
+   "title": "UK inflation falls to lowest level in three years",
+   "hoursAgo": 10.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Oil prices edge higher as OPEC+ weighs output cut",
+   "hoursAgo": 13.0
+  },
+  {
+   "feed": "guardian",
+   "title": "Scientists discover new species of deep-sea octopus off Chile",
+   "hoursAgo": 37.0
+  },
+  {
+   "feed": "verge",
+   "title": "Sony delays PlayStation handheld to next spring",
+   "hoursAgo": 16.0
+  },
+  {
+   "feed": "ars",
+   "title": "SpaceX Starship completes first orbital refueling test",
+   "hoursAgo": 21.0
+  },
+  {
+   "feed": "techcrunch",
+   "title": "Stripe raises funding at $120 billion valuation",
+   "hoursAgo": 23.0
+  },
+  {
+   "feed": "hn",
+   "title": "Show HN: A tiny SQLite-backed job queue in 300 lines",
+   "hoursAgo": 8.0
+  },
+  {
+   "feed": "bbc",
+   "title": "Heathrow warns of delays as strike action looms",
+   "hoursAgo": 4.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Boeing deliveries rebound in third quarter",
+   "hoursAgo": 19.0
+  },
+  {
+   "feed": "guardian",
+   "title": "Why the Premier League's new broadcasting deal changes everything",
+   "hoursAgo": 30.0
+  },
+  {
+   "feed": "verge",
+   "title": "Meta's new smart glasses can translate conversations in real time",
+   "hoursAgo": 26.0
+  },
+  {
+   "feed": "ars",
+   "title": "Linux 7.0 released with new scheduler and Rust drivers",
+   "hoursAgo": 17.0
+  },
+  {
+   "feed": "techcrunch",
+   "title": "Anthropic expands Claude with new enterprise connectors",
+   "hoursAgo": 28.0
+  },
+  {
+   "feed": "hn",
+   "title": "The case against microservices, five years later",
+   "hoursAgo": 15.0
+  },
+  {
+   "feed": "bbc",
+   "title": "Mount Etna erupts again, airport briefly closed",
+   "hoursAgo": 34.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Chinese exports unexpectedly jump in October",
+   "hoursAgo": 12.0
+  },
+  {
+   "feed": "guardian",
+   "title": "Gen Z is quitting social media and the data shows it",
+   "hoursAgo": 41.0
+  },
+  {
+   "feed": "spiegel",
+   "title": "Neue Studie: Homeoffice macht Beschäftigte produktiver",
+   "hoursAgo": 44.0
+  },
+  {
+   "feed": "zeit",
+   "title": "Wie Kinder Programmieren lernen sollen",
+   "hoursAgo": 38.0
+  },
+  {
+   "feed": "faz",
+   "title": "Siemens hebt Prognose an, Aktie springt",
+   "hoursAgo": 5.0
+  },
+  {
+   "feed": "tagesschau",
+   "title": "Bundeswehr kauft weitere Eurofighter",
+   "hoursAgo": 22.0
+  },
+  {
+   "feed": "heise",
+   "title": "Wetter-App-Daten landen bei Datenhändlern",
+   "hoursAgo": 29.0
+  },
+  {
+   "feed": "golem",
+   "title": "Starlink startet Direktverbindung zu Smartphones in Deutschland",
+   "hoursAgo": 33.0
+  },
+  {
+   "feed": "kicker",
+   "title": "Frankfurt holt Nationalspieler aus England",
+   "hoursAgo": 24.0
+  },
+  {
+   "feed": "bbc",
+   "title": "Storm Bert brings flooding to south Wales",
+   "hoursAgo": 7.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Microsoft earnings beat expectations on cloud growth",
+   "hoursAgo": 18.0
+  },
+  {
+   "feed": "guardian",
+   "title": "Climate summit ends with modest deal on finance",
+   "hoursAgo": 36.0
+  },
+  {
+   "feed": "verge",
+   "title": "Netflix will start streaming live boxing events",
+   "hoursAgo": 32.0
+  },
+  {
+   "feed": "ars",
+   "title": "New battery design promises faster charging for EVs",
+   "hoursAgo": 40.0
+  },
+  {
+   "feed": "techcrunch",
+   "title": "Figma launches AI design assistant for teams",
+   "hoursAgo": 9.0
+  },
+  {
+   "feed": "hn",
+   "title": "Postgres 18 released with async IO",
+   "hoursAgo": 3.0
+  },
+  {
+   "feed": "spiegel",
+   "title": "Interview mit Wirtschaftsweiser: Deutschland braucht Reformen",
+   "hoursAgo": 13.0
+  },
+  {
+   "feed": "zeit",
+   "title": "Der lange Abschied vom Verbrennerverbot",
+   "hoursAgo": 25.0
+  },
+  {
+   "feed": "faz",
+   "title": "Commerzbank: Unicredit erhöht Anteil weiter",
+   "hoursAgo": 16.0
+  },
+  {
+   "feed": "tagesschau",
+   "title": "Rekordzahl an Organspenden im vergangenen Jahr",
+   "hoursAgo": 43.0
+  },
+  {
+   "feed": "heise",
+   "title": "Telekom baut Glasfasernetz schneller aus als geplant",
+   "hoursAgo": 8.0
+  },
+  {
+   "feed": "golem",
+   "title": "Steam Machine ausprobiert: Konsole mit Linux-Herz",
+   "hoursAgo": 19.0
+  },
+  {
+   "feed": "kicker",
+   "title": "Nagelsmann beruft überraschend jungen Torwart",
+   "hoursAgo": 27.0
+  },
+  {
+   "feed": "bbc",
+   "title": "NHS waiting lists fall for third month in a row",
+   "hoursAgo": 45.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Toyota unveils solid-state battery roadmap",
+   "hoursAgo": 21.0
+  },
+  {
+   "feed": "guardian",
+   "title": "The quiet revival of the independent bookshop",
+   "hoursAgo": 46.0
+  },
+  {
+   "feed": "verge",
+   "title": "Google Pixel 11 leaks show a redesigned camera bar",
+   "hoursAgo": 14.0
+  },
+  {
+   "feed": "ars",
+   "title": "Researchers find way to extract keys from sleeping laptops",
+   "hoursAgo": 31.0
+  },
+  {
+   "feed": "techcrunch",
+   "title": "Uber partners with Waymo in three more cities",
+   "hoursAgo": 10.0
+  },
+  {
+   "feed": "hn",
+   "title": "SQLite 4 design notes published",
+   "hoursAgo": 2.0
+  },
+  {
+   "feed": "spiegel",
+   "title": "Taylor Swift kündigt neues Album an",
+   "hoursAgo": 1.0
+  },
+  {
+   "feed": "zeit",
+   "title": "Gesundheitsminister plant Reform der Notaufnahmen",
+   "hoursAgo": 6.0
+  },
+  {
+   "feed": "faz",
+   "title": "Immobilienpreise: Die Trendwende kommt",
+   "hoursAgo": 28.0
+  },
+  {
+   "feed": "tagesschau",
+   "title": "Neue Corona-Variante in Deutschland nachgewiesen",
+   "hoursAgo": 11.0
+  },
+  {
+   "feed": "heise",
+   "title": "Chrome blockiert Drittanbieter-Cookies für alle Nutzer",
+   "hoursAgo": 15.0
+  },
+  {
+   "feed": "golem",
+   "title": "AMD Ryzen 9 11950X im Test: Schneller, aber heißer",
+   "hoursAgo": 35.0
+  },
+  {
+   "feed": "kicker",
+   "title": "Handball-WM: Deutschland gewinnt Auftaktspiel",
+   "hoursAgo": 20.0
+  },
+  {
+   "feed": "bbc",
+   "title": "Archaeologists uncover Roman villa beneath Kent farm",
+   "hoursAgo": 42.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Samsung profit slumps as memory prices fall",
+   "hoursAgo": 23.0
+  },
+  {
+   "feed": "guardian",
+   "title": "Fashion weeks turn to AI models, and designers are divided",
+   "hoursAgo": 39.0
+  },
+  {
+   "feed": "verge",
+   "title": "Spotify raises prices again in the US",
+   "hoursAgo": 17.0
+  },
+  {
+   "feed": "ars",
+   "title": "Mars rover finds organic molecules in ancient lake bed",
+   "hoursAgo": 13.0
+  },
+  {
+   "feed": "tagesschau",
+   "title": "Bahn-Chefin kündigt Sanierung des Schienennetzes bis 2030 an",
+   "hoursAgo": 36.0
+  },
+  {
+   "feed": "zeit",
+   "title": "Deutsche Bahn: Fahrgastverband kritisiert anhaltende Verspätungen",
+   "hoursAgo": 30.0
+  },
+  {
+   "feed": "faz",
+   "title": "Bahn verkauft Logistiktochter Schenker an dänischen Konzern",
+   "hoursAgo": 44.0
+  },
+  {
+   "feed": "spiegel",
+   "title": "Neue Bahncard-Preise sorgen für Kritik",
+   "hoursAgo": 29.0
+  },
+  {
+   "feed": "heise",
+   "title": "Bahn-App bekommt Echtzeit-Karte für Verspätungen",
+   "hoursAgo": 26.0
+  },
+  {
+   "feed": "kicker",
+   "title": "Bundestag ehrt Fußball-Nationalmannschaft",
+   "hoursAgo": 34.0
+  },
+  {
+   "feed": "tagesschau",
+   "title": "Bundestag wählt neue Wehrbeauftragte",
+   "hoursAgo": 38.0
+  },
+  {
+   "feed": "zeit",
+   "title": "Bundestag streitet über Cannabis-Regeln",
+   "hoursAgo": 42.0
+  },
+  {
+   "feed": "faz",
+   "title": "Bundestag billigt Bundeswehr-Auftragsvergabe im Eilverfahren",
+   "hoursAgo": 20.0
+  },
+  {
+   "feed": "spiegel",
+   "title": "Rentenversicherung warnt vor steigenden Beiträgen",
+   "hoursAgo": 23.0
+  },
+  {
+   "feed": "zeit",
+   "title": "Rente mit 63: Kritik an Arbeitgebern wächst",
+   "hoursAgo": 37.0
+  },
+  {
+   "feed": "faz",
+   "title": "Rentenniveau soll bis 2040 stabil bleiben",
+   "hoursAgo": 41.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Apple supplier Foxconn posts record quarterly revenue",
+   "hoursAgo": 15.0
+  },
+  {
+   "feed": "verge",
+   "title": "Apple Watch gets blood pressure alerts in new update",
+   "hoursAgo": 27.0
+  },
+  {
+   "feed": "techcrunch",
+   "title": "Apple faces new antitrust probe in Japan",
+   "hoursAgo": 37.0
+  },
+  {
+   "feed": "guardian",
+   "title": "Trump says tariffs on EU goods will take effect next month",
+   "hoursAgo": 11.0
+  },
+  {
+   "feed": "bbc",
+   "title": "Trump to meet Xi in Seoul next week, officials say",
+   "hoursAgo": 17.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Trump administration weighs new rules on drone imports",
+   "hoursAgo": 31.0
+  },
+  {
+   "feed": "verge",
+   "title": "Tesla Cybercab spotted testing in Austin",
+   "hoursAgo": 38.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Tesla shares slide after weak delivery numbers",
+   "hoursAgo": 25.0
+  },
+  {
+   "feed": "ars",
+   "title": "Tesla Autopilot faces new federal investigation",
+   "hoursAgo": 35.0
+  },
+  {
+   "feed": "tagesschau",
+   "title": "Erdbeben erschüttert Region in Südchina",
+   "hoursAgo": 19.0
+  },
+  {
+   "feed": "spiegel",
+   "title": "Sturmtief Xaver: Warnung für die Nordseeküste",
+   "hoursAgo": 18.0
+  },
+  {
+   "feed": "zeit",
+   "title": "Streik im Einzelhandel: Verdi ruft zu Warnstreiks auf",
+   "hoursAgo": 12.0
+  },
+  {
+   "feed": "faz",
+   "title": "Streik bei Flughafenbetreiber: Gewerkschaft droht mit Ausweitung",
+   "hoursAgo": 33.0
+  },
+  {
+   "feed": "heise",
+   "title": "Google stellt neue Pixel-Smartphones vor",
+   "hoursAgo": 13.0
+  },
+  {
+   "feed": "golem",
+   "title": "Samsung stellt Galaxy S27 mit neuem Kamerasystem vor",
+   "hoursAgo": 28.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Federal Reserve governor says inflation risks remain",
+   "hoursAgo": 8.0
+  },
+  {
+   "feed": "reuters",
+   "title": "Fed's Powell to speak at Jackson Hole next week",
+   "hoursAgo": 36.0
+  },
+  {
+   "feed": "guardian",
+   "title": "Google to pay $500 million to settle privacy lawsuit",
+   "hoursAgo": 32.0
+  },
+  {
+   "feed": "verge",
+   "title": "Google Gemini now powers Android Auto",
+   "hoursAgo": 23.0
+  }
+ ]
+}

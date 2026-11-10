@@ -40,6 +40,8 @@ export const LIST_SELECT = {
   labels: { select: { labelId: true } },
   _count: { select: { duplicates: true } },
   canonical: { select: { feed: { select: { name: true } } } },
+  clusterId: true,
+  cluster: { select: { size: true, leadArticleId: true } },
 } as const;
 
 export type ListRow = {
@@ -68,6 +70,9 @@ export type ListRow = {
   labels: { labelId: string }[];
   _count: { duplicates: number };
   canonical: { feed: { name: string } | null } | null;
+  // Story cluster (K1): both null/absent for unclustered rows.
+  clusterId?: string | null;
+  cluster?: { size: number; leadArticleId: string } | null;
 };
 
 // The sync-time excerpt is the first 200 chars of the body's plain text.
@@ -118,6 +123,9 @@ export function toListItem(row: ListRow): ArticleListItem {
     duplicateCount: row._count?.duplicates ?? 0,
     canonicalFeedName: row.canonical?.feed?.name ?? null,
     labelIds: row.labels.map((l) => l.labelId),
+    ...(row.clusterId && row.cluster
+      ? { clusterId: row.clusterId, clusterSize: row.cluster.size, clusterLeadId: row.cluster.leadArticleId }
+      : {}),
   };
 }
 

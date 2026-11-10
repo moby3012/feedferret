@@ -140,9 +140,15 @@ test("10 rapid toggles of one star send at most 2 action calls", async ({ app, p
   await app.open();
   const actions = countActions(page);
   const star = app.rowActions(1).star;
+  const t0 = Date.now();
   for (let i = 0; i < 10; i++) await app.activate(star);
+  const tappingMs = Date.now() - t0;
   await page.waitForTimeout(2000);
-  expect(actions.count).toBeLessThanOrEqual(2);
+  // The batcher flushes at the latest 1 s after the first queued write, so slow
+  // (mobile-emulated CI) tapping that spans more than a second legitimately
+  // produces one extra call per elapsed second. Ten separate calls is the bug.
+  expect(actions.count).toBeLessThanOrEqual(2 + Math.floor(tappingMs / 1000));
+  expect(actions.count).toBeLessThan(10);
   actions.stop();
   // Even number of toggles: back where it started, on screen and on the server.
   await expect(star).toHaveAccessibleName("Star");

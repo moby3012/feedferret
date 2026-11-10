@@ -5,8 +5,10 @@ import { runDigestScheduler } from "./digest-scheduler";
 import { flushDueNotifications } from "./notifications";
 import { applyRetentionPoliciesForAllUsers } from "./retention";
 import { logger } from "./logger";
+import { cleanupStoryClusters, drainStoryClustering, runStoryClustering } from "./story-clustering/job";
 
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000; // run at most once/day
+const STORY_CLUSTERING_BUDGET_MS = 400;
 
 type SchedulerState = {
     timer: ReturnType<typeof setTimeout> | null;
@@ -55,6 +57,20 @@ async function tick() {
             logger.error("[push-notifications] flush failed:", e),
         );
 
+        // Story clustering (K1): bounded (<= 400 ms) pass over freshly synced articles. Never
+        // blocks or fails the tick; leftovers (first-run 48h backfill, big bursts) are drained
+        // by a background loop of further bounded passes. Off via DISABLE_STORY_CLUSTERING=true.
+        void runStoryClustering({ budgetMs: STORY_CLUSTERING_BUDGET_MS })
+            .then((r) => {
+                if (r.processed > 0) {
+                    logger.log(
+                        `[story-clustering] ${r.processed} processed (${r.created} new, ${r.joined} joined, ${r.singles} single) in ${Math.round(r.ms)}ms`,
+                    );
+                }
+                if (r.morePending) drainStoryClustering(STORY_CLUSTERING_BUDGET_MS);
+            })
+            .catch((e) => logger.error("[story-clustering] tick failed:", e));
+
         // Retention cleanup is expensive relative to a sync tick, so only run it
         // once/day rather than on every ~5-min tick.
         if (Date.now() - state.lastRetentionRun >= RETENTION_INTERVAL_MS) {
@@ -65,7 +81,9 @@ async function tick() {
                         `[retention] processed ${r.usersProcessed} users, deleted ${r.deleted} articles`,
                     ),
                 )
-                .catch((e) => logger.error("[retention] run failed:", e));
+                .catch((e) => logger.error("[retention] run failed:", e))
+                .then(() => cleanupStoryClusters())
+                .catch((e) => logger.error("[story-clustering] cleanup failed:", e));
         }
     } catch (error) {
         state.lastError = String(error);
