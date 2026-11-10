@@ -174,6 +174,18 @@ function categoryOutline(category: any, lines: string[], indent: string, childre
  * Generates an OPML string from feeds and optional categories. When categories
  * are provided, Scout Studio dynamic OPML categories and nested structure are kept.
  */
+/** API exports expose only public subscription configuration. Unknown HTTP and
+ * scraper extensions are omitted: they can carry arbitrary credentials. */
+export function generateApiOpml(feeds: any[], categories: any[] = []) {
+    const publicUrl = (value: string | null) => value?.replace(/(https?:\/\/)[^/@]+@/gi, "$1") ?? value;
+    return generateOpml(feeds.map((feed) => {
+        const scraper = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
+        delete scraper.extensions;
+        return { ...feed, url: publicUrl(feed.url), htmlUrl: publicUrl(feed.htmlUrl),
+            httpOptions: null, authPassword: null, scraperConfig: JSON.stringify(scraper) };
+    }), categories.map((category) => ({ ...category, opmlUrl: publicUrl(category.opmlUrl) })));
+}
+
 export function generateOpml(feeds: any[], categories: any[] = []): string {
     const header = `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0" xmlns:${OPML_EXTENSION_PREFIX}="${OPML_EXTENSION_NAMESPACE}">

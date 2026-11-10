@@ -13,6 +13,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 - API for the upcoming cluster card: optional `clusterId` / `clusterSize` / `clusterLeadId` on `GET /api/app/articles` items, `GET /api/app/clusters/:id`, and `affected` ids from the batched read action.
 - New setting `clusterReadMode` (default `article` until the cluster card ships; `story` = reading a story's lead marks its other sources read).
 
+### Security — sync credentials upgrade
+
+- Existing plaintext Fever keys migrate automatically to SHA-256 on first use and in a non-blocking startup backfill; no client credential rotation is needed for this upgrade. Operators should apply the additive Prisma schema update before starting the new server. If you change your email, all Fever keys are cleared: rotate the API password and recreate tokens used with Fever, then reconnect clients. Passwordless accounts without 2FA can manage API passwords within ten minutes of a new sign-in; older sessions must sign out and sign in again. TOTP codes accepted for API-password step-up or login cannot be reused within the acceptance window.
+
 ### Added — lossless FreshRSS migration
 
 - **Manage feeds → Import/Export → "Von FreshRSS umziehen"**: upload the FreshRSS export ZIP (or an OPML / article JSON file), review a dry-run summary, confirm, get a result report. Imports subscriptions, folders (incl. empty ones), XPath/JSON/HTML+JSON scraping feeds, `ttl`/mute, priority, full-content CSS selector (now **enabled**), cookies/headers/user agent, plus starred/read state, labels, bodies, dates and enclosures of exported articles. Re-importing is idempotent; see `docs/freshrss-migration.md` for the full mapping.

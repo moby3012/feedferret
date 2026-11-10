@@ -45,3 +45,16 @@ describe("OAuth/OIDC registration policy", () => {
     expect(await signIn()).toBe(false);
   });
 });
+
+
+it("records authentication time only at sign-in, never at session refresh/update", async () => {
+  mocks.user.mockResolvedValue({ isActive: true, role: "USER", sessionVersion: 1 });
+  const before = Math.floor(Date.now() / 1000);
+  const token = await mocks.config.callbacks.jwt({ token: { sub: "u1" }, trigger: "signIn" });
+  expect(token.authenticatedAt).toBeGreaterThanOrEqual(before);
+  token.authenticatedAt = 42;
+  expect((await mocks.config.callbacks.jwt({ token, trigger: "update" })).authenticatedAt).toBe(42);
+  expect((await mocks.config.callbacks.jwt({ token })).authenticatedAt).toBe(42);
+  expect(await mocks.config.callbacks.session({ session: { user: {} }, token })).toMatchObject({ authenticatedAt: 42 });
+  expect((await mocks.config.callbacks.jwt({ token: { sub: "u1", iat: before } })).authenticatedAt).toBeUndefined();
+});

@@ -1,5 +1,6 @@
 import { decimalExternalId, storedExternalId } from "./external-ids";
-import { Prisma } from "@prisma/client";
+import { hashApiToken } from "@/lib/token";
+import { Prisma, type User } from "@prisma/client";
 import crypto from "crypto";
 import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
@@ -26,17 +27,28 @@ function secret() {
   throw new Error("AUTH_SECRET must be set for Google Reader API tokens.");
 }
 
-export function createGReaderToken(userId: string) {
-  const sig = crypto.createHmac("sha256", secret()).update(userId).digest("hex");
-  return `${userId}.${sig}`;
+export function createGReaderToken(userId: string, version = 0) {
+  const payload = `${userId}:${version}`;
+  const sig = crypto.createHmac("sha256", secret()).update(payload).digest("hex");
+  return `${userId}.${version}.${sig}`;
 }
 
 export function verifyGReaderToken(token: string) {
-  const [userId, sig] = token.split(".");
-  if (!userId || !sig) return null;
-  const expected = crypto.createHmac("sha256", secret()).update(userId).digest("hex");
-  if (sig.length !== expected.length) return null;
+  const parts = token.split(".");
+  const [userId, version, sig] = parts;
+  if (parts.length !== 3 || !userId || !/^\d+$/.test(version) || !/^[a-f0-9]{64}$/.test(sig)) return null;
+  const expected = crypto.createHmac("sha256", secret()).update(`${userId}:${version}`).digest("hex");
   return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)) ? userId : null;
+}
+
+const passwordCache = new Map<string, { key: string; expires: number }>();
+
+/** Conditional update avoids a write on every poll, including across instances. */
+export async function touchApiPassword(userId: string, lastUsed: Date | null) {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 5 * 60_000);
+  if (lastUsed && lastUsed > cutoff) return;
+  await db.user.updateMany({ where: { id: userId, OR: [{ apiPasswordLastUsedAt: null }, { apiPasswordLastUsedAt: { lte: cutoff } }] }, data: { apiPasswordLastUsedAt: now } });
 }
 
 /** Shared password path: throttle both identity and source before bcrypt. */
@@ -52,10 +64,24 @@ export async function authenticateGReaderPassword(request: Request, email: strin
   if (!ipLimit.success || !accountLimit.success) failReason = "rate_limit";
   else {
     user = email ? await db.user.findUnique({ where: { email } }) : null;
-    if (!user?.password) failReason = "no_account";
+    if (!user || (!user.password && !user.apiPasswordHash)) failReason = "no_account";
     else if (!user.isActive) failReason = "inactive";
-    else if (user.twoFactorEnabled) failReason = "otp";
-    else if (!(await bcrypt.compare(password, user.password))) failReason = "password";
+    else {
+      const hash = user.apiPasswordHash || (!user.twoFactorEnabled && !user.apiPasswordRequired ? user.password : null);
+      const key = `${user.apiTokenVersion}:${hashApiToken(password)}`;
+      // Always reload user/policy/version before consulting cached verification.
+      const cached = passwordCache.get(user.id);
+      const verified = cached?.key === key && cached.expires > Date.now();
+      if (!verified) passwordCache.delete(user.id);
+      if (!hash || (!verified && !(await bcrypt.compare(password, hash)))) failReason = "password";
+      else {
+        if (!passwordCache.has(user.id)) {
+          if (passwordCache.size >= 5000) passwordCache.delete(passwordCache.keys().next().value!);
+          passwordCache.set(user.id, { key, expires: Date.now() + 60_000 });
+        }
+        if (user.apiPasswordHash) await touchApiPassword(user.id, user.apiPasswordLastUsedAt);
+      }
+    }
   }
   if (!failReason) return user;
   if (failReason !== "rate_limit") {
@@ -71,7 +97,7 @@ export async function authenticateGReaderPassword(request: Request, email: strin
   return failReason ? null : user;
 }
 
-export async function authenticateGReaderRequest(request: Request) {
+export async function authenticateGReaderRequest(request: Request): Promise<(User & { tokenScope?: string }) | null> {
   const header = request.headers.get("authorization") || "";
   const googleLogin = header.match(/GoogleLogin\s+auth=(.+)$/i);
   const bearer = header.match(/^Bearer\s+(.+)$/i);
@@ -80,10 +106,14 @@ export async function authenticateGReaderRequest(request: Request) {
     const userId = verifyGReaderToken(token.trim());
     if (userId) {
       const user = await db.user.findUnique({ where: { id: userId } });
-      if (user?.isActive) return user;
+      if (user?.isActive && Number(token.trim().split(".")[1]) === user.apiTokenVersion) return user;
     }
   }
 
+  if (bearer && !googleLogin) {
+    const record = await db.apiToken.findUnique({ where: { tokenHash: hashApiToken(bearer[1].trim()) }, include: { user: true } });
+    if (record?.user.isActive && (!record.expiresAt || record.expiresAt > new Date())) return { ...record.user, tokenScope: record.scope };
+  }
   if (header.startsWith("Basic ")) {
     const raw = Buffer.from(header.slice(6), "base64").toString("utf8");
     const separator = raw.indexOf(":");
@@ -120,7 +150,8 @@ export function parseGReaderStreamId(streamId?: string | null) {
   if (streamId === GREADER_STARRED) return { type: "starred" as const };
   if (streamId === GREADER_READ) return { type: "read" as const };
   if (streamId.startsWith("feed/")) return { type: "feed" as const, value: streamId.slice(5) };
-  if (streamId.startsWith(GREADER_LABEL_PREFIX)) return { type: "label" as const, value: streamId.slice(GREADER_LABEL_PREFIX.length) };
+  const label = normalizeCategoryNameFromTag(streamId);
+  if (label) return { type: "label" as const, value: label };
   return { type: "unknown" as const, value: streamId };
 }
 
@@ -149,9 +180,11 @@ export function greaderLimit(value: string | null, idsOnly = true) {
 }
 
 export function normalizeCategoryNameFromTag(tag: string) {
+  tag = tag.replace(/^user\/[^/]+\/label\//, GREADER_LABEL_PREFIX);
   if (!tag.startsWith(GREADER_LABEL_PREFIX)) return null;
-  const name = decodeURIComponent(tag.slice(GREADER_LABEL_PREFIX.length)).trim();
-  return name || null;
+  let name: string;
+  try { name = decodeURIComponent(tag.slice(GREADER_LABEL_PREFIX.length)).trim(); } catch { name = tag.slice(GREADER_LABEL_PREFIX.length).trim(); }
+  return name && name.length <= 255 ? name : null;
 }
 
 export function isKnownGReaderStream(streamId: string) {
@@ -276,7 +309,7 @@ export async function listGReaderTags(userId: string) {
     const name = item.name.trim();
     if (!name || seen.has(name)) return [];
     seen.add(name);
-    return [{ id: `${GREADER_LABEL_PREFIX}${name}`, type: "label", sortid: name }];
+    return [{ id: `${GREADER_LABEL_PREFIX}${name}`, type: categories.some((category) => category.name === name) ? "folder" : "tag", sortid: name }];
   });
 
   return [...systemTags, ...customTags];

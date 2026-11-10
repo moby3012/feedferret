@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
-import { generateApiToken, generateFeverKey } from "@/lib/token";
+import { generateApiToken, hashApiToken, generateFeverKey } from "@/lib/token";
 
 function requireSession() {
   return auth().then((s) => s?.user?.id ?? null);
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
   const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
   const { raw, hash } = generateApiToken();
-  const feverKey = user?.email ? generateFeverKey(user.email, raw) : null;
+  const feverKey = user?.email ? hashApiToken(generateFeverKey(user.email, raw)) : null;
 
   const token = await db.apiToken.create({
     data: { userId, tokenHash: hash, feverKey, name, scope, expiresAt },

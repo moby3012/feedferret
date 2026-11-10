@@ -1,5 +1,6 @@
 "use client";
 
+import { ApiPasswordSettings } from "@/components/api-password-settings";
 import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
 import { signOut } from "@/lib/logout";
@@ -600,6 +601,8 @@ export function SettingsForm() {
               </div>
             </section>
 
+            <p className="text-sm text-muted-foreground">{t("apiPassword.emailChangeWarning")}</p>
+
             {/* Change password */}
             <PasswordSection />
 
@@ -607,6 +610,7 @@ export function SettingsForm() {
             <TwoFactorSection />
 
             {/* API Access */}
+            <ApiPasswordSettings />
             <ApiTokenSection />
 
             {/* Add to Home Screen */}
@@ -1993,6 +1997,7 @@ function ApiTokenSection() {
         </div>
       )}
 
+      <p className="mt-4 text-xs text-muted-foreground">{t("apiPassword.emailChangeWarning")}</p>
       <p className="mt-4 text-xs text-muted-foreground">
         Pass the token as <code className="bg-muted px-1 py-0.5 rounded text-caption">Authorization: Bearer &lt;token&gt;</code>.{" "}
         The Fever API uses <code className="bg-muted px-1 py-0.5 rounded text-caption">md5(email:token)</code> as its api_key.

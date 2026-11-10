@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { generateApiToken } from "@/lib/token";
-import { generateFeverKey } from "@/lib/token";
+import { hashApiToken, generateFeverKey } from "@/lib/token";
 
 // GET /api/user/token — returns { hasToken: boolean } for backward compat
 export async function GET() {
@@ -22,7 +22,7 @@ export async function POST() {
 
   const user = await db.user.findUnique({ where: { id: session.user.id }, select: { email: true } });
   const { raw, hash } = generateApiToken();
-  const feverKey = user?.email ? generateFeverKey(user.email, raw) : null;
+  const feverKey = user?.email ? hashApiToken(generateFeverKey(user.email, raw)) : null;
 
   await db.$transaction([
     db.apiToken.deleteMany({ where: { userId: session.user.id } }),

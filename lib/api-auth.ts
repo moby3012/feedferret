@@ -14,6 +14,7 @@ export type ApiUser = {
   role: string;
   tokenScope?: string;  // undefined = session auth (full access)
   tokenId?: string;
+  authenticatedAt?: number;
 };
 
 export async function resolveApiUser(request: Request): Promise<ApiUser | null> {
@@ -112,7 +113,7 @@ export async function resolveSessionUser(): Promise<ApiUser | null> {
     select: { id: true, email: true, name: true, role: true, isActive: true },
   });
   if (!user?.isActive) return null;
-  return { id: user.id, email: user.email, name: user.name, role: user.role };
+  return { id: user.id, email: user.email, name: user.name, role: user.role, authenticatedAt: session.authenticatedAt };
 }
 
 const APP_HEADERS = { "Cache-Control": "private, no-store" } as const;

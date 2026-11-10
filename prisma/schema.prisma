@@ -13,7 +13,14 @@ model User {
   emailVerified DateTime?
   image         String?
   password      String?
+  apiPasswordHash String?
+  apiPasswordCreatedAt DateTime?
+  apiPasswordLastUsedAt DateTime?
+  apiPasswordRequired Boolean @default(false)
+  apiTokenVersion Int @default(0)
+  apiFeverKey String? @unique
   twoFactorEnabled Boolean @default(false)
+  twoFactorLastAcceptedStep Int?
   twoFactorSecret  String?
   sessionVersion   Int     @default(0)
   accounts      Account[]

@@ -4,8 +4,11 @@ export const runtime = "nodejs";
 import { decimalExternalId, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { isLegacyFeverKey } from "@/lib/fever-keys";
+import { hashApiToken } from "@/lib/token";
+import { touchApiPassword } from "@/lib/greader";
 import { logger } from "@/lib/logger";
-import { checkRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
+import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 
 function numericIds(value: string): string[] {
@@ -23,10 +26,31 @@ async function authenticateFever(
   const apiKey = body.api_key || params.get("api_key");
   if (!apiKey) return null;
 
-  const token = await db.apiToken.findFirst({
-    where: { feverKey: apiKey },
+  const keyHash = hashApiToken(apiKey);
+  let passwordUser = await db.user.findUnique({ where: { apiFeverKey: keyHash } });
+  if (!passwordUser && isLegacyFeverKey(apiKey)) {
+    const legacy = await db.user.findUnique({ where: { apiFeverKey: apiKey } });
+    if (legacy) {
+      await db.user.updateMany({ where: { id: legacy.id, apiFeverKey: apiKey }, data: { apiFeverKey: keyHash } });
+      // Reload after the CAS: concurrent backfill is fine; rotation/revocation is not.
+      passwordUser = await db.user.findUnique({ where: { apiFeverKey: keyHash } });
+    }
+  }
+  if (passwordUser?.isActive && passwordUser.apiPasswordHash) {
+    await touchApiPassword(passwordUser.id, passwordUser.apiPasswordLastUsedAt);
+    return { id: passwordUser.id, email: passwordUser.email, tokenScope: "write" };
+  }
+  let token = await db.apiToken.findFirst({
+    where: { feverKey: hashApiToken(apiKey) },
     include: { user: { select: { id: true, email: true, isActive: true } } },
   });
+  if (!token && isLegacyFeverKey(apiKey)) {
+    const legacy = await db.apiToken.findFirst({ where: { feverKey: apiKey } });
+    if (legacy) {
+      await db.apiToken.updateMany({ where: { id: legacy.id, feverKey: apiKey }, data: { feverKey: keyHash } });
+      token = await db.apiToken.findFirst({ where: { feverKey: keyHash }, include: { user: { select: { id: true, email: true, isActive: true } } } });
+    }
+  }
   if (token?.user?.isActive && (!token.expiresAt || token.expiresAt > new Date())) return { ...token.user, tokenScope: token.scope };
   return null;
 }
@@ -250,8 +274,12 @@ async function handle(request: Request) {
       );
     }
 
+    const ip = getClientIdentifier(request);
+    const authLimit = { ...RATE_LIMITS.authSignIn, prefix: "greader-ip" };
+    if (!peekRateLimit(ip, authLimit).success) return NextResponse.json(baseResponse(0));
     const user = await authenticateFever(params, body);
     if (!user) {
+      checkRateLimit(ip, authLimit);
       return NextResponse.json(baseResponse(0));
     }
 

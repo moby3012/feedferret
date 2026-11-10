@@ -77,17 +77,21 @@ export function generateTotpToken(secret: string, time = Date.now(), period = TO
 }
 
 export function verifyTotpToken(secret: string, token: string, window = 1) {
+  return matchingTotpStep(secret, token, window) !== null;
+}
+
+export function matchingTotpStep(secret: string, token: string, window = 1) {
   const normalized = normalizeToken(token);
-  if (!/^\d{6}$/.test(normalized)) return false;
+  if (!/^\d{6}$/.test(normalized)) return null;
 
   const currentCounter = Math.floor(Date.now() / 1000 / TOTP_PERIOD_SECONDS);
   for (let offset = -window; offset <= window; offset += 1) {
     if (hotp(secret, currentCounter + offset, TOTP_DIGITS) === normalized) {
-      return true;
+      return currentCounter + offset;
     }
   }
 
-  return false;
+  return null;
 }
 
 export function buildOtpAuthUri({
