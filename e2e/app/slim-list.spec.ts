@@ -1,5 +1,6 @@
 import zlib from "node:zlib";
 import { test, expect } from "../helpers/test";
+import { articleFlags } from "../helpers/db";
 
 /**
  * Shell spec PR 1 ("slim list + article detail"): the list comes from
@@ -89,4 +90,65 @@ test("app endpoints need a session", async ({ playwright }, testInfo) => {
   } finally {
     await anonymous.dispose();
   }
+});
+
+test("unread view keeps rows read this session across refetches; scroll position holds", async ({ app, page }) => {
+  await app.open();
+  const viewport = page.getByRole("region", { name: "Article list" }).locator('[data-slot="scroll-area-viewport"]').first();
+  // Scroll a bit so the position check means something.
+  await viewport.evaluate((el) => el.scrollTo(0, 240));
+
+  // Read three articles: one by opening it, two from the row action.
+  await app.activate(app.row(4));
+  await expect.poll(() => articleFlags(app.articleId(4)).isRead).toBe(true);
+  if (app.isMobile) await app.activate(page.getByRole("button", { name: /^(Back to list|Back)$/ }).first());
+  for (const num of [5, 6]) {
+    await app.activate(app.rowActions(num).read);
+    await expect.poll(() => articleFlags(app.articleId(num)).isRead).toBe(true);
+  }
+  await page.waitForLoadState("networkidle");
+  // The star click below must not scroll the list itself.
+  await app.rowActions(7).star.scrollIntoViewIfNeeded();
+  const before = await viewport.evaluate((el) => el.scrollTop);
+  const rowTop = async () => (await app.row(5).boundingBox())?.y ?? -1;
+  const rowTopBefore = await rowTop();
+
+  const listRequests: string[] = [];
+  page.on("request", (r) => {
+    if (LIST_URL.test(r.url())) listRequests.push(r.url());
+  });
+  // Star another article (used to invalidate + refetch every list), then
+  // bring the window back into focus (used to refetch stale lists).
+  await app.activate(app.rowActions(7).star);
+  await expect.poll(() => articleFlags(app.articleId(7)).isStarred).toBe(true);
+  await page.evaluate(() => {
+    document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
+    window.dispatchEvent(new Event("focus"));
+  });
+  await page.waitForTimeout(500);
+  await page.waitForLoadState("networkidle");
+
+  for (const num of [4, 5, 6]) {
+    await expect(app.row(num)).toHaveCount(1);
+    await expect(app.rowActions(num).read).toHaveAccessibleName("Mark as unread");
+  }
+  await expect(app.rowActions(7).star).toHaveAccessibleName("Remove star");
+  // Star is patched into the cache; focus does not refetch the list.
+  expect(listRequests).toEqual([]);
+  expect(Math.abs((await viewport.evaluate((el) => el.scrollTop)) - before)).toBeLessThanOrEqual(2);
+  expect(Math.abs((await rowTop()) - rowTopBefore)).toBeLessThanOrEqual(2);
+
+  // A real list refetch (keyboard "r" = refresh feeds) no longer returns the
+  // three read rows from the server; they stay where they were.
+  const refetched = page.waitForResponse((r) => LIST_URL.test(r.url()) && r.request().method() === "GET", { timeout: 30_000 });
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("r");
+  const body = await (await refetched).json();
+  for (const num of [4, 5, 6]) expect(body.items.map((i: { id: string }) => i.id)).not.toContain(app.articleId(num));
+  await page.waitForLoadState("networkidle");
+  for (const num of [4, 5, 6]) {
+    await expect(app.row(num)).toHaveCount(1);
+    await expect(app.rowActions(num).read).toHaveAccessibleName("Mark as unread");
+  }
+  expect(Math.abs((await rowTop()) - rowTopBefore)).toBeLessThanOrEqual(2);
 });

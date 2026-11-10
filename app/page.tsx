@@ -124,7 +124,10 @@ export default function RSSReaderPage() {
     () => (listScope ? listKeyOf(listScope, unreadOnly ? "unread" : "all", sortOrder === "oldest" ? "old" : "new") : null),
     [listScope, unreadOnly, sortOrder],
   );
-  const articleList = useArticleList(listKey, { active: isAuthenticated });
+  const [readInSession, setReadInSession] = useState<string[]>([]);
+  // Rows read this session stay in the unread list across refetches.
+  const retainIds = useMemo(() => (unreadOnly ? new Set(readInSession) : undefined), [unreadOnly, readInSession]);
+  const articleList = useArticleList(listKey, { active: isAuthenticated, retainIds });
   const rawArticles = articleList.items;
   const articlesLoading = articleList.status === "pending" && isAuthenticated;
 
@@ -158,7 +161,6 @@ export default function RSSReaderPage() {
   const { defaultLayout: readerLayout, onLayoutChanged: onReaderLayoutChanged } =
     useDefaultLayout({ id: "feedferret-reader-layout", panelIds: ["article-list", "article-reader"], storage: ssrSafeStorage });
 
-  const [readInSession, setReadInSession] = useState<string[]>([]);
   const [autoReadSuppressedArticles, setAutoReadSuppressedArticles] = useState<string[]>([]);
   const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
   const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);

@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useInfiniteQuery, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { replaceEqualDeep, useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type QueryKey } from "@tanstack/react-query";
 import { fetchArticleDetail, fetchArticlePage, shouldRetry } from "./api";
-import { findCachedArticle } from "./cache";
+import { findCachedArticle, mergeRetainedRows } from "./cache";
 import { qk } from "./keys";
 import type { ListKey } from "./scope";
-import type { ArticleDetail, ArticleListItem } from "./types";
+import type { ArticleDetail, ArticleListItem, ArticlePage } from "./types";
 
 const DISABLED_KEY = ["list", "__disabled__"] as const;
+const NO_IDS: ReadonlySet<string> = new Set();
 
 export interface ArticleListResult {
   items: ArticleListItem[];
@@ -27,8 +28,15 @@ export interface ArticleListResult {
 /**
  * One article list, 50 rows per page from `GET /api/app/articles`. Rows carry
  * no body. `active: false` keeps the cached pages but never fetches.
+ * `retainIds`: rows a refetch must not drop (read this session in the unread
+ * view) — they stay in the cache at their previous position.
  */
-export function useArticleList(key: ListKey | null, o: { active: boolean }): ArticleListResult {
+export function useArticleList(key: ListKey | null, o: { active: boolean; retainIds?: ReadonlySet<string> }): ArticleListResult {
+  const retainRef = useRef<ReadonlySet<string>>(o.retainIds ?? NO_IDS);
+  useEffect(() => {
+    retainRef.current = o.retainIds ?? NO_IDS;
+  }, [o.retainIds]);
+
   const query = useInfiniteQuery({
     queryKey: (key ? qk.list(key) : DISABLED_KEY) as QueryKey,
     queryFn: ({ pageParam, signal }) => fetchArticlePage(key!, pageParam, signal),
@@ -36,6 +44,18 @@ export function useArticleList(key: ListKey | null, o: { active: boolean }): Art
     getNextPageParam: (last) => last.nextCursor,
     enabled: !!key && o.active,
     staleTime: 30_000,
+    // No refetch behind the reader's back until the optimistic batcher (shell
+    // PR 2): a focus refetch would re-page the list while the user reads it.
+    refetchOnWindowFocus: false,
+    structuralSharing: (previous, next) =>
+      replaceEqualDeep(
+        previous,
+        mergeRetainedRows(
+          previous as InfiniteData<ArticlePage, string | null> | undefined,
+          next as InfiniteData<ArticlePage, string | null>,
+          retainRef.current,
+        ),
+      ),
     retry: shouldRetry,
     // Previous rows only for a show/sort toggle of the same scope; another
     // scope without cache shows skeleton rows, never the old feed.

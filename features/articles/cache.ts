@@ -81,6 +81,62 @@ export function removeCachedArticle(qc: QueryClient, id: string) {
 }
 
 /**
+ * Carries rows the user acted on this session (`retain`, e.g. read in the
+ * unread view) over a refetch that no longer returns them: the server filters
+ * read rows out of `show=unread`, but the list must not reshuffle under the
+ * reader. Each missing row goes back right after its nearest predecessor from
+ * the previous data that is still present (keyset order is stable), or to the
+ * top of the first page. Server cursors are untouched.
+ */
+export function mergeRetainedRows(previous: ListData | undefined, next: ListData, retain: ReadonlySet<string>): ListData {
+  if (!previous || retain.size === 0 || next.pages.length === 0) return next;
+  const present = new Set<string>();
+  for (const page of next.pages) for (const item of page.items) present.add(item.id);
+  const oldOrder = previous.pages.flatMap((page) => page.items);
+  if (!oldOrder.some((item) => retain.has(item.id) && !present.has(item.id))) return next;
+
+  const pages = next.pages.map((page) => ({ ...page, items: [...page.items] }));
+  let anchor: string | null = null; // last row of the old order that is in `next`
+  for (const item of oldOrder) {
+    if (present.has(item.id)) {
+      anchor = item.id;
+      continue;
+    }
+    if (!retain.has(item.id)) continue;
+    let placed = false;
+    if (anchor) {
+      for (const page of pages) {
+        const at = page.items.findIndex((row) => row.id === anchor);
+        if (at === -1) continue;
+        page.items.splice(at + 1, 0, item);
+        placed = true;
+        break;
+      }
+    } else {
+      pages[0].items.unshift(item);
+      placed = true;
+    }
+    if (!placed) continue;
+    present.add(item.id);
+    anchor = item.id;
+  }
+  return { ...next, pages };
+}
+
+/** Stale-marks every list without refetching the visible one (it is patched in place). */
+export function markListsStale(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: qk.lists, refetchType: "none" });
+}
+
+/** Removes a deleted label from every cached row. */
+export function removeLabelFromCachedArticles(qc: QueryClient, labelId: string) {
+  const strip = <T extends ArticleListItem>(item: T): T =>
+    item.labelIds.includes(labelId) ? { ...item, labelIds: item.labelIds.filter((id) => id !== labelId) } : item;
+  qc.setQueriesData({ queryKey: qk.lists }, (data: unknown) => mapListItems(data, strip));
+  qc.setQueriesData({ queryKey: qk.articles }, (detail: ArticleDetail | undefined) => (detail?.labelIds ? strip(detail) : detail));
+}
+
+/**
  * Legacy "something about articles changed" invalidation: lists and the old
  * `["articles", …]` count keys refetch; details are only marked stale (their
  * flags are patched in place, and the body rarely changes).

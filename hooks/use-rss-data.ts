@@ -9,7 +9,7 @@ import { getExportSettings, updateExportSettings, testWallabagExportConnection, 
 import { updateUiLanguage } from "@/app/actions/locale"
 import { updateDisplayTimezone } from "@/app/actions/timezone"
 import { toast } from "sonner"
-import { findCachedArticle, invalidateArticleQueries, patchCachedArticle, patchCachedArticles, removeCachedArticle, restoreArticleCaches, snapshotArticleCaches } from "@/features/articles/cache"
+import { findCachedArticle, invalidateArticleQueries, markListsStale, patchCachedArticle, patchCachedArticles, removeCachedArticle, removeLabelFromCachedArticles, restoreArticleCaches, snapshotArticleCaches } from "@/features/articles/cache"
 import { qk } from "@/features/articles/keys"
 
 export function useFeeds(enabled = true) {
@@ -86,10 +86,10 @@ export function useFeedHealth() {
  * client-side under-reports big views and disagreed with the sidebar. Keyed
  * under "articles" so every article invalidation refreshes it.
  */
-export function useViewUnreadCount(feedId?: string | null, category?: string, search?: string, enabled = true) {
+export function useViewUnreadCount(feedId?: string | null, category?: string, search?: string, enabled = true, categoryId?: string | null) {
     return useQuery({
-        queryKey: ["articles", "unread-count", feedId ?? null, category ?? null, search ?? null],
-        queryFn: () => getViewUnreadCount(feedId, category, search),
+        queryKey: ["articles", "unread-count", feedId ?? null, category ?? null, search ?? null, categoryId ?? null],
+        queryFn: () => getViewUnreadCount(feedId, category, search, categoryId),
         staleTime: 30_000,
         enabled,
     })
@@ -184,7 +184,10 @@ export function useToggleStarred() {
         },
         onError: (_error, _variables, context) => restoreArticleCaches(queryClient, context?.snapshots),
         onSuccess: () => {
-            invalidateArticleQueries(queryClient)
+            // Patched in place (onMutate): no list refetch, which would re-page
+            // the visible list. Other lists (Starred view) refetch on next use.
+            markListsStale(queryClient)
+            queryClient.invalidateQueries({ queryKey: ["articles", "starred-count"] })
         },
     })
 }
@@ -201,7 +204,7 @@ export function useToggleReadLater() {
         },
         onError: (_error, _variables, context) => restoreArticleCaches(queryClient, context?.snapshots),
         onSuccess: () => {
-            invalidateArticleQueries(queryClient)
+            markListsStale(queryClient)
             queryClient.invalidateQueries({ queryKey: ["articles", "read-later-count"] })
         },
     })
@@ -563,7 +566,8 @@ export function useMarkAllAsRead() {
     })
 }
 
-export type MarkViewScope = { feedId?: string | null; category?: string | null; search?: string | null }
+/** `categoryId`: the category a by-name selection resolved to (names are not unique). */
+export type MarkViewScope = { feedId?: string | null; category?: string | null; categoryId?: string | null; search?: string | null }
 
 /** Fired after every bulk mark-read / undo so views holding local article copies can reconcile. */
 export const ARTICLES_READ_CHANGED_EVENT = "feedferret:articles-read-changed"
@@ -686,8 +690,8 @@ export function useUpdateLabel() {
     return useMutation({
         mutationFn: ({ labelId, data }: { labelId: string; data: { name?: string; color?: string } }) => updateLabel(labelId, data),
         onSuccess: () => {
+            // Rows carry label ids only; name/colour come from the labels query.
             queryClient.invalidateQueries({ queryKey: ["labels"] })
-            invalidateArticleQueries(queryClient)
         },
     })
 }
@@ -696,9 +700,10 @@ export function useDeleteLabel() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (labelId: string) => deleteLabel(labelId),
-        onSuccess: () => {
+        onSuccess: (_result, labelId) => {
             queryClient.invalidateQueries({ queryKey: ["labels"] })
-            invalidateArticleQueries(queryClient)
+            removeLabelFromCachedArticles(queryClient, labelId)
+            markListsStale(queryClient)
         },
     })
 }
@@ -713,6 +718,8 @@ export function useSetArticleLabels() {
                 const labelIds = (article.labels ?? []).map((l: any) => l.labelId ?? l.label?.id).filter(Boolean)
                 patchCachedArticle(queryClient, article.id, { labelIds })
             }
+            // Label views refetch on next use; the visible list is patched.
+            markListsStale(queryClient)
         },
     })
 }
