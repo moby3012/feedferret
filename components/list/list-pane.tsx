@@ -1,13 +1,13 @@
 "use client";
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArticleList } from "@/components/article-list";
 import { EndOfListCard } from "@/components/end-of-list-card";
 import { BriefingCard } from "@/components/briefing/briefing-card";
 import { RssHeader } from "@/components/rss-header";
-import { SearchResultsView } from "@/components/search-results-view";
 import { OfflineChip } from "@/components/shell/offline-chip";
 import { useShellActions, useShellData, type ShellData } from "@/components/shell/shell-context";
 import { clearSearch, searchDraft, useSearchDraft } from "@/components/shell/search-draft";
@@ -25,6 +25,9 @@ import { nav, useNav } from "@/features/reader/nav/store";
 import { useReleaseArticleSpoiler } from "@/hooks/use-rss-data";
 import { scopeTitle } from "./scope-title";
 import { SpoilerGate } from "./spoiler-gate";
+
+// Search results only render for `?q=`: their own chunk.
+const SearchResultsView = dynamic(() => import("@/components/search-results-view").then((m) => m.SearchResultsView));
 
 /**
  * One list pane per tab (Neu · Gemerkt · Feeds · Suche). Mounts on first

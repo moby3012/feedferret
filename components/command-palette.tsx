@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useTheme } from "next-themes";
 import {
@@ -46,8 +45,6 @@ interface CommandPaletteProps {
   open: boolean;
   /** May return the pending nav op; actions run after it settled. */
   onOpenChange: (open: boolean) => void | Promise<void>;
-  /** ⌘K / Ctrl-K: open, or close when open. */
-  onToggle: () => void;
   feeds: CommandPaletteFeed[];
   categories: CommandPaletteCategory[];
   labels: CommandPaletteLabel[];
@@ -70,7 +67,6 @@ interface CommandPaletteProps {
 export function CommandPalette({
   open,
   onOpenChange,
-  onToggle,
   feeds,
   categories,
   labels,
@@ -86,23 +82,6 @@ export function CommandPalette({
 }: CommandPaletteProps) {
   const t = useTranslations("commandPalette");
   const { theme, setTheme } = useTheme();
-
-  // Global ⌘K / Ctrl-K listener. Deliberately fires regardless of focus
-  // (including inside inputs) — this mirrors the convention used by most
-  // command palettes and doesn't collide with the app's single-key
-  // shortcuts, which already bail out whenever a modifier key is held
-  // (see handleKeyDown in app/page.tsx).
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat) return;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        onToggle();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onToggle]);
 
   // The palette closes first (its history entry is popped), then the action
   // runs — so an action that navigates or opens another overlay never stacks

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, memo, type RefObject } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArticleReader } from "@/components/article-reader";
+import dynamic from "next/dynamic";
 import { useShellActions, useShellData } from "@/components/shell/shell-context";
 import { toLegacyArticle, withDetail } from "@/features/articles/legacy-adapter";
 import { useArticleActions, useIsFetchingFullText } from "@/features/articles/mutations";
@@ -11,6 +11,16 @@ import { prefetchArticle } from "@/features/articles/prefetch";
 import { useArticle } from "@/features/articles/queries";
 import { getLayoutClass } from "@/features/reader/layout/layout-class";
 import { getNavState, nav, useNav } from "@/features/reader/nav/store";
+import { ReaderEmptyState } from "./reader-empty";
+
+// The reader (its UI, menus, export / AI hooks, KaTeX + highlight.js CSS) is
+// its own chunk: off the cold-start path, preloaded once the shell is idle so
+// the first tap still paints the reader at once. A deep link (`?a=`) renders
+// it on the server and loads the chunk with the page.
+const loadReader = () => import("@/components/article-reader");
+const ArticleReader = dynamic(() => loadReader().then((m) => m.ArticleReader), {
+  loading: () => <div className="flex-1 bg-background" />,
+});
 
 /**
  * Reader container: the open article comes from the URL (`a`). On compact it
@@ -50,6 +60,7 @@ export const ReaderPane = memo(function ReaderPane() {
   }, [articleId, shownId]);
 
   useReaderFocus(paneRef, articleId);
+  usePreloadReader();
 
   const list = useSyncExternalStore(shell.activeList.subscribe, shell.activeList.get, shell.activeList.get);
   const { item, detail, status } = useArticle(shownId);
@@ -104,30 +115,47 @@ export const ReaderPane = memo(function ReaderPane() {
       tabIndex={-1}
       className="flex bg-background outline-none"
     >
-      <ArticleReader
-        article={readerArticle}
-        isBodyLoading={!!article && status === "pending"}
-        onToggleStar={shell.toggleStar}
-        onToggleReadLater={shell.toggleLater}
-        onToggleRead={shell.toggleRead}
-        onFetchFullText={actions.fetchFullText}
-        isFetchingFullText={isFetchingFullText}
-        labels={labels}
-        onSetLabels={actions.setLabels}
-        onBack={() => void nav.up()}
-        onOpenFeed={(feedId) => void nav.goScope({ kind: "feed", id: feedId })}
-        showBackButton={!!articleId}
-        onPreviousArticle={() => step(-1)}
-        onNextArticle={() => step(1)}
-        hasPreviousArticle={index > 0}
-        hasNextArticle={index >= 0 && index < list.articles.length - 1}
-        readerWidth={(feed?.readerWidthOverride ?? prefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
-        readerFontSize={(feed?.readerFontSizeOverride ?? prefs?.readerFontSize ?? "medium") as "small" | "medium" | "large" | "xl"}
-        hideArticleImage={feed?.hideArticleImage ?? false}
-      />
+      {readerArticle ? (
+        <ArticleReader
+          article={readerArticle}
+          isBodyLoading={!!article && status === "pending"}
+          onToggleStar={shell.toggleStar}
+          onToggleReadLater={shell.toggleLater}
+          onToggleRead={shell.toggleRead}
+          onFetchFullText={actions.fetchFullText}
+          isFetchingFullText={isFetchingFullText}
+          labels={labels}
+          onSetLabels={actions.setLabels}
+          onBack={() => void nav.up()}
+          onOpenFeed={(feedId) => void nav.goScope({ kind: "feed", id: feedId })}
+          showBackButton={!!articleId}
+          onPreviousArticle={() => step(-1)}
+          onNextArticle={() => step(1)}
+          hasPreviousArticle={index > 0}
+          hasNextArticle={index >= 0 && index < list.articles.length - 1}
+          readerWidth={(feed?.readerWidthOverride ?? prefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
+          readerFontSize={(feed?.readerFontSizeOverride ?? prefs?.readerFontSize ?? "medium") as "small" | "medium" | "large" | "xl"}
+          hideArticleImage={feed?.hideArticleImage ?? false}
+        />
+      ) : (
+        <ReaderEmptyState />
+      )}
     </section>
   );
 });
+
+/** Loads the reader chunk once the browser is idle after boot (no-op when already loaded). */
+function usePreloadReader() {
+  useEffect(() => {
+    const run = () => void loadReader();
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(run, { timeout: 4000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(run, 1500);
+    return () => window.clearTimeout(handle);
+  }, []);
+}
 
 /**
  * Compact: the reader is a layer over the (then inert) list. Opening moves
