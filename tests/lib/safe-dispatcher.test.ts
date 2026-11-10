@@ -111,6 +111,27 @@ describe("impit CONNECT bridge", () => {
       const result = await connect(port, target, token); expect(result.status).toBe(status); result.socket.destroy();
     }
   });
+  it("chains CONNECT through the admin upstream with proxy authentication", async () => {
+    let path: string | undefined;
+    let authorization: string | undefined;
+    const upstream = http.createServer();
+    const sockets = new Set<net.Socket>();
+    upstream.on("connect", (req, socket) => {
+      path = req.url;
+      authorization = req.headers["proxy-authorization"];
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+      socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+    });
+    const upstreamPort = await listen(upstream);
+    cleanup.push(() => new Promise<void>(resolve => { for (const socket of sockets) socket.destroy(); upstream.close(() => resolve()); }));
+    const port = await proxy(undefined, `http://admin:password@127.0.0.1:${upstreamPort}`);
+    const result = await connect(port, "target.test:443", auth);
+    expect(result.status).toBe(200);
+    expect(path).toBe("target.test:443");
+    expect(authorization).toBe(`Basic ${Buffer.from("admin:password").toString("base64")}`);
+    result.socket.destroy();
+  });
   it("tunnels TLS without rewriting hostname or SNI", async () => {
     let sni: string | undefined;
     const server = https.createServer({ key: readFileSync(new URL("../fixtures/tls/key.pem", import.meta.url)), cert: readFileSync(new URL("../fixtures/tls/cert.pem", import.meta.url)) }, (_req, res) => res.end("tunnel-ok"));

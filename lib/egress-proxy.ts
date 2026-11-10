@@ -34,6 +34,7 @@ export async function startEgressProxy(token: string, lookup: LookupFunction = s
       if (head.length) socket.write(head);
       socket.pipe(client); client.pipe(socket);
       client.on("close", () => socket.destroy());
+      client.on("end", () => socket.destroy());
       socket.on("error", () => client.destroy());
       socket.on("close", () => client.destroy());
       socket.setTimeout(30_000, () => socket.destroy());
@@ -49,6 +50,7 @@ export async function startEgressProxy(token: string, lookup: LookupFunction = s
       request.on("error", reject);
       request.on("timeout", () => { reject(); request.destroy(); });
       client.on("close", () => request.destroy());
+      client.on("end", () => request.destroy());
       request.end();
       return;
     }
@@ -57,6 +59,7 @@ export async function startEgressProxy(token: string, lookup: LookupFunction = s
     socket.once("connect", () => pipe(socket));
     socket.once("error", reject);
     client.on("close", () => socket.destroy());
+      client.on("end", () => socket.destroy());
     socket.setTimeout(30_000, () => { reject(); socket.destroy(); });
   });
   await new Promise<void>((resolve, reject) => {
