@@ -172,15 +172,31 @@ async function singleRun(browser, storageState) {
 
   let requests = 0, actionPosts = 0, apiCalls = 0, jsBytes = 0, totalBytes = 0;
   const urls = new Map();
+  // Data responses that can carry the article list: Next-Action POSTs (the
+  // pre-#PR1 `getArticles` server action) and GET /api/app/articles. The
+  // largest one finished before the first row is the list payload.
+  const dataReqs = new Set();
+  const decoded = new Map();
+  let listPayload = { encoded: 0, decoded: 0 };
+  let coldDone = false;
   cdp.on("Network.requestWillBeSent", (e) => {
     requests++;
     urls.set(e.requestId, e.request.url);
-    if (e.request.headers["next-action"] || e.request.headers["Next-Action"]) actionPosts++;
-    if (new URL(e.request.url).pathname.startsWith("/api/")) apiCalls++;
+    const isAction = !!(e.request.headers["next-action"] || e.request.headers["Next-Action"]);
+    if (isAction) actionPosts++;
+    const { pathname } = new URL(e.request.url);
+    if (pathname.startsWith("/api/")) apiCalls++;
+    if (isAction || /^\/api\/app\/articles\/?$/.test(pathname)) dataReqs.add(e.requestId);
+  });
+  cdp.on("Network.dataReceived", (e) => {
+    if (dataReqs.has(e.requestId)) decoded.set(e.requestId, (decoded.get(e.requestId) ?? 0) + e.dataLength);
   });
   cdp.on("Network.loadingFinished", (e) => {
     totalBytes += e.encodedDataLength;
     if ((urls.get(e.requestId) ?? "").includes(".js")) jsBytes += e.encodedDataLength;
+    if (!coldDone && dataReqs.has(e.requestId) && e.encodedDataLength > listPayload.encoded) {
+      listPayload = { encoded: e.encodedDataLength, decoded: decoded.get(e.requestId) ?? 0 };
+    }
   });
 
   await page.goto(`${BASE}/`, { waitUntil: "commit" });
@@ -196,7 +212,11 @@ async function singleRun(browser, storageState) {
       fcp: performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? null,
     };
   });
-  const coldRequests = { requests, actionPosts, apiCalls, kbTransferred: +(totalBytes / 1024).toFixed(1), jsKbTransferred: +(jsBytes / 1024).toFixed(1) };
+  coldDone = true;
+  const coldRequests = {
+    requests, actionPosts, apiCalls, kbTransferred: +(totalBytes / 1024).toFixed(1), jsKbTransferred: +(jsBytes / 1024).toFixed(1),
+    listPayloadKb: +(listPayload.encoded / 1024).toFixed(1), listPayloadRawKb: +(listPayload.decoded / 1024).toFixed(1),
+  };
 
   // ---- interactions (INP proxy) ----
   const now = () => page.evaluate(() => performance.now());
@@ -211,6 +231,12 @@ async function singleRun(browser, storageState) {
     while (!document.querySelector("article h1") && performance.now() < until) await new Promise((r) => requestAnimationFrame(r));
     return performance.now() - t0;
   }, t);
+  // ... and until the article body is painted (on-demand detail fetch since PR 1).
+  const readerBodyMs = await page.evaluate(async (t0) => {
+    const until = performance.now() + 10000;
+    while (!document.querySelector("article .article-content") && performance.now() < until) await new Promise((r) => requestAnimationFrame(r));
+    return performance.now() - t0;
+  }, t);
   await page.getByRole("button", { name: /^(Back to list|Back)$/ }).first().tap();
   await page.waitForTimeout(600);
 
@@ -223,7 +249,7 @@ async function singleRun(browser, storageState) {
   const starMs = await interactionMs(page, t);
 
   await context.close();
-  return { ...cold, ...coldRequests, openArticleInp: openMs, openArticleToReaderMs: readerMs, markReadInp: markReadMs, starInp: starMs };
+  return { ...cold, ...coldRequests, openArticleInp: openMs, openArticleToReaderMs: readerMs, openArticleToBodyMs: readerBodyMs, markReadInp: markReadMs, starInp: starMs };
 }
 
 /** Restore seeded read/star flags so every run opens/marks the same unread rows. */
@@ -297,8 +323,10 @@ async function main() {
     `| Time to first article row | ${fmt(med.firstRow)} ms | ≤ 2000 ms |`,
     `| Requests at cold start | ${fmt(med.requests)} (${fmt(med.actionPosts)} Next-Action POSTs, ${fmt(med.apiCalls)} /api) | ≤ 4 parallel data requests |`,
     `| Transferred at cold start | ${fmt(med.kbTransferred, 0)} KB (JS ${fmt(med.jsKbTransferred, 0)} KB) | |`,
+    `| List payload (first list response) | ${fmt(med.listPayloadKb, 1)} KB transferred (${fmt(med.listPayloadRawKb, 1)} KB raw) | ≤ 100 KB gz / 50 rows |`,
     `| INP-proxy: open article (tap) | ${fmt(med.openArticleInp)} ms | ≤ 200 ms |`,
     `| Tap → reader title painted | ${fmt(med.openArticleToReaderMs)} ms | ≤ 100 ms (P1-09) |`,
+    `| Tap → reader body painted | ${fmt(med.openArticleToBodyMs)} ms | |`,
     `| INP-proxy: mark read (tap) | ${fmt(med.markReadInp)} ms | ≤ 200 ms |`,
     `| INP-proxy: star (tap) | ${fmt(med.starInp)} ms | ≤ 200 ms |`,
     `| First-load JS \`/\` (gz), route entry | ${jsSize.pageEntry.gzKb} KB (${jsSize.pageEntry.rawKb} KB raw, ${jsSize.pageEntry.files} chunks) | ≤ 180 KB |`,

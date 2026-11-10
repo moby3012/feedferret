@@ -385,6 +385,14 @@ model Article {
   aiSummarizedAt DateTime?
   aiTaggedAt     DateTime?                              // F8: set once auto-tagging has run, whether or not it produced any tags — avoids re-asking every sync
   digestedAt     DateTime?                              // set when article is sent in a digest
+  // List metadata (lib/article-kind.ts), computed at sync. Nullable: rows from
+  // before these columns existed are filled by lib/article-meta-backfill.ts and
+  // derived on the fly by the list mapper until then.
+  kind              String?   // "article" | "video" | "audio" | "social" | "image"
+  mediaUrl          String?   // primary audio/video enclosure or media:content
+  mediaType         String?
+  mediaDurationSecs Int?
+  readMinutes       Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, feedId, dedupeKey])
@@ -402,6 +410,8 @@ model Article {
   @@index([userId, publishedAt(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
   // Perf: serves per-feed unread counts (groupBy feedId WHERE userId, isRead=false, isSpoiler=false)
   @@index([userId, isRead, isSpoiler, feedId])
+  // Perf: the list's per-row `_count.duplicates` and ON DELETE SET NULL of a canonical article
+  @@index([duplicateOf])
 }
 
 model Label {

@@ -1,10 +1,8 @@
 "use client";
 
 import { useTranslations, useFormatter } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
 import Image from "next/image";
-import MarkdownIt from "markdown-it";
-import DOMPurify from "isomorphic-dompurify";
 import { Article } from "@/lib/rss-data";
 import { startsInPannableContent } from "@/lib/gesture-guards";
 import { useAiSettings, useSummarizeArticle, useExportSettings, useBuildObsidianExportLink, useExportArticleToWallabag } from "@/hooks/use-rss-data";
@@ -42,17 +40,10 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// Lazily-created singleton: only instantiated once markdown-format content actually needs rendering.
-let markdownItService: MarkdownIt | null = null;
-function getMarkdownItService() {
-  if (!markdownItService) {
-    markdownItService = new MarkdownIt({ html: false, linkify: true, typographer: true });
-  }
-  return markdownItService;
-}
-
 interface ArticleReaderProps {
   article: Article | null;
+  /** The body (article detail) is still being fetched: show a skeleton instead of "no content". */
+  isBodyLoading?: boolean;
   onToggleStar: (articleId: string) => void;
   onToggleReadLater?: (articleId: string) => void;
   onToggleRead?: (articleId: string) => void;
@@ -106,6 +97,7 @@ function FeedFaviconInReader({ feedIcon, feedName, articleLink, size }: { feedIc
 
 export function ArticleReader({
   article,
+  isBodyLoading = false,
   onToggleStar,
   onToggleReadLater,
   onToggleRead,
@@ -204,16 +196,10 @@ export function ArticleReader({
     setSummarizeFailed(false);
   }, [article?.id]);
 
-  // Content is stored either as sanitized HTML or as Markdown (M1); render
-  // Markdown to HTML client-side and sanitize the result before injecting it.
-  const renderedHtml = useMemo(() => {
-    if (!article?.content) return "";
-    if (article.contentFormat === "markdown") {
-      const rawHtml = getMarkdownItService().render(article.content);
-      return DOMPurify.sanitize(rawHtml, { ADD_ATTR: ["target", "rel"] });
-    }
-    return article.content; // already-sanitized HTML (legacy + html mode)
-  }, [article]);
+  // `content` is render-ready HTML from GET /api/app/articles/:id: stored HTML
+  // (sanitized at sync) or Markdown rendered + sanitized on the server with the
+  // same sanitizer REST/GReader/Fever use. Nothing is parsed or sanitized here.
+  const renderedHtml = article?.content ?? "";
 
   useEffect(() => {
     if (!article?.id) return;
@@ -631,8 +617,12 @@ export function ArticleReader({
                 </>
               )}
               <time dateTime={article.publishedAt}>{format.dateTime(new Date(article.publishedAt), { dateStyle: "medium" })}</time>
-              <span aria-hidden="true" className="text-muted-foreground/40">·</span>
-              <span>{t("readTime", { minutes: article.readTime })}</span>
+              {article.readTime != null && (
+                <>
+                  <span aria-hidden="true" className="text-muted-foreground/40">·</span>
+                  <span>{t("readTime", { minutes: article.readTime })}</span>
+                </>
+              )}
             </div>
             {!!article.labels?.length && (
               <div className="mt-5 flex flex-wrap gap-2">
@@ -719,7 +709,14 @@ export function ArticleReader({
           )}
 
           {/* Article Body */}
-          {article.content && article.content.trim().length > 0 ? (
+          {isBodyLoading && !article.content ? (
+            <div data-testid="reader-body-loading" aria-busy="true" className="space-y-3 animate-pulse">
+              <span className="sr-only">{t("loadingBody")}</span>
+              <div className="h-4 w-full rounded bg-muted" />
+              <div className="h-4 w-11/12 rounded bg-muted" />
+              <div className="h-4 w-4/6 rounded bg-muted" />
+            </div>
+          ) : article.content && article.content.trim().length > 0 ? (
             <div
               className={`animate-fade-in-up animation-delay-200 article-content min-w-0 max-w-full overflow-hidden ${hideArticleImage ? "hide-images " : ""}${readerFontSizeClass[readerFontSize] ?? readerFontSizeClass.medium}`}
               dangerouslySetInnerHTML={{ __html: renderedHtml }}

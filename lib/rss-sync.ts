@@ -14,6 +14,7 @@ import { getSanitizer } from "./sanitize-html";
 import { resolveFullTextMode } from "./full-text-mode";
 import { fetchAndExtractReadable } from "./readability-extract";
 import { applySyncFailure, applySyncSuccess } from "./feed-auto-mute";
+import { computeArticleMeta, estimateReadMinutes, htmlToPlainText, markdownToPlainText } from "./article-kind";
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 const MAX_AUTO_TAG_PER_SYNC = 3;
@@ -33,6 +34,13 @@ export interface ArticleSyncInput {
     publishedAt: Date;
     imageUrl?: string | null;
     enclosures?: string | null;
+    // List metadata (lib/article-kind.ts#computeArticleMeta). Optional so callers
+    // that do not provide it leave the nullable columns for the backfill.
+    kind?: string | null;
+    readMinutes?: number | null;
+    mediaUrl?: string | null;
+    mediaType?: string | null;
+    mediaDurationSecs?: number | null;
 }
 
 export interface ArticleSyncResult {
@@ -54,6 +62,20 @@ function updatableFields(article: ArticleSyncInput) {
         publishedAt: article.publishedAt,
         imageUrl: article.imageUrl ?? null,
         enclosures: article.enclosures ?? null,
+        ...metaFields(article),
+    };
+}
+
+// Derived from the fields above, so it is written whenever they are (and an
+// unchanged row keeps whatever it has; nulls are filled by the backfill).
+function metaFields(article: ArticleSyncInput) {
+    if (article.kind === undefined) return {};
+    return {
+        kind: article.kind ?? null,
+        readMinutes: article.readMinutes ?? null,
+        mediaUrl: article.mediaUrl ?? null,
+        mediaType: article.mediaType ?? null,
+        mediaDurationSecs: article.mediaDurationSecs ?? null,
     };
 }
 
@@ -192,6 +214,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
                     publishedAt: article.publishedAt,
                     imageUrl: article.imageUrl ?? null,
                     enclosures: article.enclosures ?? null,
+                    ...metaFields(article),
                 })),
                 select: { id: true, dedupeKey: true, contentHash: true },
             });
@@ -226,6 +249,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
                         publishedAt: article.publishedAt,
                         imageUrl: article.imageUrl ?? null,
                         enclosures: article.enclosures ?? null,
+                        ...metaFields(article),
                     },
                     select: { id: true, dedupeKey: true, contentHash: true },
                 });
@@ -343,20 +367,36 @@ export async function syncFeed(userId: string, feedId: string) {
             const dedupeKey = buildDedupeKey(feed, item, externalId);
             const link = item.link || `${feed.url}#${encodeURIComponent(dedupeKey)}`;
 
+            const sanitizedContent = DOMPurify.sanitize(content);
+            const title = item.title || "Untitled";
+            const meta = computeArticleMeta({
+                content: sanitizedContent,
+                contentFormat: "html",
+                title,
+                link,
+                imageUrl: item.imageUrl,
+                enclosures: item.enclosures,
+                feedUrl: feed.url,
+                mediaUrl: item.media?.url,
+                mediaType: item.media?.type,
+                durationSecs: item.durationSecs,
+            });
+
             return {
                 feedId: feed.id,
                 userId: userId,
-                title: item.title || "Untitled",
+                title,
                 link,
                 externalId,
                 dedupeKey,
                 contentHash: computeContentHash(link),
-                content: DOMPurify.sanitize(content),
+                content: sanitizedContent,
                 excerpt: excerpt,
                 author: item.author || null,
                 publishedAt: item.publishedAt || new Date(),
                 imageUrl: item.imageUrl,
                 enclosures: item.enclosures?.length ? JSON.stringify(item.enclosures) : null,
+                ...meta,
             };
         });
 
@@ -536,7 +576,7 @@ async function autoFetchFullTextForArticles(
 
             await db.article.update({
                 where: { id: article.id, userId },
-                data: { content: sanitized, contentFormat: "html", excerpt: plain.slice(0, 240) },
+                data: { content: sanitized, contentFormat: "html", excerpt: plain.slice(0, 240), readMinutes: estimateReadMinutes(plain) },
             });
         } catch (e) {
             logger.warn(`[rss-sync] autoFetchFullText failed for ${article.link}:`, e);
@@ -635,6 +675,7 @@ async function autoFetchFullTextViaEngine(
                     content,
                     contentFormat: useMarkdown ? "markdown" : "html",
                     excerpt,
+                    readMinutes: estimateReadMinutes(useMarkdown ? markdownToPlainText(content) : htmlToPlainText(content)),
                 },
             });
         } catch (e) {

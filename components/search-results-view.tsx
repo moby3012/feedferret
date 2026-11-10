@@ -24,6 +24,10 @@ interface SearchResultsViewProps {
   filterKey?: string;
   transitionStyle?: "fade" | "flip" | "filter";
   isMobile?: boolean;
+  hasMorePages?: boolean;
+  isFetchingMore?: boolean;
+  onLoadMore?: () => void;
+  loadedCount?: number;
 }
 
 export function SearchResultsView({
@@ -44,6 +48,10 @@ export function SearchResultsView({
   filterKey,
   transitionStyle,
   isMobile,
+  hasMorePages,
+  isFetchingMore,
+  onLoadMore,
+  loadedCount,
 }: SearchResultsViewProps) {
   const t = useTranslations("searchResults");
   const tA11y = useTranslations("accessibility");
@@ -153,6 +161,10 @@ export function SearchResultsView({
             transitionStyle={transitionStyle}
             onMarkRead={onMarkRead}
             searchQuery={searchQuery}
+            hasMorePages={hasMorePages}
+            isFetchingMore={isFetchingMore}
+            onLoadMore={onLoadMore}
+            loadedCount={loadedCount}
           />
         </div>
       )}

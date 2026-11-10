@@ -26,9 +26,9 @@ import { fetchAndSuggestFeedCandidates, type SuggestedFieldConfig } from "@/lib/
 import { createPageFeedForUser } from "@/lib/page-feed-create";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs } from "@/lib/webhooks";
 import { buildXPathArticles } from "@/lib/feed-fetcher";
-import { buildAdvancedSearchWhere } from "@/lib/search";
 import { createUndoToken, claimUndoToken, releaseUndoToken } from "@/lib/undo-tokens";
 import { isMarkAllAllowed } from "@/lib/view-scope";
+import { buildViewScope, legacyViewScopeInput } from "@/server/articles/view-scope";
 import { applyRetentionPoliciesForUser } from "@/lib/retention";
 import { randomBytes } from "crypto";
 import { decryptIfValue } from "@/lib/crypto";
@@ -973,161 +973,19 @@ export async function toggleArticleStarred(articleId: string, isStarred: boolean
 
 
 /**
- * Builds the Prisma `where` + `orderBy` for an article "view" (feed, category,
- * label, saved search, …). Shared by `getArticles` (the list) and
- * `getViewUnreadCount` (the header count) so both always describe exactly the
- * same set of articles.
+ * Legacy `(feedId, category, search)` → view scope. The scope builder lives in
+ * server/articles/view-scope.ts (shared with GET /api/app/articles) so the
+ * list, the header count and "mark all read" always describe the same set.
  */
-async function buildViewScope(
-    userId: string,
-    feedId?: string | null,
-    category?: string,
-    search?: string,
-) {
-    const userPrefs = await db.user.findUnique({
-        where: { id: userId },
-        select: { hideDuplicates: true },
-    });
-
-    const where: any = { userId };
-
-    // Hide duplicates that have a known canonical article
-    if (userPrefs?.hideDuplicates ?? true) {
-        where.AND = [...(where.AND || []), {
-            NOT: { isDuplicate: true, duplicateOf: { not: null } },
-        }];
-    }
-
-    const advancedSearchWhere = await buildAdvancedSearchWhere(userId, search);
-    if (Object.keys(advancedSearchWhere).length) {
-        where.AND = [...(where.AND || []), advancedSearchWhere];
-    }
-
-    // Stable tiebreaker: feeds whose items lack a parseable date all share the
-    // same sync-time fallback publishedAt, so without a secondary sort they'd
-    // fall back to undefined DB order (often oldest-first feed order). createdAt
-    // surfaces newer-synced articles on top; id is the final deterministic key
-    // so the top-N window is consistent across requests.
-    let orderBy: any = [{ publishedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }];
-    let isSpoilerCategory = false;
-
-    const isSearching = !!search?.trim();
-
-    if (feedId) {
-        where.feedId = feedId;
-    } else if (!category || category === "All" || category === "All Articles") {
-        // Exclude feeds and categories marked as hidden from all feeds view.
-        // Skip this exclusion while searching: global search is expected to span
-        // every feed the user owns, including ones hidden from the default view.
-        if (!isSearching) {
-            where.AND = [...(where.AND || []), {
-                feed: {
-                    hideFromAllFeeds: false,
-                    OR: [
-                        { categoryId: null },
-                        { category: { hideFromAllFeeds: false } },
-                    ],
-                },
-            }];
-        }
-    } else if (category !== "All" && category !== "All Articles") {
-        if (category === "Starred") {
-            where.isStarred = true;
-        } else if (category === "Read Later") {
-            where.isReadLater = true;
-        } else if (category === "Spoiler") {
-            isSpoilerCategory = true;
-            where.isSpoiler = true;
-            orderBy = { spoilerAt: "desc" };
-        } else if (category === "Recently Read") {
-            where.isRead = true;
-            where.readAt = { not: null };
-            orderBy = { readAt: "desc" };
-        } else if (category === "New Articles") {
-            where.isRead = false;
-        } else if (category.startsWith("Label:")) {
-            where.labels = {
-                some: {
-                    labelId: category.slice("Label:".length),
-                    userId,
-                },
-            };
-        } else if (category.startsWith("Search:")) {
-            const savedSearch = await db.savedSearch.findUnique({
-                where: { id: category.slice("Search:".length), userId },
-            });
-            if (savedSearch) {
-                const savedWhere = await buildAdvancedSearchWhere(userId, savedSearch.query);
-                where.AND = [...(where.AND || []), savedWhere];
-            }
-        } else {
-            where.feed = {
-                category: {
-                    name: category,
-                },
-            };
-        }
-    }
-
-    // Spoiler flag is opt-in: filter spoilers out of every view that is not the
-    // dedicated Spoiler category so users do not accidentally read them.
-    if (!isSpoilerCategory && where.isSpoiler !== true) {
-        where.AND = [...(where.AND || []), { isSpoiler: false }];
-    }
-
-    return { where, orderBy };
-}
-
-export async function getArticles(feedId?: string | null, category?: string, search?: string, filters?: { dateFrom?: string; dateTo?: string; isRead?: boolean; isStarred?: boolean; limit?: number }) {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-
-    const { where, orderBy } = await buildViewScope(session.user.id, feedId, category, search);
-
-    // Date filters
-    if (filters?.dateFrom) {
-        where.publishedAt = { ...where.publishedAt, gte: new Date(filters.dateFrom) };
-    }
-    if (filters?.dateTo) {
-        where.publishedAt = { ...where.publishedAt, lte: new Date(filters.dateTo) };
-    }
-
-    // Read/Starred filters. The view scope wins where it pins the same field
-    // (e.g. "Starred", "Recently Read"), as it did before the scope was shared.
-    if (filters?.isRead !== undefined && where.isRead === undefined) {
-        where.isRead = filters.isRead;
-    }
-    if (filters?.isStarred !== undefined && where.isStarred === undefined) {
-        where.isStarred = filters.isStarred;
-    }
-
-    return await db.article.findMany({
-        where,
-        include: {
-            feed: {
-                select: { id: true, name: true, icon: true },
-            },
-            labels: {
-                include: { label: true },
-            },
-            _count: {
-                select: { duplicates: true },
-            },
-            canonical: {
-                select: { feedId: true, feed: { select: { name: true } } },
-            },
-        },
-        orderBy,
-        take: filters?.limit || 200,
-    });
+async function buildLegacyViewScope(userId: string, feedId?: string | null, category?: string, search?: string, categoryId?: string | null) {
+    return buildViewScope(userId, legacyViewScopeInput(feedId, category, categoryId), search);
 }
 
 /**
- * Server-side unread count for a list view. `getArticles` returns at most 200
- * rows, so counting unread rows client-side under-reports big views; this
- * counts the whole view instead.
+ * Server-side unread count for a list view. The list is paged, so counting
+ * unread rows client-side under-reports big views; this counts the whole view.
  */
-export async function getViewUnreadCount(feedId?: string | null, category?: string, search?: string) {
+export async function getViewUnreadCount(feedId?: string | null, category?: string, search?: string, categoryId?: string | null) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -1135,7 +993,7 @@ export async function getViewUnreadCount(feedId?: string | null, category?: stri
     // report 0 instead of counting unrelated unread rows.
     if (!isMarkAllAllowed(feedId, category)) return 0;
 
-    const { where } = await buildViewScope(session.user.id, feedId, category, search);
+    const { where } = await buildLegacyViewScope(session.user.id, feedId, category, search, categoryId);
     where.isRead = false;
     return db.article.count({ where });
 }
@@ -1361,7 +1219,7 @@ export async function fetchFullText(articleId: string) {
 
 /**
  * Marks exactly the current list view read: the scope is built by the same
- * `buildViewScope` as `getArticles` / `getViewUnreadCount`, so feed / category /
+ * view scope as the list (GET /api/app/articles) / `getViewUnreadCount`, so feed / category /
  * label / saved search / free-text search / "hide duplicates" / spoiler rules
  * all match what the user sees. Read-only views ("Recently Read", "Spoiler")
  * change nothing.
@@ -1370,7 +1228,7 @@ export async function fetchFullText(articleId: string) {
  * lists the ids that were really changed plus a server-side, user-scoped
  * `undoToken` for `markArticlesAsUnread`.
  */
-export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null; search?: string | null }) {
+export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null; categoryId?: string | null; search?: string | null }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
     const userId = session.user.id;
@@ -1381,7 +1239,7 @@ export async function markAllAsRead(scope?: { feedId?: string | null; category?:
 
     if (!isMarkAllAllowed(feedId, category)) return { ids: [] as string[], undoToken: null as string | null };
 
-    const { where } = await buildViewScope(userId, feedId, category, search);
+    const { where } = await buildLegacyViewScope(userId, feedId, category, search, scope?.categoryId || null);
     where.isRead = false;
 
     const readAt = new Date();

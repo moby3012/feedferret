@@ -1,0 +1,54 @@
+// Wire types of the app data layer (.pm/spec-shell-design.md §2.2).
+import type { ArticleKind } from "@/lib/article-kind";
+
+export type { ArticleKind } from "@/lib/article-kind";
+export type { ListKey, Scope, Show, Sort } from "./scope";
+
+export interface ArticleMedia {
+  url: string | null;
+  type: string | null;
+  durationSecs: number | null;
+}
+
+/** One list row. Deliberately has NO `content` — the body comes from `ArticleDetail`. */
+export interface ArticleListItem {
+  id: string;
+  feedId: string;
+  title: string;
+  link: string;
+  excerpt: string;
+  author: string | null;
+  publishedAt: string;
+  createdAt: string;
+  imageUrl: string | null;
+  kind: ArticleKind;
+  media: ArticleMedia | null;
+  readMinutes: number | null;
+  isRead: boolean;
+  isStarred: boolean;
+  isReadLater: boolean;
+  isSpoiler: boolean;
+  isDuplicate: boolean;
+  duplicateCount: number;
+  canonicalFeedName: string | null;
+  labelIds: string[];
+}
+
+export interface ArticleDetail extends ArticleListItem {
+  /**
+   * Render-ready, sanitized HTML: stored HTML as is (sanitized at sync) or
+   * `renderMarkdownToHtml(content)` for Markdown — the same server sanitizer
+   * REST v1 / GReader / Fever use. Inject as is; never sanitize client-side.
+   */
+  html: string;
+  /** Format the body is stored in (`html` is always HTML). */
+  contentFormat: "html" | "markdown";
+  aiSummary: string | null;
+  aiSummarizedAt: string | null;
+  readAt: string | null;
+}
+
+export interface ArticlePage {
+  items: ArticleListItem[];
+  nextCursor: string | null;
+}

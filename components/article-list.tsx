@@ -120,6 +120,12 @@ interface ArticleListProps {
   // When set, highlights occurrences of the query's free-text terms in each
   // article's title/excerpt so it's visible *where* a search matched.
   searchQuery?: string;
+  /** More server pages exist beyond `articles` (the list is paged, 50 rows/page). */
+  hasMorePages?: boolean;
+  isFetchingMore?: boolean;
+  onLoadMore?: () => void;
+  /** Rows fetched so far (before client-side filtering); re-arms the paging sentinel. */
+  loadedCount?: number;
 }
 
 export function ArticleList({
@@ -144,6 +150,10 @@ export function ArticleList({
   scrollBackToId,
   hasFeeds = true,
   searchQuery,
+  hasMorePages = false,
+  isFetchingMore = false,
+  onLoadMore,
+  loadedCount,
 }: ArticleListProps) {
   const t = useTranslations("articleList");
   const highlightTerms = useMemo(() => extractHighlightTerms(searchQuery ?? ""), [searchQuery]);
@@ -261,7 +271,8 @@ export function ArticleList({
   }, [enablePullToRefresh, isRefreshing, onPullToRefresh, scrollRoot]);
 
   const visibleArticles = articles.slice(0, visibleCount);
-  const hasMore = visibleCount < articles.length;
+  const hasMoreLoaded = visibleCount < articles.length;
+  const hasMore = hasMoreLoaded || hasMorePages;
   const showPullIndicator = enablePullToRefresh && (pullDistance > 0 || pullTriggered);
   const pullReady = pullDistance >= 72;
 
@@ -271,15 +282,16 @@ export function ArticleList({
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisibleCount(prev => Math.min(prev + (pageSize ?? 30), articles.length));
-        }
+        if (!entries[0].isIntersecting) return;
+        // Reveal what is already loaded first; at its end, fetch the next server page.
+        if (hasMoreLoaded) setVisibleCount(prev => Math.min(prev + (pageSize ?? 30), articles.length));
+        else if (!isFetchingMore) onLoadMore?.();
       },
       { root: scrollRoot, threshold: 0.1 }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, articles.length, pageSize, scrollRoot]);
+  }, [hasMore, hasMoreLoaded, articles.length, loadedCount, isFetchingMore, onLoadMore, pageSize, scrollRoot]);
 
   if (isLoading && articles.length === 0) {
     const skeletonCount = viewMode === "magazine" ? 4 : viewMode === "minimal" ? 8 : 6;

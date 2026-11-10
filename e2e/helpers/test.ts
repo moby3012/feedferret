@@ -43,6 +43,9 @@ export class App {
   async open() {
     await this.page.goto("/");
     await expect(this.page.locator('[role="button"][aria-label*="(#001)"]')).toBeVisible({ timeout: 30_000 });
+    // The list (GET /api/app/articles) can paint before the sidebar's feed
+    // counts (server action) arrive; specs read those badges right away.
+    await this.page.waitForLoadState("networkidle");
   }
 
   /** Desktop: sidebar is always visible. Mobile: it is a sheet behind the "Feeds" button. */
