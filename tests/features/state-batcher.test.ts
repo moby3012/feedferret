@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_ARTICLES_PER_CALL, StateBatcher, toWireOps, type SettledFlush, type WireStateOp } from "../../features/articles/state-batcher";
+import { MAX_ARTICLES_PER_CALL, MAX_WAIT_MS, StateBatcher, TRAILING_MS, toWireOps, type SettledFlush, type WireStateOp } from "../../features/articles/state-batcher";
 
 function deferred<T>() {
   let resolve!: (v: T) => void;
@@ -28,13 +28,13 @@ describe("StateBatcher", () => {
     return { batcher, calls, settled };
   };
 
-  it("coalesces writes into one call 150 ms after the last enqueue (last write wins per field)", async () => {
+  it("coalesces writes into one call TRAILING_MS after the last enqueue (last write wins per field)", async () => {
     const { batcher, calls } = setup();
     batcher.enqueue({ id: "a", field: "isRead", value: true }, false);
     await vi.advanceTimersByTimeAsync(100);
     batcher.enqueue({ id: "b", field: "isStarred", value: true }, false);
     batcher.enqueue({ id: "a", field: "isStarred", value: true }, false);
-    await vi.advanceTimersByTimeAsync(149);
+    await vi.advanceTimersByTimeAsync(TRAILING_MS - 1);
     expect(calls).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1);
     expect(calls).toEqual([[{ id: "a", isRead: true, isStarred: true }, { id: "b", isStarred: true }]]);
@@ -51,8 +51,36 @@ describe("StateBatcher", () => {
   it("an odd number of rapid toggles sends exactly one op with the final value", async () => {
     const { batcher, calls } = setup();
     for (let i = 0; i < 11; i++) batcher.enqueue({ id: "a", field: "isStarred", value: i % 2 === 0 }, i % 2 !== 0);
-    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(TRAILING_MS);
     expect(calls).toEqual([[{ id: "a", isStarred: true }]]);
+  });
+
+  // Regression guard (mobile CI: 10 taps ~200 ms apart -> 10 calls). The
+  // trailing window must outlast the gap between two rapid taps, or every tap
+  // flushes alone and a toggle never meets its inverse in the queue.
+  it.each([150, 200, 300])("toggles %i ms apart (rapid tap cadence) still cancel: nothing is sent", async (gapMs) => {
+    const { batcher, calls } = setup();
+    for (let i = 0; i < 10; i++) {
+      batcher.enqueue({ id: "a", field: "isStarred", value: i % 2 === 0 }, i % 2 !== 0);
+      await vi.advanceTimersByTimeAsync(gapMs);
+    }
+    await vi.advanceTimersByTimeAsync(2 * MAX_WAIT_MS);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("an odd number of toggles at tap cadence sends one op, even when tapping outlasts the max wait", async () => {
+    const { batcher, calls } = setup();
+    for (let i = 0; i < 11; i++) {
+      batcher.enqueue({ id: "a", field: "isStarred", value: i % 2 === 0 }, i % 2 !== 0);
+      await vi.advanceTimersByTimeAsync(250);
+    }
+    await vi.advanceTimersByTimeAsync(2 * MAX_WAIT_MS);
+    expect(calls).toEqual([[{ id: "a", isStarred: true }]]);
+  });
+
+  it("the trailing window is longer than a rapid tap gap and shorter than the max wait", () => {
+    expect(TRAILING_MS).toBeGreaterThanOrEqual(2 * 200);
+    expect(TRAILING_MS).toBeLessThan(MAX_WAIT_MS);
   });
 
   it("flushes at the latest 1 s after the first enqueue even while writes keep coming", async () => {
@@ -63,7 +91,7 @@ describe("StateBatcher", () => {
     }
     expect(calls.length).toBe(1);
     expect(calls[0].length).toBe(10);
-    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(TRAILING_MS);
     expect(calls.length).toBe(2);
   });
 
@@ -111,7 +139,7 @@ describe("StateBatcher", () => {
     let idle = false;
     batcher.enqueue({ id: "a", field: "isRead", value: true }, false);
     void batcher.whenIdle().then(() => (idle = true));
-    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(TRAILING_MS);
     expect(idle).toBe(false);
     call.resolve({ failed: [] });
     await vi.advanceTimersByTimeAsync(0);

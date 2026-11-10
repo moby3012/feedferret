@@ -140,17 +140,32 @@ test("10 rapid toggles of one star send at most 2 action calls", async ({ app, p
   await app.open();
   const actions = countActions(page);
   const star = app.rowActions(1).star;
-  const t0 = Date.now();
   for (let i = 0; i < 10; i++) await app.activate(star);
-  const tappingMs = Date.now() - t0;
   await page.waitForTimeout(2000);
-  // The batcher flushes at the latest 1 s after the first queued write, so slow
-  // (mobile-emulated CI) tapping that spans more than a second legitimately
-  // produces one extra call per elapsed second. Ten separate calls is the bug.
-  expect(actions.count).toBeLessThanOrEqual(2 + Math.floor(tappingMs / 1000));
-  expect(actions.count).toBeLessThan(10);
+  // Each toggle meets its inverse in the queue (taps land well inside the
+  // trailing window), so the count does not grow with how long tapping took.
+  expect(actions.count).toBeLessThanOrEqual(2);
   actions.stop();
   // Even number of toggles: back where it started, on screen and on the server.
+  await expect(star).toHaveAccessibleName("Star");
+  expect(articleFlags(app.articleId(1)).isStarred).toBe(false);
+});
+
+test("toggles at human tap cadence (~220 ms apart) cancel out instead of one call per tap", async ({ app, page }) => {
+  // Regression: with a 150 ms trailing window every tap of mobile-emulated CI
+  // (~200 ms apart) was flushed alone -> 10 taps, 10 calls. Paced so local and
+  // CI runs see the same gap.
+  await app.open();
+  const actions = countActions(page);
+  const star = app.rowActions(1).star;
+  for (let i = 0; i < 10; i++) {
+    const started = Date.now();
+    await app.activate(star);
+    await page.waitForTimeout(Math.max(0, 220 - (Date.now() - started)));
+  }
+  await page.waitForTimeout(2000);
+  expect(actions.count).toBeLessThanOrEqual(2);
+  actions.stop();
   await expect(star).toHaveAccessibleName("Star");
   expect(articleFlags(app.articleId(1)).isStarred).toBe(false);
 });
