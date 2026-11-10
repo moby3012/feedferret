@@ -90,8 +90,11 @@ async function getItems(
 
   const where: Record<string, unknown> = { userId, extId: { not: null }, feed: { extId: { not: null } } };
 
+  // Invalid since_id/max_id values are ignored entirely (filter AND sort order).
+  const since = sinceId ? numericIds(sinceId)[0] : undefined;
+  const max = maxId && maxId.trim() !== "0" ? numericIds(maxId)[0] : undefined;
   if (withIds?.length) where.extId = { in: numericIds(withIds.join(",")) };
-  else where.extId = { not: null, ...(sinceId && numericIds(sinceId).length ? { gt: numericIds(sinceId)[0] } : {}), ...(maxId && maxId.trim() !== "0" && numericIds(maxId).length ? { lt: numericIds(maxId)[0] } : {}) };
+  else where.extId = { not: null, ...(since ? { gt: since } : {}), ...(max ? { lt: max } : {}) };
   const feedIds = params.get("feed_ids")?.split(",").filter(Boolean);
   const groupIds = params.get("group_ids")?.split(",").filter(Boolean);
   if (feedIds?.length) where.feed = { extId: { in: numericIds(feedIds.join(",")) }, userId };
@@ -99,7 +102,7 @@ async function getItems(
 
   const articles = await db.article.findMany({
     where: { AND: [where, { feed: { extId: { not: null } } }] },
-    orderBy: { extId: sinceId ? "asc" : "desc" },
+    orderBy: { extId: since ? "asc" : "desc" },
     take: 50,
     select: {
       id: true,

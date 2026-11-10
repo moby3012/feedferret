@@ -12,6 +12,10 @@ export async function allocateExternalIds(client: PrismaClient, count: number): 
   return Array.from({ length: count }, (_, i) => storedExternalId(row.value - BigInt(count - i - 1)));
 }
 
+// NOTE: allocation runs on the base client, not on a caller's interactive
+// transaction. Never create Article/Feed/Category/Label via `tx.*.create` inside
+// `db.$transaction(async (tx) => …)`: on SQLite (single connection) that would
+// wait on itself until the transaction times out.
 export function withExternalIds(client: PrismaClient) {
   return client.$extends({ query: { $allModels: {
     async $allOperations({ model, operation, args, query }) {
