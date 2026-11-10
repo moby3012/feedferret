@@ -293,7 +293,16 @@ export function ArticleList({
     return () => observer.disconnect();
   }, [hasMore, hasMoreLoaded, articles.length, loadedCount, isFetchingMore, onLoadMore, pageSize, scrollRoot]);
 
-  if (isLoading && articles.length === 0) {
+  // Client-side filtering (e.g. unread-only over a search/smart view) can hide
+  // every row of the pages loaded so far. Without visible rows there is no
+  // sentinel to scroll into, so keep paging until something shows up or the
+  // server reports the end — otherwise older matches would be unreachable.
+  const pagingThroughHidden = articles.length === 0 && hasMorePages;
+  useEffect(() => {
+    if (pagingThroughHidden && !isFetchingMore && !isLoading) onLoadMore?.();
+  }, [pagingThroughHidden, isFetchingMore, isLoading, loadedCount, onLoadMore]);
+
+  if ((isLoading || pagingThroughHidden) && articles.length === 0) {
     const skeletonCount = viewMode === "magazine" ? 4 : viewMode === "minimal" ? 8 : 6;
     return (
       <div

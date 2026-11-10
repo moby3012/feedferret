@@ -112,3 +112,13 @@ describe("helpers", () => {
     expect(computeArticleMeta({ content: "", title: "x", link: "https://e.com/" }).readMinutes).toBeNull();
   });
 });
+
+describe("parseDurationSecs bounds (Postgres Int)", () => {
+  it("rejects durations beyond signed 32-bit", () => {
+    expect(parseDurationSecs("2147483648")).toBeNull();
+    expect(parseDurationSecs(2 ** 40)).toBeNull();
+    expect(parseDurationSecs("99999999:00:00")).toBeNull();
+    expect(parseDurationSecs("2147483647")).toBe(2147483647);
+    expect(parseDurationSecs(Number.POSITIVE_INFINITY)).toBeNull();
+  });
+});

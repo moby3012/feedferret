@@ -65,10 +65,12 @@ export async function backfillArticleMetaBatch(
         enclosures: row.enclosures,
         feedUrl: row.feed?.url ?? null,
       });
-      // `kind: null` in the filter: a concurrent sync that already wrote fresh
-      // metadata for this row wins.
+      // `kind: null` + unchanged `updatedAt` in the filter: if a concurrent sync,
+      // read/star toggle or full-text fetch touched the row since we read it, we
+      // skip it instead of writing our stale `updatedAt` back (GReader ot/nt rely
+      // on it). Reads derive `kind` when it is null; a later run fills it.
       return db.article.updateMany({
-        where: { id: row.id, kind: null },
+        where: { id: row.id, kind: null, updatedAt: row.updatedAt },
         data: { ...meta, updatedAt: row.updatedAt },
       });
     }),
