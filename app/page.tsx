@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
-import readingTime from "reading-time";
 import { RssSidebar } from "@/components/rss-sidebar";
 import { ArticleList } from "@/components/article-list";
 import { ArticleReader } from "@/components/article-reader";
@@ -16,7 +15,6 @@ import { SearchResultsView } from "@/components/search-results-view";
 import { isMarkAllAllowed } from "@/lib/view-scope";
 import {
   useFeeds,
-  useArticles,
   useViewUnreadCount,
   useToggleRead,
   useToggleStarred,
@@ -53,31 +51,17 @@ import { useRouter } from "next/navigation";
 import { useAppBadge, useUnreadBadgeCount } from "@/hooks/use-app-badge";
 import { useOfflineArticleCache } from "@/hooks/use-offline-articles";
 import { useDebounce } from "@/hooks/use-debounce";
+import { useQueryClient } from "@tanstack/react-query";
+import { useArticle, useArticleList } from "@/features/articles/queries";
+import { listKeyOf } from "@/features/articles/scope";
+import { qk } from "@/features/articles/keys";
+import { fetchArticleDetail } from "@/features/articles/api";
+import { legacyScope, toLegacyArticle, withDetail, type LegacyContext } from "@/features/articles/legacy-adapter";
 
 const ssrSafeStorage = {
   getItem: (key: string) => (typeof window !== "undefined" ? localStorage.getItem(key) : null),
   setItem: (key: string, value: string) => { if (typeof window !== "undefined") localStorage.setItem(key, value); },
 };
-
-function toUiArticle(a: any) {
-  const publishedAt = new Date(a.publishedAt);
-  return {
-    ...a,
-    feedName: a.feed.name,
-    feedIcon: a.feed.icon || "",
-    publishedAtRaw: publishedAt.getTime(),
-    createdAtRaw: a.createdAt ? new Date(a.createdAt).getTime() : 0,
-    publishedAt: publishedAt.toISOString(),
-    readTime: Math.ceil(readingTime((a.content || "").replace(/<[^>]*>?/gm, "")).minutes),
-    excerpt: a.excerpt || "",
-    // No "Unknown" fallback here — many feeds simply don't provide an
-    // author, and showing a placeholder for every one of their articles is
-    // just noise. Leave it empty and let the display layer hide it entirely.
-    author: a.author || "",
-    duplicateCount: a._count?.duplicates ?? 0,
-    canonicalFeedName: a.canonical?.feed?.name ?? null,
-  };
-}
 
 function normalizeViewMode(value?: string | null): ViewMode {
   if (value === "minimal" || value === "magazine" || value === "list") {
@@ -124,14 +108,25 @@ export default function RSSReaderPage() {
   const isAuthenticated = status === "authenticated";
 
   const { data: feeds = [], isLoading: feedsLoading } = useFeeds(isAuthenticated);
+  const { data: categories = [] } = useCategories(isAuthenticated);
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const isSearchActive = Boolean(debouncedSearchQuery.trim());
-  const { data: rawArticles = [], isLoading: articlesLoading } = useArticles(
-    isSearchActive ? null : selectedFeed,
-    isSearchActive ? "All Articles" : selectedCategory,
-    debouncedSearchQuery || undefined,
-    isAuthenticated,
+  const queryClient = useQueryClient();
+
+  // Slim, server-filtered, paged list (GET /api/app/articles, 50 rows/page,
+  // no bodies). The unread filter runs on the server for all/feed/category/
+  // label/saved-search; smart views and search ignore `show` (filtered below).
+  const listScope = useMemo(
+    () => legacyScope(isSearchActive ? null : selectedFeed, isSearchActive ? "All Articles" : selectedCategory, debouncedSearchQuery, categories),
+    [isSearchActive, selectedFeed, selectedCategory, debouncedSearchQuery, categories],
   );
+  const listKey = useMemo(
+    () => (listScope ? listKeyOf(listScope, unreadOnly ? "unread" : "all", sortOrder === "oldest" ? "old" : "new") : null),
+    [listScope, unreadOnly, sortOrder],
+  );
+  const articleList = useArticleList(listKey, { active: isAuthenticated });
+  const rawArticles = articleList.items;
+  const articlesLoading = articleList.status === "pending" && isAuthenticated;
 
   // Header count comes from the server: the article query is capped, so a
   // client-side count under-reports big views and disagreed with the sidebar.
@@ -148,8 +143,7 @@ export default function RSSReaderPage() {
   const toggleReadLater = useToggleReadLater();
   const { markViewRead, isPending: isMarkingAllRead } = useMarkViewRead();
   const fetchFullText = useFetchFullText();
-  const { data: labels = [] } = useLabels(isAuthenticated);
-  const { data: categories = [] } = useCategories(isAuthenticated);
+  const { data: labels = [], isSuccess: labelsReady } = useLabels(isAuthenticated);
   const { data: savedSearches = [] } = useSavedSearches(isAuthenticated);
   const createSavedSearch = useCreateSavedSearch();
   const setArticleLabels = useSetArticleLabels();
@@ -332,10 +326,20 @@ export default function RSSReaderPage() {
 
   const { articles: cachedRawArticles, isOffline, hasOfflineSnapshot } = useOfflineArticleCache(rawArticles);
 
-  // Transform articles for UI components
-  const articles = useMemo(() => {
-    return cachedRawArticles.map((a) => toUiArticle(a));
-  }, [cachedRawArticles]);
+  // Adapt the slim rows to the existing list/reader components (field copies
+  // only, memoized per row — no body parsing per article any more).
+  const legacyContext = useMemo<LegacyContext>(
+    () => ({
+      feedsById: new Map(feeds.map((f: any) => [f.id, f])),
+      labelsById: new Map(labels.map((l: any) => [l.id, l])),
+      labelsReady,
+    }),
+    [feeds, labels, labelsReady],
+  );
+  const articles = useMemo(
+    () => cachedRawArticles.map((a) => toLegacyArticle(a, legacyContext)),
+    [cachedRawArticles, legacyContext],
+  );
 
   const displayArticles = useMemo(() => {
     const byId = new Map<string, any>();
@@ -352,6 +356,14 @@ export default function RSSReaderPage() {
       : null,
     [displayArticles, selectedArticleId, selectedArticleSnapshot],
   );
+  // Body on demand (GET /api/app/articles/:id): the reader paints title/meta
+  // from the list row at once and the server-rendered HTML when it arrives.
+  const { detail: selectedDetail, status: selectedDetailStatus } = useArticle(selectedArticleId);
+  const readerArticle = useMemo(
+    () => (selectedArticle ? withDetail(selectedArticle, selectedDetail) : null),
+    [selectedArticle, selectedDetail],
+  );
+  const isReaderBodyLoading = !!selectedArticle && selectedDetailStatus === "pending";
 
   const loadedUnreadCount = useMemo(
     () => displayArticles.filter((a: any) => !a.isRead).length,
@@ -369,11 +381,23 @@ export default function RSSReaderPage() {
     const articleId = articleDeepLinkRef.current;
     if (!articleId || selectedArticleId) return;
     const article = displayArticles.find((item: any) => item.id === articleId);
-    if (!article) return;
-    setSelectedArticleId(article.id);
-    setSelectedArticleSnapshot(article);
+    if (article) {
+      setSelectedArticleId(article.id);
+      setSelectedArticleSnapshot(article);
+      articleDeepLinkRef.current = null;
+      return;
+    }
+    // Not on the first list page (lists are paged now): open it by id.
+    if (articleList.status !== "ready") return;
     articleDeepLinkRef.current = null;
-  }, [displayArticles, selectedArticleId]);
+    queryClient
+      .fetchQuery({ queryKey: qk.article(articleId), queryFn: ({ signal }) => fetchArticleDetail(articleId, signal), staleTime: 5 * 60_000 })
+      .then((detail) => {
+        setSelectedArticleId(detail.id);
+        setSelectedArticleSnapshot(toLegacyArticle(detail, legacyContext));
+      })
+      .catch(() => { /* unknown or foreign id: stay on the list */ });
+  }, [displayArticles, selectedArticleId, articleList.status, queryClient, legacyContext]);
 
 
   const filteredArticles = useMemo(() => {
@@ -391,7 +415,11 @@ export default function RSSReaderPage() {
       list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
     }
 
-    // Sort AFTER filtering. Tie-break date-less/equal-timestamp articles by
+    // "Recently read" keeps the server order (by read time).
+    if (listScope?.kind === "recent") return list;
+
+    // Sort AFTER filtering (the server already returns this order; merged
+    // session copies need it). Tie-break date-less/equal-timestamp articles by
     // createdAt then id (mirroring the sort direction) so feeds without a
     // parseable publishedAt aren't left in arbitrary/oldest-first feed order.
     return list.sort((a: any, b: any) => {
@@ -404,7 +432,7 @@ export default function RSSReaderPage() {
       if (a.id === b.id) return 0;
       return sortOrder === "oldest" ? (a.id < b.id ? -1 : 1) : (a.id > b.id ? -1 : 1);
     });
-  }, [displayArticles, unreadOnly, readInSession, sortOrder]);
+  }, [displayArticles, unreadOnly, readInSession, sortOrder, listScope?.kind]);
 
   const selectedArticleIndex = useMemo(
     () => filteredArticles.findIndex((article: any) => article.id === selectedArticleId),
@@ -683,27 +711,17 @@ export default function RSSReaderPage() {
   }, [updateGlobalSettings]);
 
   const handleFetchFullText = useCallback((articleId: string) => {
-    fetchFullText.mutate(articleId, {
-      onSuccess: (article: any) => {
-        const uiArticle = toUiArticle(article);
-        setSelectedArticleSnapshot(uiArticle);
-        setSessionReadArticles((prev) => [
-          uiArticle,
-          ...prev.filter((a) => a.id !== uiArticle.id),
-        ]);
-      },
-    });
+    // The new body arrives through the refetched article detail (see useFetchFullText).
+    fetchFullText.mutate(articleId);
   }, [fetchFullText]);
 
   const handleSetLabels = useCallback((articleId: string, labelIds: string[]) => {
     setArticleLabels.mutate({ articleId, labelIds }, {
       onSuccess: (article: any) => {
-        const uiArticle = toUiArticle(article);
-        setSelectedArticleSnapshot(uiArticle);
-        setSessionReadArticles((prev) => [
-          uiArticle,
-          ...prev.filter((a) => a.id !== uiArticle.id),
-        ]);
+        const labels = article?.labels ?? [];
+        const patch = (a: any) => (a.id === articleId ? { ...a, labels, labelIds: labels.map((l: any) => l.labelId ?? l.label?.id) } : a);
+        setSelectedArticleSnapshot((prev: any) => (prev ? patch(prev) : prev));
+        setSessionReadArticles((prev) => prev.map(patch));
       },
     });
   }, [setArticleLabels]);
@@ -975,6 +993,10 @@ export default function RSSReaderPage() {
                 markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
                 filterKey={`search|${debouncedSearchQuery}|${sortOrder}`}
                 transitionStyle={transitionStyle}
+                hasMorePages={articleList.hasMore}
+                isFetchingMore={articleList.isFetchingMore}
+                onLoadMore={articleList.fetchMore}
+                loadedCount={rawArticles.length}
               />
             ) : (
               <>
@@ -1024,6 +1046,10 @@ export default function RSSReaderPage() {
                     endOfList={endOfListCard}
                     scrollBackToId={lastClosedArticleId}
                     hasFeeds={feeds.length > 0}
+                    hasMorePages={articleList.hasMore}
+                    isFetchingMore={articleList.isFetchingMore}
+                    onLoadMore={articleList.fetchMore}
+                    loadedCount={rawArticles.length}
                   />
                 )}
               </>
@@ -1039,7 +1065,8 @@ export default function RSSReaderPage() {
         <ResizablePanel id="article-reader" defaultSize="64%" minSize="30%">
           <div role="region" aria-label={tA11y("articleReader")} className="flex h-full bg-background">
             <ArticleReader
-              article={selectedArticle}
+              article={readerArticle}
+              isBodyLoading={isReaderBodyLoading}
               onToggleStar={handleToggleStar}
               onToggleReadLater={handleToggleReadLater}
               onToggleRead={handleToggleRead}
@@ -1087,6 +1114,10 @@ export default function RSSReaderPage() {
             markReadOnScroll={readingPrefs?.markReadOnScroll ?? false}
             filterKey={`search|${debouncedSearchQuery}|${sortOrder}`}
             transitionStyle={transitionStyle}
+            hasMorePages={articleList.hasMore}
+            isFetchingMore={articleList.isFetchingMore}
+            onLoadMore={articleList.fetchMore}
+            loadedCount={rawArticles.length}
             isMobile
           />
         ) : (
@@ -1140,6 +1171,10 @@ export default function RSSReaderPage() {
                 endOfList={endOfListCard}
                 scrollBackToId={lastClosedArticleId}
                 hasFeeds={feeds.length > 0}
+                hasMorePages={articleList.hasMore}
+                isFetchingMore={articleList.isFetchingMore}
+                onLoadMore={articleList.fetchMore}
+                loadedCount={rawArticles.length}
               />
             )}
           </>
@@ -1166,7 +1201,8 @@ export default function RSSReaderPage() {
       {isMobileLayout && (selectedArticle || isClosingReader) && (
       <div role="region" aria-label={tA11y("articleReader")} className={`fixed inset-0 z-50 flex bg-background ${isClosingReader ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
         <ArticleReader
-          article={selectedArticle}
+          article={readerArticle}
+          isBodyLoading={isReaderBodyLoading}
           onToggleStar={handleToggleStar}
           onToggleReadLater={handleToggleReadLater}
           onToggleRead={handleToggleRead}

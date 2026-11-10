@@ -767,6 +767,7 @@
     "duplicateBadge": "Duplikat"
   },
   "articleReader": {
+    "loadingBody": "Artikel wird geladen…",
     "readTime": "{minutes, plural, one {# Min. Lesezeit} other {# Min. Lesezeit}}",
     "selectArticle": "Artikel auswählen",
     "selectArticleDescription": "Wähle einen Artikel aus der Liste, um ihn hier zu lesen.",

@@ -12,6 +12,7 @@ import { fetchWithSsrfProtection, isTrustedFeedFetchingAllowed, type Conditional
 import { isTrustedConnectorUrl } from "./connector-hosts";
 import { logger } from "./logger";
 import { stripStyleBlocks } from "./html-utils";
+import { parseDurationSecs } from "./article-kind";
 
 export type FeedFetchConfig = {
   url: string;
@@ -56,6 +57,10 @@ export type FetchedFeedArticle = {
   publishedAt?: Date | null;
   imageUrl?: string | null;
   enclosures?: Array<{ href: string; type: string; length?: number }>;
+  /** `media:content` with an audio/video type (used when there is no such enclosure). */
+  media?: { url: string; type: string } | null;
+  /** `itunes:duration` / `media:content@duration`, in seconds. */
+  durationSecs?: number | null;
   externalId?: string | null;
   categories?: string[];
 };
@@ -72,7 +77,34 @@ export type FetchedFeed = {
   lastModifiedHeader?: string | null;
 };
 
-const parser = new Parser();
+// `media:content` is collected under a private key so the existing
+// `item["media:content"]` image fallback below keeps its current behaviour.
+const parser = new Parser({ customFields: { item: [["media:content", "ffMediaContent", { keepArray: true }]] } });
+
+type MediaContentNode = { $?: { url?: string; type?: string; medium?: string; duration?: string } };
+
+/** First audio/video `media:content` (+ its duration) of an rss-parser item. */
+export function mediaFromItem(item: { ffMediaContent?: unknown; itunes?: { duration?: unknown } }): {
+  media: { url: string; type: string } | null;
+  durationSecs: number | null;
+} {
+  const nodes = Array.isArray(item.ffMediaContent) ? (item.ffMediaContent as MediaContentNode[]) : [];
+  let media: { url: string; type: string } | null = null;
+  let mediaDuration: number | null = null;
+  for (const node of nodes) {
+    const attrs = node?.$;
+    const url = typeof attrs?.url === "string" ? attrs.url.trim() : "";
+    if (!url) continue;
+    const type = typeof attrs?.type === "string" ? attrs.type.trim().toLowerCase() : "";
+    const medium = typeof attrs?.medium === "string" ? attrs.medium.trim().toLowerCase() : "";
+    const resolved = /^(audio|video)\//.test(type) ? type : medium === "audio" || medium === "video" ? `${medium}/*` : "";
+    if (!resolved) continue;
+    media = { url, type: resolved };
+    mediaDuration = parseDurationSecs(attrs?.duration);
+    break;
+  }
+  return { media, durationSecs: parseDurationSecs(htmlText(item.itunes?.duration)) ?? mediaDuration };
+}
 
 function splitHeaderLines(value?: unknown) {
   if (typeof value !== "string") return [];
@@ -341,6 +373,7 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
         imageUrl: extractImageFromHtml(content) || item.enclosure?.url || item["media:content"]?.$?.url || null,
         externalId: htmlText(item.guid) || htmlText(item.id) || htmlText(item.link) || null,
         enclosures: item.enclosure?.url ? [{ href: item.enclosure.url, type: item.enclosure.type || "", ...(Number(item.enclosure.length) > 0 ? { length: Number(item.enclosure.length) } : {}) }] : [],
+        ...mediaFromItem(item),
         categories: categoriesFrom(item.categories),
       };
     }),

@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { hashApiToken } from "@/lib/token";
+import { gzipSync } from "node:zlib";
 
 export type ApiUser = {
   id: string;
@@ -91,4 +92,48 @@ export function scopeError(user: ApiUser, required: "read" | "write" | "admin"):
     return apiError("Insufficient token scope", 403);
   }
   return null;
+}
+
+/**
+ * Session-cookie-only auth for the first-party app endpoints under
+ * `/api/app/*` (the reader UI). Bearer API tokens are deliberately NOT
+ * accepted there: those endpoints are internal to the web app, not part of
+ * the public REST/GReader/Fever/MCP surfaces. Inactive users are rejected
+ * exactly like `resolveApiUser` does.
+ */
+export async function resolveSessionUser(): Promise<ApiUser | null> {
+  const session = await auth();
+  if (!session?.user?.id) return null;
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, email: true, name: true, role: true, isActive: true },
+  });
+  if (!user?.isActive) return null;
+  return { id: user.id, email: user.email, name: user.name, role: user.role };
+}
+
+const APP_HEADERS = { "Cache-Control": "private, no-store" } as const;
+const GZIP_MIN_BYTES = 1024;
+
+/**
+ * JSON response for `/api/app/*`: per-user data, never cached by browsers or
+ * proxies. Gzipped here when the client accepts it: Next's built-in
+ * compression does not apply to App Router route-handler responses, and the
+ * article list is the hottest payload of the app.
+ */
+export function appJson(body: unknown, opts: { request?: Request; status?: number } = {}) {
+  const json = JSON.stringify(body);
+  const status = opts.status ?? 200;
+  const acceptsGzip = /\bgzip\b/i.test(opts.request?.headers.get("accept-encoding") ?? "");
+  if (acceptsGzip && json.length >= GZIP_MIN_BYTES) {
+    return new NextResponse(new Uint8Array(gzipSync(json)), {
+      status,
+      headers: { ...APP_HEADERS, "Content-Type": "application/json", "Content-Encoding": "gzip", Vary: "Accept-Encoding" },
+    });
+  }
+  return new NextResponse(json, { status, headers: { ...APP_HEADERS, "Content-Type": "application/json", Vary: "Accept-Encoding" } });
+}
+
+export function appError(message: string, status = 400) {
+  return NextResponse.json({ error: { message } }, { status, headers: APP_HEADERS });
 }

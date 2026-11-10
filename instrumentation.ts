@@ -22,6 +22,13 @@ export async function register() {
 
     const { startBackgroundSync } = await import("./lib/background-sync");
     startBackgroundSync();
+
+    // Fills Article.kind / readMinutes / media* for rows synced before those
+    // columns existed. Background + batched; never delays startup.
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+        const { startArticleMetaBackfill } = await import("./lib/article-meta-backfill");
+        startArticleMetaBackfill();
+    }
 }
 
 const INSECURE_DEFAULTS = [

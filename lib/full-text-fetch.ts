@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { getSanitizer } from "@/lib/sanitize-html";
+import { estimateReadMinutes } from "@/lib/article-kind";
 import { fetchAndExtractReadable } from "@/lib/readability-extract";
 import { HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
 import { looksLikeTruncatedFeed } from "@/lib/full-text-mode";
@@ -89,6 +90,7 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
             content: result.html,
             contentFormat: "html",
             excerpt: result.excerpt?.trim() || plain.slice(0, 240),
+            readMinutes: estimateReadMinutes(plain),
         },
         include: {
             feed: true,
