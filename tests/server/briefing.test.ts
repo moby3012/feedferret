@@ -499,6 +499,55 @@ describe("review fixes: atomic cap, accounting, selection signals", () => {
     expect((await usageSummary(u.id)).paused).toBe(true); // the refusal paused automatic features
   });
 
+  it("concurrent first calls of the day: both reserve (no spurious refusal while the counter row is created)", async () => {
+    const u = await makeUser("firstcall", { provider: "fake", cap: 10_000 });
+    const real = state.db;
+    // Worst-case interleaving: both first conditional increments see "0 rows"
+    // (no row yet); caller 1 then creates the row, and only after that does
+    // caller 2 continue — it finds the row already there.
+    let seen = 0;
+    let bothMissed!: () => void;
+    const missed = new Promise<void>((r) => (bothMissed = r));
+    let rowCreated!: () => void;
+    const created = new Promise<void>((r) => (rowCreated = r));
+    const budget = new Proxy(real.aiBudgetDay, {
+      get(target, key, receiver) {
+        if (key === "create") {
+          return async (args: Parameters<typeof target.create>[0]) => {
+            try {
+              return await target.create(args);
+            } finally {
+              rowCreated();
+            }
+          };
+        }
+        if (key !== "updateMany") return Reflect.get(target, key, receiver);
+        return async (args: Parameters<typeof target.updateMany>[0]) => {
+          const result = await target.updateMany(args);
+          const n = ++seen;
+          if (n <= 2) {
+            expect(result.count).toBe(0);
+            if (n === 2) {
+              bothMissed();
+              await created;
+            } else await missed;
+          }
+          return result;
+        };
+      },
+    });
+    state.db = new Proxy(real, { get: (target, key, receiver) => (key === "aiBudgetDay" ? budget : Reflect.get(target, key, receiver)) });
+    try {
+      const results = await Promise.allSettled([reserveBudget(u.id, "openai", 300), reserveBudget(u.id, "openai", 200)]);
+      expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+      expect(results.map((r) => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof reserveBudget>>>).value.reserved)).toEqual([300, 200]);
+    } finally {
+      state.db = real;
+    }
+    expect(await tokensUsedToday(u.id)).toBe(500);
+    expect(await state.db.aiBudgetDay.count({ where: { userId: u.id } })).toBe(1);
+  });
+
   it("two parallel generations near the cap (different scopes, same size) → at most one reaches the provider", async () => {
     const u = await makeUser("race", { provider: "fake", model: "fake-slow" });
     await seedStories(u);

@@ -8,6 +8,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { isSelectableAiProvider, type AiConfig, type AiProvider } from "@/lib/ai-summary";
 import { CitedOutputParser, outputStatus, type ParsedItem } from "@/lib/ai/citations";
 import { AiBudgetError, classifyAiError } from "@/lib/ai/errors";
+import { isFakeLocalModel } from "@/lib/ai/fake";
 import { streamAiPrompt } from "@/lib/ai/stream";
 import { checkBudget, isLocalProvider, reserveBudget, settleUsage, type Reservation } from "@/lib/ai/usage";
 import { buildHeadlineDigest, citationOf } from "./fallback";
@@ -68,7 +69,7 @@ async function loadAiContext(userId: string): Promise<AiContext> {
     config: { provider, apiKey, model, ollamaBaseUrl: user.aiOllamaBaseUrl },
     model,
     // PM default: auto-generate only for local (free) providers; cloud → explicit "Briefing erstellen".
-    auto: user.briefingAuto && isLocalProvider(provider),
+    auto: user.briefingAuto && (isLocalProvider(provider) || (provider === "fake" && isFakeLocalModel(model))),
     capOff,
   };
 }

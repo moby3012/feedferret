@@ -1839,6 +1839,12 @@
       "provider_error": "KI nicht verfügbar – Schlagzeilen statt KI-Überblick.",
       "too_few": "Zu wenige neue Geschichten für einen Überblick.",
       "rate_limited": "Gerade zu viele Anfragen – Schlagzeilen statt KI-Überblick."
-    }
+    },
+    "heading": "Überblick",
+    "loading": "Wird geladen…",
+    "create": "Erstellen",
+    "show": "Anzeigen",
+    "none": "Keine neuen Geschichten",
+    "newStories": "Neu: {count, plural, one {# Geschichte} other {# Geschichten}}"
   }
 }

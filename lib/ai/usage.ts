@@ -99,23 +99,22 @@ export interface Reservation {
   reserved: number;
 }
 
-/** Creates today's counter row if missing (a concurrent create is fine). `true` = it was missing. */
-async function ensureBudgetRow(userId: string, day: string): Promise<boolean> {
-  const exists = await db.aiBudgetDay.findUnique({ where: { userId_day: { userId, day } }, select: { userId: true } });
-  if (exists) return false;
+/** Creates today's counter row if missing; a concurrent create (unique violation) is fine. */
+async function ensureBudgetRow(userId: string, day: string): Promise<void> {
   try {
     await db.aiBudgetDay.create({ data: { userId, day }, select: { userId: true } });
-  } catch {
-    /* created concurrently */
+  } catch (error) {
+    if ((error as { code?: string } | null)?.code !== "P2002") throw error;
   }
-  return true;
 }
 
 /**
  * Atomically reserves `estimate` cloud tokens for today, or throws
  * `AiBudgetError` (cap reached, or cap 0 = AI off — the latter also for local
  * providers). Local providers reserve nothing. A DB error fails open (warning)
- * so a transient error never breaks sync.
+ * so a transient error never breaks sync. A process crash before
+ * `settleUsage` leaves the estimate counted until the UTC day rolls over
+ * (stricter, never looser; docs/self-hosting.md "AI token cap").
  */
 export async function reserveBudget(userId: string, provider: string | null | undefined, estimate: number, now: Date = new Date()): Promise<Reservation> {
   const kind = usageKind(provider);
@@ -135,7 +134,13 @@ export async function reserveBudget(userId: string, provider: string | null | un
   let granted: number;
   try {
     granted = await tryReserve();
-    if (granted === 0 && (await ensureBudgetRow(userId, day))) granted = await tryReserve();
+    // 0 rows = no row yet OR at the cap. Always make sure the row exists and
+    // retry once: two concurrent first calls of the day both see 0 rows, and
+    // only one of them creates the row — the other must not be refused.
+    if (granted === 0) {
+      await ensureBudgetRow(userId, day);
+      granted = await tryReserve();
+    }
   } catch (error) {
     logger.warn("[ai-usage] budget reservation failed, allowing the call:", error instanceof Error ? error.message : error);
     return { userId, kind, day, reserved: 0 };

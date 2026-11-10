@@ -80,46 +80,15 @@ export const ListPane = memo(function ListPane({ tab }: { tab: TabId }) {
   );
 });
 
-/** Longest the first rows wait for the briefing card (then the list paints without it). */
-const BRIEFING_WAIT_MS = 1_500;
-
-type BriefingGate = "off" | "wait" | "show";
-
-/**
- * The K2 briefing card sits ABOVE the first row, so it must never pop in after
- * the rows painted (layout shift). Its GET starts together with the list query
- * (same render, in parallel); a binding whose list is still loading holds its
- * rows (skeleton) until the briefing settled — at most BRIEFING_WAIT_MS. If the
- * rows are already on screen (cached list) or the wait times out, the card is
- * left out for this binding instead of pushing the rows down later.
- */
-function useBriefingGate(on: boolean, bindingKey: string, listPending: boolean): BriefingGate {
-  const briefing = useBriefing("new", on);
-  // Offline ("paused") counts as settled: the card has nothing to show.
-  const settled = briefing.status !== "pending" || briefing.fetchStatus === "paused";
-  const [state, setState] = useState<{ key: string; gate: BriefingGate } | null>(null);
-  let gate: BriefingGate;
-  if (!on) gate = "off";
-  else if (state?.key === bindingKey && !(state.gate === "wait" && settled)) gate = state.gate;
-  else gate = settled ? "show" : listPending && state?.key !== bindingKey ? "wait" : "off";
-  if (on && (state?.key !== bindingKey || state.gate !== gate)) setState({ key: bindingKey, gate });
-  useEffect(() => {
-    if (gate !== "wait") return;
-    const timer = setTimeout(() => setState({ key: bindingKey, gate: "off" }), BRIEFING_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, [gate, bindingKey]);
-  return gate;
-}
-
 function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: boolean }) {
   const data = useShellData();
   const listKey = useMemo(() => listKeyOfLoc(loc, data.sortOrder === "oldest" ? "old" : "new"), [loc, data.sortOrder]);
   const list = useArticleList(listKey, { active });
-  const briefingGate = useBriefingGate(
-    tab === "new" && loc.scope?.kind === "all" && loc.show === "unread",
-    listKey?.id ?? "",
-    list.status === "pending" || list.isPlaceholder,
-  );
+  // K2 card: shown on the Neu list (all, unread) from the first row paint on.
+  // Its GET starts here, together with the list query, so a fast answer is
+  // part of the first paint (the card then opens by itself).
+  const showBriefing = tab === "new" && loc.scope?.kind === "all" && loc.show === "unread";
+  useBriefing("new", showBriefing);
   const counts = useCounts(true);
   const scopeUnread = useScopeUnread(loc.scope, data.feeds, true);
   const isMarkingAllRead = useIsMarkingViewRead();
@@ -141,7 +110,7 @@ function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: bool
       online={online}
       draft={draft}
       selectedId={selectedId}
-      briefingGate={briefingGate}
+      showBriefing={showBriefing}
     />
   );
 }
@@ -159,7 +128,7 @@ interface ViewProps {
   online: boolean;
   draft: string;
   selectedId: string | null;
-  briefingGate: BriefingGate;
+  showBriefing: boolean;
 }
 
 // Frozen while inactive: no re-render for hidden panes (data and cache writes included).
@@ -234,16 +203,14 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
     );
   }
 
-  // Rows wait (skeleton) while the briefing card above them is still loading.
-  const holdRows = p.briefingGate === "wait";
   const listProps = {
-    articles: holdRows ? NO_ROWS : filtered,
+    articles: filtered,
     selectedArticle,
     onSelectArticle: shell.selectArticle,
     onToggleRead: shell.toggleRead,
     onToggleStar: shell.toggleStar,
     onToggleReadLater: shell.toggleLater,
-    isLoading: loading || holdRows,
+    isLoading: loading,
     markReadOnScroll: data.prefs?.markReadOnScroll ?? false,
     onMarkRead,
     scrollMemoryKey: listKey?.id ?? null,
@@ -315,14 +282,12 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
             />
           }
           hasFeeds={data.feeds.length > 0}
-          header={p.briefingGate === "show" ? <BriefingCard scopeKey="new" active={active} /> : undefined}
+          header={p.showBriefing ? <BriefingCard scopeKey="new" active={active} /> : undefined}
         />
       )}
     </>
   );
 }, (prev, next) => (!prev.active && !next.active) || shallowEqual(prev, next));
-
-const NO_ROWS: never[] = [];
 
 const LIST_FIELDS = ["items", "status", "isPlaceholder", "hasMore", "isFetchingMore"] as const;
 

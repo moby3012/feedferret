@@ -238,6 +238,21 @@ TRUSTED_FEED_FETCHING="false"
 ALLOW_INTERNAL_FEED_URLS="false"
 ```
 
+#### AI token cap
+
+```env
+# Default daily limit of cloud AI tokens per user (UTC day). 0 = AI off by default.
+# Users can override it in Settings → AI. Local Ollama usage is never capped.
+AI_DAILY_TOKEN_CAP="150000"
+```
+
+Each cloud AI call reserves its estimated tokens on the user's counter for the
+current UTC day before it runs and settles to the actual usage afterwards. If
+the server crashes or is restarted between the reservation and the settlement,
+that reservation is never settled: the estimate stays counted until the
+counter resets at 00:00 UTC. The effect is only ever a stricter cap for the
+rest of that day, never an overshoot.
+
 ---
 
 ## First Start and Setup Wizard

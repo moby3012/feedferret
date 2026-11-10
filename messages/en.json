@@ -1839,6 +1839,12 @@
       "provider_error": "AI unavailable – headlines instead of an AI briefing.",
       "too_few": "Too few new stories for a briefing.",
       "rate_limited": "Too many requests right now – headlines instead of an AI briefing."
-    }
+    },
+    "heading": "Briefing",
+    "loading": "Loading…",
+    "create": "Create",
+    "show": "Show",
+    "none": "No new stories",
+    "newStories": "New: {count, plural, one {# story} other {# stories}}"
   }
 }

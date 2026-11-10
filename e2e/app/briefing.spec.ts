@@ -23,11 +23,60 @@ async function chipTitle(chip: Locator): Promise<string> {
   return label.replace(/^Source \d+: /, "").replace(/ — [^—]+$/, "");
 }
 
+/** Waits until the card's GET answered (status line left "Loading…"). */
+async function cardLoaded(page: Page) {
+  await expect(card(page)).toBeVisible({ timeout: 30_000 });
+  await expect(card(page).getByTestId("briefing-status-line")).not.toHaveText("Loading…", { timeout: 30_000 });
+}
+
+/** Opens the body unless it already opened by itself (briefing loaded before the first rows painted). */
+async function expand(app: App, page: Page) {
+  await cardLoaded(page);
+  if ((await toggle(page).getAttribute("aria-expanded")) !== "true") await app.activate(toggle(page));
+  await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
+}
+
 async function openCard(app: App, page: Page, name: RegExp) {
   await app.open();
-  await expect(card(page)).toBeVisible();
+  await expand(app, page);
   await expect(toggle(page)).toHaveAccessibleName(name);
-  await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
+}
+
+type RowSample = { y: number; card: boolean; expanded: string | null; t: number; search: string };
+
+/** Every frame: y of the first row of the active list, whether the card exists, its toggle state. */
+async function sampleRows(page: Page) {
+  await page.addInitScript(() => {
+    const samples: RowSample[] = [];
+    (window as unknown as { __rowSamples: RowSample[] }).__rowSamples = samples;
+    const tick = () => {
+      const pane = document.querySelector('[data-pane^="list-"][data-active="true"]');
+      const row = pane?.querySelector("[data-article-id]");
+      if (row) {
+        const c = pane?.querySelector('[data-testid="briefing-card"]');
+        samples.push({
+          y: Math.round(row.getBoundingClientRect().top * 10) / 10,
+          card: !!c,
+          expanded: c?.querySelector("[aria-expanded]")?.getAttribute("aria-expanded") ?? null,
+          t: performance.now(),
+          search: location.search,
+        });
+      }
+      if (samples.length < 20_000) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+const samplesOf = (page: Page) => page.evaluate(() => (window as unknown as { __rowSamples: RowSample[] }).__rowSamples.slice());
+const ys = (samples: RowSample[]) => [...new Set(samples.map((s) => s.y))];
+
+/** Slow briefing GET (the list answers first); POSTs untouched. */
+async function delayBriefingGet(page: Page, ms = 700) {
+  await page.route("**/api/app/briefing?*", async (route) => {
+    if (route.request().method() === "GET") await new Promise((r) => setTimeout(r, ms));
+    await route.continue();
+  });
 }
 
 test.describe("briefing card", () => {
@@ -109,6 +158,7 @@ test.describe("briefing card", () => {
     await expect(card(page)).toHaveAttribute("data-mode", "ai", { timeout: 30_000 });
     await page.waitForLoadState("networkidle");
     expect(posts).toHaveLength(1); // served from the cache (GET), no second generation
+    await expand(app, page);
 
     const chip = card(page).locator("[data-briefing-section=what] [data-citation-id]").first();
     const id = await chip.getAttribute("data-citation-id");
@@ -130,7 +180,7 @@ test.describe("briefing card", () => {
     await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
     await expect(card(page).locator("[data-briefing-item]")).toHaveCount(0);
     await page.reload();
-    await expect(card(page)).toBeVisible({ timeout: 30_000 });
+    await cardLoaded(page);
     await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
     if (!app.isMobile) {
       await toggle(page).focus();
@@ -151,34 +201,98 @@ test.describe("briefing card", () => {
     expect(briefingCount(app.userKey)).toBe(0);
   });
 
-  test("first row never moves when the card mounts, even when the briefing GET is slower than the list", async ({ app, page }) => {
+  test("slow briefing GET: the card header is there from the first row paint, stays collapsed, rows never move", async ({ app, page }) => {
     resetBriefing(app.userKey);
-    // Slow briefing GET (the list answers first); POSTs untouched.
-    await page.route("**/api/app/briefing?*", async (route) => {
-      if (route.request().method() === "GET") await new Promise((r) => setTimeout(r, 700));
-      await route.continue();
-    });
-    // Every frame: y of the first row of the active list + whether the card exists.
-    await page.addInitScript(() => {
-      const samples: { y: number; card: boolean }[] = [];
-      (window as unknown as { __rowSamples: typeof samples }).__rowSamples = samples;
+    await delayBriefingGet(page);
+    await sampleRows(page);
+    await page.goto("/");
+    await cardLoaded(page);
+    await expect(card(page).getByTestId("briefing-status-line")).toHaveText(/stories since|new stories/);
+    await page.waitForTimeout(300);
+    const samples = await samplesOf(page);
+    expect(samples.length).toBeGreaterThan(0);
+    expect(samples.every((s) => s.card)).toBe(true); // header present at the first painted frame
+    expect(samples.every((s) => s.expanded === "false")).toBe(true); // arrived after the rows: no auto-open
+    expect(ys(samples)).toHaveLength(1);
+  });
+
+  test("warm cache: back on Neu the card opens with the first paint (not hidden), rows never move", async ({ app, page }) => {
+    resetBriefing(app.userKey);
+    await app.open();
+    // Opened once (default pref "expanded"): a remount with the cached briefing opens by itself.
+    await expand(app, page);
+    await app.selectSidebar(/^Solo Blog\s*\d+$/);
+    await expect(card(page)).toHaveCount(0);
+    // Same document (no reload): start the per-frame sampler now.
+    await page.evaluate(() => {
+      const samples: RowSample[] = [];
+      (window as unknown as { __rowSamples: RowSample[] }).__rowSamples = samples;
       const tick = () => {
         const pane = document.querySelector('[data-pane^="list-"][data-active="true"]');
         const row = pane?.querySelector("[data-article-id]");
-        if (row) samples.push({ y: Math.round(row.getBoundingClientRect().top * 10) / 10, card: !!pane?.querySelector('[data-testid="briefing-card"]') });
-        if (samples.length < 2_000) requestAnimationFrame(tick);
+        if (row) {
+          const c = pane?.querySelector('[data-testid="briefing-card"]');
+          samples.push({ y: Math.round(row.getBoundingClientRect().top * 10) / 10, card: !!c, expanded: c?.querySelector("[aria-expanded]")?.getAttribute("aria-expanded") ?? null, t: performance.now(), search: location.search });
+        }
+        if (samples.length < 20_000) requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     });
-    await page.goto("/");
-    await expect(card(page)).toBeVisible({ timeout: 30_000 });
-    await expect(app.rows().first()).toBeVisible();
+    await app.selectSidebar(/^All articles\s*\d*$/);
+    await expect(card(page)).toBeVisible();
+    await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(card(page).locator("[data-briefing-item]").first()).toBeVisible();
     await page.waitForTimeout(300);
-    const samples = await page.evaluate(() => (window as unknown as { __rowSamples: { y: number; card: boolean }[] }).__rowSamples);
-    expect(samples.length).toBeGreaterThan(0);
-    // The card was already there when the first row painted, and the row never moved.
-    expect(samples[0].card).toBe(true);
-    expect(new Set(samples.map((s) => s.y)).size).toBe(1);
+    const samples = await samplesOf(page);
+    const withCard = samples.slice(samples.findIndex((s) => s.card));
+    expect(withCard.length).toBeGreaterThan(0);
+    // From the first frame of the Neu rows on: card present and open, first row fixed.
+    expect(withCard.every((s) => s.card && s.expanded === "true")).toBe(true);
+    expect(ys(withCard)).toHaveLength(1);
+  });
+
+  test("local provider: auto-generation after mount streams into the header only; rows never move", async ({ app, page }) => {
+    setAiProvider(app.userKey, "fake", "fake-local");
+    const posts = trackBriefingPosts(page);
+    await delayBriefingGet(page);
+    await sampleRows(page);
+    await page.goto("/");
+    const status = card(page).getByTestId("briefing-status-line");
+    await expect(status).toHaveText("Creating your briefing…", { timeout: 30_000 });
+    await expect(card(page)).toHaveAttribute("data-state", "generating");
+    await expect(status).toHaveText(/Briefing ready, \d+ points/, { timeout: 60_000 });
+    expect(posts).toHaveLength(1);
+    await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
+    await expect(card(page).locator("[data-briefing-item]")).toHaveCount(0);
+    await page.waitForTimeout(300);
+    const samples = await samplesOf(page);
+    expect(samples.every((s) => s.card && s.expanded === "false")).toBe(true);
+    expect(ys(samples)).toHaveLength(1);
+    // The result is there on demand.
+    await app.activate(toggle(page));
+    await expect(card(page)).toHaveAttribute("data-mode", "ai");
+    await expect(card(page).locator("[data-briefing-item]").first()).toBeVisible();
+  });
+
+  test("rows move only after the user expands the card", async ({ app, page }) => {
+    resetBriefing(app.userKey);
+    await delayBriefingGet(page);
+    await sampleRows(page);
+    await page.goto("/");
+    await cardLoaded(page);
+    await page.waitForTimeout(300);
+    const tClick = await page.evaluate(() => performance.now());
+    await app.activate(toggle(page));
+    await expect(toggle(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(card(page).locator("[data-briefing-item]").first()).toBeVisible();
+    await page.waitForTimeout(200);
+    const samples = await samplesOf(page);
+    const before = samples.filter((s) => s.t < tClick);
+    const after = samples.filter((s) => s.t > tClick);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.every((s) => s.card)).toBe(true);
+    expect(ys(before)).toHaveLength(1);
+    expect(after.at(-1)!.y).toBeGreaterThan(before[0].y);
   });
 
   test("rows do not move when streaming completes while the list is scrolled", async ({ app, page }) => {

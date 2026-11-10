@@ -1,6 +1,7 @@
 // Deterministic fake AI provider (.pm/spec-ai-briefing.md §6) — the only
 // provider CI ever talks to; no network. Behaviour is picked by `aiModel`
-// (fake | fake-slow | fake-error | fake-auth | fake-garbage | fake-timeout) and
+// (fake | fake-slow | fake-local | fake-error | fake-auth | fake-garbage |
+// fake-timeout) and
 // the task by the `<!-- ff:task=… -->` marker every K prompt starts with.
 //
 // Gate: never available in a real deployment. It needs FEEDFERRET_FAKE_AI=1
@@ -17,7 +18,7 @@ import { timingSafeEqual } from "node:crypto";
 import { logger } from "@/lib/logger";
 import { AiProviderError } from "./errors";
 
-export const FAKE_MODELS = ["fake", "fake-slow", "fake-error", "fake-auth", "fake-garbage", "fake-timeout"] as const;
+export const FAKE_MODELS = ["fake", "fake-slow", "fake-local", "fake-error", "fake-auth", "fake-garbage", "fake-timeout"] as const;
 
 /** Marker file of the e2e harness for a SQLite `DATABASE_URL` (`file:/abs/e2e.db` → `/abs/e2e.db.harness`). */
 export function harnessMarkerPath(databaseUrl: string | undefined, provider: string | undefined): string | null {
@@ -174,7 +175,13 @@ export async function fakePrompt(prompt: string, model: string | null | undefine
 
 export type StreamPart = { text: string } | { usage: { in: number; out: number } };
 
-/** Streaming call: 7-char chunks (deliberately splitting `[[s1]]`), 5 ms apart (fake-slow: 60 ms). */
+/**
+ * `fake-local` stands in for a local (Ollama-like) provider in the briefing UI:
+ * the card auto-generates for it (lib/briefing/generate.ts). Streams like fake-slow.
+ */
+export const isFakeLocalModel = (model: string | null | undefined) => model === "fake-local";
+
+/** Streaming call: 7-char chunks (deliberately splitting `[[s1]]`), 5 ms apart (fake-slow / fake-local: 60 ms). */
 export async function* fakeStream(prompt: string, model: string | null | undefined, signal?: AbortSignal): AsyncGenerator<StreamPart> {
   assertFakeAiEnabled();
   const m = model || "fake";
@@ -184,7 +191,7 @@ export async function* fakeStream(prompt: string, model: string | null | undefin
     return;
   }
   const output = m === "fake-garbage" ? "Hier ist eine schöne Zusammenfassung ohne jedes Format, ganz frei formuliert.\n" : fakeOutput(prompt);
-  const delay = m === "fake-slow" ? 60 : 5;
+  const delay = m === "fake-slow" || m === "fake-local" ? 60 : 5;
   for (let i = 0; i < output.length; i += CHUNK) {
     await sleep(delay, signal);
     yield { text: output.slice(i, i + CHUNK) };
