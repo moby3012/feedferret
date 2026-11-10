@@ -68,6 +68,17 @@ export function stripLayoutBreakingStyles(styleValue: string, keepWidth = false)
 }
 
 
+/**
+ * Builds the sanitizer's JSDOM window and runs one sanitize call. isomorphic-dompurify creates its
+ * window lazily, which costs ~300 ms of blocked event loop the first time any code sanitizes --
+ * measured as the single longest stall of the first background sync tick (and of the first article
+ * open). Called once at boot so that stall happens before traffic instead of during it.
+ */
+export async function warmSanitizer(): Promise<void> {
+    const DOMPurify = await getSanitizer();
+    DOMPurify.sanitize('<p style="width:1px">warm</p><a target="_blank" href="https://example.com">x</a>');
+}
+
 export async function getSanitizer() {
     const { default: DOMPurify } = await import("isomorphic-dompurify");
 

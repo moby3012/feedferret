@@ -65,6 +65,14 @@ export async function register() {
         })().catch((error) => console.error("[connector-secrets] startup cleanup failed; secrets stay redacted on output", error));
     }
 
+    // Pay the sanitizer's one-time ~300 ms JSDOM window creation at boot, not inside the first sync
+    // tick / first article open (audit R5: longest single event-loop stall of a cold tick).
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+        void import("./lib/sanitize-html")
+            .then((m) => m.warmSanitizer())
+            .catch((error) => console.error("[sanitizer] warm-up failed (will initialise on first use)", error));
+    }
+
     const { startBackgroundSync } = await import("./lib/background-sync");
     startBackgroundSync();
 

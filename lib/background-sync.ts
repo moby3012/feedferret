@@ -6,8 +6,9 @@ import { flushDueNotifications } from "./notifications";
 import { applyRetentionPoliciesForAllUsers } from "./retention";
 import { logger } from "./logger";
 import { optimizeSqlitePlannerStatsIfDue } from "./db-maintenance";
-import { cleanupStoryClusters, drainStoryClustering, runStoryClustering } from "./story-clustering/job";
+import { cleanupStoryClusters, drainStoryClustering, invalidateStoryWindowCache, runStoryClustering } from "./story-clustering/job";
 
+const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000; // run at most once/day
 const STORY_CLUSTERING_BUDGET_MS = 400;
 
@@ -35,6 +36,68 @@ function getState(): SchedulerState {
     return g[GLOBAL_KEY] as SchedulerState;
 }
 
+/**
+ * Everything that follows a sync pass, run one job after the other (they used to be fired
+ * concurrently right after the sync and competed with each other and with requests for the
+ * event loop) with a macrotask yield in between, and awaited so the tick -- and therefore
+ * the "no overlapping ticks" guard -- covers them. Each job is isolated: a failure is logged and
+ * the next one still runs. Clustering's leftover drain loop self-schedules bounded passes and is
+ * single-flight on its own.
+ */
+async function runPostTickJobs(state: SchedulerState) {
+    const jobs: Array<[string, () => Promise<unknown>]> = [
+        // Story clustering (K1): bounded (<= 400 ms) pass over freshly synced articles. Never
+        // blocks or fails the tick; leftovers (first-run 48h backfill, big bursts) are drained by a
+        // background loop of further bounded passes. Off via DISABLE_STORY_CLUSTERING=true.
+        ["story-clustering", async () => {
+            const r = await runStoryClustering({ budgetMs: STORY_CLUSTERING_BUDGET_MS });
+            if (r.processed > 0) {
+                logger.log(
+                    `[story-clustering] ${r.processed} processed (${r.created} new, ${r.joined} joined, ${r.singles} single) in ${Math.round(r.ms)}ms`,
+                );
+            }
+            if (r.morePending) drainStoryClustering(STORY_CLUSTERING_BUDGET_MS);
+        }],
+        // SQLite planner statistics (audit R1): cheap `PRAGMA optimize` after every tick (it only
+        // re-analyses what changed a lot, e.g. the first sync of a fresh install), the full
+        // all-tables pass at most once a day. No-op on Postgres.
+        ["db-maintenance", () => optimizeSqlitePlannerStatsIfDue()],
+        // Digest scheduler (internally rate-limits per user; may wait on an AI provider, hence after
+        // the bounded jobs) and due push notifications.
+        ["digest-scheduler", () => runDigestScheduler()],
+        ["push-notifications", () => flushDueNotifications()],
+    ];
+    // Retention cleanup is expensive relative to a sync tick, so only run it once/day rather than
+    // on every ~5-min tick -- and last, after the cheap jobs.
+    if (Date.now() - state.lastRetentionRun >= RETENTION_INTERVAL_MS) {
+        state.lastRetentionRun = Date.now();
+        jobs.push(["retention", async () => {
+            await applyRetentionPoliciesForAllUsers()
+                .then((r) => logger.log(`[retention] processed ${r.usersProcessed} users, deleted ${r.deleted} articles`))
+                .catch((e) => logger.error("[retention] run failed:", e));
+            await yieldToLoop();
+            await cleanupStoryClusters().catch((e) => logger.error("[story-clustering] cleanup failed:", e));
+            invalidateStoryWindowCache(); // retention deleted articles: the cached clustering window is stale
+            await yieldToLoop();
+            // K2: briefings > 14 d, AI usage rows > 90 d.
+            await import("./briefing/generate").then((m) => m.cleanupBriefingData()).catch((e) => logger.error("[briefing] cleanup failed:", e));
+        }]);
+    }
+    for (const [name, job] of jobs) {
+        await yieldToLoop();
+        try {
+            await job();
+        } catch (e) {
+            logger.error(`[background-sync] ${name} failed:`, e);
+        }
+    }
+}
+
+/** One scheduler tick; exported for tests. Re-entrant calls while a tick is running are ignored. */
+export async function runBackgroundSyncTick() {
+    return tick();
+}
+
 async function tick() {
     const state = getState();
     if (state.running) return;
@@ -50,50 +113,7 @@ async function tick() {
         logger.log(
             `[background-sync] tick: ${synced} synced, ${failed} failed, ${results.length} total`,
         );
-        // Run digest scheduler after each sync tick (internally rate-limits per user)
-        void runDigestScheduler().catch((e) =>
-            logger.error("[digest-scheduler] error:", e),
-        );
-        void flushDueNotifications().catch((e) =>
-            logger.error("[push-notifications] flush failed:", e),
-        );
-
-        // Story clustering (K1): bounded (<= 400 ms) pass over freshly synced articles. Never
-        // blocks or fails the tick; leftovers (first-run 48h backfill, big bursts) are drained
-        // by a background loop of further bounded passes. Off via DISABLE_STORY_CLUSTERING=true.
-        void runStoryClustering({ budgetMs: STORY_CLUSTERING_BUDGET_MS })
-            .then((r) => {
-                if (r.processed > 0) {
-                    logger.log(
-                        `[story-clustering] ${r.processed} processed (${r.created} new, ${r.joined} joined, ${r.singles} single) in ${Math.round(r.ms)}ms`,
-                    );
-                }
-                if (r.morePending) drainStoryClustering(STORY_CLUSTERING_BUDGET_MS);
-            })
-            .catch((e) => logger.error("[story-clustering] tick failed:", e));
-
-        // SQLite planner statistics (audit R1): cheap `PRAGMA optimize` after every tick (it
-        // only re-analyses what changed a lot, e.g. the first sync of a fresh install), the
-        // full all-tables pass at most once a day. No-op on Postgres.
-        void optimizeSqlitePlannerStatsIfDue().catch((e) => logger.error("[db-maintenance] optimize failed:", e));
-
-        // Retention cleanup is expensive relative to a sync tick, so only run it
-        // once/day rather than on every ~5-min tick.
-        if (Date.now() - state.lastRetentionRun >= RETENTION_INTERVAL_MS) {
-            state.lastRetentionRun = Date.now();
-            void applyRetentionPoliciesForAllUsers()
-                .then((r) =>
-                    logger.log(
-                        `[retention] processed ${r.usersProcessed} users, deleted ${r.deleted} articles`,
-                    ),
-                )
-                .catch((e) => logger.error("[retention] run failed:", e))
-                .then(() => cleanupStoryClusters())
-                .catch((e) => logger.error("[story-clustering] cleanup failed:", e))
-                // K2: briefings > 14 d, AI usage rows > 90 d.
-                .then(() => import("./briefing/generate").then((m) => m.cleanupBriefingData()))
-                .catch((e) => logger.error("[briefing] cleanup failed:", e));
-        }
+        await runPostTickJobs(state);
     } catch (error) {
         state.lastError = String(error);
         logger.error("[background-sync] tick failed:", error);
