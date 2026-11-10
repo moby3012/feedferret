@@ -17,7 +17,7 @@ import { logger } from "@/lib/logger";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
 import { isRsshubConfigured, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
-import { connectorFeedUrlError, getConnectorSecretRules, redactFeedForClient, redactFeedsForClient, redactFeedWith, stripConnectorSecrets } from "@/lib/connector-secrets";
+import { connectorFeedUrlError, getConnectorSecretRules, redactFeedForClient, redactFeedsForClient, redactFeedWith, stripConnectorSecrets, stripConnectorSecretsWith } from "@/lib/connector-secrets";
 import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
@@ -37,11 +37,13 @@ async function articlePayload(article: any) {
     article.contentFormat === "markdown" && article.content
       ? await renderMarkdownToHtml(article.content)
       : article.content;
+  // Connector secrets (N3): neither the link nor the feed URL may carry them.
+  const rules = await getConnectorSecretRules();
   return {
     id: article.id,
     feedId: article.feedId,
     title: article.title,
-    link: article.link,
+    link: typeof article.link === "string" ? stripConnectorSecretsWith(rules, article.link) : article.link,
     externalId: article.externalId,
     excerpt: article.excerpt,
     content,
@@ -57,7 +59,7 @@ async function articlePayload(article: any) {
     duplicateOf: article.duplicateOf,
     createdAt: article.createdAt,
     updatedAt: article.updatedAt,
-    feed: article.feed ? await redactFeedForClient(article.feed) : article.feed,
+    feed: article.feed ? redactFeedWith(rules, article.feed) : article.feed,
     labels: (article.labels || []).map((item: any) => item.label),
   };
 }

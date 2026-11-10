@@ -17,12 +17,15 @@
 // - Every client-facing output additionally runs through `redactFeed*`
 //   / `redactConnectorText` (defence in depth for rows that still carry the
 //   secret, e.g. before the migration below runs).
-// - `migrateConnectorFeedUrls` rewrites legacy keyed rows to the keyless form
-//   and `scrubConnectorSecretsFromArticleLinks` removes secrets from stored
-//   article links. Both are opt-in for this release
-//   (`FEEDFERRET_MIGRATE_CONNECTOR_URLS=1`) so a rollback to an older build,
-//   which still expects keyed URLs, keeps working. Injection and redaction work
-//   for keyed and keyless rows alike.
+// - `scrubConnectorSecretsFromArticleLinks` removes secrets from stored
+//   (synthetic) article links on every start. Always on: no build ever used
+//   an article link as a fetch URL, so a rollback is unaffected.
+// - `migrateConnectorFeedUrls` rewrites legacy keyed feed rows to the keyless
+//   form. Opt-in for this release (`FEEDFERRET_MIGRATE_CONNECTOR_URLS=1`) so a
+//   rollback to an older build, which still expects keyed URLs, keeps
+//   working. Injection and redaction work for keyed and keyless rows alike.
+// - A user-chosen proxy never sees the secret: with CURLOPT_PROXY set the
+//   fetcher requests the keyless URL as an ordinary external fetch.
 
 import { logger } from "@/lib/logger";
 import { changedetectionRouteError, rsshubRouteError } from "@/lib/rsshub-route";
@@ -52,43 +55,56 @@ function ruleFor(kind: ConnectorKind, baseUrl: string, param: string, value: str
 
 const RULES_TTL_MS = 15_000;
 let rulesCache: { at: number; rules: ConnectorSecretRule[] } | null = null;
+/** Per-connector rule from the last successful config read (fallback while the DB hiccups). */
+const lastGoodRules = new Map<ConnectorKind, ConnectorSecretRule | null>();
 
 /**
  * Rules for every configured connector (15 s memo: the fetcher asks once per
  * feed fetch). Never throws. A config read that failed (DB hiccup) is not
- * memoized, so it can't blank out redaction/injection for the whole TTL.
+ * memoized, so it can't blank out redaction/injection for the whole TTL, and
+ * the failed connector falls back to its last successfully loaded rule so
+ * output redaction keeps working meanwhile.
  */
 export async function getConnectorSecretRules(): Promise<ConnectorSecretRule[]> {
   if (rulesCache && Date.now() - rulesCache.at < RULES_TTL_MS) return rulesCache.rules;
-  const rules: ConnectorSecretRule[] = [];
   let failed = false;
   const settle = <T>(promise: Promise<T>) =>
-    promise.catch((error) => {
-      failed = true;
-      logger.warn("[connector-secrets] connector config unavailable", error);
-      return null;
-    });
+    promise.then(
+      (value) => ({ ok: true as const, value }),
+      (error) => {
+        failed = true;
+        logger.warn("[connector-secrets] connector config unavailable", error);
+        return { ok: false as const, value: null };
+      },
+    );
   // Dynamic imports: lib/rsshub imports the feed fetcher, which imports this module.
   const [{ loadRsshubConfig }, { loadChangedetectionConfig }] = await Promise.all([
     import("@/lib/rsshub"),
     import("@/lib/changedetection"),
   ]);
   const [rsshub, changedetection] = await Promise.all([settle(loadRsshubConfig()), settle(loadChangedetectionConfig())]);
-  if (rsshub) {
-    const rule = ruleFor("rsshub", rsshub.baseUrl, "key", rsshub.apiKey);
-    if (rule) rules.push(rule);
+  const resolved: Array<[ConnectorKind, ConnectorSecretRule | null]> = [];
+  if (rsshub.ok) resolved.push(["rsshub", rsshub.value ? ruleFor("rsshub", rsshub.value.baseUrl, "key", rsshub.value.apiKey) : null]);
+  else resolved.push(["rsshub", lastGoodRules.get("rsshub") ?? null]);
+  if (changedetection.ok) {
+    resolved.push([
+      "changedetection",
+      changedetection.value ? ruleFor("changedetection", changedetection.value.baseUrl, "token", changedetection.value.rssToken) : null,
+    ]);
+  } else {
+    resolved.push(["changedetection", lastGoodRules.get("changedetection") ?? null]);
   }
-  if (changedetection) {
-    const rule = ruleFor("changedetection", changedetection.baseUrl, "token", changedetection.rssToken);
-    if (rule) rules.push(rule);
-  }
+  if (rsshub.ok) lastGoodRules.set("rsshub", resolved[0][1]);
+  if (changedetection.ok) lastGoodRules.set("changedetection", resolved[1][1]);
+  const rules = resolved.map(([, rule]) => rule).filter((rule): rule is ConnectorSecretRule => rule !== null);
   rulesCache = failed ? null : { at: Date.now(), rules };
   return rules;
 }
 
 /** Forget the memoized rules (tests; admin save of the RSSHub / changedetection.io settings). */
-export function resetConnectorSecretRulesCache() {
+export function resetConnectorSecretRulesCache(options: { includeLastGood?: boolean } = {}) {
   rulesCache = null;
+  if (options.includeLastGood) lastGoodRules.clear();
 }
 
 function matches(url: URL, rule: ConnectorSecretRule): boolean {
@@ -230,6 +246,30 @@ export function redactFeedWith<T extends { url?: string | null; lastError?: stri
   return out;
 }
 
+/**
+ * Client-facing view of article rows: `link` without connector secrets
+ * (linkless items of legacy rows used `<keyed feed url>#<dedupe key>`) and the
+ * nested `feed` (if any) redacted like `redactFeedWith`. New objects, never mutates.
+ */
+export function redactArticleWith<T>(rules: ConnectorSecretRule[], article: T): T {
+  if (!rules.length || !article || typeof article !== "object") return article;
+  const out = { ...article } as Record<string, unknown>;
+  if (typeof out.link === "string") out.link = stripConnectorSecretsWith(rules, out.link);
+  if (out.feed && typeof out.feed === "object") out.feed = redactFeedWith(rules, out.feed as { url?: string | null; lastError?: string | null });
+  return out as T;
+}
+
+export async function redactArticlesForClient<T>(articles: T[]): Promise<T[]> {
+  const rules = await getConnectorSecretRules();
+  if (!rules.length) return articles;
+  return articles.map((article) => redactArticleWith(rules, article));
+}
+
+export async function redactArticleForClient<T>(article: T): Promise<T> {
+  if (!article) return article;
+  return redactArticleWith(await getConnectorSecretRules(), article);
+}
+
 type FeedUrlRow = { id: string; userId: string; url: string };
 type MigrationDb = {
   feed: {
@@ -282,7 +322,7 @@ export async function migrateConnectorFeedUrls(db: MigrationDb, rulesInput?: Con
 }
 
 /**
- * Opt-in for this release: rewriting stored feed URLs / article links is not
+ * Opt-in for this release: rewriting stored feed URLs is not
  * rolled back by downgrading, and an older build expects keyed URLs. Enable
  * with `FEEDFERRET_MIGRATE_CONNECTOR_URLS=1` (planned default-on next release).
  */
@@ -292,6 +332,7 @@ export function connectorUrlMigrationEnabled(env: Record<string, string | undefi
 
 type ArticleLinkRow = { id: string; link: string; updatedAt: Date };
 type ArticleScrubDb = {
+  feed: { findMany(args: unknown): Promise<Array<{ id: string }>> };
   article: {
     findMany(args: unknown): Promise<ArticleLinkRow[]>;
     update(args: unknown): Promise<unknown>;
@@ -301,39 +342,54 @@ type ArticleScrubDb = {
 /**
  * Idempotent background cleanup: removes the connector secret from stored
  * article links (linkless items used to get `<keyed feed url>#<dedupe key>`).
- * Keeps Article.updatedAt unchanged (GReader ot/nt sync depends on it).
- * Batched by id cursor; returns counts; never throws.
+ * Runs on every start, not behind the feed URL migration flag: older builds
+ * never fetch article links, so this is rollback-safe.
+ *
+ * Bounded: only articles of feeds on a connector origin are looked at (via the
+ * Article feedId index, chunks of feed ids), only rows whose link starts with
+ * the connector origin + base path and contains `<param>=`, batched by id
+ * cursor with a yield between batches. Keeps Article.updatedAt unchanged
+ * (GReader ot/nt sync depends on it). Returns counts; never throws.
  */
 export async function scrubConnectorSecretsFromArticleLinks(
   db: ArticleScrubDb,
   rulesInput?: ConnectorSecretRule[],
   batchSize = 500,
+  feedChunkSize = 200,
 ) {
   const result = { scanned: 0, scrubbed: 0 };
   try {
     const rules = rulesInput ?? (await getConnectorSecretRules());
     for (const rule of rules) {
-      let cursor: string | null = null;
-      for (;;) {
-        const rows: ArticleLinkRow[] = await db.article.findMany({
-          where: {
-            link: { startsWith: `${rule.origin}${rule.basePath}`, contains: `${rule.param}=` },
-            ...(cursor ? { id: { gt: cursor } } : {}),
-          },
-          select: { id: true, link: true, updatedAt: true },
-          orderBy: { id: "asc" },
-          take: batchSize,
-        });
-        if (!rows.length) break;
-        for (const row of rows) {
-          result.scanned += 1;
-          const scrubbed = stripConnectorSecretsWith([rule], row.link);
-          if (scrubbed === row.link) continue;
-          await db.article.update({ where: { id: row.id }, data: { link: scrubbed, updatedAt: row.updatedAt } });
-          result.scrubbed += 1;
+      const prefix = `${rule.origin}${rule.basePath}`;
+      const feeds = await db.feed.findMany({ where: { url: { startsWith: prefix } }, select: { id: true } });
+      for (let i = 0; i < feeds.length; i += feedChunkSize) {
+        const feedIds = feeds.slice(i, i + feedChunkSize).map((feed) => feed.id);
+        let cursor: string | null = null;
+        for (;;) {
+          const rows: ArticleLinkRow[] = await db.article.findMany({
+            where: {
+              feedId: { in: feedIds },
+              link: { startsWith: prefix, contains: `${rule.param}=` },
+              ...(cursor ? { id: { gt: cursor } } : {}),
+            },
+            select: { id: true, link: true, updatedAt: true },
+            orderBy: { id: "asc" },
+            take: batchSize,
+          });
+          if (!rows.length) break;
+          for (const row of rows) {
+            result.scanned += 1;
+            const scrubbed = stripConnectorSecretsWith([rule], row.link);
+            if (scrubbed === row.link) continue;
+            // Explicit updatedAt overrides @updatedAt: the row's sync clock stays as it was.
+            await db.article.update({ where: { id: row.id }, data: { link: scrubbed, updatedAt: row.updatedAt } });
+            result.scrubbed += 1;
+          }
+          cursor = rows[rows.length - 1].id;
+          if (rows.length < batchSize) break;
+          await new Promise((resolve) => setImmediate(resolve));
         }
-        cursor = rows[rows.length - 1].id;
-        if (rows.length < batchSize) break;
         await new Promise((resolve) => setImmediate(resolve));
       }
     }

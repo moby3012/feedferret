@@ -36,7 +36,7 @@ import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-
 import { pickFields } from "@/lib/pick-fields";
 import { clampFeedLimits } from "@/lib/feed-limits";
 import { assertOwnedCategories, MAX_REORDER_ITEMS } from "@/lib/owned-categories";
-import { connectorFeedUrlError, redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
+import { connectorFeedUrlError, redactArticleForClient, redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
 import { FEED_CLIENT_SELECT, stripFeedSecrets } from "@/lib/feed-secrets";
 
 export async function refreshAllFeeds() {
@@ -1045,7 +1045,7 @@ export async function fetchFullText(articleId: string) {
     // the extraction-engine + improvement-check rationale. The UI caller expects
     // the article fields spread at the top level plus `suggestAutoFullText`.
     const { article, suggestAutoFullText } = await refetchArticleFullText(session.user.id, articleId);
-    return { ...article, feed: await redactFeedForClient(article.feed), suggestAutoFullText };
+    return { ...(await redactArticleForClient({ ...article, feed: await redactFeedForClient(article.feed) })), suggestAutoFullText };
 }
 
 /**

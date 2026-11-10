@@ -444,6 +444,9 @@ export async function toGReaderArticle(article: any) {
     const parsed = article.enclosures ? JSON.parse(article.enclosures) : null;
     if (Array.isArray(parsed)) enclosures = parsed;
   } catch { /* Corrupt feed metadata must not break a sync page. */ }
+  // Article link / fallback feed URL without connector secrets (N3).
+  const secretRules = await getConnectorSecretRules();
+  const link = article.link ? stripConnectorSecretsWith(secretRules, article.link) : article.link;
   return {
     id: greaderItemId(decimalExternalId(article.extId)),
     crawlTimeMsec: String(new Date(article.createdAt).getTime()),
@@ -451,8 +454,8 @@ export async function toGReaderArticle(article: any) {
     published: Math.floor(new Date(article.publishedAt).getTime() / 1000),
     updated: Math.floor(new Date(article.updatedAt ?? article.publishedAt).getTime() / 1000),
     title: article.title,
-    canonical: article.link ? [{ href: article.link }] : [],
-    alternate: article.link ? [{ href: article.link }] : [],
+    canonical: link ? [{ href: link }] : [],
+    alternate: link ? [{ href: link }] : [],
     categories: [...new Set([
       GREADER_READING_LIST,
       ...(article.isRead ? [GREADER_READ] : []),
@@ -466,8 +469,7 @@ export async function toGReaderArticle(article: any) {
     origin: {
       streamId: `feed/${decimalExternalId(article.feed.extId)}`,
       title: article.feed.name,
-      // Fallback feed URL without connector secrets (N3).
-      htmlUrl: article.feed.htmlUrl || (article.feed.url ? stripConnectorSecretsWith(await getConnectorSecretRules(), article.feed.url) : article.feed.url),
+      htmlUrl: article.feed.htmlUrl || (article.feed.url ? stripConnectorSecretsWith(secretRules, article.feed.url) : article.feed.url),
     },
     ...(article.author?.trim() ? { author: article.author } : {}),
     summary: { content: content || article.excerpt || "" },

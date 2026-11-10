@@ -10,7 +10,7 @@ import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
 import { isRsshubConfigured, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
-import { connectorFeedUrlError, getConnectorSecretRules, redactFeedForClient, redactFeedsForClient, redactFeedWith, stripConnectorSecrets } from "@/lib/connector-secrets";
+import { connectorFeedUrlError, getConnectorSecretRules, redactArticleWith, redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
 import { stripFeedSecrets } from "@/lib/feed-secrets";
 import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } from "@/lib/changedetection";
@@ -237,9 +237,9 @@ async function searchArticles(user: ApiUser, args: any) {
       labels: { include: { label: true } },
     },
   });
-  // feed.url without connector secrets (N3).
+  // link / feed.url without connector secrets (N3).
   const rules = await getConnectorSecretRules();
-  return articles.map((article) => (article.feed ? { ...article, feed: redactFeedWith(rules, article.feed) } : article));
+  return articles.map((article) => redactArticleWith(rules, article));
 }
 
 // Shared feed-creation core for the MCP add-feed + connector-feed tools. The
@@ -287,12 +287,12 @@ async function callTool(user: ApiUser, name: string, args: any) {
     case "feedferret.get_article": {
       const article = await db.article.findFirst({ where: { id: String(args.articleId), userId: user.id }, include: { feed: true, labels: { include: { label: true } } } });
       if (article && (article as any).feed) (article as any).feed = await clientFeed((article as any).feed);
-      return article;
+      return article ? redactArticleWith(await getConnectorSecretRules(), article) : article;
     }
     case "feedferret.fetch_full_text": {
       const { article, suggestAutoFullText } = await refetchArticleFullText(user.id, String(args.articleId));
       if ((article as any).feed) (article as any).feed = await clientFeed((article as any).feed);
-      return { ...article, suggestAutoFullText };
+      return { ...redactArticleWith(await getConnectorSecretRules(), article), suggestAutoFullText };
     }
     case "feedferret.update_article_state": {
       const data: any = {};

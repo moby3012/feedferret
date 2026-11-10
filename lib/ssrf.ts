@@ -22,6 +22,11 @@ export type SafeFetchTextOptions = SsrfCheckOptions & {
   // instead of just the bare status code. Opt-in so ordinary feed syncs keep
   // their terse "Fetch failed: N" errors.
   includeErrorBody?: boolean;
+  // Decides every redirect hop: returns the URL to follow (possibly
+  // rewritten), or null to refuse the redirect (the fetch then fails). Used for
+  // trusted connector requests, whose internal-network allowance must not
+  // carry over to an arbitrary redirect target.
+  redirectGuard?: (nextUrl: string, currentUrl: string) => string | null;
 };
 
 function truthy(value?: string) {
@@ -238,7 +243,12 @@ export async function fetchWithSsrfProtection(
       });
 
       if (response.status >= 300 && response.status < 400 && response.headers.get("location")) {
-        const next = (await assertSafeFetchUrl(new URL(response.headers.get("location")!, current).toString(), options)).toString();
+        let next = (await assertSafeFetchUrl(new URL(response.headers.get("location")!, current).toString(), options)).toString();
+        if (options.redirectGuard) {
+          const allowed = options.redirectGuard(next, current);
+          if (!allowed) throw new Error(`Redirect refused: ${urlWithoutQuery(next)} is not an allowed target`);
+          next = (await assertSafeFetchUrl(allowed, options)).toString();
+        }
         if (new URL(next).origin !== new URL(current).origin) {
           headers.delete("authorization");
           headers.delete("cookie");

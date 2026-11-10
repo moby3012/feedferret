@@ -176,6 +176,12 @@ describe("email change review: normalization, duplicates, notices", () => {
     expect((await state.db.user.findUniqueOrThrow({ where: { id: ids.alice } })).email).toBe("alice.new@test.com");
   });
 
+  it("treats a legacy mixed-case address of another user as taken (case-insensitive lookup)", async () => {
+    await state.db.user.create({ data: { email: "Carol@Legacy.Test", name: "Carol" } });
+    expect(await updateProfile({ email: "carol@legacy.test", currentPassword: "correct horse" })).toEqual({ success: false, code: "emailTaken" });
+    expect((await state.db.user.findUniqueOrThrow({ where: { id: ids.alice } })).email).toBe("alice.new@test.com");
+  });
+
   it("flags that no notice was sent when mail delivery is not configured", async () => {
     const result = await updateProfile({ email: "alice3@test", currentPassword: "correct horse" });
     expect(result).toMatchObject({ success: true, emailChanged: true, emailNotice: "unavailable" });

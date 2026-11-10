@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
-import { db } from "@/lib/db";
+import { db, getDatabaseProvider } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
@@ -35,6 +35,22 @@ export type UpdateProfileResult =
 
 function isUniqueViolation(error: unknown): boolean {
   return !!error && typeof error === "object" && (error as { code?: unknown }).code === "P2002";
+}
+
+/**
+ * Case-insensitive "address already in use" check (`email` is already
+ * lower-cased). Older rows may hold mixed-case addresses, and both providers
+ * compare `=` case-sensitively: Postgres uses `mode: "insensitive"`, SQLite a
+ * `lower()` comparison.
+ */
+async function emailTakenByOtherUser(email: string, userId: string): Promise<boolean> {
+  if (getDatabaseProvider() === "postgresql") {
+    // `mode` only exists in the Postgres-generated client types.
+    const emailFilter = { equals: email, mode: "insensitive" } as unknown as string;
+    return Boolean(await db.user.findFirst({ where: { email: emailFilter, NOT: { id: userId } }, select: { id: true } }));
+  }
+  const rows = await db.$queryRaw<Array<{ id: string }>>`SELECT id FROM "User" WHERE lower(email) = ${email} AND id <> ${userId} LIMIT 1`;
+  return rows.length > 0;
 }
 
 /** Whether an email change can send the confirmation / old-address notice (UI warns when not). */
@@ -78,8 +94,7 @@ export async function updateProfile(data: {
     );
     if (!stepUp.ok) return { success: false, code: stepUp.code };
     // Checked after the step-up so a bare session can't probe which addresses exist.
-    const taken = await db.user.findFirst({ where: { email: profile.email, NOT: { id: session.user.id } }, select: { id: true } });
-    if (taken) return { success: false, code: "emailTaken" };
+    if (await emailTakenByOtherUser(profile.email, session.user.id)) return { success: false, code: "emailTaken" };
   }
 
   let emailChanged: boolean;

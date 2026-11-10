@@ -11,7 +11,7 @@ import { logger } from "@/lib/logger";
 import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { readBoundedBytes, RequestTooLargeError } from "@/lib/bounded-body";
-import { redactFeedsForClient } from "@/lib/connector-secrets";
+import { getConnectorSecretRules, redactFeedsForClient, stripConnectorSecretsWith } from "@/lib/connector-secrets";
 
 const FEVER_MAX_BODY_BYTES = 64 * 1024;
 const FEVER_MAX_WITH_IDS = 1000;
@@ -152,6 +152,7 @@ async function getItems(
     },
   });
 
+  const secretRules = await getConnectorSecretRules();
   return Promise.all(
     articles.filter((a) => a.extId && a.feed.extId).map(async (a) => ({
       id: decimalExternalId(a.extId),
@@ -159,7 +160,7 @@ async function getItems(
       title: a.title,
       author: a.author || "",
       html: a.contentFormat === "markdown" && a.content ? await renderMarkdownToHtml(a.content) : a.content,
-      url: a.link,
+      url: stripConnectorSecretsWith(secretRules, a.link), // no connector secrets (N3)
       is_saved: a.isStarred ? 1 : 0,
       is_read: a.isRead ? 1 : 0,
       created_on_time: Math.floor(a.publishedAt.getTime() / 1000),

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { buildAdvancedSearchWhere } from "@/lib/search";
+import { redactArticlesForClient } from "@/lib/connector-secrets";
 
 export async function getSharedSavedSearch(token: string, limit = 100) {
   if (!token || token.length < 16) return null;
@@ -27,7 +28,8 @@ export async function getSharedSavedSearch(token: string, limit = 100) {
     take: limit,
   });
 
-  return { savedSearch, articles };
+  // Public page: article links without connector secrets (N3).
+  return { savedSearch, articles: await redactArticlesForClient(articles) };
 }
 
 export function getPublicBaseUrl() {

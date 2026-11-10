@@ -310,9 +310,28 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
   // users: any other path on the connector host (`/rsshub/transform/…`, …)
   // gets neither, so it can't be used as a read-SSRF proxy (N3).
   const trustedInstance = feed.allowInternal === true || (await isTrustedFeedFetchingAllowed());
-  const { resolveConnectorRequest } = await import("./connector-secrets");
-  const connector = await resolveConnectorRequest(feed.url);
+  const { getConnectorSecretRules, resolveConnectorRequestWith, stripConnectorSecretsWith } = await import("./connector-secrets");
+  const secretRules = await getConnectorSecretRules();
+  let connector = resolveConnectorRequestWith(secretRules, feed.url);
+  if (http.CURLOPT_PROXY && connector.trusted) {
+    // A user-chosen proxy sees the full request URL (plain HTTP, or the
+    // CONNECT target), so it would receive the admin's connector secret. Such
+    // a feed is fetched like any external URL instead: keyless (legacy keyed
+    // rows stripped too), no internal-network allowance.
+    connector = { url: stripConnectorSecretsWith(secretRules, feed.url), trusted: false };
+  }
   const allowInternal = trustedInstance || connector.trusted;
+  // Trusted connector request: the internal allowance (and the secret) only
+  // follow redirects to another allowed route on the same connector origin.
+  const connectorOrigin = connector.trusted ? new URL(connector.url).origin : null;
+  const redirectGuard =
+    connectorOrigin
+      ? (next: string) => {
+          if (new URL(next).origin !== connectorOrigin) return null;
+          const hop = resolveConnectorRequestWith(secretRules, next);
+          return hop.trusted ? hop.url : null;
+        }
+      : undefined;
 
   if (http.CURLOPT_PROXY) {
     // The proxy host is a connection target of its own: apply the same SSRF rules as to the
@@ -336,6 +355,7 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
 
   return fetchWithSsrfProtection(connector.url, init, {
     allowInternal,
+    redirectGuard,
     includeErrorBody: feed.includeErrorBody,
     context: "Feed fetch",
     maxBytes,

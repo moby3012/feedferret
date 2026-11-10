@@ -26,6 +26,7 @@ import {
   connectorFeedUrlErrorWith,
   connectorUrlMigrationEnabled,
   getConnectorSecretRules,
+  redactArticleWith,
   redactConnectorTextWith,
   redactFeedWith,
   resetConnectorSecretRulesCache,
@@ -39,6 +40,7 @@ import { rsshubRouteError, validateRsshubRoute } from "../../lib/rsshub";
 import { buildDefaultWebhookBody, executeWebhookCall, interpolate } from "../../lib/webhooks";
 import { resolveApiUser } from "../../lib/api-auth";
 import { POST as feverPost } from "../../app/api/fever/route";
+import { toGReaderArticle } from "../../lib/greader";
 
 const rules: ConnectorSecretRule[] = [
   { kind: "rsshub", origin: "http://rsshub:1200", basePath: "", param: "key", value: "rsskey" },
@@ -93,7 +95,7 @@ describe("N3: connector secrets", () => {
 
   it("does not memoize connector rules from a failed config read", async () => {
     const findUnique = mockedDb.globalSettings.findUnique as unknown as ReturnType<typeof vi.fn>;
-    resetConnectorSecretRulesCache();
+    resetConnectorSecretRulesCache({ includeLastGood: true });
     findUnique.mockRejectedValueOnce(new Error("db down")).mockRejectedValueOnce(new Error("db down"));
     expect(await getConnectorSecretRules()).toEqual([]);
     findUnique.mockResolvedValue({ rsshubEnabled: true, rsshubBaseUrl: "http://rsshub:1200", rsshubApiKey: null });
@@ -113,7 +115,7 @@ describe("N3: connector secrets", () => {
     expect(connectorUrlMigrationEnabled({ FEEDFERRET_MIGRATE_CONNECTOR_URLS: "true" })).toBe(true);
   });
 
-  it("article link cleanup strips the secret, keeps updatedAt and is idempotent", async () => {
+  it("article link cleanup is bounded to connector feeds, strips the secret, keeps updatedAt and is idempotent", async () => {
     const updatedAt = new Date("2026-01-01T00:00:00Z");
     const rows = [
       { id: "a1", link: "http://rsshub:1200/youtube/x?key=rsskey#item-1", updatedAt },
@@ -123,10 +125,14 @@ describe("N3: connector secrets", () => {
       const row = rows.find((r) => r.id === where.id)!;
       row.link = data.link;
     });
+    const feedFindMany = vi.fn(async (_args: unknown) => [{ id: "f1" }]);
     const fakeDb = {
+      feed: { findMany: feedFindMany },
       article: {
-        findMany: vi.fn(async ({ where }: { where: { link: { contains: string }; id?: { gt: string } } }) =>
-          rows.filter((r) => r.link.includes(where.link.contains) && (!where.id || r.id > where.id.gt)),
+        findMany: vi.fn(async ({ where }: { where: { feedId: { in: string[] }; link: { startsWith: string; contains: string }; id?: { gt: string } } }) =>
+          rows.filter(
+            (r) => where.feedId.in.includes("f1") && r.link.startsWith(where.link.startsWith) && r.link.includes(where.link.contains) && (!where.id || r.id > where.id.gt),
+          ),
         ),
         update,
       },
@@ -135,6 +141,47 @@ describe("N3: connector secrets", () => {
     expect(rows[0].link).toBe("http://rsshub:1200/youtube/x#item-1");
     expect(update).toHaveBeenCalledWith({ where: { id: "a1" }, data: { link: "http://rsshub:1200/youtube/x#item-1", updatedAt } });
     expect(await scrubConnectorSecretsFromArticleLinks(fakeDb, rules)).toEqual({ scanned: 0, scrubbed: 0 });
+    // Only feeds on a connector origin + base path are considered.
+    expect(feedFindMany).toHaveBeenCalledWith({ where: { url: { startsWith: "http://rsshub:1200" } }, select: { id: true } });
+    expect(feedFindMany).toHaveBeenCalledWith({ where: { url: { startsWith: "https://cd.example/cd" } }, select: { id: true } });
+  });
+
+  it("strips connector secrets from article links on output (API payloads)", async () => {
+    const article = { id: "a", link: "http://rsshub:1200/youtube/x?key=rsskey#item-1", feed: { url: "http://rsshub:1200/youtube/x?key=rsskey", name: "n" } };
+    expect(redactArticleWith(rules, article)).toEqual({ id: "a", link: "http://rsshub:1200/youtube/x#item-1", feed: { url: "http://rsshub:1200/youtube/x", name: "n" } });
+    expect(article.link).toContain("rsskey"); // not mutated
+
+    process.env.FEEDFERRET_RSSHUB_URL = "http://rsshub:1200";
+    process.env.FEEDFERRET_RSSHUB_KEY = "rsskey";
+    resetConnectorSecretRulesCache();
+    try {
+      const item = await toGReaderArticle({
+        extId: BigInt(5), createdAt: new Date(0), publishedAt: new Date(0), updatedAt: new Date(0), title: "t",
+        link: "http://rsshub:1200/youtube/x?key=rsskey#item-1", content: "c", contentFormat: "html",
+        feed: { extId: BigInt(7), name: "f", htmlUrl: null, url: "http://rsshub:1200/youtube/x?key=rsskey" },
+      });
+      expect(JSON.stringify(item)).not.toContain("rsskey");
+      expect(item.canonical).toEqual([{ href: "http://rsshub:1200/youtube/x#item-1" }]);
+    } finally {
+      delete process.env.FEEDFERRET_RSSHUB_URL;
+      delete process.env.FEEDFERRET_RSSHUB_KEY;
+      resetConnectorSecretRulesCache({ includeLastGood: true });
+    }
+  });
+
+  it("falls back to the last good connector rules when a later config read fails", async () => {
+    const findUnique = mockedDb.globalSettings.findUnique as unknown as ReturnType<typeof vi.fn>;
+    resetConnectorSecretRulesCache({ includeLastGood: true });
+    findUnique.mockResolvedValue({ rsshubEnabled: true, rsshubBaseUrl: "http://rsshub:1200", rsshubApiKey: "k1-secret" });
+    const good = await getConnectorSecretRules();
+    expect(good.map((rule) => rule.origin)).toContain("http://rsshub:1200");
+    resetConnectorSecretRulesCache();
+    findUnique.mockRejectedValue(new Error("db down"));
+    const fallback = await getConnectorSecretRules();
+    expect(fallback).toEqual(good);
+    expect(stripConnectorSecretsWith(fallback, "http://rsshub:1200/youtube/x?key=k1-secret#a")).toBe("http://rsshub:1200/youtube/x#a");
+    findUnique.mockReset().mockResolvedValue(null);
+    resetConnectorSecretRulesCache({ includeLastGood: true });
   });
 
   it("redacts secret values from free text and client feed objects", () => {

@@ -66,3 +66,77 @@ describe("feed fetch: connector secret + internal access only for allowed routes
     expect(allowInternal).toBe(false);
   });
 });
+
+async function optionsFor(feed: Record<string, unknown>) {
+  await fetchFeedArticles(feed as never).catch(() => undefined);
+  expect(mocks.fetchWith).toHaveBeenCalledTimes(1);
+  const [requestUrl, , options] = mocks.fetchWith.mock.calls[0];
+  return { requestUrl: String(requestUrl), options: options as import("../../lib/ssrf").SafeFetchTextOptions };
+}
+
+describe("feed fetch: a user-chosen proxy never receives the connector secret", () => {
+  it.each([
+    ["keyless row", "http://rsshub:1200/youtube/channel/UC1"],
+    ["legacy keyed row", "http://rsshub:1200/youtube/channel/UC1?key=rsskey"],
+  ])("RSSHub %s via proxy: no key, no internal access", async (_label, url) => {
+    const { requestUrl, options } = await optionsFor({ url, httpOptions: JSON.stringify({ CURLOPT_PROXY: "http://8.8.8.8:3128" }) });
+    expect(requestUrl).toBe("http://rsshub:1200/youtube/channel/UC1");
+    expect(requestUrl).not.toContain("rsskey");
+    expect(options.allowInternal).toBe(false);
+  });
+
+  it("changedetection watch feed via proxy: no token, no internal access", async () => {
+    const url = "http://changedetection:5000/rss/watch/0b8f6c2e-1d3a-4a5b-9c7d-112233445566";
+    const { requestUrl, options } = await optionsFor({ url, httpOptions: JSON.stringify({ CURLOPT_PROXY: "http://8.8.8.8:3128" }) });
+    expect(requestUrl).toBe(url);
+    expect(options.allowInternal).toBe(false);
+  });
+});
+
+describe("feed fetch: trusted connector redirects stay on allowed connector routes", () => {
+  const realFetch = globalThis.fetch;
+  afterAll(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  async function runRedirect(location: string) {
+    const { requestUrl, options } = await optionsFor({ url: "http://rsshub:1200/youtube/channel/UC1" });
+    expect(options.allowInternal).toBe(true);
+    expect(options.redirectGuard).toBeTypeOf("function");
+    const { fetchWithSsrfProtection } = await vi.importActual<typeof import("../../lib/ssrf")>("../../lib/ssrf");
+    const requested: string[] = [];
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      requested.push(url);
+      if (requested.length === 1) return new Response(null, { status: 302, headers: { location } });
+      return new Response(RSS, { status: 200 });
+    }) as typeof fetch;
+    const outcome = await fetchWithSsrfProtection(requestUrl, {}, options).then(
+      () => "ok",
+      (error: Error) => error.message,
+    );
+    return { outcome, requested };
+  }
+
+  it.each([
+    "http://rsshub:1200/rsshub/transform/html/http%3A%2F%2Fpostgres%3A5432%2F/item=a",
+    "http://postgres:5432/",
+    "http://169.254.169.254/latest/meta-data/",
+    "https://attacker.example/collect",
+  ])("refuses a redirect to %s (no follow-up request, key not re-sent)", async (location) => {
+    const { outcome, requested } = await runRedirect(location);
+    expect(outcome).toMatch(/Redirect refused/);
+    expect(requested).toEqual(["http://rsshub:1200/youtube/channel/UC1?key=rsskey"]);
+  });
+
+  it("follows a redirect to another allowed route on the same connector (with the current key)", async () => {
+    const { outcome, requested } = await runRedirect("/youtube/channel/UC2");
+    expect(outcome).toBe("ok");
+    expect(requested).toEqual(["http://rsshub:1200/youtube/channel/UC1?key=rsskey", "http://rsshub:1200/youtube/channel/UC2?key=rsskey"]);
+  });
+
+  it("ordinary external feeds get no redirect guard", async () => {
+    const { options } = await optionsFor({ url: "https://blog.example/feed.xml" });
+    expect(options.redirectGuard).toBeUndefined();
+  });
+});
