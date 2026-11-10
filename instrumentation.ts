@@ -23,14 +23,18 @@ export async function register() {
     // Deliberately NOT awaited (audit R3): the one-time FTS backfill / trigram index
     // build is O(corpus) (11 s at 50 k articles) and the first HTTP response must not
     // wait for it. Search uses the plain LIKE path until the index is complete.
+    // Postgres stays awaited (old behaviour): its plain `CREATE INDEX … USING GIN`
+    // takes a SHARE lock that would block article writes if it ran under live traffic.
     if (process.env.NEXT_PHASE !== "phase-production-build") {
-        void (async () => {
+        const { getDatabaseProvider } = await import("./lib/db");
+        const setup = (async () => {
             const { ensureSearchIndexes } = await import("./lib/search-indexes");
             await ensureSearchIndexes();
             // SQLite planner statistics (audit R1): off the boot path, bounded sample.
             const { scheduleStartupSqliteOptimize } = await import("./lib/db-maintenance");
             scheduleStartupSqliteOptimize();
         })().catch((error) => console.error("[search-indexes] startup setup failed", error));
+        if (getDatabaseProvider() === "postgresql") await setup;
     }
 
     if (process.env.NEXT_PHASE !== "phase-production-build") {
