@@ -2,10 +2,11 @@ import { decimalExternalId, storedExternalId } from "./external-ids";
 import { hashApiToken } from "@/lib/token";
 import { Prisma, type User } from "@prisma/client";
 import crypto from "crypto";
-import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimit, peekRateLimit, releaseRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
+import { getConnectorSecretRules, stripConnectorSecretsWith } from "@/lib/connector-secrets";
 
 export const GREADER_READING_LIST = "user/-/state/com.google/reading-list";
 export const GREADER_UNREAD = "user/-/state/com.google/unread";
@@ -42,6 +43,8 @@ export function verifyGReaderToken(token: string) {
 }
 
 const passwordCache = new Map<string, { key: string; expires: number }>();
+/** identity -> hash of a password verified within the last minute (lets that client skip the budget peek). */
+const recentLogins = new Map<string, { key: string; expires: number }>();
 
 /** Conditional update avoids a write on every poll, including across instances. */
 export async function touchApiPassword(userId: string, lastUsed: Date | null) {
@@ -51,50 +54,85 @@ export async function touchApiPassword(userId: string, lastUsed: Date | null) {
   await db.user.updateMany({ where: { id: userId, OR: [{ apiPasswordLastUsedAt: null }, { apiPasswordLastUsedAt: { lte: cutoff } }] }, data: { apiPasswordLastUsedAt: now } });
 }
 
-/** Shared password path: throttle both identity and source before bcrypt. */
+/**
+ * Shared password path: throttle both identity and source before bcrypt.
+ *
+ * N6: an attempt is *reserved* (counted) synchronously before the slow bcrypt
+ * compare and given back only when the password was right. Peek-then-count
+ * let N parallel requests all pass the check before any failure was counted;
+ * now the (single-threaded, synchronous) reservation is the authoritative
+ * check, so concurrent guesses get at most `limit` bcrypt compares per window.
+ * Requests answered from the short-lived verification cache (same user, same
+ * password, same token version) need no reservation, so a client polling with
+ * Basic auth in parallel is never throttled.
+ */
 export async function authenticateGReaderPassword(request: Request, email: string, password: string) {
   const ip = getClientIdentifier(request);
   const identity = email.trim().toLowerCase();
   const ipConfig = { ...RATE_LIMITS.authSignIn, prefix: "greader-ip" };
   const emailConfig = { ...RATE_LIMITS.authSignIn, prefix: "greader-email" };
-  const ipLimit = peekRateLimit(ip, ipConfig);
-  const accountLimit = peekRateLimit(identity, emailConfig);
   let user: Awaited<ReturnType<typeof db.user.findUnique>> = null;
   let failReason: string | undefined;
-  if (!ipLimit.success || !accountLimit.success) failReason = "rate_limit";
+  let reserved = false;
+  const reserve = () => {
+    const ipLimit = checkRateLimit(ip, ipConfig);
+    const accountLimit = checkRateLimit(identity, emailConfig);
+    reserved = true;
+    return ipLimit.success && accountLimit.success;
+  };
+  // A login verified within the last minute (same identity + password) skips
+  // the budget peek: a client re-authenticating in a loop must not lock itself
+  // out once other traffic spent the IP budget. The full check (user, policy,
+  // token version, cached verification) still runs below.
+  const passwordKey = hashApiToken(password);
+  const recent = recentLogins.get(identity);
+  const recentlyVerified = recent?.key === passwordKey && recent.expires > Date.now();
+  // Cheap early exit (no DB, no bcrypt) once a budget is spent.
+  if (!recentlyVerified && (!peekRateLimit(ip, ipConfig).success || !peekRateLimit(identity, emailConfig).success)) failReason = "rate_limit";
   else {
     user = email ? await db.user.findUnique({ where: { email } }) : null;
-    if (!user || (!user.password && !user.apiPasswordHash)) failReason = "no_account";
-    else if (!user.isActive) failReason = "inactive";
+    // Addresses are stored lower-case since the email-change normalization.
+    if (!user && identity && identity !== email) user = await db.user.findUnique({ where: { email: identity } });
+    if (!user || (!user.password && !user.apiPasswordHash)) failReason = reserve() ? "no_account" : "rate_limit";
+    else if (!user.isActive) failReason = reserve() ? "inactive" : "rate_limit";
     else {
       const hash = user.apiPasswordHash || (!user.twoFactorEnabled && !user.apiPasswordRequired ? user.password : null);
       const key = `${user.apiTokenVersion}:${hashApiToken(password)}`;
       // Always reload user/policy/version before consulting cached verification.
       const cached = passwordCache.get(user.id);
-      const verified = cached?.key === key && cached.expires > Date.now();
+      const verified = !!hash && cached?.key === key && cached.expires > Date.now();
       if (!verified) passwordCache.delete(user.id);
-      if (!hash || (!verified && !(await bcrypt.compare(password, hash)))) failReason = "password";
+      if (!verified && !reserve()) failReason = "rate_limit";
+      else if (!hash || (!verified && !(await bcrypt.compare(password, hash)))) failReason = "password";
       else {
         if (!passwordCache.has(user.id)) {
           if (passwordCache.size >= 5000) passwordCache.delete(passwordCache.keys().next().value!);
           passwordCache.set(user.id, { key, expires: Date.now() + 60_000 });
         }
+        if (recentLogins.size >= 5000 && !recentLogins.has(identity)) recentLogins.delete(recentLogins.keys().next().value!);
+        recentLogins.set(identity, { key: passwordKey, expires: Date.now() + 60_000 });
         if (user.apiPasswordHash) await touchApiPassword(user.id, user.apiPasswordLastUsedAt);
       }
     }
   }
-  if (!failReason) return user;
-  if (failReason !== "rate_limit") {
-    checkRateLimit(ip, ipConfig);
-    checkRateLimit(identity, emailConfig);
+  if (!failReason) {
+    // A correct password gives its reserved attempt back.
+    if (reserved) {
+      releaseRateLimit(ip, ipConfig);
+      releaseRateLimit(identity, emailConfig);
+    }
+    return user;
   }
+  // N12: no audit row while rate-limited — otherwise anonymous steady traffic
+  // means unbounded inserts (the limiter already makes those requests cheap).
+  if (failReason === "rate_limit") return null;
   try {
     await db.loginAttempt.create({ data: {
-      email, userId: user?.id, success: !failReason, failReason,
+      email, userId: user?.id, success: false, failReason,
       ip: ip.replace(/^ip:/, ""), userAgent: request.headers.get("user-agent"),
     } });
   } catch { /* Audit failures must not crash authentication. */ }
-  return failReason ? null : user;
+  return null;
 }
 
 export async function authenticateGReaderRequest(request: Request): Promise<(User & { tokenScope?: string }) | null> {
@@ -260,7 +298,25 @@ export async function listGReaderStreamPrefs(userId: string) {
   return Array.from(grouped.entries()).map(([id, value]) => ({ id, value }));
 }
 
+/** N11: bounds for client-written stream preferences (FreshRSS-style UI state, tiny in practice). */
+export const GREADER_PREF_LIMITS = { streamId: 512, key: 256, value: 4096, perUser: 500 } as const;
+/** N11: labels a GReader client may create per user (edit-tag / rename). */
+export const GREADER_MAX_LABELS = 1000;
+export const MAX_GREADER_LABEL_NAME = 100;
+
+export class GReaderLimitError extends Error {}
+
 export async function upsertGReaderStreamPref(userId: string, streamId: string, key: string, value: string) {
+  if (streamId.length > GREADER_PREF_LIMITS.streamId || key.length > GREADER_PREF_LIMITS.key || value.length > GREADER_PREF_LIMITS.value) {
+    throw new GReaderLimitError("Stream preference too large");
+  }
+  const existing = await db.gReaderPreference.findUnique({
+    where: { userId_streamId_key: { userId, streamId, key } },
+    select: { userId: true },
+  });
+  if (!existing && (await db.gReaderPreference.count({ where: { userId } })) >= GREADER_PREF_LIMITS.perUser) {
+    throw new GReaderLimitError("Too many stream preferences");
+  }
   return db.gReaderPreference.upsert({
     where: {
       userId_streamId_key: {
@@ -388,6 +444,9 @@ export async function toGReaderArticle(article: any) {
     const parsed = article.enclosures ? JSON.parse(article.enclosures) : null;
     if (Array.isArray(parsed)) enclosures = parsed;
   } catch { /* Corrupt feed metadata must not break a sync page. */ }
+  // Article link / fallback feed URL without connector secrets (N3).
+  const secretRules = await getConnectorSecretRules();
+  const link = article.link ? stripConnectorSecretsWith(secretRules, article.link) : article.link;
   return {
     id: greaderItemId(decimalExternalId(article.extId)),
     crawlTimeMsec: String(new Date(article.createdAt).getTime()),
@@ -395,8 +454,8 @@ export async function toGReaderArticle(article: any) {
     published: Math.floor(new Date(article.publishedAt).getTime() / 1000),
     updated: Math.floor(new Date(article.updatedAt ?? article.publishedAt).getTime() / 1000),
     title: article.title,
-    canonical: article.link ? [{ href: article.link }] : [],
-    alternate: article.link ? [{ href: article.link }] : [],
+    canonical: link ? [{ href: link }] : [],
+    alternate: link ? [{ href: link }] : [],
     categories: [...new Set([
       GREADER_READING_LIST,
       ...(article.isRead ? [GREADER_READ] : []),
@@ -410,7 +469,7 @@ export async function toGReaderArticle(article: any) {
     origin: {
       streamId: `feed/${decimalExternalId(article.feed.extId)}`,
       title: article.feed.name,
-      htmlUrl: article.feed.htmlUrl || article.feed.url,
+      htmlUrl: article.feed.htmlUrl || (article.feed.url ? stripConnectorSecretsWith(secretRules, article.feed.url) : article.feed.url),
     },
     ...(article.author?.trim() ? { author: article.author } : {}),
     summary: { content: content || article.excerpt || "" },

@@ -45,6 +45,18 @@ const CHANGEDETECTION_DISABLED = truthy(process.env.FEEDFERRET_DISABLE_CHANGEDET
  * vice versa, so treat a partial config as "not configured"). Never throws.
  */
 export async function getChangedetectionConfig(): Promise<ChangedetectionConfig | null> {
+  try {
+    return await loadChangedetectionConfig();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Like `getChangedetectionConfig`, but a DB error throws instead of reading as
+ * "not configured" — for callers that cache the answer (lib/connector-secrets.ts).
+ */
+export async function loadChangedetectionConfig(): Promise<ChangedetectionConfig | null> {
   if (CHANGEDETECTION_DISABLED) return null;
 
   const envUrl = process.env.FEEDFERRET_CHANGEDETECTION_URL?.trim();
@@ -55,24 +67,20 @@ export async function getChangedetectionConfig(): Promise<ChangedetectionConfig 
     return { baseUrl: envUrl, apiKey, rssToken };
   }
 
-  try {
-    const settings = await db.globalSettings.findUnique({
-      where: { id: "global" },
-      select: {
-        changedetectionEnabled: true,
-        changedetectionBaseUrl: true,
-        changedetectionApiKey: true,
-        changedetectionRssToken: true,
-      },
-    });
-    if (!settings?.changedetectionEnabled || !settings.changedetectionBaseUrl?.trim()) return null;
-    const apiKey = decryptIfValue(settings.changedetectionApiKey);
-    const rssToken = decryptIfValue(settings.changedetectionRssToken);
-    if (!apiKey || !rssToken) return null;
-    return { baseUrl: settings.changedetectionBaseUrl.trim(), apiKey, rssToken };
-  } catch {
-    return null;
-  }
+  const settings = await db.globalSettings.findUnique({
+    where: { id: "global" },
+    select: {
+      changedetectionEnabled: true,
+      changedetectionBaseUrl: true,
+      changedetectionApiKey: true,
+      changedetectionRssToken: true,
+    },
+  });
+  if (!settings?.changedetectionEnabled || !settings.changedetectionBaseUrl?.trim()) return null;
+  const apiKey = decryptIfValue(settings.changedetectionApiKey);
+  const rssToken = decryptIfValue(settings.changedetectionRssToken);
+  if (!apiKey || !rssToken) return null;
+  return { baseUrl: settings.changedetectionBaseUrl.trim(), apiKey, rssToken };
 }
 
 /** Cheap "is the changedetection.io connector available?" check for UI gating. */
@@ -88,6 +96,15 @@ function apiUrl(config: ChangedetectionConfig, path: string): string {
 export function buildWatchFeedUrl(config: ChangedetectionConfig, uuid: string): string {
   const base = config.baseUrl.replace(/\/+$/, "");
   return `${base}/rss/watch/${uuid}?token=${encodeURIComponent(config.rssToken)}`;
+}
+
+/**
+ * Per-watch feed URL WITHOUT the RSS token — what is stored and shown. The
+ * feed fetcher adds the token server-side (lib/connector-secrets.ts).
+ */
+export function buildWatchFeedPublicUrl(config: ChangedetectionConfig, uuid: string): string {
+  const base = config.baseUrl.replace(/\/+$/, "");
+  return `${base}/rss/watch/${encodeURIComponent(uuid)}`;
 }
 
 export type CreateWatchInput = {

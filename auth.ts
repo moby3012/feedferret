@@ -59,7 +59,12 @@ const config = {
           } catch { /* never crash auth on log failure */ }
         };
 
-        const user = await db.user.findUnique({ where: { email } });
+        const normalizedEmail = email.trim().toLowerCase();
+        // Addresses are stored lower-case since the email-change normalization;
+        // older rows keep their spelling, so try the exact form first.
+        const user =
+          (await db.user.findUnique({ where: { email } })) ??
+          (normalizedEmail && normalizedEmail !== email ? await db.user.findUnique({ where: { email: normalizedEmail } }) : null);
 
         if (!user?.password) { await logAttempt(false, undefined, "no_account"); return null; }
 
@@ -130,7 +135,7 @@ const config = {
 
       const user = (await db.user.findUnique({
         where: { id: token.sub },
-        select: { isActive: true, sessionVersion: true, role: true },
+        select: { isActive: true, sessionVersion: true, role: true, email: true },
       })) as any;
 
       if (!user || !user.isActive) {
@@ -145,6 +150,8 @@ const config = {
         }
         token.role = user.role;
         token.sv = user.sessionVersion;
+        // Follow a (step-up protected) email change without a re-login.
+        if (user.email) token.email = user.email;
       }
 
       return token;

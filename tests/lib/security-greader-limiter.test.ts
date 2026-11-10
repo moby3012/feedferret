@@ -18,7 +18,33 @@ it("counts failures per normalized email and stops before bcrypt", async () => {
   mocks.compare.mockResolvedValue(true);
   expect(await authenticateGReaderPassword(request("new-source"), "failure@test.com", "pw")).toBeNull();
   expect(mocks.compare).toHaveBeenCalledTimes(10);
-  expect(mocks.log).toHaveBeenCalledTimes(11);
+  // N12: the rate-limited 11th attempt writes no audit row.
+  expect(mocks.log).toHaveBeenCalledTimes(10);
+});
+it("N6: parallel guesses are reserved before bcrypt, so at most `limit` compares run", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  mocks.compare.mockImplementation(async () => { await gate; return false; });
+  const attempts = Array.from({ length: 30 }, (_, i) =>
+    authenticateGReaderPassword(request(`parallel-${i}`), "parallel@test.com", `guess-${i}`));
+  // Let every request get past its DB lookup while bcrypt is still pending.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  release();
+  const results = await Promise.all(attempts);
+  expect(results.every((result) => result === null)).toBe(true);
+  expect(mocks.compare).toHaveBeenCalledTimes(RATE_LIMITS.authSignIn.limit);
+});
+it("N6: a correct password gives its reserved attempt back", async () => {
+  mocks.compare.mockResolvedValue(false);
+  for (let i = 0; i < RATE_LIMITS.authSignIn.limit - 1; i++) {
+    await authenticateGReaderPassword(request(`refund-${i}`), "refund@test.com", "bad");
+  }
+  mocks.compare.mockResolvedValue(true);
+  // Fresh user object each time so the verification cache does not short-cut bcrypt.
+  for (let i = 0; i < 3; i++) {
+    mocks.user.mockResolvedValueOnce({ ...user, id: `refund-user-${i}` });
+    expect(await authenticateGReaderPassword(request(`refund-ok-${i}`), "refund@test.com", "pw")).not.toBeNull();
+  }
 });
 it("isolates GReader IP failures from web sign-in and blocks across emails", async () => {
   for (let i = 0; i < 12; i++) checkRateLimit("ip:separate", RATE_LIMITS.authSignIn);

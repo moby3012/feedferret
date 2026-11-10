@@ -27,6 +27,7 @@ import { EXTRACTION_SOURCE_TYPES, normalizeSourceType, stringifyNonEmpty } from 
 import { MAX_SEARCH_QUERY, validateFeedUrl, validateOpml } from "@/lib/validation";
 import { translateFreshRssReadFilters } from "./frss-filters";
 import { assertSafeHttpOptionsProxy, proxyFromHttpOptions } from "@/lib/ssrf";
+import { connectorFeedUrlErrorWith, getConnectorSecretRules, stripConnectorSecretsWith } from "@/lib/connector-secrets";
 
 /** `local`: a file the signed-in user uploaded. `remote`: fetched from a third-party URL (dynamic OPML). */
 export type ImportTrust = "local" | "remote";
@@ -330,12 +331,21 @@ export async function applyOpmlImportPlan(
   report.errors = [...plan.errors];
   const total = countFeeds(plan);
   let done = 0;
+  const secretRules = await getConnectorSecretRules();
 
   const writeFeed = async (feed: PlannedFeed, categoryId: string | null, pending: boolean, order: number) => {
+    // Connector feeds: only allowed routes (no /rsshub/transform/…, no
+    // all-watches feed), stored without the RSSHub key / changedetection token (N3).
+    const connectorError = connectorFeedUrlErrorWith(secretRules, feed.url);
+    if (connectorError) {
+      report.issues.push({ kind: "unsupported", code: "connector-route-blocked", subject: feed.name, attribute: "xmlUrl", detail: connectorError });
+      return;
+    }
+    const feedUrl = stripConnectorSecretsWith(secretRules, feed.url);
     const existing = pending
       ? null
       : await db.feed.findUnique({
-          where: { userId_url: { userId, url: feed.url } },
+          where: { userId_url: { userId, url: feedUrl } },
           select: { id: true, fullTextMode: true },
         });
     if (existing) report.feedsUpdated += 1;
@@ -424,7 +434,7 @@ export async function applyOpmlImportPlan(
       await db.feed.update({ where: { id: existing.id }, data: { ...common, ...modeOnUpdate } });
       feedId = existing.id;
     } else {
-      const created = await db.feed.create({ data: { userId, url: feed.url, order, ...common, name: d.name, ...modeOnCreate } });
+      const created = await db.feed.create({ data: { userId, url: feedUrl, order, ...common, name: d.name, ...modeOnCreate } });
       feedId = created.id;
     }
 

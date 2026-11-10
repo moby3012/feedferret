@@ -22,11 +22,12 @@ beforeEach(() => {
 });
 describe("GReader password authentication", () => {
   const request = new Request("https://example.test");
-  it("throttles before bcrypt and records rejection", async () => {
+  it("throttles before bcrypt without an audit row per rate-limited request (N12)", async () => {
     mocks.limited.mockReturnValue({ success: false });
     expect(await authenticateGReaderPassword(request, user.email, "pw")).toBeNull();
     expect(mocks.compare).not.toHaveBeenCalled();
-    expect(mocks.log).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ success: false, failReason: "rate_limit" }) }));
+    expect(mocks.user).not.toHaveBeenCalled();
+    expect(mocks.log).not.toHaveBeenCalled();
   });
   it.each([{ isActive: false }, { twoFactorEnabled: true }])("rejects disabled or 2FA account %s", async overrides => {
     mocks.user.mockResolvedValue({ ...user, ...overrides });

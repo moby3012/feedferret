@@ -455,3 +455,51 @@ export async function sendTestSystemEmail(
     overrideSettings,
   });
 }
+
+/** True when the instance can send system email (admin switched the mail service on). Never throws. */
+export async function isMailServiceEnabled(): Promise<boolean> {
+  try {
+    return !!(await getStoredSettings())?.mailServiceEnabled;
+  } catch {
+    return false;
+  }
+}
+
+function escapeMailHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+/**
+ * Security notices after an account email change: the OLD address learns
+ * that (and to which address) the login moved, the NEW address gets a
+ * confirmation. Best effort: each send is independent; returns whether both
+ * went out. Callers check `isMailServiceEnabled` first.
+ */
+export async function sendEmailChangeNotices({
+  oldEmail,
+  newEmail,
+  locale,
+}: {
+  oldEmail: string;
+  newEmail: string;
+  locale?: string | null;
+}): Promise<boolean> {
+  const t = createEmailTranslator(locale ?? "en");
+  const card = (title: string, body: string) => `
+      <div style="background:#f9f9f9;padding:20px;font-family:sans-serif;">
+        <div style="max-width:600px;margin:0 auto;background:white;padding:40px;border-radius:10px;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
+          <h1 style="color:#111;margin-bottom:20px;">${escapeMailHtml(title)}</h1>
+          <p style="color:#444;font-size:16px;line-height:1.6;">${escapeMailHtml(body)}</p>
+        </div>
+      </div>
+    `;
+  const oldSubject = t("emailAuth.emailChangedOldSubject");
+  const oldBody = t("emailAuth.emailChangedOldBody", { newEmail });
+  const newSubject = t("emailAuth.emailChangedNewSubject");
+  const newBody = t("emailAuth.emailChangedNewBody", { oldEmail });
+  const results = await Promise.allSettled([
+    sendSystemEmail({ to: oldEmail, subject: oldSubject, text: oldBody, html: card(oldSubject, oldBody) }),
+    sendSystemEmail({ to: newEmail, subject: newSubject, text: newBody, html: card(newSubject, newBody) }),
+  ]);
+  return results.every((result) => result.status === "fulfilled");
+}

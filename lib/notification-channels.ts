@@ -93,8 +93,9 @@ export async function sendGotifyNotification(
     });
 
     if (!res.ok) {
-      const err = await res.text().catch(() => "");
-      return { ok: false, error: `HTTP ${res.status}: ${err.slice(0, 200)}` };
+      // Status only: user-chosen host, its body must not be echoed (N10).
+      await res.body?.cancel().catch(() => {});
+      return { ok: false, error: `HTTP ${res.status}` };
     }
     return { ok: true };
   } catch (err) {
@@ -127,8 +128,9 @@ export async function sendNtfyNotification(
     });
 
     if (!res.ok) {
-      const err = await res.text().catch(() => "");
-      return { ok: false, error: `HTTP ${res.status}: ${err.slice(0, 200)}` };
+      // Status only: user-chosen host, its body must not be echoed (N10).
+      await res.body?.cancel().catch(() => {});
+      return { ok: false, error: `HTTP ${res.status}` };
     }
     return { ok: true };
   } catch (err) {

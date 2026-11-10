@@ -132,7 +132,8 @@ async function loadArticleForExport(userId: string, articleId: string) {
     select: { id: true, title: true, link: true, content: true, contentFormat: true },
   });
   if (!article) throw new Error("Article not found");
-  return article;
+  const { redactArticleForClient } = await import("@/lib/connector-secrets");
+  return redactArticleForClient(article);
 }
 
 function articleAsMarkdown(article: { content: string; contentFormat: string | null }): string {

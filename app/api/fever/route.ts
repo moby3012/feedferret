@@ -10,6 +10,11 @@ import { touchApiPassword } from "@/lib/greader";
 import { logger } from "@/lib/logger";
 import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
+import { readBoundedBytes, RequestTooLargeError } from "@/lib/bounded-body";
+import { getConnectorSecretRules, redactFeedsForClient, stripConnectorSecretsWith } from "@/lib/connector-secrets";
+
+const FEVER_MAX_BODY_BYTES = 64 * 1024;
+const FEVER_MAX_WITH_IDS = 1000;
 
 function numericIds(value: string): string[] {
   return value.split(",").flatMap((part) => {
@@ -73,11 +78,12 @@ async function getGroups(userId: string) {
 }
 
 async function getFeedsAndGroups(userId: string) {
-  const feeds = await db.feed.findMany({
+  // Connector secrets (RSSHub key, changedetection token) never leave the server (N3).
+  const feeds = await redactFeedsForClient(await db.feed.findMany({
     where: { userId },
     include: { category: true },
     orderBy: { name: "asc" },
-  });
+  }));
 
   const feverFeeds = feeds.filter((f) => f.extId).map((f) => ({
     id: decimalExternalId(f.extId), favicon_id: decimalExternalId(f.extId),
@@ -110,7 +116,9 @@ async function getItems(
   const withIds = (params.get("with_ids") || body.with_ids)
     ?.split(",")
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    // Fever specifies at most 50; allow headroom for lenient clients.
+    .slice(0, FEVER_MAX_WITH_IDS);
 
   const where: Record<string, unknown> = { userId, extId: { not: null }, feed: { extId: { not: null } } };
 
@@ -144,6 +152,7 @@ async function getItems(
     },
   });
 
+  const secretRules = await getConnectorSecretRules();
   return Promise.all(
     articles.filter((a) => a.extId && a.feed.extId).map(async (a) => ({
       id: decimalExternalId(a.extId),
@@ -151,7 +160,7 @@ async function getItems(
       title: a.title,
       author: a.author || "",
       html: a.contentFormat === "markdown" && a.content ? await renderMarkdownToHtml(a.content) : a.content,
-      url: a.link,
+      url: stripConnectorSecretsWith(secretRules, a.link), // no connector secrets (N3)
       is_saved: a.isStarred ? 1 : 0,
       is_read: a.isRead ? 1 : 0,
       created_on_time: Math.floor(a.publishedAt.getTime() / 1000),
@@ -206,7 +215,7 @@ async function handleMark(
       data.isStarred = false;
     }
     if (Object.keys(data).length) {
-      await db.article.updateMany({ where: { extId: { in: numericIds(withIds || id!) }, userId, ...(before ? { createdAt: { lte: beforeDate } } : {}) }, data });
+      await db.article.updateMany({ where: { extId: { in: numericIds(withIds || id!).slice(0, FEVER_MAX_WITH_IDS) }, userId, ...(before ? { createdAt: { lte: beforeDate } } : {}) }, data });
     }
   } else if (mark === "feed" && as_ === "read") {
     await db.article.updateMany({
@@ -244,21 +253,35 @@ async function handle(request: Request) {
     const url = new URL(request.url);
     const params = url.searchParams;
 
-    // Parse body for POST requests
+    // Parse body for POST requests. N7: this runs before authentication, so
+    // the body is read through a 64 KB cap first (streamed, also without a
+    // Content-Length) and only then parsed — never request.formData()/json()
+    // on an unbounded anonymous stream.
     let body: Record<string, string> = {};
     if (request.method === "POST") {
+      let raw: Buffer;
+      try {
+        raw = await readBoundedBytes(request, FEVER_MAX_BODY_BYTES);
+      } catch (error) {
+        if (error instanceof RequestTooLargeError) return new Response("Request too large", { status: 413 });
+        raw = Buffer.alloc(0);
+      }
       try {
         const ct = request.headers.get("content-type") || "";
         if (ct.includes("multipart/form-data")) {
-          const form = await request.formData();
+          const form = await new Response(new Uint8Array(raw), { headers: { "content-type": ct } }).formData();
           form.forEach((v, k) => { if (typeof v === "string") body[k] = v; });
         } else if (ct.includes("application/x-www-form-urlencoded")) {
-          const text = await request.text();
-          new URLSearchParams(text).forEach((v, k) => {
+          new URLSearchParams(raw.toString("utf8")).forEach((v, k) => {
             body[k] = v;
           });
         } else if (ct.includes("application/json")) {
-          body = await request.json();
+          const parsed: unknown = JSON.parse(raw.toString("utf8"));
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            for (const [k, v] of Object.entries(parsed)) {
+              if (typeof v === "string" || typeof v === "number") body[k] = String(v);
+            }
+          }
         }
       } catch {
         /* ignore parse errors */

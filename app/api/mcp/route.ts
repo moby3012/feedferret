@@ -9,9 +9,11 @@ import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
-import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute, applyRsshubKey } from "@/lib/rsshub";
+import { isRsshubConfigured, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
+import { connectorFeedUrlError, getConnectorSecretRules, redactArticleWith, redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
+import { stripFeedSecrets } from "@/lib/feed-secrets";
 import { discoverFeeds } from "@/lib/feed-discovery";
-import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
+import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
 import { importOpmlXml, OpmlImportInputError } from "@/lib/import/opml-import";
@@ -34,15 +36,14 @@ function textContent(data: unknown) {
   return { content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] };
 }
 
-// The per-feed HTTP Basic Auth password must never leave the server. Strip it
-// from any feed object (or array of feed objects) before returning it to a client.
-function stripFeedSecrets<T>(value: T): T {
-  if (Array.isArray(value)) return value.map((item) => stripFeedSecrets(item)) as T;
-  if (value && typeof value === "object" && "authPassword" in (value as Record<string, unknown>)) {
-    const { authPassword: _authPassword, ...rest } = value as Record<string, unknown>;
-    return rest as T;
-  }
-  return value;
+// Feed credentials, fetch options and connector secrets must never leave the
+// server: strip the secret columns (lib/feed-secrets.ts) and redact connector
+// keys from URLs / errors (lib/connector-secrets.ts) on every feed output.
+async function clientFeed<T>(value: T): Promise<T> {
+  if (!value || typeof value !== "object") return value;
+  const stripped = stripFeedSecrets(value);
+  if (Array.isArray(stripped)) return (await redactFeedsForClient(stripped as any[])) as T;
+  return (await redactFeedForClient(stripped as any)) as T;
 }
 
 // Serialize an auto-read rule for MCP output: never return the raw
@@ -225,7 +226,7 @@ async function searchArticles(user: ApiUser, args: any) {
     if (Object.keys(advancedWhere).length) where.AND = [...(where.AND || []), advancedWhere];
   }
   const limit = Math.min(50, Math.max(1, clampInt(args.limit, 10, 1, 50)));
-  return db.article.findMany({
+  const articles = await db.article.findMany({
     where,
     orderBy: { publishedAt: "desc" },
     take: limit,
@@ -236,6 +237,9 @@ async function searchArticles(user: ApiUser, args: any) {
       labels: { include: { label: true } },
     },
   });
+  // link / feed.url without connector secrets (N3).
+  const rules = await getConnectorSecretRules();
+  return articles.map((article) => redactArticleWith(rules, article));
 }
 
 // Shared feed-creation core for the MCP add-feed + connector-feed tools. The
@@ -246,7 +250,10 @@ async function createFeedForUser(
   url: string,
   opts: { name?: unknown; categoryId?: unknown; icon?: unknown; fallbackName?: string; sync?: boolean },
 ) {
-  url = await applyRsshubKey(url);
+  // Only allowed connector routes (no /rsshub/transform/…, no all-watches feed) — N3.
+  const connectorError = await connectorFeedUrlError(url);
+  if (connectorError) throw new Error(connectorError);
+  url = await stripConnectorSecrets(url);
   const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
   const order = await db.feed.count({ where: { userId } });
   const name = (typeof opts.name === "string" && opts.name.trim()) || remoteFeed?.title || opts.fallbackName || url;
@@ -266,7 +273,7 @@ async function createFeedForUser(
     where: { id: feed.id, userId },
     include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } },
   });
-  return stripFeedSecrets(fresh);
+  return clientFeed(fresh);
 }
 
 async function callTool(user: ApiUser, name: string, args: any) {
@@ -279,13 +286,13 @@ async function callTool(user: ApiUser, name: string, args: any) {
       return searchArticles(user, args);
     case "feedferret.get_article": {
       const article = await db.article.findFirst({ where: { id: String(args.articleId), userId: user.id }, include: { feed: true, labels: { include: { label: true } } } });
-      if (article && (article as any).feed) (article as any).feed = stripFeedSecrets((article as any).feed);
-      return article;
+      if (article && (article as any).feed) (article as any).feed = await clientFeed((article as any).feed);
+      return article ? redactArticleWith(await getConnectorSecretRules(), article) : article;
     }
     case "feedferret.fetch_full_text": {
       const { article, suggestAutoFullText } = await refetchArticleFullText(user.id, String(args.articleId));
-      if ((article as any).feed) (article as any).feed = stripFeedSecrets((article as any).feed);
-      return { ...article, suggestAutoFullText };
+      if ((article as any).feed) (article as any).feed = await clientFeed((article as any).feed);
+      return { ...redactArticleWith(await getConnectorSecretRules(), article), suggestAutoFullText };
     }
     case "feedferret.update_article_state": {
       const data: any = {};
@@ -296,11 +303,11 @@ async function callTool(user: ApiUser, name: string, args: any) {
       return { updated: updated.count };
     }
     case "feedferret.list_feeds":
-      return stripFeedSecrets(await db.feed.findMany({ where: { userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } }, orderBy: [{ order: "asc" }, { name: "asc" }] }));
+      return clientFeed(await db.feed.findMany({ where: { userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } }, orderBy: [{ order: "asc" }, { name: "asc" }] }));
     case "feedferret.get_feed": {
       const feed = await db.feed.findFirst({ where: { id: String(args.feedId), userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } } });
       if (!feed) throw new Error("Feed not found");
-      return stripFeedSecrets(feed);
+      return clientFeed(feed);
     }
     case "feedferret.add_feed": {
       const url = typeof args.url === "string" ? args.url.trim() : "";
@@ -345,7 +352,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       const result = await db.feed.updateMany({ where: { id: String(args.feedId), userId: user.id }, data });
       if (!result.count) throw new Error("Feed not found");
       const feed = await db.feed.findFirst({ where: { id: String(args.feedId), userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } } });
-      return stripFeedSecrets(feed);
+      return clientFeed(feed);
     }
     // Category management
     case "feedferret.create_category": {
@@ -566,7 +573,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       if (!config) throw new Error("RSSHub is not configured on this server");
       const validation = await validateRsshubRoute(config, routePath);
       if (!validation.ok) throw new Error(`RSSHub route did not validate: ${validation.reason}`);
-      return createFeedForUser(user.id, buildRsshubRouteUrl(config, routePath), {
+      return createFeedForUser(user.id, buildRsshubPublicRouteUrl(config, routePath), {
         name: args.name,
         categoryId: args.categoryId,
         fallbackName: validation.title ?? undefined,
@@ -582,7 +589,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       if (!watch.ok) throw new Error(`Could not create changedetection.io watch: ${watch.reason}`);
       // The watch feed is empty until changedetection has checked twice, so
       // don't sync on create unless explicitly requested.
-      return createFeedForUser(user.id, buildWatchFeedUrl(config, watch.uuid), {
+      return createFeedForUser(user.id, buildWatchFeedPublicUrl(config, watch.uuid), {
         name: args.name || url,
         categoryId: args.categoryId,
         sync: args.sync === true,
@@ -611,7 +618,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
         categoryId: typeof args.categoryId === "string" ? args.categoryId : undefined,
         sync: args.sync,
       });
-      return stripFeedSecrets(feed);
+      return clientFeed(feed);
     }
     case "feedferret.get_stats": {
       const [totalFeeds, totalArticles, unreadArticles, starredArticles, readLaterArticles, totalLabels, totalCategories, totalSavedSearches, totalKeywordAlerts, totalAutoReadRules, unreadNotifications] = await db.$transaction([

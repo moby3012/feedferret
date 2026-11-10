@@ -451,3 +451,42 @@ export function clearSaved(userKey: string) {
     db.close();
   }
 }
+
+/**
+ * Stores fetch credentials / options on one seeded feed of the user (security
+ * wave 3, N4) and returns the planted secret strings plus a restore callback.
+ * No proxy / auth type is set, so background syncs of the fixture feed keep
+ * working while the secrets sit in the row.
+ */
+export function plantFeedSecrets(userKey: string): { secrets: string[]; restore: () => void } {
+  const { userId } = manifest().users[userKey];
+  const tag = `${userKey}-${Date.now()}`;
+  const secrets = [`E2E-SECRET-PASS-${tag}`, `e2e-secret-user-${tag}`, `E2E-SECRET-COOKIE-${tag}`, `E2E-SECRET-SCRAPER-${tag}`];
+  const db = open();
+  let feed: { id: string; authUsername: string | null; authPassword: string | null; httpOptions: string | null; scraperConfig: string | null };
+  try {
+    feed = db.prepare(`SELECT id, authUsername, authPassword, httpOptions, scraperConfig FROM "Feed" WHERE userId = ? ORDER BY "order" LIMIT 1`).get(userId) as typeof feed;
+    db.prepare(`UPDATE "Feed" SET authPassword = ?, authUsername = ?, httpOptions = ?, scraperConfig = ? WHERE id = ?`).run(
+      secrets[0],
+      secrets[1],
+      JSON.stringify({ CURLOPT_COOKIE: secrets[2] }),
+      JSON.stringify({ marker: secrets[3] }),
+      feed.id,
+    );
+  } finally {
+    db.close();
+  }
+  return {
+    secrets,
+    restore: () => {
+      const c = open();
+      try {
+        c.prepare(`UPDATE "Feed" SET authPassword = ?, authUsername = ?, httpOptions = ?, scraperConfig = ? WHERE id = ?`).run(
+          feed.authPassword, feed.authUsername, feed.httpOptions, feed.scraperConfig, feed.id,
+        );
+      } finally {
+        c.close();
+      }
+    },
+  };
+}

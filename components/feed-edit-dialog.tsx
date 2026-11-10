@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { CheckCircle2, Eye, Loader2, Sparkles } from "lucide-react";
 import { useUpdateFeed, usePreviewFeedExtraction, useProposeAiFullTextSelector, useAiSettings } from "@/hooks/use-rss-data";
 import { resolveFullTextMode, type FullTextMode } from "@/lib/full-text-mode";
+import { getFeedEditConfig } from "@/app/actions/feeds";
 
 interface FeedEditDialogProps {
   feed: {
@@ -45,8 +46,6 @@ interface FeedEditDialogProps {
     name: string;
     url: string;
     authType?: string | null;
-    authUsername?: string | null;
-    authPassword?: string | null;
     customUserAgent?: string | null;
     fetchTimeoutSecs?: number | null;
     sslVerify?: boolean;
@@ -60,8 +59,6 @@ interface FeedEditDialogProps {
     priority?: string | null;
     unicityCriteria?: string | null;
     unicityCriteriaForced?: boolean;
-    scraperConfig?: string | null;
-    httpOptions?: string | null;
     fullTextConditions?: string | null;
     filtersActionRead?: string | null;
     retentionDays?: number | null;
@@ -94,6 +91,12 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const [authType, setAuthType] = useState<string>("none");
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  // Credentials and Scout-Studio fetch options are not part of the feed list
+  // (they used to be embedded in every page's HTML); they load on demand for
+  // this dialog. The stored password itself is never sent back — only whether
+  // one exists — and stays unchanged unless a new one is typed.
+  const [editConfigLoaded, setEditConfigLoaded] = useState(false);
+  const [hasStoredPassword, setHasStoredPassword] = useState(false);
   const [customUserAgent, setCustomUserAgent] = useState("");
   const [updateFrequency, setUpdateFrequency] = useState("");
   const [fetchTimeoutSecs, setFetchTimeoutSecs] = useState("");
@@ -175,8 +178,10 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     if (!feed) return;
     setActiveTab("auth");
     setAuthType(feed.authType || "none");
-    setAuthUsername(feed.authUsername || "");
-    setAuthPassword(feed.authPassword || "");
+    setAuthUsername("");
+    setAuthPassword("");
+    setHasStoredPassword(false);
+    setEditConfigLoaded(false);
     setCustomUserAgent(feed.customUserAgent || "");
     setUpdateFrequency((feed as any).updateFrequency ? String((feed as any).updateFrequency) : "");
     setFetchTimeoutSecs(feed.fetchTimeoutSecs ? String(feed.fetchTimeoutSecs) : "");
@@ -195,8 +200,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     setPriority(feed.priority || "main");
     setUnicityCriteria(feed.unicityCriteria || "id");
     setUnicityCriteriaForced(feed.unicityCriteriaForced ?? false);
-    setScraperConfig(feed.scraperConfig || "");
-    setHttpOptions(feed.httpOptions || "");
+    setScraperConfig("");
+    setHttpOptions("");
     setFiltersActionRead(feed.filtersActionRead || "");
     setRetentionDays(feed.retentionDays ? String(feed.retentionDays) : "");
     setKeepMinArticles(feed.keepMinArticles ? String(feed.keepMinArticles) : "");
@@ -217,6 +222,25 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     // snapshot from this closure yet. Bump a tick to trigger the snapshot
     // effect below once the hydrated values have actually committed.
     setHydrationTick((tick) => tick + 1);
+
+    let cancelled = false;
+    getFeedEditConfig(feed.id)
+      .then((config) => {
+        if (cancelled) return;
+        setAuthUsername(config.authUsername || "");
+        setHasStoredPassword(config.hasAuthPassword);
+        setScraperConfig(config.scraperConfig || "");
+        setHttpOptions(config.httpOptions || "");
+        setEditConfigLoaded(true);
+        setHydrationTick((tick) => tick + 1);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error(t("toasts.loadConfigFailed"));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feed]);
 
   // Runs after the hydration effect's state updates have committed, so
@@ -234,8 +258,15 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
         feedId: feed.id,
         data: {
           authType: authType === "none" ? null : authType,
-          authUsername: authType === "basic" ? authUsername || null : null,
-          authPassword: authType === "basic" ? authPassword || null : null,
+          // Until the on-demand config has loaded, the fields below are blank
+          // placeholders: omit them (undefined = unchanged) instead of wiping.
+          authUsername: !editConfigLoaded ? undefined : authType === "basic" ? authUsername || null : null,
+          // Write-only password: blank keeps the stored one.
+          authPassword: authType !== "basic"
+            ? null
+            : authPassword
+              ? authPassword
+              : hasStoredPassword || !editConfigLoaded ? undefined : null,
           customUserAgent: customUserAgent.trim() || null,
           updateFrequency: updateFrequency ? parseInt(updateFrequency) : null,
           fetchTimeoutSecs: fetchTimeoutSecs ? parseInt(fetchTimeoutSecs) : null,
@@ -254,8 +285,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           priority,
           unicityCriteria: unicityCriteria.trim() || "id",
           unicityCriteriaForced,
-          scraperConfig: scraperConfig.trim() || null,
-          httpOptions: httpOptions.trim() || null,
+          scraperConfig: editConfigLoaded ? scraperConfig.trim() || null : undefined,
+          httpOptions: editConfigLoaded ? httpOptions.trim() || null : undefined,
           filtersActionRead: filtersActionRead.trim() || null,
           retentionDays: retentionDays ? parseInt(retentionDays) : null,
           keepMinArticles: keepMinArticles ? parseInt(keepMinArticles) : null,
@@ -425,6 +456,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                       value={authUsername}
                       onChange={(e) => setAuthUsername(e.target.value)}
                       placeholder={t("auth.usernamePlaceholder")}
+                      disabled={!editConfigLoaded}
                       className="rounded-xl h-10 border-border/70 bg-background/70"
                       autoComplete="off"
                     />
@@ -435,10 +467,16 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                       type="password"
                       value={authPassword}
                       onChange={(e) => setAuthPassword(e.target.value)}
-                      placeholder={t("auth.passwordPlaceholder")}
+                      placeholder={hasStoredPassword ? t("auth.passwordStoredPlaceholder") : t("auth.passwordPlaceholder")}
+                      aria-describedby={hasStoredPassword ? "feed-auth-password-stored" : undefined}
                       className="rounded-xl h-10 border-border/70 bg-background/70"
                       autoComplete="new-password"
                     />
+                    {hasStoredPassword && (
+                      <p id="feed-auth-password-stored" className="text-xs text-muted-foreground">
+                        {t("auth.passwordStoredHint")}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -899,6 +937,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 <Label className="text-sm font-medium">{t("scout.scraperConfig")}</Label>
                 <Textarea
                   value={scraperConfig}
+                  disabled={!editConfigLoaded}
                   onChange={(e) => setScraperConfig(e.target.value)}
                   placeholder='{\"xpath\":{\"xPathItem\":\"//article\",\"xPathItemTitle\":\".//h2\"}}'
                   className="min-h-28 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
@@ -909,6 +948,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 <Label className="text-sm font-medium">{t("scout.httpOptions")}</Label>
                 <Textarea
                   value={httpOptions}
+                  disabled={!editConfigLoaded}
                   onChange={(e) => setHttpOptions(e.target.value)}
                   placeholder='{\"CURLOPT_HTTPHEADER\":\"Accept: application/json\",\"CURLOPT_USERAGENT\":\"FeedFerret\"}'
                   className="min-h-24 rounded-xl border-border/70 bg-background/70 font-mono text-xs"

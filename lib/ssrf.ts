@@ -22,6 +22,11 @@ export type SafeFetchTextOptions = SsrfCheckOptions & {
   // instead of just the bare status code. Opt-in so ordinary feed syncs keep
   // their terse "Fetch failed: N" errors.
   includeErrorBody?: boolean;
+  // Decides every redirect hop: returns the URL to follow (possibly
+  // rewritten), or null to refuse the redirect (the fetch then fails). Used for
+  // trusted connector requests, whose internal-network allowance must not
+  // carry over to an arbitrary redirect target.
+  redirectGuard?: (nextUrl: string, currentUrl: string) => string | null;
 };
 
 function truthy(value?: string) {
@@ -162,7 +167,7 @@ export function proxyFromHttpOptions(httpOptions: unknown): string | null {
   return proxy === undefined || proxy === null || String(proxy).trim() === "" ? null : String(proxy).trim();
 }
 
-async function readTextWithLimit(response: FetchResponseLike, maxBytes?: number) {
+export async function readTextWithLimit(response: FetchResponseLike, maxBytes?: number) {
   if (!maxBytes || !response.body) return response.text();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -238,7 +243,12 @@ export async function fetchWithSsrfProtection(
       });
 
       if (response.status >= 300 && response.status < 400 && response.headers.get("location")) {
-        const next = (await assertSafeFetchUrl(new URL(response.headers.get("location")!, current).toString(), options)).toString();
+        let next = (await assertSafeFetchUrl(new URL(response.headers.get("location")!, current).toString(), options)).toString();
+        if (options.redirectGuard) {
+          const allowed = options.redirectGuard(next, current);
+          if (!allowed) throw new Error(`Redirect refused: ${urlWithoutQuery(next)} is not an allowed target`);
+          next = (await assertSafeFetchUrl(allowed, options)).toString();
+        }
         if (new URL(next).origin !== new URL(current).origin) {
           headers.delete("authorization");
           headers.delete("cookie");
@@ -265,7 +275,7 @@ export async function fetchWithSsrfProtection(
     }
   }
 
-  throw new Error(`Too many redirects fetching ${rawUrl}`);
+  throw new Error(`Too many redirects fetching ${urlWithoutQuery(rawUrl)}`);
 }
 
 export async function fetchTextWithSsrfProtection(
@@ -278,4 +288,14 @@ export async function fetchTextWithSsrfProtection(
   // would be unexpected; preserve the previous "non-2xx throws" behavior for them.
   if (result.notModified) throw new Error("Fetch failed: 304");
   return result.text;
+}
+
+/** Origin + path only: error messages end up in feed.lastError, which users see. */
+function urlWithoutQuery(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return "URL";
+  }
 }

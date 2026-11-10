@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { JSDOM } from "jsdom";
 import { logger } from "@/lib/logger";
+import { isSameOriginRequest } from "@/lib/same-origin";
 
 export const runtime = "nodejs";
 
@@ -197,6 +198,8 @@ function mapCategory(name: string): string {
 
 // POST /api/discovery/catalog/import - Admin only: import from public OPML directories
 export async function POST(request: Request) {
+  // CSRF: the session cookie is ambient; refuse cross-site mutations (audit #2 wave 3).
+  if (!isSameOriginRequest(request)) return new Response("Forbidden", { status: 403 });
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

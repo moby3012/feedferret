@@ -143,7 +143,19 @@
     "passwordChangeFailed": "Could not change password. Please try again.",
     "passwordTooShort": "New password must be at least 8 characters",
     "noPasswordSet": "This account signs in via SSO/OAuth and has no password to change.",
-    "currentPasswordIncorrect": "Current password is incorrect"
+    "currentPasswordIncorrect": "Current password is incorrect",
+    "changeEmail": "Change email",
+    "newEmail": "New email address",
+    "emailStepUp": "Current password or 2FA code",
+    "emailStepUpHint": "Required to change your sign-in email. Accounts without a password or 2FA: sign in again, then change it within 10 minutes (leave this empty).",
+    "updateEmail": "Update email",
+    "emailChanged": "Email changed. Reconnect your Google Reader and Fever clients.",
+    "emailChangeFailed": "Could not change the email. Please try again.",
+    "emailChangeRateLimited": "Too many attempts. Wait 15 minutes and try again.",
+    "invalidEmail": "Enter a valid email address.",
+    "emailTaken": "This email address is already in use.",
+    "emailChangeNoMail": "This server has no email delivery configured: no confirmation will be sent to the new address and no notice to the old one. Double-check the new address.",
+    "emailChangeNoticeFailed": "Email changed, but the notification emails could not be sent."
   },
   "twoFactor": {
     "title": "Two-factor authentication",
@@ -1300,6 +1312,7 @@
         "css-without-selector": "Full-text settings without a content selector",
         "filter-untranslatable": "Filter has no equivalent",
         "proxy-blocked": "Proxy not allowed (internal address), not imported",
+        "connector-route-blocked": "This connector address (RSSHub/changedetection.io) is not allowed, not imported",
         "proxy-socks": "SOCKS proxy not supported, not imported",
         "filter-too-long": "Translated filter is too long",
         "filter-rule-remote-dropped": "Rules are not created from remote OPML",
@@ -1349,7 +1362,9 @@
       "password": "Password",
       "usernamePlaceholder": "username",
       "passwordPlaceholder": "••••••••",
-      "credentialsUsage": "Credentials used when fetching this feed's RSS/Atom URL."
+      "credentialsUsage": "Credentials used when fetching this feed's RSS/Atom URL.",
+      "passwordStoredPlaceholder": "Saved — leave blank to keep",
+      "passwordStoredHint": "A password is saved. It is never shown again; type a new one to replace it."
     },
     "behavior": {
       "hideFromAllArticles": "Hide from All Articles",
@@ -1481,7 +1496,8 @@
       "saved": "Feed settings saved",
       "failedToSave": "Failed to save feed settings",
       "previewFailed": "Preview failed",
-      "selectorApplied": "Selector applied"
+      "selectorApplied": "Selector applied",
+      "loadConfigFailed": "Couldn't load this feed's fetch settings. Credentials and source options stay unchanged."
     },
     "unsavedChanges": {
       "title": "Discard unsaved changes?",
@@ -1854,7 +1870,11 @@
     "signInButton": "Sign in",
     "signInIgnore": "If you didn't request this email, you can safely ignore it.",
     "testSubject": "FeedFerret mail provider test",
-    "testBody": "If you received this message, your FeedFerret email provider is configured correctly."
+    "testBody": "If you received this message, your FeedFerret email provider is configured correctly.",
+    "emailChangedOldSubject": "Your FeedFerret sign-in address was changed",
+    "emailChangedOldBody": "The sign-in email of your FeedFerret account was just changed to {newEmail}. If this wasn't you, contact your administrator right away — your account may be compromised.",
+    "emailChangedNewSubject": "Your new FeedFerret sign-in address",
+    "emailChangedNewBody": "This address is now the sign-in email of your FeedFerret account (previously {oldEmail}). Reconnect your Google Reader and Fever clients with the new address."
   },
   "commandPalette": {
     "title": "Command palette",

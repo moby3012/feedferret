@@ -14,6 +14,7 @@ import { assertSafeFetchUrl } from "@/lib/ssrf";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { type AiConfig, runAiPrompt } from "@/lib/ai-summary";
 import { matchRadarRules, type RadarMatch } from "@/lib/rsshub-radar-rules";
+import { rsshubRouteError } from "@/lib/rsshub-route";
 
 export type RsshubConfig = { baseUrl: string; apiKey: string | null };
 
@@ -32,6 +33,18 @@ const RSSHUB_DISABLED = truthy(process.env.FEEDFERRET_DISABLE_RSSHUB);
  * whatever is asking for it.
  */
 export async function getRsshubConfig(): Promise<RsshubConfig | null> {
+  try {
+    return await loadRsshubConfig();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Like `getRsshubConfig`, but a DB error throws instead of reading as "not
+ * configured" — for callers that cache the answer (lib/connector-secrets.ts).
+ */
+export async function loadRsshubConfig(): Promise<RsshubConfig | null> {
   if (RSSHUB_DISABLED) return null;
 
   const envUrl = process.env.FEEDFERRET_RSSHUB_URL?.trim();
@@ -39,19 +52,15 @@ export async function getRsshubConfig(): Promise<RsshubConfig | null> {
     return { baseUrl: envUrl, apiKey: process.env.FEEDFERRET_RSSHUB_KEY?.trim() || null };
   }
 
-  try {
-    const settings = await db.globalSettings.findUnique({
-      where: { id: "global" },
-      select: { rsshubEnabled: true, rsshubBaseUrl: true, rsshubApiKey: true },
-    });
-    if (!settings?.rsshubEnabled || !settings.rsshubBaseUrl?.trim()) return null;
-    return {
-      baseUrl: settings.rsshubBaseUrl.trim(),
-      apiKey: decryptIfValue(settings.rsshubApiKey) || null,
-    };
-  } catch {
-    return null;
-  }
+  const settings = await db.globalSettings.findUnique({
+    where: { id: "global" },
+    select: { rsshubEnabled: true, rsshubBaseUrl: true, rsshubApiKey: true },
+  });
+  if (!settings?.rsshubEnabled || !settings.rsshubBaseUrl?.trim()) return null;
+  return {
+    baseUrl: settings.rsshubBaseUrl.trim(),
+    apiKey: decryptIfValue(settings.rsshubApiKey) || null,
+  };
 }
 
 /** Cheap "is the RSSHub connector available?" check for UI gating. */
@@ -103,6 +112,8 @@ export function applyRsshubKeyWith(config: RsshubConfig | null, feedUrl: string)
   }
 }
 
+export { rsshubRouteError } from "@/lib/rsshub-route";
+
 export type RsshubValidation =
   | { ok: true; title: string | null; itemCount: number; sampleTitles: string[] }
   | { ok: false; reason: string };
@@ -111,7 +122,13 @@ export type RsshubValidation =
  * Fetches and validates a candidate RSSHub route: it must be reachable
  * (SSRF-safe) and parse as a real feed with at least one item. Never throws.
  */
-export async function validateRsshubRoute(config: RsshubConfig, routePath: string): Promise<RsshubValidation> {
+export async function validateRsshubRoute(
+  config: RsshubConfig,
+  routePath: string,
+  options: { includeErrorBody?: boolean } = {},
+): Promise<RsshubValidation> {
+  const routeError = rsshubRouteError(routePath);
+  if (routeError) return { ok: false, reason: routeError };
   let url: string;
   try {
     url = buildRsshubRouteUrl(config, routePath);
@@ -133,9 +150,10 @@ export async function validateRsshubRoute(config: RsshubConfig, routePath: strin
 
   try {
     // includeErrorBody surfaces RSSHub's own message ("Twitter API is not
-    // configured", "This channel does not exist", …) instead of a bare 503,
-    // so a failed route tells the user what's actually wrong.
-    const feed = await fetchFeedArticles({ url, allowInternal: true, includeErrorBody: true });
+    // configured", …) instead of a bare 503 — but only for the admin's own
+    // connection test. User-supplied routes are fetched with allowInternal, so
+    // echoing the upstream body would turn RSSHub into a read-SSRF oracle (N3).
+    const feed = await fetchFeedArticles({ url, allowInternal: true, includeErrorBody: options.includeErrorBody === true });
     if (!feed.articles.length) {
       return { ok: false, reason: "RSSHub returned a feed with no items for this route" };
     }

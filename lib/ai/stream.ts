@@ -22,6 +22,8 @@ export interface StreamOptions {
 
 type Usage = { in: number; out: number };
 
+const MAX_STREAM_LINE_CHARS = 1024 * 1024;
+
 async function* lines(body: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -39,6 +41,9 @@ async function* lines(body: ReadableStream<Uint8Array>, signal?: AbortSignal): A
         buffer = buffer.slice(nl + 1);
         nl = buffer.indexOf("\n");
       }
+      // A (possibly user-chosen, e.g. Ollama) endpoint streaming one endless
+      // line must not grow this buffer without bound (N10).
+      if (buffer.length > MAX_STREAM_LINE_CHARS) throw new Error("AI stream line too long");
     }
     buffer += decoder.decode();
     if (buffer) yield buffer;

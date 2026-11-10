@@ -16,9 +16,10 @@ import { validateFeedUrl } from "@/lib/validation";
 import { logger } from "@/lib/logger";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
-import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute, applyRsshubKey } from "@/lib/rsshub";
+import { isRsshubConfigured, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
+import { connectorFeedUrlError, getConnectorSecretRules, redactFeedForClient, redactFeedsForClient, redactFeedWith, stripConnectorSecrets, stripConnectorSecretsWith } from "@/lib/connector-secrets";
 import { discoverFeeds } from "@/lib/feed-discovery";
-import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
+import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactWebhookConfigs } from "@/lib/webhooks";
@@ -36,11 +37,13 @@ async function articlePayload(article: any) {
     article.contentFormat === "markdown" && article.content
       ? await renderMarkdownToHtml(article.content)
       : article.content;
+  // Connector secrets (N3): neither the link nor the feed URL may carry them.
+  const rules = await getConnectorSecretRules();
   return {
     id: article.id,
     feedId: article.feedId,
     title: article.title,
-    link: article.link,
+    link: typeof article.link === "string" ? stripConnectorSecretsWith(rules, article.link) : article.link,
     externalId: article.externalId,
     excerpt: article.excerpt,
     content,
@@ -56,12 +59,14 @@ async function articlePayload(article: any) {
     duplicateOf: article.duplicateOf,
     createdAt: article.createdAt,
     updatedAt: article.updatedAt,
-    feed: article.feed,
+    feed: article.feed ? redactFeedWith(rules, article.feed) : article.feed,
     labels: (article.labels || []).map((item: any) => item.label),
   };
 }
 
-function feedPayload(feed: any) {
+function feedPayload(rawFeed: any, rules: Awaited<ReturnType<typeof getConnectorSecretRules>>) {
+  // Connector secrets (RSSHub key, changedetection token) never leave the server (N3).
+  const feed = rawFeed ? redactFeedWith(rules, rawFeed) : rawFeed;
   return {
     id: feed.id,
     url: feed.url,
@@ -292,7 +297,8 @@ async function listFeeds(user: ApiUser) {
     include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } },
     orderBy: [{ order: "asc" }, { name: "asc" }],
   });
-  return NextResponse.json({ items: feeds.map(feedPayload) });
+  const rules = await getConnectorSecretRules();
+  return NextResponse.json({ items: feeds.map((feed) => feedPayload(feed, rules)) });
 }
 
 // Shared feed-creation core: create a feed row for `url` (already validated by
@@ -307,7 +313,10 @@ async function createFeedFromUrl(
   url: string,
   opts: { name?: string; categoryId?: string; icon?: string; sync?: boolean; fallbackName?: string },
 ) {
-  url = await applyRsshubKey(url);
+  // Only allowed connector routes (no /rsshub/transform/…, no all-watches feed) — N3.
+  const connectorError = await connectorFeedUrlError(url);
+  if (connectorError) return apiError(connectorError, 400);
+  url = await stripConnectorSecrets(url);
   const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
   const order = await db.feed.count({ where: { userId: user.id } });
   const feed = await db.feed.create({
@@ -325,7 +334,7 @@ async function createFeedFromUrl(
 
   if (opts.sync !== false) await syncFeed(user.id, feed.id).catch((error) => logger.error("[api/v1] initial feed sync failed", error));
   const fresh = await db.feed.findFirst({ where: { id: feed.id, userId: user.id }, include: { category: true } });
-  return NextResponse.json(feedPayload(fresh), { status: 201 });
+  return NextResponse.json(feedPayload(fresh, await getConnectorSecretRules()), { status: 201 });
 }
 
 async function createFeed(user: ApiUser, request: Request) {
@@ -354,7 +363,7 @@ async function createRsshubFeed(user: ApiUser, request: Request) {
   const validation = await validateRsshubRoute(config, routePath);
   if (!validation.ok) return apiError(`RSSHub route did not validate: ${validation.reason}`, 422);
 
-  return createFeedFromUrl(user, buildRsshubRouteUrl(config, routePath), {
+  return createFeedFromUrl(user, buildRsshubPublicRouteUrl(config, routePath), {
     name: allowedString(body?.name),
     categoryId: allowedString(body?.categoryId),
     icon: allowedString(body?.icon),
@@ -379,7 +388,7 @@ async function createChangedetectionFeed(user: ApiUser, request: Request) {
   // A changedetection watch feed has no items until at least two checks have
   // run, so we skip the initial sync (there is nothing to fetch yet) unless the
   // caller explicitly asks for it.
-  return createFeedFromUrl(user, buildWatchFeedUrl(config, watch.uuid), {
+  return createFeedFromUrl(user, buildWatchFeedPublicUrl(config, watch.uuid), {
     name: allowedString(body?.name) || url,
     categoryId: allowedString(body?.categoryId),
     icon: allowedString(body?.icon),
@@ -428,7 +437,7 @@ async function createPageFeed(user: ApiUser, request: Request) {
       categoryId: allowedString(body?.categoryId),
       sync: body?.sync,
     });
-    return NextResponse.json(feedPayload(feed), { status: 201 });
+    return NextResponse.json(feedPayload(feed, await getConnectorSecretRules()), { status: 201 });
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Could not create feed from that page", 422);
   }
@@ -437,7 +446,7 @@ async function createPageFeed(user: ApiUser, request: Request) {
 async function getFeed(user: ApiUser, feedId: string) {
   const feed = await db.feed.findFirst({ where: { id: feedId, userId: user.id }, include: { category: true } });
   if (!feed) return apiError("Feed not found", 404);
-  return NextResponse.json(feedPayload(feed));
+  return NextResponse.json(feedPayload(feed, await getConnectorSecretRules()));
 }
 
 async function patchFeed(user: ApiUser, feedId: string, request: Request) {
@@ -476,7 +485,7 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
   const result = await db.feed.updateMany({ where: { id: feedId, userId: user.id }, data });
   if (!result.count) return apiError("Feed not found", 404);
   const feed = await db.feed.findFirst({ where: { id: feedId, userId: user.id }, include: { category: true } });
-  return NextResponse.json(feedPayload(feed));
+  return NextResponse.json(feedPayload(feed, await getConnectorSecretRules()));
 }
 
 async function deleteFeed(user: ApiUser, feedId: string) {
@@ -641,7 +650,8 @@ async function exportOpml(user: ApiUser) {
     db.feed.findMany({ where: { userId: user.id }, include: { category: true }, orderBy: [{ category: { name: "asc" } }, { name: "asc" }] }),
     db.category.findMany({ where: { userId: user.id }, orderBy: [{ order: "asc" }, { name: "asc" }] }),
   ]);
-  return new NextResponse(generateApiOpml(feeds, categories), { headers: { "content-type": "application/xml; charset=utf-8" } });
+  // Connector secrets never leave the server (N3), also not via OPML.
+  return new NextResponse(generateApiOpml(await redactFeedsForClient(feeds), categories), { headers: { "content-type": "application/xml; charset=utf-8" } });
 }
 
 async function importOpml(user: ApiUser, request: Request) {

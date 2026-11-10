@@ -3,11 +3,14 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { SEED_FEEDS } from "@/lib/discovery-catalog-seeds";
 import { logger } from "@/lib/logger";
+import { isSameOriginRequest } from "@/lib/same-origin";
 
 export const runtime = "nodejs";
 
 // POST /api/discovery/catalog/seed - Admin only: seed the discovery catalog
 export async function POST(request: Request) {
+  // CSRF: the session cookie is ambient; refuse cross-site mutations (audit #2 wave 3).
+  if (!isSameOriginRequest(request)) return new Response("Forbidden", { status: 403 });
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

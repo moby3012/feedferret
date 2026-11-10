@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { generateApiToken } from "@/lib/token";
 import { hashApiToken, generateFeverKey } from "@/lib/token";
+import { isSameOriginRequest } from "@/lib/same-origin";
 
 // GET /api/user/token — returns { hasToken: boolean } for backward compat
 export async function GET() {
@@ -16,7 +17,9 @@ export async function GET() {
 }
 
 // POST /api/user/token — revoke all + generate new "Default write" token
-export async function POST() {
+export async function POST(request: Request) {
+  // CSRF: the session cookie is ambient; refuse cross-site mutations (audit #2 wave 3).
+  if (!isSameOriginRequest(request)) return new Response("Forbidden", { status: 403 });
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -35,7 +38,9 @@ export async function POST() {
 }
 
 // DELETE /api/user/token — revoke all tokens
-export async function DELETE() {
+export async function DELETE(request: Request) {
+  // CSRF: the session cookie is ambient; refuse cross-site mutations (audit #2 wave 3).
+  if (!isSameOriginRequest(request)) return new Response("Forbidden", { status: 403 });
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

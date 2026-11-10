@@ -1,3 +1,4 @@
+import { FEED_CLIENT_SELECT } from "@/lib/feed-secrets";
 import { db } from "@/lib/db";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { estimateReadMinutes } from "@/lib/article-kind";
@@ -93,7 +94,8 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
             readMinutes: estimateReadMinutes(plain),
         },
         include: {
-            feed: true,
+            // Explicit allowlist: this article is returned to clients (N4).
+            feed: { select: FEED_CLIENT_SELECT },
             labels: { include: { label: true } },
         },
     });

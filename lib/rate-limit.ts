@@ -99,6 +99,15 @@ export function peekRateLimit(identifier: string, config: RateLimitConfig): Rate
   return { success: count < config.limit, remaining: Math.max(0, config.limit - count), resetAt };
 }
 
+/**
+ * Gives back one unit taken by `checkRateLimit` (e.g. a reserved login attempt
+ * that turned out to be valid). No-op for an expired or missing window.
+ */
+export function releaseRateLimit(identifier: string, config: RateLimitConfig): void {
+  const entry = store.get(`${config.prefix}:${identifier}`);
+  if (entry && entry.resetAt >= Date.now() && entry.count > 0) entry.count -= 1;
+}
+
 // Presets for different API endpoints
 export const RATE_LIMITS = {
   // Feedsearch.dev: be respectful, 10 req/min per user

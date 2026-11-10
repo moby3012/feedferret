@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { redactArticlesForClient } from "@/lib/connector-secrets";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { sendPushToUser } from "@/lib/push";
 import { sendSystemEmail } from "@/lib/mail";
@@ -66,7 +67,7 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
 
   for (const alert of alerts) {
     const searchWhere = await buildAdvancedSearchWhere(userId, alert.query);
-    const matches = await db.article.findMany({
+    const matchedRows = await db.article.findMany({
       where: {
         userId,
         id: { in: articleIds },
@@ -78,7 +79,9 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
       take: 50,
     });
 
-    if (matches.length === 0) continue;
+    if (matchedRows.length === 0) continue;
+    // Links go to external channels (webhook, push, mail): never with connector secrets.
+    const matches = await redactArticlesForClient(matchedRows);
 
     const actions = parseActions(alert.actions);
     const now = new Date();

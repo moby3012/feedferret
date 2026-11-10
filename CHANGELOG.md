@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Security — connector secrets, SSRF and step-up (audit #2, wave 3)
+
+- **RSSHub key / changedetection.io token stay on the server.** They are no longer stored in feed URLs, shown in feed lists, previews, OPML exports (UI, GReader, API v1), MCP results, GReader `origin.htmlUrl`, feed errors, notifications or rule payloads. The feed fetcher adds the current secret right before the request — and only for an allowed feed route: an ordinary RSSHub platform route, or a single changedetection.io watch feed (`/rss/watch/<uuid>`). Every other path on a connector host (RSSHub `/rsshub/*` incl. `transform`, `/api/*`, changedetection's all-watches `/rss`) gets neither the secret nor internal-network access, and adding such a feed is refused (UI, API v1, MCP, GReader quick-add, OPML and FreshRSS import). Percent-encoded tricks (`/%72sshub/…`, `%2F`) are rejected.
+- **Upgrade note — stored URL migration is opt-in this release.** Existing feeds created with a keyed URL keep working unchanged (the secret is redacted on every output and refreshed at fetch time). To rewrite stored feed URLs and article links to the keyless form, set `FEEDFERRET_MIGRATE_CONNECTOR_URLS=1` (idempotent background job; article `updatedAt` is not touched). Leave it off while you might still roll back to an older build; it is planned to become the default in the next release.
+- **Operators:** rotate the RSSHub access key and the changedetection.io RSS token after deploying — earlier builds exposed them to every user.
+- Changing the account email now normalizes the address (trim, lower case), reports "E-Mail bereits vergeben" instead of a server error, and — when mail delivery is configured — notifies the old address and sends a confirmation to the new one; without mail delivery the settings dialog warns that no confirmation will be sent. Cross-site requests to the token, push and discovery-catalog endpoints are refused.
+
 ### Changed — server performance at scale (SQLite statistics, search, boot, sync tick)
 
 - **SQLite planner statistics.** Prisma never runs `ANALYZE`, so on a default install SQLite picked the wrong index for the per-feed unread list, the starred / read-later counts, cluster detail and the SSR bootstrap. The server now builds statistics in the background after boot (bounded `analysis_limit`, one index at a time with event-loop yields), refreshes them with `PRAGMA optimize` after each sync tick and does a full pass once a day. PostgreSQL is untouched (autovacuum).
