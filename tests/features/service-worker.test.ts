@@ -90,36 +90,64 @@ describe("service worker navigations", () => {
     expect(await (await result)!.text()).toBe("LATE PAGE");
   });
 
-  it("after 8 s the offline page is offered in 'slow' mode, the request keeps running and 'keep waiting' gets its answer", async () => {
-    let calls = 0;
-    let answer!: (r: Response) => void;
-    const sw = boot(() => {
-      calls += 1;
-      return new Promise<Response>((resolve) => (answer = resolve));
+  it("after 8 s the offline page is offered in 'slow' mode and that request is aborted; 'keep waiting' is a brand-new request", async () => {
+    const signals: Array<AbortSignal | undefined> = [];
+    const answers: Array<(r: Response) => void> = [];
+    const sw = boot((_req, init) => {
+      signals.push(init?.signal);
+      return new Promise<Response>((resolve) => answers.push(resolve));
     });
     const first = sw.navigate("/?v=later");
     await vi.advanceTimersByTimeAsync(8_000);
-    const slow = await first!;
-    expect(await slow.text()).toContain('<body data-mode="slow">');
-    expect(calls).toBe(1);
-    answer(html("REAL PAGE")); // the server finally answers
+    expect(await (await first!).text()).toContain('<body data-mode="slow">');
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.aborted).toBe(true);
+    answers[0](html("OLD ANSWER")); // arrives late: nobody is waiting for it
     await vi.advanceTimersByTimeAsync(10);
-    // "Keep waiting" = reload of the same URL: no second request, the original response.
+    // "Keep waiting" = reload of the same URL: a second, fresh request. The old answer is not reused.
     const second = sw.navigate("/?v=later");
-    expect(await (await second)!.text()).toBe("REAL PAGE");
-    expect(calls).toBe(1);
+    expect(signals).toHaveLength(2);
+    answers[1](html("FRESH ANSWER"));
+    expect(await (await second)!.text()).toBe("FRESH ANSWER");
   });
 
-  it("a hanging request is aborted at the hard cap", async () => {
+  it("a slow page of account A is never handed to account B (same URL, logout in between)", async () => {
+    // Fake server: answers per signed-in account. A's request hangs, so the worker shows the slow page and gives up on it.
+    let account = "A";
+    const pendingA: Array<(r: Response) => void> = [];
+    const sw = boot(() => {
+      if (account === "A") return new Promise<Response>((resolve) => pendingA.push(resolve));
+      return Promise.resolve(html("PAGE OF B"));
+    });
+    const aTab = sw.navigate("/article/1");
+    await vi.advanceTimersByTimeAsync(8_000);
+    const slow = await (await aTab!).text();
+    expect(slow).toContain('data-mode="slow"');
+    expect(slow).not.toContain("PAGE OF A");
+
+    account = "B"; // A signs out, B signs in on the same device
+    pendingA[0](html("PAGE OF A")); // A's server finally answers — too late
+    await vi.advanceTimersByTimeAsync(10);
+
+    const bTab = await sw.navigate("/article/1");
+    const body = await bTab!.text();
+    expect(body).toBe("PAGE OF B");
+    expect(body).not.toContain("PAGE OF A");
+    // And "keep waiting" from a still-open slow page of A (after B signed in) is a fresh request as B too.
+    const reload = await sw.navigate("/article/1");
+    expect(await reload!.text()).toBe("PAGE OF B");
+  });
+
+  it("a hanging request is aborted when the slow page is shown, and not before", async () => {
     let signal: AbortSignal | undefined;
     const sw = boot((_req, init) => {
       signal = init?.signal;
       return new Promise<Response>(() => {});
     });
     void sw.navigate("/");
-    await vi.advanceTimersByTimeAsync(8_000);
+    await vi.advanceTimersByTimeAsync(7_900);
     expect(signal?.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(200);
     expect(signal?.aborted).toBe(true);
   });
 

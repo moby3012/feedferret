@@ -7,7 +7,14 @@
  *    is shown; another account signed in (userId differs) → cleared; same account → `verifiedAt` is refreshed.
  *    Unreachable (timeout / 5xx / network) says nothing and falls through to the expiry rule.
  *  - Expiry: data whose `verifiedAt` is older than MAX_AGE_MS (the 30-day session lifetime), missing, or from the
- *    future (clock turned back) is not shown and is cleared — also when offline and nothing can be verified. */
+ *    future (clock turned back) is not shown and is cleared — also when offline and nothing can be verified.
+ *  - Clearing is bound to what was judged: the store is only wiped inside a transaction that re-reads the session
+ *    record and finds the same (userId, gen) — a verdict that arrives after another account claimed the DB never
+ *    touches the new owner's data (same gate as the app's own writes, features/offline/store.ts).
+ *  - A page is never trusted for longer than it was checked: the session is re-validated on `pageshow` (BFCache
+ *    restores included), when the tab becomes visible, on the app's cross-tab session signals, and — against the
+ *    DB, atomically with the read — before any body is opened. When the session is gone / replaced / expired the
+ *    rendered DOM (lists, title, the article iframe) is emptied at once, not only the DB. */
 (function () {
   "use strict";
 
@@ -132,43 +139,75 @@
     });
   }
 
-  /** Drops everything the app stored (what logout does): rows, bodies and the session record. */
-  function clearStore(db) {
-    if (!db) return Promise.resolve();
+    var SIGNAL_CHANNEL = "feedferret-offline-session"; // keep in sync with features/offline/session.ts
+  var SIGNAL_KEY = "feedferret:offline-session-signal";
+
+  function sameSession(a, b) {
+    return !!a && !!b && a.userId === b.userId && a.gen === b.gen;
+  }
+
+  /**
+   * Drops everything the app stored (what logout does) — but only if the DB still belongs to the session that was
+   * judged: the (userId, gen) comparison happens INSIDE the clearing transaction. For the expiry path the record
+   * must also still be expired (the app may have re-verified it meanwhile).
+   * Resolves "cleared" | "gone" (nothing stored any more) | "stale" (somebody else owns the DB now: untouched) | "error".
+   */
+  function clearStoreIf(db, session, why) {
+    if (!db || !session) return Promise.resolve("gone");
     return new Promise(function (resolve) {
+      var outcome = "error";
       try {
         var tx = db.transaction([INDEX_STORE, BODY_STORE, META_STORE], "readwrite");
-        tx.objectStore(INDEX_STORE).clear();
-        tx.objectStore(BODY_STORE).clear();
-        tx.objectStore(META_STORE).clear();
-        tx.oncomplete = tx.onerror = tx.onabort = function () {
-          resolve();
+        var get = tx.objectStore(META_STORE).get(SESSION_KEY);
+        get.onsuccess = function () {
+          var cur = get.result;
+          if (!cur) {
+            outcome = "gone";
+          } else if (!sameSession(cur, session) || (why === "expired" && judge(cur, Date.now()) !== "expired")) {
+            outcome = "stale";
+          } else {
+            tx.objectStore(INDEX_STORE).clear();
+            tx.objectStore(BODY_STORE).clear();
+            tx.objectStore(META_STORE).clear();
+            outcome = "cleared";
+          }
+        };
+        tx.oncomplete = function () {
+          resolve(outcome);
+        };
+        tx.onerror = tx.onabort = function () {
+          resolve("error");
         };
       } catch (e) {
-        resolve();
+        resolve("error");
       }
     });
   }
 
-  /** The server confirmed the session just now (refresh `verifiedAt` — unless the session was replaced meanwhile). */
+  /** The server confirmed the session just now. Resolves false when the session was replaced meanwhile. */
   function markVerified(db, session) {
     return new Promise(function (resolve) {
+      var matched = false;
       try {
         var tx = db.transaction([META_STORE], "readwrite");
         var meta = tx.objectStore(META_STORE);
         var get = meta.get(SESSION_KEY);
         get.onsuccess = function () {
           var cur = get.result;
-          if (cur && cur.gen === session.gen && cur.userId === session.userId) {
+          if (sameSession(cur, session)) {
+            matched = true;
             cur.verifiedAt = Date.now();
             meta.put(cur, SESSION_KEY);
           }
         };
-        tx.oncomplete = tx.onerror = tx.onabort = function () {
-          resolve();
+        tx.oncomplete = function () {
+          resolve(matched);
+        };
+        tx.onerror = tx.onabort = function () {
+          resolve(matched);
         };
       } catch (e) {
-        resolve();
+        resolve(matched);
       }
     });
   }
@@ -198,27 +237,44 @@
     });
   }
 
-  /** Reads the store under the policy above. Resolves to {db, rows, message}. */
-  function authorize() {
+  /**
+   * Reads the store under the policy above. Resolves to {db, session, rows, message}.
+   * `onLocal(state)` runs right after the local read, before any network wait, so a caller can react to a DB
+   * that already says "gone / replaced / expired" without waiting for the server.
+   */
+  function authorize(onLocal, attempt) {
+    attempt = attempt || 0;
     return load()
       .catch(function () {
         return { db: null, session: null, verdict: "none", rows: [] };
       })
       .then(function (state) {
-        if (state.verdict === "none") return { db: state.db, rows: [], message: null };
+        if (onLocal) onLocal(state);
+        var result = function (rows, message) {
+          return { db: state.db, session: message ? null : state.session, rows: rows, message: message };
+        };
+        // The DB changed owner between our read and our write: judge again from the top, once.
+        var retryOr = function (message) {
+          return attempt < 1 ? authorize(onLocal, attempt + 1) : result([], message);
+        };
+        if (state.verdict === "none") return result([], null);
         if (state.verdict === "expired") {
-          return clearStore(state.db).then(function () {
-            return { db: state.db, rows: [], message: "expired" };
+          return clearStoreIf(state.db, state.session, "expired").then(function (outcome) {
+            return outcome === "stale" ? retryOr("expired") : result([], "expired");
           });
         }
         return verifyOnline(state.session).then(function (verdict) {
           if (verdict === "unauthorized" || verdict === "mismatch") {
-            return clearStore(state.db).then(function () {
-              return { db: state.db, rows: [], message: "signedOut" };
+            return clearStoreIf(state.db, state.session, "revoked").then(function (outcome) {
+              return outcome === "stale" ? retryOr("signedOut") : result([], "signedOut");
             });
           }
-          if (verdict === "ok") markVerified(state.db, state.session);
-          return { db: state.db, rows: state.rows, message: null };
+          if (verdict === "ok") {
+            return markVerified(state.db, state.session).then(function (matched) {
+              return matched ? result(state.rows, null) : retryOr("signedOut");
+            });
+          }
+          return result(state.rows, null);
         });
       });
   }
@@ -278,8 +334,96 @@
     );
   }
 
-  function showArticle(state, row) {
-    return openBody(state, row).then(function (detail) {
+  // What the page currently shows. `scope` = the (userId, gen) the rendered lists were read for (null = nothing
+  // sensitive in the DOM); `shown` = false while the "server is slow" choice is pending (lists stay hidden).
+  var view = { scope: null, locked: null, db: null, byId: {}, shown: true, epoch: 0, ready: Promise.resolve() };
+
+  /** Empties everything rendered from the store — lists, article title/meta and the article iframe — right now. */
+  function wipeDom(clearHash) {
+    view.scope = null;
+    view.byId = {};
+    $("sections").textContent = "";
+    $("r-title").textContent = "";
+    $("r-meta").textContent = "";
+    var frame = $("body");
+    frame.onload = null;
+    frame.title = "";
+    frame.style.height = "";
+    frame.srcdoc = "";
+    frame.removeAttribute("srcdoc");
+    $("reader").hidden = true;
+    if (view.shown) $("lists").hidden = false;
+    if (clearHash && /^#a=/.test(location.hash)) {
+      try {
+        history.replaceState(null, "", location.pathname + location.search);
+      } catch (e) {
+        /* keep the hash */
+      }
+    }
+  }
+
+  /** Locked state: no stored content in the DOM, only the message (and the sign-in link when the session ended). */
+  function lock(message) {
+    wipeDom(true);
+    view.locked = message;
+    $("intro").textContent = message ? T[message] : T.none;
+    $("login").hidden = message !== "signedOut";
+  }
+
+  function route() {
+    var m = /^#a=(.+)$/.exec(location.hash);
+    var row = view.shown && view.scope && m && view.byId[decodeURIComponent(m[1])];
+    if (row) void showArticle(row);
+    else showLists();
+  }
+
+  function showLists() {
+    $("reader").hidden = true;
+    $("lists").hidden = !view.shown;
+  }
+
+  /** The body of `row`, read in ONE transaction together with the session record: only if it still is the rendered session. */
+  function openBody(row) {
+    return new Promise(function (resolve) {
+      var scope = view.scope;
+      var db = view.db;
+      if (!scope || !db) return resolve({ ok: false });
+      var out = { ok: false, detail: null };
+      try {
+        var tx = db.transaction([META_STORE, BODY_STORE], "readonly");
+        var get = tx.objectStore(META_STORE).get(SESSION_KEY);
+        get.onsuccess = function () {
+          var cur = get.result;
+          if (!sameSession(cur, scope) || judge(cur, Date.now()) !== "fresh") return;
+          out.ok = true;
+          var body = tx.objectStore(BODY_STORE).get(row.key);
+          body.onsuccess = function () {
+            out.detail = body.result || null;
+          };
+        };
+        tx.oncomplete = function () {
+          resolve(out);
+        };
+        tx.onerror = tx.onabort = function () {
+          resolve({ ok: out.ok, detail: null });
+        };
+      } catch (e) {
+        resolve({ ok: false });
+      }
+    });
+  }
+
+  function showArticle(row) {
+    var scope = view.scope;
+    return openBody(row).then(function (res) {
+      if (scope !== view.scope) return; // locked / re-rendered while the body was read
+      if (!res.ok) {
+        // The DB no longer says this session is valid: lock now, then find out why.
+        lock("signedOut");
+        void refresh();
+        return;
+      }
+      var detail = res.detail;
       $("lists").hidden = true;
       $("reader").hidden = false;
       $("r-title").textContent = row.item.displayTitle || row.item.title;
@@ -288,34 +432,26 @@
       frame.title = row.item.title;
       if (!detail) {
         frame.srcdoc = frameDoc('<p class="missing">' + T.bodyMissing + "</p>");
-        return;
+      } else {
+        frame.onload = function () {
+          if (view.scope !== scope) return;
+          var doc = frame.contentDocument;
+          if (!doc) return;
+          Array.prototype.forEach.call(doc.images, function (img) {
+            if (img.complete && img.naturalWidth === 0) placeholder(doc, img);
+            else img.addEventListener("error", function () { placeholder(doc, img); });
+          });
+          frame.style.height = doc.documentElement.scrollHeight + "px";
+        };
+        frame.srcdoc = frameDoc(detail.html || "");
+        window.scrollTo(0, 0);
       }
-      frame.onload = function () {
-        var doc = frame.contentDocument;
-        if (!doc) return;
-        Array.prototype.forEach.call(doc.images, function (img) {
-          if (img.complete && img.naturalWidth === 0) placeholder(doc, img);
-          else img.addEventListener("error", function () { placeholder(doc, img); });
-        });
-        frame.style.height = doc.documentElement.scrollHeight + "px";
-      };
-      frame.srcdoc = frameDoc(detail.html || "");
-      window.scrollTo(0, 0);
+      // Re-check against the server in the background (the local check above already passed).
+      void refresh();
     });
   }
 
-  function openBody(state, row) {
-    return request(state.db.transaction([BODY_STORE], "readonly").objectStore(BODY_STORE).get(row.key)).catch(function () {
-      return null;
-    });
-  }
-
-  function showLists() {
-    $("reader").hidden = true;
-    $("lists").hidden = false;
-  }
-
-  function render(state) {
+  function renderLists(state) {
     var later = state.rows
       .filter(function (r) { return r.readLater; })
       .sort(function (a, b) { return String(b.item.publishedAt).localeCompare(String(a.item.publishedAt)); });
@@ -323,42 +459,93 @@
       .filter(function (r) { return !r.readLater && r.openedAt != null; })
       .sort(function (a, b) { return b.openedAt - a.openedAt; })
       .slice(0, MAX_RECENT);
-    var host = $("sections");
-    if (state.message) {
-      $("intro").textContent = T[state.message];
-      if (state.message === "signedOut") $("login").hidden = false;
-      return;
-    }
+    wipeDom(!!view.scope); // a hash left over from another session's article must not be followed
+    view.locked = null;
+    $("login").hidden = true;
     if (!later.length && !recent.length) {
       $("intro").textContent = T.none;
       return;
     }
+    $("intro").textContent = T.intro;
+    view.scope = state.session ? { userId: state.session.userId, gen: state.session.gen } : null;
+    view.db = state.db;
+    var host = $("sections");
     var open = function (row) {
       location.hash = "a=" + encodeURIComponent(row.id);
     };
     if (later.length) host.appendChild(section(T.later, later, open));
     if (recent.length) host.appendChild(section(T.recent, recent, open));
-
-    var byId = {};
-    later.concat(recent).forEach(function (r) { byId[r.id] = r; });
-    function route() {
-      var m = /^#a=(.+)$/.exec(location.hash);
-      var row = m && byId[decodeURIComponent(m[1])];
-      if (row) void showArticle(state, row);
-      else showLists();
-    }
-    $("back").addEventListener("click", function () {
-      location.hash = "";
-    });
-    window.addEventListener("hashchange", route);
+    later.concat(recent).forEach(function (r) { view.byId[r.id] = r; });
     route();
   }
 
+  /** Shows the outcome of an authorization pass. Same session as already rendered → the DOM stays as it is. */
+  function apply(state) {
+    if (state.message) return lock(state.message);
+    if (view.scope && sameSession(view.scope, state.session)) return;
+    // The store was emptied under a page that showed (or had just locked) something: say so, do not claim "nothing stored".
+    if (!state.session && (view.scope || view.locked)) return lock(view.locked || "signedOut");
+    renderLists(state);
+  }
+
+  /**
+   * (Re-)validates the session and updates the page. Every trigger below runs it; the newest run wins.
+   * Locally detectable revocation / replacement / expiry empties the DOM before the network is asked.
+   */
+  function refresh() {
+    var epoch = ++view.epoch;
+    var run = authorize(function (state) {
+      if (epoch !== view.epoch || !view.scope) return;
+      if (state.verdict !== "fresh" || !sameSession(view.scope, state.session)) {
+        lock(state.verdict === "expired" ? "expired" : "signedOut");
+      }
+    }).then(function (state) {
+      if (epoch === view.epoch) apply(state);
+    });
+    view.ready = run;
+    return run;
+  }
+
+  $("back").addEventListener("click", function () {
+    location.hash = "";
+  });
+  window.addEventListener("hashchange", route);
+
+  // Re-validation triggers. A page restored from the BFCache (`pageshow` with persisted=true) or brought back to the
+  // front still shows whatever it showed when it was frozen; the session may have ended or changed owner since.
+  var firstPageshow = true;
+  window.addEventListener("pageshow", function (event) {
+    if (firstPageshow && !event.persisted) {
+      firstPageshow = false; // the load that is running right now already authorizes
+      return;
+    }
+    firstPageshow = false;
+    if (event.persisted) document.body.setAttribute("data-checking", "");
+    refresh().then(function () {
+      document.body.removeAttribute("data-checking");
+    });
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") void refresh();
+  });
+  // The app tells every tab when the account / session changes (features/offline/session.ts).
+  try {
+    var channel = new BroadcastChannel(SIGNAL_CHANNEL);
+    channel.onmessage = function () {
+      void refresh();
+    };
+  } catch (e) {
+    /* no BroadcastChannel: the storage event below covers it */
+  }
+  window.addEventListener("storage", function (event) {
+    if (event.key === SIGNAL_KEY && event.newValue) void refresh();
+  });
+
   // The service worker flags a page it showed because the server hangs (not because the connection failed):
-  // the visitor chooses between the offline view and waiting for the real response.
+  // the visitor chooses between the offline view and a fresh try ("Keep waiting" = reload = new navigation).
   var slow = document.body.getAttribute("data-mode") === "slow";
-  var authorized = authorize();
   if (slow) {
+    view.shown = false;
     $("lists").hidden = true;
     $("slow").hidden = false;
     $("wait").addEventListener("click", function () {
@@ -366,10 +553,12 @@
     });
     $("show-offline").addEventListener("click", function () {
       $("slow").hidden = true;
+      view.shown = true;
       $("lists").hidden = false;
-      authorized.then(render);
+      view.ready.then(function () {
+        if (view.shown) route();
+      });
     });
-  } else {
-    authorized.then(render);
   }
+  void refresh();
 })();

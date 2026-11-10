@@ -405,3 +405,92 @@ test("server unreachable while the browser says online: the fallback list is rep
   await page.unroute(outage);
   await refetched;
 });
+
+test("a slow page of account A is never handed to account B: 'keep waiting' is a brand-new navigation", async ({ app, page, context }) => {
+  test.setTimeout(150_000);
+  await openAndWaitForStore(app, page);
+  const sw = context.serviceWorkers().find((w) => w.url().endsWith("/sw.js")) ?? (await context.waitForEvent("serviceworker"));
+  // Inside the real worker, make one URL hang for account "A" (what a cold server does) and answer instantly for "B".
+  await sw.evaluate(() => {
+    const g = globalThis as unknown as {
+      fetch: typeof fetch;
+      __account: string;
+      __held: Array<() => void>;
+    };
+    const real = g.fetch.bind(globalThis);
+    g.__account = "A";
+    g.__held = [];
+    const answer = (who: string) =>
+      new Response(`<!doctype html><title>${who}</title><body>PAGE-OF-${who}</body>`, { status: 200, headers: { "content-type": "text/html" } });
+    g.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (url.pathname !== "/e2e-slow-probe") return real(input, init);
+      if (g.__account !== "A") return Promise.resolve(answer("B"));
+      return new Promise<Response>((resolve, reject) => {
+        g.__held.push(() => resolve(answer("A")));
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      });
+    }) as typeof fetch;
+  });
+
+  const probe = await context.newPage();
+  await probe.goto("/e2e-slow-probe"); // 8 s later the worker shows the offline page in "slow" mode
+  await expect(probe.locator("#slow")).toBeVisible({ timeout: 30_000 });
+
+  // A signs out, B signs in on the same device — and only then A's server answers.
+  const other = otherUserKey(app);
+  await context.clearCookies();
+  await context.addCookies(JSON.parse(readFileSync(path.resolve("e2e", ".auth", `${other}.json`), "utf8")).cookies);
+  await sw.evaluate(() => {
+    const g = globalThis as unknown as { __account: string; __held: Array<() => void> };
+    g.__account = "B";
+    for (const release of g.__held.splice(0)) release();
+  });
+
+  await probe.getByRole("button", { name: "Keep waiting" }).click();
+  await expect(probe.locator("body")).toContainText("PAGE-OF-B", { timeout: 30_000 });
+  await expect(probe.locator("body")).not.toContainText("PAGE-OF-A");
+  await probe.close();
+});
+
+test("offline page: signing out in another tab empties the rendered lists and the open article at once", async ({ app, page, context }) => {
+  await openAndWaitForStore(app, page);
+  await page.goto("/offline.html");
+  await expect(page.locator("#sections li").first()).toBeVisible();
+  await page.locator("#sections li button").first().click();
+  await expect(page.locator("#reader")).toBeVisible();
+  await expect(page.locator("#body")).toHaveAttribute("srcdoc", /<body>/);
+
+  const second = await context.newPage();
+  const secondApp = new App(second, app.isMobile, app.user, app.userKey);
+  await second.goto("/");
+  await secondApp.navReady();
+  await secondApp.openSidebar();
+  await secondApp.activate(second.getByRole("button", { name: "Sign out" }).first());
+  await secondApp.activate(second.getByRole("alertdialog", { name: "Sign out?" }).getByRole("button", { name: "Sign out" }));
+  await second.waitForURL(/\/login/, { timeout: 30_000 });
+
+  // The offline tab (still open, nobody reloaded it) lets go of everything it rendered.
+  await expect(page.locator("#intro")).toContainText("no longer valid", { timeout: 15_000 });
+  await expect(page.locator("#sections li")).toHaveCount(0);
+  await expect(page.locator("#reader")).toBeHidden();
+  await expect(page.locator("#r-title")).toHaveText("");
+  await expect(page.locator("#body")).not.toHaveAttribute("srcdoc", /.*/);
+  await second.close();
+});
+
+test("offline page restored from the back/forward cache (pageshow persisted) is re-validated before it is trusted", async ({ app, page, context }) => {
+  await openAndWaitForStore(app, page);
+  await page.goto("/offline.html");
+  await expect(page.locator("#sections li").first()).toBeVisible();
+  await context.clearCookies(); // the session ended while the page sat frozen
+  await page.evaluate(() => {
+    const event = new Event("pageshow");
+    Object.defineProperty(event, "persisted", { value: true });
+    window.dispatchEvent(event);
+  });
+  await expect(page.locator("#intro")).toContainText("no longer valid", { timeout: 15_000 });
+  await expect(page.locator("#sections li")).toHaveCount(0);
+  await expect(page.locator("body[data-checking]")).toHaveCount(0);
+  expect(await storedRows(page)).toEqual([]);
+});

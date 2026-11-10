@@ -11,11 +11,10 @@ const RUNTIME_CACHE = "feedferret-runtime-v3";
 const STATIC_MAX_ENTRIES = 150;
 const RUNTIME_MAX_ENTRIES = 60;
 // Network-first navigations. A connection that fails outright shows the offline page at once. One that merely
-// HANGS ("lie-fi", cold server) is not abandoned: after NAVIGATION_TIMEOUT_MS the offline page is shown in its
-// "slow" mode — "server answering slowly: offline view / keep waiting" — while the real request keeps running
-// (up to NAVIGATION_HARD_CAP_MS). "Keep waiting" reloads and gets that very response; nothing is cancelled for the user.
+// HANGS ("lie-fi", cold server) is given NAVIGATION_TIMEOUT_MS; then the offline page is shown in its "slow" mode —
+// "server answering slowly: offline view / keep waiting" — and that request is aborted. "Keep waiting" is a plain
+// reload = a fresh navigation (fresh cookies, fresh response). The worker never keeps a response for a later request.
 const NAVIGATION_TIMEOUT_MS = 8000;
-const NAVIGATION_HARD_CAP_MS = 60_000;
 // Sign-in and OAuth hops are never second-guessed by a timer (a slow identity provider is normal there): no slow
 // page, no abort — only a hard network failure falls back to the offline page.
 const PATIENT_PATHS = ["/login", "/register", "/setup"];
@@ -116,22 +115,13 @@ async function slowPage() {
   return new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 
-// Requests that outlived the timeout, by URL, for "keep waiting" (a reload of the same URL picks the result up).
-const pendingNavigations = new Map();
-
-function startNavigation(request) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), NAVIGATION_HARD_CAP_MS);
-  return fetch(request, { signal: controller.signal }).finally(() => clearTimeout(timer));
-}
-
-function takePending(url) {
-  const entry = pendingNavigations.get(url);
-  pendingNavigations.delete(url);
-  return entry && Date.now() - entry.at < NAVIGATION_HARD_CAP_MS ? entry.attempt : null;
-}
-
-/** Network-first. HTTP errors pass through; a failed request shows the offline page; a hanging one the "slow" offline page. */
+/**
+ * Network-first. HTTP errors pass through; a failed request shows the offline page; a hanging one the "slow"
+ * offline page and the request is ABORTED. Nothing of a navigation outlives its own response: "keep waiting"
+ * is a plain reload, i.e. a brand-new navigation with the cookies of whoever is signed in at that moment.
+ * (A page that was kept by URL and handed to the next navigation could carry one account's HTML into another
+ * account's tab or past a logout.)
+ */
 async function navigate(event) {
   const { request } = event;
   if (isPatientNavigation(new URL(request.url))) {
@@ -141,8 +131,9 @@ async function navigate(event) {
       return offlinePage();
     }
   }
-  const attempt = takePending(request.url) || startNavigation(request);
-  event.waitUntil(attempt.catch(() => {}));
+  const controller = new AbortController();
+  const attempt = fetch(request, { signal: controller.signal });
+  event.waitUntil(attempt.then(() => {}, () => {}));
   let timer;
   const outcome = await Promise.race([
     attempt.then((response) => ({ response }), () => ({ failed: true })),
@@ -153,9 +144,7 @@ async function navigate(event) {
   clearTimeout(timer);
   if (outcome.response) return outcome.response;
   if (outcome.failed) return offlinePage();
-  for (const [key, entry] of pendingNavigations) if (Date.now() - entry.at >= NAVIGATION_HARD_CAP_MS) pendingNavigations.delete(key);
-  attempt.catch(() => {});
-  pendingNavigations.set(request.url, { attempt, at: Date.now() });
+  controller.abort(); // the answer, if it ever comes, is dropped — never kept for a later request
   return slowPage();
 }
 

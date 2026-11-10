@@ -66,6 +66,8 @@
       #reader[hidden], #lists[hidden], #slow[hidden] { display: none; }
       #slow .btn { margin-right: 0.5rem; }
       #slow .btn.quiet { margin-top: 1.25rem; }
+      /* A page restored from the back/forward cache stays hidden until its session has been re-checked. */
+      body[data-checking] #lists, body[data-checking] #reader { visibility: hidden; }
       #login[hidden] { display: none; }
       #login { display: inline-flex; align-items: center; text-decoration: none; }
       #reader h2 { all: unset; display: block; margin: 1rem 0 0.25rem; font-size: 1.5rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.02em; }
