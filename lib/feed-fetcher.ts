@@ -10,6 +10,7 @@ import {
 } from "./feed-extraction";
 import { assertSafeProxyUrl, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed, type ConditionalFetchResult } from "./ssrf";
 import { logger } from "./logger";
+import { isTrustedGoogleNewsOverrideUrl } from "./google-news";
 import { stripStyleBlocks } from "./html-utils";
 import { parseDurationSecs } from "./article-kind";
 
@@ -62,6 +63,8 @@ export type FetchedFeedArticle = {
   durationSecs?: number | null;
   externalId?: string | null;
   categories?: string[];
+  /** RSS `<source>` element text (publisher name on aggregators like Google News). */
+  sourceName?: string | null;
 };
 
 export type FetchedFeed = {
@@ -78,7 +81,7 @@ export type FetchedFeed = {
 
 // `media:content` is collected under a private key so the existing
 // `item["media:content"]` image fallback below keeps its current behaviour.
-const parser = new Parser({ customFields: { item: [["media:content", "ffMediaContent", { keepArray: true }]] } });
+const parser = new Parser({ customFields: { item: [["media:content", "ffMediaContent", { keepArray: true }], ["source", "ffSource"]] } });
 
 type MediaContentNode = { $?: { url?: string; type?: string; medium?: string; duration?: string } };
 
@@ -321,7 +324,12 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
     // Applies to untrusted rows too (legacy keyed URL on a no-longer-allowed route).
     connector = { url: stripConnectorSecretsWith(secretRules, connector.url), trusted: false };
   }
-  const allowInternal = trustedInstance || connector.trusted;
+  // TEST-ONLY Google News origin override (FEEDFERRET_GOOGLE_NEWS_BASE_URL, the
+  // e2e fixture server; never set in production): only its `/rss/…` paths are
+  // trusted past the private-address block, redirects stay on them. The
+  // public news.google.com never needs it.
+  const googleNewsOverride = !trustedInstance && !connector.trusted && isTrustedGoogleNewsOverrideUrl(connector.url);
+  const allowInternal = trustedInstance || connector.trusted || googleNewsOverride;
   // Trusted connector request: the internal allowance (and the secret) only
   // follow redirects to another allowed route on the same connector origin.
   const connectorOrigin = connector.trusted ? new URL(connector.url).origin : null;
@@ -332,7 +340,9 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
           const hop = resolveConnectorRequestWith(secretRules, next);
           return hop.trusted ? hop.url : null;
         }
-      : undefined;
+      : googleNewsOverride
+        ? (next: string) => (isTrustedGoogleNewsOverrideUrl(next) ? next : null)
+        : undefined;
 
   if (http.CURLOPT_PROXY) {
     // The proxy host is a connection target of its own: apply the same SSRF rules as to the
@@ -405,6 +415,7 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
         enclosures: item.enclosure?.url ? [{ href: item.enclosure.url, type: item.enclosure.type || "", ...(Number(item.enclosure.length) > 0 ? { length: Number(item.enclosure.length) } : {}) }] : [],
         ...mediaFromItem(item),
         categories: categoriesFrom(item.categories),
+        sourceName: htmlText(item.ffSource) || null,
       };
     }),
   } satisfies FetchedFeed;

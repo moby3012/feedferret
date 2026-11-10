@@ -2102,5 +2102,38 @@
     "gesturesHelp": "Gestures & help",
     "more": "More",
     "moreWithNotifications": "More, {count} new notifications"
+  },
+  "googleNews": {
+    "tabLabel": "Google News",
+    "intro": "Follow any keyword or search as a feed. New Google News results arrive like articles from any other feed.",
+    "queryLabel": "Keywords",
+    "queryPlaceholder": "e.g. electric cars -Tesla",
+    "operatorsHint": "Tip: \"exact phrase\", A OR B, -exclude, site:example.com, intitle:word",
+    "editionLabel": "Language & region",
+    "windowLabel": "Time window",
+    "windows": {
+      "any": "Any time",
+      "1h": "Past hour",
+      "1d": "Past 24 hours",
+      "7d": "Past 7 days"
+    },
+    "previewLoading": "Searching Google News…",
+    "itemsFound": "{count, plural, one {# result} other {# results}}",
+    "noResultsHint": "No results right now. You can still subscribe — new matches will show up later.",
+    "subscribe": "Subscribe",
+    "customize": "Customize",
+    "editTitle": "Google News search",
+    "editDescription": "Change the keywords, language or time window of this feed. Articles already loaded stay.",
+    "saveSearch": "Apply search",
+    "editApplyHint": "Applies right away and refreshes the feed — separate from “Save settings” below.",
+    "saved": "Search updated.",
+    "errors": {
+      "invalidQuery": "Enter at least one keyword.",
+      "rateLimited": "Too many searches in a short time. Wait a moment and try again.",
+      "duplicate": "You already follow this search.",
+      "fetchFailed": "Google News could not be reached right now. Try again in a few minutes.",
+      "notFound": "This feed is not a Google News search.",
+      "invalidCategory": "That category no longer exists."
+    }
   }
 }

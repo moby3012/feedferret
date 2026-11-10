@@ -2102,5 +2102,38 @@
     "gesturesHelp": "Gesten & Hilfe",
     "more": "Mehr",
     "moreWithNotifications": "Mehr, {count} neue Benachrichtigungen"
+  },
+  "googleNews": {
+    "tabLabel": "Google News",
+    "intro": "Folge einem Stichwort oder einer Suche als Feed. Neue Google-News-Treffer kommen wie Artikel aus jedem anderen Feed an.",
+    "queryLabel": "Stichwörter",
+    "queryPlaceholder": "z. B. Elektroauto -Tesla",
+    "operatorsHint": "Tipp: \"exakte Phrase\", A OR B, -ausschließen, site:beispiel.de, intitle:Wort",
+    "editionLabel": "Sprache & Region",
+    "windowLabel": "Zeitraum",
+    "windows": {
+      "any": "Beliebig",
+      "1h": "Letzte Stunde",
+      "1d": "Letzte 24 Stunden",
+      "7d": "Letzte 7 Tage"
+    },
+    "previewLoading": "Google News wird durchsucht …",
+    "itemsFound": "{count, plural, one {# Treffer} other {# Treffer}}",
+    "noResultsHint": "Gerade keine Treffer. Du kannst trotzdem abonnieren — neue Treffer erscheinen später.",
+    "subscribe": "Abonnieren",
+    "customize": "Anpassen",
+    "editTitle": "Google-News-Suche",
+    "editDescription": "Ändere Stichwörter, Sprache oder Zeitraum dieses Feeds. Bereits geladene Artikel bleiben erhalten.",
+    "saveSearch": "Suche übernehmen",
+    "editApplyHint": "Wird sofort übernommen und der Feed neu geladen — unabhängig von „Einstellungen speichern“ unten.",
+    "saved": "Suche aktualisiert.",
+    "errors": {
+      "invalidQuery": "Gib mindestens ein Stichwort ein.",
+      "rateLimited": "Zu viele Suchen in kurzer Zeit. Warte kurz und versuche es erneut.",
+      "duplicate": "Dieser Suche folgst du bereits.",
+      "fetchFailed": "Google News ist gerade nicht erreichbar. Versuche es in ein paar Minuten erneut.",
+      "notFound": "Dieser Feed ist keine Google-News-Suche.",
+      "invalidCategory": "Diese Kategorie gibt es nicht mehr."
+    }
   }
 }

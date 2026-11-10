@@ -39,6 +39,12 @@ import { CheckCircle2, Eye, Loader2, Sparkles } from "lucide-react";
 import { useUpdateFeed, usePreviewFeedExtraction, useProposeAiFullTextSelector, useAiSettings } from "@/hooks/use-rss-data";
 import { resolveFullTextMode, type FullTextMode } from "@/lib/full-text-mode";
 import { getFeedEditConfig } from "@/app/actions/feeds";
+import { GoogleNewsQueryEditor } from "@/components/google-news-panel";
+
+/** Cheap client-side gate; the server re-checks (origin may be admin-overridden). */
+function looksLikeGoogleNewsSearch(url: string) {
+  return url.includes("/rss/search?") && url.includes("ceid=");
+}
 
 interface FeedEditDialogProps {
   feed: {
@@ -407,10 +413,11 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="flex h-[min(92dvh,760px)] w-[calc(100vw-1rem)] max-w-2xl flex-col rounded-sheet border border-border/70 bg-background p-0 shadow-overlay">
         <DialogHeader className="border-b border-border/60 bg-card/95 px-5 py-5 backdrop-blur-bar sm:px-8 sm:py-6">
-          <DialogTitle className="text-xl font-semibold tracking-title sm:text-2xl">
+          {/* pe-10: long names never run under the close button. */}
+          <DialogTitle className="pe-10 text-xl font-semibold tracking-title break-words sm:text-2xl">
             {feed.name}
           </DialogTitle>
-          <DialogDescription className="mt-1 text-sm text-muted-foreground truncate">
+          <DialogDescription className="mt-1 pe-10 text-sm text-muted-foreground truncate">
             {feed.url}
           </DialogDescription>
         </DialogHeader>
@@ -597,6 +604,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             </TabsContent>
 
             <TabsContent value="fetch" className="mt-0 space-y-5">
+              {/* G1: a Google News keyword feed's search stays editable. */}
+              {looksLikeGoogleNewsSearch(feed.url) && <GoogleNewsQueryEditor feedId={feed.id} />}
               <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold">{t("fetch.transparency.title")}</p>
