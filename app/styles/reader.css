@@ -1,0 +1,229 @@
+/*
+ * Reader chrome v2 (spec §4.7, .pm/research-reeder.md §4.3) — owner: PR 8.
+ *
+ *   .ff-reader[data-chrome="shown|hidden"]       hide-on-scroll top bar
+ *             [data-reader-font|width|theme]     "Aa" sheet (features/reader/typography)
+ *             style: --reader-size-user | --reader-size-delta | --reader-leading-user
+ *             style: --reader-progress (0–1, rAF writer)
+ *
+ * The chrome (bar, buttons, pill, pull indicator) lives in reader-chrome.css
+ * and the "Aa" sheet in reader-aa.css: both load with their lazy chunks.
+ *
+ * Reader themes are scopes: "dark" is a nested `.dark`, "light" / "sepia"
+ * re-declare the light roles (tokens.css lists [data-reader-theme] next to
+ * :root), sepia overrides the surfaces + text below. Nothing here animates
+ * longer than --dur-slow; under reduced motion nothing translates.
+ */
+
+:root {
+  --reader-font: var(--font-sans);
+  --reader-font-serif: Charter, "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, serif;
+  --reader-font-rounded: ui-rounded, "SF Pro Rounded", Nunito, "Varela Round", "Arial Rounded MT", system-ui, sans-serif;
+}
+[data-reader-font="sans"] { --reader-font: var(--font-sans); }
+[data-reader-font="serif"] { --reader-font: var(--reader-font-serif); }
+[data-reader-font="rounded"] { --reader-font: var(--reader-font-rounded); }
+
+[data-reader-theme="sepia"] {
+  --surface-base: oklch(0.945 0.03 85); /* #f4ecd8 */
+  --surface-raised: oklch(0.965 0.025 85);
+  --surface-sunken: oklch(0.91 0.035 85);
+  --surface-bar-solid: oklch(0.935 0.032 85);
+  --surface-overlay-solid: oklch(0.965 0.025 85);
+  --text-primary: oklch(0.31 0.035 65); /* #3b2f22 */
+  --text-secondary: oklch(0.45 0.04 65); /* 6.0:1 on the sepia base */
+  --divider: oklch(0.31 0.035 65 / 0.16);
+  --border: oklch(0.85 0.035 80);
+  --muted: oklch(0.9 0.035 85);
+  --link: oklch(0.45 0.11 55);
+}
+[data-reader-theme="light"],
+[data-reader-theme="sepia"] {
+  color-scheme: light;
+}
+.ff-reader.dark {
+  color-scheme: dark;
+}
+[data-reader-theme="sepia"] .article-content {
+  --tw-prose-body: var(--text-primary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-lead: var(--text-secondary);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-counters: var(--text-secondary);
+  --tw-prose-bullets: var(--text-secondary);
+  --tw-prose-hr: var(--divider);
+  --tw-prose-quotes: var(--text-primary);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--text-secondary);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--divider);
+}
+
+/* ------------------------------------------------------------------ root */
+.ff-reader {
+  --reader-measure-eff: var(--reader-measure);
+  --reader-bar-total: calc(var(--bar-h) + var(--safe-t));
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  /* Unbreakable content must never widen the pane (iOS Safari min-size bug). */
+  contain: layout;
+}
+.ff-reader[data-reader-width="narrow"] { --reader-measure-eff: 62ch; }
+.ff-reader[data-reader-width="medium"] { --reader-measure-eff: 68ch; }
+.ff-reader[data-reader-width="wide"] { --reader-measure-eff: 76ch; }
+.ff-reader[data-reader-width="full"] { --reader-measure-eff: 100%; }
+
+.ff-reader-scroller {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+/* ------------------------------------------------------------------ article column */
+.ff-reader-article {
+  width: min(100% - 2 * var(--reader-gutter), var(--reader-measure-eff));
+  margin-inline: auto;
+  padding-top: calc(var(--reader-bar-total) + 24px);
+  /* Room for the pill + the pull indicator under the last line. */
+  padding-bottom: calc(var(--tabbar-h) + var(--tabbar-inset) + var(--safe-b) + 32px);
+  font-size: var(--reader-size-user, calc(var(--reader-size) + var(--reader-size-delta, 0px)));
+}
+@media (width >= 48rem) {
+  .ff-reader-article {
+    padding-top: calc(var(--reader-bar-total) + 40px);
+    padding-bottom: calc(var(--safe-b) + 64px);
+  }
+}
+.ff-reader-header {
+  margin-bottom: 32px;
+}
+.ff-reader-feedline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border-radius: var(--radius-chip);
+  font-size: var(--text-footnote);
+  line-height: var(--text-footnote--line-height);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.ff-reader-feedline:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .ff-reader-feedline:hover {
+    color: var(--text-primary);
+  }
+}
+.ff-reader-title {
+  margin-top: 10px;
+  font-family: var(--reader-font);
+  font-size: var(--text-display);
+  line-height: var(--text-display--line-height);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  /* `pretty`, not `balance`: Safari's balanced headings stop honouring
+     overflow-wrap on long unbroken words. */
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.ff-reader-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 12px;
+  font-size: var(--text-footnote);
+  line-height: var(--text-footnote--line-height);
+  color: var(--text-secondary);
+}
+.ff-reader-hero {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  max-height: 56vh;
+  margin: 24px calc(-1 * var(--reader-gutter)) 0;
+  overflow: hidden;
+  background: var(--surface-sunken);
+}
+@media (width >= 48rem) {
+  .ff-reader-hero {
+    margin-inline: 0;
+    border-radius: var(--radius-row);
+  }
+}
+.ff-reader .article-content {
+  font-family: var(--reader-font);
+  font-size: 1em;
+  line-height: var(--reader-leading-user, var(--reader-leading));
+}
+.ff-reader .article-content p,
+.ff-reader .article-content li {
+  line-height: inherit;
+}
+.ff-reader-card {
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-row);
+  background: var(--surface-raised);
+}
+
+.ff-reader-card-accent {
+  border-inline-start: 2px solid var(--brand);
+}
+
+/* Body placeholder: only shows when the detail is not there after 150 ms. */
+.ff-reader-skeleton {
+  display: grid;
+  gap: 12px;
+  animation: ff-reader-reveal 0s linear 150ms both;
+}
+.ff-reader-skeleton > div {
+  height: 1em;
+  border-radius: var(--radius-chip);
+  background: var(--muted);
+}
+.ff-reader-skeleton > div:nth-of-type(2) { width: 92%; }
+.ff-reader-skeleton > div:nth-of-type(3) { width: 66%; }
+@keyframes ff-reader-reveal {
+  from { visibility: hidden; }
+  to { visibility: visible; }
+}
+
+/* ------------------------------------------------------------------ entrance (exactly one) */
+@keyframes ff-reader-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ff-reader-from-below {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ff-reader-from-above {
+  from { opacity: 0; transform: translateY(-24px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* Open: compact gets the pane move (shell.css), wide a content fade. */
+  @media (width >= 48rem) {
+    .ff-reader-article[data-enter="open"] { animation: ff-reader-fade var(--dur-fast) var(--ease-out); }
+  }
+  .ff-reader-article[data-enter="fade"] { animation: ff-reader-fade var(--dur-fast) var(--ease-out); }
+  .ff-reader-article[data-enter="next"] { animation: ff-reader-from-below var(--dur-base) var(--ease-out); }
+  .ff-reader-article[data-enter="prev"] { animation: ff-reader-from-above var(--dur-base) var(--ease-out); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-reader-article:is([data-enter="fade"], [data-enter="next"], [data-enter="prev"]) {
+    animation: ff-reader-fade 120ms linear;
+  }
+}

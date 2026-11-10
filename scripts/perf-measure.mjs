@@ -225,21 +225,43 @@ async function singleRun(browser, storageState) {
   const now = () => page.evaluate(() => performance.now());
   const rows = page.locator('[role="button"][aria-label^="Unread:"]');
 
+  // Tap → reader painted, measured inside the page: from the tap's own event
+  // timestamp (first pointerdown/touchstart) to the first animation frame in
+  // which the reader headline / body exists. A rAF watcher is armed before the
+  // tap, so neither Playwright's actionability round trips nor the polling
+  // start-up end up in the number (they did before 2026-11-10: ~400 ms).
+  await page.evaluate(() => {
+    const w = window;
+    w.__ffTap = { down: null, title: null, body: null };
+    const onDown = (e) => {
+      if (w.__ffTap.down === null) w.__ffTap.down = e.timeStamp;
+    };
+    window.addEventListener("pointerdown", onDown, { capture: true, once: true });
+    window.addEventListener("touchstart", onDown, { capture: true, once: true, passive: true });
+    const until = performance.now() + 15000;
+    // performance.now(), not the rAF timestamp: that is the frame's start,
+    // which can precede the commit that put the headline in.
+    const tick = () => {
+      const s = w.__ffTap;
+      if (s.down !== null) {
+        const at = performance.now();
+        if (s.title === null && document.querySelector('[data-pane="reader"] article h1')) s.title = at;
+        if (s.body === null && document.querySelector('[data-pane="reader"] article .article-content')) s.body = at;
+      }
+      if ((s.title === null || s.body === null) && performance.now() < until) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
   let t = await now();
   await page.locator('[role="button"][aria-label^="Unread:"]').first().tap();
   const openMs = await interactionMs(page, t);
-  // time until the reader's title is painted
-  const readerMs = await page.evaluate(async (t0) => {
-    const until = performance.now() + 5000;
-    while (!document.querySelector("article h1") && performance.now() < until) await new Promise((r) => requestAnimationFrame(r));
-    return performance.now() - t0;
-  }, t);
-  // ... and until the article body is painted (on-demand detail fetch since PR 1).
-  const readerBodyMs = await page.evaluate(async (t0) => {
-    const until = performance.now() + 10000;
-    while (!document.querySelector("article .article-content") && performance.now() < until) await new Promise((r) => requestAnimationFrame(r));
-    return performance.now() - t0;
-  }, t);
+  const tapTimes = await page.evaluate(async () => {
+    const until = performance.now() + 15000;
+    while ((window.__ffTap.title === null || window.__ffTap.body === null) && performance.now() < until) await new Promise((r) => setTimeout(r, 50));
+    return window.__ffTap;
+  });
+  const readerMs = tapTimes.title !== null && tapTimes.down !== null ? Math.max(0, tapTimes.title - tapTimes.down) : null;
+  const readerBodyMs = tapTimes.body !== null && tapTimes.down !== null ? Math.max(0, tapTimes.body - tapTimes.down) : null;
   await page.getByRole("button", { name: /^(Back to list|Back)$/ }).first().tap();
   await page.waitForTimeout(600);
 

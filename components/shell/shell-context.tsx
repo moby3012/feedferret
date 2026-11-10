@@ -11,6 +11,7 @@ import { useOnline } from "@/features/bootstrap/queries";
 import { getLayoutClass } from "@/features/reader/layout/layout-class";
 import { TAB_ROOTS } from "@/features/reader/nav/location";
 import { getNavState, nav } from "@/features/reader/nav/store";
+import { markArticleOpen } from "@/features/reader/perf-marks";
 import { markInAppNavigation } from "@/lib/in-app-back";
 import {
   useCategories,
@@ -163,6 +164,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
         const feed = fs.find((f: any) => f.id === article.feedId);
         const openOriginal = feed?.openOriginalOverride ?? p?.openOriginalByDefault;
         if (openOriginal && article.link) window.open(article.link, "_blank", "noopener,noreferrer");
+        markArticleOpen(article.id);
         void nav.openArticle(article.id);
       },
       toggleRead(id, opts) {

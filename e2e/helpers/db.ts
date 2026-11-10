@@ -124,7 +124,7 @@ export function markEverythingUnread(userKey: string) {
   }
 }
 
-export function setUserSettings(userKey: string, values: { markReadOnAdvance?: boolean; defaultViewMode?: string }) {
+export function setUserSettings(userKey: string, values: { markReadOnAdvance?: boolean; defaultViewMode?: string; readerWidth?: string }) {
   const { userId } = manifest().users[userKey];
   const db = open();
   try {
@@ -132,6 +132,7 @@ export function setUserSettings(userKey: string, values: { markReadOnAdvance?: b
       db.prepare(`UPDATE "User" SET markReadOnAdvance = ? WHERE id = ?`).run(values.markReadOnAdvance ? 1 : 0, userId);
     if (values.defaultViewMode !== undefined)
       db.prepare(`UPDATE "User" SET defaultViewMode = ? WHERE id = ?`).run(values.defaultViewMode, userId);
+    if (values.readerWidth !== undefined) db.prepare(`UPDATE "User" SET readerWidth = ? WHERE id = ?`).run(values.readerWidth, userId);
   } finally {
     db.close();
   }

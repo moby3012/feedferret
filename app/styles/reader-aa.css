@@ -1,0 +1,85 @@
+/* "Aa" typography sheet — loaded with its lazy chunk (components/reader/reader-typography-sheet.tsx). */
+
+/* ------------------------------------------------------------------ "Aa" sheet */
+.ff-aa-sheet {
+  display: grid;
+  gap: 14px;
+  width: min(320px, 100vw - 24px);
+  padding: 14px;
+  border-radius: var(--radius-panel);
+}
+.ff-aa-preview {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-control);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--reader-font);
+}
+.ff-aa-row {
+  display: grid;
+  gap: 6px;
+}
+.ff-aa-row-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ff-aa-label {
+  font-size: var(--text-footnote);
+  line-height: var(--text-footnote--line-height);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.ff-aa-segmented {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+}
+.ff-aa-seg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding-inline: 6px;
+  border-radius: 8px;
+  font-size: var(--text-body-sm);
+  color: var(--text-secondary);
+  transition: background-color var(--dur-fast) linear, color var(--dur-fast) linear;
+}
+.ff-aa-seg[data-reader-font] {
+  font-family: var(--reader-font);
+}
+.ff-aa-seg.is-on {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.1);
+}
+.ff-aa-seg:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.ff-aa-seg[data-swatch]::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+}
+.ff-aa-seg[data-swatch="auto"]::before { background: linear-gradient(135deg, oklch(0.995 0 0) 50%, oklch(0.18 0.012 255) 50%); }
+.ff-aa-seg[data-swatch="light"]::before { background: oklch(0.995 0 0); }
+.ff-aa-seg[data-swatch="dark"]::before { background: oklch(0.18 0.012 255); }
+.ff-aa-seg[data-swatch="sepia"]::before { background: oklch(0.945 0.03 85); }
+.ff-aa-reset {
+  justify-self: end;
+  min-height: 32px;
+  font-size: var(--text-footnote);
+  font-weight: 500;
+  color: var(--link);
+}

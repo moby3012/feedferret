@@ -216,3 +216,108 @@ describe("pull-to-refresh sequences", () => {
     expect(onTrigger).not.toHaveBeenCalled();
   });
 });
+
+describe("pull past the end (reader → next article)", () => {
+  let scroller: HTMLElement;
+  let code: HTMLElement;
+  let para: HTMLElement;
+  let onTrigger: ReturnType<typeof vi.fn<(...args: unknown[]) => void>>;
+  let renders: Array<[number, string]>;
+  let dispose: () => void;
+  let scrollTop = 1000;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "performance", "Date"] });
+    resetGestureTracking();
+    document.body.innerHTML = "";
+    scroller = document.createElement("div");
+    scrollTop = 1000; // at the end: scrollHeight 1600 − clientHeight 600
+    Object.defineProperties(scroller, {
+      scrollTop: { get: () => scrollTop, configurable: true },
+      scrollHeight: { value: 1600, configurable: true },
+      clientHeight: { value: 600, configurable: true },
+    });
+    para = document.createElement("p");
+    code = document.createElement("pre");
+    scroller.append(para, code);
+    document.body.append(scroller);
+    onTrigger = vi.fn();
+    renders = [];
+    dispose = createPull(scroller, { edge: "bottom", enabled: () => true, onTrigger, render: (px, state) => renders.push([px, state]) });
+  });
+
+  afterEach(() => {
+    dispose();
+    vi.useRealTimers();
+  });
+
+  /** Finger moves from y=500 upwards by `dy` (optionally sideways first). */
+  const pullUp = (target: EventTarget, dy: number, dx = 0) => {
+    touch(target, "touchstart", [{ x: 100, y: 500 }]);
+    if (dx) touch(target, "touchmove", [{ x: 100 + dx, y: 500 }]);
+    for (let d = 20; d <= dy; d += 20) touch(target, "touchmove", [{ x: 100 + dx, y: 500 - d }]);
+    vi.advanceTimersByTime(20);
+  };
+  const lastState = () => renders.at(-1)?.[1] ?? "idle";
+
+  it("an upward pull at the end arms, prevents native overscroll and fires once on release", () => {
+    touch(para, "touchstart", [{ x: 100, y: 500 }]);
+    touch(para, "touchmove", [{ x: 100, y: 480 }]);
+    const move = touch(para, "touchmove", [{ x: 100, y: 200 }]);
+    expect(move.defaultPrevented).toBe(true);
+    vi.advanceTimersByTime(20);
+    expect(lastState()).toBe("armed");
+    touch(para, "touchend", []);
+    expect(onTrigger).toHaveBeenCalledTimes(1);
+  });
+
+  it("a short pull springs back without firing; a downward drag is native scrolling", () => {
+    pullUp(para, 60);
+    expect(lastState()).toBe("pulling");
+    touch(para, "touchend", []);
+    vi.advanceTimersByTime(2000);
+    expect(lastState()).toBe("idle");
+    touch(para, "touchstart", [{ x: 100, y: 500 }]);
+    const down = touch(para, "touchmove", [{ x: 100, y: 600 }]);
+    expect(down.defaultPrevented).toBe(false);
+    touch(para, "touchend", []);
+    expect(onTrigger).not.toHaveBeenCalled();
+  });
+
+  it("never starts away from the end", () => {
+    scrollTop = 400;
+    pullUp(para, 300);
+    touch(para, "touchend", []);
+    expect(renders).toEqual([]);
+    expect(onTrigger).not.toHaveBeenCalled();
+  });
+
+  it("ignores touches that start in pannable content (pre / code / table)", () => {
+    pullUp(code, 300);
+    touch(code, "touchend", []);
+    expect(renders).toEqual([]);
+    expect(onTrigger).not.toHaveBeenCalled();
+  });
+
+  it("axis lock: sideways first keeps the whole sequence out", () => {
+    pullUp(para, 300, 30);
+    touch(para, "touchend", []);
+    expect(renders).toEqual([]);
+    expect(onTrigger).not.toHaveBeenCalled();
+  });
+
+  it("a second finger cancels an armed pull; lifting the fingers afterwards never fires", () => {
+    pullUp(para, 300);
+    expect(lastState()).toBe("armed");
+    pointer(document, "pointerdown", { id: 1, x: 100, y: 200 });
+    pointer(document, "pointerdown", { id: 2, x: 200, y: 300, primary: false });
+    touch(para, "touchstart", [{ x: 100, y: 200 }, { x: 200, y: 300 }]);
+    touch(para, "touchmove", [{ x: 100, y: 150 }, { x: 200, y: 250 }]);
+    touch(para, "touchend", [{ x: 100, y: 150 }]);
+    touch(para, "touchmove", [{ x: 100, y: 100 }]);
+    touch(para, "touchend", []);
+    vi.advanceTimersByTime(2000);
+    expect(lastState()).toBe("idle");
+    expect(onTrigger).not.toHaveBeenCalled();
+  });
+});

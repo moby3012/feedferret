@@ -3,6 +3,7 @@ import { signOut as authSignOut } from "next-auth/react";
 import { getStateBatcher } from "@/features/articles/batcher-registry";
 import { announceOfflineSession, revokeOfflineScope } from "@/features/offline/session";
 import { clearAllOffline } from "@/features/offline/store";
+import { clearReaderPositions } from "@/features/reader/reader-position";
 import { clearLastSync } from "@/features/sync/last-sync";
 import { getActiveQueryClient } from "@/lib/active-query-client";
 
@@ -13,6 +14,7 @@ const FLUSH_TIMEOUT_MS = 2000;
 
 /** localStorage keys and runtime caches that belong to the signed-in account. The offline IndexedDB store is handled by the session logic. */
 export async function clearAccountBrowserData() {
+  clearReaderPositions();
   try {
     for (const key of ACCOUNT_STORAGE_KEYS) localStorage.removeItem(key);
     clearLastSync(localStorage);

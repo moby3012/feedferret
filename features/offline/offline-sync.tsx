@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/features/articles/keys";
 import { useCountsQuery } from "@/features/bootstrap/queries";
 import { isOnline } from "@/features/bootstrap/online";
+import { clearReaderPositions } from "@/features/reader/reader-position";
 import { clearAccountBrowserData } from "@/lib/logout";
 import { onServedOffline, takeServedOffline } from "./offline";
 import { createRecoveryProbe } from "./recovery";
@@ -149,7 +150,11 @@ export function OfflineSync({ userId }: { userId: string }) {
       if (disposed || !claim) return;
       if (!setOfflineGeneration(userId, claim.gen)) return;
       // A new generation means every other tab of this device is looking at another account's world.
-      if (claim.changed) announceOfflineSession(claim.gen);
+      if (claim.changed) {
+        // Same as the store purge in `claimSession`: other accounts' reading positions go too.
+        clearReaderPositions(userId);
+        announceOfflineSession(claim.gen);
+      }
     });
 
     // Another tab claimed the device for a different account / signed out → this tab is stale.

@@ -5,6 +5,7 @@
 @import './styles/motion.css';
 @import './styles/shell.css';
 @import './styles/list.css';
+@import './styles/reader.css';
 
 .article-content {
   @apply prose prose-neutral dark:prose-invert max-w-none;
