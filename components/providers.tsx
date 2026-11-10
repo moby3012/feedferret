@@ -1,8 +1,10 @@
 "use client";
 
 import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "@/features/articles/api";
+import { ArticleActionsProvider } from "@/features/articles/mutations";
+import { setActiveQueryClient } from "@/lib/active-query-client";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -25,7 +27,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }),
   );
 
+  useEffect(() => {
+    setActiveQueryClient(queryClient);
+    return () => setActiveQueryClient(null);
+  }, [queryClient]);
+
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <ArticleActionsProvider>{children}</ArticleActionsProvider>
+    </QueryClientProvider>
   );
 }

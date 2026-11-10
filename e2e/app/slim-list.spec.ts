@@ -92,7 +92,7 @@ test("app endpoints need a session", async ({ playwright }, testInfo) => {
   }
 });
 
-test("unread view keeps rows read this session across refetches; scroll position holds", async ({ app, page }) => {
+test("unread view keeps rows read this session across toggles and focus; an explicit refresh resets the snapshot", async ({ app, page }) => {
   await app.open();
   const viewport = page.getByRole("region", { name: "Article list" }).locator('[data-slot="scroll-area-viewport"]').first();
   // Scroll a bit so the position check means something.
@@ -138,17 +138,14 @@ test("unread view keeps rows read this session across refetches; scroll position
   expect(Math.abs((await viewport.evaluate((el) => el.scrollTop)) - before)).toBeLessThanOrEqual(2);
   expect(Math.abs((await rowTop()) - rowTopBefore)).toBeLessThanOrEqual(2);
 
-  // A real list refetch (keyboard "r" = refresh feeds) no longer returns the
-  // three read rows from the server; they stay where they were.
+  // An explicit refresh (keyboard "r") resets the snapshot (shell spec §2.3 /
+  // §4.8): the server no longer returns the three read rows, so they leave.
   const refetched = page.waitForResponse((r) => LIST_URL.test(r.url()) && r.request().method() === "GET", { timeout: 30_000 });
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.keyboard.press("r");
   const body = await (await refetched).json();
   for (const num of [4, 5, 6]) expect(body.items.map((i: { id: string }) => i.id)).not.toContain(app.articleId(num));
   await page.waitForLoadState("networkidle");
-  for (const num of [4, 5, 6]) {
-    await expect(app.row(num)).toHaveCount(1);
-    await expect(app.rowActions(num).read).toHaveAccessibleName("Mark as unread");
-  }
-  expect(Math.abs((await rowTop()) - rowTopBefore)).toBeLessThanOrEqual(2);
+  for (const num of [4, 5, 6]) await expect(app.row(num)).toHaveCount(0);
+  await expect(app.row(7)).toHaveCount(1);
 });

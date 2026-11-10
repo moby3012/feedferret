@@ -1,27 +1,35 @@
 "use client"
 
-import { useCallback } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
-import { getFeeds, getViewUnreadCount, getCategories, toggleArticleRead, toggleArticleStarred, toggleArticleReadLater, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, getStarredCount, getReadLaterCount, getSpoilerCount, updateCategoryOrder, updateFeedOrder, markAllAsRead, markArticlesAsUnread, fetchFullText, getLabels, createLabel, updateLabel, deleteLabel, setArticleLabels, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers, suggestFeedFromUrl, createFeedFromPage, proposeAiFeedConfig, proposeAiFullTextSelector, getRsshubStatus, previewRsshubFeed, getChangedetectionStatus, createChangedetectionFeed } from "@/app/actions/feeds"
+import { getFeeds, getCategories, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, updateCategoryOrder, updateFeedOrder, getLabels, createLabel, updateLabel, deleteLabel, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers, suggestFeedFromUrl, createFeedFromPage, proposeAiFeedConfig, proposeAiFullTextSelector, getRsshubStatus, previewRsshubFeed, getChangedetectionStatus, createChangedetectionFeed } from "@/app/actions/feeds"
 import { updateProfile, changePassword, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, previewDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getContentFetchSettings, updateContentFetchSettings, testContentFetchConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
 import { getExportSettings, updateExportSettings, testWallabagExportConnection, buildObsidianExportLink, exportArticleToWallabag } from "@/app/actions/export"
 import { updateUiLanguage } from "@/app/actions/locale"
 import { updateDisplayTimezone } from "@/app/actions/timezone"
 import { toast } from "sonner"
-import { findCachedArticle, invalidateArticleQueries, markListsStale, patchCachedArticle, patchCachedArticles, removeCachedArticle, removeLabelFromCachedArticles, restoreArticleCaches, snapshotArticleCaches } from "@/features/articles/cache"
+import { invalidateArticleQueries, invalidateCounts, markListsStale, removeCachedArticle, removeLabelFromCachedArticles, restoreArticleCaches, snapshotArticleCaches } from "@/features/articles/cache"
 import { qk } from "@/features/articles/keys"
+import type { Counts } from "@/features/bootstrap/types"
+import { useCountsQuery } from "@/features/bootstrap/queries"
+import { useArticleActions, useIsMarkingViewRead, type MarkViewScope } from "@/features/articles/mutations"
+
+export type { MarkViewScope }
+
+// Entity queries refetch on invalidation only (no polling, no focus refetch):
+// live numbers come from `["counts"]` (features/bootstrap/queries.ts), which
+// reconciles every 120 s. `_count` on feeds / labels is the server's value at
+// fetch time and is kept for the settings pages; the reader shell reads counts
+// only from `useCounts()`.
+const ENTITY_QUERY = { staleTime: 5 * 60_000, refetchOnWindowFocus: false } as const
 
 export function useFeeds(enabled = true) {
     return useQuery({
         queryKey: ["feeds"],
         queryFn: () => getFeeds(),
         enabled,
-        // Keep sidebar unread badges live: refetch in background every 60s
-        // and whenever the tab regains focus (React Query default).
-        refetchInterval: 60_000,
-        refetchIntervalInBackground: false,
-        staleTime: 15_000,
+        ...ENTITY_QUERY,
     })
 }
 
@@ -33,36 +41,41 @@ export function useCategories(enabled = true) {
     })
 }
 
-export function useStarredCount() {
-    return useQuery({
-        queryKey: ["articles", "starred-count"],
-        queryFn: () => getStarredCount(),
-    })
-}
-
-export function useReadLaterCount() {
-    return useQuery({
-        queryKey: ["articles", "read-later-count"],
-        queryFn: () => getReadLaterCount(),
-    })
-}
-
-export function useSpoilerCount() {
-    return useQuery({
-        queryKey: ["articles", "spoiler-count"],
-        queryFn: () => getSpoilerCount(),
-    })
-}
-
 export function useLabels(enabled = true) {
-    return useQuery({
+    const query = useQuery({
         queryKey: ["labels"],
         queryFn: () => getLabels(),
         enabled,
-        refetchInterval: 60_000,
-        refetchIntervalInBackground: false,
-        staleTime: 15_000,
+        ...ENTITY_QUERY,
     })
+    // Unread per label from the live counts (optimistic + reconciled), so a
+    // label badge moves with every toggle without refetching labels.
+    const counts = useCountsQuery(enabled).data
+    const data = useMemo(
+        () => (counts && query.data
+            ? query.data.map((label) => ({ ...label, _count: { ...label._count, articles: counts.byLabel[label.id] ?? 0 } }))
+            : query.data),
+        [counts, query.data],
+    )
+    return { ...query, data }
+}
+
+/** Starred total (sidebar). Adapter over `useCounts()`; kept for the pre-shell sidebar. */
+export function useStarredCount() {
+    const query = useCountsQuery()
+    return { ...query, data: query.data?.starred }
+}
+
+/** Read-later total (sidebar). Adapter over `useCounts()`. */
+export function useReadLaterCount() {
+    const query = useCountsQuery()
+    return { ...query, data: query.data?.later }
+}
+
+/** Spoiler total (sidebar). Adapter over `useCounts()`. */
+export function useSpoilerCount() {
+    const query = useCountsQuery()
+    return { ...query, data: query.data?.spoiler }
 }
 
 export function useSavedSearches(enabled = true) {
@@ -77,136 +90,6 @@ export function useFeedHealth() {
     return useQuery({
         queryKey: ["feed-health"],
         queryFn: () => getFeedHealth(),
-    })
-}
-
-/**
- * Unread count of a whole list view, computed on the server with the same
- * scope as the list endpoint. The list is paged, so counting unread rows
- * client-side under-reports big views and disagreed with the sidebar. Keyed
- * under "articles" so every article invalidation refreshes it.
- */
-export function useViewUnreadCount(feedId?: string | null, category?: string, search?: string, enabled = true, categoryId?: string | null) {
-    return useQuery({
-        queryKey: ["articles", "unread-count", feedId ?? null, category ?? null, search ?? null, categoryId ?? null],
-        queryFn: () => getViewUnreadCount(feedId, category, search, categoryId),
-        staleTime: 30_000,
-        enabled,
-    })
-}
-
-export function useToggleRead() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: ({ articleId, isRead }: { articleId: string; isRead: boolean }) =>
-            toggleArticleRead(articleId, isRead),
-        onMutate: async ({ articleId, isRead }) => {
-            await queryClient.cancelQueries({ queryKey: ["articles"] })
-            await queryClient.cancelQueries({ queryKey: qk.lists })
-            await queryClient.cancelQueries({ queryKey: qk.article(articleId) })
-            await queryClient.cancelQueries({ queryKey: ["feeds"] })
-            const snapshots = snapshotArticleCaches(queryClient)
-            const feedsSnapshot = queryClient.getQueryData<any[]>(["feeds"])
-
-            // Find the article in any cached list to know its feed and labels
-            const hit = findCachedArticle(queryClient, articleId)
-            const affectedFeedId: string | undefined = hit?.feedId
-            const articleLabelIds: string[] = hit?.labelIds ?? []
-
-            patchCachedArticle(queryClient, articleId, { isRead })
-
-            // Keep the list-header count (server count, see useViewUnreadCount) in step.
-            // Only views that certainly contain the article are adjusted; the
-            // rest are corrected by the invalidation in onSuccess.
-            if (affectedFeedId) {
-                const delta = isRead ? -1 : 1
-                queryClient.getQueriesData<number>({ queryKey: ["articles", "unread-count"] }).forEach(([key, count]) => {
-                    if (typeof count !== "number") return
-                    const [, , keyFeed, keyCategory, keySearch] = key as [string, string, string | null, string | null, string | null]
-                    const containsArticle =
-                        !keySearch &&
-                        (keyFeed === affectedFeedId ||
-                            (!keyFeed && (keyCategory === null || keyCategory === "All" || keyCategory === "All Articles")))
-                    if (containsArticle) queryClient.setQueryData(key, Math.max(0, count + delta))
-                })
-            }
-
-            // Optimistically adjust the feed's unread count so sidebar badge updates immediately (#19)
-            if (affectedFeedId && Array.isArray(feedsSnapshot)) {
-                queryClient.setQueryData(["feeds"], feedsSnapshot.map((f: any) => {
-                    if (f.id !== affectedFeedId) return f
-                    const current = f._count?.articles ?? 0
-                    const delta = isRead ? -1 : 1
-                    const next = Math.max(0, current + delta)
-                    return { ...f, _count: { ...(f._count || {}), articles: next } }
-                }))
-            }
-
-            // Optimistically adjust label unread counts
-            const labelsSnapshot = queryClient.getQueryData<any[]>(["labels"])
-            if (articleLabelIds.length > 0 && Array.isArray(labelsSnapshot)) {
-                const delta = isRead ? -1 : 1
-                queryClient.setQueryData(["labels"], labelsSnapshot.map((l: any) =>
-                    articleLabelIds.includes(l.id)
-                        ? { ...l, _count: { ...l._count, articles: Math.max(0, (l._count?.articles ?? 0) + delta) } }
-                        : l
-                ))
-            }
-
-            return { snapshots, feedsSnapshot, labelsSnapshot }
-        },
-        onError: (_error, _variables, context) => {
-            restoreArticleCaches(queryClient, context?.snapshots)
-            if (context?.feedsSnapshot) {
-                queryClient.setQueryData(["feeds"], context.feedsSnapshot)
-            }
-            if (context?.labelsSnapshot) {
-                queryClient.setQueryData(["labels"], context.labelsSnapshot)
-            }
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["feeds"] })
-            queryClient.invalidateQueries({ queryKey: ["labels"] })
-            queryClient.invalidateQueries({ queryKey: ["articles", "unread-count"] })
-        },
-    })
-}
-
-export function useToggleStarred() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: ({ articleId, isStarred }: { articleId: string; isStarred: boolean }) =>
-            toggleArticleStarred(articleId, isStarred),
-        onMutate: async ({ articleId, isStarred }) => {
-            const snapshots = snapshotArticleCaches(queryClient)
-            patchCachedArticle(queryClient, articleId, { isStarred })
-            return { snapshots }
-        },
-        onError: (_error, _variables, context) => restoreArticleCaches(queryClient, context?.snapshots),
-        onSuccess: () => {
-            // Patched in place (onMutate): no list refetch, which would re-page
-            // the visible list. Other lists (Starred view) refetch on next use.
-            markListsStale(queryClient)
-            queryClient.invalidateQueries({ queryKey: ["articles", "starred-count"] })
-        },
-    })
-}
-
-export function useToggleReadLater() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: ({ articleId, isReadLater }: { articleId: string; isReadLater: boolean }) =>
-            toggleArticleReadLater(articleId, isReadLater),
-        onMutate: async ({ articleId, isReadLater }) => {
-            const snapshots = snapshotArticleCaches(queryClient)
-            patchCachedArticle(queryClient, articleId, { isReadLater })
-            return { snapshots }
-        },
-        onError: (_error, _variables, context) => restoreArticleCaches(queryClient, context?.snapshots),
-        onSuccess: () => {
-            markListsStale(queryClient)
-            queryClient.invalidateQueries({ queryKey: ["articles", "read-later-count"] })
-        },
     })
 }
 
@@ -511,170 +394,6 @@ export function useUpdateDisplayTimezone() {
     })
 }
 
-export function useMarkAllAsRead() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: (scope?: MarkViewScope) => markAllAsRead(scope),
-        onMutate: async (scope) => {
-            await queryClient.cancelQueries({ queryKey: ["feeds"] })
-            const feedsSnapshot = queryClient.getQueryData<any[]>(["feeds"])
-            // Search scopes can't be mapped to sidebar badges: invalidation in onSuccess fixes them.
-            if (Array.isArray(feedsSnapshot) && !scope?.search) {
-                // Optimistic: zero unread on the affected feed(s) so badge updates instantly (#19)
-                const next = feedsSnapshot.map((f: any) => {
-                    if (scope?.feedId) {
-                        if (f.id !== scope.feedId) return f
-                        return { ...f, _count: { ...(f._count || {}), articles: 0 } }
-                    }
-                    if (!scope?.feedId && !scope?.category) {
-                        return { ...f, _count: { ...(f._count || {}), articles: 0 } }
-                    }
-                    // Category-scoped: cannot reliably know which feeds belong without the
-                    // category map here, so fall back to invalidation in onSuccess.
-                    return f
-                })
-                queryClient.setQueryData(["feeds"], next)
-            }
-
-            // Optimistic: zero the label badge immediately when marking a label scope as read
-            let labelsSnapshot: any[] | undefined
-            if (scope?.category?.startsWith("Label:")) {
-                const labelId = scope.category.slice("Label:".length)
-                labelsSnapshot = queryClient.getQueryData<any[]>(["labels"])
-                if (Array.isArray(labelsSnapshot)) {
-                    queryClient.setQueryData(["labels"], labelsSnapshot.map((l: any) =>
-                        l.id === labelId ? { ...l, _count: { ...l._count, articles: 0 } } : l
-                    ))
-                }
-            }
-
-            return { feedsSnapshot, labelsSnapshot }
-        },
-        onError: (_error, _variables, context) => {
-            if (context?.feedsSnapshot) {
-                queryClient.setQueryData(["feeds"], context.feedsSnapshot)
-            }
-            if (context?.labelsSnapshot) {
-                queryClient.setQueryData(["labels"], context.labelsSnapshot)
-            }
-        },
-        onSuccess: () => {
-            invalidateArticleQueries(queryClient)
-            queryClient.invalidateQueries({ queryKey: ["feeds"] })
-            queryClient.invalidateQueries({ queryKey: ["labels"] })
-        },
-    })
-}
-
-/** `categoryId`: the category a by-name selection resolved to (names are not unique). */
-export type MarkViewScope = { feedId?: string | null; category?: string | null; categoryId?: string | null; search?: string | null }
-
-/** Fired after every bulk mark-read / undo so views holding local article copies can reconcile. */
-export const ARTICLES_READ_CHANGED_EVENT = "feedferret:articles-read-changed"
-export type ArticlesReadChangedDetail = { ids: string[]; isRead: boolean }
-
-function announceReadChange(detail: ArticlesReadChangedDetail, queryClient?: ReturnType<typeof useQueryClient>) {
-    if (queryClient) patchCachedArticles(queryClient, detail.ids, { isRead: detail.isRead })
-    if (typeof window !== "undefined" && detail.ids.length > 0) {
-        window.dispatchEvent(new CustomEvent<ArticlesReadChangedDetail>(ARTICLES_READ_CHANGED_EVENT, { detail }))
-    }
-}
-
-// Powers the "Undo" action of the mark-all-read toast. Takes the opaque
-// server-issued undo token, never article ids.
-export function useMarkArticlesAsUnread() {
-    const queryClient = useQueryClient()
-    const t = useTranslations("sidebar")
-    return useMutation({
-        mutationFn: (undoToken: string) => markArticlesAsUnread(undoToken),
-        onSuccess: (result) => {
-            announceReadChange({ ids: result.ids, isRead: false }, queryClient)
-            invalidateArticleQueries(queryClient)
-            queryClient.invalidateQueries({ queryKey: ["feeds"] })
-            queryClient.invalidateQueries({ queryKey: ["labels"] })
-        },
-        onError: () => {
-            toast.error(t("undoFailed"))
-        },
-    })
-}
-
-/**
- * The ONE way to bulk-mark a view read (header, end-of-list card, command
- * palette, keyboard shortcut, sidebar menus). Always shows the Undo toast and
- * reconciles local state. Returns a function: `markViewRead({ feedId, category, search })`.
- */
-export function useMarkViewRead() {
-    const queryClient = useQueryClient()
-    const t = useTranslations("sidebar")
-    const markAll = useMarkAllAsRead()
-    const undo = useMarkArticlesAsUnread()
-    const { mutateAsync } = markAll
-    const { mutate: undoMutate } = undo
-
-    const markViewRead = useCallback(
-        (scope: MarkViewScope) => {
-            mutateAsync(scope)
-                .then((result) => {
-                    const ids = result?.ids ?? []
-                    if (ids.length === 0) return
-                    announceReadChange({ ids, isRead: true }, queryClient)
-                    const undoToken = result.undoToken
-                    toast(t("undoMarkAllReadMessage", { count: ids.length }), {
-                        duration: 6000,
-                        action: undoToken
-                            ? { label: t("undo"), onClick: () => undoMutate(undoToken) }
-                            : undefined,
-                    })
-                })
-                .catch(() => {
-                    // Nothing was changed (the server update is atomic); re-sync what the UI shows.
-                    invalidateArticleQueries(queryClient)
-                    queryClient.invalidateQueries({ queryKey: ["feeds"] })
-                    queryClient.invalidateQueries({ queryKey: ["labels"] })
-                    toast.error(t("markAllReadFailed"))
-                })
-        },
-        [mutateAsync, undoMutate, queryClient, t],
-    )
-
-    return { markViewRead, isPending: markAll.isPending }
-}
-
-export function useFetchFullText() {
-    const queryClient = useQueryClient()
-    const updateFeedMutation = useUpdateFeed()
-    const t = useTranslations("articleReader")
-    return useMutation({
-        mutationFn: (articleId: string) => fetchFullText(articleId),
-        onSuccess: (article: any) => {
-            // The body lives in the detail entry: refetch it (render-ready HTML from the server).
-            if (typeof article?.excerpt === "string") patchCachedArticle(queryClient, article.id, { excerpt: article.excerpt })
-            queryClient.invalidateQueries({ queryKey: qk.article(article.id) })
-            toast.success(t("fullTextLoaded"))
-
-            const suggestion = article.suggestAutoFullText
-            if (suggestion) {
-                toast(t("truncatedFeedSuggestion"), {
-                    description: suggestion.feedName,
-                    action: {
-                        label: t("enableAutoFullText"),
-                        onClick: () => updateFeedMutation.mutate({ feedId: suggestion.feedId, data: { fullTextMode: "auto" } }),
-                    },
-                    cancel: {
-                        label: t("dontAskAgainFullText"),
-                        onClick: () => updateFeedMutation.mutate({ feedId: suggestion.feedId, data: { fullTextAutoSuggestDismissed: true } }),
-                    },
-                    duration: 10000,
-                })
-            }
-        },
-        onError: (error) => {
-            toast.error(error instanceof Error ? error.message : t("fullTextUnavailable"))
-        },
-    })
-}
-
 export function useCreateLabel() {
     const queryClient = useQueryClient()
     return useMutation({
@@ -703,22 +422,6 @@ export function useDeleteLabel() {
         onSuccess: (_result, labelId) => {
             queryClient.invalidateQueries({ queryKey: ["labels"] })
             removeLabelFromCachedArticles(queryClient, labelId)
-            markListsStale(queryClient)
-        },
-    })
-}
-
-export function useSetArticleLabels() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: ({ articleId, labelIds }: { articleId: string; labelIds: string[] }) => setArticleLabels(articleId, labelIds),
-        onSuccess: (article: any) => {
-            queryClient.invalidateQueries({ queryKey: ["labels"] })
-            if (article?.id) {
-                const labelIds = (article.labels ?? []).map((l: any) => l.labelId ?? l.label?.id).filter(Boolean)
-                patchCachedArticle(queryClient, article.id, { labelIds })
-            }
-            // Label views refetch on next use; the visible list is patched.
             markListsStale(queryClient)
         },
     })
@@ -791,7 +494,6 @@ export function useDeleteAutoReadRule() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["auto-read-rules"] })
             invalidateArticleQueries(queryClient)
-            queryClient.invalidateQueries({ queryKey: ["articles", "spoiler-count"] })
             toast.success("Rule deleted")
         },
     })
@@ -802,23 +504,21 @@ export function useReleaseArticleSpoiler() {
     return useMutation({
         mutationFn: (articleId: string) => releaseArticleSpoiler(articleId),
         onMutate: async (articleId) => {
-            await queryClient.cancelQueries({ queryKey: ["articles"] })
-            await queryClient.cancelQueries({ queryKey: qk.lists })
-            const snapshots = snapshotArticleCaches(queryClient)
+            const spoilerLists = qk.listScope("v:spoiler")
+            await queryClient.cancelQueries({ queryKey: spoilerLists })
+            const snapshots = queryClient.getQueriesData({ queryKey: spoilerLists })
             removeCachedArticle(queryClient, articleId)
-            const prev = queryClient.getQueryData<number>(["articles", "spoiler-count"])
-            if (typeof prev === "number") {
-                queryClient.setQueryData(["articles", "spoiler-count"], Math.max(0, prev - 1))
-            }
-            return { snapshots, prev }
+            queryClient.setQueryData<Counts>(qk.counts, (c) => (c ? { ...c, spoiler: Math.max(0, c.spoiler - 1) } : c))
+            return { snapshots }
         },
         onError: (_err, _id, ctx) => {
             restoreArticleCaches(queryClient, ctx?.snapshots)
-            if (ctx?.prev !== undefined) queryClient.setQueryData(["articles", "spoiler-count"], ctx.prev)
+            invalidateCounts(queryClient)
         },
-        onSettled: () => {
-            invalidateArticleQueries(queryClient)
-            queryClient.invalidateQueries({ queryKey: ["articles", "spoiler-count"] })
+        onSuccess: () => {
+            // The row now belongs to the regular views: they pick it up on rebind.
+            markListsStale(queryClient)
+            invalidateCounts(queryClient)
         },
     })
 }
@@ -829,7 +529,6 @@ export function useReleaseAllSpoilers() {
         mutationFn: () => releaseAllSpoilers(),
         onSuccess: () => {
             invalidateArticleQueries(queryClient)
-            queryClient.invalidateQueries({ queryKey: ["articles", "spoiler-count"] })
             toast.success("All spoiler flags released")
         },
         onError: () => {
@@ -944,20 +643,32 @@ export function useTestKeywordAlert() {
     })
 }
 
+/**
+ * Notification list. No own polling: it refetches when the unread number in
+ * `["counts"]` (120 s reconcile) changes.
+ */
 export function useNotifications() {
+    const queryClient = useQueryClient()
+    const unread = useCountsQuery().data?.notifications
+    const seen = useRef<number | undefined>(undefined)
+    useEffect(() => {
+        if (unread === undefined) return
+        if (seen.current !== undefined && seen.current !== unread) {
+            queryClient.invalidateQueries({ queryKey: ["notifications"], exact: true })
+        }
+        seen.current = unread
+    }, [unread, queryClient])
     return useQuery({
         queryKey: ["notifications"],
         queryFn: () => getNotifications(),
-        refetchInterval: 60_000,
+        refetchOnWindowFocus: false,
     })
 }
 
+/** Unread notifications (bell badge). Adapter over `useCounts()`. */
 export function useUnreadNotificationCount() {
-    return useQuery({
-        queryKey: ["notifications", "unread-count"],
-        queryFn: () => getUnreadNotificationCount(),
-        refetchInterval: 60_000,
-    })
+    const query = useCountsQuery()
+    return { ...query, data: query.data?.notifications }
 }
 
 export function useMarkNotificationRead() {
@@ -966,6 +677,7 @@ export function useMarkNotificationRead() {
         mutationFn: (notificationId: string) => markNotificationRead(notificationId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["notifications"] })
+            invalidateCounts(queryClient)
         },
     })
 }
@@ -976,6 +688,7 @@ export function useMarkAllNotificationsRead() {
         mutationFn: () => markAllNotificationsRead(),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["notifications"] })
+            invalidateCounts(queryClient)
         },
     })
 }
@@ -1280,4 +993,14 @@ export function useTestNotificationChannel() {
         mutationFn: (channel: "telegram" | "gotify" | "ntfy") =>
             testNotificationChannel(channel),
     })
+}
+
+/**
+ * Bulk "mark this view read" with the Undo toast. Adapter over
+ * `useArticleActions().markViewRead` (features/articles/mutations.ts) for the
+ * pre-shell sidebar.
+ */
+export function useMarkViewRead() {
+    const { markViewRead } = useArticleActions()
+    return { markViewRead, isPending: useIsMarkingViewRead() }
 }

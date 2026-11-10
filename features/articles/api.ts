@@ -14,7 +14,7 @@ export function shouldRetry(failureCount: number, error: unknown): boolean {
   return failureCount < 2;
 }
 
-async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+export async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, { credentials: "same-origin", headers: { accept: "application/json" }, cache: "no-store", signal });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
@@ -47,4 +47,11 @@ export function fetchArticlePage(key: ListKey, cursor: string | null, signal?: A
 
 export function fetchArticleDetail(id: string, signal?: AbortSignal): Promise<ArticleDetail> {
   return getJson<ArticleDetail>(`/api/app/articles/${encodeURIComponent(id)}`, signal);
+}
+
+/** `GET /api/app/articles/count` — unread of one scope (only used for saved searches and ad-hoc search). */
+export function fetchViewCount(key: ListKey, signal?: AbortSignal): Promise<{ unread: number }> {
+  const params = new URLSearchParams(key.id.startsWith("/?") ? key.id.slice(2) : "");
+  params.delete("show");
+  return getJson<{ unread: number }>(`/api/app/articles/count?${params.toString()}`, signal);
 }

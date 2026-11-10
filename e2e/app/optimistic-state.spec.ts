@@ -1,0 +1,190 @@
+import type { Page, Request } from "@playwright/test";
+import { test, expect } from "../helpers/test";
+import { articleFlags, starredCountInDb, unreadCountInDb } from "../helpers/db";
+
+/**
+ * Single cache owner + batched optimistic toggles (shell spec PR 2, UX audit
+ * P1-05): toggles flip before the network answers, a failed write reverts
+ * exactly that field with one toast, counts stay consistent, and rapid
+ * toggles are coalesced into few action calls.
+ *
+ * Seed (e2e/fixtures/data.mjs): #001–#012 unread; #004 starred; #006 read-later.
+ */
+
+const isAction = (r: Request) => r.method() === "POST" && !!r.headers()["next-action"];
+
+function countActions(page: Page) {
+  const seen: Request[] = [];
+  const onRequest = (r: Request) => {
+    if (isAction(r)) seen.push(r);
+  };
+  page.on("request", onRequest);
+  return {
+    get count() {
+      return seen.length;
+    },
+    stop: () => page.off("request", onRequest),
+  };
+}
+
+/** Chromium network emulation (Slow 3G-like: 2 s RTT) for the whole page. */
+async function throttle(page: Page, latencyMs = 2000) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Network.enable");
+  await cdp.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: latencyMs,
+    downloadThroughput: (400 * 1024) / 8,
+    uploadThroughput: (400 * 1024) / 8,
+  });
+  return cdp;
+}
+
+/** Clicks a row's toggle inside the page and returns its accessible name one animation frame later. */
+async function clickAndReadNextFrame(page: Page, num: number, name: RegExp) {
+  const pad = String(num).padStart(3, "0");
+  return page.evaluate(
+    ({ pad, source }) => {
+      const re = new RegExp(source);
+      const row = () => document.querySelector(`[role="button"][aria-label*="(#${pad})"]`);
+      const button = () => [...(row()?.querySelectorAll("button") ?? [])].find((b) => re.test(b.getAttribute("aria-label") ?? ""));
+      button()!.click();
+      return new Promise<string[]>((resolve) =>
+        requestAnimationFrame(() => resolve([...(row()?.querySelectorAll("button") ?? [])].map((b) => b.getAttribute("aria-label") ?? ""))),
+      );
+    },
+    { pad, source: name.source },
+  );
+}
+
+test("star, read-later and read flip in the same frame on a throttled network; counts move at once", async ({ app, page }) => {
+  await app.open();
+  const starredBefore = await app.sidebarCount("Starred");
+  const unreadBefore = await app.sidebarCount("All articles");
+  const cdp = await throttle(page);
+
+  expect(await clickAndReadNextFrame(page, 1, /^Star$/)).toContain("Remove star");
+  expect(await clickAndReadNextFrame(page, 1, /^Save to Read Later$/)).toContain("Remove from Read Later");
+  expect(await clickAndReadNextFrame(page, 2, /^Mark as read$/)).toContain("Mark as unread");
+
+  // Sidebar counts are optimistic too (the write is still on the wire).
+  expect(await app.sidebarCount("Starred")).toBe(starredBefore + 1);
+  expect(await app.sidebarCount("All articles")).toBe(unreadBefore - 1);
+  // A read row stays in the unread list (snapshot semantics).
+  await expect(app.row(2)).toBeVisible();
+
+  await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+  await expect.poll(() => articleFlags(app.articleId(1)), { timeout: 15_000 }).toMatchObject({ isStarred: true, isReadLater: true });
+  await expect.poll(() => articleFlags(app.articleId(2)).isRead, { timeout: 15_000 }).toBe(true);
+});
+
+test("a failed write reverts exactly that field and shows one toast", async ({ app, page }) => {
+  await app.open();
+  // A successful write first: it must survive the later failure.
+  await app.activate(app.rowActions(3).read);
+  await expect.poll(() => articleFlags(app.articleId(3)).isRead).toBe(true);
+  const starredBefore = await app.sidebarCount("Starred");
+
+  await page.route("**/*", (route) => (isAction(route.request()) ? route.abort("failed") : route.continue()));
+  await app.activate(app.rowActions(3).star);
+  await app.activate(app.rowActions(5).later);
+
+  const failToast = page.locator("[data-sonner-toast]").filter({ hasText: "Couldn't save that change" });
+  await expect(failToast).toHaveCount(1);
+  await expect(app.rowActions(3).star).toHaveAccessibleName("Star");
+  await expect(app.rowActions(5).later).toHaveAccessibleName("Save to Read Later");
+  // The earlier, successful read is untouched.
+  await expect(app.rowActions(3).read).toHaveAccessibleName("Mark as unread");
+  expect(await app.sidebarCount("Starred")).toBe(starredBefore);
+  await page.waitForTimeout(1500);
+  await expect(failToast).toHaveCount(1);
+  expect(articleFlags(app.articleId(3))).toMatchObject({ isRead: true, isStarred: false });
+  expect(articleFlags(app.articleId(5)).isReadLater).toBe(false);
+  await page.unroute("**/*");
+});
+
+test("20 rapid toggles: UI, sidebar counts and DB agree, before and after reload", async ({ app, page }) => {
+  await app.open();
+  const actions = countActions(page);
+  for (let i = 0; i < 20; i++) {
+    const num = (i % 7) + 1;
+    await app.activate(i % 2 === 0 ? app.rowActions(num).star : app.rowActions(num).read);
+  }
+  // Coalesced: far fewer action calls than toggles.
+  await expect.poll(() => actions.count, { timeout: 10_000 }).toBeGreaterThan(0);
+  await page.waitForTimeout(1500);
+  expect(actions.count).toBeLessThanOrEqual(6);
+  actions.stop();
+
+  const starredInDb = () => [1, 2, 3, 4, 5, 6, 7].filter((n) => articleFlags(app.articleId(n)).isStarred).length;
+  const starredInUi = async () => {
+    let n = 0;
+    for (const num of [1, 2, 3, 4, 5, 6, 7]) if ((await app.rowActions(num).star.getAttribute("aria-label")) === "Remove star") n++;
+    return n;
+  };
+  await expect.poll(starredInDb, { timeout: 10_000 }).toBe(await starredInUi());
+
+  const check = async () => {
+    expect(await app.sidebarCount("All articles")).toBe(unreadCountInDb(app.userKey));
+    expect(await app.sidebarCount("Starred")).toBe(starredCountInDb(app.userKey));
+  };
+  await check();
+  // Fresh page: the server-side counts must agree with what was shown.
+  await page.reload();
+  await expect(page.locator('[role="button"][aria-label*=" — "]').first()).toBeVisible({ timeout: 30_000 });
+  await page.waitForLoadState("networkidle");
+  await check();
+});
+
+test("10 rapid toggles of one star send at most 2 action calls", async ({ app, page }) => {
+  await app.open();
+  const actions = countActions(page);
+  const star = app.rowActions(1).star;
+  for (let i = 0; i < 10; i++) await app.activate(star);
+  await page.waitForTimeout(2000);
+  expect(actions.count).toBeLessThanOrEqual(2);
+  actions.stop();
+  // Even number of toggles: back where it started, on screen and on the server.
+  await expect(star).toHaveAccessibleName("Star");
+  expect(articleFlags(app.articleId(1)).isStarred).toBe(false);
+});
+
+test("a single toggle is one action call: no feeds / labels / counts refetch afterwards", async ({ app, page }) => {
+  await app.open();
+  const actions = countActions(page);
+  const gets: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "GET" && new URL(r.url()).pathname.startsWith("/api/")) gets.push(new URL(r.url()).pathname);
+  });
+  await app.activate(app.rowActions(1).star);
+  await page.waitForTimeout(2500);
+  expect(actions.count).toBe(1);
+  expect(gets).toEqual([]);
+  actions.stop();
+});
+
+test("marking read keeps the row until the view changes", async ({ app, page }) => {
+  await app.open();
+  await app.activate(app.rowActions(2).read);
+  await expect(app.rowActions(2).read).toHaveAccessibleName("Mark as unread");
+  await page.waitForTimeout(500);
+  await expect(app.row(2)).toBeVisible();
+  // Leave and come back: the read row is gone from the unread view.
+  await app.selectSidebar(/^Starred\s*\d*$/);
+  await expect(page.getByRole("heading", { level: 2, name: "Starred" })).toBeVisible();
+  await app.selectSidebar(/^All articles\s*\d*$/);
+  await expect(app.row(1)).toBeVisible();
+  await expect(app.row(2)).toHaveCount(0);
+});
+
+test("offline is read-only: chip shown, toggles refused with a toast", async ({ app, page, context }) => {
+  await app.open();
+  await context.setOffline(true);
+  await expect(page.getByTestId("offline-chip")).toBeVisible();
+  await app.activate(app.rowActions(1).star);
+  await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Offline – read only" })).toHaveCount(1);
+  await expect(app.rowActions(1).star).toHaveAccessibleName("Star");
+  await context.setOffline(false);
+  await expect(page.getByTestId("offline-chip")).toHaveCount(0);
+  expect(articleFlags(app.articleId(1)).isStarred).toBe(false);
+});
