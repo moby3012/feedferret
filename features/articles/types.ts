@@ -40,6 +40,15 @@ export interface ArticleListItem {
   clusterId?: string;
   clusterSize?: number;
   clusterLeadId?: string;
+  /**
+   * K3 enrichment (optional: absent on old servers/caches). `isSponsored` =
+   * heuristic or AI said paid/affiliate content. `displayTitle` is the neutral
+   * AI title, set only when the user enabled "Sachliche Titel bei Clickbait"
+   * and the article is clickbait; `title` is always the original. Plain text.
+   */
+  isSponsored?: boolean;
+  isClickbait?: boolean;
+  displayTitle?: string | null;
 }
 
 /** GET /api/app/clusters/:id — all sources of one story (slim list rows, oldest first). */
@@ -62,6 +71,10 @@ export interface ArticleDetail extends ArticleListItem {
   aiSummary: string | null;
   aiSummarizedAt: string | null;
   readAt: string | null;
+  /** K3: named entities from the tagging call (plain text, ≤8). */
+  entities?: string[];
+  /** K3: the original headline when `displayTitle` replaced it (else null). */
+  originalTitle?: string | null;
 }
 
 export interface ArticlePage {

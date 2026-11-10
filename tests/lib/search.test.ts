@@ -310,3 +310,59 @@ describe("buildAdvancedSearchWhere OR operator", () => {
     expect(result.OR).toHaveLength(3);
   });
 });
+
+describe("K3 enrichment operators", () => {
+  it("is:sponsored / is:ad / is:anzeige map to isSponsored: true", async () => {
+    for (const v of ["sponsored", "ad", "anzeige", "SPONSORED"]) {
+      expect(await buildAdvancedSearchWhere(USER, `is:${v}`)).toEqual({ AND: [{ isSponsored: true }] });
+    }
+  });
+
+  it("is:clickbait maps to isClickbait: true", async () => {
+    expect(await buildAdvancedSearchWhere(USER, "is:clickbait")).toEqual({ AND: [{ isClickbait: true }] });
+  });
+
+  it("negation keeps unknown (null) rows: -is:clickbait, !is:sponsored", async () => {
+    expect(await buildAdvancedSearchWhere(USER, "-is:clickbait")).toEqual({
+      AND: [{ OR: [{ isClickbait: null }, { isClickbait: false }] }],
+    });
+    expect(await buildAdvancedSearchWhere(USER, "!is:sponsored")).toEqual({
+      AND: [{ OR: [{ isSponsored: null }, { isSponsored: false }] }],
+    });
+  });
+
+  it("-entity:X keeps articles without entities (NULL)", async () => {
+    expect(await buildAdvancedSearchWhere(USER, "-entity:EZB")).toEqual({
+      AND: [{ OR: [{ entities: null }, { NOT: { entities: { contains: '"EZB"' } } }] }],
+    });
+  });
+
+  it("entity:<name> matches the quoted JSON element, quoted or not", async () => {
+    const expected = { AND: [{ entities: { contains: '"OpenAI"' } }] };
+    expect(await buildAdvancedSearchWhere(USER, "entity:OpenAI")).toEqual(expected);
+    expect(await buildAdvancedSearchWhere(USER, 'entity:"OpenAI"')).toEqual(expected);
+  });
+
+  it("entity with spaces stays one token", async () => {
+    expect(await buildAdvancedSearchWhere(USER, 'entity:"Angela Merkel"')).toEqual({
+      AND: [{ entities: { contains: '"Angela Merkel"' } }],
+    });
+    expect(tokenizeSearch('-entity:"Angela Merkel" foo author:\'Jane Doe\'')).toEqual([
+      "-entity:Angela Merkel",
+      "foo",
+      "author:Jane Doe",
+    ]);
+  });
+
+  it("entity strips quotes/backslashes from the value and ignores an empty one", async () => {
+    expect(await buildAdvancedSearchWhere(USER, 'entity:a\\"b')).toEqual({ AND: [{ entities: { contains: '"ab"' } }] });
+    // empty value after stripping → falls through as free text, never an unbounded match
+    const where = (await buildAdvancedSearchWhere(USER, 'entity:""')) as { AND?: unknown[] };
+    expect(JSON.stringify(where)).not.toContain('"entities"');
+  });
+
+  it("unknown is: values still fall through as free text", async () => {
+    const where = await buildAdvancedSearchWhere(USER, "is:bogus");
+    expect(JSON.stringify(where)).not.toContain("isSponsored");
+  });
+});

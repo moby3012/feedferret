@@ -38,6 +38,9 @@ export const LIST_SELECT = {
   isDuplicate: true,
   feed: { select: { url: true } },
   labels: { select: { labelId: true } },
+  isSponsored: true,
+  isClickbait: true,
+  cleanTitle: true,
   _count: { select: { duplicates: true } },
   canonical: { select: { feed: { select: { name: true } } } },
   clusterId: true,
@@ -66,6 +69,10 @@ export type ListRow = {
   isReadLater: boolean;
   isSpoiler: boolean;
   isDuplicate: boolean;
+  // K3 enrichment (nullable columns; optional so pre-K3 fixtures still type-check).
+  isSponsored?: boolean | null;
+  isClickbait?: boolean | null;
+  cleanTitle?: string | null;
   feed: { url: string } | null;
   labels: { labelId: string }[];
   _count: { duplicates: number };
@@ -79,7 +86,7 @@ export type ListRow = {
 const EXCERPT_LENGTH = 200;
 
 /** DB row → wire row. Tolerates every nullable metadata column (pre-backfill rows). */
-export function toListItem(row: ListRow): ArticleListItem {
+export function toListItem(row: ListRow, opts: { cleanTitles?: boolean } = {}): ArticleListItem {
   const excerpt = row.excerpt ?? "";
   let kind = isArticleKind(row.kind) ? row.kind : null;
   let media =
@@ -126,7 +133,16 @@ export function toListItem(row: ListRow): ArticleListItem {
     ...(row.clusterId && row.cluster
       ? { clusterId: row.clusterId, clusterSize: row.cluster.size, clusterLeadId: row.cluster.leadArticleId }
       : {}),
+    isSponsored: row.isSponsored === true,
+    isClickbait: row.isClickbait === true,
+    displayTitle: opts.cleanTitles && row.isClickbait === true && row.cleanTitle ? row.cleanTitle : null,
   };
+}
+
+/** The user's "Sachliche Titel bei Clickbait" setting (default off). */
+export async function getCleanTitlesSetting(userId: string): Promise<boolean> {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { aiCleanTitles: true } });
+  return user?.aiCleanTitles === true;
 }
 
 // ---------------------------------------------------------------- cursor
@@ -213,17 +229,20 @@ export async function listArticles(userId: string, params: ListArticlesParams): 
     where.AND = [...(where.AND || []), keysetWhere(keyset, values, direction)];
   }
 
-  const rows = (await db.article.findMany({
-    where,
-    select: LIST_SELECT,
-    orderBy: keyset.map((field) => ({ [field]: direction })),
-    take: limit + 1,
-  })) as ListRow[];
+  const [rows, cleanTitles] = await Promise.all([
+    db.article.findMany({
+      where,
+      select: LIST_SELECT,
+      orderBy: keyset.map((field) => ({ [field]: direction })),
+      take: limit + 1,
+    }) as Promise<ListRow[]>,
+    getCleanTitlesSetting(userId),
+  ]);
 
   const hasMore = rows.length > limit;
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
   return {
-    items: pageRows.map(toListItem),
+    items: pageRows.map((row) => toListItem(row, { cleanTitles })),
     nextCursor: hasMore ? encodeCursor(pageRows[pageRows.length - 1], keyset) : null,
   };
 }

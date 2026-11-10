@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import type { ArticleDetail } from "@/features/articles/types";
-import { LIST_SELECT, toListItem, type ListRow } from "./list";
+import { parseStoredEntities } from "@/lib/article-enrichment";
+import { LIST_SELECT, getCleanTitlesSetting, toListItem, type ListRow } from "./list";
 
 /**
  * Render-ready body HTML, identical to what REST v1 / GReader / Fever serve:
@@ -18,10 +19,10 @@ export async function renderArticleHtml(content: string | null | undefined, cont
 export async function getArticleDetail(userId: string, id: string): Promise<ArticleDetail | null> {
   const row = await db.article.findFirst({
     where: { id, userId },
-    select: { ...LIST_SELECT, content: true, contentFormat: true, aiSummary: true, aiSummarizedAt: true },
+    select: { ...LIST_SELECT, content: true, contentFormat: true, aiSummary: true, aiSummarizedAt: true, entities: true },
   });
   if (!row) return null;
-  const item = toListItem(row as unknown as ListRow);
+  const item = toListItem(row as unknown as ListRow, { cleanTitles: await getCleanTitlesSetting(userId) });
   return {
     ...item,
     html: await renderArticleHtml(row.content, row.contentFormat),
@@ -29,5 +30,7 @@ export async function getArticleDetail(userId: string, id: string): Promise<Arti
     aiSummary: row.aiSummary ?? null,
     aiSummarizedAt: row.aiSummarizedAt?.toISOString() ?? null,
     readAt: row.readAt?.toISOString() ?? null,
+    entities: parseStoredEntities(row.entities),
+    originalTitle: item.displayTitle ? row.title : null,
   };
 }

@@ -16,6 +16,8 @@ import { resolveFullTextMode } from "./full-text-mode";
 import { fetchAndExtractReadable } from "./readability-extract";
 import { applySyncFailure, applySyncSuccess } from "./feed-auto-mute";
 import { computeArticleMeta, estimateReadMinutes, htmlToPlainText, markdownToPlainText } from "./article-kind";
+import { computeHeuristicEnrichment } from "./enrichment-heuristics";
+import { persistEnrichment } from "./article-enrichment";
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 const MAX_AUTO_TAG_PER_SYNC = 3;
@@ -42,6 +44,11 @@ export interface ArticleSyncInput {
     mediaUrl?: string | null;
     mediaType?: string | null;
     mediaDurationSecs?: number | null;
+    // K3 heuristic enrichment (lib/enrichment-heuristics.ts): only ever `true`,
+    // written on INSERT only — the AI pass and re-syncs never fight over them.
+    isSponsored?: boolean | null;
+    isClickbait?: boolean | null;
+    enrichSource?: string | null;
 }
 
 export interface ArticleSyncResult {
@@ -77,6 +84,16 @@ function metaFields(article: ArticleSyncInput) {
         mediaUrl: article.mediaUrl ?? null,
         mediaType: article.mediaType ?? null,
         mediaDurationSecs: article.mediaDurationSecs ?? null,
+    };
+}
+
+// Heuristic flags for brand-new rows. Deliberately NOT part of updatableFields.
+function enrichFields(article: ArticleSyncInput) {
+    if (!article.isSponsored && !article.isClickbait) return {};
+    return {
+        ...(article.isSponsored ? { isSponsored: true } : {}),
+        ...(article.isClickbait ? { isClickbait: true } : {}),
+        enrichSource: article.enrichSource ?? "heuristic",
     };
 }
 
@@ -216,6 +233,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
                     imageUrl: article.imageUrl ?? null,
                     enclosures: article.enclosures ?? null,
                     ...metaFields(article),
+                    ...enrichFields(article),
                 })),
                 select: { id: true, dedupeKey: true, contentHash: true },
             });
@@ -251,6 +269,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
                         imageUrl: article.imageUrl ?? null,
                         enclosures: article.enclosures ?? null,
                         ...metaFields(article),
+                        ...enrichFields(article),
                     },
                     select: { id: true, dedupeKey: true, contentHash: true },
                 });
@@ -398,6 +417,12 @@ export async function syncFeed(userId: string, feedId: string) {
                 imageUrl: item.imageUrl,
                 enclosures: item.enclosures?.length ? JSON.stringify(item.enclosures) : null,
                 ...meta,
+                ...computeHeuristicEnrichment({
+                    title,
+                    text: htmlToPlainText(content.slice(0, 2_000)),
+                    link,
+                    html: content,
+                }),
             };
         });
 
@@ -737,7 +762,7 @@ async function autoSummarizeNewArticles(userId: string, articleIds: string[]) {
     }
 }
 
-async function autoTagNewArticles(userId: string, articleIds: string[]) {
+export async function autoTagNewArticles(userId: string, articleIds: string[]) {
     const user = await db.user.findUnique({
         where: { id: userId },
         select: {
@@ -751,7 +776,7 @@ async function autoTagNewArticles(userId: string, articleIds: string[]) {
 
     if (!user?.aiAutoTag || !user.aiProvider) return;
 
-    const { generateTags } = await import("./ai-tagging");
+    const { generateEnrichment } = await import("./ai-tagging");
 
     const articles = await db.article.findMany({
         where: {
@@ -761,7 +786,7 @@ async function autoTagNewArticles(userId: string, articleIds: string[]) {
             aiTaggedAt: null,
         },
         orderBy: { createdAt: "asc" },
-        select: { id: true, content: true },
+        select: { id: true, title: true, content: true },
         take: MAX_AUTO_TAG_PER_SYNC,
     });
 
@@ -783,12 +808,18 @@ async function autoTagNewArticles(userId: string, articleIds: string[]) {
         ollamaBaseUrl: user.aiOllamaBaseUrl,
     };
 
+    // Articles that received AI enrichment: auto-read rules (`is:sponsored`,
+    // `is:clickbait`, `entity:`) must see the final flags/entities.
+    const enrichedIds: string[] = [];
+
     for (const article of articles) {
         const content = article.content?.trim();
         if (!content) continue;
 
         try {
-            const tagNames = await generateTags(content, aiConfig, existingLabelNames);
+            // ONE AI call per article: tags + entities + sponsored/clickbait/cleanTitle.
+            const enrichment = await generateEnrichment(article.title, content, aiConfig, existingLabelNames);
+            const tagNames = enrichment.tags;
 
             for (const name of tagNames) {
                 let label = await db.label.findFirst({ where: { userId, name } });
@@ -806,13 +837,23 @@ async function autoTagNewArticles(userId: string, articleIds: string[]) {
                 }
             }
 
-            await db.article.update({
-                where: { id: article.id },
-                data: { aiTaggedAt: new Date() },
-            });
+            // aiTaggedAt + enrichment in one write that keeps Article.updatedAt
+            // (GReader ot/nt clock) — see lib/article-enrichment.ts.
+            const result = await persistEnrichment(article.id, userId, enrichment);
+            if (!result.written) {
+                logger.warn("[rss-sync] enrichment write skipped (article changed concurrently):", article.id);
+            } else if (enrichment.structured) {
+                enrichedIds.push(article.id);
+            }
         } catch (error) {
             logger.error("[rss-sync] auto-tag failed:", error);
         }
+    }
+
+    if (enrichedIds.length > 0) {
+        await applyAutoReadRules(userId, { onlyArticleIds: enrichedIds }).catch((e) =>
+            logger.error("[rss-sync] applyAutoReadRules after enrichment failed:", e),
+        );
     }
 }
 

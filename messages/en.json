@@ -304,6 +304,8 @@
     "autoSummarizeDescription": "Automatically summarize new articles (uses API credits)",
     "autoTag": "Auto-tag on sync",
     "autoTagDescription": "Automatically suggest labels for new articles (uses API credits)",
+    "cleanTitles": "Neutral titles for clickbait",
+    "cleanTitlesDescription": "Show the AI-written neutral title in the list instead of a clickbait headline. Needs auto-tag. Search with is:sponsored, is:clickbait or entity:Name (also usable in auto-read rules).",
     "save": "Save",
     "saving": "Saving…",
     "testConnection": "Test connection",
