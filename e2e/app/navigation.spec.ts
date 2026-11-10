@@ -67,7 +67,8 @@ test("opening an article shows title and content in the reader; the article is i
 
 test("reader renders images and code blocks", async ({ app, page }) => {
   await app.open();
-  const row = page.getByRole("button", { name: new RegExp(app.user.sample.code.replace(/[()#]/g, "\\$&")) }).first();
+  // The row itself (CSS role): touch rows also hold a screen-reader "Actions: <title>" button.
+  const row = app.rowsMatching(app.user.sample.code).first();
   await row.scrollIntoViewIfNeeded();
   await app.activate(row);
   await expect(page.locator("article").filter({ hasText: app.user.sample.code }).locator("pre code")).toBeVisible();

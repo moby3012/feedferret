@@ -79,6 +79,8 @@ interface AddFeedDialogProps {
   initialUrl?: string;
   /** Bumped per open request, so a repeated share re-applies `initialUrl`. */
   requestId?: number;
+  /** Tab to open on ("discover" from the empty state of a new account). */
+  initialTab?: "url" | "discover";
 }
 
 /**
@@ -86,7 +88,7 @@ interface AddFeedDialogProps {
  * nested inside the feed sheet / sidebar: system Back closes it and it never
  * stacks on another overlay. Its form state resets on every close.
  */
-export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, requestId = 0 }: AddFeedDialogProps) {
+export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, initialTab, requestId = 0 }: AddFeedDialogProps) {
   const t = useTranslations();
   const locale = useLocale();
   const [newFeedUrl, setNewFeedUrl] = useState("");
@@ -140,6 +142,10 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
     packsLoaded.current = true;
     loadStarterPacks();
   }, [open]);
+
+  useEffect(() => {
+    if (open && !initialUrl && initialTab === "discover") setAddFeedTab("discover");
+  }, [open, initialUrl, initialTab, requestId]);
 
   useEffect(() => {
     if (!open || !initialUrl) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ResponsiveMenu, type OverlayMenuItem } from "@/components/ui/responsive-overlay";
+import { getLayoutClass, isCoarsePointer } from "@/features/reader/layout/layout-class";
+import { nav } from "@/features/reader/nav/store";
+import { useOwnedOverlay } from "@/features/reader/nav/use-owned-overlay";
 import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import {
   Tooltip,
@@ -209,6 +213,8 @@ export function RssSidebar({
 
   const [feedToDelete, setFeedToDelete] = useState<{ id: string; name: string } | null>(null);
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
+  // Bell menu: a nav overlay (system Back closes it, not the Feeds screen).
+  const [notificationsOpen, setNotificationsOpen] = useOwnedOverlay("notifications");
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const visibleFeeds = hideEmptyFeeds ? feeds.filter((f) => f.unreadCount > 0) : feeds;
@@ -630,7 +636,7 @@ export function RssSidebar({
             )}
             <Tooltip>
               <TooltipTrigger asChild>
-                <DropdownMenu>
+                <DropdownMenu open={notificationsOpen} onOpenChange={setNotificationsOpen}>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
@@ -1015,72 +1021,58 @@ function FeedQuickActions({
       return null;
     }
   })();
+  // Same overlay as every other "…" (sheet on compact touch, dropdown with a
+  // mouse) and a nav overlay: system Back closes it, not the Feeds screen.
+  const [open, setOpen] = useOwnedOverlay("feed-menu");
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [placement, setPlacement] = useState<{ mode: "sheet" | "menu"; anchor: { x: number; y: number } }>({ mode: "menu", anchor: { x: 0, y: 0 } });
+  // Act once the menu's history entry is gone: "Bearbeiten" / "Feed-Zustand"
+  // push another route, which must not race the overlay's history.back().
+  const afterClose = (fn: () => void) => () => void nav.closeOverlay("feed-menu").then(fn);
+  const items: OverlayMenuItem[] = [
+    { id: "refresh", label: t("sidebar.refreshFeed"), icon: RefreshCw, onSelect: onRefresh },
+    { id: "mark-read", label: t("sidebar.markAllAsRead"), icon: CheckCheck, onSelect: onMarkRead },
+    ...(websiteUrl ? [{ id: "website", label: t("sidebar.openWebsite"), icon: ExternalLink, onSelect: () => window.open(websiteUrl, "_blank", "noopener,noreferrer") }] : []),
+    { id: "edit", label: t("sidebar.editFeed"), icon: Pencil, separated: true, onSelect: afterClose(onEdit) },
+    { id: "health", label: t("sidebar.feedHealth"), icon: Activity, onSelect: afterClose(onShowHealth) },
+    { id: "delete", label: t("sidebar.deleteFeed"), icon: Trash2, separated: true, danger: true, onSelect: afterClose(onDelete) },
+  ];
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          aria-label={t("sidebar.feedActions")}
-          onClick={(e) => e.stopPropagation()}
-          className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/80 hover:text-foreground hover:bg-sidebar-accent/60 transition-colors"
-        >
-          <MoreHorizontal className="w-4 h-4" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        className="w-52 rounded-2xl p-2 shadow-overlay border-none bg-popover/95 backdrop-blur-bar"
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={t("sidebar.feedActions")}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-testid="feed-menu-button"
+        onClick={(e) => {
+          e.stopPropagation();
+          const r = e.currentTarget.getBoundingClientRect();
+          setPlacement({
+            mode: getLayoutClass() === "compact" && isCoarsePointer() ? "sheet" : "menu",
+            anchor: { x: Math.max(8, r.right - 256), y: r.bottom + 4 },
+          });
+          setOpen(true);
+        }}
+        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/80 hover:text-foreground hover:bg-sidebar-accent/60 transition-colors"
       >
-        <DropdownMenuItem
-          className="rounded-xl py-2.5 px-3 text-sm"
-          onClick={onRefresh}
-        >
-          <RefreshCw className="w-4 h-4 me-3" />
-          {t("sidebar.refreshFeed")}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="rounded-xl py-2.5 px-3 text-sm"
-          onClick={onMarkRead}
-        >
-          <CheckCheck className="w-4 h-4 me-3" />
-          {t("sidebar.markAllAsRead")}
-        </DropdownMenuItem>
-        {websiteUrl && (
-          <DropdownMenuItem
-            className="rounded-xl py-2.5 px-3 text-sm"
-            onClick={() =>
-              window.open(websiteUrl, "_blank", "noopener,noreferrer")
-            }
-          >
-            <ExternalLink className="w-4 h-4 me-3" />
-            {t("sidebar.openWebsite")}
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator className="my-1.5 bg-border/50" />
-        <DropdownMenuItem
-          className="rounded-xl py-2.5 px-3 text-sm"
-          onClick={onEdit}
-        >
-          <Pencil className="w-4 h-4 me-3" />
-          {t("sidebar.editFeed")}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="rounded-xl py-2.5 px-3 text-sm"
-          onClick={onShowHealth}
-        >
-          <Activity className="w-4 h-4 me-3" />
-          {t("sidebar.feedHealth")}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator className="my-1.5 bg-border/50" />
-        <DropdownMenuItem
-          className="rounded-xl py-2.5 px-3 text-sm text-destructive focus:text-destructive focus:bg-destructive/10"
-          onClick={onDelete}
-        >
-          <Trash2 className="w-4 h-4 me-3" />
-          {t("sidebar.deleteFeed")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+      {open && (
+        <ResponsiveMenu
+          open={open}
+          onOpenChange={setOpen}
+          mode={placement.mode}
+          title={feed.name ?? t("sidebar.feedActions")}
+          anchor={placement.anchor}
+          items={items}
+          testId="feed-menu"
+          returnFocus={() => triggerRef.current}
+        />
+      )}
+    </>
   );
 }
 

@@ -21,8 +21,10 @@ import { formatLoc, listKeyOfLoc, type Loc, type TabId } from "@/features/reader
 import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import { canMarkAll, markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
+import { useOnline } from "@/features/bootstrap/online";
 import { useReleaseArticleSpoiler } from "@/hooks/use-rss-data";
 import { ArticleListView } from "./article-list-view";
+import { EmptyListState, ListErrorState, NoFeedsState, type EmptyKind } from "./list-states";
 import { ListTopBar } from "./list-top-bar";
 import { scopeTitle } from "./scope-title";
 import { SpoilerGate } from "./spoiler-gate";
@@ -181,6 +183,9 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
   const [spoilerRevealed, setSpoilerRevealed] = useState<string | null>(null);
   const isSpoiler = scope?.kind === "spoiler";
   const loading = list.status === "pending";
+  // A failed first page is an error, never "caught up" / "end of list" (audit R1).
+  const failed = list.status === "error";
+  const online = useOnline();
   const unreadCount = p.scopeUnread ?? filtered.filter((a) => !a.isRead).length;
   const selectedArticle = p.selectedId ? (filtered.find((a) => a.id === p.selectedId) ?? null) : null;
   const markAll = scope && canMarkAll(scope) ? () => markViewRead(markViewScopeOf(scope)) : undefined;
@@ -253,7 +258,9 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
           onScrollTop={scrollTop}
           resultSummary={`${tSearch("resultsCount", { count })} · ${tSearch("unreadCount", { count: unreadCount })}`}
         />
-        {scope?.kind === "query" ? (
+        {scope?.kind === "query" && failed ? (
+          <ListErrorState offline={!online} retrying={list.isRetrying} onRetry={list.retry} />
+        ) : scope?.kind === "query" ? (
           <ArticleListView
             {...listProps}
             viewMode="list"
@@ -286,6 +293,37 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
   }
 
   const spoilerKey = listKey?.id ?? "";
+  // Nothing to show: which statement is true? (audit R6) A new account has no
+  // feeds; Gemerkt views have their own copy; "caught up" only for an unread
+  // list that really ran empty; anything else is just empty.
+  const empty = filtered.length === 0 && !loading;
+  const emptyKind: EmptyKind | null =
+    scope.kind === "later" || scope.kind === "starred"
+      ? scope.kind
+      : showApplies(scope) && loc.show === "all"
+        ? scope.kind === "label"
+          ? "label"
+          : "generic"
+        : null;
+  // Offline, an empty answer came from the device store: the list is simply
+  // not stored here — never "caught up" (Gemerkt views are stored in full).
+  const offlineEmpty = empty && !online && scope.kind !== "later" && scope.kind !== "starred";
+  const endOfList = offlineEmpty ? (
+    <ListErrorState offline retrying={list.isRetrying} onRetry={list.retry} />
+  ) : empty && data.feedsLoaded && data.feeds.length === 0 && scope.kind !== "query" ? (
+      <NoFeedsState onAddFeed={() => shell.requestAddFeed()} onDiscover={() => shell.requestAddFeed(undefined, "discover")} />
+    ) : empty && emptyKind ? (
+      <EmptyListState kind={emptyKind} />
+    ) : (
+      <EndOfListCard
+        caughtUp={unreadCount === 0}
+        onMarkAllRead={markAll}
+        isMarkingAllRead={p.isMarkingAllRead}
+        nextFeedName={nextFeed?.name ?? null}
+        onContinue={continueToNext}
+        continueMarksRead={data.prefs?.markReadOnAdvance ?? false}
+      />
+    );
   return (
     <>
       <ListTopBar
@@ -301,6 +339,8 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
       />
       {isSpoiler && spoilerRevealed !== spoilerKey ? (
         <SpoilerGate onReveal={() => setSpoilerRevealed(spoilerKey)} />
+      ) : failed ? (
+        <ListErrorState offline={!online} retrying={list.isRetrying} onRetry={list.retry} />
       ) : (
         <ArticleListView
           {...listProps}
@@ -312,17 +352,9 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
           isRefreshing={loading || data.isRefreshing}
           isSyncing={data.isRefreshing}
           newItems={newItems}
+          gestureHint={active}
           onPullToRefresh={shell.refresh}
-          endOfList={
-            <EndOfListCard
-              caughtUp={unreadCount === 0}
-              onMarkAllRead={markAll}
-              isMarkingAllRead={p.isMarkingAllRead}
-              nextFeedName={nextFeed?.name ?? null}
-              onContinue={continueToNext}
-              continueMarksRead={data.prefs?.markReadOnAdvance ?? false}
-            />
-          }
+          endOfList={endOfList}
           hasFeeds={data.feeds.length > 0}
           header={p.showBriefing ? <BriefingCard scopeKey="new" active={active} /> : undefined}
         />
@@ -331,7 +363,7 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
   );
 }, (prev, next) => (!prev.active && !next.active) || shallowEqual(prev, next));
 
-const LIST_FIELDS = ["items", "status", "isPlaceholder", "hasMore", "isFetchingMore"] as const;
+const LIST_FIELDS = ["items", "status", "isPlaceholder", "hasMore", "isFetchingMore", "isRetrying"] as const;
 
 function shallowEqual(a: ViewProps, b: ViewProps): boolean {
   return (Object.keys(a) as (keyof ViewProps)[]).every((key) =>

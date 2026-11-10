@@ -34,7 +34,10 @@ const PRECACHE_URLS = [
   "/icon-512.png",
   "/icon-512-maskable.png",
 ];
-const KNOWN_CACHES = [CACHE_NAME, STATIC_CACHE, RUNTIME_CACHE];
+// Per-device settings the worker needs while no page is open (app badge on/off).
+const SETTINGS_CACHE = "feedferret-settings-v1";
+const BADGE_PREF_URL = "/__feedferret/badge-pref";
+const KNOWN_CACHES = [CACHE_NAME, STATIC_CACHE, RUNTIME_CACHE, SETTINGS_CACHE];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -196,7 +199,31 @@ async function updateBadge(count) {
   }
 }
 
+/** Settings → Benachrichtigungen → "Badge am App-Symbol" (default on). */
+async function badgeEnabled() {
+  try {
+    const cache = await caches.open(SETTINGS_CACHE);
+    const stored = await cache.match(BADGE_PREF_URL);
+    return !stored || (await stored.text()) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+async function setBadgeEnabled(enabled) {
+  try {
+    const cache = await caches.open(SETTINGS_CACHE);
+    await cache.put(BADGE_PREF_URL, new Response(enabled ? "1" : "0"));
+  } catch {
+    // Without Cache Storage the page still clears the badge itself.
+  }
+  if (!enabled) await updateBadge(0);
+}
+
 self.addEventListener("message", (event) => {
+  if (event.data?.type === "BADGE_PREF") {
+    event.waitUntil(setBadgeEnabled(event.data.enabled !== false));
+  }
   if (event.data?.type === "SET_BADGE") {
     event.waitUntil(updateBadge(event.data.count));
   }
@@ -229,7 +256,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     Promise.all([
       self.registration.showNotification(title, options),
-      updateBadge(payload.unreadCount),
+      badgeEnabled().then((enabled) => (enabled ? updateBadge(payload.unreadCount) : undefined)),
     ]),
   );
 });

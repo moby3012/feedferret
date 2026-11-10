@@ -363,7 +363,7 @@
     position: relative;
     z-index: var(--z-bar);
     flex-shrink: 0;
-    padding-top: max(var(--safe-t), var(--titlebar-h));
+    padding-top: var(--safe-t);
     border-bottom: 1px solid transparent;
     background: var(--surface-base);
     user-select: none;
@@ -499,4 +499,159 @@
   .ff-search-item:hover {
     background: var(--surface-sunken);
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Offline chip (audit R2): icon + "Offline" in the list bar; icon only on the
+ * narrowest phones so the title / segments and "…" always keep their room.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 22.4375rem) {
+  .ff-offline-chip {
+    padding-inline: 4px;
+  }
+  .ff-offline-chip-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Touch rows without buttons (owner decision 2026-11-10, audit A-06): on a
+ * coarse pointer the read / star / later buttons are gone — swipe, long-press
+ * and the row menu carry the actions. The meta line collapses when the
+ * buttons were all it held. Screen readers get one "Aktionen" button per row
+ * (visually hidden until focused) that opens the same menu.
+ * ------------------------------------------------------------------------- */
+.ff-row-sr-actions {
+  display: none;
+}
+@media (pointer: coarse) {
+  .ff-row-actions,
+  .ff-row-meta[data-actions-only] {
+    display: none;
+  }
+  .ff-row[data-density="list"] {
+    --row-intrinsic: 112px;
+  }
+  .ff-row-sr-actions {
+    display: block;
+    position: absolute;
+    top: 4px;
+    inset-inline-end: var(--gutter);
+    z-index: 1;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .ff-row-sr-actions:focus-visible {
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    padding: 6px 10px;
+    border-radius: var(--radius-control);
+    background: var(--surface-raised);
+    box-shadow: inset 0 0 0 2px var(--ring);
+    font-size: var(--text-footnote);
+    font-weight: 600;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * First-use gesture hint (components/list/gesture-hint.tsx): a chip above the
+ * rows plus a stepped nudge of the first row (data-coach = "lead" | "trail"),
+ * each step a ≤320 ms transition — the motion ceiling holds.
+ * ------------------------------------------------------------------------- */
+.ff-gesture-hint {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 8px var(--gutter);
+  padding: 12px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-row);
+  background: color-mix(in oklch, var(--brand) 6%, var(--surface-base));
+}
+.ff-row[data-coach] > .ff-row-content {
+  transition: transform var(--dur-slow) var(--ease-standard);
+}
+.ff-row[data-coach] {
+  --swipe-p: 1;
+}
+.ff-row[data-coach="lead"] > .ff-row-content {
+  transform: translate3d(96px, 0, 0);
+}
+.ff-row[data-coach="trail"] > .ff-row-content {
+  transform: translate3d(-96px, 0, 0);
+}
+:root[dir="rtl"] .ff-row[data-coach="lead"] > .ff-row-content {
+  transform: translate3d(-96px, 0, 0);
+}
+:root[dir="rtl"] .ff-row[data-coach="trail"] > .ff-row-content {
+  transform: translate3d(96px, 0, 0);
+}
+.ff-row[data-coach="lead"] > .ff-row-reveal[data-side="leading"],
+.ff-row[data-coach="trail"] > .ff-row-reveal[data-side="trailing"] {
+  opacity: 1;
+}
+
+/* Settings → Lesen → Gesten: miniature half-swiped rows (components/gesture-settings.tsx). */
+.ff-gesture-demo {
+  position: relative;
+  height: 44px;
+  overflow: clip;
+  border-radius: var(--radius-control);
+  --reveal: var(--text-secondary);
+  background: color-mix(in oklch, var(--reveal) 14%, var(--surface-base));
+  color: var(--reveal);
+}
+.ff-gesture-demo[data-action="read"] {
+  --reveal: var(--success);
+}
+.ff-gesture-demo[data-action="later"] {
+  --reveal: var(--brand-secondary);
+}
+.ff-gesture-demo[data-action="star"] {
+  --reveal: var(--brand);
+}
+.ff-gesture-demo-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 12px;
+}
+.ff-gesture-demo[data-side="trailing"] .ff-gesture-demo-reveal {
+  justify-content: flex-end;
+}
+.ff-gesture-demo-row {
+  position: absolute;
+  inset-block: 0;
+  inset-inline: 96px -96px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-inline: 12px;
+  border: 1px solid var(--divider);
+  border-radius: inherit;
+  background: var(--surface-base);
+  color: var(--text-secondary);
+}
+.ff-gesture-demo[data-side="trailing"] .ff-gesture-demo-row {
+  inset-inline: -96px 96px;
+  justify-content: flex-end;
+}
+.ff-gesture-demo-line {
+  height: 8px;
+  width: 50%;
+  border-radius: 9999px;
+  background: var(--divider);
 }

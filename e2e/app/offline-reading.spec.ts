@@ -147,11 +147,13 @@ test("connection drops inside the app: Read later list and reader open from the 
   await openAndWaitForStore(app, page);
   await context.setOffline(true);
   await expect(page.getByTestId("offline-chip")).toBeVisible();
-  await expect(page.getByTestId("offline-chip")).toHaveText("Offline – changes only when back online");
+  // Compact chip: icon + "Offline"; the full sentence is its name / tooltip.
+  await expect(page.getByTestId("offline-chip")).toHaveText("Offline");
+  await expect(page.getByTestId("offline-chip")).toHaveAccessibleName("Offline – changes only when back online");
   await app.selectSidebar(/^Read later\s*\d*$/);
   await expect(app.rows()).toHaveCount(app.user.counts.readLater);
   // Still read-only.
-  await app.activate(app.rows().first().getByRole("button", { name: /^(Star|Remove star)$/ }));
+  await app.toggle(app.rows().first().locator('[role="button"]').first(), "star");
   await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Offline – changes only when back online" })).toHaveCount(1);
   await app.activate(app.rows().first());
   const article = page.locator("article");

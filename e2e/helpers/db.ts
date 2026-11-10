@@ -404,3 +404,50 @@ export function setCountDisplay(userKey: string, mode: "all" | "categories" | "o
     db.close();
   }
 }
+
+/**
+ * A brand-new account without feeds: a copy of the seeded user's row (same
+ * password) under a new id / e-mail. Log in through the form; the cleanup
+ * deletes it (sessions etc. cascade).
+ */
+export function createEmptyUser(userKey: string, tag: string): { email: string; cleanup: () => void } {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  const id = `e2e-empty-${tag}-${Date.now().toString(36)}`;
+  const email = `${id}@e2e.test`;
+  try {
+    const row = db.prepare(`SELECT * FROM "User" WHERE id = ?`).get(userId) as Record<string, unknown>;
+    const copy: Record<string, unknown> = { ...row, id, email, name: "Empty" };
+    // Unique per-user secrets / tokens must not be duplicated.
+    for (const key of ["apiFeverKey", "digestUnsubscribeToken"]) if (key in copy) copy[key] = null;
+    const cols = Object.keys(copy);
+    db.prepare(`INSERT INTO "User" (${cols.map((c) => `"${c}"`).join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).run(
+      ...cols.map((c) => copy[c] as string | number | null),
+    );
+  } finally {
+    db.close();
+  }
+  return {
+    email,
+    cleanup: () => {
+      const c = open();
+      try {
+        c.pragma("foreign_keys = ON");
+        c.prepare(`DELETE FROM "User" WHERE id = ?`).run(id);
+      } finally {
+        c.close();
+      }
+    },
+  };
+}
+
+/** Nothing saved for later / starred for one user (resetArticleState restores the seed). */
+export function clearSaved(userKey: string) {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    db.prepare(`UPDATE "Article" SET isReadLater = 0, readLaterSavedAt = NULL, isStarred = 0 WHERE userId = ?`).run(userId);
+  } finally {
+    db.close();
+  }
+}

@@ -7,3 +7,4 @@ export { springBack } from "./spring";
 export { activeGesture, cancelActiveGesture, documentDir, recentlyScrolled } from "./guards";
 export { useGesturePrefs, getGesturePrefs, setGesturePref, SWIPE_ACTIONS, DEFAULT_GESTURE_PREFS, type GesturePrefs, type SwipeActionId } from "./prefs";
 export * from "./math";
+export { completeGestureHint, resetGestureHint, useGestureHintDue, GESTURE_HINT_KEY } from "./coach";

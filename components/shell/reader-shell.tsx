@@ -12,7 +12,7 @@ import type { UiPrefs } from "@/features/reader/layout/ui-prefs";
 import { UiPrefsProvider } from "@/features/reader/layout/ui-prefs-context";
 import { TAB_IDS } from "@/features/reader/nav/location";
 import { NavProvider, bootNav, useNav } from "@/features/reader/nav/store";
-import { useAppBadge } from "@/hooks/use-app-badge";
+import { useAppBadge, useAppBadgeEnabled } from "@/hooks/use-app-badge";
 import { markInAppNavigation } from "@/lib/in-app-back";
 import { browserStorage, recordSyncResult, syncedWithin } from "@/features/sync/last-sync";
 import { PaneResizer } from "./pane-resizer";
@@ -112,7 +112,7 @@ function useBackgroundWork(userId: string) {
   const qc = useQueryClient();
   const counts = useCounts(true);
   const unreadBadge = useMemo(() => Object.values(counts.byFeed).reduce((sum, n) => sum + n, 0), [counts.byFeed]);
-  useAppBadge(unreadBadge, true);
+  useAppBadge(unreadBadge, useAppBadgeEnabled());
 
   const toastShown = useRef(false);
   useEffect(() => {

@@ -17,7 +17,17 @@ interface FakeEvent {
 function boot(fetchImpl: (req: unknown, init?: { signal?: AbortSignal }) => Promise<Response>) {
   const listeners: Record<string, Array<(e: unknown) => void>> = {};
   const offline = new Response("<html><body>OFFLINE</body></html>", { status: 200, headers: { "content-type": "text/html" } });
-  const cache = { match: async (key: string) => (key === "/offline.html" ? offline.clone() : undefined), keys: async () => [], put: async () => {}, delete: async () => true, addAll: async () => {} };
+  // Only the worker's own settings entries are kept (fetch caching stays out of these tests).
+  const settings = new Map<string, Response>();
+  const cache = {
+    match: async (key: string) => (key === "/offline.html" ? offline.clone() : settings.get(String(key))?.clone()),
+    keys: async () => [],
+    put: async (key: string, res: Response) => {
+      if (String(key).startsWith("/__feedferret/")) settings.set(String(key), res);
+    },
+    delete: async () => true,
+    addAll: async () => {},
+  };
   const badge = { setAppBadge: vi.fn(async () => {}), clearAppBadge: vi.fn(async () => {}) };
   const self = {
     location: { origin: ORIGIN },
@@ -194,5 +204,30 @@ describe("service worker badge (not shimmed)", () => {
     await run({ type: "SET_BADGE", count: 0 });
     await run({ type: "CLEAR_BADGE" });
     expect(sw.badge.clearAppBadge).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("service worker badge preference (Settings → app badge, default on)", () => {
+  it("push sets the badge by default; BADGE_PREF off clears it and keeps pushes from setting it; on again restores", async () => {
+    const sw = boot(async () => html("x"));
+    const run = async (type: string, data: unknown) => {
+      const waits: Array<Promise<unknown>> = [];
+      sw.dispatch(type, { data, waitUntil: (p: Promise<unknown>) => waits.push(p) });
+      await Promise.all(waits);
+    };
+    const push = (count: number) => run("push", { json: () => ({ title: "t", unreadCount: count }) });
+
+    await push(4);
+    expect(sw.badge.setAppBadge).toHaveBeenLastCalledWith(4);
+
+    await run("message", { type: "BADGE_PREF", enabled: false });
+    expect(sw.badge.clearAppBadge).toHaveBeenCalledTimes(1);
+    sw.badge.setAppBadge.mockClear();
+    await push(5);
+    expect(sw.badge.setAppBadge).not.toHaveBeenCalled();
+
+    await run("message", { type: "BADGE_PREF", enabled: true });
+    await push(6);
+    expect(sw.badge.setAppBadge).toHaveBeenLastCalledWith(6);
   });
 });

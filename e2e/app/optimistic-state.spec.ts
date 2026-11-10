@@ -1,5 +1,5 @@
 import type { Page, Request } from "@playwright/test";
-import { test, expect } from "../helpers/test";
+import { test, expect, type App } from "../helpers/test";
 import { articleFlags, starredCountInDb, unreadCountInDb } from "../helpers/db";
 
 /**
@@ -81,20 +81,20 @@ test("star, read-later and read flip in the same frame on a throttled network; c
 test("a failed write reverts exactly that field and shows one toast", async ({ app, page }) => {
   await app.open();
   // A successful write first: it must survive the later failure.
-  await app.activate(app.rowActions(3).read);
+  await app.toggle(3, "read");
   await expect.poll(() => articleFlags(app.articleId(3)).isRead).toBe(true);
   const starredBefore = await app.sidebarCount("Starred");
 
   await page.route("**/*", (route) => (isAction(route.request()) ? route.abort("failed") : route.continue()));
-  await app.activate(app.rowActions(3).star);
-  await app.activate(app.rowActions(5).later);
+  await app.toggle(3, "star");
+  await app.toggle(5, "later");
 
   const failToast = page.locator("[data-sonner-toast]").filter({ hasText: "Couldn't save that change" });
   await expect(failToast).toHaveCount(1);
-  await expect(app.rowActions(3).star).toHaveAccessibleName("Star");
-  await expect(app.rowActions(5).later).toHaveAccessibleName("Save to Read Later");
+  await app.expectRow(3, { starred: false });
+  await app.expectRow(5, { later: false });
   // The earlier, successful read is untouched.
-  await expect(app.rowActions(3).read).toHaveAccessibleName("Mark as unread");
+  await app.expectRow(3, { read: true });
   expect(await app.sidebarCount("Starred")).toBe(starredBefore);
   await page.waitForTimeout(1500);
   await expect(failToast).toHaveCount(1);
@@ -104,22 +104,26 @@ test("a failed write reverts exactly that field and shows one toast", async ({ a
 });
 
 test("20 rapid toggles: UI, sidebar counts and DB agree, before and after reload", async ({ app, page }) => {
+  // Touch: each toggle is a long-press + menu tap (~1.5 s).
+  if (app.isMobile) test.setTimeout(120_000);
   await app.open();
   const actions = countActions(page);
   for (let i = 0; i < 20; i++) {
     const num = (i % 7) + 1;
-    await app.activate(i % 2 === 0 ? app.rowActions(num).star : app.rowActions(num).read);
+    await app.toggle(num, i % 2 === 0 ? "star" : "read");
   }
-  // Coalesced: far fewer action calls than toggles.
+  // Coalesced: far fewer action calls than toggles. (Touch toggles go through
+  // the long-press menu, ~1 s each: every one flushes alone there — the
+  // batching itself is covered at tap cadence by the tests below.)
   await expect.poll(() => actions.count, { timeout: 10_000 }).toBeGreaterThan(0);
   await page.waitForTimeout(1500);
-  expect(actions.count).toBeLessThanOrEqual(6);
+  if (!app.isMobile) expect(actions.count).toBeLessThanOrEqual(6);
   actions.stop();
 
   const starredInDb = () => [1, 2, 3, 4, 5, 6, 7].filter((n) => articleFlags(app.articleId(n)).isStarred).length;
   const starredInUi = async () => {
     let n = 0;
-    for (const num of [1, 2, 3, 4, 5, 6, 7]) if ((await app.rowActions(num).star.getAttribute("aria-label")) === "Remove star") n++;
+    for (const num of [1, 2, 3, 4, 5, 6, 7]) if ((await app.rowHost(num).getAttribute("data-starred")) !== null) n++;
     return n;
   };
   await expect.poll(starredInDb, { timeout: 10_000 }).toBe(await starredInUi());
@@ -136,10 +140,23 @@ test("20 rapid toggles: UI, sidebar counts and DB agree, before and after reload
   await check();
 });
 
+/**
+ * A star button of #001 that a finger can hit at tap cadence: the row's with
+ * a mouse; on touch (rows have no buttons) the reader pill's — opened first,
+ * and only once its automatic mark-read has been written.
+ */
+async function tapStar(app: App, page: Page) {
+  if (!app.isMobile) return app.rowActions(1).star;
+  await app.activate(app.row(1));
+  await expect.poll(() => articleFlags(app.articleId(1)).isRead).toBe(true);
+  await page.waitForTimeout(1200);
+  return page.locator('[data-pane="reader"] .ff-reader-pill').getByRole("button", { name: /^(Star|Remove star)$/ });
+}
+
 test("10 rapid toggles of one star send at most 2 action calls", async ({ app, page }) => {
   await app.open();
+  const star = await tapStar(app, page);
   const actions = countActions(page);
-  const star = app.rowActions(1).star;
   for (let i = 0; i < 10; i++) await app.activate(star);
   await page.waitForTimeout(2000);
   // Each toggle meets its inverse in the queue (taps land well inside the
@@ -156,8 +173,8 @@ test("toggles at human tap cadence (~220 ms apart) cancel out instead of one cal
   // (~200 ms apart) was flushed alone -> 10 taps, 10 calls. Paced so local and
   // CI runs see the same gap.
   await app.open();
+  const star = await tapStar(app, page);
   const actions = countActions(page);
-  const star = app.rowActions(1).star;
   for (let i = 0; i < 10; i++) {
     const started = Date.now();
     await app.activate(star);
@@ -172,12 +189,21 @@ test("toggles at human tap cadence (~220 ms apart) cancel out instead of one cal
 
 test("a single toggle is one action call: no feeds / labels / counts refetch afterwards", async ({ app, page }) => {
   await app.open();
+  // The offline-reading boot pass (4 s after mount: session check, Read-later
+  // list, then the bodies, paced) must not land in the window: a touch toggle
+  // goes through the long-press menu and takes ~1 s longer than a click.
+  await page.waitForTimeout(4500);
+  await page.waitForLoadState("networkidle");
   const actions = countActions(page);
   const gets: string[] = [];
   page.on("request", (r) => {
-    if (r.method() === "GET" && new URL(r.url()).pathname.startsWith("/api/")) gets.push(new URL(r.url()).pathname);
+    const path = new URL(r.url()).pathname;
+    // Article BODIES are not refetches: the offline store's paced Read-later
+    // prefetch, and the press-to-open prefetch of the touched row.
+    if (/^\/api\/app\/articles\/[^/]+$/.test(path)) return;
+    if (r.method() === "GET" && path.startsWith("/api/")) gets.push(path);
   });
-  await app.activate(app.rowActions(1).star);
+  await app.toggle(1, "star");
   await page.waitForTimeout(2500);
   expect(actions.count).toBe(1);
   expect(gets).toEqual([]);
@@ -186,8 +212,8 @@ test("a single toggle is one action call: no feeds / labels / counts refetch aft
 
 test("marking read keeps the row until the view changes", async ({ app, page }) => {
   await app.open();
-  await app.activate(app.rowActions(2).read);
-  await expect(app.rowActions(2).read).toHaveAccessibleName("Mark as unread");
+  await app.toggle(2, "read");
+  await app.expectRow(2, { read: true });
   await page.waitForTimeout(500);
   await expect(app.row(2)).toBeVisible();
   // Leave and come back: the read row is gone from the unread view.
@@ -202,9 +228,9 @@ test("offline is read-only: chip shown, toggles refused with a toast", async ({ 
   await app.open();
   await context.setOffline(true);
   await expect(page.getByTestId("offline-chip")).toBeVisible();
-  await app.activate(app.rowActions(1).star);
+  await app.toggle(1, "star");
   await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Offline – changes only when back online" })).toHaveCount(1);
-  await expect(app.rowActions(1).star).toHaveAccessibleName("Star");
+  await app.expectRow(1, { starred: false });
   await context.setOffline(false);
   await expect(page.getByTestId("offline-chip")).toHaveCount(0);
   expect(articleFlags(app.articleId(1)).isStarred).toBe(false);

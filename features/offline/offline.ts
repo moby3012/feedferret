@@ -101,6 +101,11 @@ export async function readStoredPage(key: ListKey): Promise<ArticlePage | null> 
   if (!userId) return null;
   const items = itemsForScope(await listRows(userId), key);
   if (!items) return null;
+  // Nothing stored for a scope the store only holds a sample of (a feed, a
+  // label, all): that is "not available offline", not an empty list — the
+  // caller fails and the list shows its offline / error state (audit R1).
+  // "Später lesen" and "Zuletzt gelesen" are stored in full: empty is true.
+  if (items.length === 0 && key.scopeKey !== "v:later" && key.scopeKey !== "v:recent") return null;
   servedLists.set(key.id + key.sort, key);
   served();
   return { items, nextCursor: null };
