@@ -161,7 +161,8 @@ export function ArticleReader({
   const { data: aiSettings } = useAiSettings();
   const aiSummaryEnabled = Boolean(aiSettings?.provider);
   const [localSummary, setLocalSummary] = useState<string | null>(null);
-  const [summarizeFailed, setSummarizeFailed] = useState(false);
+  // false | "error" (provider failed) | "budget" (daily token cap) | "ai_off" (cap 0)
+  const [summarizeFailed, setSummarizeFailed] = useState<false | "error" | "budget" | "ai_off">(false);
   const summarize = useSummarizeArticle();
 
   // F5: export / "send to" destinations — hidden entirely unless the user has
@@ -663,11 +664,12 @@ export function ArticleReader({
                       setSummarizeFailed(false);
                       try {
                         const result = await summarize.mutateAsync(article.id);
-                        setLocalSummary(result.summary);
+                        if (result.error) setSummarizeFailed(result.error);
+                        else setLocalSummary(result.summary);
                       } catch {
                         // Error toast is shown by useSummarizeArticle's onError;
                         // here we just track state for the inline retry hint.
-                        setSummarizeFailed(true);
+                        setSummarizeFailed("error");
                       }
                     }}
                   >
@@ -683,8 +685,8 @@ export function ArticleReader({
                 {summary ? (
                   <p className="mt-2 text-sm leading-relaxed text-foreground/80">{summary}</p>
                 ) : summarizeFailed ? (
-                  <p className="mt-2 text-sm text-destructive">
-                    {t("summarizeFailedInline")}
+                  <p className="mt-2 text-sm text-destructive" role="status">
+                    {summarizeFailed === "budget" ? t("summarizeBudget") : summarizeFailed === "ai_off" ? t("summarizeAiOff") : t("summarizeFailedInline")}
                   </p>
                 ) : (
                   <p className="mt-2 text-sm text-muted-foreground italic">

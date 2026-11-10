@@ -151,6 +151,36 @@ test.describe("briefing card", () => {
     expect(briefingCount(app.userKey)).toBe(0);
   });
 
+  test("first row never moves when the card mounts, even when the briefing GET is slower than the list", async ({ app, page }) => {
+    resetBriefing(app.userKey);
+    // Slow briefing GET (the list answers first); POSTs untouched.
+    await page.route("**/api/app/briefing?*", async (route) => {
+      if (route.request().method() === "GET") await new Promise((r) => setTimeout(r, 700));
+      await route.continue();
+    });
+    // Every frame: y of the first row of the active list + whether the card exists.
+    await page.addInitScript(() => {
+      const samples: { y: number; card: boolean }[] = [];
+      (window as unknown as { __rowSamples: typeof samples }).__rowSamples = samples;
+      const tick = () => {
+        const pane = document.querySelector('[data-pane^="list-"][data-active="true"]');
+        const row = pane?.querySelector("[data-article-id]");
+        if (row) samples.push({ y: Math.round(row.getBoundingClientRect().top * 10) / 10, card: !!pane?.querySelector('[data-testid="briefing-card"]') });
+        if (samples.length < 2_000) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    await page.goto("/");
+    await expect(card(page)).toBeVisible({ timeout: 30_000 });
+    await expect(app.rows().first()).toBeVisible();
+    await page.waitForTimeout(300);
+    const samples = await page.evaluate(() => (window as unknown as { __rowSamples: { y: number; card: boolean }[] }).__rowSamples);
+    expect(samples.length).toBeGreaterThan(0);
+    // The card was already there when the first row painted, and the row never moved.
+    expect(samples[0].card).toBe(true);
+    expect(new Set(samples.map((s) => s.y)).size).toBe(1);
+  });
+
   test("rows do not move when streaming completes while the list is scrolled", async ({ app, page }) => {
     setAiProvider(app.userKey, "fake", "fake-slow");
     await openCard(app, page, /Headline overview/);

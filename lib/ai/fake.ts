@@ -4,21 +4,67 @@
 // the task by the `<!-- ff:task=… -->` marker every K prompt starts with.
 //
 // Gate: never available in a real deployment. It needs FEEDFERRET_FAKE_AI=1
-// AND either a non-production NODE_ENV (vitest, `next dev`) or the disposable
-// e2e harness database (a SQLite file inside a `.e2e/` directory — the e2e
-// harness serves a production build, see playwright.config.ts). A production
-// instance (Postgres, or SQLite under /app/data) can never satisfy it, even
-// with the flag set by mistake.
+// AND either a non-production NODE_ENV (vitest, `next dev`) or — the e2e
+// harness serves a production build — a per-run harness token: the
+// Playwright config generates a random FEEDFERRET_E2E_HARNESS token per run,
+// scripts/e2e-seed.mjs writes it into a marker file next to the freshly seeded
+// SQLite DB (`<db>.harness`), and only a server whose env token matches that
+// file's content enables the fake. A production instance with the flag set by
+// mistake has no such marker: the flag is ignored and an error is logged once.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { timingSafeEqual } from "node:crypto";
+import { logger } from "@/lib/logger";
 import { AiProviderError } from "./errors";
 
 export const FAKE_MODELS = ["fake", "fake-slow", "fake-error", "fake-auth", "fake-garbage", "fake-timeout"] as const;
 
+/** Marker file of the e2e harness for a SQLite `DATABASE_URL` (`file:/abs/e2e.db` → `/abs/e2e.db.harness`). */
+export function harnessMarkerPath(databaseUrl: string | undefined, provider: string | undefined): string | null {
+  const kind = (provider || "sqlite").toLowerCase();
+  if (kind !== "sqlite" && kind !== "file") return null;
+  const m = /^file:([^?]+)/.exec(databaseUrl ?? "");
+  return m ? `${resolve(m[1])}.harness` : null;
+}
+
+const MIN_TOKEN_CHARS = 32;
+const verified = new Set<string>();
+let loggedIgnored = false;
+
+function harnessTokenMatches(): boolean {
+  const token = process.env.FEEDFERRET_E2E_HARNESS ?? "";
+  const marker = harnessMarkerPath(process.env.DATABASE_URL, process.env.DATABASE_PROVIDER);
+  if (token.length < MIN_TOKEN_CHARS || !marker) return false;
+  const key = `${marker}\0${token}`;
+  if (verified.has(key)) return true;
+  let content: string;
+  try {
+    content = readFileSync(marker, "utf8").trim();
+  } catch {
+    return false;
+  }
+  const a = Buffer.from(content);
+  const b = Buffer.from(token);
+  const ok = a.length === b.length && timingSafeEqual(a, b);
+  if (ok) verified.add(key);
+  return ok;
+}
+
 export function isFakeAiEnabled(): boolean {
   if (process.env.FEEDFERRET_FAKE_AI !== "1") return false;
   if (process.env.NODE_ENV !== "production") return true;
-  const provider = (process.env.DATABASE_PROVIDER || "sqlite").toLowerCase();
-  const url = process.env.DATABASE_URL ?? "";
-  return (provider === "sqlite" || provider === "file") && /^file:.*[\\/]\.e2e[\\/][\w.-]+\.db$/.test(url);
+  if (harnessTokenMatches()) return true;
+  if (!loggedIgnored) {
+    loggedIgnored = true;
+    logger.error("[ai] FEEDFERRET_FAKE_AI=1 is set in production without a matching e2e harness token — ignored; the fake AI provider stays disabled.");
+  }
+  return false;
+}
+
+/** Tests only: forget verified tokens and the one-time log. */
+export function resetFakeAiGate(): void {
+  verified.clear();
+  loggedIgnored = false;
 }
 
 export function assertFakeAiEnabled() {
@@ -49,7 +95,8 @@ function fakeBriefing(prompt: string): string {
   for (const s of stories.slice(0, 3)) lines.push(`- ${titleOf(s.text)} — ${sourcesOf(s.id)} Quellen. [[${s.id}]]`);
   lines.push("- Ungeprüfte Behauptung [[s99]]");
   lines.push("- Satz ohne Quelle");
-  if (stories.some((s) => s.text.includes("IGNORE"))) lines.push("- <script>alert(1)</script> https://evil.example [[s1]]");
+  // (Starts with the story's title so it passes the grounding guard and the sanitizer is what removes tag + URL.)
+  if (stories.some((s) => s.text.includes("IGNORE"))) lines.push(`- ${titleOf(stories[0].text)} <script>alert(1)</script> https://evil.example [[s1]]`);
   lines.push("## WHY");
   if (stories.length) {
     const entity = titleOf(stories[0].text).split(/\s+/).find((w) => /^[A-ZÄÖÜ0-9]/.test(w)) ?? "Thema";

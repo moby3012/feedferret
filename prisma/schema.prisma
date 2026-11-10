@@ -33,6 +33,7 @@ model User {
   storyClusters StoryCluster[]
   briefings     Briefing[]
   aiUsage       AiUsage[]
+  aiBudgetDays  AiBudgetDay[]
   labels        Label[]
   savedSearches SavedSearch[]
   autoReadRules AutoReadRule[]
@@ -494,16 +495,31 @@ model Briefing {
   @@index([userId, scopeKey, createdAt])
 }
 
-// K2: per-user, per-day (UTC), per-feature AI token usage — the server-side daily cap reads it.
+// K2: per-user, per-day (UTC), per-feature AI token usage (statistics; settings shows cloud vs local).
 model AiUsage {
   userId    String
   day       String   // "YYYY-MM-DD" UTC
   feature   String   // "briefing" | "tagging" | "summary" | "digest" | "extraction"
+  kind      String   @default("cloud") // "cloud" (capped) | "local" (Ollama, never capped)
   tokensIn  Int      @default(0)
   tokensOut Int      @default(0)
   calls     Int      @default(0)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@id([userId, day, feature])
+  @@id([userId, day, feature, kind])
+}
+
+// K2: the daily cap's single source of truth — cloud tokens of one user/day (UTC), including
+// in-flight reservations. A call reserves its estimate with ONE conditional increment
+// (`tokens <= cap - estimate`) before it runs and reconciles to the actual usage afterwards,
+// so concurrent calls can never overshoot the cap. exhaustedAt = a call was refused today
+// (automatic AI features paused; cleared when the cap changes).
+model AiBudgetDay {
+  userId      String
+  day         String    // "YYYY-MM-DD" UTC
+  tokens      Int       @default(0)
+  exhaustedAt DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, day])
 }
 
 model Label {
@@ -527,6 +543,9 @@ model ArticleLabel {
   userId    String
   article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
   label     Label   @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  // "user" (any manual / API / import / rule assignment) | "ai" (auto-tagging). The K2
+  // briefing ranks only user labels as a signal, never the model's own tags.
+  source    String  @default("user")
   createdAt DateTime @default(now())
   @@id([articleId, labelId])
   @@index([labelId])

@@ -1,6 +1,7 @@
 import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { fakePrompt, isFakeAiEnabled } from "@/lib/ai/fake";
-import { assertBudget, estimateTokens, recordUsage, type AiFeature } from "@/lib/ai/usage";
+import { classifyAiError } from "@/lib/ai/errors";
+import { estimateTokens, reserveBudget, settleUsage, type AiFeature } from "@/lib/ai/usage";
 
 /** "fake" is the deterministic CI provider (lib/ai/fake.ts); it only exists behind its test gate. */
 export type AiProvider = "openai" | "anthropic" | "ollama" | "gemini" | "openrouter" | "fake";
@@ -110,9 +111,17 @@ export async function runAiPrompt(prompt: string, config: AiConfig, maxTokens = 
   if (!config.usage) return dispatchAiPrompt(prompt, config, maxTokens);
   const { userId, feature } = config.usage;
   const estIn = estimateTokens(prompt);
-  await assertBudget(userId, config.provider, estIn + maxTokens);
-  const output = await dispatchAiPrompt(prompt, config, maxTokens);
-  await recordUsage(userId, feature, estIn, estimateTokens(output));
+  // Atomic reservation of input + max output BEFORE the call (throws AiBudgetError).
+  const reservation = await reserveBudget(userId, config.provider, estIn + maxTokens);
+  let output: string;
+  try {
+    output = await dispatchAiPrompt(prompt, config, maxTokens);
+  } catch (error) {
+    // Aborted / timed out: the provider most likely processed (and billed) the input.
+    await settleUsage(reservation, feature, classifyAiError(error) === "timeout" ? estIn : 0, 0);
+    throw error;
+  }
+  await settleUsage(reservation, feature, estIn, estimateTokens(output));
   return output;
 }
 

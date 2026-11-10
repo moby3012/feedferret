@@ -154,15 +154,31 @@ type CandidateRow = {
   clusterId: string | null;
   feedId: string;
   feed: { name: string; priority: string };
-  _count: { labels: number; notifications: number };
 };
+
+/**
+ * Candidates the reader marked (a user label — never an AI auto-tag) or a
+ * keyword alert / rule hit notified about: one grouped query per signal,
+ * restricted to the candidate ids (index-backed, no whole-table counts).
+ */
+async function userSignalHits(userId: string, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const [labels, alerts] = await Promise.all([
+    db.articleLabel.groupBy({ by: ["articleId"], where: { userId, articleId: { in: ids }, source: "user" } }),
+    db.notification.groupBy({ by: ["articleId"], where: { userId, articleId: { in: ids }, type: { in: ["keyword_alert", "rule_match"] } } }),
+  ]);
+  const hits = new Set<string>();
+  for (const row of labels) hits.add(row.articleId);
+  for (const row of alerts) if (row.articleId) hits.add(row.articleId);
+  return hits;
+}
 
 export interface SelectOptions {
   now?: Date;
 }
 
 /**
- * Builds the briefing input of one scope (≤ 5 queries + 2 memoized).
+ * Builds the briefing input of one scope (≤ 7 queries + 2 memoized).
  * `scope` must already be ownership-checked (see `resolveBriefingScope`).
  */
 export async function selectBriefingInput(userId: string, scope: BriefingScope, listScope: Scope, o: SelectOptions = {}): Promise<BriefingInput> {
@@ -170,7 +186,7 @@ export async function selectBriefingInput(userId: string, scope: BriefingScope, 
   const scopeKey = briefingScopeKey(scope);
   const [lastSeen, user, view] = await Promise.all([
     db.briefing.findFirst({ where: { userId, scopeKey, seenAt: { not: null } }, orderBy: { windowEnd: "desc" }, select: { windowEnd: true } }),
-    db.user.findUnique({ where: { id: userId }, select: { aiSummaryLanguage: true, uiLanguage: true } }),
+    db.user.findUnique({ where: { id: userId }, select: { aiSummaryLanguage: true, uiLanguage: true, storyClustering: true } }),
     buildViewScope(userId, listScope),
   ]);
   const window = briefingWindow(lastSeen?.windowEnd ?? null, now);
@@ -202,11 +218,14 @@ export async function selectBriefingInput(userId: string, scope: BriefingScope, 
       clusterId: true,
       feedId: true,
       feed: { select: { name: true, priority: true } },
-      _count: { select: { labels: true, notifications: true } },
     },
   });
 
-  // Group into story units: one per K1 cluster, singletons on their own.
+  // Group into story units: one per K1 cluster, singletons on their own. With
+  // story clustering switched off for the user, every article is its own unit
+  // (stale clusterIds from before the switch are ignored).
+  const clustering = user?.storyClustering ?? true;
+  if (!clustering) for (const row of rows) row.clusterId = null;
   const groups = new Map<string, CandidateRow[]>();
   for (const row of rows) {
     const key = row.clusterId ? `c:${row.clusterId}` : `a:${row.id}`;
@@ -215,11 +234,12 @@ export async function selectBriefingInput(userId: string, scope: BriefingScope, 
     else groups.set(key, [row]);
   }
   const clusterIds = [...new Set(rows.map((r) => r.clusterId).filter((id): id is string => !!id))];
-  const [clusters, engagement] = await Promise.all([
+  const [clusters, engagement, hits] = await Promise.all([
     clusterIds.length
       ? db.storyCluster.findMany({ where: { userId, id: { in: clusterIds } }, select: { id: true, leadArticleId: true } })
       : Promise.resolve([] as { id: string; leadArticleId: string }[]),
     feedEngagement(userId, now),
+    userSignalHits(userId, rows.map((r) => r.id)),
   ]);
   const leadOf = new Map(clusters.map((c) => [c.id, c.leadArticleId]));
 
@@ -237,7 +257,7 @@ export async function selectBriefingInput(userId: string, scope: BriefingScope, 
       priority,
       engagement: Math.max(...feedIds.map((f) => engagement.get(f) ?? 0)),
       ageHours: (now.getTime() - Math.min(newest, now.getTime())) / H,
-      hit: members.some((m) => m._count.labels > 0 || m._count.notifications > 0),
+      hit: members.some((m) => hits.has(m.id)),
       clickbait,
     });
     const ordered = [lead, ...members.filter((m) => m.id !== lead.id)];

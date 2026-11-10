@@ -35,7 +35,7 @@ if (!dbPath.startsWith(e2eDir + path.sep)) {
   process.exit(1);
 }
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-for (const suffix of ["", "-journal", "-wal", "-shm"]) fs.rmSync(dbPath + suffix, { force: true });
+for (const suffix of ["", "-journal", "-wal", "-shm", ".harness"]) fs.rmSync(dbPath + suffix, { force: true });
 
 // 1. Schema: same path as production start (`prisma db push`), SQLite only.
 const env = { ...process.env, DATABASE_PROVIDER: "sqlite", DATABASE_URL: `file:${dbPath}` };
@@ -137,4 +137,11 @@ await prisma.$executeRawUnsafe(
 await prisma.$disconnect();
 
 fs.writeFileSync(path.join(path.dirname(dbPath), "manifest.json"), JSON.stringify({ ...manifest, dbPath }, null, 2));
+
+// 4. K2 fake-AI harness marker (lib/ai/fake.ts): the per-run token the
+//    Playwright config generated (FEEDFERRET_E2E_HARNESS), next to this DB. The
+//    production server under test enables the fake AI provider only when its
+//    env token matches this file. No token (perf harness) → no marker.
+const harnessToken = process.env.FEEDFERRET_E2E_HARNESS ?? "";
+if (harnessToken.length >= 32) fs.writeFileSync(`${dbPath}.harness`, harnessToken, { mode: 0o600 });
 console.log(`[e2e-seed] ${dbPath}: ${USERS.length} users x (${CATEGORIES.length} categories, ${FEEDS.length} feeds, ${articles.length} articles)`);

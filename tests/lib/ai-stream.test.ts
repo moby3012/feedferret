@@ -1,7 +1,8 @@
 // K2: streaming parsers per provider wire format (recorded bodies), the
 // non-streaming fallback, and the fake provider + its production gate.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 vi.mock("@/lib/ssrf", () => ({
@@ -10,7 +11,8 @@ vi.mock("@/lib/ssrf", () => ({
 }));
 
 import { streamAiPrompt, type StreamPart } from "../../lib/ai/stream";
-import { fakeOutput, fakeStream, isFakeAiEnabled } from "../../lib/ai/fake";
+import { fakeOutput, fakeStream, harnessMarkerPath, isFakeAiEnabled, resetFakeAiGate } from "../../lib/ai/fake";
+import { logger } from "../../lib/logger";
 import { runAiPrompt, isSelectableAiProvider } from "../../lib/ai-summary";
 import { AiProviderError } from "../../lib/ai/errors";
 
@@ -106,21 +108,47 @@ describe("fake provider", () => {
 <story id="s3" feeds="D">Kurzmeldung</story>
 </brief>`;
 
-  it("is gated: flag required, production only against the e2e SQLite file", () => {
-    vi.stubEnv("FEEDFERRET_FAKE_AI", "");
-    expect(isFakeAiEnabled()).toBe(false);
-    vi.stubEnv("FEEDFERRET_FAKE_AI", "1");
-    expect(isFakeAiEnabled()).toBe(true); // NODE_ENV=test
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("DATABASE_PROVIDER", "postgresql");
-    vi.stubEnv("DATABASE_URL", "postgresql://u@db/feedferret");
-    expect(isFakeAiEnabled()).toBe(false);
-    vi.stubEnv("DATABASE_PROVIDER", "sqlite");
-    vi.stubEnv("DATABASE_URL", "file:/app/data/dev.db");
-    expect(isFakeAiEnabled()).toBe(false);
-    expect(isSelectableAiProvider("fake")).toBe(false);
-    vi.stubEnv("DATABASE_URL", "file:/repo/.e2e/e2e.db");
-    expect(isFakeAiEnabled()).toBe(true);
+  it("is gated: flag required; in production only with a harness token matching the marker next to the DB", () => {
+    resetFakeAiGate();
+    const dir = mkdtempSync(join(tmpdir(), "ff-harness-"));
+    const token = "a".repeat(48);
+    const errors = vi.spyOn(logger, "error").mockImplementation(() => {});
+    try {
+      vi.stubEnv("FEEDFERRET_FAKE_AI", "");
+      expect(isFakeAiEnabled()).toBe(false);
+      vi.stubEnv("FEEDFERRET_FAKE_AI", "1");
+      expect(isFakeAiEnabled()).toBe(true); // NODE_ENV=test
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("DATABASE_PROVIDER", "sqlite");
+      // The old heuristic (any `.e2e/*.db` path) no longer opens the gate.
+      vi.stubEnv("DATABASE_URL", `file:${join(dir, ".e2e", "e2e.db")}`);
+      vi.stubEnv("FEEDFERRET_E2E_HARNESS", "");
+      expect(isFakeAiEnabled()).toBe(false);
+      vi.stubEnv("DATABASE_URL", `file:${join(dir, "e2e.db")}`);
+      vi.stubEnv("FEEDFERRET_E2E_HARNESS", token);
+      expect(isFakeAiEnabled()).toBe(false); // no marker file
+      writeFileSync(join(dir, "e2e.db.harness"), "b".repeat(48));
+      expect(isFakeAiEnabled()).toBe(false); // marker of another run
+      expect(isSelectableAiProvider("fake")).toBe(false);
+      vi.stubEnv("FEEDFERRET_E2E_HARNESS", "short");
+      writeFileSync(join(dir, "e2e.db.harness"), "short");
+      expect(isFakeAiEnabled()).toBe(false); // too short to be a run token
+      writeFileSync(join(dir, "e2e.db.harness"), `${token}\n`);
+      vi.stubEnv("FEEDFERRET_E2E_HARNESS", token);
+      expect(isFakeAiEnabled()).toBe(true);
+      expect(harnessMarkerPath(`file:${join(dir, "e2e.db")}`, "sqlite")).toBe(join(dir, "e2e.db.harness"));
+      // Postgres never has a marker, even with a matching token.
+      vi.stubEnv("DATABASE_PROVIDER", "postgresql");
+      vi.stubEnv("DATABASE_URL", "postgresql://u@db/feedferret");
+      expect(isFakeAiEnabled()).toBe(false);
+      // Ignored flag in production → exactly one error log.
+      expect(errors).toHaveBeenCalledTimes(1);
+      expect(String(errors.mock.calls[0][0])).toContain("FEEDFERRET_FAKE_AI=1 is set in production");
+    } finally {
+      errors.mockRestore();
+      rmSync(dir, { recursive: true, force: true });
+      resetFakeAiGate();
+    }
   });
 
   it("refuses to run when the gate is closed", async () => {

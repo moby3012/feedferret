@@ -341,7 +341,10 @@
     "briefingAutoDescription": "Local model (Ollama) only: creates the briefing when you open “New”. With cloud providers you tap “Create briefing”.",
     "dailyCap": "Daily limit (tokens)",
     "dailyCapDescription": "Applies to every AI feature with cloud providers. Empty = server default ({default}), 0 = AI off. Ollama runs locally and is not capped.",
-    "usageToday": "Used today: {count} tokens",
+    "dailyCapDay": "The day is counted in UTC – the limit resets at {time} (your time).",
+    "usageTodayCloud": "Used today (cloud, counts toward the limit): {count} tokens",
+    "usageTodayLocal": "local (Ollama, unlimited): {count} tokens",
+    "budgetPaused": "Daily limit reached – automatic AI features paused until {time}.",
     "briefingPrivacy": "For the briefing only titles, excerpts (max. 350 characters) and feed names are sent to the provider."
   },
   "contentFetch": {
@@ -843,6 +846,8 @@
     "nextArticle": "Next article",
     "summarizeFailed": "Summary failed. Check your AI provider settings.",
     "summarizeFailedInline": "Summary failed — try again.",
+    "summarizeBudget": "Daily AI limit reached – summaries are available again tomorrow, or raise the limit in Settings.",
+    "summarizeAiOff": "AI is switched off for your account (daily limit 0).",
     "fetchingFullTextStatus": "Fetching full article text…",
     "fullTextLoaded": "Full text loaded",
     "fullTextUnavailable": "Full text unavailable. Open the original article instead.",

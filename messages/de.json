@@ -341,7 +341,10 @@
     "briefingAutoDescription": "Nur mit lokalem Modell (Ollama): erstellt den Überblick, sobald du „Neu“ öffnest. Bei Cloud-Anbietern tippst du auf „Überblick erstellen“.",
     "dailyCap": "Tageslimit (Tokens)",
     "dailyCapDescription": "Gilt für alle KI-Funktionen mit Cloud-Anbietern. Leer = Server-Standard ({default}), 0 = KI aus. Ollama läuft lokal und wird nicht begrenzt.",
-    "usageToday": "Heute verbraucht: {count} Tokens",
+    "dailyCapDay": "Der Tag zählt nach UTC – das Limit setzt sich um {time} (deine Zeit) zurück.",
+    "usageTodayCloud": "Heute verbraucht (Cloud, zählt zum Limit): {count} Tokens",
+    "usageTodayLocal": "lokal (Ollama, unbegrenzt): {count} Tokens",
+    "budgetPaused": "Tageslimit erreicht – automatische KI-Funktionen pausiert bis {time}.",
     "briefingPrivacy": "Für den Überblick werden nur Titel, Anrisse (max. 350 Zeichen) und Feed-Namen an den Anbieter gesendet."
   },
   "contentFetch": {
@@ -843,6 +846,8 @@
     "nextArticle": "Nächster Artikel",
     "summarizeFailed": "Zusammenfassung fehlgeschlagen. Bitte die KI-Anbieter-Einstellungen prüfen.",
     "summarizeFailedInline": "Zusammenfassung fehlgeschlagen — bitte erneut versuchen.",
+    "summarizeBudget": "Tageslimit für KI erreicht – du kannst morgen wieder zusammenfassen lassen oder das Limit in den Einstellungen erhöhen.",
+    "summarizeAiOff": "KI ist für dein Konto ausgeschaltet (Tageslimit 0).",
     "fetchingFullTextStatus": "Volltext des Artikels wird abgerufen…",
     "fullTextLoaded": "Volltext geladen",
     "fullTextUnavailable": "Volltext nicht verfügbar. Öffne stattdessen den Originalartikel.",

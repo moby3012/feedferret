@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — "Catch me up" briefing on the Neu list (K2)
+
+- A collapsible card above the first row of **Neu** summarizes the unread stories since your last briefing (what happened · why it matters · in brief). Every point cites its sources (tap a chip to open the article); uncited, unknown or ungrounded model lines are dropped server-side. Without AI (or below 3 stories) the card shows a headline overview grouped by story instead. Cloud providers generate on tap; a local Ollama model can generate automatically. Only titles, excerpts (≤ 350 chars) and feed names are sent to the provider.
+
+### Changed — daily AI token cap (applies to existing automatic AI features)
+
+- **New default: 150 000 tokens per user and UTC day** for every cloud AI call — the new briefing **and the existing auto-summaries, auto-tagging/enrichment and AI digest summaries**. Operators can change the server default with `AI_DAILY_TOKEN_CAP` (`0` = AI off by default); users can set their own limit in Settings → AI (empty = server default, `0` = AI off for the account). Local Ollama usage is never capped and is shown separately.
+- When the cap is reached, automatic AI features **pause until 00:00 UTC** (sync logs one warning per user and day; settings show "Tageslimit erreicht – automatische KI-Funktionen pausiert bis …"); the digest is still sent, without AI extras; "Summarize" in the reader explains the limit. Heavy auto-summary/auto-tag users on cloud providers who exceed 150k tokens/day should raise their limit after upgrading.
+- Usage is reserved atomically before each call and reconciled with the actual usage afterwards, so concurrent calls cannot overshoot the cap. Schema (additive): `Briefing`, `AiUsage`, `AiBudgetDay`, `User.aiDailyTokenCap/briefingAuto`, `ArticleLabel.source` (`user` | `ai`, default `user`).
+
 ### Added — AI enrichment in the tagging call (sponsored / clickbait / entities)
 
 - The existing AI auto-tag call now also returns `entities`, `sponsored`, `clickbait` and a neutral `cleanTitle` — **no extra AI call per article**, same per-sync cap, +80 output tokens. Weak models that still answer with the old bare tag array keep working (flags stay "unknown").

@@ -31,9 +31,13 @@ import { fakeStream } from "../../lib/ai/fake";
 import { checkRateLimit } from "../../lib/rate-limit";
 import { runAiPrompt } from "../../lib/ai-summary";
 import { AiBudgetError } from "../../lib/ai/errors";
-import { checkBudget, recordUsage, tokensUsedToday, utcDay } from "../../lib/ai/usage";
+import { checkBudget, recordUsage, reserveBudget, settleUsage, tokensUsedToday, usageSummary, utcDay } from "../../lib/ai/usage";
 import { clearEngagementCache, resolveBriefingScope, selectBriefingInput } from "../../lib/briefing/select";
-import { cleanupBriefingData, inFlightCount } from "../../lib/briefing/generate";
+import { MAX_BRIEFING_AGE_MS, cleanupBriefingData, inFlightCount, startBriefing } from "../../lib/briefing/generate";
+import { buildBriefingPrompt, MAX_OUT } from "../../lib/briefing/prompt";
+import { autoTagNewArticles } from "../../lib/rss-sync";
+import { summarizeArticle } from "../../app/actions/feeds";
+import { logger } from "../../lib/logger";
 import type { BriefingEvent, BriefingResponse } from "../../lib/briefing/types";
 
 const streamSpy = vi.mocked(streamAiPrompt);
@@ -235,7 +239,8 @@ describe("POST generation with the fake provider", () => {
     const texts = its.map((e) => e.item.text);
     expect(texts.join(" ")).not.toContain("Ungeprüfte Behauptung");
     expect(texts.join(" ")).not.toContain("Satz ohne Quelle");
-    expect(texts).toContain("alert(1)"); // the injected line: tag and URL removed, plain text left
+    // The injected line (starts with s1's title): tag and URL removed, plain text left.
+    expect(texts.filter((t) => / alert\(1\)$/.test(t))).toHaveLength(1);
     expect(texts.join(" ")).not.toMatch(/<|https?:|evil\.example/);
     const owned = new Set((await state.db.article.findMany({ where: { userId: u.id }, select: { id: true } })).map((a) => a.id));
     for (const e of its) {
@@ -254,7 +259,7 @@ describe("POST generation with the fake provider", () => {
     const row = await state.db.briefing.findUniqueOrThrow({ where: { id: done.briefingId! } });
     expect(row).toMatchObject({ userId: u.id, scopeKey: "new", provider: "fake", model: "fake", status: "ok", storyCount: 5 });
     expect(row.tokensIn).toBeGreaterThan(0);
-    const usage = await state.db.aiUsage.findUniqueOrThrow({ where: { userId_day_feature: { userId: u.id, day: utcDay(), feature: "briefing" } } });
+    const usage = await state.db.aiUsage.findUniqueOrThrow({ where: { userId_day_feature_kind: { userId: u.id, day: utcDay(), feature: "briefing", kind: "cloud" } } });
     expect(usage).toMatchObject({ calls: 1, tokensIn: row.tokensIn, tokensOut: row.tokensOut });
     // Never touches Article.updatedAt (GReader ot/nt clock).
     const after = await state.db.article.findMany({ where: { userId: u.id }, select: { id: true, updatedAt: true }, orderBy: { id: "asc" } });
@@ -369,9 +374,13 @@ describe("dedupe, limits, caps, failures", () => {
     streamSpy.mockImplementationOnce((prompt) => fakeStream(prompt, "fake"));
     const { events } = await post();
     expect(ofType(events, "done")!.status).toBe("ok");
-    expect(await tokensUsedToday(u.id)).toBeGreaterThan(100);
+    // Local usage is recorded as "local" and never counts against the cap.
+    const summary = await usageSummary(u.id);
+    expect(summary.localToday).toBeGreaterThan(100);
+    expect(summary.usedToday).toBe(0);
+    expect(await tokensUsedToday(u.id)).toBe(0);
     expect((await checkBudget(u.id, "ollama", 10_000)).ok).toBe(true);
-    expect((await checkBudget(u.id, "openai", 10_000)).ok).toBe(false);
+    expect((await checkBudget(u.id, "openai", 10_000)).ok).toBe(false); // 10k > cap 100
   });
 
   it("provider 401 → provider_auth + headline fallback; nothing persisted", async () => {
@@ -407,7 +416,8 @@ describe("dedupe, limits, caps, failures", () => {
     await seedStories(u);
     state.session = { user: { id: u.id } };
     streamSpy.mockImplementationOnce(async function* () {
-      yield { text: "## WHAT\n- Nur ein Satz [[s1]]\n## WHY\n- Darum [[s2]]\n" };
+      // (Words of every seeded title, so the lines pass the grounding guard whatever the ranking.)
+      yield { text: "## WHAT\n- Nur ein Satz zu EZB, Bahn, Wahl, Router, Sturmwarnung [[s1]]\n## WHY\n- Darum: EZB, Bahn, Wahl, Router, Sturmwarnung [[s2]]\n" };
     });
     const { events } = await post();
     expect(ofType(events, "done")!.status).toBe("partial");
@@ -449,11 +459,11 @@ describe("usage accounting for every AI call", () => {
     const u = await makeUser("usage", { provider: "fake", cap: 1000 });
     const out = await runAiPrompt("Summarize.\n\nArticle:\nErster Satz. Zweiter Satz. Dritter.", { provider: "fake", usage: { userId: u.id, feature: "summary" } }, 50);
     expect(out).toBe("Erster Satz. Zweiter Satz.");
-    const row = await state.db.aiUsage.findUniqueOrThrow({ where: { userId_day_feature: { userId: u.id, day: utcDay(), feature: "summary" } } });
+    const row = await state.db.aiUsage.findUniqueOrThrow({ where: { userId_day_feature_kind: { userId: u.id, day: utcDay(), feature: "summary", kind: "cloud" } } });
     expect(row.calls).toBe(1);
     await recordUsage(u.id, "tagging", 900, 50);
     await expect(runAiPrompt("x".repeat(400), { provider: "fake", usage: { userId: u.id, feature: "tagging" } }, 100)).rejects.toBeInstanceOf(AiBudgetError);
-    expect((await state.db.aiUsage.findUniqueOrThrow({ where: { userId_day_feature: { userId: u.id, day: utcDay(), feature: "tagging" } } })).calls).toBe(1);
+    expect((await state.db.aiUsage.findUniqueOrThrow({ where: { userId_day_feature_kind: { userId: u.id, day: utcDay(), feature: "tagging", kind: "cloud" } } })).calls).toBe(1);
   });
 
   it("retention removes old briefings (14 d) and usage rows (90 d)", async () => {
@@ -467,5 +477,165 @@ describe("usage accounting for every AI call", () => {
     expect(r.briefings).toBeGreaterThanOrEqual(1);
     expect(r.usage).toBeGreaterThanOrEqual(1);
     expect(await state.db.aiUsage.count({ where: { userId: u.id } })).toBe(1);
+  });
+});
+
+async function untilIdle() {
+  for (let i = 0; i < 200 && inFlightCount() > 0; i++) await new Promise((r) => setTimeout(r, 10));
+  expect(inFlightCount()).toBe(0);
+}
+
+describe("review fixes: atomic cap, accounting, selection signals", () => {
+  it("reservation is atomic: two parallel reservations near the cap → exactly one passes", async () => {
+    const u = await makeUser("atomic", { provider: "fake", cap: 1_000 });
+    const results = await Promise.allSettled([reserveBudget(u.id, "openai", 600), reserveBudget(u.id, "openai", 600)]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect((results.find((r) => r.status === "rejected") as PromiseRejectedResult).reason).toBeInstanceOf(AiBudgetError);
+    expect(await tokensUsedToday(u.id)).toBe(600);
+    // Settling moves the counter from the estimate to the actual usage.
+    const granted = (results.find((r) => r.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<typeof reserveBudget>>>).value;
+    await settleUsage(granted, "summary", 100, 50);
+    expect(await tokensUsedToday(u.id)).toBe(150);
+    expect((await usageSummary(u.id)).paused).toBe(true); // the refusal paused automatic features
+  });
+
+  it("two parallel generations near the cap (different scopes, same size) → at most one reaches the provider", async () => {
+    const u = await makeUser("race", { provider: "fake", model: "fake-slow" });
+    await seedStories(u);
+    const cat = await state.db.category.create({ data: { name: "Alle", userId: u.id } });
+    await state.db.feed.updateMany({ where: { userId: u.id }, data: { categoryId: cat.id } });
+    const input = await selectBriefingInput(u.id, { kind: "new" }, (await resolveBriefingScope(u.id, { kind: "new" }))!);
+    const est = buildBriefingPrompt(input, "fake").estIn + MAX_OUT;
+    await state.db.user.update({ where: { id: u.id }, data: { aiDailyTokenCap: Math.floor(est * 1.5) } });
+    state.session = { user: { id: u.id } };
+    const [a, b] = await Promise.all([post("new"), post(`cat:${cat.id}`)]);
+    const done = [a, b].filter((r) => ofType(r.events, "done"));
+    const budget = [a, b].filter((r) => ofType(r.events, "fallback")?.reason === "budget");
+    expect(done).toHaveLength(1);
+    expect(budget).toHaveLength(1);
+    expect(streamSpy).toHaveBeenCalledTimes(1);
+    expect(await tokensUsedToday(u.id)).toBeLessThanOrEqual(Math.floor(est * 1.5));
+  });
+
+  it("client abort before the first token → the input estimate is still recorded", async () => {
+    const u = await makeUser("abort", { provider: "fake", model: "fake-timeout" });
+    await seedStories(u);
+    const input = await selectBriefingInput(u.id, { kind: "new" }, (await resolveBriefingScope(u.id, { kind: "new" }))!);
+    const estIn = buildBriefingPrompt(input, "fake").estIn;
+    const controller = new AbortController();
+    const events = await startBriefing(u.id, { kind: "new" }, { signal: controller.signal });
+    expect((await events.next()).value).toMatchObject({ type: "meta", cached: false });
+    controller.abort();
+    await events.return(undefined);
+    await untilIdle();
+    const row = await state.db.aiUsage.findUniqueOrThrow({ where: { userId_day_feature_kind: { userId: u.id, day: utcDay(), feature: "briefing", kind: "cloud" } } });
+    expect(row).toMatchObject({ tokensIn: estIn, tokensOut: 0, calls: 1 });
+    expect(await tokensUsedToday(u.id)).toBe(estIn); // reservation (estIn + max out) reconciled to estIn
+  });
+
+  it("first-token timeout → the input estimate is recorded, the reservation released", async () => {
+    const u = await makeUser("ftt", { provider: "fake", model: "fake-timeout" });
+    await seedStories(u);
+    state.session = { user: { id: u.id } };
+    const input = await selectBriefingInput(u.id, { kind: "new" }, (await resolveBriefingScope(u.id, { kind: "new" }))!);
+    const estIn = buildBriefingPrompt(input, "fake").estIn;
+    process.env.FEEDFERRET_AI_TIMEOUT_MS = "100";
+    try {
+      expect(ofType((await post()).events, "error")).toEqual({ type: "error", code: "timeout" });
+    } finally {
+      delete process.env.FEEDFERRET_AI_TIMEOUT_MS;
+    }
+    await untilIdle();
+    expect(await tokensUsedToday(u.id)).toBe(estIn);
+  });
+
+  it("provider rejects outright (401) → nothing counted", async () => {
+    const u = await makeUser("rel", { provider: "fake", model: "fake-auth" });
+    await seedStories(u);
+    state.session = { user: { id: u.id } };
+    await post();
+    await untilIdle();
+    expect(await tokensUsedToday(u.id)).toBe(0);
+  });
+
+  it("story clustering off → every article is its own unit", async () => {
+    const u = await makeUser("nocluster");
+    const ids = await seedStories(u);
+    const cluster = await state.db.storyCluster.create({
+      data: { userId: u.id, leadArticleId: ids.ezb, size: 2, feedCount: 2, firstSeenAt: new Date(), lastSeenAt: new Date(), sig: "{}" },
+    });
+    await addArticle(u.id, u.feeds[1], "Zinswende bei der EZB", 3, { clusterId: cluster.id });
+    await state.db.article.update({ where: { id: ids.ezb }, data: { clusterId: cluster.id } });
+    const scope = (await resolveBriefingScope(u.id, { kind: "new" }))!;
+    expect((await selectBriefingInput(u.id, { kind: "new" }, scope)).totalStories).toBe(5);
+    await state.db.user.update({ where: { id: u.id }, data: { storyClustering: false } });
+    const input = await selectBriefingInput(u.id, { kind: "new" }, scope);
+    expect(input.totalStories).toBe(6);
+    expect([...input.top, ...input.brief].every((x) => x.memberIds.length === 1)).toBe(true);
+  });
+
+  it("score hit: user labels and alerts count, AI auto-tags do not", async () => {
+    const u = await makeUser("hits");
+    const ai = await addArticle(u.id, u.feeds[0], "Artikel mit KI-Tag", 2);
+    const mine = await addArticle(u.id, u.feeds[0], "Artikel mit eigenem Label", 2);
+    const alerted = await addArticle(u.id, u.feeds[0], "Artikel mit Alarm", 2);
+    const plain = await addArticle(u.id, u.feeds[0], "Artikel ohne alles", 2);
+    const tag = await state.db.label.create({ data: { userId: u.id, name: "KI-Tag" } });
+    const label = await state.db.label.create({ data: { userId: u.id, name: "Mein Label" } });
+    await state.db.articleLabel.create({ data: { userId: u.id, articleId: ai.id, labelId: tag.id, source: "ai" } });
+    await state.db.articleLabel.create({ data: { userId: u.id, articleId: mine.id, labelId: label.id } });
+    await state.db.notification.create({ data: { userId: u.id, type: "keyword_alert", title: "x", body: "y", articleId: alerted.id } });
+    const scope = (await resolveBriefingScope(u.id, { kind: "new" }))!;
+    const input = await selectBriefingInput(u.id, { kind: "new" }, scope);
+    const score = (id: string) => [...input.top, ...input.brief].find((x) => x.leadId === id)!.score;
+    expect(score(ai.id)).toBeCloseTo(score(plain.id), 6);
+    expect(score(mine.id)).toBeCloseTo(score(plain.id) + 0.3, 6);
+    expect(score(alerted.id)).toBeCloseTo(score(plain.id) + 0.3, 6);
+  });
+
+  it("stale only with new stories; briefings older than 72 h are ignored", async () => {
+    const u = await makeUser("stale", { provider: "fake" });
+    const ids = await seedStories(u);
+    await addArticle(u.id, u.feeds[1], "Sechste Meldung", 1);
+    state.session = { user: { id: u.id } };
+    const done = ofType((await post()).events, "done")!;
+    // Input changes (one story read) but nothing new → not stale.
+    await state.db.article.update({ where: { id: ids.wahl }, data: { isRead: true } });
+    expect((await getState()).body).toMatchObject({ briefingId: done.briefingId, stale: null });
+    await state.db.briefing.update({ where: { id: done.briefingId! }, data: { createdAt: new Date(Date.now() - MAX_BRIEFING_AGE_MS - 60_000) } });
+    const old = (await getState()).body;
+    expect(old.briefingId).toBeNull();
+    expect(old.briefing!.mode).toBe("headlines");
+  });
+
+  it("auto-tagging stops at the cap: one warning per user and day, settings report the pause", async () => {
+    const u = await makeUser("autotag", { provider: "fake", cap: 300 });
+    await state.db.user.update({ where: { id: u.id }, data: { aiAutoTag: true } });
+    const arts = [];
+    for (let i = 0; i < 4; i++) arts.push(await addArticle(u.id, u.feeds[0], `Langer Artikel ${i}`, 1, { content: `<p>${"Inhalt ".repeat(400)}</p>` }));
+    const warn = vi.spyOn(logger, "warn");
+    const error = vi.spyOn(logger, "error");
+    try {
+      await autoTagNewArticles(u.id, arts.map((a) => a.id), { applyRules: false });
+      await autoTagNewArticles(u.id, arts.map((a) => a.id), { applyRules: false });
+      const budgetWarnings = warn.mock.calls.filter((c) => String(c[0]).includes("automatic AI features paused"));
+      expect(budgetWarnings).toHaveLength(1);
+      expect(error.mock.calls.filter((c) => String(c[0]).includes("auto-tag failed"))).toHaveLength(0);
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
+    const summary = await usageSummary(u.id);
+    expect(summary).toMatchObject({ paused: true, usedToday: 0 });
+    expect(new Date(summary.resetsAt).getUTCHours()).toBe(0);
+  });
+
+  it("summarizeArticle over the cap returns { error: 'budget' } instead of throwing", async () => {
+    const u = await makeUser("sumcap", { provider: "fake", cap: 10 });
+    const a = await addArticle(u.id, u.feeds[0], "Zusammenfassen", 1, { content: `<p>${"Text. ".repeat(200)}</p>` });
+    state.session = { user: { id: u.id } };
+    expect(await summarizeArticle(a.id)).toEqual({ error: "budget" });
+    await state.db.user.update({ where: { id: u.id }, data: { aiDailyTokenCap: 0 } });
+    expect(await summarizeArticle(a.id)).toEqual({ error: "ai_off" });
   });
 });

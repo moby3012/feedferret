@@ -116,6 +116,40 @@ export function validateLine<T>(line: string, aliases: AliasMap<T>): ValidatedLi
   return { text: sanitizeOutputText(body), cited, unknown };
 }
 
+// ─── Grounding guard ────────────────────────────────────────────────────────
+// A validated citation proves the alias exists, not that the line is about
+// that story. A line must share at least one content word with the title /
+// excerpt of one of the stories it cites, else it is dropped (catches lines
+// that hang a fabricated claim on a real alias).
+
+const STOPWORDS = new Set(
+  (
+    "the and for with from that this these those are was were has have had will would can could should into onto over under after before about more most than then its it's their there they them our your you his her not but also just only very what when where which who whom why how all any some such been being does did out off per via new news " +
+    "der die das den dem des und oder mit von vom für fur ein eine einer eines einem einen sich auf ist sind war waren wird werden wurde wurden nach bei aus auch wie als zum zur über uber unter dass nicht noch nur schon sehr mehr hat haben hatte kann können konnen soll sollen will diese dieser dieses diesem diesen jetzt heute neue neuer neues neuen einem gegen ohne seit beim durch weil wenn aber doch man sie ihr ihre ihren wir uns"
+  ).split(/\s+/),
+);
+
+/** Normalized content words: lowercased, ≥ 3 letters (or ≥ 2 digits), no stopwords, cut to a 5-char stem. */
+export function contentTokens(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const word of text.toLowerCase().normalize("NFKC").split(/[^\p{L}\p{N}]+/u)) {
+    if (!word || STOPWORDS.has(word)) continue;
+    if (/^\p{N}+$/u.test(word) ? word.length < 2 : word.length < 3) continue;
+    out.add(word.slice(0, 5));
+  }
+  return out;
+}
+
+/** Whether `text` shares ≥ 1 content token with at least one of `sources`. */
+export function isGrounded(text: string, sources: string[]): boolean {
+  const words = contentTokens(text);
+  if (words.size === 0) return false;
+  return sources.some((source) => {
+    for (const token of contentTokens(source)) if (words.has(token)) return true;
+    return false;
+  });
+}
+
 export interface ParsedItem<T> {
   section: Section;
   text: string;
@@ -141,7 +175,15 @@ export class CitedOutputParser<T> {
   readonly counts: Record<Section, number> = { what: 0, why: 0, brief: 0 };
   dropped = 0;
 
-  constructor(private readonly aliases: AliasMap<T>) {}
+  /**
+   * `groundingText`: the source text of a cited value (title + excerpt). When
+   * set, a line that shares no content word with any of its cited values is
+   * dropped (see `isGrounded`).
+   */
+  constructor(
+    private readonly aliases: AliasMap<T>,
+    private readonly o: { groundingText?: (value: T) => string } = {},
+  ) {}
 
   push(chunk: string): ParsedItem<T>[] {
     this.buffer += chunk;
@@ -179,6 +221,11 @@ export class CitedOutputParser<T> {
       this.dropped++;
       return null;
     }
+    const groundingText = this.o.groundingText;
+    if (groundingText && !isGrounded(v.text, v.cited.map(groundingText))) {
+      this.dropped++;
+      return null;
+    }
     const key = v.text.toLowerCase();
     if (this.texts.has(key) || this.counts[this.section] >= SECTION_CAPS[this.section]) return null;
     this.texts.add(key);
@@ -188,8 +235,8 @@ export class CitedOutputParser<T> {
 }
 
 /** Whole-text convenience (tests, non-streamed output). */
-export function parseCitedLines<T>(text: string, aliases: AliasMap<T>): ParseResult<T> {
-  const parser = new CitedOutputParser(aliases);
+export function parseCitedLines<T>(text: string, aliases: AliasMap<T>, o: { groundingText?: (value: T) => string } = {}): ParseResult<T> {
+  const parser = new CitedOutputParser(aliases, o);
   const items = [...parser.push(text), ...parser.end()];
   return { items, dropped: parser.dropped, counts: parser.counts };
 }

@@ -18,6 +18,8 @@ import { applySyncFailure, applySyncSuccess } from "./feed-auto-mute";
 import { computeArticleMeta, estimateReadMinutes, htmlToPlainText, markdownToPlainText } from "./article-kind";
 import { computeHeuristicEnrichment } from "./enrichment-heuristics";
 import { persistEnrichment } from "./article-enrichment";
+import { AiBudgetError } from "./ai/errors";
+import { warnBudgetOnce } from "./ai/usage";
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 const MAX_AUTO_TAG_PER_SYNC = 3;
@@ -769,6 +771,11 @@ async function autoSummarizeNewArticles(userId: string, articleIds: string[]) {
                 data: { aiSummary: summary, aiSummarizedAt: new Date() },
             });
         } catch (error) {
+            // Daily token cap reached: every further article would be refused too.
+            if (error instanceof AiBudgetError) {
+                warnBudgetOnce(userId, "auto-summary", error);
+                break;
+            }
             logger.error("[rss-sync] auto-summary failed:", error);
         }
     }
@@ -851,7 +858,8 @@ export async function autoTagNewArticles(
                 });
                 if (!alreadyLinked) {
                     await db.articleLabel.create({
-                        data: { articleId: article.id, labelId: label.id, userId },
+                        // "ai": the briefing ranks only user labels as a signal (lib/briefing/select.ts).
+                        data: { articleId: article.id, labelId: label.id, userId, source: "ai" },
                     });
                     labelsAdded = true;
                 }
@@ -870,6 +878,10 @@ export async function autoTagNewArticles(
                 enrichedIds.push(article.id);
             }
         } catch (error) {
+            if (error instanceof AiBudgetError) {
+                warnBudgetOnce(userId, "auto-tag", error);
+                break;
+            }
             logger.error("[rss-sync] auto-tag failed:", error);
         }
     }

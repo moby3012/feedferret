@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   CitedOutputParser,
   buildAliasMap,
+  contentTokens,
+  isGrounded,
   escapeUntrusted,
   outputStatus,
   parseCitedLines,
@@ -118,5 +120,36 @@ describe("CitedOutputParser", () => {
     expect(outputStatus({ what: 1, why: 1, brief: 0 })).toBe("partial");
     expect(outputStatus({ what: 1, why: 0, brief: 5 })).toBe("invalid_output");
     expect(parseCitedLines("Prose without any format.", aliases).items).toEqual([]);
+  });
+});
+
+describe("grounding guard", () => {
+  const stories = buildAliasMap([
+    { id: "a", text: "EZB senkt den Leitzins auf 2 Prozent — Die Notenbank reagiert auf die Inflation" },
+    { id: "b", text: "Bahn streikt am Montag" },
+  ]);
+  const groundingText = (s: { text: string }) => s.text;
+
+  it("content tokens: lowercased, stopwords and short words dropped, 5-char stems", () => {
+    expect([...contentTokens("Die EZB senkt den Leitzinsen auf 2 Prozent")]).toEqual(["ezb", "senkt", "leitz", "proze"]);
+    expect(contentTokens("und der die das ist")).toEqual(new Set());
+  });
+
+  it("keeps a line that shares a content word with a cited story (inflections match)", () => {
+    expect(isGrounded("Leitzinsen sinken deutlich", [stories.byAlias.get("s1")!.text])).toBe(true);
+  });
+
+  it("drops a line hung on a real alias without any overlap, and counts it", () => {
+    const out = parseCitedLines(
+      "## WHAT\n- Die EZB senkt erneut [[s1]]\n- Aliens landen in Berlin [[s1]]\n- Streik bei der Bahn [[s2]]\n- Aliens auch hier [[s1, s2]]\n",
+      stories,
+      { groundingText },
+    );
+    expect(out.items.map((i) => i.text)).toEqual(["Die EZB senkt erneut", "Streik bei der Bahn"]);
+    expect(out.dropped).toBe(2);
+  });
+
+  it("is off without groundingText (generic use)", () => {
+    expect(parseCitedLines("## WHAT\n- Aliens landen [[s1]]\n", stories).items).toHaveLength(1);
   });
 });

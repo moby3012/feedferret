@@ -2009,6 +2009,7 @@ function ApiTokenSection() {
 
 function AiSummarySection() {
   const t = useTranslations();
+  const format = useFormatter();
   const { data: ai } = useAiSettings();
   const updateAi = useUpdateAiSettings();
   const testAi = useTestAiConnection();
@@ -2245,8 +2246,17 @@ function AiSummarySection() {
             />
             <p id="ai-daily-cap-hint" className="text-xs text-muted-foreground">
               {t("ai.dailyCapDescription", { default: (ai?.defaultDailyCap ?? 150000).toLocaleString() })}{" "}
-              {t("ai.usageToday", { count: (ai?.usedToday ?? 0).toLocaleString() })}
+              {t("ai.dailyCapDay", { time: ai?.budgetResetsAt ? format.dateTime(new Date(ai.budgetResetsAt), { hour: "2-digit", minute: "2-digit" }) : "00:00 UTC" })}
             </p>
+            <p className="text-xs text-muted-foreground" data-testid="ai-usage-today">
+              {t("ai.usageTodayCloud", { count: (ai?.usedToday ?? 0).toLocaleString() })}
+              {(ai?.localUsedToday ?? 0) > 0 && <> · {t("ai.usageTodayLocal", { count: (ai?.localUsedToday ?? 0).toLocaleString() })}</>}
+            </p>
+            {ai?.budgetPaused && (
+              <p role="status" className="rounded-2xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-foreground" data-testid="ai-budget-paused">
+                {t("ai.budgetPaused", { time: format.dateTime(new Date(ai.budgetResetsAt), { weekday: "short", hour: "2-digit", minute: "2-digit" }) })}
+              </p>
+            )}
           </div>
         )}
 

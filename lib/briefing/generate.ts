@@ -7,9 +7,9 @@ import { decryptIfValue } from "@/lib/crypto";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isSelectableAiProvider, type AiConfig, type AiProvider } from "@/lib/ai-summary";
 import { CitedOutputParser, outputStatus, type ParsedItem } from "@/lib/ai/citations";
-import { classifyAiError } from "@/lib/ai/errors";
+import { AiBudgetError, classifyAiError } from "@/lib/ai/errors";
 import { streamAiPrompt } from "@/lib/ai/stream";
-import { checkBudget, isLocalProvider, recordUsage } from "@/lib/ai/usage";
+import { checkBudget, isLocalProvider, reserveBudget, settleUsage, type Reservation } from "@/lib/ai/usage";
 import { buildHeadlineDigest, citationOf } from "./fallback";
 import { buildBriefingPrompt, MAX_OUT } from "./prompt";
 import { MIN_UNITS, PROMPT_VERSION, inputArticleIds, inputHash, resolveBriefingScope, selectBriefingInput, type BriefingInput, type StoryUnit } from "./select";
@@ -26,6 +26,8 @@ import {
 
 const SOFT_HIT_MS = 30 * 60_000;
 const SOFT_HIT_MAX_NEW = 3;
+/** Briefings older than the longest window (72 h) are never shown or replayed. */
+export const MAX_BRIEFING_AGE_MS = 72 * 3_600_000;
 
 export const DEFAULT_MODELS: Record<AiProvider, string> = {
   openai: "gpt-4o-mini",
@@ -109,11 +111,19 @@ async function prepare(userId: string, scope: BriefingScope, now: Date): Promise
   return { scopeKey: briefingScopeKey(scope), input, ai };
 }
 
-async function latestBriefing(userId: string, scopeKey: string, model: string) {
+async function latestBriefing(userId: string, scopeKey: string, model: string, now: Date) {
   return db.briefing.findFirst({
-    where: { userId, scopeKey, model, promptVersion: PROMPT_VERSION },
+    where: { userId, scopeKey, model, promptVersion: PROMPT_VERSION, createdAt: { gte: new Date(now.getTime() - MAX_BRIEFING_AGE_MS) } },
     orderBy: { createdAt: "desc" },
   });
+}
+
+/** Exact cache hit (same input, model, prompt version), unless older than 72 h. */
+async function exactBriefing(userId: string, scopeKey: string, hash: string, model: string, now: Date) {
+  const row = await db.briefing.findUnique({
+    where: { userId_scopeKey_inputHash_model_promptVersion: { userId, scopeKey, inputHash: hash, model, promptVersion: PROMPT_VERSION } },
+  });
+  return row && now.getTime() - row.createdAt.getTime() <= MAX_BRIEFING_AGE_MS ? row : null;
 }
 
 // ─── GET ─────────────────────────────────────────────────────────────────────
@@ -146,7 +156,7 @@ export async function getBriefingState(userId: string, scope: BriefingScope, o: 
   const tooFew = input.totalStories < MIN_UNITS;
 
   if (ai.config && ai.model && !tooFew) {
-    const latest = await latestBriefing(userId, scopeKey, ai.model);
+    const latest = await latestBriefing(userId, scopeKey, ai.model, now);
     const content = latest ? publicContent(latest.content) : null;
     if (latest && content) {
       const fresh = latest.inputHash === inputHash(input);
@@ -155,7 +165,8 @@ export async function getBriefingState(userId: string, scope: BriefingScope, o: 
         ...base,
         briefing: content,
         briefingId: latest.id,
-        stale: fresh ? null : { newStories },
+        // Stale only when there is something new (a re-ranked / shrunk input alone is not "stale").
+        stale: newStories > 0 ? { newStories } : null,
         ai: aiState,
         generatedAt: latest.createdAt.toISOString(),
         seen: !!latest.seenAt,
@@ -281,22 +292,25 @@ async function* briefingEvents(userId: string, { scopeKey, input, ai }: Prepared
   const hash = inputHash(input);
 
   // 1. Exact cache hit → replay (no provider call, no rate limit).
-  const exact = await db.briefing.findUnique({
-    where: { userId_scopeKey_inputHash_model_promptVersion: { userId, scopeKey, inputHash: hash, model, promptVersion: PROMPT_VERSION } },
-  });
+  const exact = await exactBriefing(userId, scopeKey, hash, model, now);
   if (exact) return yield* replayStored(exact, null);
 
   // 2. Soft hit: a recent briefing that misses fewer than 3 new stories.
-  const latest = await latestBriefing(userId, scopeKey, model);
+  const latest = await latestBriefing(userId, scopeKey, model, now);
   if (latest && !o.force && now.getTime() - latest.createdAt.getTime() < SOFT_HIT_MS) {
     const newStories = newStoriesSince(latest.content, input);
-    if (newStories < SOFT_HIT_MAX_NEW) return yield* replayStored(latest, { newStories });
+    if (newStories < SOFT_HIT_MAX_NEW) return yield* replayStored(latest, newStories > 0 ? { newStories } : null);
   }
 
-  // 3. Daily cap (cloud providers; cap 0 = off was handled above).
+  // 3. Daily cap pre-check (read-only; cloud providers; cap 0 = off was handled
+  //    above). The authoritative atomic reservation happens in runGeneration.
   const built = buildBriefingPrompt(input, config.provider);
   const budget = await checkBudget(userId, config.provider, built.estIn + MAX_OUT, now);
   if (!budget.ok) return yield* fallbackEvents(input, budget.reason === "off" ? "no_ai" : "budget");
+
+  // 3b. A concurrent request may have finished the same input meanwhile.
+  const exactAgain = await exactBriefing(userId, scopeKey, hash, model, now);
+  if (exactAgain) return yield* replayStored(exactAgain, null);
 
   // From here on no `await` until the generation is registered: concurrent
   // requests for the same input must find it in the in-flight map.
@@ -311,7 +325,10 @@ async function* briefingEvents(userId: string, { scopeKey, input, ai }: Prepared
     (o.force && !checkRateLimit(userId, { prefix: "briefing-force", limit: 3, windowSecs: 600 }).success);
   if (limited) {
     yield { type: "error", code: "rate_limited" };
-    if (latest) return yield* replayStored(latest, { newStories: newStoriesSince(latest.content, input) });
+    if (latest) {
+      const newStories = newStoriesSince(latest.content, input);
+      return yield* replayStored(latest, newStories > 0 ? { newStories } : null);
+    }
     return yield* fallbackEvents(input, "rate_limited");
   }
 
@@ -323,7 +340,7 @@ async function* briefingEvents(userId: string, { scopeKey, input, ai }: Prepared
   broadcast.onIdle = () => {
     if (validated === 0 && !broadcast.closed) controller.abort(new DOMException("Client gone", "AbortError"));
   };
-  void runGeneration({ userId, scopeKey, input, config, model, hash, built, broadcast, controller, onItem: () => validated++ }).finally(() => {
+  void runGeneration({ userId, scopeKey, input, config, model, hash, built, broadcast, controller, now, onItem: () => validated++ }).finally(() => {
     inFlight().delete(key);
     broadcast.close();
   });
@@ -340,11 +357,23 @@ interface RunArgs {
   built: ReturnType<typeof buildBriefingPrompt>;
   broadcast: Broadcast;
   controller: AbortController;
+  now: Date;
   onItem: () => void;
 }
 
 async function runGeneration(a: RunArgs): Promise<void> {
   const { input, broadcast, controller } = a;
+  // Atomic reservation (input estimate + max output) before the provider call:
+  // two generations near the cap can never both pass.
+  let reservation: Reservation;
+  try {
+    reservation = await reserveBudget(a.userId, a.config.provider, a.built.estIn + MAX_OUT, a.now);
+  } catch (error) {
+    const reason: FallbackReason = error instanceof AiBudgetError ? (error.cap === 0 ? "no_ai" : "budget") : "provider_error";
+    for (const event of fallbackEvents(input, reason)) broadcast.push(event);
+    return;
+  }
+  if (controller.signal.aborted) return void (await settleUsage(reservation, "briefing", 0, 0)); // gone before the call
   const limits = timeouts(a.config.provider);
   let timedOut = false;
   const timeoutAbort = () => {
@@ -353,7 +382,7 @@ async function runGeneration(a: RunArgs): Promise<void> {
   };
   let firstTimer: ReturnType<typeof setTimeout> | null = setTimeout(timeoutAbort, limits.first);
   const totalTimer = setTimeout(timeoutAbort, limits.total);
-  const parser = new CitedOutputParser(a.built.aliases);
+  const parser = new CitedOutputParser(a.built.aliases, { groundingText: (u) => `${u.title} ${u.excerpt}` });
   const content: BriefingContent = { mode: "ai", what: [], why: [], brief: [], dropped: 0, storyCount: input.totalStories, window: windowOf(input) };
   let outChars = 0;
   let usage: { in: number; out: number } | null = null;
@@ -385,9 +414,14 @@ async function runGeneration(a: RunArgs): Promise<void> {
     clearTimeout(totalTimer);
     if (firstTimer) clearTimeout(firstTimer);
     const code = timedOut ? "timeout" : classifyAiError(error);
-    if (controller.signal.aborted && !timedOut) return; // client gone before anything validated: nothing to keep
+    const outTokens = Math.ceil(outChars / 3.5);
+    // Client gone before anything validated: nothing to keep, but the provider
+    // already processed (and billed) the input.
+    if (controller.signal.aborted && !timedOut) return void (await settleUsage(reservation, "briefing", a.built.estIn, outTokens));
     logger.warn(`[briefing] generation failed (${code})`);
-    if (outChars > 0) await recordUsage(a.userId, "briefing", a.built.estIn, Math.ceil(outChars / 3.5));
+    // Timeout (incl. first-token timeout) or a stream that broke mid-way: input
+    // counted; a request the provider rejected outright releases the reservation.
+    await settleUsage(reservation, "briefing", code === "timeout" || outChars > 0 ? a.built.estIn : 0, outTokens);
     broadcast.push({ type: "error", code });
     broadcast.push({ type: "fallback", reason: "provider_error", briefing: buildHeadlineDigest(input) });
     return;
@@ -397,7 +431,7 @@ async function runGeneration(a: RunArgs): Promise<void> {
 
   const tokensIn = usage?.in ?? a.built.estIn;
   const tokensOut = usage?.out ?? Math.ceil(outChars / 3.5);
-  await recordUsage(a.userId, "briefing", tokensIn, tokensOut);
+  await settleUsage(reservation, "briefing", tokensIn, tokensOut);
   content.dropped = parser.dropped;
   if (parser.dropped) broadcast.push({ type: "dropped", count: parser.dropped });
 
@@ -447,5 +481,6 @@ export async function cleanupBriefingData(now: Date = new Date()): Promise<{ bri
   const briefings = await db.briefing.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 14 * 86_400_000) } } });
   const cutoffDay = new Date(now.getTime() - 90 * 86_400_000).toISOString().slice(0, 10);
   const usage = await db.aiUsage.deleteMany({ where: { day: { lt: cutoffDay } } });
+  await db.aiBudgetDay.deleteMany({ where: { day: { lt: cutoffDay } } });
   return { briefings: briefings.count, usage: usage.count };
 }

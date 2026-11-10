@@ -1,4 +1,5 @@
 import path from "node:path";
+import { randomBytes } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
 
 /**
@@ -18,6 +19,11 @@ const PORT = Number(process.env.E2E_PORT || 3100);
 const FIXTURE_PORT = Number(process.env.E2E_FIXTURE_PORT || 4010);
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || `http://localhost:${PORT}`;
 const DB_PATH = path.resolve(".e2e", "e2e.db");
+// K2 fake AI gate (lib/ai/fake.ts): a random token per run. The seed writes it
+// next to the DB (`e2e.db.harness`); the production server enables the fake
+// provider only when its env token matches that file. `??=` keeps one token
+// for the whole run (workers inherit the env of the main process).
+const HARNESS_TOKEN = (process.env.FEEDFERRET_E2E_HARNESS ??= randomBytes(24).toString("hex"));
 
 const AUTHED = ["**/app/**/*.spec.ts", "**/authenticated-a11y.spec.ts"];
 
@@ -94,8 +100,10 @@ export default defineConfig({
         AUTH_TRUST_HOST: "true",
         DISABLE_BACKGROUND_SYNC: "true",
         // K2: the deterministic fake AI provider (lib/ai/fake.ts). Only honoured
-        // with this flag AND the disposable .e2e SQLite DB — never in production.
+        // with this flag AND the per-run harness token matching the marker file
+        // the seed writes next to the disposable DB — never in a deployment.
         FEEDFERRET_FAKE_AI: "1",
+        FEEDFERRET_E2E_HARNESS: HARNESS_TOKEN,
         NEXT_TELEMETRY_DISABLED: "1",
         NODE_ENV: "production",
       },

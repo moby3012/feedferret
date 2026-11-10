@@ -605,6 +605,11 @@ export async function getAiSettings() {
     dailyCap: usage.userCap,
     defaultDailyCap: usage.defaultCap,
     usedToday: usage.usedToday,
+    /** Local (Ollama) tokens today — shown separately, never capped. */
+    localUsedToday: usage.localToday,
+    /** A cloud call was refused today: automatic AI features pause until `budgetResetsAt` (00:00 UTC). */
+    budgetPaused: usage.paused,
+    budgetResetsAt: usage.resetsAt,
     /** The deterministic CI provider is offered only behind its test gate. */
     fakeProviderAvailable: isFakeAiEnabled(),
   };
@@ -634,9 +639,11 @@ export async function updateAiSettings(data: {
     updateData.aiProvider = data.provider ?? null;
   }
   if ("briefingAuto" in data) updateData.briefingAuto = data.briefingAuto === true;
+  let capChanged = false;
   if ("dailyCap" in data) {
     const { normalizeCapInput } = await import("@/lib/ai/usage");
     updateData.aiDailyTokenCap = normalizeCapInput(data.dailyCap);
+    capChanged = true;
   }
   if (data.clearApiKey) {
     updateData.aiApiKey = null;
@@ -649,7 +656,13 @@ export async function updateAiSettings(data: {
   if ("language" in data) updateData.aiSummaryLanguage = data.language;
   if ("autoTag" in data) updateData.aiAutoTag = data.autoTag;
   if ("cleanTitles" in data) updateData.aiCleanTitles = data.cleanTitles === true;
+  const before = capChanged ? await db.user.findUnique({ where: { id: session.user.id }, select: { aiDailyTokenCap: true } }) : null;
   await db.user.update({ where: { id: session.user.id }, data: updateData });
+  if (capChanged && before?.aiDailyTokenCap !== updateData.aiDailyTokenCap) {
+    // A new cap lifts today's "paused" note; the next refusal sets it again.
+    const { clearBudgetPause } = await import("@/lib/ai/usage");
+    await clearBudgetPause(session.user.id);
+  }
   revalidatePath("/settings");
 }
 
