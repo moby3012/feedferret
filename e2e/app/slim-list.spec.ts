@@ -12,9 +12,11 @@ const LIST_URL = /\/api\/app\/articles\?/;
 const DETAIL_URL = /\/api\/app\/articles\/[^/?]+(\?|$)/;
 
 test("first list response: 50 slim rows, no `content`, ≤ 100 KB gzipped", async ({ app, page }) => {
-  const first = page.waitForResponse((r) => LIST_URL.test(r.url()) && r.request().method() === "GET");
+  // Since the cold-start bootstrap (shell spec PR 5) the first page arrives in
+  // the HTML; the endpoint serves every page after it (and other scopes):
+  // request the same URL the client would.
   await app.open();
-  const response = await first;
+  const response = await page.request.get("/api/app/articles?show=unread&sort=new&limit=50", { headers: { "accept-encoding": "gzip" } });
   expect(response.status()).toBe(200);
   const raw = await response.body();
   const body = JSON.parse(raw.toString("utf8"));
