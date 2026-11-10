@@ -39,13 +39,12 @@ test.describe("overlays are history levels on touch / compact", () => {
     await expect.poll(() => app.where()).toBe(url);
   });
 
-  test("Add Feed from the feed sheet replaces the sheet; Back closes it and stays in the app", async ({ app, page, isMobile }) => {
-    test.skip(!isMobile, "the feed sheet is the compact feed picker");
+  test("Add Feed from the Feeds tab: Back closes it and stays on the Feeds root", async ({ app, page, isMobile }) => {
+    test.skip(!isMobile, "the Feeds tab is the compact feed picker");
     await app.open();
     await app.openSidebar();
     await app.sidebar().getByRole("button", { name: /^Add feed$/i }).first().tap();
     await expect(dialog(page, "Add Feed")).toBeVisible();
-    await expect(dialog(page, /feed navigation/i)).toBeHidden(); // never nested
     expect(app.where()).toBe("/?tab=feeds");
     await page.goBack();
     await expect(dialog(page, "Add Feed")).toBeHidden();
@@ -63,38 +62,28 @@ test.describe("overlays are history levels on touch / compact", () => {
     await expect.poll(() => app.where()).toBe("/?tab=feeds");
   });
 
-  test("a search-dialog draft dismissed by system Back within 300 ms is never committed", async ({ app, page, isMobile }) => {
-    test.skip(!isMobile, "the search dialog is a history level on touch");
+  test("a search edit still pending when the tab changes is never committed", async ({ app, page, isMobile }) => {
+    test.skip(!isMobile, "tab bar");
     await app.open();
-    await page.keyboard.press("/");
-    const input = dialog(page, "Search articles").getByRole("textbox");
-    await expect(input).toBeVisible();
-    await input.fill("cancelled draft");
-    await page.goBack(); // well within the 300 ms commit delay
-    await expect(input).toBeHidden();
+    await app.openSearch();
+    await page.getByTestId("search-field").filter({ visible: true }).fill("cancelled draft");
+    // Keyboard down (the bar hides while it is up), then a tab tap — well within the 300 ms commit delay.
+    await page.evaluate(async () => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      document.querySelector<HTMLElement>("#ff-tab-new")!.click();
+    });
     await page.waitForTimeout(800);
     expect(app.where()).toBe("/");
-    // Re-opening starts from the committed (empty) query, not the dismissed draft.
-    await page.keyboard.press("/");
-    await expect(dialog(page, "Search articles").getByRole("textbox")).toHaveValue("");
-  });
-
-  test("an inline search edit pending when system Back lands is dropped", async ({ app, page, isMobile }) => {
-    test.skip(!isMobile, "compact: the feed list is a level above the Feeds root");
-    await app.open();
-    await app.selectSidebar(/^Solo Blog\s*\d+$/);
-    await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
-    await page.getByRole("button", { name: "Search articles" }).last().tap();
-    await page.getByRole("searchbox").fill("never committed");
-    await page.goBack();
-    await expect.poll(() => app.where()).toBe("/?tab=feeds");
-    await page.waitForTimeout(800);
-    expect(app.where()).toBe("/?tab=feeds");
+    // Back on Suche: the committed (empty) query, not the dismissed draft.
+    await app.tab("Search").tap();
+    await expect(page.getByTestId("search-field").filter({ visible: true })).toHaveValue("");
+    expect(app.where()).toBe("/?tab=search");
   });
 });
 
 test.describe("compact reader: focus and inert", () => {
-  test("opening moves focus into the reader; the list and bottom controls behind it are inert; closing restores focus to the row", async ({ app, page, isMobile }) => {
+  test("opening moves focus into the reader; the list and tab bar behind it are inert; closing restores focus to the row", async ({ app, page, isMobile }) => {
     test.skip(!isMobile, "compact layout: the reader covers the list");
     await app.open();
     const id = app.articleId(2);
@@ -103,15 +92,15 @@ test.describe("compact reader: focus and inert", () => {
 
     await expect.poll(() => activeInReader(page)).toBe(true);
     await expect(page.locator(ACTIVE_LIST)).toHaveAttribute("inert", "");
-    await expect(page.locator(".ff-shell-bottom")).toHaveAttribute("inert", "");
+    await expect(page.getByTestId("tab-bar")).toHaveAttribute("inert", "");
     // Tabbing never escapes into the covered list / bottom controls.
     for (let i = 0; i < 12; i++) {
       await page.keyboard.press("Tab");
       const where = await page.evaluate(() => {
         const el = document.activeElement;
         if (!el || el === document.body) return "body";
-        // Covered = the list panes, the Feeds root and the bottom controls under the reader.
-        if (el.closest('[data-pane^="list-"], [data-pane="sources"], .ff-shell-bottom')) return `covered: ${el.outerHTML.slice(0, 160)}`;
+        // Covered = the list panes, the Feeds root and the tab bar under the reader.
+        if (el.closest('[data-pane^="list-"], [data-pane="sources"], [data-testid="tab-bar"]')) return `covered: ${el.outerHTML.slice(0, 160)}`;
         return el.closest('[data-pane="reader"]') ? "reader" : "outside-shell"; // e.g. the skip link
       });
       expect(where).not.toMatch(/^covered/);
@@ -120,7 +109,7 @@ test.describe("compact reader: focus and inert", () => {
     await page.goBack();
     await expect(page.locator('[data-pane="reader"] article')).toHaveCount(0, { timeout: 5000 });
     await expect(page.locator(ACTIVE_LIST)).not.toHaveAttribute("inert", "");
-    await expect(page.locator(".ff-shell-bottom")).not.toHaveAttribute("inert", "");
+    await expect(page.getByTestId("tab-bar")).not.toHaveAttribute("inert", "");
     await expect
       .poll(() => page.evaluate(() => document.activeElement?.closest("[data-article-id]")?.getAttribute("data-article-id") ?? null))
       .toBe(id);

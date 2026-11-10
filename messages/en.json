@@ -1793,7 +1793,8 @@
     "showResults": "{count, plural, one {Show # result} other {Show # results}}",
     "enterSearchTerm": "Enter search term",
     "searching": "Searching…",
-    "searchComplete": "Search complete"
+    "searchComplete": "Search complete",
+    "fieldPlaceholder": "Search all feeds"
   },
   "sharedSearch": {
     "title": "Shared FeedFerret search",
@@ -1875,7 +1876,8 @@
     "emailChangeWarning": "Changing your email disconnects Google Reader clients and clears all Fever keys. Rotate your API password and recreate API tokens used for Fever, then reconnect your clients."
   },
   "shell": {
-    "chooseFeed": "Choose a feed or category from the sidebar."
+    "chooseFeed": "Choose a feed or category from the sidebar.",
+    "showFeeds": "Show feeds"
   },
   "briefing": {
     "title": "Your briefing",
@@ -1922,5 +1924,39 @@
     "show": "Show",
     "none": "No new stories",
     "newStories": "New: {count, plural, one {# story} other {# stories}}"
+  },
+  "tabs": {
+    "label": "Main navigation",
+    "new": "New",
+    "saved": "Saved",
+    "feeds": "Feeds",
+    "search": "Search",
+    "settings": "Settings",
+    "showSources": "Show sources",
+    "collapseSidebar": "Collapse sidebar"
+  },
+  "listBar": {
+    "backToFeeds": "Back to Feeds",
+    "unreadFilter": "Unread",
+    "unreadCount": "{count} unread",
+    "layoutList": "List",
+    "layoutCompact": "Compact",
+    "layoutMagazine": "Magazine",
+    "refresh": "Refresh",
+    "segmentLater": "Later",
+    "segmentFavorites": "Favorites",
+    "savedViews": "Saved views",
+    "labels": "Labels"
+  },
+  "searchHome": {
+    "title": "Search",
+    "savedSearches": "Saved searches",
+    "recent": "Recent searches",
+    "clearRecent": "Clear"
+  },
+  "saveSearch": {
+    "title": "Save search",
+    "name": "Name",
+    "save": "Save"
   }
 }

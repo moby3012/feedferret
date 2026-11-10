@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -117,6 +117,8 @@ interface RssSidebarProps {
   onAddFeed: () => void;
   /** Opens an article in the shell (notification items); falls back to a full navigation. */
   onOpenArticle?: (articleId: string) => void;
+  /** Extra control in the header row (the shell's collapse-to-rail button). */
+  headerAction?: ReactNode;
 }
 
 export function RssSidebar({
@@ -130,6 +132,7 @@ export function RssSidebar({
   hideEmptyLabels = false,
   onAddFeed,
   onOpenArticle,
+  headerAction,
 }: RssSidebarProps) {
   const t = useTranslations();
   const router = useRouter();
@@ -331,8 +334,8 @@ export function RssSidebar({
   return (
     <>
     <aside role="navigation" aria-label={t("sidebar.feedNavigation")} className="h-full w-full bg-sidebar/85 backdrop-blur-overlay border-e border-sidebar-border/70 flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="p-5 border-b border-sidebar-border/70">
+      {/* Header (hidden on the compact Feeds screen, which has its own large title) */}
+      <div className="ff-sidebar-header p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-4">
             {branding.instanceIconDataUrl ? (
@@ -367,15 +370,18 @@ export function RssSidebar({
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="w-8 h-8 rounded-xl shrink-0"
-            onClick={() => window.dispatchEvent(new Event('focus-search'))}
-            aria-label={t("sidebar.searchArticles")}
-          >
-            <Search className="w-4 h-4" />
-          </Button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-8 h-8 rounded-xl shrink-0"
+              onClick={() => window.dispatchEvent(new Event('focus-search'))}
+              aria-label={t("sidebar.searchArticles")}
+            >
+              <Search className="w-4 h-4" />
+            </Button>
+            {headerAction}
+          </div>
         </div>
       </div>
 

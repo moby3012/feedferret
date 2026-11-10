@@ -43,7 +43,6 @@ const POP_FALLBACK_MS = 300;
 let state: NavState | null = null;
 const listeners = new Set<() => void>();
 let pending: { resolve: () => void; timer: number } | null = null;
-let searchReturn: Loc | null = null;
 let queue: Promise<void> | null = null;
 /** Layout family the owned history stack was last written for (compact has the Feeds root level). */
 let stackLayout: NavLayout | null = null;
@@ -334,18 +333,18 @@ function goScopeInner(scope: Scope, show: Show): void | Promise<void> {
   return resetStackInner(target);
 }
 
+/**
+ * Search lives in the Suche tab: a commit (debounced typing, Enter, a recent
+ * or saved query) replaces the Suche entry; clearing returns to the Suche
+ * root — the tab bar, not the search, is the way back to a list.
+ */
 function setQueryInner(q: string): void | Promise<void> {
   const s = getNavState();
   const text = q.trim();
-  if (text) {
-    if (s.loc.tab !== "search") searchReturn = { ...s.loc, articleId: null };
-    const target = locOf({ kind: "query", q: text });
-    if (sameLoc(target, s.loc)) return;
-    return replaceOrReset(target);
-  }
-  if (s.loc.tab !== "search") return;
-  const target = searchReturn ?? TAB_ROOTS.new;
-  searchReturn = null;
+  const target = text ? locOf({ kind: "query", q: text }) : TAB_ROOTS.search;
+  if (!text && s.loc.tab !== "search") return;
+  if (sameLoc(target, s.loc)) return;
+  if (s.loc.tab !== "search") return resetStackInner(target);
   return replaceOrReset(target);
 }
 

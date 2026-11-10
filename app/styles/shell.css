@@ -6,9 +6,11 @@
  *   data-tab="new|saved|feeds|search"  data-scope="0|1"  data-reader="open|closed"
  * and each list pane's data-active. Inactive panes are visibility:hidden (+ inert
  * in the DOM), never display:none — their scroll offset must survive.
- *   compact <48rem: all panes stack in one cell; reader / Feeds→scope push over.
- *   medium 48–75rem: [sources 0 | list | reader] — sources open as a drawer.
- *   expanded ≥75rem: [sources | list | reader].
+ *   compact <48rem: all panes stack in one cell; reader / Feeds→scope push over;
+ *     the floating tab bar (Neu · Gemerkt · Feeds · Suche) is the navigation.
+ *   medium 48–75rem: [rail 72 | list | reader] — the feeds tree opens as a drawer.
+ *   expanded ≥75rem: [sidebar | list | reader]; data-sources="rail" (`[`,
+ *     ff_ui cookie → SSR) collapses the sidebar to the rail.
  * ------------------------------------------------------------------------- */
 
 .ff-shell {
@@ -36,11 +38,6 @@
 .ff-shell > [data-pane^="list-"][data-active="false"] {
   visibility: hidden;
   pointer-events: none;
-}
-
-/* The fixed bottom controls are not a grid item. */
-.ff-shell-bottom {
-  display: contents;
 }
 
 .ff-pane-resizer {
@@ -97,11 +94,11 @@
 /* ------------------------------------------------------------------ wide */
 @media (width >= 48rem) {
   .ff-shell {
-    grid-template: "sources list reader" minmax(0, 1fr) / 0px var(--list-w-medium) minmax(0, 1fr);
+    --sources-w: var(--rail-w);
+    grid-template: "sources list reader" minmax(0, 1fr) / var(--sources-w) var(--list-w-medium) minmax(0, 1fr);
   }
   .ff-shell > [data-pane="sources"] {
     grid-area: sources;
-    visibility: hidden;
   }
   .ff-shell > [data-pane="reader"] {
     grid-area: reader;
@@ -110,17 +107,18 @@
 
 @media (width >= 75rem) {
   .ff-shell {
-    grid-template-columns: var(--sidebar-w) var(--list-w) minmax(0, 1fr);
+    --sources-w: var(--sidebar-w);
+    grid-template-columns: var(--sources-w) var(--list-w) minmax(0, 1fr);
   }
-  .ff-shell > [data-pane="sources"] {
-    visibility: visible;
+  .ff-shell[data-sources="rail"] {
+    --sources-w: var(--rail-w);
   }
   .ff-pane-resizer {
     display: block;
     position: absolute;
     top: 0;
     bottom: 0;
-    inset-inline-start: calc(var(--sidebar-w) + var(--list-w) - 3px);
+    inset-inline-start: calc(var(--sources-w) + var(--list-w) - 3px);
     width: 6px;
     z-index: var(--z-sticky);
     cursor: col-resize;
@@ -156,5 +154,231 @@ html[data-nav-anim="none"] .ff-shell > [data-pane] {
     transition:
       opacity 120ms linear,
       visibility 0s;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Sources pane: icon rail vs. full tree (PR 7). The rail is the navigation
+ * on medium and on expanded with the sidebar collapsed; the full tree is the
+ * expanded sidebar and the compact Feeds root.
+ * ------------------------------------------------------------------------- */
+.ff-rail {
+  display: none;
+}
+.ff-sources-full {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.ff-feeds-header {
+  display: none;
+}
+
+@media (width < 48rem) {
+  .ff-feeds-header {
+    display: flex;
+  }
+  /* The tree's own brand header is the sidebar's; the Feeds screen has its own large title. */
+  .ff-sources-full .ff-sidebar-header {
+    display: none;
+  }
+  .ff-sources-full {
+    padding-bottom: calc(var(--tabbar-h) + var(--tabbar-inset) + var(--safe-b));
+  }
+}
+@media (width >= 48rem) and (width < 75rem) {
+  .ff-rail {
+    display: flex;
+  }
+  .ff-sources-full {
+    display: none;
+  }
+}
+@media (width >= 75rem) {
+  .ff-shell[data-sources="rail"] .ff-rail {
+    display: flex;
+  }
+  .ff-shell[data-sources="rail"] .ff-sources-full {
+    display: none;
+  }
+}
+
+.ff-rail {
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  padding: max(12px, var(--safe-t), var(--titlebar-h)) 0 max(12px, var(--safe-b));
+  padding-inline-start: var(--safe-l);
+  border-inline-end: 1px solid var(--divider);
+  background: var(--surface-base);
+  user-select: none;
+}
+.ff-rail-tab,
+.ff-rail-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
+}
+.ff-rail-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-control);
+}
+.ff-rail-tab {
+  flex-direction: column;
+  gap: 2px;
+  width: 60px;
+  min-height: 56px;
+  border-radius: var(--radius-panel);
+}
+.ff-rail-tab:active,
+.ff-tab:active {
+  transform: scale(0.97);
+}
+.ff-rail-btn:hover,
+.ff-rail-tab:hover {
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+}
+.ff-rail-tab[data-active] {
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+}
+.ff-rail-tab[data-active] svg,
+.ff-tab[data-active] svg {
+  color: var(--primary);
+}
+.ff-rail-tab:focus-visible,
+.ff-rail-btn:focus-visible,
+.ff-tab:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Tab bar (compact; spec §4.6): floating pill over the content, no opaque
+ * strip — a gradient fades the list out behind it. Slides out while the
+ * reader / an overlay / the keyboard is up; never hides on list scroll.
+ * ------------------------------------------------------------------------- */
+.ff-tabbar {
+  position: fixed;
+  z-index: var(--z-bar);
+  bottom: calc(var(--safe-b) + var(--tabbar-inset));
+  inset-inline: max(12px, var(--safe-l)) max(12px, var(--safe-r));
+  max-width: 420px;
+  height: var(--tabbar-h);
+  margin-inline: auto;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sheet);
+  background: var(--surface-bar);
+  backdrop-filter: blur(var(--blur-bar)) saturate(1.4);
+  box-shadow: var(--shadow-bar);
+  user-select: none;
+  -webkit-touch-callout: none;
+  transition:
+    transform var(--dur-slow) var(--ease-out),
+    visibility 0s;
+}
+.ff-tabbar[data-hidden] {
+  visibility: hidden;
+  transform: translateY(140%);
+  transition:
+    transform var(--dur-base) var(--ease-in),
+    visibility 0s linear var(--dur-base);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .ff-tabbar {
+    background: var(--surface-base);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ff-tabbar {
+    background: var(--surface-base);
+    backdrop-filter: none;
+  }
+}
+.ff-tabbar-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  height: 100%;
+  padding: 3px;
+}
+.ff-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  border-radius: var(--radius-panel);
+  color: var(--text-secondary);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
+}
+.ff-tab[data-active] {
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+}
+.ff-tab-dot {
+  position: absolute;
+  top: 0;
+  inset-inline-end: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--unread);
+}
+
+@media (width < 48rem) {
+  .ff-shell::after {
+    content: "";
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: var(--z-sticky);
+    height: calc(var(--tabbar-h) + var(--tabbar-inset) + var(--safe-b) + 40px);
+    background: linear-gradient(to top, var(--surface-base) 35%, transparent);
+    pointer-events: none;
+  }
+  .ff-shell[data-reader="open"]::after {
+    visibility: hidden;
+  }
+}
+@media (width >= 48rem) {
+  .ff-tabbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-tabbar,
+  .ff-tabbar[data-hidden] {
+    transform: none;
+    transition:
+      opacity 120ms linear,
+      visibility 0s linear 120ms;
+  }
+  .ff-tabbar[data-hidden] {
+    opacity: 0;
+  }
+  .ff-tabbar:not([data-hidden]) {
+    transition:
+      opacity 120ms linear,
+      visibility 0s;
+  }
+  .ff-tab:active,
+  .ff-rail-tab:active {
+    transform: none;
   }
 }

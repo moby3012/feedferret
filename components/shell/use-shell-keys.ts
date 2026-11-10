@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useArticleActions } from "@/features/articles/mutations";
+import { getLayoutClass } from "@/features/reader/layout/layout-class";
 import { canMarkAll, markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
 import { getNavState, nav } from "@/features/reader/nav/store";
 import { clearSearch } from "./search-draft";
@@ -24,6 +25,7 @@ function overlayOpen() {
  * Global keys. Article moves (j/k/n/p) open the first article with a push and
  * then always REPLACE (`nav.openArticle` replaces while one is open), so
  * history never grows while reading. Esc: reader → clear search → nothing.
+ * `/` → Suche tab (field focused) · `[` → collapse / expand the sidebar.
  */
 export function useShellKeys(shell: ShellActions) {
   const { markViewRead } = useArticleActions();
@@ -46,6 +48,12 @@ export function useShellKeys(shell: ShellActions) {
         case "/":
           e.preventDefault();
           shell.openSearch();
+          return;
+        case "[":
+          // Expanded: sidebar ⇄ rail (persisted in the ff_ui cookie).
+          if (getLayoutClass() !== "expanded" || overlayOpen()) return;
+          e.preventDefault();
+          shell.toggleSourcesCollapsed();
           return;
         case "Escape":
           if (overlayOpen()) return;

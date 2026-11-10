@@ -1793,7 +1793,8 @@
     "showResults": "{count, plural, one {# Ergebnis anzeigen} other {# Ergebnisse anzeigen}}",
     "enterSearchTerm": "Suchbegriff eingeben",
     "searching": "Suche läuft…",
-    "searchComplete": "Suche abgeschlossen"
+    "searchComplete": "Suche abgeschlossen",
+    "fieldPlaceholder": "Alle Feeds durchsuchen"
   },
   "sharedSearch": {
     "title": "Geteilte FeedFerret-Suche",
@@ -1875,7 +1876,8 @@
     "emailChangeWarning": "Wenn du deine E-Mail-Adresse änderst, werden Google-Reader-Clients getrennt und alle Fever-Schlüssel gelöscht. Erneuere dein API-Passwort und erstelle die für Fever verwendeten API-Token neu. Verbinde deine Clients danach erneut."
   },
   "shell": {
-    "chooseFeed": "Wähle links einen Feed oder Ordner."
+    "chooseFeed": "Wähle links einen Feed oder Ordner.",
+    "showFeeds": "Feeds anzeigen"
   },
   "briefing": {
     "title": "Dein Überblick",
@@ -1922,5 +1924,39 @@
     "show": "Anzeigen",
     "none": "Keine neuen Geschichten",
     "newStories": "Neu: {count, plural, one {# Geschichte} other {# Geschichten}}"
+  },
+  "tabs": {
+    "label": "Hauptnavigation",
+    "new": "Neu",
+    "saved": "Gemerkt",
+    "feeds": "Feeds",
+    "search": "Suche",
+    "settings": "Einstellungen",
+    "showSources": "Quellen anzeigen",
+    "collapseSidebar": "Seitenleiste einklappen"
+  },
+  "listBar": {
+    "backToFeeds": "Zurück zu Feeds",
+    "unreadFilter": "Ungelesen",
+    "unreadCount": "{count} ungelesen",
+    "layoutList": "Liste",
+    "layoutCompact": "Kompakt",
+    "layoutMagazine": "Magazin",
+    "refresh": "Aktualisieren",
+    "segmentLater": "Später",
+    "segmentFavorites": "Favoriten",
+    "savedViews": "Gemerkte Ansichten",
+    "labels": "Labels"
+  },
+  "searchHome": {
+    "title": "Suche",
+    "savedSearches": "Gespeicherte Suchen",
+    "recent": "Zuletzt gesucht",
+    "clearRecent": "Löschen"
+  },
+  "saveSearch": {
+    "title": "Suche speichern",
+    "name": "Name",
+    "save": "Speichern"
   }
 }

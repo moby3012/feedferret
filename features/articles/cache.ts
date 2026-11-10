@@ -68,13 +68,51 @@ function mapListItems(data: unknown, fn: (item: ArticleListItem) => ArticleListI
  */
 function updateListRows(qc: QueryClient, fn: (item: ArticleListItem) => ArticleListItem | null, queryKey: QueryKey = qk.lists) {
   for (const query of qc.getQueryCache().findAll({ queryKey })) {
+    // A list on the wire may bring the row back in its old state even when its
+    // current pages do not hold it (the next page, a first load, an article known
+    // only via another cache): queue the rewrite for every fetching list.
+    if (query.state.fetchStatus === "fetching") reapplyAfterFetch(qc, query, fn);
     const data = query.state.data;
     const next = mapListItems(data, fn);
-    if (next === data) continue;
-    const { dataUpdatedAt, isInvalidated } = query.state;
-    qc.setQueryData(query.queryKey, next, { updatedAt: dataUpdatedAt });
-    if (isInvalidated) void qc.invalidateQueries({ queryKey: query.queryKey, exact: true, refetchType: "none" });
+    if (next !== data) writeRows(qc, query, next);
   }
+}
+
+type ListQuery = ReturnType<ReturnType<QueryClient["getQueryCache"]>["findAll"]>[number];
+type RowFn = (item: ArticleListItem) => ArticleListItem | null;
+
+function writeRows(qc: QueryClient, query: ListQuery, next: unknown) {
+  const { dataUpdatedAt, isInvalidated } = query.state;
+  qc.setQueryData(query.queryKey, next, { updatedAt: dataUpdatedAt });
+  if (isInvalidated) void qc.invalidateQueries({ queryKey: query.queryKey, exact: true, refetchType: "none" });
+}
+
+/** Row rewrites made while a list query was fetching, re-applied (in order) when that fetch settles. */
+const afterFetch = new WeakMap<ListQuery, RowFn[]>();
+
+/**
+ * An infinite query builds its result from the pages it saw when the fetch
+ * STARTED (`fetchNextPage`: old pages + the new one): a row patched while the
+ * next page is on the wire would come back with its old state — e.g. a
+ * read toggle tapped during paging silently flips back in the UI while the
+ * server keeps the new value. Re-apply such rewrites once the fetch settles.
+ */
+function reapplyAfterFetch(qc: QueryClient, query: ListQuery, fn: RowFn) {
+  const queued = afterFetch.get(query);
+  if (queued) {
+    queued.push(fn);
+    return;
+  }
+  afterFetch.set(query, [fn]);
+  const unsubscribe = qc.getQueryCache().subscribe((event) => {
+    if (event.query !== query || query.state.fetchStatus === "fetching") return;
+    unsubscribe();
+    const fns = afterFetch.get(query) ?? [];
+    afterFetch.delete(query);
+    const data = query.state.data;
+    const next = fns.reduce<unknown>((acc, f) => mapListItems(acc, f), data);
+    if (next !== data) writeRows(qc, query, next);
+  });
 }
 
 /** Applies a field patch to one article in every list page and its detail entry (new objects only where it changed). */

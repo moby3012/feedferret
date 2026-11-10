@@ -72,14 +72,14 @@ test("opening an article marks it read (instant default) and reader toggles refl
   await expect.poll(() => articleFlags(app.articleId(3)).isStarred).toBe(true);
   await app.activate(app.reader().getByRole("button", { name: "Mark as unread" }));
   await expect.poll(() => articleFlags(app.articleId(3)).isRead).toBe(false);
-  // Mobile: the feed sheet is only reachable from the list, so close the reader first.
+  // Mobile: the tab bar (Feeds tab) is hidden in the reader, so close the reader first.
   await app.activate(page.getByRole("button", { name: /^(Back to list|Back)$/ }).first());
   await expect.poll(() => app.sidebarCount("All articles")).toBe(before);
 });
 
 test("mark all as read empties unread counts and persists", async ({ app, page }) => {
   await app.open();
-  await app.activate(page.getByRole("button", { name: "Mark all as read" }).first());
+  await app.markAllRead();
   // A confirmation may be shown; confirm if present (current behaviour documented in testing.md).
   const confirm = page.getByRole("alertdialog").getByRole("button", { name: /mark all|confirm|yes|ok/i });
   if (await confirm.isVisible().catch(() => false)) await app.activate(confirm.first());

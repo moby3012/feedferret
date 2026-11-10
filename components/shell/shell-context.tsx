@@ -3,16 +3,17 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import type { ViewMode } from "@/components/rss-header";
 import { findCachedArticle } from "@/features/articles/cache";
 import type { LegacyArticle, LegacyContext } from "@/features/articles/legacy-adapter";
 import { useArticleActions } from "@/features/articles/mutations";
 import { useOnline } from "@/features/bootstrap/queries";
 import { getLayoutClass } from "@/features/reader/layout/layout-class";
+import { updateUiPrefs, useUiPrefs } from "@/features/reader/layout/ui-prefs-context";
 import { TAB_ROOTS } from "@/features/reader/nav/location";
 import { getNavState, nav } from "@/features/reader/nav/store";
 import { markArticleOpen } from "@/features/reader/perf-marks";
 import { markInAppNavigation } from "@/lib/in-app-back";
+import { requestSearchFocus } from "./tabs";
 import {
   useCategories,
   useCreateSavedSearch,
@@ -29,6 +30,7 @@ import {
 // actions — no handler props threaded through the shell).
 
 export type SortOrder = "newest" | "oldest";
+export type ViewMode = "list" | "magazine" | "minimal";
 
 /** The list the user is looking at (j/k, reader prev/next, prefetch). */
 export interface ActiveList {
@@ -72,6 +74,8 @@ export interface ShellData {
   suppressed: string[];
   /** Last Add Feed request (`n` bumps per request; `url` = share-target prefill). Open state = nav overlay "add-feed". */
   addFeed: { n: number; url?: string };
+  /** Query the save-search dialog names (open state = nav overlay "save-search"). */
+  saveSearchQuery: string;
 }
 
 export interface ShellActions {
@@ -84,13 +88,20 @@ export interface ShellActions {
   /** Auto / scroll mark-read; respects the session snapshot and the suppression set. */
   markAutoRead(article: { id: string; isRead: boolean }, src?: "auto" | "scroll"): void;
   bindSession(key: string): void;
+  /** The feeds tree: compact → Feeds tab; medium / collapsed rail → drawer. */
   openSources(): void;
+  /** Suche tab with its field focused (`/`, palette, sidebar search icon). */
   openSearch(): void;
+  /** Expanded layout: sidebar ⇄ rail (`[`); persisted in the `ff_ui` cookie. */
+  toggleSourcesCollapsed(): void;
   /** Overlay "shortcuts" (open / close through the nav store). */
   setShortcutsOpen(open: boolean): void;
   /** Overlay "add-feed" (compact: on the Feeds root, spec §1.3 consumed params). */
   requestAddFeed(url?: string): void;
+  /** Opens the save-search dialog for `q` (no window.prompt). */
   saveSearch(q: string): void;
+  /** Saves `q` under `name` (the dialog's submit). */
+  createSavedSearch(name: string, q: string): void;
   openSettings(): void;
   refresh(): void;
   setViewMode(mode: ViewMode): void;
@@ -98,6 +109,8 @@ export interface ShellActions {
 }
 
 const DataContext = createContext<ShellData | null>(null);
+/** Own context: the shell root reads it, and must not re-render on every data change. */
+const CollapsedContext = createContext(false);
 const ActionsContext = createContext<ShellActions | null>(null);
 
 function normalizeViewMode(value?: string | null): ViewMode {
@@ -140,6 +153,9 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<{ key: string | null; ids: string[] }>({ key: null, ids: [] });
   const [suppressed, setSuppressed] = useState<string[]>([]);
   const [addFeed, setAddFeed] = useState<ShellData["addFeed"]>({ n: 0 });
+  const [saveSearchQuery, setSaveSearchQuery] = useState("");
+  const uiPrefs = useUiPrefs();
+  const [sourcesCollapsed, setSourcesCollapsed] = useState(() => !!uiPrefs.current.sidebarCollapsed);
 
   const legacyContext = useMemo<LegacyContext>(
     () => ({
@@ -151,8 +167,8 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   );
 
   // Handlers read the latest values through a ref: the actions object never changes.
-  const live = useRef({ feeds, prefs, online, session, suppressed, articleActions, refreshMutation, updateGlobalSettings, createSavedSearch, router });
-  live.current = { feeds, prefs, online, session, suppressed, articleActions, refreshMutation, updateGlobalSettings, createSavedSearch, router };
+  const live = useRef({ feeds, prefs, online, session, suppressed, articleActions, refreshMutation, updateGlobalSettings, createSavedSearch, router, uiPrefs });
+  live.current = { feeds, prefs, online, session, suppressed, articleActions, refreshMutation, updateGlobalSettings, createSavedSearch, router, uiPrefs };
 
   const actions = useMemo<ShellActions>(() => {
     const addSession = (id: string) =>
@@ -194,8 +210,22 @@ export function ShellProvider({ children }: { children: ReactNode }) {
         setSession((s) => (s.key === key ? s : { key, ids: [] }));
         setSuppressed((prev) => (prev.length ? [] : prev));
       },
-      openSources: () => void nav.openOverlay("sources"),
-      openSearch: () => void nav.openOverlay("search"),
+      openSources() {
+        if (getLayoutClass() === "compact") void nav.goTo(TAB_ROOTS.feeds);
+        else void nav.openOverlay("sources");
+      },
+      openSearch() {
+        const { loc } = getNavState();
+        const go = loc.tab === "search" && !loc.articleId ? nav.closeOverlay() : nav.goTab("search");
+        void go.then(requestSearchFocus);
+      },
+      toggleSourcesCollapsed() {
+        setSourcesCollapsed((prev) => {
+          const next = !prev;
+          updateUiPrefs(live.current.uiPrefs, { sidebarCollapsed: next });
+          return next;
+        });
+      },
       setShortcutsOpen(open) {
         void (open ? nav.openOverlay("shortcuts") : nav.closeOverlay("shortcuts"));
       },
@@ -209,8 +239,12 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       saveSearch(q) {
         const query = q.trim();
         if (!query) return;
-        const name = window.prompt("Name for this saved search", query.length > 40 ? `${query.slice(0, 40)}…` : query);
-        if (!name?.trim()) return;
+        setSaveSearchQuery(query);
+        void nav.openOverlay("save-search");
+      },
+      createSavedSearch(name, q) {
+        const query = q.trim();
+        if (!query || !name.trim()) return;
         live.current.createSavedSearch.mutate({ name: name.trim(), query });
       },
       openSettings() {
@@ -243,13 +277,16 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       session,
       suppressed,
       addFeed,
+      saveSearchQuery,
     }),
-    [feeds, categories, labels, savedSearches, prefs, legacyContext, viewMode, sortOrder, refreshMutation.isPending, session, suppressed, addFeed],
+    [feeds, categories, labels, savedSearches, prefs, legacyContext, viewMode, sortOrder, refreshMutation.isPending, session, suppressed, addFeed, saveSearchQuery],
   );
 
   return (
     <ActionsContext.Provider value={actions}>
-      <DataContext.Provider value={data}>{children}</DataContext.Provider>
+      <DataContext.Provider value={data}>
+        <CollapsedContext.Provider value={sourcesCollapsed}>{children}</CollapsedContext.Provider>
+      </DataContext.Provider>
     </ActionsContext.Provider>
   );
 }
@@ -264,4 +301,9 @@ export function useShellActions(): ShellActions {
   const value = useContext(ActionsContext);
   if (!value) throw new Error("useShellActions() outside <ShellProvider>");
   return value;
+}
+
+/** Expanded layout: the sidebar is collapsed to the rail (`[`, `ff_ui` cookie → SSR). */
+export function useSourcesCollapsed(): boolean {
+  return useContext(CollapsedContext);
 }

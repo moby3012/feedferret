@@ -1,15 +1,13 @@
 "use client";
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { EndOfListCard } from "@/components/end-of-list-card";
 import { BriefingCard } from "@/components/briefing/briefing-card";
-import { RssHeader } from "@/components/rss-header";
-import { OfflineChip } from "@/components/shell/offline-chip";
-import { useShellActions, useShellData, type ShellData } from "@/components/shell/shell-context";
-import { clearSearch, searchDraft, useSearchDraft } from "@/components/shell/search-draft";
+import { SearchEmpty, SearchHome } from "@/components/search/search-home";
+import { useShellActions, useShellData, useSourcesCollapsed, type ShellData } from "@/components/shell/shell-context";
+import { scrollTabToTop, sourcesAreRail, tabLabelIdOf } from "@/components/shell/tabs";
 import { toLegacyArticle, type LegacyArticle } from "@/features/articles/legacy-adapter";
 import { useArticleActions, useIsMarkingViewRead } from "@/features/articles/mutations";
 import { prefetchArticle } from "@/features/articles/prefetch";
@@ -17,19 +15,16 @@ import { useArticleList, type ArticleListResult } from "@/features/articles/quer
 import { showsBriefing } from "@/features/briefing/api";
 import { useBriefing } from "@/features/briefing/queries";
 import { showApplies, type ListKey } from "@/features/articles/scope";
-import { useCounts, useOnline, useScopeUnread } from "@/features/bootstrap/queries";
+import { useCounts, useScopeUnread } from "@/features/bootstrap/queries";
 import { formatLoc, listKeyOfLoc, type Loc, type TabId } from "@/features/reader/nav/location";
 import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import { canMarkAll, markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
 import { useReleaseArticleSpoiler } from "@/hooks/use-rss-data";
 import { ArticleListView } from "./article-list-view";
+import { ListTopBar } from "./list-top-bar";
 import { scopeTitle } from "./scope-title";
 import { SpoilerGate } from "./spoiler-gate";
-
-// Search results only render for `?q=`: their own chunk.
-export const loadSearchResults = () => import("@/components/search-results-view");
-const SearchResultsView = dynamic(() => loadSearchResults().then((m) => m.SearchResultsView));
 
 /**
  * One list pane per tab (Neu · Gemerkt · Feeds · Suche). Mounts on first
@@ -56,6 +51,9 @@ export const ListPane = memo(function ListPane({ tab }: { tab: TabId }) {
   // (Inactive panes are inert anyway: only the active one subscribes to the reader.)
   const covered = useNav((s) => s.loc.tab === tab && !!s.loc.articleId) && layout === "compact";
   const inert = !active || covered;
+  // Controlled by the tab bar / rail: a tabpanel named by its tab. Without a
+  // visible tablist (expanded, full sidebar) a plain labelled region.
+  const labelledBy = tabLabelIdOf(tab, layout, useSourcesCollapsed());
 
   // Prefetch on intent: a row's body starts loading on pointerdown.
   const onPointerDown = useCallback(
@@ -71,12 +69,14 @@ export const ListPane = memo(function ListPane({ tab }: { tab: TabId }) {
 
   return (
     <section
+      id={`ff-pane-${tab}`}
       data-pane={`list-${tab}`}
       data-active={active ? "true" : "false"}
       inert={inert || undefined}
       aria-hidden={inert || undefined}
-      role="region"
-      aria-label={tA11y("articleList")}
+      role={labelledBy ? "tabpanel" : "region"}
+      aria-labelledby={labelledBy ?? undefined}
+      aria-label={labelledBy ? undefined : tA11y("articleList")}
       onPointerDownCapture={onPointerDown}
       className="relative flex flex-col border-e border-border/60 bg-card/70"
     >
@@ -97,8 +97,6 @@ function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: bool
   const counts = useCounts(true);
   const scopeUnread = useScopeUnread(loc.scope, data.feeds, true);
   const isMarkingAllRead = useIsMarkingViewRead();
-  const online = useOnline();
-  const [draft] = useSearchDraft();
   // Selection highlight follows in a deferred render, after the reader painted.
   const selectedId = useDeferredValue(useNav((s) => (s.loc.tab === tab ? s.loc.articleId : null)));
   return (
@@ -112,8 +110,6 @@ function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: bool
       byFeed={counts.byFeed}
       scopeUnread={scopeUnread}
       isMarkingAllRead={isMarkingAllRead}
-      online={online}
-      draft={draft}
       selectedId={selectedId}
       showBriefing={showBriefing}
     />
@@ -130,8 +126,6 @@ interface ViewProps {
   byFeed: Record<string, number>;
   scopeUnread: number | undefined;
   isMarkingAllRead: boolean;
-  online: boolean;
-  draft: string;
   selectedId: string | null;
   showBriefing: boolean;
 }
@@ -141,6 +135,7 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
   const t = useTranslations("sidebar");
   const tShell = useTranslations("shell");
   const tSearch = useTranslations("searchResults");
+  const tSearchHome = useTranslations("searchHome");
   const shell = useShellActions();
   const { markViewRead } = useArticleActions();
   const releaseArticleSpoiler = useReleaseArticleSpoiler();
@@ -197,22 +192,6 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
     void nav.goScope({ kind: "feed", id: nextFeed.id });
   };
 
-  if (!scope) {
-    // Feeds root on wide (compact shows the sources pane instead) / Suche root.
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center text-sm text-muted-foreground">
-        {p.tab === "search" ? (
-          <button type="button" onClick={shell.openSearch} className="rounded-xl border border-border/60 px-4 py-2.5 font-medium">
-            {t("searchArticles")}
-          </button>
-        ) : (
-          tShell("chooseFeed")
-        )}
-        {p.tab === "search" && <span>{tSearch("globalSearchHint")}</span>}
-      </div>
-    );
-  }
-
   const markRange = listKey ? { listKey: listKey.id, sort: listKey.sort, snapshotAt: list.snapshotAt } : null;
   const listProps = {
     articles: filtered,
@@ -234,47 +213,71 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
     markRange,
   };
 
-  if (scope.kind === "query") {
+  const scrollTop = () => scrollTabToTop(p.tab);
+  const title = scope ? scopeTitle(scope, data, t) : tSearchHome("title");
+
+  if (p.tab === "search") {
+    // One element tree for root and results: the field (top bar) keeps its
+    // focus and draft when the debounced commit swaps the body.
+    const count = filtered.length;
     return (
-      <SearchResultsView
-        {...listProps}
-        searchQuery={scope.q}
-        unreadCount={unreadCount}
-        onCloseSearch={() => void clearSearch()}
-        onEditSearch={shell.openSearch}
-        onSaveSearch={() => shell.saveSearch(scope.q)}
-      />
+      <>
+        <ListTopBar
+          tab={p.tab}
+          loc={loc}
+          title={scope?.kind === "query" ? scope.q : title}
+          unreadCount={0}
+          active={active}
+          isRefreshing={loading || data.isRefreshing}
+          onMarkAllRead={markAll}
+          isMarkingAllRead={p.isMarkingAllRead}
+          onScrollTop={scrollTop}
+          resultSummary={`${tSearch("resultsCount", { count })} · ${tSearch("unreadCount", { count: unreadCount })}`}
+        />
+        {scope?.kind === "query" ? (
+          <ArticleListView
+            {...listProps}
+            viewMode="list"
+            searchQuery={scope.q}
+            endOfList={count === 0 && !loading ? <SearchEmpty /> : undefined}
+          />
+        ) : (
+          <SearchHome />
+        )}
+      </>
+    );
+  }
+
+  if (!scope) {
+    // Feeds root on wide (compact shows the sources pane instead).
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center text-body-sm text-muted-foreground">
+        {tShell("chooseFeed")}
+        <button
+          type="button"
+          onClick={() => (sourcesAreRail() ? shell.openSources() : undefined)}
+          className="hidden rounded-control border border-divider px-4 py-2.5 font-medium text-foreground medium:inline-flex"
+        >
+          {tShell("showFeeds")}
+        </button>
+      </div>
     );
   }
 
   const spoilerKey = listKey?.id ?? "";
   return (
     <>
-      <RssHeader
-        title={scopeTitle(scope, data, t)}
-        articleCount={filtered.length}
+      <ListTopBar
+        tab={p.tab}
+        loc={loc}
+        title={title}
         unreadCount={unreadCount}
-        viewMode={data.viewMode}
-        onViewModeChange={shell.setViewMode}
-        onToggleSidebar={shell.openSources}
-        onRefresh={shell.refresh}
+        active={active}
         isRefreshing={loading || data.isRefreshing}
-        unreadOnly={loc.show === "unread"}
-        onToggleUnreadOnly={() => void nav.setShow(loc.show === "unread" ? "all" : "unread")}
-        searchQuery={p.draft}
-        onSearchChange={searchDraft.set}
         onMarkAllRead={markAll}
         isMarkingAllRead={p.isMarkingAllRead}
-        onSaveSearch={() => shell.saveSearch(p.draft)}
-        onShowShortcuts={() => shell.setShortcutsOpen(true)}
-        sortOrder={data.sortOrder}
-        onToggleSort={shell.toggleSort}
+        onScrollTop={scrollTop}
       />
-      {!p.online && (
-        <div className="flex justify-center border-b border-border/60 px-4 py-2">
-          <OfflineChip />
-        </div>
-      )}
       {isSpoiler && spoilerRevealed !== spoilerKey ? (
         <SpoilerGate onReveal={() => setSpoilerRevealed(spoilerKey)} />
       ) : (
