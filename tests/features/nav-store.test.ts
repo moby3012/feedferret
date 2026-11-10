@@ -38,6 +38,24 @@ async function boot(path: string, as: "compact" | "medium" | "expanded" = "compa
   await settle();
 }
 
+/** Reload: the history (entries + states) survives, the module state does not. */
+async function reload() {
+  stop();
+  vi.resetModules();
+  store = await import("../../features/reader/nav/store");
+  stop = store.bootNav(() => {});
+  await settle();
+}
+
+/** Crosses breakpoints back to back without letting the traversal in between finish. */
+async function jitter(...sizes: ("compact" | "medium" | "expanded")[]) {
+  for (const to of sizes) {
+    layout.current = to;
+    layout.listeners.forEach((l) => l());
+  }
+  await settle(60);
+}
+
 async function resize(to: "compact" | "medium" | "expanded") {
   layout.current = to;
   layout.listeners.forEach((l) => l());
@@ -159,6 +177,83 @@ describe("crossing the compact breakpoint reconciles the owned stack", () => {
     await systemBack(); // closes the overlay, stays on the feed
     expect(nav().overlay).toBeNull();
     expect(history.here()).toBe("/?feed=F");
+  });
+});
+
+describe("resize jitter during a stack rewrite", () => {
+  it("compact → wide → compact mid-traversal keeps the Feeds root (Back exits after three steps)", async () => {
+    await boot("/?feed=F&a=X");
+    await jitter("expanded", "compact");
+    expect(history.backStack()).toEqual(["/?tab=feeds", "/?feed=F", "/?feed=F&a=X"]);
+    expect(nav().index).toBe(2);
+    expect(here().articleId).toBe("X");
+    await systemBack();
+    expect(history.here()).toBe("/?feed=F");
+    await systemBack();
+    expect(history.here()).toBe("/?tab=feeds");
+    expect(history.exited).toBe(false);
+    await systemBack();
+    expect(history.exited).toBe(true);
+  });
+
+  it("wide → compact → wide mid-traversal ends on the wide chain", async () => {
+    await boot("/?feed=F", "expanded");
+    await store.nav.openArticle("X");
+    await jitter("compact", "expanded");
+    expect(history.backStack()).toEqual(["/?feed=F", "/?feed=F&a=X"]);
+    expect(nav().index).toBe(1);
+    await systemBack();
+    expect(history.here()).toBe("/?feed=F");
+    await systemBack();
+    expect(history.exited).toBe(true);
+  });
+
+  it("many crossings in a row settle on the last layout, the entry kinds match it", async () => {
+    await boot("/?feed=F&a=X");
+    await jitter("expanded", "compact", "medium", "compact", "expanded", "compact");
+    expect(history.backStack()).toEqual(["/?tab=feeds", "/?feed=F", "/?feed=F&a=X"]);
+    expect(history.entries.slice(1, history.index + 1).map((e) => (e.state as { ff: { k: string } }).ff.k)).toEqual([
+      "root",
+      "scope",
+      "article",
+    ]);
+    // A later single crossing still reconciles (nothing is left stuck as "queued").
+    await resize("expanded");
+    expect(history.backStack()).toEqual(["/?feed=F", "/?feed=F&a=X"]);
+  });
+});
+
+describe("reload", () => {
+  it("on an overlay's transient entry: boots on the entry beneath it, Back leaves the article", async () => {
+    await boot("/?feed=F&a=X");
+    await store.nav.openOverlay("palette");
+    expect(history.backStack()).toEqual(["/?tab=feeds", "/?feed=F", "/?feed=F&a=X", "/?feed=F&a=X"]);
+    await reload();
+    expect(nav().overlay).toBeNull();
+    expect(nav().index).toBe(2);
+    expect(history.backStack()).toEqual(["/?tab=feeds", "/?feed=F", "/?feed=F&a=X"]);
+    await systemBack();
+    expect(history.here()).toBe("/?feed=F");
+    expect(here().articleId).toBeNull();
+  });
+
+  it("on an overlay entry over a root: boots on the root, Back leaves the app", async () => {
+    await boot("/");
+    await store.nav.openOverlay("search");
+    await store.nav.openOverlay("palette"); // swapped, still one transient entry
+    await reload();
+    expect(nav().overlay).toBeNull();
+    expect(nav().index).toBe(0);
+    expect(history.backStack()).toEqual(["/"]);
+    await systemBack();
+    expect(history.exited).toBe(true);
+  });
+
+  it("on a normal entry: keeps the stack as it is", async () => {
+    await boot("/?feed=F&a=X");
+    await reload();
+    expect(history.backStack()).toEqual(["/?tab=feeds", "/?feed=F", "/?feed=F&a=X"]);
+    expect(nav().index).toBe(2);
   });
 });
 

@@ -47,6 +47,8 @@ let searchReturn: Loc | null = null;
 let queue: Promise<void> | null = null;
 /** Layout family the owned history stack was last written for (compact has the Feeds root level). */
 let stackLayout: NavLayout | null = null;
+/** A reconcile pass is queued and has not started yet. */
+let reconcileQueued = false;
 
 const searchOf = (href: string) => href.split("?")[1] ?? "";
 const navLayout = (): NavLayout => (getLayoutClass() === "compact" ? "compact" : "wide");
@@ -194,10 +196,17 @@ function after(first: void | Promise<void>, next: () => void | Promise<void>): v
   return first ? first.then(next) : next();
 }
 
-async function resetStackInner(entries: Loc[]) {
+/**
+ * Rewrites the owned stack as the chain of `target`. The chain is computed
+ * AFTER the traversal to the bottom entry, for the layout at that moment: a
+ * resize while the traversal is awaited must not leave a chain of the old
+ * layout recorded as the new one (`stackLayout` is what the chain was built for).
+ */
+async function resetStackInner(target: Loc) {
   const s = getNavState();
   if (s.index > 0) await goAndWait(-s.index);
   const layout = navLayout();
+  const entries = stackOf(target, layout);
   stackLayout = layout;
   entries.forEach((loc, j) => write(j === 0 ? "replace" : "push", loc, { i: j, k: entryKindOf(loc, layout) }));
   setNavAnim("none");
@@ -208,7 +217,7 @@ async function resetStackInner(entries: Loc[]) {
 function replaceOrReset(target: Loc): void | Promise<void> {
   const s = getNavState();
   const layout = navLayout();
-  if (s.index > 0 && (s.loc.articleId || readFf()?.k === "overlay")) return resetStackInner(stackOf(target, layout));
+  if (s.index > 0 && (s.loc.articleId || readFf()?.k === "overlay")) return resetStackInner(target);
   write("replace", target, { i: s.index, k: entryKindOf(target, layout) });
   setNavAnim("none");
   commit({ loc: target, overlay: null, index: s.index, cause: "replace" });
@@ -260,6 +269,7 @@ function closeOverlayInner() {
  * overlay survives (it is re-opened on top of the rewritten stack).
  */
 function reconcileLayoutInner(): void | Promise<void> {
+  reconcileQueued = false; // a crossing from here on (even mid-traversal) queues the next pass
   const layout = navLayout();
   if (stackLayout === null || layout === stackLayout) return;
   stackLayout = layout;
@@ -273,9 +283,18 @@ function reconcileLayoutInner(): void | Promise<void> {
     return;
   }
   const overlay = s.overlay;
-  return resetStackInner(chain).then(() => {
+  // The chain is rebuilt for the layout at the END of the traversal (see
+  // resetStackInner); a later crossing is picked up by the queued pass.
+  return resetStackInner(s.loc).then(() => {
     if (overlay) openOverlayInner(overlay);
   });
+}
+
+/** Layout listener: one queued reconcile pass at a time (latest layout wins when it runs). */
+function scheduleReconcile() {
+  if (reconcileQueued || stackLayout === null || navLayout() === stackLayout) return;
+  reconcileQueued = true;
+  void run(() => {}); // every op starts with reconcileLayoutInner()
 }
 
 function openOverlayInner(id: OverlayId) {
@@ -312,7 +331,7 @@ function goScopeInner(scope: Scope, show: Show): void | Promise<void> {
   }
   if (!s.loc.articleId && target.tab === s.loc.tab) return replaceOrReset(target);
   // Cross-tab jump (or leaving the reader for another list): fresh stack of the target tab.
-  return resetStackInner(stackOf(target, "compact"));
+  return resetStackInner(target);
 }
 
 function setQueryInner(q: string): void | Promise<void> {
@@ -351,8 +370,8 @@ export const nav = {
     }),
   setQuery: (q: string) => run(() => after(dropOverlay(), () => setQueryInner(q))),
   /** Any location as a fresh stack (cross-tab jump, consumed deep-link intents). */
-  goTo: (loc: Loc) => run(() => after(dropOverlay(), () => resetStackInner(stackOf(loc, navLayout())))),
-  goTab: (tab: TabId) => run(() => after(dropOverlay(), () => resetStackInner(stackOf(tabMemoryLoc(tab), navLayout())))),
+  goTo: (loc: Loc) => run(() => after(dropOverlay(), () => resetStackInner(loc))),
+  goTab: (tab: TabId) => run(() => after(dropOverlay(), () => resetStackInner(tabMemoryLoc(tab)))),
   /** Opens an overlay (palette, shortcuts, add-feed, sheet, search); swaps an open one — overlays never nest. */
   openOverlay: (id: OverlayId) => run(() => openOverlayInner(id)),
   /** Closes the open overlay (`only`: just when it is that one); history.back() when its entry was pushed. */
@@ -372,8 +391,9 @@ export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
   if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
   window.addEventListener("popstate", onPopState);
   let unguard = () => {};
-  const cancel = whenRouterReady(() => {
-    unguard = keepFfAcrossRouterWrites();
+  let disposed = false;
+  const settleBoot = () => {
+    if (disposed) return;
     const { loc, intents, changed } = normalizeSearch(window.location.search);
     const ff = readFf();
     const layout = navLayout();
@@ -384,21 +404,35 @@ export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
       chain.forEach((l, j) => write(j === 0 ? "replace" : "push", l, { i: j, k: entryKindOf(l, layout) }));
       index = chain.length - 1;
     } else if (changed || ff.k === "overlay") {
-      // Reloaded on an overlay entry: the overlay is gone, keep the depth.
+      // An overlay entry at the bottom of the stack (not app-pushed; should not
+      // happen): nothing to step back onto — turn it into a plain entry in place.
       write("replace", loc, ff.k === "overlay" ? { i: ff.i, k: entryKindOf(loc, layout) } : ff);
     }
     setNavAnim("none");
     commit({ loc, overlay: null, index, cause: "init" });
     if (intents.addFeed || intents.sharedUrl) onIntents(intents);
+  };
+  const cancel = whenRouterReady(() => {
+    unguard = keepFfAcrossRouterWrites();
+    const ff = readFf();
+    if (ff?.k === "overlay" && ff.i > 0) {
+      // Reloaded with an overlay open: the overlay is gone, its transient entry
+      // would become a duplicate of the entry beneath (Back = same screen).
+      // Step back onto that entry and boot from there; the stale entry stays
+      // only as a forward entry, dropped by the next push.
+      void run(() => goAndWait(-1).then(settleBoot));
+    } else {
+      settleBoot();
+    }
   });
-  const unwatchLayout = subscribeLayoutClass(() => {
-    if (stackLayout !== null && navLayout() !== stackLayout) void run(() => reconcileLayoutInner());
-  });
+  const unwatchLayout = subscribeLayoutClass(scheduleReconcile);
   return () => {
     cancel();
     unguard();
     unwatchLayout();
+    disposed = true;
     stackLayout = null;
+    reconcileQueued = false;
     window.removeEventListener("popstate", onPopState);
     if (pending) window.clearTimeout(pending.timer);
     pending = null;
