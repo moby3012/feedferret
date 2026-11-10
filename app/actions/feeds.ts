@@ -43,7 +43,6 @@ export async function refreshAllFeeds() {
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     const result = await syncUserFeeds(session.user.id);
-    revalidatePath("/");
     return result;
 }
 
@@ -58,7 +57,6 @@ export async function refreshFeed(feedId: string) {
     if (!feed) throw new Error("Feed not found");
 
     const result = await syncFeed(session.user.id, feedId);
-    revalidatePath("/");
     return result;
 }
 
@@ -106,48 +104,6 @@ export async function getCategories() {
         },
         orderBy: { order: "asc" },
     });
-}
-
-export async function getStarredCount() {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-
-    return await db.article.count({
-        where: { userId: session.user.id, isStarred: true },
-    });
-}
-
-export async function getReadLaterCount() {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-
-    return await db.article.count({
-        where: { userId: session.user.id, isReadLater: true },
-    });
-}
-
-export async function getSpoilerCount() {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-
-    return await db.article.count({
-        where: { userId: session.user.id, isSpoiler: true },
-    });
-}
-
-export async function toggleArticleReadLater(articleId: string, isReadLater: boolean) {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-
-    await db.article.update({
-        where: { id: articleId, userId: session.user.id },
-        data: {
-            isReadLater,
-            readLaterSavedAt: isReadLater ? new Date() : null,
-        },
-    });
-
-    revalidatePath("/");
 }
 
 export async function getLabels() {
@@ -251,7 +207,6 @@ export async function setArticleLabels(articleId: string, labelIds: string[]) {
         ),
     ]);
 
-    revalidatePath("/");
     return await db.article.findUnique({
         where: { id: articleId, userId: session.user.id },
         include: {
@@ -288,7 +243,6 @@ export async function createSavedSearch(data: { name: string; query: string }) {
         },
     });
 
-    revalidatePath("/");
     return savedSearch;
 }
 
@@ -946,34 +900,6 @@ export async function updateFeedOrder(orders: { id: string; order: number; categ
     revalidatePath("/");
 }
 
-export async function toggleArticleRead(articleId: string, isRead: boolean) {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-
-    await db.article.update({
-        where: { id: articleId, userId: session.user.id },
-        data: {
-            isRead,
-            readAt: isRead ? new Date() : null,
-        },
-    });
-
-    revalidatePath("/");
-}
-
-export async function toggleArticleStarred(articleId: string, isStarred: boolean) {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-
-    await db.article.update({
-        where: { id: articleId, userId: session.user.id },
-        data: { isStarred },
-    });
-
-    revalidatePath("/");
-}
-
-
 /**
  * Legacy `(feedId, category, search)` → view scope. The scope builder lives in
  * server/articles/view-scope.ts (shared with GET /api/app/articles) so the
@@ -1271,7 +1197,6 @@ export async function markAllAsRead(scope?: { feedId?: string | null; category?:
         { timeout: 60_000, maxWait: 10_000 },
     );
 
-    revalidatePath("/");
 
     // Note: rows are attributed to this call via `readAt`. Two concurrent mark-all
     // calls of the same user in the same millisecond could share it; worst case
@@ -1322,7 +1247,6 @@ export async function markArticlesAsUnread(undoToken: string) {
         throw error;
     }
 
-    revalidatePath("/");
 
     return { count: ids.length, ids };
 }
@@ -1510,7 +1434,6 @@ export async function releaseArticleSpoiler(articleId: string) {
         where: { id: articleId, userId: session.user.id },
         data: { isSpoiler: false, spoilerAt: null, spoilerRuleId: null },
     });
-    revalidatePath("/");
 }
 
 export async function releaseAllSpoilers() {
@@ -1520,7 +1443,6 @@ export async function releaseAllSpoilers() {
         where: { userId: session.user.id, isSpoiler: true },
         data: { isSpoiler: false, spoilerAt: null, spoilerRuleId: null },
     });
-    revalidatePath("/");
 }
 
 export async function applyAutoReadRulesNow() {
@@ -1713,12 +1635,6 @@ export async function getNotifications(limit = 20) {
         orderBy: { createdAt: "desc" },
         take: Math.min(Math.max(limit, 1), 100),
     });
-}
-
-export async function getUnreadNotificationCount() {
-    const session = await auth();
-    if (!session?.user?.id) throw new Error("Unauthorized");
-    return db.notification.count({ where: { userId: session.user.id, isRead: false } });
 }
 
 export async function markNotificationRead(notificationId: string) {

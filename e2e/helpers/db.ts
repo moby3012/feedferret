@@ -74,6 +74,17 @@ export function unreadCountInDb(userKey: string): number {
   }
 }
 
+/** Starred articles of a user (what the server persisted). */
+export function starredCountInDb(userKey: string): number {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    return (db.prepare(`SELECT COUNT(*) AS n FROM "Article" WHERE userId = ? AND isStarred = 1`).get(userId) as { n: number }).n;
+  } finally {
+    db.close();
+  }
+}
+
 /** Ids of all unread articles of a user (to assert undo restores *exactly* the changed set). */
 export function unreadIds(userKey: string): string[] {
   const { userId } = manifest().users[userKey];

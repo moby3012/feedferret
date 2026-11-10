@@ -1685,5 +1685,11 @@
       "toggleTheme": "Toggle theme",
       "shortcuts": "Keyboard shortcuts"
     }
+  },
+  "articleState": {
+    "toggleFailed": "Couldn't save that change — it was undone.",
+    "offlineReadOnly": "Offline – read only",
+    "offline": "Offline",
+    "labelsFailed": "Couldn't update labels."
   }
 }

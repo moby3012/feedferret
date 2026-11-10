@@ -1685,5 +1685,11 @@
       "toggleTheme": "Visuellen Modus wechseln",
       "shortcuts": "Tastaturkürzel"
     }
+  },
+  "articleState": {
+    "toggleFailed": "Änderung konnte nicht gespeichert werden und wurde zurückgenommen.",
+    "offlineReadOnly": "Offline – nur Lesen",
+    "offline": "Offline",
+    "labelsFailed": "Labels konnten nicht geändert werden."
   }
 }

@@ -172,6 +172,8 @@ async function singleRun(browser, storageState) {
 
   let requests = 0, actionPosts = 0, apiCalls = 0, jsBytes = 0, totalBytes = 0;
   const urls = new Map();
+  // Data requests (Next-Action POSTs + /api/*) in order, for per-interaction counts.
+  const dataLog = [];
   // Data responses that can carry the article list: Next-Action POSTs (the
   // pre-#PR1 `getArticles` server action) and GET /api/app/articles. The
   // largest one finished before the first row is the list payload.
@@ -186,6 +188,7 @@ async function singleRun(browser, storageState) {
     if (isAction) actionPosts++;
     const { pathname } = new URL(e.request.url);
     if (pathname.startsWith("/api/")) apiCalls++;
+    if (isAction || pathname.startsWith("/api/")) dataLog.push({ isAction, pathname });
     if (isAction || /^\/api\/app\/articles\/?$/.test(pathname)) dataReqs.add(e.requestId);
   });
   cdp.on("Network.dataReceived", (e) => {
@@ -240,16 +243,47 @@ async function singleRun(browser, storageState) {
   await page.getByRole("button", { name: /^(Back to list|Back)$/ }).first().tap();
   await page.waitForTimeout(600);
 
-  t = await now();
-  await rows.nth(1).getByRole("button", { name: "Mark as read" }).tap();
-  const markReadMs = await interactionMs(page, t);
+  // Requests a toggle causes (the write itself + any follow-up refetches),
+  // counted over a 3 s settle window after the tap.
+  const settle = async () => {
+    await page.waitForTimeout(3000);
+  };
+  const requestsDuring = async (fn) => {
+    const from = dataLog.length;
+    await fn();
+    await settle();
+    const slice = dataLog.slice(from);
+    return { total: slice.length, actions: slice.filter((r) => r.isAction).length };
+  };
 
-  t = await now();
-  await rows.nth(1).getByRole("button", { name: "Star" }).tap();
-  const starMs = await interactionMs(page, t);
+  let markReadMs = null;
+  const markReadReq = await requestsDuring(async () => {
+    t = await now();
+    await rows.nth(1).getByRole("button", { name: "Mark as read" }).tap();
+    markReadMs = await interactionMs(page, t);
+  });
+
+  let starMs = null;
+  const starReq = await requestsDuring(async () => {
+    t = await now();
+    await rows.nth(1).getByRole("button", { name: "Star" }).tap();
+    starMs = await interactionMs(page, t);
+  });
+
+  // 10 rapid star toggles on one row (no waiting between taps).
+  const burstReq = await requestsDuring(async () => {
+    const id = await rows.nth(2).locator("xpath=ancestor-or-self::*[@data-article-id][1]").getAttribute("data-article-id");
+    const star = page.locator(`[data-article-id="${id}"]`).getByRole("button", { name: /^(Star|Remove star)$/ }).first();
+    for (let i = 0; i < 10; i++) await star.tap();
+  });
 
   await context.close();
-  return { ...cold, ...coldRequests, openArticleInp: openMs, openArticleToReaderMs: readerMs, openArticleToBodyMs: readerBodyMs, markReadInp: markReadMs, starInp: starMs };
+  return {
+    ...cold, ...coldRequests, openArticleInp: openMs, openArticleToReaderMs: readerMs, openArticleToBodyMs: readerBodyMs, markReadInp: markReadMs, starInp: starMs,
+    markReadRequests: markReadReq.total, markReadActionPosts: markReadReq.actions,
+    starRequests: starReq.total, starActionPosts: starReq.actions,
+    burst10Requests: burstReq.total, burst10ActionPosts: burstReq.actions,
+  };
 }
 
 /** Restore seeded read/star flags so every run opens/marks the same unread rows. */
@@ -329,6 +363,9 @@ async function main() {
     `| Tap → reader body painted | ${fmt(med.openArticleToBodyMs)} ms | |`,
     `| INP-proxy: mark read (tap) | ${fmt(med.markReadInp)} ms | ≤ 200 ms |`,
     `| INP-proxy: star (tap) | ${fmt(med.starInp)} ms | ≤ 200 ms |`,
+    `| Requests per mark-read (3 s window) | ${fmt(med.markReadRequests)} (${fmt(med.markReadActionPosts)} Next-Action POSTs) | 1 |`,
+    `| Requests per star (3 s window) | ${fmt(med.starRequests)} (${fmt(med.starActionPosts)} Next-Action POSTs) | 1 |`,
+    `| 10 rapid star toggles (3 s window) | ${fmt(med.burst10Requests)} (${fmt(med.burst10ActionPosts)} Next-Action POSTs) | ≤ 2 action POSTs |`,
     `| First-load JS \`/\` (gz), route entry | ${jsSize.pageEntry.gzKb} KB (${jsSize.pageEntry.rawKb} KB raw, ${jsSize.pageEntry.files} chunks) | ≤ 180 KB |`,
     `| First-load JS \`/\` (gz), incl. runtime | ${jsSize.withRuntime.gzKb} KB (${jsSize.withRuntime.rawKb} KB raw, ${jsSize.withRuntime.files} chunks) | |`,
     ``,

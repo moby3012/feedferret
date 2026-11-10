@@ -1,15 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import { replaceEqualDeep, useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type QueryKey } from "@tanstack/react-query";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
+import { useInfiniteQuery, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { fetchArticleDetail, fetchArticlePage, shouldRetry } from "./api";
-import { findCachedArticle, mergeRetainedRows } from "./cache";
+import { findCachedArticle, overlayPendingState, pruneReadRows } from "./cache";
 import { qk } from "./keys";
 import type { ListKey } from "./scope";
-import type { ArticleDetail, ArticleListItem, ArticlePage } from "./types";
+import type { ArticleDetail, ArticleListItem } from "./types";
 
 const DISABLED_KEY = ["list", "__disabled__"] as const;
-const NO_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * A bound list is a snapshot: it never refetches on its own (no focus /
+ * reconnect / interval). Rebinding a key refetches only when its snapshot is
+ * older than this or was marked stale (membership changed, server-side
+ * change); otherwise the cached rows are reused as they are (spec §2.3).
+ */
+export const LIST_REBIND_STALE_MS = 10 * 60_000;
 
 export interface ArticleListResult {
   items: ArticleListItem[];
@@ -28,34 +35,35 @@ export interface ArticleListResult {
 /**
  * One article list, 50 rows per page from `GET /api/app/articles`. Rows carry
  * no body. `active: false` keeps the cached pages but never fetches.
- * `retainIds`: rows a refetch must not drop (read this session in the unread
- * view) — they stay in the cache at their previous position.
+ *
+ * Snapshot semantics: marking a row read patches it in place — it stays in
+ * the list until the key is bound again (prune on rebind) or the list is
+ * explicitly refreshed.
  */
-export function useArticleList(key: ListKey | null, o: { active: boolean; retainIds?: ReadonlySet<string> }): ArticleListResult {
-  const retainRef = useRef<ReadonlySet<string>>(o.retainIds ?? NO_IDS);
-  useEffect(() => {
-    retainRef.current = o.retainIds ?? NO_IDS;
-  }, [o.retainIds]);
+export function useArticleList(key: ListKey | null, o: { active: boolean }): ArticleListResult {
+  const qc = useQueryClient();
+  const queryKey = (key ? qk.list(key) : DISABLED_KEY) as QueryKey;
+  // Prune on rebind, before the observer reads the cache for this render (so
+  // the first paint of the rebound list has no read rows). Runs once per bind.
+  const boundRef = useRef<string | null>(null);
+  const boundHash = key ? JSON.stringify(queryKey) : null;
+  if (key && boundRef.current !== boundHash) {
+    boundRef.current = boundHash;
+    pruneReadRows(qc, key);
+  }
 
   const query = useInfiniteQuery({
-    queryKey: (key ? qk.list(key) : DISABLED_KEY) as QueryKey,
-    queryFn: ({ pageParam, signal }) => fetchArticlePage(key!, pageParam, signal),
+    queryKey,
+    queryFn: async ({ pageParam, signal }) => {
+      const page = await fetchArticlePage(key!, pageParam, signal);
+      return { ...page, items: page.items.map((item) => overlayPendingState(qc, item)) };
+    },
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
     enabled: !!key && o.active,
-    staleTime: 30_000,
-    // No refetch behind the reader's back until the optimistic batcher (shell
-    // PR 2): a focus refetch would re-page the list while the user reads it.
+    staleTime: LIST_REBIND_STALE_MS,
     refetchOnWindowFocus: false,
-    structuralSharing: (previous, next) =>
-      replaceEqualDeep(
-        previous,
-        mergeRetainedRows(
-          previous as InfiniteData<ArticlePage, string | null> | undefined,
-          next as InfiniteData<ArticlePage, string | null>,
-          retainRef.current,
-        ),
-      ),
+    refetchOnReconnect: false,
     retry: shouldRetry,
     // Previous rows only for a show/sort toggle of the same scope; another
     // scope without cache shows skeleton rows, never the old feed.
@@ -116,7 +124,7 @@ export function useArticle(id: string | null): ArticleResult {
   const qc = useQueryClient();
   const detailQuery = useQuery({
     queryKey: id ? qk.article(id) : ["article", "__none__"],
-    queryFn: ({ signal }) => fetchArticleDetail(id!, signal),
+    queryFn: async ({ signal }) => overlayPendingState(qc, await fetchArticleDetail(id!, signal)),
     enabled: !!id,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,

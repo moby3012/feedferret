@@ -15,20 +15,11 @@ import { SearchResultsView } from "@/components/search-results-view";
 import { isMarkAllAllowed } from "@/lib/view-scope";
 import {
   useFeeds,
-  useViewUnreadCount,
-  useToggleRead,
-  useToggleStarred,
-  useToggleReadLater,
   useRefresh,
-  useMarkViewRead,
-  ARTICLES_READ_CHANGED_EVENT,
-  type ArticlesReadChangedDetail,
-  useFetchFullText,
   useLabels,
   useCategories,
   useSavedSearches,
   useCreateSavedSearch,
-  useSetArticleLabels,
   useReadingPreferences,
   useUpdateGlobalSettings,
   useReleaseArticleSpoiler,
@@ -48,8 +39,7 @@ import {
 import { useDefaultLayout } from "react-resizable-panels";
 import { hasUsers } from "./actions/onboarding";
 import { useRouter } from "next/navigation";
-import { useAppBadge, useUnreadBadgeCount } from "@/hooks/use-app-badge";
-import { useOfflineArticleCache } from "@/hooks/use-offline-articles";
+import { useAppBadge } from "@/hooks/use-app-badge";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useQueryClient } from "@tanstack/react-query";
 import { useArticle, useArticleList } from "@/features/articles/queries";
@@ -57,6 +47,11 @@ import { listKeyOf } from "@/features/articles/scope";
 import { qk } from "@/features/articles/keys";
 import { fetchArticleDetail } from "@/features/articles/api";
 import { legacyScope, toLegacyArticle, withDetail, type LegacyContext } from "@/features/articles/legacy-adapter";
+import { useArticleActions, useIsFetchingFullText, useIsMarkingViewRead } from "@/features/articles/mutations";
+import { prefetchArticle } from "@/features/articles/prefetch";
+import { findCachedArticle } from "@/features/articles/cache";
+import { useCounts, useOnline, useScopeUnread } from "@/features/bootstrap/queries";
+import { OfflineChip } from "@/components/shell/offline-chip";
 
 const ssrSafeStorage = {
   getItem: (key: string) => (typeof window !== "undefined" ? localStorage.getItem(key) : null),
@@ -124,47 +119,43 @@ export default function RSSReaderPage() {
     () => (listScope ? listKeyOf(listScope, unreadOnly ? "unread" : "all", sortOrder === "oldest" ? "old" : "new") : null),
     [listScope, unreadOnly, sortOrder],
   );
+  // Ids (never article copies: the query cache owns every article field) of
+  // rows read in this view: they stay visible in "unread only" until the view
+  // changes. Bulk mark-read is not in here, so its rows leave the view.
   const [readInSession, setReadInSession] = useState<string[]>([]);
-  // Rows read this session stay in the unread list across refetches.
-  const retainIds = useMemo(() => (unreadOnly ? new Set(readInSession) : undefined), [unreadOnly, readInSession]);
-  const articleList = useArticleList(listKey, { active: isAuthenticated, retainIds });
+  const articleList = useArticleList(listKey, { active: isAuthenticated });
   const rawArticles = articleList.items;
   const articlesLoading = articleList.status === "pending" && isAuthenticated;
 
-  // Header count comes from the server: the article query is capped, so a
-  // client-side count under-reports big views and disagreed with the sidebar.
-  const viewUnreadQuery = useViewUnreadCount(
-    isSearchActive ? null : selectedFeed,
-    isSearchActive ? "All Articles" : selectedCategory,
-    debouncedSearchQuery || undefined,
-    isAuthenticated,
-    listScope?.kind === "category" ? listScope.id : null,
-  );
+  // Header / sidebar / badge numbers: one `["counts"]` entry, patched
+  // optimistically by every toggle (features/articles/cache.ts).
+  const counts = useCounts(isAuthenticated);
+  const scopeUnread = useScopeUnread(listScope, feeds, isAuthenticated);
 
   const refresh = useRefresh();
-  const toggleRead = useToggleRead();
-  const toggleStarred = useToggleStarred();
-  const toggleReadLater = useToggleReadLater();
-  const { markViewRead, isPending: isMarkingAllRead } = useMarkViewRead();
-  const fetchFullText = useFetchFullText();
+  const actions = useArticleActions();
+  const { markViewRead } = actions;
+  const isMarkingAllRead = useIsMarkingViewRead();
+  const isFetchingFullText = useIsFetchingFullText();
+  const online = useOnline();
   const { data: labels = [], isSuccess: labelsReady } = useLabels(isAuthenticated);
   const { data: savedSearches = [] } = useSavedSearches(isAuthenticated);
   const createSavedSearch = useCreateSavedSearch();
-  const setArticleLabels = useSetArticleLabels();
   const { data: readingPrefs } = useReadingPreferences(isAuthenticated);
   const updateGlobalSettings = useUpdateGlobalSettings();
   const releaseArticleSpoiler = useReleaseArticleSpoiler();
   const releaseAllSpoilers = useReleaseAllSpoilers();
 
-  const unreadBadgeCount = useUnreadBadgeCount(feeds);
+  const unreadBadgeCount = useMemo(
+    () => Object.values(counts.byFeed).reduce((sum, n) => sum + n, 0),
+    [counts.byFeed],
+  );
   useAppBadge(unreadBadgeCount, status === "authenticated");
 
   const { defaultLayout: readerLayout, onLayoutChanged: onReaderLayoutChanged } =
     useDefaultLayout({ id: "feedferret-reader-layout", panelIds: ["article-list", "article-reader"], storage: ssrSafeStorage });
 
   const [autoReadSuppressedArticles, setAutoReadSuppressedArticles] = useState<string[]>([]);
-  const [sessionReadArticles, setSessionReadArticles] = useState<any[]>([]);
-  const [selectedArticleSnapshot, setSelectedArticleSnapshot] = useState<any | null>(null);
   const [lastClosedArticleId, setLastClosedArticleId] = useState<string | null>(null);
   const deepLinkAppliedRef = useRef(false);
   const articleDeepLinkRef = useRef<string | null>(null);
@@ -195,8 +186,6 @@ export default function RSSReaderPage() {
   useEffect(() => {
     setReadInSession([]);
     setAutoReadSuppressedArticles([]);
-    setSessionReadArticles([]);
-    setSelectedArticleSnapshot(null);
   }, [selectedFeed, selectedCategory]);
 
   // Spoiler feed needs an explicit "reveal" each time the user enters it so
@@ -327,8 +316,6 @@ export default function RSSReaderPage() {
     }
   }, [isAuthenticated, t]);
 
-  const { articles: cachedRawArticles, isOffline, hasOfflineSnapshot } = useOfflineArticleCache(rawArticles);
-
   // Adapt the slim rows to the existing list/reader components (field copies
   // only, memoized per row — no body parsing per article any more).
   const legacyContext = useMemo<LegacyContext>(
@@ -339,29 +326,22 @@ export default function RSSReaderPage() {
     }),
     [feeds, labels, labelsReady],
   );
-  const articles = useMemo(
-    () => cachedRawArticles.map((a) => toLegacyArticle(a, legacyContext)),
-    [cachedRawArticles, legacyContext],
+  const displayArticles = useMemo(
+    () => rawArticles.map((a) => toLegacyArticle(a, legacyContext)),
+    [rawArticles, legacyContext],
   );
 
-  const displayArticles = useMemo(() => {
-    const byId = new Map<string, any>();
-    [...articles, ...sessionReadArticles].forEach((article) => {
-      const previous = byId.get(article.id);
-      byId.set(article.id, previous ? { ...previous, ...article } : article);
-    });
-    return Array.from(byId.values());
-  }, [articles, sessionReadArticles]);
-
-  const selectedArticle = useMemo(
-    () => selectedArticleId
-      ? displayArticles.find((a: any) => a.id === selectedArticleId) || selectedArticleSnapshot
-      : null,
-    [displayArticles, selectedArticleId, selectedArticleSnapshot],
-  );
   // Body on demand (GET /api/app/articles/:id): the reader paints title/meta
   // from the list row at once and the server-rendered HTML when it arrives.
-  const { detail: selectedDetail, status: selectedDetailStatus } = useArticle(selectedArticleId);
+  // `item` is the article as any cache knows it (detail or any list), so the
+  // reader keeps it after the list moves on (deep link, refresh, other view).
+  const { item: selectedCachedItem, detail: selectedDetail, status: selectedDetailStatus } = useArticle(selectedArticleId);
+  const selectedArticle = useMemo(() => {
+    if (!selectedArticleId) return null;
+    const inList = displayArticles.find((a: any) => a.id === selectedArticleId);
+    if (inList) return inList;
+    return selectedCachedItem ? toLegacyArticle(selectedCachedItem, legacyContext) : null;
+  }, [displayArticles, selectedArticleId, selectedCachedItem, legacyContext]);
   const readerArticle = useMemo(
     () => (selectedArticle ? withDetail(selectedArticle, selectedDetail) : null),
     [selectedArticle, selectedDetail],
@@ -372,13 +352,9 @@ export default function RSSReaderPage() {
     () => displayArticles.filter((a: any) => !a.isRead).length,
     [displayArticles],
   );
-  // Server count once known; until then the sidebar's own per-feed number
-  // (same source as its badge) or, as a last resort, what is loaded.
-  const unreadCount =
-    viewUnreadQuery.data ??
-    (selectedFeed && !isSearchActive
-      ? (feeds.find((f) => f.id === selectedFeed)?._count?.articles ?? loadedUnreadCount)
-      : loadedUnreadCount);
+  // From `["counts"]` (or the per-scope server count for search / saved
+  // search / Starred / Read later) once known; until then what is loaded.
+  const unreadCount = scopeUnread ?? loadedUnreadCount;
 
   useEffect(() => {
     const articleId = articleDeepLinkRef.current;
@@ -386,7 +362,6 @@ export default function RSSReaderPage() {
     const article = displayArticles.find((item: any) => item.id === articleId);
     if (article) {
       setSelectedArticleId(article.id);
-      setSelectedArticleSnapshot(article);
       articleDeepLinkRef.current = null;
       return;
     }
@@ -395,47 +370,21 @@ export default function RSSReaderPage() {
     articleDeepLinkRef.current = null;
     queryClient
       .fetchQuery({ queryKey: qk.article(articleId), queryFn: ({ signal }) => fetchArticleDetail(articleId, signal), staleTime: 5 * 60_000 })
-      .then((detail) => {
-        setSelectedArticleId(detail.id);
-        setSelectedArticleSnapshot(toLegacyArticle(detail, legacyContext));
-      })
+      .then((detail) => setSelectedArticleId(detail.id))
       .catch(() => { /* unknown or foreign id: stay on the list */ });
-  }, [displayArticles, selectedArticleId, articleList.status, queryClient, legacyContext]);
+  }, [displayArticles, selectedArticleId, articleList.status, queryClient]);
 
 
+  // Rows come in server order (keyset: publishedAt, createdAt, id — or read
+  // time for "Recently read"). "Unread only" hides rows that are read, except
+  // the ones read in this view (snapshot semantics: they stay, dimmed, until
+  // the view changes). Server-filtered lists only contain such rows after a
+  // bulk mark-read; smart views and search are filtered here.
   const filteredArticles = useMemo(() => {
-    let list = [...displayArticles];
-
-    // Apply main view filter - include items that are either:
-    // 1. Not yet read, OR
-    // 2. Read in this session (clicked but still visible), OR
-    // 3. Already in readInSession (persist visibility after server update)
-    // The search itself always queries across all articles regardless of
-    // read state (see useArticles above) — this filter only controls which
-    // of those matches are *displayed*, same as outside of search, so the
-    // unread/all toggle keeps working while a search is active.
-    if (unreadOnly) {
-      list = list.filter((a) => !a.isRead || readInSession.includes(a.id));
-    }
-
-    // "Recently read" keeps the server order (by read time).
-    if (listScope?.kind === "recent") return list;
-
-    // Sort AFTER filtering (the server already returns this order; merged
-    // session copies need it). Tie-break date-less/equal-timestamp articles by
-    // createdAt then id (mirroring the sort direction) so feeds without a
-    // parseable publishedAt aren't left in arbitrary/oldest-first feed order.
-    return list.sort((a: any, b: any) => {
-      if (a.publishedAtRaw !== b.publishedAtRaw) {
-        return sortOrder === "oldest" ? a.publishedAtRaw - b.publishedAtRaw : b.publishedAtRaw - a.publishedAtRaw;
-      }
-      if ((a.createdAtRaw ?? 0) !== (b.createdAtRaw ?? 0)) {
-        return sortOrder === "oldest" ? a.createdAtRaw - b.createdAtRaw : b.createdAtRaw - a.createdAtRaw;
-      }
-      if (a.id === b.id) return 0;
-      return sortOrder === "oldest" ? (a.id < b.id ? -1 : 1) : (a.id > b.id ? -1 : 1);
-    });
-  }, [displayArticles, unreadOnly, readInSession, sortOrder, listScope?.kind]);
+    if (!unreadOnly) return displayArticles;
+    const keep = new Set(readInSession);
+    return displayArticles.filter((a) => !a.isRead || keep.has(a.id));
+  }, [displayArticles, unreadOnly, readInSession]);
 
   const selectedArticleIndex = useMemo(
     () => filteredArticles.findIndex((article: any) => article.id === selectedArticleId),
@@ -472,20 +421,13 @@ export default function RSSReaderPage() {
       readInSession.includes(article.id) ||
       autoReadSuppressedArticles.includes(article.id)
     ) return;
-      const readArticle = { ...article, isRead: true, readAt: new Date() };
-      setReadInSession((prev) => [...prev, article.id]);
-      setAutoReadSuppressedArticles((prev) => prev.filter((id) => id !== article.id));
-      setSessionReadArticles((prev) => [
-        readArticle,
-        ...prev.filter((a) => a.id !== article.id),
-      ]);
-      setSelectedArticleSnapshot(readArticle);
-      toggleRead.mutate({ articleId: article.id, isRead: true });
-  }, [autoReadSuppressedArticles, readInSession, toggleRead]);
+    setReadInSession((prev) => [...prev, article.id]);
+    setAutoReadSuppressedArticles((prev) => prev.filter((id) => id !== article.id));
+    actions.setRead(article.id, true, "auto");
+  }, [autoReadSuppressedArticles, readInSession, actions]);
 
   const handleSelectArticle = useCallback((article: any) => {
     setSelectedArticleId(article.id);
-    setSelectedArticleSnapshot(article);
     const articleFeed = feeds.find((f: any) => f.id === article.feedId);
     const openOriginal = articleFeed?.openOriginalOverride ?? readingPrefs?.openOriginalByDefault;
     if (openOriginal && article.link) {
@@ -496,7 +438,6 @@ export default function RSSReaderPage() {
   const handleCloseArticle = useCallback(() => {
     setLastClosedArticleId(selectedArticleIdRef.current);
     setSelectedArticleId(null);
-    setSelectedArticleSnapshot(null);
   }, []);
 
   const handleMobileBack = useCallback(() => {
@@ -511,7 +452,6 @@ export default function RSSReaderPage() {
     setSelectedFeed(feedId);
     setSelectedCategory("All");
     setSelectedArticleId(null);
-    setSelectedArticleSnapshot(null);
     setSidebarOpen(false);
   }, []);
 
@@ -521,7 +461,6 @@ export default function RSSReaderPage() {
   const handleSelectFeedNav = useCallback((feedId: string | null) => {
     setSelectedFeed(feedId);
     setSelectedArticleId(null);
-    setSelectedArticleSnapshot(null);
     if (feedId) {
       setSelectedCategory("All");
       setUnreadOnly(true);
@@ -532,7 +471,6 @@ export default function RSSReaderPage() {
     setSelectedCategory(category);
     setSelectedFeed(null);
     setSelectedArticleId(null);
-    setSelectedArticleSnapshot(null);
     const noUnreadFilter = category === "Starred" || category === "Read Later";
     setUnreadOnly(!noUnreadFilter);
   }, []);
@@ -577,50 +515,29 @@ export default function RSSReaderPage() {
     return () => window.clearTimeout(timer);
   }, [selectedArticle, readInSession, autoReadSuppressedArticles, markArticleRead, readingPrefs?.markReadAfterDelaySecs]);
 
+  // Toggles: the cache is patched synchronously (same frame), the write goes
+  // through the state batcher; a failed write rolls back exactly that field.
   const handleToggleRead = useCallback((articleId: string) => {
-    const article = displayArticles.find((a: any) => a.id === articleId) || selectedArticleSnapshot;
+    const article = findCachedArticle(queryClient, articleId);
     if (!article) return;
     const nextIsRead = !article.isRead;
-    const updated = { ...article, isRead: nextIsRead, readAt: nextIsRead ? new Date() : null };
-
-    setSessionReadArticles((prev) => {
-      const without = prev.filter((a) => a.id !== articleId);
-      return unreadOnly || !nextIsRead
-        ? [updated, ...without]
-        : without;
-    });
+    if (!online) {
+      actions.setRead(articleId, nextIsRead, "tap"); // refused with the offline toast
+      return;
+    }
     setReadInSession((prev) =>
       nextIsRead ? Array.from(new Set([...prev, articleId])) : prev.filter((id) => id !== articleId),
     );
     setAutoReadSuppressedArticles((prev) => {
       if (nextIsRead) return prev.filter((id) => id !== articleId);
-      if (selectedArticleId !== articleId) return prev;
+      if (selectedArticleIdRef.current !== articleId) return prev;
       return Array.from(new Set([...prev, articleId]));
     });
-    if (selectedArticleId === articleId) setSelectedArticleSnapshot(updated);
-    toggleRead.mutate({ articleId, isRead: nextIsRead });
-  }, [displayArticles, selectedArticleSnapshot, unreadOnly, selectedArticleId, toggleRead]);
+    actions.setRead(articleId, nextIsRead, "tap");
+  }, [actions, online, queryClient]);
 
-  const handleToggleStar = useCallback((articleId: string) => {
-    const article = displayArticles.find((a: any) => a.id === articleId) || selectedArticleSnapshot;
-    if (article) {
-      toggleStarred.mutate({ articleId, isStarred: !article.isStarred });
-      const updated = { ...article, isStarred: !article.isStarred };
-      if (selectedArticleId === articleId) setSelectedArticleSnapshot(updated);
-      setSessionReadArticles((prev) => prev.map((a) => a.id === articleId ? updated : a));
-    }
-  }, [displayArticles, selectedArticleSnapshot, selectedArticleId, toggleStarred]);
-
-  const handleToggleReadLater = useCallback((articleId: string) => {
-    const article = displayArticles.find((a: any) => a.id === articleId) || selectedArticleSnapshot;
-    if (article) {
-      const next = !article.isReadLater;
-      toggleReadLater.mutate({ articleId, isReadLater: next });
-      const updated = { ...article, isReadLater: next, readLaterSavedAt: next ? new Date() : null };
-      if (selectedArticleId === articleId) setSelectedArticleSnapshot(updated);
-      setSessionReadArticles((prev) => prev.map((a) => a.id === articleId ? updated : a));
-    }
-  }, [displayArticles, selectedArticleSnapshot, selectedArticleId, toggleReadLater]);
+  const handleToggleStar = useCallback((articleId: string) => actions.toggleStar(articleId), [actions]);
+  const handleToggleReadLater = useCallback((articleId: string) => actions.toggleLater(articleId), [actions]);
 
   const handleRefresh = useCallback(() => {
     refresh.mutate();
@@ -642,22 +559,6 @@ export default function RSSReaderPage() {
     markViewRead({ feedId: selectedFeed, category: selectedFeed ? null : selectedCategory, categoryId: listScope?.kind === "category" ? listScope.id : null });
   }, [canMarkAllRead, isSearchActive, debouncedSearchQuery, markViewRead, selectedFeed, selectedCategory, listScope]);
 
-  // Reconcile locally held article copies (session snapshots, open reader) with
-  // what the server just committed — bulk mark-read and its Undo, from any
-  // entry point including the sidebar menus.
-  useEffect(() => {
-    const onReadChanged = (event: Event) => {
-      const { ids, isRead } = (event as CustomEvent<ArticlesReadChangedDetail>).detail;
-      const changed = new Set(ids);
-      const patch = (a: any) => (changed.has(a.id) ? { ...a, isRead, readAt: isRead ? new Date() : null } : a);
-      setSessionReadArticles((prev) => prev.map(patch));
-      setSelectedArticleSnapshot((prev: any) => (prev ? patch(prev) : prev));
-      setReadInSession((prev) => (isRead ? prev : prev.filter((id) => !changed.has(id))));
-    };
-    window.addEventListener(ARTICLES_READ_CHANGED_EVENT, onReadChanged);
-    return () => window.removeEventListener(ARTICLES_READ_CHANGED_EVENT, onReadChanged);
-  }, []);
-
   const toggleUnreadOnly = useCallback(() => {
     setTransitionStyle("filter");
     setUnreadOnly((prev) => !prev);
@@ -678,8 +579,8 @@ export default function RSSReaderPage() {
     const currentIdx = feeds.findIndex((f) => f.id === selectedFeed);
     if (currentIdx === -1) return null;
     const ordered = [...feeds.slice(currentIdx + 1), ...feeds.slice(0, currentIdx)];
-    return ordered.find((f) => (f._count?.articles ?? 0) > 0) ?? null;
-  }, [feeds, selectedFeed, isSearchActive]);
+    return ordered.find((f) => (counts.byFeed[f.id] ?? 0) > 0) ?? null;
+  }, [feeds, selectedFeed, isSearchActive, counts.byFeed]);
 
   const handleContinueToNextFeed = useCallback(() => {
     if (!nextFeedWithUnread) return;
@@ -690,7 +591,6 @@ export default function RSSReaderPage() {
     setSelectedFeed(nextFeedWithUnread.id);
     setSelectedCategory("All");
     setSelectedArticleId(null);
-    setSelectedArticleSnapshot(null);
     setTransitionStyle("flip");
   }, [nextFeedWithUnread, readingPrefs?.markReadOnAdvance, unreadCount, markViewRead, selectedFeed]);
 
@@ -713,21 +613,10 @@ export default function RSSReaderPage() {
     });
   }, [updateGlobalSettings]);
 
-  const handleFetchFullText = useCallback((articleId: string) => {
-    // The new body arrives through the refetched article detail (see useFetchFullText).
-    fetchFullText.mutate(articleId);
-  }, [fetchFullText]);
-
-  const handleSetLabels = useCallback((articleId: string, labelIds: string[]) => {
-    setArticleLabels.mutate({ articleId, labelIds }, {
-      onSuccess: (article: any) => {
-        const labels = article?.labels ?? [];
-        const patch = (a: any) => (a.id === articleId ? { ...a, labels, labelIds: labels.map((l: any) => l.labelId ?? l.label?.id) } : a);
-        setSelectedArticleSnapshot((prev: any) => (prev ? patch(prev) : prev));
-        setSessionReadArticles((prev) => prev.map(patch));
-      },
-    });
-  }, [setArticleLabels]);
+  // The new body arrives through the refetched article detail.
+  const handleFetchFullText = useCallback((articleId: string) => actions.fetchFullText(articleId), [actions]);
+  // Optimistic (labels + label counts), rolled back on failure.
+  const handleSetLabels = useCallback((articleId: string, labelIds: string[]) => actions.setLabels(articleId, labelIds), [actions]);
 
   const handleSaveSearch = useCallback(() => {
     const query = searchQuery.trim();
@@ -741,16 +630,44 @@ export default function RSSReaderPage() {
     setSearchQuery("");
     setSearchOpen(false);
     setSelectedArticleId(null);
-    setSelectedArticleSnapshot(null);
   }, []);
 
   const handleEditSearch = useCallback(() => {
     setSearchOpen(true);
   }, []);
 
+  // Prefetch on intent: a row's body starts loading on pointerdown (before
+  // the click); after opening the reader, the next two bodies when idle.
+  const handleListPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button, a, input")) return; // row actions (star, read, …) need no body
+    const id = target.closest("[data-article-id]")?.getAttribute("data-article-id");
+    if (id) prefetchArticle(queryClient, id);
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (!selectedArticleId) return;
+    const list = filteredArticlesRef.current;
+    const at = list.findIndex((a: any) => a.id === selectedArticleId);
+    if (at === -1) return;
+    const next = list.slice(at + 1, at + 3);
+    const run = () => next.forEach((a: any) => prefetchArticle(queryClient, a.id));
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(run, { timeout: 2000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(run, 300);
+    return () => window.clearTimeout(handle);
+  }, [selectedArticleId, queryClient]);
+
   // Use refs for keyboard navigation to avoid stale closures
   const filteredArticlesRef = useRef(filteredArticles);
   const selectedArticleIdRef = useRef(selectedArticleId);
+  const selectedArticleRef = useRef(selectedArticle);
+  useEffect(() => {
+    selectedArticleRef.current = selectedArticle;
+  }, [selectedArticle]);
   useEffect(() => {
     filteredArticlesRef.current = filteredArticles;
   }, [filteredArticles]);
@@ -818,8 +735,8 @@ export default function RSSReaderPage() {
       handleToggleReadLater(currentSelectedArticleId);
     } else if (e.key === "m" && currentSelectedArticleId) {
       handleToggleRead(currentSelectedArticleId);
-    } else if (e.key === "o" && selectedArticleSnapshot?.link) {
-      window.open(selectedArticleSnapshot.link, "_blank", "noopener,noreferrer");
+    } else if (e.key === "o" && selectedArticleRef.current?.link) {
+      window.open(selectedArticleRef.current.link, "_blank", "noopener,noreferrer");
     } else if (e.key === "r") {
       handleRefresh();
     } else if (e.key === "A" && e.shiftKey) {
@@ -829,7 +746,7 @@ export default function RSSReaderPage() {
       e.preventDefault();
       handleSaveSearch();
     }
-  }, [handleSelectArticle, handleToggleStar, handleToggleReadLater, handleToggleRead, handleRefresh, handleMarkAllRead, selectedArticleSnapshot, handleSaveSearch]);
+  }, [handleSelectArticle, handleToggleStar, handleToggleReadLater, handleToggleRead, handleRefresh, handleMarkAllRead, handleSaveSearch]);
 
   useEffect(() => {
     if (status !== "unauthenticated") return;
@@ -877,7 +794,7 @@ export default function RSSReaderPage() {
     ...f,
     category: f.category?.name || t("uncategorized"),
     categoryHideFromAllFeeds: f.category?.hideFromAllFeeds ?? false,
-    unreadCount: f._count?.articles || 0,
+    unreadCount: counts.byFeed[f.id] ?? 0,
     icon: f.icon || "📰",
   }));
 
@@ -974,7 +891,7 @@ export default function RSSReaderPage() {
           minSize="20%"
           maxSize="70%"
         >
-          <div role="region" aria-label={tA11y("articleList")} className="relative z-(--z-sticky) flex h-full min-w-[320px] flex-col border-e border-border/60 bg-card/70 backdrop-blur-bar">
+          <div role="region" aria-label={tA11y("articleList")} onPointerDownCapture={handleListPointerDown} className="relative z-(--z-sticky) flex h-full min-w-[320px] flex-col border-e border-border/60 bg-card/70 backdrop-blur-bar">
             {isSearchActive ? (
               <SearchResultsView
                 searchQuery={searchQuery}
@@ -1023,9 +940,9 @@ export default function RSSReaderPage() {
                   sortOrder={sortOrder}
                   onToggleSort={handleToggleSort}
                 />
-                {isOffline && hasOfflineSnapshot && (
-                  <div className="border-b border-warning/20 bg-warning/10 px-4 py-2 text-xs text-warning">
-                    {t("offlineBannerMessage")}
+                {!online && (
+                  <div className="flex justify-center border-b border-border/60 px-4 py-2">
+                    <OfflineChip />
                   </div>
                 )}
                 {isSpoilerCategory && !spoilerRevealed ? spoilerGate : (
@@ -1074,7 +991,7 @@ export default function RSSReaderPage() {
               onToggleReadLater={handleToggleReadLater}
               onToggleRead={handleToggleRead}
               onFetchFullText={handleFetchFullText}
-              isFetchingFullText={fetchFullText.isPending}
+              isFetchingFullText={isFetchingFullText}
               labels={labels}
               onSetLabels={handleSetLabels}
               onBack={handleCloseArticle}
@@ -1095,7 +1012,7 @@ export default function RSSReaderPage() {
 
       {/* Mobile Article List Panel */}
       {isMobileLayout && !selectedArticle && (
-      <div role="region" aria-label={tA11y("articleList")} className="relative z-(--z-sticky) flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-bar transition-all duration-(--dur-slow) ease-out">
+      <div role="region" aria-label={tA11y("articleList")} onPointerDownCapture={handleListPointerDown} className="relative z-(--z-sticky) flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-bar transition-all duration-(--dur-slow) ease-out">
         {isSearchActive ? (
           <SearchResultsView
             searchQuery={searchQuery}
@@ -1145,9 +1062,9 @@ export default function RSSReaderPage() {
               sortOrder={sortOrder}
               onToggleSort={handleToggleSort}
             />
-            {isOffline && hasOfflineSnapshot && (
-              <div className="border-b border-warning/20 bg-warning/10 px-4 py-2 text-xs text-warning">
-                Offline mode: showing cached articles from this device.
+            {!online && (
+              <div className="flex justify-center border-b border-border/60 px-4 py-2">
+                <OfflineChip />
               </div>
             )}
             {isSpoilerCategory && !spoilerRevealed ? spoilerGate : (
@@ -1210,7 +1127,7 @@ export default function RSSReaderPage() {
           onToggleReadLater={handleToggleReadLater}
           onToggleRead={handleToggleRead}
           onFetchFullText={handleFetchFullText}
-          isFetchingFullText={fetchFullText.isPending}
+          isFetchingFullText={isFetchingFullText}
           labels={labels}
           onSetLabels={handleSetLabels}
           onBack={handleMobileBack}
