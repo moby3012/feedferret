@@ -42,7 +42,7 @@ export default async function ReaderPage({ searchParams }: { searchParams: Searc
   return (
     <Suspense fallback={<ShellSkeleton href={href} ui={ui} viewMode={prefs.defaultViewMode} />}>
       <BootstrapHydrator userId={userId} href={href}>
-        <ReaderShell initialHref={href} initialUi={ui} />
+        <ReaderShell initialHref={href} initialUi={ui} userId={userId} />
       </BootstrapHydrator>
     </Suspense>
   );

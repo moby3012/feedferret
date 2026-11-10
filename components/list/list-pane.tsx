@@ -15,6 +15,7 @@ import { toLegacyArticle } from "@/features/articles/legacy-adapter";
 import { useArticleActions, useIsMarkingViewRead } from "@/features/articles/mutations";
 import { prefetchArticle } from "@/features/articles/prefetch";
 import { useArticleList, type ArticleListResult } from "@/features/articles/queries";
+import { showsBriefing } from "@/features/briefing/api";
 import { useBriefing } from "@/features/briefing/queries";
 import { showApplies, type ListKey } from "@/features/articles/scope";
 import { useCounts, useOnline, useScopeUnread } from "@/features/bootstrap/queries";
@@ -90,7 +91,7 @@ function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: bool
   // K2 card: shown on the Neu list (all, unread) from the first row paint on.
   // Its GET starts here, together with the list query, so a fast answer is
   // part of the first paint (the card then opens by itself).
-  const showBriefing = tab === "new" && loc.scope?.kind === "all" && loc.show === "unread";
+  const showBriefing = showsBriefing(tab, loc);
   useBriefing("new", showBriefing);
   const counts = useCounts(true);
   const scopeUnread = useScopeUnread(loc.scope, data.feeds, true);

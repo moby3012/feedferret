@@ -15,14 +15,17 @@ const h = vi.hoisted(() => {
     })),
     listArticles: vi.fn(async (_userId: string, _params: unknown) => ({ items: [{ id: "a1", title: "First" }], nextCursor: "cur" })),
     getArticleDetail: vi.fn(async (_userId: string, id: string) => (id === "missing" ? null : { id, html: "<p>body</p>" })),
+    getBriefingState: vi.fn(async (_userId: string, _scope: unknown) => ({ briefing: null, briefingId: null, totalUnread: 3, generatedAt: null as string | null })),
   };
 });
 vi.mock("@/server/bootstrap", () => ({ getBootstrap: h.getBootstrap }));
 vi.mock("@/server/articles/list", () => ({ listArticles: h.listArticles }));
 vi.mock("@/server/articles/detail", () => ({ getArticleDetail: h.getArticleDetail }));
+vi.mock("@/lib/briefing/generate", () => ({ getBriefingState: h.getBriefingState }));
 
 import { buildBootstrapState } from "../../server/bootstrap-state";
 import { qk } from "../../features/articles/keys";
+import { briefingKey } from "../../features/briefing/api";
 import { listKeyOfLoc, parseLoc } from "../../features/reader/nav/location";
 
 const keysOf = (state: Awaited<ReturnType<typeof buildBootstrapState>>) => state.queries.map((q) => JSON.stringify(q.queryKey));
@@ -33,6 +36,7 @@ beforeEach(() => {
   h.prefs.defaultArticleSort = "newest";
   h.listArticles.mockClear();
   h.getArticleDetail.mockClear();
+  h.getBriefingState.mockClear();
 });
 
 describe("buildBootstrapState (cold-start cache, spec §2.5)", () => {
@@ -40,7 +44,7 @@ describe("buildBootstrapState (cold-start cache, spec §2.5)", () => {
     const state = await buildBootstrapState("u1", "/");
     const clientKey = listKeyOfLoc(parseLoc(""), "new")!;
     expect(keysOf(state).sort()).toEqual(
-      [qk.feeds, qk.categories, qk.labels, qk.savedSearches, qk.prefs, qk.counts, qk.notifications, qk.list(clientKey)].map((k) => JSON.stringify(k)).sort(),
+      [qk.feeds, qk.categories, qk.labels, qk.savedSearches, qk.prefs, qk.counts, qk.notifications, qk.list(clientKey), briefingKey("new")].map((k) => JSON.stringify(k)).sort(),
     );
     // useInfiniteQuery's shape: one page, first page param null.
     expect(dataOf(state, qk.list(clientKey))).toEqual({ pages: [{ items: [{ id: "a1", title: "First" }], nextCursor: "cur" }], pageParams: [null] });
@@ -67,6 +71,24 @@ describe("buildBootstrapState (cold-start cache, spec §2.5)", () => {
     const state = await buildBootstrapState("u1", "/?tab=feeds");
     expect(h.listArticles).not.toHaveBeenCalled();
     expect(keysOf(state).some((k) => k.startsWith('["list"'))).toBe(false);
+  });
+
+  it("the Neu list (all, unread) also seeds the briefing card's GET state; other lists do not", async () => {
+    const state = await buildBootstrapState("u1", "/");
+    expect(h.getBriefingState).toHaveBeenCalledWith("u1", { kind: "new" });
+    expect(dataOf(state, briefingKey("new"))).toMatchObject({ briefing: null, totalUnread: 3 });
+    for (const href of ["/?feed=f1", "/?show=all", "/?v=later", "/?tab=feeds"]) {
+      h.getBriefingState.mockClear();
+      expect(keysOf(await buildBootstrapState("u1", href))).not.toContain(JSON.stringify(briefingKey("new")));
+      expect(h.getBriefingState).not.toHaveBeenCalled();
+    }
+  });
+
+  it("a failing briefing query leaves the card to its own GET", async () => {
+    h.getBriefingState.mockRejectedValueOnce(new Error("db down"));
+    const state = await buildBootstrapState("u1", "/");
+    expect(keysOf(state)).not.toContain(JSON.stringify(briefingKey("new")));
+    expect(keysOf(state).some((k) => k.startsWith('["list"'))).toBe(true);
   });
 
   it("a failing list query still boots the shell (entities hydrated, the client fetches the list)", async () => {

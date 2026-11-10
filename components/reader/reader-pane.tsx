@@ -68,8 +68,11 @@ export const ReaderPane = memo(function ReaderPane() {
     if (!shownId) return null;
     const inList = list.articles.find((a) => a.id === shownId);
     if (inList) return inList;
-    return item ? toLegacyArticle(item, legacyContext) : null;
-  }, [list.articles, shownId, item, legacyContext]);
+    // The detail is a superset of the row: a deep link (`?a=`) renders from the
+    // bootstrap-hydrated detail on the server (no list cache is readable there).
+    const known = item ?? (detail?.id === shownId ? detail : undefined);
+    return known ? toLegacyArticle(known, legacyContext) : null;
+  }, [list.articles, shownId, item, detail, legacyContext]);
   const readerArticle = useMemo(() => (article ? withDetail(article, detail) : null), [article, detail]);
   const index = shownId ? list.articles.findIndex((a) => a.id === shownId) : -1;
 
