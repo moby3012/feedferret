@@ -304,8 +304,8 @@ export function ArticleList({
       className={cn("flex-1 overflow-hidden min-h-0", transitionClass)}
     >
       {showPullIndicator && (
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center px-3">
-          <div className="flex items-center gap-2 rounded-full border border-border/70 bg-background/95 px-4 py-2 text-xs font-medium text-muted-foreground shadow-lg backdrop-blur-xl">
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-(--z-sticky) flex justify-center px-3">
+          <div className="flex items-center gap-2 rounded-full border border-border/70 bg-background/95 px-4 py-2 text-xs font-medium text-muted-foreground shadow-lg backdrop-blur-bar">
             <RefreshCw className={cn("h-3.5 w-3.5", (isRefreshing || pullTriggered) && "animate-spin", pullReady && !isRefreshing && "text-foreground")} />
             <span>
               {isRefreshing || pullTriggered
@@ -499,7 +499,7 @@ function ArticlePreview({
       aria-hidden="true"
       className={cn(
         "pointer-events-none absolute inset-0 flex items-center rounded-2xl px-5",
-        swipeRevealDir === "read" ? "justify-start bg-emerald-500/15 text-emerald-500" : "justify-end bg-brand-secondary/15 text-brand-secondary",
+        swipeRevealDir === "read" ? "justify-start bg-success/15 text-success" : "justify-end bg-brand-secondary/15 text-brand-secondary",
       )}
       style={{ opacity: Math.min(1, Math.abs(swipeOffset) / SWIPE_THRESHOLD) }}
     >
@@ -549,7 +549,7 @@ function ArticlePreview({
         aria-label={`${article.isRead ? "" : "Unread: "}${article.title} — ${article.feedName}`}
         aria-pressed={isSelected}
         className={cn(
-          "px-3 py-2.5 cursor-pointer rounded-xl transition-[opacity,background-color,border-color,box-shadow] duration-200 flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden relative focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "px-3 py-2.5 cursor-pointer rounded-xl transition-[opacity,background-color,border-color,box-shadow] duration-(--dur-base) flex min-w-0 max-w-full items-center gap-2.5 overflow-hidden relative focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "border-s-4",
           isSelected ? "bg-muted" : "hover:bg-card/80",
           !article.isRead ? "border-brand" : isSelected ? "border-accent" : "border-transparent",
@@ -600,7 +600,7 @@ function ArticlePreview({
         aria-label={`${article.isRead ? "" : "Unread: "}${article.title} — ${article.feedName}`}
         aria-pressed={isSelected}
         className={cn(
-          "cursor-pointer rounded-xl overflow-hidden transition-all duration-300 border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 backdrop-blur-xl min-w-0 max-w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "cursor-pointer rounded-xl overflow-hidden transition-all duration-(--dur-slow) border border-border/55 bg-card/75 shadow-sm hover:shadow-lg hover:-translate-y-0.5 min-w-0 max-w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           isSelected && "border-transparent border-s-2 border-s-accent bg-muted",
           !article.isRead && "ring-1 ring-brand/20",
         )}
@@ -613,9 +613,9 @@ function ArticlePreview({
               fill
               loading="lazy"
               sizes="(max-width: 640px) 100vw, 400px"
-              className="object-cover transition-transform duration-500 hover:scale-105"
+              className="object-cover transition-transform duration-(--dur-slow) hover:scale-105"
             />
-            <div className="absolute top-3 start-3 flex items-center gap-1.5 px-2 py-1 bg-background/60 backdrop-blur-md rounded-lg text-foreground text-[10px] font-bold">
+            <div className="absolute top-3 start-3 flex items-center gap-1.5 px-2 py-1 bg-background/60 backdrop-blur-bar rounded-lg text-foreground text-caption font-bold">
               <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={12} />
               {article.feedName}
             </div>
@@ -623,7 +623,7 @@ function ArticlePreview({
         )}
         {!article.imageUrl && (
           <div className="px-4 pt-3">
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-muted rounded-lg text-[10px] font-bold">
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-muted rounded-lg text-caption font-bold">
               <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={12} />
               {article.feedName}
             </span>
@@ -664,7 +664,7 @@ function ArticlePreview({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onReleaseSpoiler(article.id); }}
-                  className="rounded-md p-1 transition-colors text-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
+                  className="rounded-md p-1 transition-colors text-warning hover:text-warning hover:bg-warning/10"
                   aria-label={t("releaseSpoiler")}
                   title={t("releaseSpoiler")}
                 >
@@ -697,7 +697,7 @@ function ArticlePreview({
       aria-pressed={isSelected}
       className={cn(
         "p-3 sm:p-3.5 cursor-pointer rounded-xl group border min-w-0 max-w-full overflow-hidden",
-        "transition-[opacity,background-color,border-color,box-shadow,transform] duration-200 ease-out",
+        "transition-[opacity,background-color,border-color,box-shadow,transform] duration-(--dur-base) ease-out",
         "active:scale-[0.995] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isSelected
           ? "border-transparent border-s-2 border-s-accent bg-muted"
@@ -707,14 +707,14 @@ function ArticlePreview({
     >
       <div className="flex min-w-0 gap-3 sm:gap-4">
         {article.imageUrl && (
-          <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden flex-shrink-0 bg-muted relative group-hover:shadow-lg transition-shadow duration-300">
+          <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden flex-shrink-0 bg-muted relative group-hover:shadow-lg transition-shadow duration-(--dur-slow)">
             <Image
               src={article.imageUrl || "/placeholder.svg"}
               alt=""
               fill
               loading="lazy"
               sizes="(max-width: 640px) 96px, 128px"
-              className="object-cover transition-transform duration-500 group-hover:scale-105"
+              className="object-cover transition-transform duration-(--dur-slow) group-hover:scale-105"
             />
             {!article.isRead && (
               <div className="absolute top-2 start-2 w-2.5 h-2.5 rounded-full bg-brand animate-pulse-gentle" />
@@ -730,7 +730,7 @@ function ArticlePreview({
             </span>
             {(article.duplicateCount ?? 0) > 0 && (
               <span
-                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-[10px] font-medium shrink-0"
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-caption font-medium shrink-0"
                 title={`${t("alsoIn")} ${article.duplicateCount} ${t("otherFeeds", { count: article.duplicateCount ?? 0 })}`}
               >
                 <Layers className="w-2.5 h-2.5" />
@@ -739,7 +739,7 @@ function ArticlePreview({
             )}
             {article.isDuplicate && article.canonicalFeedName && (
               <span
-                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/70 text-[10px] font-medium shrink-0"
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground/70 text-caption font-medium shrink-0"
                 title={`${t("firstSeenIn")}: ${article.canonicalFeedName}`}
               >
                 <Layers className="w-2.5 h-2.5" />
@@ -758,7 +758,7 @@ function ArticlePreview({
                   className="rounded-lg p-1 hover:bg-brand-secondary/10 transition-colors"
                   aria-label={t("removeStar")}
                 >
-                  <Star className="w-4 h-4 text-brand-secondary fill-brand-secondary transition-transform duration-300 group-hover:scale-110" />
+                  <Star className="w-4 h-4 text-brand-secondary fill-brand-secondary transition-transform duration-(--dur-slow) group-hover:scale-110" />
                 </button>
               )}
               {article.isReadLater && (
@@ -776,7 +776,7 @@ function ArticlePreview({
 
           <h3
             className={cn(
-              "text-[0.98rem] sm:text-[1rem] leading-snug mb-2 line-clamp-2 text-balance transition-colors duration-200 tracking-[-0.02em] break-words [overflow-wrap:anywhere]",
+              "text-row-title leading-snug mb-2 line-clamp-2 text-balance transition-colors duration-(--dur-base) tracking-title break-words [overflow-wrap:anywhere]",
               !article.isRead
                 ? "font-semibold text-foreground"
                 : "font-medium text-foreground/75",
@@ -794,7 +794,7 @@ function ArticlePreview({
               {article.labels.slice(0, 3).map((item) => (
                 <span
                   key={item.label.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-caption font-medium text-muted-foreground"
                 >
                   <span
                     className="h-1.5 w-1.5 rounded-full"
@@ -846,7 +846,7 @@ function ArticlePreview({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onReleaseSpoiler(article.id); }}
-                  className="rounded-lg p-1.5 transition-colors text-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
+                  className="rounded-lg p-1.5 transition-colors text-warning hover:text-warning hover:bg-warning/10"
                   aria-label={t("releaseSpoiler")}
                   title={t("releaseSpoiler")}
                 >

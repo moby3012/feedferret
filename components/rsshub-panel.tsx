@@ -103,7 +103,7 @@ export function RsshubPanel({ onAddFeed, isAddingFeed }: RsshubPanelProps) {
       </Button>
 
       {error && !preview && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+        <div className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
           {error}
         </div>
       )}
@@ -114,7 +114,7 @@ export function RsshubPanel({ onAddFeed, isAddingFeed }: RsshubPanelProps) {
             <Rss className="size-3.5 shrink-0 text-muted-foreground" />
             {preview.title || preview.route}
           </p>
-          <p className="text-[11px] text-muted-foreground">{t("itemsFound", { count: preview.itemCount })}</p>
+          <p className="text-caption text-muted-foreground">{t("itemsFound", { count: preview.itemCount })}</p>
           {preview.sampleTitles.slice(0, 3).map((title, i) => (
             <p key={i} className="text-xs text-muted-foreground truncate">{title}</p>
           ))}

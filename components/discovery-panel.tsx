@@ -294,7 +294,7 @@ function SearchResults({
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-center">
-        <AlertCircle className="size-5 text-amber-500 mb-2" />
+        <AlertCircle className="size-5 text-warning mb-2" />
         <p className="text-sm text-muted-foreground">{error.message}</p>
       </div>
     );
@@ -385,7 +385,7 @@ function FeedCard({
         variant={isSubscribed ? "ghost" : "ghost"}
         className={cn(
           "absolute end-1.5 top-1.5 h-7 w-7 p-0 rounded-lg shrink-0",
-          isSubscribed && "text-green-500 cursor-default"
+          isSubscribed && "text-success cursor-default"
         )}
         onClick={isSubscribed ? undefined : onAdd}
         disabled={isAdding || isSubscribed}

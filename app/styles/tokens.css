@@ -1,0 +1,425 @@
+/*
+ * FeedFerret design tokens — the ONLY place raw radius / type / colour-role /
+ * elevation / z-index / safe-area values are defined. Everything else uses the
+ * utilities these tokens generate (rounded-row, text-body-sm, bg-surface-bar,
+ * z-(--z-overlay) …). An ESLint guard (eslint.config.mjs) rejects new raw
+ * values (rounded-[…], z-[…], text-[…], tracking-[…], palette status colours,
+ * raw backdrop-blur sizes, env(safe-area-…)) outside this directory.
+ * Spec: .pm/spec-shell-design.md §4. Reference: docs/design-system.md.
+ *
+ * User theming (components/theme-color-applier.tsx) keeps working: it writes
+ * --brand / --brand-secondary / --brand-foreground inline on <html>. Every
+ * accent-derived role below (--unread, --selected, --accent-subtle, --primary
+ * in dark, --ring …) is defined *from* --brand, never from a literal.
+ */
+
+@custom-variant dark (&:is(.dark *));
+
+/* Layout classes + input capability (spec §0 terms). `sm:`/`lg:` must not be
+   used as "has a mouse" / "is desktop" in shell code. */
+@custom-variant compact (@media (width < 48rem));
+@custom-variant medium (@media (width >= 48rem) and (width < 75rem));
+@custom-variant expanded (@media (width >= 75rem));
+@custom-variant wide (@media (width >= 48rem));
+@custom-variant fine (@media (hover: hover) and (pointer: fine));
+@custom-variant coarse (@media (pointer: coarse));
+@custom-variant standalone (@media (display-mode: standalone), (display-mode: window-controls-overlay));
+
+/* ---------------------------------------------------------------------------
+ * 1. Colour roles (spec §4.1). Light = :root, dark = .dark (next-themes class).
+ * ------------------------------------------------------------------------- */
+:root {
+  --brand: #5BA4CF;
+  --brand-secondary: #F0963C;
+  --brand-foreground: #08111d;
+  --brand-secondary-foreground: #140b02;
+
+  /* Surfaces */
+  --surface-base: oklch(0.975 0.004 250);
+  --surface-raised: oklch(0.995 0.002 250);
+  --surface-sunken: oklch(0.945 0.006 250);
+  /* Opaque twins of the two translucent surfaces; the translucent roles are
+     derived from them so reduced-transparency / no-backdrop-filter can fall
+     back to alpha 1 with a single override. */
+  --surface-bar-solid: oklch(0.985 0.003 250);
+  --surface-overlay-solid: oklch(0.995 0.002 250);
+  --bar-alpha: 82%;
+  --overlay-alpha: 94%;
+
+  /* Text + lines */
+  --text-primary: oklch(0.18 0.012 255);
+  --text-secondary: oklch(0.46 0.012 255); /* 6.7:1 on --surface-base */
+  --divider: oklch(0.88 0.006 250 / 0.6);
+
+  /* Brand-derived roles */
+  --unread: var(--primary); /* the only unread colour — never red */
+  --accent-subtle: color-mix(in oklab, var(--brand) 14%, transparent);
+
+  /* Status roles (text/icon-safe fills; *-subtle = 14 % tint for backgrounds) */
+  --success: oklch(0.5 0.13 155);
+  --warning: oklch(0.52 0.12 70);
+  --danger: oklch(0.52 0.19 27);
+  --info: oklch(0.5 0.13 235);
+
+  --scrim: oklch(0 0 0 / 0.55);
+  --scrim-reader: oklch(0 0 0 / 0.08);
+
+  /* Colour-foundation fixes (design-polish-2): darker/more saturated brand
+     fills so brand-on-fill text is text-safe. Computed (OKLCH -> linear
+     sRGB -> WCAG relative luminance): near-black (--brand-foreground,
+     #08111d) on this --primary is ~5.3:1 and on this --accent is ~4.52:1 —
+     both clear AA (4.5:1), so --primary-foreground/--accent-foreground stay
+     near-black in light mode (near-white text on these fills only reaches
+     ~3.4:1/~4.0:1, i.e. worse — near-black is the correct choice here). */
+  --primary: oklch(0.62 0.11 235);
+  --primary-foreground: var(--brand-foreground);
+  --secondary: oklch(0.94 0.006 250);
+  --secondary-foreground: oklch(0.18 0.012 255);
+  --muted: oklch(0.93 0.006 250);
+  --accent: oklch(0.58 0.115 235);
+  --accent-foreground: var(--brand-foreground);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.88 0.006 250);
+  --input: oklch(0.88 0.006 250);
+  --ring: color-mix(in oklab, var(--brand) 76%, black 10%);
+  /* Dedicated link color: distinct from --accent/--primary so body/prose
+     links stay text-safe (~5.3:1 on --background) independent of future
+     accent/primary retuning. */
+  --link: oklch(0.5 0.13 235);
+  --chart-1: var(--brand);
+  --chart-2: var(--brand-secondary);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0.003 250 / 0.84);
+  --sidebar-foreground: oklch(0.15 0.01 250);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: color-mix(in oklab, var(--sidebar) 88%, var(--brand) 12%);
+  --sidebar-accent-foreground: oklch(0.15 0.01 250);
+  --sidebar-border: oklch(0.92 0.002 240);
+  --sidebar-ring: var(--ring);
+}
+
+.dark {
+  --surface-base: oklch(0.13 0.012 255);
+  --surface-raised: oklch(0.18 0.012 255);
+  --surface-sunken: oklch(0.105 0.012 255);
+  --surface-bar-solid: oklch(0.15 0.012 255);
+  --surface-overlay-solid: oklch(0.21 0.012 255);
+  --bar-alpha: 80%;
+
+  --text-primary: oklch(0.95 0.003 250);
+  --text-secondary: oklch(0.68 0.01 250); /* 7.0:1 on --surface-base */
+  --divider: oklch(0.29 0.012 255 / 0.6);
+
+  --unread: var(--brand);
+  --accent-subtle: color-mix(in oklab, var(--brand) 20%, transparent);
+
+  --success: oklch(0.74 0.15 155);
+  --warning: oklch(0.8 0.13 80);
+  --danger: oklch(0.72 0.17 22);
+  --info: oklch(0.75 0.11 235);
+
+  --scrim: oklch(0 0 0 / 0.6);
+  --scrim-reader: oklch(0 0 0 / 0.3);
+
+  --secondary: oklch(0.24 0.012 255);
+  --secondary-foreground: oklch(0.95 0.002 240);
+  --muted: oklch(0.24 0.012 255);
+  --primary: color-mix(in oklab, var(--brand) 86%, black 4%);
+  --primary-foreground: var(--brand-foreground);
+  --accent: color-mix(in oklab, var(--brand) 72%, black 16%);
+  /* Bug fix: this token previously fell through to --brand-foreground
+     (near-black, #08111d) on a mid-luminance dark accent fill — a
+     computed ~3.1-4.2:1 depending on measurement, i.e. an AA fail/near-fail.
+     Override with a near-white so accent-foreground text (toggle on-state,
+     dropdown/command/calendar focus, segmented buttons) stays legible. */
+  --accent-foreground: oklch(0.97 0.005 250);
+  --destructive: oklch(0.5 0.2 25);
+  --destructive-foreground: oklch(0.95 0 0);
+  --border: oklch(0.29 0.012 255);
+  --input: oklch(0.29 0.012 255);
+  --ring: color-mix(in oklab, var(--brand) 82%, white 8%);
+  /* Dark counterpart of --link: brighter/lighter for dark backgrounds
+     (~9.2:1 on the dark --background). */
+  --link: oklch(0.75 0.11 235);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.15 0.012 255 / 0.86);
+  --sidebar-foreground: oklch(0.95 0.002 240);
+  --sidebar-accent: color-mix(in oklab, var(--sidebar) 80%, var(--brand) 20%);
+  --sidebar-accent-foreground: oklch(0.95 0.002 240);
+  --sidebar-border: oklch(0.25 0.01 250);
+}
+
+/* Derived roles + shadcn aliases. Declared on both selectors so that they
+   resolve against whichever element carries the scheme (html.dark in the app,
+   but also any nested .dark scope). */
+:root,
+.dark {
+  --surface-bar: color-mix(in oklab, var(--surface-bar-solid) var(--bar-alpha), transparent);
+  --surface-overlay: color-mix(in oklab, var(--surface-overlay-solid) var(--overlay-alpha), transparent);
+  --selected: var(--sidebar-accent); /* + 2px --brand inline-start bar */
+
+  /* shadcn names → aliases of the roles (old utilities keep working) */
+  --background: var(--surface-base);
+  --foreground: var(--text-primary);
+  --card: var(--surface-raised); /* opaque: loses its former alpha */
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-overlay);
+  --popover-foreground: var(--text-primary);
+  --muted-foreground: var(--text-secondary);
+
+  /* Subtle status tints derive from the role (so they follow light/dark). */
+  --success-subtle: color-mix(in oklab, var(--success) 14%, transparent);
+  --warning-subtle: color-mix(in oklab, var(--warning) 14%, transparent);
+  --danger-subtle: color-mix(in oklab, var(--danger) 14%, transparent);
+  --info-subtle: color-mix(in oklab, var(--info) 14%, transparent);
+}
+
+/* Translucent surfaces fall back to alpha 1 without backdrop-filter support
+   or when the user asks for reduced transparency. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --surface-bar: var(--surface-bar-solid);
+    --surface-overlay: var(--surface-overlay-solid);
+  }
+}
+@supports not (backdrop-filter: blur(1px)) {
+  :root {
+    --surface-bar: var(--surface-bar-solid);
+    --surface-overlay: var(--surface-overlay-solid);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 2. Space, targets, z-scale, safe areas (spec §4.3) — plain custom props.
+ * ------------------------------------------------------------------------- */
+:root {
+  --gutter: 16px;
+  --row-pad-y: 12px;
+  --row-gap: 12px;
+  --bar-h: 52px;
+  --tabbar-h: 60px;
+  --tabbar-inset: 12px;
+  --rail-w: 72px;
+  --sidebar-w: 280px;
+  --list-w: 380px;
+  --list-w-medium: 360px;
+  --reader-gutter: 20px;
+
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --titlebar-h: env(titlebar-area-height, 0px);
+  --keyboard-inset: 0px; /* set from visualViewport on iOS */
+  --content-pad-bottom: calc(var(--tabbar-h) + var(--tabbar-inset) + var(--safe-b) + 16px);
+
+  --hit-min: 44px;
+
+  /* z-scale: only via z-(--z-*). Numeric / arbitrary z-index utilities are banned. */
+  --z-sticky: 10;
+  --z-bar: 30;
+  --z-reader: 40;
+  --z-overlay: 50;
+  --z-toast: 60;
+  --z-skip: 100;
+
+  /* Reader body (consumed by the reader in a later PR; maps readerFontSize
+     small/medium/large/xl → −2/0/+2/+4 px, readerWidth normal/wide/full →
+     68ch/76ch/none). */
+  --reader-size: 17px;
+  --reader-leading: 1.6;
+  --reader-measure: 68ch;
+}
+@media (width >= 48rem) {
+  :root {
+    --gutter: 20px;
+    --bar-h: 56px;
+    --reader-gutter: 32px;
+    --content-pad-bottom: 16px;
+    --reader-size: 19px;
+    /* row-title is 17/22 on wide, display is 32/38 (see type scale) */
+    --text-row-title: 1.0625rem;
+    --text-row-title--line-height: 1.375rem;
+    --text-display: 2rem;
+    --text-display--line-height: 2.375rem;
+  }
+}
+@media (width >= 75rem) {
+  :root {
+    --gutter: 24px;
+    --reader-gutter: 48px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 3. Theme: type scale, monotonic radius, elevation, blur (spec §4.2/§4.3).
+ *    `static` = always emitted, even before a utility references them.
+ * ------------------------------------------------------------------------- */
+@theme static {
+  /* Type scale: size / line-height / weight / tracking. 11 px is the minimum
+     size anywhere. */
+  --text-caption: 0.6875rem;
+  --text-caption--line-height: 0.875rem;
+  --text-caption--font-weight: 500;
+  --text-footnote: 0.75rem;
+  --text-footnote--line-height: 1rem;
+  --text-footnote--font-weight: 500;
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.25rem;
+  --text-body-sm--font-weight: 400;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5rem;
+  --text-body--font-weight: 400;
+  --text-row-title: 1rem;
+  --text-row-title--line-height: 1.3125rem;
+  --text-row-title--font-weight: 600;
+  --text-row-title--letter-spacing: -0.01em;
+  --text-title-sm: 1.0625rem;
+  --text-title-sm--line-height: 1.375rem;
+  --text-title-sm--font-weight: 600;
+  --text-title-sm--letter-spacing: -0.01em;
+  --text-title: 1.25rem;
+  --text-title--line-height: 1.625rem;
+  --text-title--font-weight: 600;
+  --text-title--letter-spacing: -0.02em;
+  --text-headline: 1.5rem;
+  --text-headline--line-height: 1.875rem;
+  --text-headline--font-weight: 700;
+  --text-headline--letter-spacing: -0.02em;
+  --text-display: 1.625rem;
+  --text-display--line-height: 2rem;
+  --text-display--font-weight: 700;
+  --text-display--letter-spacing: -0.02em;
+
+  /* Tracking scale (standalone utilities: tracking-title / -subtitle / -overline) */
+  --tracking-title: -0.02em; /* ≥ 20 px */
+  --tracking-subtitle: -0.01em; /* 17–19 px */
+  --tracking-overline: 0.06em; /* uppercase only */
+
+  /* Radius, monotonic. Role utilities for new code… */
+  --radius-chip: 6px;
+  --radius-control: 10px; /* buttons, inputs, thumbs */
+  --radius-row: 14px; /* cards, covers */
+  --radius-panel: 20px; /* popovers, menus */
+  --radius-sheet: 28px; /* sheets, dialogs, pills */
+  --radius-icon: 28%; /* app-icon "squircle" marks */
+  /* …and the legacy Tailwind keys, re-pinned so the scale is never inverted. */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 20px;
+  --radius-3xl: 28px;
+  --radius-4xl: 28px;
+
+  /* Two elevation levels only (bar, overlay); everything else is flat. */
+  --shadow-bar: 0 1px 0 oklch(0 0 0 / 0.04), 0 8px 24px -12px oklch(0 0 0 / 0.18);
+  --shadow-overlay: 0 0 0 1px oklch(0 0 0 / 0.06), 0 24px 64px -24px oklch(0 0 0 / 0.35);
+  --blur-bar: 20px;
+  --blur-overlay: 28px;
+}
+
+/* Colour roles as Tailwind colours. */
+@theme inline {
+  --font-sans: var(--font-geist-sans, system-ui, sans-serif);
+  --font-mono: var(--font-geist-mono, ui-monospace, monospace);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-brand: var(--brand);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-link: var(--link);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Roles (text roles are reached through foreground / muted-foreground) */
+  --color-surface-base: var(--surface-base);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-bar: var(--surface-bar);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-divider: var(--divider);
+  --color-unread: var(--unread);
+  --color-selected: var(--selected);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-scrim: var(--scrim);
+  --color-scrim-reader: var(--scrim-reader);
+}
+
+/* ---------------------------------------------------------------------------
+ * 4. Elevation recipes (spec §4.3): bar + overlay. Rows, cards and list
+ *    panels never blur.
+ * ------------------------------------------------------------------------- */
+@utility elev-bar {
+  background: var(--surface-bar);
+  backdrop-filter: blur(var(--blur-bar)) saturate(1.4);
+  box-shadow: var(--shadow-bar);
+  border-color: var(--divider);
+}
+@utility elev-overlay {
+  background: var(--surface-overlay);
+  backdrop-filter: blur(var(--blur-overlay)) saturate(1.4);
+  box-shadow: var(--shadow-overlay);
+}
+@utility rounded-inherit {
+  border-radius: inherit;
+}
+
+/* Touch targets: every interactive element ≥ 44×44 on coarse pointers. The
+   visual size stays 32/36/44; an invisible ::after grows the hit box. */
+.hit-slop:where(:not(.absolute, .fixed, .sticky, .relative)) {
+  position: relative;
+}
+@media (pointer: coarse) {
+  .hit-slop::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--hit-min));
+    height: max(100%, var(--hit-min));
+    transform: translate(-50%, -50%);
+  }
+}

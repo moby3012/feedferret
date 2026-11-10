@@ -79,13 +79,13 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-dvh flex items-center justify-center p-6 bg-background text-foreground selection:bg-muted">
-      <div className="w-full max-w-[400px] relative z-10 animate-scale-in">
+      <div className="w-full max-w-[400px] relative z-(--z-sticky) animate-scale-in">
         <div className="text-center mb-10 group">
           {/* bg-accent, not bg-card: the logo mark is a solid white SVG with
               no dark variant, so it needs a background that's never
               near-white — bg-card is near-white in light mode and made the
               logo effectively invisible there. */}
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl border border-border bg-accent p-3 mb-6 shadow-2xl transition-transform duration-500 group-hover:scale-105">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl border border-border bg-accent p-3 mb-6 shadow-overlay transition-transform duration-(--dur-slow) group-hover:scale-105">
             <Image
               src="/logo.svg"
               alt="FeedFerret"
@@ -94,7 +94,7 @@ export default function RegisterPage() {
               className="w-full h-full opacity-90"
             />
           </div>
-          <h1 className="text-2xl font-bold tracking-[-0.04em] text-foreground">
+          <h1 className="text-2xl font-bold tracking-title text-foreground">
             {t("subtitle")}
           </h1>
           <p className="text-muted-foreground mt-2 text-sm font-medium tracking-tight">
@@ -102,9 +102,9 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <Card className="border-border bg-card backdrop-blur-xl shadow-2xl overflow-hidden ring-1 ring-border">
+        <Card className="border-border bg-card backdrop-blur-bar shadow-overlay overflow-hidden ring-1 ring-border">
           <CardHeader className="pb-5 pt-8 px-8 text-center sm:text-start">
-            <CardTitle className="text-lg font-semibold tracking-[-0.02em] text-foreground flex items-center justify-center sm:justify-start gap-2">
+            <CardTitle className="text-lg font-semibold tracking-title text-foreground flex items-center justify-center sm:justify-start gap-2">
               <UserPlus className="w-4 h-4 text-muted-foreground" />
               {t("registration")}
             </CardTitle>
@@ -156,7 +156,7 @@ export default function RegisterPage() {
               </div>
 
               {error && (
-                <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium animate-shake">
+                <div className="p-3 rounded-2xl bg-danger/10 border border-danger/20 text-danger text-xs font-medium animate-shake">
                   {error}
                 </div>
               )}

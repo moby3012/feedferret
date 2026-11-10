@@ -20,9 +20,9 @@ export default async function SharedSearchPage({ params }: { params: Promise<{ t
   return (
     <main className="min-h-dvh app-chrome px-4 py-8 text-foreground sm:px-6">
       <div className="mx-auto max-w-4xl">
-        <header className="mb-8 rounded-[2rem] border border-border/70 bg-card/85 p-6 shadow-sm backdrop-blur-2xl">
+        <header className="mb-8 rounded-sheet border border-border/70 bg-card/85 p-6 shadow-sm backdrop-blur-bar">
           <div className="mb-3 text-sm font-medium text-muted-foreground">{t("title")}</div>
-          <h1 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">{savedSearch.name}</h1>
+          <h1 className="text-3xl font-semibold tracking-title sm:text-4xl">{savedSearch.name}</h1>
           <code className="mt-4 block rounded-2xl bg-muted/60 px-3 py-2 text-sm text-muted-foreground">{savedSearch.query}</code>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link href={rssUrl} className="inline-flex h-10 items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground">
@@ -36,14 +36,14 @@ export default async function SharedSearchPage({ params }: { params: Promise<{ t
 
         <section className="grid gap-3">
           {articles.map((article) => (
-            <article key={article.id} className="rounded-[1.5rem] border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur-xl">
+            <article key={article.id} className="rounded-panel border border-border/60 bg-card/80 p-4 shadow-sm backdrop-blur-bar">
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
                 <span>{article.feed.icon || "📰"}</span>
                 <span>{article.feed.name}</span>
                 <span>·</span>
                 <time dateTime={article.publishedAt.toISOString()}>{format.dateTime(article.publishedAt, { dateStyle: "medium" })}</time>
               </div>
-              <h2 className="text-xl font-semibold tracking-[-0.03em]">
+              <h2 className="text-xl font-semibold tracking-title">
                 {article.link ? (
                   <a href={article.link} target="_blank" rel="noreferrer" className="hover:underline">
                     {article.title}
@@ -59,7 +59,7 @@ export default async function SharedSearchPage({ params }: { params: Promise<{ t
             </article>
           ))}
           {articles.length === 0 && (
-            <div className="rounded-[1.5rem] border border-border/60 bg-card/80 p-10 text-center">
+            <div className="rounded-panel border border-border/60 bg-card/80 p-10 text-center">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
                 <Rss className="h-6 w-6 text-muted-foreground" />
               </div>

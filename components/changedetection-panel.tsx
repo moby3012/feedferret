@@ -68,7 +68,7 @@ export function ChangedetectionPanel({ onAddFeed, isAddingFeed }: Changedetectio
       </Button>
 
       {error && !created && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+        <div className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
           {error}
         </div>
       )}
@@ -79,7 +79,7 @@ export function ChangedetectionPanel({ onAddFeed, isAddingFeed }: Changedetectio
             <Eye className="size-3.5 shrink-0 text-muted-foreground" />
             {t("watchCreated")}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
+          <p className="text-caption text-muted-foreground leading-relaxed">
             {created.usedAiSelector ? t("watchCreatedHintAi") : t("watchCreatedHint")}
           </p>
           <Button size="sm" className="w-full" disabled={isAddingFeed} onClick={handleAdd}>

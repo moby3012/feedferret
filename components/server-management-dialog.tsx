@@ -578,15 +578,15 @@ export function ServerManagementDialog({
                                 {user.name?.[0] || user.email?.[0]?.toUpperCase()}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className="font-semibold truncate flex flex-wrap items-center gap-2 tracking-[-0.01em]">
+                                <div className="font-semibold truncate flex flex-wrap items-center gap-2 tracking-subtitle">
                                   {user.name || t("users.unnamedUser")}
                                   {user.role === "ADMIN" && (
-                                    <span className="text-[10px] bg-primary/10 text-foreground px-1.5 py-0.5 rounded-full font-bold">
+                                    <span className="text-caption bg-primary/10 text-foreground px-1.5 py-0.5 rounded-full font-bold">
                                       {t("users.adminBadge")}
                                     </span>
                                   )}
                                   {!user.isActive && (
-                                    <span className="text-[10px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full font-bold">
+                                    <span className="text-caption bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full font-bold">
                                       {t("users.suspendedBadge")}
                                     </span>
                                   )}
@@ -607,7 +607,7 @@ export function ServerManagementDialog({
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className={cn("rounded-lg transition-colors", user.isActive ? "text-amber-500 hover:bg-amber-500/10" : "text-emerald-500 hover:bg-emerald-500/10")}
+                                className={cn("rounded-lg transition-colors", user.isActive ? "text-warning hover:bg-warning/10" : "text-success hover:bg-success/10")}
                                 onClick={() => handleToggleSuspend(user)}
                                 title={user.isActive ? t("users.suspendUser") : t("users.reactivateUser")}
                               >
@@ -635,7 +635,7 @@ export function ServerManagementDialog({
                     <div className="max-w-2xl space-y-8 px-6 py-6 sm:px-8">
                     <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.allowNewRegistrations")}</h4>
+                        <h4 className="text-lg font-semibold tracking-title">{t("registrations.allowNewRegistrations")}</h4>
                         <p className="text-sm text-muted-foreground">
                           {t("registrations.registrationsDescription")}
                         </p>
@@ -647,7 +647,7 @@ export function ServerManagementDialog({
                     </div>
                     <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.require2FA")}</h4>
+                        <h4 className="text-lg font-semibold tracking-title">{t("registrations.require2FA")}</h4>
                         <p className="text-sm text-muted-foreground">
                           {t("registrations.require2FADescription")}
                         </p>
@@ -659,7 +659,7 @@ export function ServerManagementDialog({
                     </div>
                     <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.publicSavedSearches")}</h4>
+                        <h4 className="text-lg font-semibold tracking-title">{t("registrations.publicSavedSearches")}</h4>
                         <p className="text-sm text-muted-foreground">
                           {t("registrations.publicSavedSearchesDescription")}
                         </p>
@@ -671,7 +671,7 @@ export function ServerManagementDialog({
                     </div>
                     <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("registrations.defaultUiLanguage")}</h4>
+                        <h4 className="text-lg font-semibold tracking-title">{t("registrations.defaultUiLanguage")}</h4>
                         <p className="text-sm text-muted-foreground">
                           {t("registrations.defaultUiLanguageDescription")}
                         </p>
@@ -689,12 +689,12 @@ export function ServerManagementDialog({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="p-6 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-3">
-                      <div className="flex items-center gap-2 text-amber-500">
+                    <div className="p-6 rounded-2xl bg-warning/10 border border-warning/20 space-y-3">
+                      <div className="flex items-center gap-2 text-warning">
                         <AlertCircle className="w-5 h-5" />
                         <h4 className="font-bold">{t("registrations.securityNote")}</h4>
                       </div>
-                      <p className="text-sm text-amber-500/80 leading-relaxed">
+                      <p className="text-sm text-warning/80 leading-relaxed">
                         {t("registrations.disableRegistrations")}
                       </p>
                     </div>
@@ -709,7 +709,7 @@ export function ServerManagementDialog({
                       {/* Enable toggle */}
                       <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
-                          <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("email.mailService")}</h4>
+                          <h4 className="text-lg font-semibold tracking-title">{t("email.mailService")}</h4>
                           <p className="text-sm text-muted-foreground">
                             {t("email.enableMailService")}
                           </p>
@@ -937,7 +937,7 @@ export function ServerManagementDialog({
                     <div className="space-y-4 px-6 py-6 sm:px-8">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("starterPacks.title")}</h4>
+                          <h4 className="text-lg font-semibold tracking-title">{t("starterPacks.title")}</h4>
                           <p className="text-sm text-muted-foreground">
                             {t("starterPacks.description")}
                           </p>
@@ -957,7 +957,7 @@ export function ServerManagementDialog({
                           "rounded-2xl border px-4 py-3 text-sm",
                           starterPackValidation.errors.length > 0
                             ? "border-destructive/25 bg-destructive/10 text-destructive"
-                            : "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                            : "border-warning/20 bg-warning/10 text-warning",
                         )}>
                           <p className="font-semibold">
                             {starterPackValidation.errors.length > 0 ? "Starter pack validation needs attention" : "Starter pack cleanup will be applied on save"}
@@ -1025,7 +1025,7 @@ export function ServerManagementDialog({
                           </div>
 
                           {pack.path && (
-                            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                            <div className="rounded-2xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
                               This default pack imports from <code>{pack.path}</code>. Add custom feeds below to override future custom pack content, or remove/reset as needed.
                             </div>
                           )}
@@ -1126,7 +1126,7 @@ export function ServerManagementDialog({
                     <div className="max-w-2xl space-y-6 px-6 py-6 sm:px-8">
                     <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.backgroundSync")}</h4>
+                        <h4 className="text-lg font-semibold tracking-title">{t("sync.backgroundSync")}</h4>
                         <p className="text-sm text-muted-foreground">
                           {t("sync.automaticallyFetch")}
                         </p>
@@ -1166,7 +1166,7 @@ export function ServerManagementDialog({
                     )}
                     <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pe-6">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.trustedInternalFeeds")}</h4>
+                        <h4 className="text-lg font-semibold tracking-title">{t("sync.trustedInternalFeeds")}</h4>
                         <p className="text-sm text-muted-foreground">
                           {t("sync.allowInternalIps")}
                         </p>
@@ -1191,7 +1191,7 @@ export function ServerManagementDialog({
                     {/* ── Browser-render sidecar (M7-T2) ── */}
                     <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pe-6">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.renderSidecar")}</h4>
+                        <h4 className="text-lg font-semibold tracking-title">{t("sync.renderSidecar")}</h4>
                         <p className="text-sm text-muted-foreground">
                           {t("sync.renderSidecarDescription")}
                         </p>
@@ -1223,7 +1223,7 @@ export function ServerManagementDialog({
                         </ol>
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideComposeLabel")}</Label>
+                            <Label className="text-caption uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideComposeLabel")}</Label>
                             <Button
                               type="button"
                               size="sm"
@@ -1235,10 +1235,10 @@ export function ServerManagementDialog({
                               {t("sync.renderSidecarGuideCopy")}
                             </Button>
                           </div>
-                          <pre className="rounded-xl bg-background/60 border border-border/50 p-3 text-[11px] font-mono whitespace-pre overflow-x-auto">{RENDER_SIDECAR_COMPOSE}</pre>
+                          <pre className="rounded-xl bg-background/60 border border-border/50 p-3 text-caption font-mono whitespace-pre overflow-x-auto">{RENDER_SIDECAR_COMPOSE}</pre>
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideCommandLabel")}</Label>
+                          <Label className="text-caption uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideCommandLabel")}</Label>
                           <div className="flex items-center gap-2">
                             <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">docker compose up -d render-sidecar</code>
                             <Button type="button" size="icon" variant="outline" className="rounded-xl shrink-0" onClick={() => handleCopyText("docker compose up -d render-sidecar")}>
@@ -1247,7 +1247,7 @@ export function ServerManagementDialog({
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideUrlLabel")}</Label>
+                          <Label className="text-caption uppercase tracking-wider text-muted-foreground">{t("sync.renderSidecarGuideUrlLabel")}</Label>
                           <div className="flex items-center gap-2">
                             <code className="flex-1 truncate rounded-xl bg-background border border-border/50 px-3 py-2 text-xs font-mono">http://render-sidecar:8080/</code>
                             <Button type="button" size="icon" variant="outline" className="rounded-xl shrink-0" onClick={() => handleCopyText("http://render-sidecar:8080/")}>
@@ -1255,7 +1255,7 @@ export function ServerManagementDialog({
                             </Button>
                           </div>
                         </div>
-                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        <p className="text-caption text-muted-foreground leading-relaxed">
                           {t("sync.renderSidecarGuideDocsHint")}
                         </p>
                       </CollapsibleContent>
@@ -1301,7 +1301,7 @@ export function ServerManagementDialog({
                     {/* ── RSSHub connector (M5a) ── */}
                     <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pe-6">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.rsshub")}</h4>
+                        <h4 className="text-lg font-semibold tracking-title">{t("sync.rsshub")}</h4>
                         <p className="text-sm text-muted-foreground">
                           {t("sync.rsshubDescription")}
                         </p>
@@ -1352,7 +1352,7 @@ export function ServerManagementDialog({
                     {/* ── changedetection.io connector (M5b) ── */}
                     <div className="flex flex-col gap-4 p-6 rounded-2xl bg-card border border-border/60 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pe-6">
-                        <h4 className="text-lg font-semibold tracking-[-0.02em]">{t("sync.changedetection")}</h4>
+                        <h4 className="text-lg font-semibold tracking-title">{t("sync.changedetection")}</h4>
                         <p className="text-sm text-muted-foreground">
                           {t("sync.changedetectionDescription")}
                         </p>
@@ -1445,9 +1445,9 @@ export function ServerManagementDialog({
                                     <td className="px-4 py-2">
                                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", {
                                         "bg-destructive/15 text-destructive": entry.action === "user.delete",
-                                        "bg-amber-500/15 text-amber-600": entry.action === "user.suspend" || entry.action === "user.role_change",
-                                        "bg-green-500/15 text-green-600": entry.action === "user.unsuspend",
-                                        "bg-blue-500/15 text-blue-600": entry.action === "settings.update",
+                                        "bg-warning/15 text-warning": entry.action === "user.suspend" || entry.action === "user.role_change",
+                                        "bg-success/15 text-success": entry.action === "user.unsuspend",
+                                        "bg-info/15 text-info": entry.action === "settings.update",
                                         "bg-muted text-muted-foreground": !["user.delete","user.suspend","user.role_change","user.unsuspend","settings.update"].includes(entry.action),
                                       })}>
                                         {entry.action}
@@ -1485,7 +1485,7 @@ export function ServerManagementDialog({
                                     <td className="px-4 py-2 truncate max-w-[180px]">{attempt.email}</td>
                                     <td className="px-4 py-2">
                                       {attempt.success ? (
-                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-green-500/15 text-green-600">
+                                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-success/15 text-success">
                                           <CheckCircle2 className="w-3 h-3" /> {t("audit.success")}
                                         </span>
                                       ) : (
@@ -1622,8 +1622,8 @@ export function ServerManagementDialog({
                                     <td className="px-4 py-2 text-muted-foreground whitespace-nowrap text-xs">{new Date(entry.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</td>
                                     <td className="px-4 py-2">
                                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", {
-                                        "bg-blue-500/15 text-blue-600": entry.level === "info",
-                                        "bg-amber-500/15 text-amber-600": entry.level === "warn",
+                                        "bg-info/15 text-info": entry.level === "info",
+                                        "bg-warning/15 text-warning": entry.level === "warn",
                                         "bg-destructive/15 text-destructive": entry.level === "error",
                                       })}>
                                         {entry.level === "info" ? t("logs.levelInfo") : entry.level === "warn" ? t("logs.levelWarn") : t("logs.levelError")}
@@ -1711,7 +1711,7 @@ function SettingsField({
         onChange={(e) => setSettings({ ...settings, [field]: e.target.value })}
       />
       {hasStoredValue && (
-        <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ Value stored securely. Leave blank to keep existing.</p>
+        <p className="text-xs text-success">✓ Value stored securely. Leave blank to keep existing.</p>
       )}
     </div>
   );
@@ -1856,8 +1856,8 @@ function DiscoveryCatalogTab() {
 
         {/* Import Result */}
         {importResult && (
-          <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-3">
-            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+          <div className="p-4 rounded-2xl bg-success/10 border border-success/20 space-y-3">
+            <div className="flex items-center gap-2 text-success">
               <ShieldCheck className="w-5 h-5" />
               <span className="font-medium">{t("discovery.importComplete")}</span>
             </div>
@@ -1868,7 +1868,7 @@ function DiscoveryCatalogTab() {
               </div>
               <div>
                 <span className="text-muted-foreground">{t("discovery.added")}</span>
-                <p className="font-medium text-emerald-600">{importResult.totalAdded}</p>
+                <p className="font-medium text-success">{importResult.totalAdded}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">{t("discovery.skipped")}</span>
@@ -1879,7 +1879,7 @@ function DiscoveryCatalogTab() {
                 <p className="font-medium">{importResult.totalInCatalog}</p>
               </div>
             </div>
-            <div className="pt-2 border-t border-emerald-500/20">
+            <div className="pt-2 border-t border-success/20">
               <p className="text-xs text-muted-foreground mb-2">{t("discovery.sources")}</p>
               <div className="space-y-1">
                 {importResult.sources.map((src) => (
@@ -1968,7 +1968,7 @@ function NotificationsAdminPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xl font-semibold tracking-[-0.02em]">{t("pushNotifications.title")}</h3>
+        <h3 className="text-xl font-semibold tracking-title">{t("pushNotifications.title")}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           {t("pushNotifications.description")}
         </p>
@@ -1978,7 +1978,7 @@ function NotificationsAdminPanel() {
         <div className="flex items-start gap-3">
           <div className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
-            diag?.configured ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-600",
+            diag?.configured ? "bg-success/10 text-success" : "bg-warning/10 text-warning",
           )}>
             {diag?.configured ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
           </div>
@@ -2009,7 +2009,7 @@ function NotificationsAdminPanel() {
             <ol className="list-decimal list-inside text-xs text-muted-foreground space-y-1 mt-2">
               <li>Click <strong className="text-foreground/80">Generate keys</strong> below.</li>
               <li>Copy the keys and your contact email into your environment file:
-                <pre className="mt-1 rounded-xl bg-background/60 border border-border/50 p-2 text-[11px] font-mono whitespace-pre overflow-x-auto">{`WEB_PUSH_VAPID_PUBLIC_KEY=…
+                <pre className="mt-1 rounded-xl bg-background/60 border border-border/50 p-2 text-caption font-mono whitespace-pre overflow-x-auto">{`WEB_PUSH_VAPID_PUBLIC_KEY=…
 WEB_PUSH_VAPID_PRIVATE_KEY=…
 WEB_PUSH_CONTACT=mailto:admin@example.com`}</pre>
               </li>

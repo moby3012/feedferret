@@ -222,17 +222,17 @@ export default function SetupPage() {
 
   return (
     <div className="min-h-dvh flex items-center justify-center p-4 sm:p-6 bg-background text-foreground selection:bg-muted">
-      <div className="w-full max-w-[520px] relative z-10">
+      <div className="w-full max-w-[520px] relative z-(--z-sticky)">
         {/* Logo */}
         <div className="text-center mb-8 group">
           {/* bg-accent, not bg-card: the logo mark is a solid white SVG with
               no dark variant, so it needs a background that's never
               near-white — bg-card is near-white in light mode and made the
               logo effectively invisible there. */}
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-border bg-accent p-3 mb-5 shadow-2xl">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-border bg-accent p-3 mb-5 shadow-overlay">
             <Image src="/logo.svg" alt="FeedFerret" width={44} height={44} className="w-full h-full opacity-90" />
           </div>
-          <h1 className="text-2xl font-bold tracking-[-0.04em] text-foreground">
+          <h1 className="text-2xl font-bold tracking-title text-foreground">
             Feed<span className="text-muted-foreground">Ferret</span> Setup
           </h1>
         </div>
@@ -261,9 +261,9 @@ export default function SetupPage() {
         </div>
 
         {/* Card */}
-        <div className="rounded-3xl border border-border bg-card p-5 shadow-2xl ring-1 ring-border backdrop-blur-xl sm:p-8">
+        <div className="rounded-3xl border border-border bg-card p-5 shadow-overlay ring-1 ring-border backdrop-blur-bar sm:p-8">
           {error && (
-            <div className="mb-5 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+            <div className="mb-5 p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-xs font-medium">
               {error}
             </div>
           )}
@@ -276,7 +276,7 @@ export default function SetupPage() {
                   <UserPlus className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{t("adminAccount")}</h2>
+                  <h2 className="text-lg font-semibold tracking-title text-foreground">{t("adminAccount")}</h2>
                   <p className="text-xs text-muted-foreground">{t("adminAccountDescription")}</p>
                 </div>
               </div>
@@ -338,7 +338,7 @@ export default function SetupPage() {
                   <Globe className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{t("instanceSettings")}</h2>
+                  <h2 className="text-lg font-semibold tracking-title text-foreground">{t("instanceSettings")}</h2>
                   <p className="text-xs text-muted-foreground">{t("instanceSettingsDescription")}</p>
                 </div>
               </div>
@@ -381,7 +381,7 @@ export default function SetupPage() {
                   <Mail className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{t("emailDelivery")}</h2>
+                  <h2 className="text-lg font-semibold tracking-title text-foreground">{t("emailDelivery")}</h2>
                   <p className="text-xs text-muted-foreground">{t("emailDeliveryDescription")}</p>
                 </div>
               </div>
@@ -459,7 +459,7 @@ export default function SetupPage() {
                   <Lock className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{t("accessControl")}</h2>
+                  <h2 className="text-lg font-semibold tracking-title text-foreground">{t("accessControl")}</h2>
                   <p className="text-xs text-muted-foreground">{t("accessControlDescription")}</p>
                 </div>
               </div>
@@ -483,7 +483,7 @@ export default function SetupPage() {
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-400 text-xs leading-relaxed">
+              <div className="p-4 rounded-xl border border-warning/20 bg-warning/5 text-warning text-xs leading-relaxed">
                 {t("twoFactorNote")}
               </div>
 
@@ -506,7 +506,7 @@ export default function SetupPage() {
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">{t("quickStart")}</h2>
+                  <h2 className="text-lg font-semibold tracking-title text-foreground">{t("quickStart")}</h2>
                   <p className="text-xs text-muted-foreground">{t("quickStartDescription")}</p>
                 </div>
               </div>

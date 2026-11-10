@@ -196,7 +196,7 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
       </div>
 
       {suggestError && !candidates && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+        <div className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
           {suggestError}
         </div>
       )}
@@ -239,7 +239,7 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
                     <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                       {t("itemsFound", { count: candidate.itemCount })}
                       {candidate.isAi && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium text-brand">
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-brand/10 px-1.5 py-0.5 text-caption font-medium text-brand">
                           ✨ {t("aiBadge")}
                         </span>
                       )}
@@ -248,14 +248,14 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
                       <p key={ti} className="text-xs text-muted-foreground truncate">{title}</p>
                     ))}
                     {candidate.isAi && candidate.notes && (
-                      <p className="text-[11px] text-muted-foreground italic">{candidate.notes}</p>
+                      <p className="text-caption text-muted-foreground italic">{candidate.notes}</p>
                     )}
                     {candidate.preview.length > 0 && (
                       <div className="flex flex-wrap gap-1 pt-0.5">
                         {candidate.preview.slice(0, 3).map((item, pi) => (
                           <span
                             key={pi}
-                            className="rounded-lg bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground truncate max-w-[140px]"
+                            className="rounded-lg bg-muted px-1.5 py-0.5 text-caption text-muted-foreground truncate max-w-[140px]"
                             title={item.title}
                           >
                             {item.title} · {hostOf(item.link)}

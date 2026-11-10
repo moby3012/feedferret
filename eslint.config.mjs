@@ -1,4 +1,5 @@
 import coreWebVitals from "eslint-config-next/core-web-vitals";
+import noRawDesignValues from "./eslint-rules/no-raw-design-values.mjs";
 
 /** @type {import("eslint").Linter.Config[]} */
 const config = [
@@ -14,6 +15,14 @@ const config = [
       "react-hooks/refs": "off",
       "react-hooks/purity": "off",
     },
+  },
+  {
+    // Design-token guard: raw radius / z-index / type size / tracking / palette
+    // status colour / blur / safe-area / duration values belong in
+    // app/styles/{tokens,motion}.css only. See eslint-rules/no-raw-design-values.mjs.
+    files: ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}", "hooks/**/*.{ts,tsx}", "lib/**/*.{ts,tsx}", "features/**/*.{ts,tsx}"],
+    plugins: { ff: { rules: { "no-raw-design-values": noRawDesignValues } } },
+    rules: { "ff/no-raw-design-values": "error" },
   },
 ];
 

@@ -51,8 +51,8 @@ export function SearchResultsView({
   const count = articles.length;
 
   return (
-    <div className="relative z-10 flex min-w-0 flex-1 flex-col min-h-0">
-      <header className="relative border-b border-border/60 bg-card/85 backdrop-blur-2xl animate-fade-in">
+    <div className="relative z-(--z-sticky) flex min-w-0 flex-1 flex-col min-h-0">
+      <header className="relative border-b border-border/60 bg-card/85 backdrop-blur-bar animate-fade-in">
         <div className="flex items-start gap-3 px-4 pt-4 pb-3 sm:px-5">
           <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
             <SearchIcon className="h-5 w-5" />
@@ -66,7 +66,7 @@ export function SearchResultsView({
             title={t("editQuery")}
           >
             <div className="flex items-center gap-2">
-              <h2 className="truncate text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-xl">
+              <h2 className="truncate text-lg font-semibold tracking-title text-foreground sm:text-xl">
                 &ldquo;{searchQuery}&rdquo;
               </h2>
               <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />

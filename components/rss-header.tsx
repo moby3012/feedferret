@@ -88,10 +88,10 @@ export function RssHeader({
     : t("refreshFeeds");
 
   return (
-    <header className="min-h-16 flex items-center justify-between px-4 sm:px-5 pt-[env(safe-area-inset-top)] border-b border-border/60 bg-card/75 backdrop-blur-2xl animate-fade-in relative z-20">
+    <header className="min-h-16 flex items-center justify-between px-4 sm:px-5 pt-(--safe-t) border-b border-border/60 bg-card/75 backdrop-blur-bar animate-fade-in relative z-(--z-bar)">
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold text-foreground tracking-[-0.02em] truncate">
+          <h2 className="text-base font-semibold text-foreground tracking-title truncate">
             {title}
           </h2>
           <p className="text-xs text-muted-foreground truncate font-medium">
@@ -108,7 +108,7 @@ export function RssHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="w-11 h-11 rounded-xl transition-all duration-200 active:scale-95 text-muted-foreground"
+          className="w-11 h-11 rounded-xl transition-all duration-(--dur-base) active:scale-95 text-muted-foreground"
           onClick={() => onToggleSort?.()}
           aria-label={sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
           title={sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
@@ -118,7 +118,7 @@ export function RssHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="w-11 h-11 rounded-xl transition-all duration-200 active:scale-95"
+          className="w-11 h-11 rounded-xl transition-all duration-(--dur-base) active:scale-95"
           onClick={() => {
             const modes: ViewMode[] = ["list", "minimal", "magazine"];
             const idx = modes.indexOf(activeViewMode);
@@ -140,7 +140,7 @@ export function RssHeader({
           variant="ghost"
           size="icon"
           className={cn(
-            "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
+            "w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95",
             unreadOnly
               ? "bg-accent text-accent-foreground"
               : "text-muted-foreground",
@@ -157,7 +157,7 @@ export function RssHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+          className="w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={onRefresh}
           disabled={isRefreshing}
           aria-label={isRefreshing ? t("refreshing") : lastRefreshedLabel}
@@ -165,7 +165,7 @@ export function RssHeader({
         >
           <RefreshCw
             className={cn(
-              "w-4 h-4 transition-transform duration-500",
+              "w-4 h-4 transition-transform duration-(--dur-slow)",
               isRefreshing && "animate-spin",
             )}
           />
@@ -175,7 +175,7 @@ export function RssHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+          className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={() => onToggleSort?.()}
           aria-label={sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
           title={sortOrder === "oldest" ? t("sortOldest") : t("sortNewest")}
@@ -192,7 +192,7 @@ export function RssHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+          className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95 text-muted-foreground"
           onClick={() => onMarkAllRead?.()}
           disabled={isMarkingAllRead}
           aria-label={t("markAllAsRead")}
@@ -207,7 +207,7 @@ export function RssHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+            className="hidden xl:inline-flex w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95 text-muted-foreground"
             onClick={onSaveSearch}
             aria-label={t("saveSearch")}
             title={t("saveSearch")}
@@ -220,7 +220,7 @@ export function RssHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+          className="w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95"
           onClick={() => {
             const modes: ViewMode[] = ["list", "minimal", "magazine"];
             const idx = modes.indexOf(activeViewMode);
@@ -240,7 +240,7 @@ export function RssHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="xl:hidden w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 text-muted-foreground"
+              className="xl:hidden w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95 text-muted-foreground"
               aria-label={t("moreOptions")}
               title={t("moreOptions")}
             >

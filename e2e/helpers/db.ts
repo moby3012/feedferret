@@ -126,6 +126,17 @@ export function setUserSettings(userKey: string, values: { markReadOnAdvance?: b
   }
 }
 
+/** Per-user accent colour (Settings → Appearance); drives --brand via ThemeColorApplier. */
+export function setAccentColor(userKey: string, hex: string) {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    db.prepare(`UPDATE "User" SET accentColor = ? WHERE id = ?`).run(hex, userId);
+  } finally {
+    db.close();
+  }
+}
+
 export function userSettings(userKey: string): { markReadOnAdvance: boolean } {
   const { userId } = manifest().users[userKey];
   const db = open();

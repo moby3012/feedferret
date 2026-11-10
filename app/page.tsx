@@ -213,7 +213,7 @@ export default function RSSReaderPage() {
   const spoilerGate = (
     <div className="flex-1 flex items-center justify-center p-8 animate-fade-in">
       <div className="max-w-md text-center space-y-5">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-warning/10 text-warning">
           <SpoilerIcon className="h-8 w-8" />
         </div>
         <div className="space-y-2">
@@ -226,7 +226,7 @@ export default function RSSReaderPage() {
           <button
             type="button"
             onClick={() => setSpoilerRevealed(true)}
-            className="rounded-2xl bg-amber-500 px-6 py-3 text-sm font-semibold text-amber-50 shadow-sm hover:bg-amber-600 active:scale-[0.98] transition-all"
+            className="rounded-2xl bg-warning px-6 py-3 text-sm font-semibold text-warning shadow-sm hover:bg-warning active:scale-[0.98] transition-all"
           >
             {t("revealSpoilers")}
           </button>
@@ -238,7 +238,7 @@ export default function RSSReaderPage() {
               });
             }}
             disabled={releaseAllSpoilers.isPending}
-            className="text-xs text-amber-600 hover:text-amber-700 disabled:opacity-50"
+            className="text-xs text-warning hover:text-warning disabled:opacity-50"
           >
             {releaseAllSpoilers.isPending ? t("clearingSpoilerFlags") : t("clearSpoilerFlags")}
           </button>
@@ -845,8 +845,8 @@ export default function RSSReaderPage() {
     return (
       <div className="h-dvh flex items-center justify-center bg-background">
         <div className="relative w-20 h-20">
-          <div className="absolute inset-0 border-4 border-primary/20 rounded-[28%] animate-pulse" />
-          <div className="absolute inset-0 border-t-4 border-primary rounded-[28%] animate-spin" />
+          <div className="absolute inset-0 border-4 border-primary/20 rounded-icon animate-pulse" />
+          <div className="absolute inset-0 border-t-4 border-primary rounded-icon animate-spin" />
         </div>
       </div>
     );
@@ -869,8 +869,8 @@ export default function RSSReaderPage() {
     return (
       <div className="h-dvh flex items-center justify-center bg-background">
         <div className="relative w-20 h-20">
-          <div className="absolute inset-0 border-4 border-primary/20 rounded-[28%] animate-pulse" />
-          <div className="absolute inset-0 border-t-4 border-primary rounded-[28%] animate-spin" />
+          <div className="absolute inset-0 border-4 border-primary/20 rounded-icon animate-pulse" />
+          <div className="absolute inset-0 border-t-4 border-primary rounded-icon animate-spin" />
         </div>
       </div>
     );
@@ -915,7 +915,7 @@ export default function RSSReaderPage() {
           // (absolute top-4 end-4, ~44px tall) — without it, RssSidebar's own
           // header (search button top-right) renders directly underneath and
           // visually collides with it.
-          className="h-[86dvh] rounded-t-[2rem] border-border/70 p-0 pt-12 gap-0 lg:hidden"
+          className="h-[86dvh] rounded-t-sheet border-border/70 p-0 pt-12 gap-0 lg:hidden"
         >
           <SheetTitle className="sr-only">{t("feedNavigation")}</SheetTitle>
           <RssSidebar
@@ -953,7 +953,7 @@ export default function RSSReaderPage() {
           minSize="20%"
           maxSize="70%"
         >
-          <div role="region" aria-label={tA11y("articleList")} className="relative z-10 flex h-full min-w-[320px] flex-col border-e border-border/60 bg-card/70 backdrop-blur-2xl">
+          <div role="region" aria-label={tA11y("articleList")} className="relative z-(--z-sticky) flex h-full min-w-[320px] flex-col border-e border-border/60 bg-card/70 backdrop-blur-bar">
             {isSearchActive ? (
               <SearchResultsView
                 searchQuery={searchQuery}
@@ -999,7 +999,7 @@ export default function RSSReaderPage() {
                   onToggleSort={handleToggleSort}
                 />
                 {isOffline && hasOfflineSnapshot && (
-                  <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
+                  <div className="border-b border-warning/20 bg-warning/10 px-4 py-2 text-xs text-warning">
                     {t("offlineBannerMessage")}
                   </div>
                 )}
@@ -1065,7 +1065,7 @@ export default function RSSReaderPage() {
 
       {/* Mobile Article List Panel */}
       {isMobileLayout && !selectedArticle && (
-      <div role="region" aria-label={tA11y("articleList")} className="relative z-10 flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-2xl transition-all duration-300 ease-out">
+      <div role="region" aria-label={tA11y("articleList")} className="relative z-(--z-sticky) flex min-w-0 flex-1 flex-col bg-card/70 backdrop-blur-bar transition-all duration-(--dur-slow) ease-out">
         {isSearchActive ? (
           <SearchResultsView
             searchQuery={searchQuery}
@@ -1112,7 +1112,7 @@ export default function RSSReaderPage() {
               onToggleSort={handleToggleSort}
             />
             {isOffline && hasOfflineSnapshot && (
-              <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-200">
+              <div className="border-b border-warning/20 bg-warning/10 px-4 py-2 text-xs text-warning">
                 Offline mode: showing cached articles from this device.
               </div>
             )}
@@ -1164,7 +1164,7 @@ export default function RSSReaderPage() {
 
       {/* Mobile Article Reader Panel */}
       {isMobileLayout && (selectedArticle || isClosingReader) && (
-      <div role="region" aria-label={tA11y("articleReader")} className={`fixed inset-0 z-50 flex bg-background ${isClosingReader ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
+      <div role="region" aria-label={tA11y("articleReader")} className={`fixed inset-0 z-(--z-overlay) flex bg-background ${isClosingReader ? "animate-slide-out-right" : "animate-slide-in-right"}`}>
         <ArticleReader
           article={selectedArticle}
           onToggleStar={handleToggleStar}
@@ -1192,7 +1192,7 @@ export default function RSSReaderPage() {
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent
           showCloseButton={false}
-          className="sm:max-w-xl rounded-2xl border-border/60 bg-card/95 backdrop-blur-2xl shadow-2xl p-0 gap-0 overflow-hidden"
+          className="sm:max-w-xl rounded-2xl border-border/60 bg-card/95 backdrop-blur-bar shadow-overlay p-0 gap-0 overflow-hidden"
         >
           <DialogHeader className="sr-only">
             <DialogTitle>{t("searchArticles")}</DialogTitle>

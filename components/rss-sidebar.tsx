@@ -523,7 +523,7 @@ export function RssSidebar({
             variant="ghost"
             size="icon"
             className={cn(
-              "w-12 h-12 rounded-xl relative transition-all duration-200",
+              "w-12 h-12 rounded-xl relative transition-all duration-(--dur-base)",
               isActiveNav && "bg-sidebar-accent ring-2 ring-sidebar-ring/50",
             )}
             onClick={() => {
@@ -546,7 +546,7 @@ export function RssSidebar({
 
   return (
     <>
-    <aside role="navigation" aria-label={t("sidebar.feedNavigation")} className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-2xl border-e border-sidebar-border/70 flex flex-col overflow-hidden">
+    <aside role="navigation" aria-label={t("sidebar.feedNavigation")} className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-overlay border-e border-sidebar-border/70 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">
@@ -568,7 +568,7 @@ export function RssSidebar({
               />
             )}
             <div>
-              <h1 className="text-xl font-semibold text-sidebar-foreground tracking-[-0.03em]">
+              <h1 className="text-xl font-semibold text-sidebar-foreground tracking-title">
                 {branding.instanceName}
               </h1>
               <p
@@ -851,7 +851,7 @@ export function RssSidebar({
                     >
                       <Bell className="w-4 h-4" />
                       {unreadNotifications > 0 && (
-                        <span className="absolute -end-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-destructive px-1 text-[10px] font-bold leading-none text-destructive-foreground shadow-sm">
+                        <span className="absolute -end-1 -top-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-destructive px-1 text-caption font-bold leading-none text-destructive-foreground shadow-sm">
                           {unreadNotifications > 9 ? "9+" : unreadNotifications}
                         </span>
                       )}
@@ -883,7 +883,7 @@ export function RssSidebar({
                         const typeIcon = notification.type === "feed_error"
                           ? <AlertCircle className="h-3.5 w-3.5 text-destructive" />
                           : notification.type === "feed_auto_muted"
-                          ? <BellOff className="h-3.5 w-3.5 text-amber-500" />
+                          ? <BellOff className="h-3.5 w-3.5 text-warning" />
                           : notification.type === "rule_match"
                           ? <Play className="h-3.5 w-3.5 text-muted-foreground" />
                           : notification.type === "digest_sent"
@@ -1032,7 +1032,7 @@ export function RssSidebar({
               )}
 
               {discoveryMessage && discoveredFeeds.length === 0 && (
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                <div className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
                   {discoveryMessage}
                 </div>
               )}
@@ -1270,7 +1270,7 @@ function SortableCategory({
   const style = {
     transform: CSS.Translate.toString(transform),
     transition,
-    zIndex: isDragging ? 50 : undefined,
+    zIndex: isDragging ? "var(--z-overlay)" : undefined,
     opacity: isDragging ? 0.5 : 1,
   };
 
@@ -1310,7 +1310,7 @@ function SortableCategory({
           <span>{category.name}</span>
         </button>
         {!expanded && categoryUnreadCount > 0 && (
-          <span className="min-w-5 rounded-full bg-brand px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-brand-foreground">
+          <span className="min-w-5 rounded-full bg-brand px-1.5 py-0.5 text-center text-caption font-bold leading-none text-brand-foreground">
             {categoryUnreadCount}
           </span>
         )}
@@ -1370,7 +1370,7 @@ function SortableFeedItem({ feed, renderFeedRow }: any) {
   const style = {
     transform: CSS.Translate.toString(transform),
     transition,
-    zIndex: isDragging ? 50 : undefined,
+    zIndex: isDragging ? "var(--z-overlay)" : undefined,
     opacity: isDragging ? 0.5 : 1,
   };
 
@@ -1434,7 +1434,7 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
       {!hideUnreadBadge && feed.unreadCount > 0 && (
         <span
           className={cn(
-            "shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums",
+            "shrink-0 text-caption px-1.5 py-0.5 rounded-full font-bold tabular-nums",
             isSelected
               ? "bg-primary-foreground/20 text-primary-foreground"
               : "bg-brand text-brand-foreground",
@@ -1484,7 +1484,7 @@ function FeedQuickActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-52 rounded-2xl p-2 shadow-2xl border-none bg-popover/95 backdrop-blur-xl"
+        className="w-52 rounded-2xl p-2 shadow-overlay border-none bg-popover/95 backdrop-blur-bar"
       >
         <DropdownMenuItem
           className="rounded-xl py-2.5 px-3 text-sm"

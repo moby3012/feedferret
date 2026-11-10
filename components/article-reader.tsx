@@ -382,18 +382,18 @@ export function ArticleReader({
       // iOS Safari, not reproducible in Chromium) can inflate it no matter
       // what renders inside, regardless of whether every descendant remembers
       // its own min-w-0/overflow-hidden correctly.
-      className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background/75 backdrop-blur-xl animate-fade-in [contain:layout]"
+      className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background/75 backdrop-blur-bar animate-fade-in [contain:layout]"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
       {/* Reader Header */}
-      <header className="flex min-w-0 items-center justify-between px-4 sm:px-6 pt-[calc(0.75rem_+_env(safe-area-inset-top))] pb-3 border-b border-border/60 bg-background/80 backdrop-blur-2xl sticky top-0 z-10 [contain:layout]">
+      <header className="flex min-w-0 items-center justify-between px-4 sm:px-6 pt-[calc(0.75rem_+_var(--safe-t))] pb-3 border-b border-border/60 bg-background/80 backdrop-blur-bar sticky top-0 z-(--z-sticky) [contain:layout]">
         <div className="flex min-w-0 flex-1 items-center gap-4">
           {showBackButton && (
             <Button
               variant="ghost"
               size="icon"
-              className="w-11 h-11 rounded-xl hover:bg-muted transition-all duration-200 hover:scale-105 active:scale-95"
+              className="w-11 h-11 rounded-xl hover:bg-muted transition-all duration-(--dur-base) hover:scale-105 active:scale-95"
               onClick={onBack}
               aria-label={t("back")}
             >
@@ -403,7 +403,7 @@ export function ArticleReader({
           <button
             type="button"
             onClick={() => onOpenFeed?.(article.feedId)}
-            className="flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl px-2 py-1.5 text-start transition-colors hover:bg-muted/70 active:scale-[0.99]"
+            className="hit-slop flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl px-2 py-1.5 text-start transition-colors hover:bg-muted/70 active:scale-[0.99]"
             aria-label={`Show all articles from ${article.feedName}`}
           >
             <div className="w-6 h-6 rounded-md overflow-hidden bg-muted flex items-center justify-center shrink-0">
@@ -418,7 +418,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95"
             onClick={() => onToggleStar(article.id)}
             aria-label={article.isStarred ? tList("removeStar") : tList("star")}
             aria-pressed={article.isStarred}
@@ -426,7 +426,7 @@ export function ArticleReader({
           >
             <Star
               className={cn(
-                "w-4 h-4 transition-all duration-300",
+                "w-4 h-4 transition-all duration-(--dur-slow)",
                 article.isStarred
                   ? "text-brand-secondary fill-brand-secondary scale-110"
                   : "text-muted-foreground hover:text-brand-secondary",
@@ -437,7 +437,7 @@ export function ArticleReader({
             variant="ghost"
             size="icon"
             className={cn(
-              "w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95",
+              "w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95",
               article.isReadLater && "bg-accent",
             )}
             onClick={() => onToggleReadLater?.(article.id)}
@@ -447,7 +447,7 @@ export function ArticleReader({
           >
             <Bookmark
               className={cn(
-                "w-4 h-4 transition-all duration-300",
+                "w-4 h-4 transition-all duration-(--dur-slow)",
                 article.isReadLater
                   ? "text-accent-foreground fill-accent-foreground scale-110"
                   : "text-muted-foreground hover:text-accent",
@@ -457,7 +457,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95"
             onClick={() => onToggleRead?.(article.id)}
             aria-label={article.isRead ? tList("markAsUnread") : tList("markAsRead")}
             aria-pressed={article.isRead}
@@ -472,7 +472,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95"
             onClick={shareArticle}
             aria-label={t("share")}
             title={t("share")}
@@ -482,7 +482,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95"
             onClick={openOriginal}
             disabled={!article.link}
             aria-label={t("openOriginal")}
@@ -493,7 +493,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95"
             onClick={copyLink}
             disabled={!article.link}
             aria-label={t("copyLink")}
@@ -509,7 +509,7 @@ export function ArticleReader({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                  className="w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95"
                   aria-label={t("sendTo")}
                   title={t("sendTo")}
                 >
@@ -539,7 +539,7 @@ export function ArticleReader({
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95"
             onClick={() => onFetchFullText?.(article.id)}
             disabled={!article.link || isFetchingFullText}
             aria-label={isFetchingFullText ? t("fetching") : t("fetchFullText")}
@@ -556,7 +556,7 @@ export function ArticleReader({
               <Button
                 variant="ghost"
                 size="icon"
-                className="w-10 h-10 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                className="w-10 h-10 rounded-xl transition-all duration-(--dur-base) hover:scale-105 active:scale-95"
                 aria-label={t("labels")}
                 title={t("labels")}
               >
@@ -606,7 +606,7 @@ export function ArticleReader({
 
       {/* Article Content */}
       <ScrollArea className={cn("flex-1 overflow-hidden min-h-0", articleAnimClass)}>
-        <article aria-labelledby="article-title" className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-[calc(4rem_+_env(safe-area-inset-bottom)_+_1.5rem)] sm:px-8 sm:pt-12 lg:pb-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
+        <article aria-labelledby="article-title" className={cn("reader-page mx-auto w-full min-w-0 max-w-full overflow-hidden px-5 pt-8 pb-[calc(4rem_+_var(--safe-b)_+_1.5rem)] sm:px-8 sm:pt-12 lg:pb-12", readerWidthClass[readerWidth] ?? "max-w-3xl")}>
           {/* Article Header */}
           <header className="mb-10 animate-fade-in-up">
             <h1
@@ -616,7 +616,7 @@ export function ArticleReader({
                 // where a balanced heading stops respecting overflow-wrap on long
                 // headlines, letting them overflow instead of wrapping — not worth
                 // the purely cosmetic line-balancing on a reader headline.
-                "text-2xl sm:text-4xl lg:text-[2.85rem] font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 tracking-[-0.04em] break-words [overflow-wrap:anywhere]",
+                "text-display font-semibold text-foreground leading-[1.08] sm:leading-[1.04] mb-5 tracking-title break-words [overflow-wrap:anywhere]",
               )}
             >
               {article.title}
@@ -706,13 +706,13 @@ export function ArticleReader({
           {/* Hero Image */}
           {article.imageUrl && !hideArticleImage && (
             <figure className="mb-12 -mx-6 sm:mx-0 animate-scale-in">
-              <div className="aspect-[16/9] sm:rounded-2xl overflow-hidden bg-muted shadow-2xl shadow-black/10 relative">
+              <div className="aspect-[16/9] sm:rounded-2xl overflow-hidden bg-muted shadow-overlay relative">
                 <Image
                   src={article.imageUrl || "/placeholder.svg"}
                   alt=""
                   fill
                   sizes="(max-width: 640px) 100vw, 800px"
-                  className="object-cover transition-transform duration-500 hover:scale-105"
+                  className="object-cover transition-transform duration-(--dur-slow) hover:scale-105"
                 />
               </div>
             </figure>
@@ -795,14 +795,14 @@ export function ArticleReader({
         </article>
       </ScrollArea>
 
-      <nav className="fixed inset-x-0 bottom-0 z-[60] bg-background/95 backdrop-blur-xl pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-(--z-toast) bg-background/95 backdrop-blur-bar pl-[max(1rem,var(--safe-l))] pr-[max(1rem,var(--safe-r))] pb-[max(0.75rem,var(--safe-b))] lg:hidden">
         {/* overflow-hidden: last-resort net for this row too (see the
             min-w-0 additions below) — if six flex-1 buttons ever don't fit
             (the unread-toggle button is wider than the rest, being the one
             icon button without size="icon"'s fixed square), they clip to
             this pill's rounded shape instead of spilling past it onto the
             screen edge. */}
-        <div className="flex h-16 items-center overflow-hidden rounded-[2rem] border border-border/70 bg-background/90 px-1 shadow-2xl shadow-black/20 backdrop-blur-2xl supports-[backdrop-filter]:bg-background/75">
+        <div className="flex h-16 items-center overflow-hidden rounded-sheet border border-border/70 bg-background/90 px-1 shadow-overlay backdrop-blur-bar supports-[backdrop-filter]:bg-background/75">
           <Button
             type="button"
             variant="ghost"
@@ -830,7 +830,7 @@ export function ArticleReader({
             type="button"
             variant="ghost"
             className={cn(
-              "h-11 min-w-0 flex-1 rounded-2xl active:scale-95 transition-all duration-200",
+              "h-11 min-w-0 flex-1 rounded-2xl active:scale-95 transition-all duration-(--dur-base)",
               article.isRead ? "bg-muted/70 text-foreground" : "bg-accent text-accent-foreground shadow-lg shadow-accent/20",
             )}
             onClick={() => onToggleRead?.(article.id)}

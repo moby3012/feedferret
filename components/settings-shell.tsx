@@ -47,18 +47,18 @@ export function SettingsModalShell({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          "h-[min(92dvh,900px)] w-[calc(100vw-1rem)] max-w-5xl grid-rows-[auto_1fr] gap-0 overflow-hidden rounded-[2rem] border border-border/70 bg-background p-0 shadow-2xl",
+          "h-[min(92dvh,900px)] w-[calc(100vw-1rem)] max-w-5xl grid-rows-[auto_1fr] gap-0 overflow-hidden rounded-sheet border border-border/70 bg-background p-0 shadow-overlay",
           className,
         )}
       >
-        <DialogHeader className="border-b border-border/60 bg-card/95 p-5 pb-4 backdrop-blur-2xl sm:p-8 sm:pb-5">
+        <DialogHeader className="border-b border-border/60 bg-card/95 p-5 pb-4 backdrop-blur-bar sm:p-8 sm:pb-5">
           <div className="flex flex-col gap-1 pe-10">
             {eyebrow ? (
               <div className="text-sm font-medium text-muted-foreground">
                 {eyebrow}
               </div>
             ) : null}
-            <DialogTitle className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
+            <DialogTitle className="text-2xl font-semibold tracking-title sm:text-3xl">
               {title}
             </DialogTitle>
             {description ? (
@@ -115,20 +115,20 @@ export function SettingsPageShell({
       onValueChange={onTabChange}
       className={cn("min-h-dvh bg-background flex flex-col", className)}
     >
-      <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 backdrop-blur-xl pt-[env(safe-area-inset-top)]">
+      <div className="sticky top-0 z-(--z-sticky) border-b border-border/60 bg-background/95 backdrop-blur-bar pt-(--safe-t)">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
           <Link href={backHref}>
             <Button
               variant="ghost"
               size="icon"
-              className="h-11 w-11 rounded-2xl bg-card/70 backdrop-blur-xl border border-border/60 shadow-sm shrink-0"
+              className="h-11 w-11 rounded-2xl bg-card/70 backdrop-blur-bar border border-border/60 shadow-sm shrink-0"
               aria-label={t("common.back")}
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-[-0.04em] truncate sm:text-3xl">{title}</h1>
+            <h1 className="text-2xl font-semibold tracking-title truncate sm:text-3xl">{title}</h1>
             {description && (
               <p className="text-sm text-muted-foreground truncate">{description}</p>
             )}
@@ -168,7 +168,7 @@ export function SettingsSection({
   return (
     <section
       className={cn(
-        "rounded-[2rem] border border-border/65 bg-card/85 p-5 shadow-sm backdrop-blur-2xl",
+        "rounded-sheet border border-border/65 bg-card/85 p-5 shadow-sm",
         className,
       )}
     >
@@ -179,7 +179,7 @@ export function SettingsSection({
           </div>
         ) : null}
         <div>
-          <h3 className="text-lg font-semibold tracking-[-0.02em]">{title}</h3>
+          <h3 className="text-lg font-semibold tracking-title">{title}</h3>
           {description ? (
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
               {description}
