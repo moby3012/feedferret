@@ -59,8 +59,11 @@ describe("client messages (perf audit C15)", () => {
       if (ROUTE_SCOPED_FILES.has(file)) continue;
       const src = fs.readFileSync(path.join(root, file), "utf8");
       for (const ns of ROUTE_ONLY_NAMESPACES) {
-        // useTranslations("ns") · t("ns.key") · `ns.${…}` · namespace: "ns"
-        if (new RegExp(`["'\`]${ns}["'.\`]`).test(src)) offenders.push(`${file}: ${ns}`);
+        // useTranslations("ns") · getTranslations("ns") · t("ns.key") · `ns.${…}` · namespace: "ns"
+        // (a bare "ns" string is not a namespace use: e.g. the briefing's `mode === "ai"`)
+        const q = `["'\`]`;
+        const use = new RegExp(`(?:Translations\\(\\s*|namespace:\\s*)${q}${ns}${q}|${q}${ns}\\.`);
+        if (use.test(src)) offenders.push(`${file}: ${ns}`);
       }
     }
     expect(offenders).toEqual([]);
