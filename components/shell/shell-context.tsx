@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { findCachedArticle } from "@/features/articles/cache";
 import type { LegacyArticle, LegacyContext } from "@/features/articles/legacy-adapter";
@@ -21,6 +21,7 @@ import {
   useLabels,
   useReadingPreferences,
   useRefresh,
+  REFRESH_FEED_KEY,
   useSavedSearches,
   useUpdateGlobalSettings,
 } from "@/hooks/use-rss-data";
@@ -136,6 +137,8 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const updateGlobalSettings = useUpdateGlobalSettings();
   const createSavedSearch = useCreateSavedSearch();
   const refreshMutation = useRefresh();
+  // A single-feed refresh (sources menu) is an explicit refresh too.
+  const isRefreshing = useIsMutating({ mutationKey: REFRESH_FEED_KEY }) > 0 || refreshMutation.isPending;
 
   // Prefs are in the cache at the first render after a cold start (server
   // bootstrap): start with the user's view mode / sort, so the server-rendered
@@ -273,13 +276,13 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       legacyContext,
       viewMode,
       sortOrder,
-      isRefreshing: refreshMutation.isPending,
+      isRefreshing,
       session,
       suppressed,
       addFeed,
       saveSearchQuery,
     }),
-    [feeds, categories, labels, savedSearches, prefs, legacyContext, viewMode, sortOrder, refreshMutation.isPending, session, suppressed, addFeed, saveSearchQuery],
+    [feeds, categories, labels, savedSearches, prefs, legacyContext, viewMode, sortOrder, isRefreshing, session, suppressed, addFeed, saveSearchQuery],
   );
 
   return (

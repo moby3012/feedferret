@@ -77,6 +77,14 @@ export interface ArticleDetail extends ArticleListItem {
   originalTitle?: string | null;
 }
 
+/** `GET /api/app/articles/head` — rows of a list created after its snapshot (spec §2.1). */
+export interface HeadProbe {
+  /** Capped at 100 (the pill shows "99+" above 99). */
+  count: number;
+  /** createdAt (ms, string) of the newest of them; null when there are none. */
+  newestCursor: string | null;
+}
+
 export interface ArticlePage {
   items: ArticleListItem[];
   nextCursor: string | null;

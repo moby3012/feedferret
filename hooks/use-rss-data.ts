@@ -9,7 +9,7 @@ import { getExportSettings, updateExportSettings, testWallabagExportConnection, 
 import { updateUiLanguage } from "@/app/actions/locale"
 import { updateDisplayTimezone } from "@/app/actions/timezone"
 import { toast } from "sonner"
-import { invalidateArticleQueries, invalidateCounts, markListsStale, removeCachedArticle, removeLabelFromCachedArticles, restoreArticleCaches, snapshotArticleCaches } from "@/features/articles/cache"
+import { invalidateAfterSync, invalidateArticleQueries, invalidateCounts, markListsStale, removeCachedArticle, removeLabelFromCachedArticles, restoreArticleCaches, snapshotArticleCaches } from "@/features/articles/cache"
 import { qk } from "@/features/articles/keys"
 import type { Counts } from "@/features/bootstrap/types"
 import { useCountsQuery } from "@/features/bootstrap/queries"
@@ -93,26 +93,40 @@ export function useFeedHealth() {
     })
 }
 
+/** Mutation keys of the explicit feed syncs: either one running = the shell's `isRefreshing`. */
+export const REFRESH_ALL_KEY = ["refresh-all"] as const
+export const REFRESH_FEED_KEY = ["refresh-feed"] as const
+
+/**
+ * Explicit refresh ("Aktualisieren", pull-to-refresh, `r`). Stays pending
+ * until the counts are refetched, so the end of `isRefreshing` means "fresh
+ * numbers": the live region announces them, and the bound list's pill
+ * (`NewItemsPill`) probes once more and applies — or owes the update.
+ * New rows are buffered behind "↑ N neu" (never inserted under the finger).
+ */
 export function useRefresh() {
     const queryClient = useQueryClient()
     return useMutation({
+        mutationKey: REFRESH_ALL_KEY,
         mutationFn: () => refreshAllFeeds(),
-        onSuccess: () => {
+        onSuccess: async () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
-            invalidateArticleQueries(queryClient)
+            await invalidateAfterSync(queryClient)
         },
     })
 }
 
+/** Single-feed refresh: same end-of-refresh path as `useRefresh` (drives `isRefreshing`). */
 export function useRefreshFeed() {
     const queryClient = useQueryClient()
     return useMutation({
+        mutationKey: REFRESH_FEED_KEY,
         mutationFn: (feedId: string) => refreshFeed(feedId),
-        onSuccess: () => {
+        onSuccess: async () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
-            invalidateArticleQueries(queryClient)
             queryClient.invalidateQueries({ queryKey: ["feed-health"] })
             toast.success("Feed refreshed")
+            await invalidateAfterSync(queryClient)
         },
         onError: (error) => {
             toast.error(error instanceof Error ? error.message : "Feed sync failed. Check your connection and try again.")

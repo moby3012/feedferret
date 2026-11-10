@@ -1,5 +1,12 @@
 {
   "settings": {
+    "countDisplay": "Show counts",
+    "countDisplayDescription": "Where unread numbers appear. Unread always stays visible as a dot.",
+    "countDisplayOptions": {
+      "all": "All",
+      "categories": "Categories only",
+      "off": "Off"
+    },
     "title": "Settings",
     "breadcrumb": "FeedFerret",
     "appearance": "Appearance",
@@ -806,6 +813,11 @@
     "recentlyRead": "Recently read"
   },
   "articleList": {
+    "newItems": "{count} new",
+    "newItemsAria": "{count, plural, one {# new article – show at top} other {# new articles – show at top}}",
+    "newItemsRefresh": "Refresh",
+    "newItemsRefreshAria": "Refresh list – show at top",
+    "newItemsFailed": "Could not load new articles",
     "noArticles": "No articles",
     "noArticlesDescription": "There are no articles matching your current filters.",
     "noFeedsYet": "No feeds yet",

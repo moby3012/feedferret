@@ -12,6 +12,7 @@ import { ChangePasswordSchema } from "@/lib/validation";
 import type { AiProvider } from "@/lib/ai-summary";
 import { fetchViaHostedApiDetailed, type HostedFetchProvider } from "@/lib/hosted-fetch";
 import { loadReadingPreferences } from "@/server/bootstrap";
+import { isCountDisplay, type CountDisplay } from "@/lib/count-display";
 
 async function requireUser() {
   const session = await auth();
@@ -92,6 +93,7 @@ export async function updateGlobalSettings(data: {
   layoutDirection?: "ltr" | "rtl";
   hideEmptyFeeds?: boolean;
   hideEmptyLabels?: boolean;
+  countDisplay?: CountDisplay;
   autoMuteFailingFeedsAfter?: number;
 }) {
   const session = await requireUser();
@@ -105,6 +107,9 @@ export async function updateGlobalSettings(data: {
 
   if (data.clusterReadMode !== undefined && data.clusterReadMode !== "story" && data.clusterReadMode !== "article") {
     throw new Error("Invalid clusterReadMode");
+  }
+  if (data.countDisplay !== undefined && !isCountDisplay(data.countDisplay)) {
+    throw new Error("Invalid countDisplay");
   }
 
   await db.user.update({

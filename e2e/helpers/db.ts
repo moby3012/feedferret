@@ -42,7 +42,7 @@ export function resetArticleState(userKey: string) {
        WHERE userId = ?`,
     ).run(userId);
     // Settings the specs flip must not leak between tests either.
-    db.prepare(`UPDATE "User" SET markReadOnAdvance = 0, defaultViewMode = 'list' WHERE id = ?`).run(userId);
+    db.prepare(`UPDATE "User" SET markReadOnAdvance = 0, defaultViewMode = 'list', countDisplay = 'all' WHERE id = ?`).run(userId);
     db.prepare(`UPDATE "Article" SET isSpoiler = 0, spoilerAt = NULL WHERE userId = ? AND isSpoiler = 1`).run(userId);
   } finally {
     db.close();
@@ -356,4 +356,51 @@ export function insertArrivalBelow(belowId: string, id: string): () => void {
       c.close();
     }
   };
+}
+
+/**
+ * `n` NEW unread articles (createdAt = publishedAt = now, newest last) in the
+ * feed of the user's first seeded article: what a background sync would add
+ * on top of the Neu list. Titles "Arrival <tag> <i>". Removed by the returned function.
+ */
+export function insertArrivals(userKey: string, n: number, tag = "x"): { ids: string[]; cleanup: () => void } {
+  const user = manifest().users[userKey];
+  const db = open();
+  const ids = Array.from({ length: n }, (_, i) => `e2e-arrival-${userKey}-${tag}-${i}`);
+  try {
+    const iso = (d: Date) => d.toISOString().replace("Z", "+00:00");
+    const ref = db.prepare(`SELECT feedId FROM "Article" WHERE id = ?`).get(user.firstArticleId) as { feedId: string };
+    const now = Date.now();
+    const insert = db.prepare(
+      `INSERT INTO "Article" (id, feedId, userId, title, link, content, excerpt, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?)`,
+    );
+    ids.forEach((id, i) => {
+      const at = iso(new Date(now + i * 1000));
+      insert.run(id, ref.feedId, user.userId, `Arrival ${tag} ${i}`, `https://arrival.e2e.test/${id}`, at, at, at);
+    });
+  } finally {
+    db.close();
+  }
+  return {
+    ids,
+    cleanup: () => {
+      const c = open();
+      try {
+        c.prepare(`DELETE FROM "Article" WHERE id IN (${ids.map(() => "?").join(",")})`).run(...ids);
+      } finally {
+        c.close();
+      }
+    },
+  };
+}
+
+/** `User.countDisplay` ("all" | "categories" | "off"); resetArticleState restores "all". */
+export function setCountDisplay(userKey: string, mode: "all" | "categories" | "off") {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    db.prepare(`UPDATE "User" SET countDisplay = ? WHERE id = ?`).run(mode, userId);
+  } finally {
+    db.close();
+  }
 }

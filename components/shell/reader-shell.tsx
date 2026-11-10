@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAfterSync } from "@/features/articles/cache";
 import { ListPane } from "@/components/list/list-pane";
 import { ReaderPane } from "@/components/reader/reader-pane";
 import { useCounts, useScopeUnread } from "@/features/bootstrap/queries";
@@ -107,6 +109,7 @@ const BOOT_SYNC_MIN_INTERVAL_MS = 5 * 60_000;
 /** Lazy sync on load (at most every 5 min per user) + app badge. */
 function useBackgroundWork(userId: string) {
   const t = useTranslations("sidebar");
+  const qc = useQueryClient();
   const counts = useCounts(true);
   const unreadBadge = useMemo(() => Object.values(counts.byFeed).reduce((sum, n) => sum + n, 0), [counts.byFeed]);
   useAppBadge(unreadBadge, true);
@@ -121,28 +124,44 @@ function useBackgroundWork(userId: string) {
       .then(async (res) => {
         if (!res.ok) throw new Error(`Sync request failed (${res.status})`);
         // Stamped only for a sync that ran for this user (not `already_syncing`).
-        recordSyncResult(browserStorage(), userId, await res.json().catch(() => null));
+        const body = await res.json().catch(() => null);
+        recordSyncResult(browserStorage(), userId, body);
+        // Spec §2.5.4: feeds were synced → counts refetch, and the "↑ N neu" probe with them.
+        if (typeof body?.synced === "number" && body.synced > 0) void invalidateAfterSync(qc);
       })
       .catch(() => {
         if (toastShown.current) return;
         toastShown.current = true;
         toast.error(t("syncFailedToast"));
       });
-  }, [t, userId]);
+  }, [qc, t, userId]);
 }
 
-/** Announces the unread count of the bound scope (spec §4.9.8: on scope change, not per mark-read). */
+/**
+ * Announces the unread count of the bound scope (spec §4.9.8): on scope
+ * change and when an explicit refresh completed (its counts are refetched
+ * before `isRefreshing` ends) — never per (optimistic) mark-read.
+ */
 function LiveRegion() {
   const scope = useNav((s) => s.loc.scope);
-  const { feeds } = useShellData();
+  const { feeds, isRefreshing } = useShellData();
   const unread = useScopeUnread(scope, feeds, true);
   const scopeId = useNav((s) => (s.loc.scope ? JSON.stringify(s.loc.scope) : ""));
-  const announced = useRef<{ scopeId: string; text: string }>({ scopeId: "", text: "" });
-  if (unread !== undefined && announced.current.scopeId !== scopeId) {
-    announced.current = { scopeId, text: `${unread} unread ${unread === 1 ? "article" : "articles"}` };
+  const [refreshes, setRefreshes] = useState(0);
+  const wasRefreshing = useRef(isRefreshing);
+  useEffect(() => {
+    if (wasRefreshing.current && !isRefreshing) setRefreshes((n) => n + 1);
+    wasRefreshing.current = isRefreshing;
+  }, [isRefreshing]);
+  const announced = useRef<{ key: string; text: string }>({ key: "", text: "" });
+  const key = `${scopeId}#${refreshes}`;
+  if (unread !== undefined && announced.current.key !== key) {
+    const text = `${unread} unread ${unread === 1 ? "article" : "articles"}`;
+    // The same words again would not be re-read: a trailing no-break space makes it a change.
+    announced.current = { key, text: text === announced.current.text ? `${text}\u00a0` : text };
   }
   return (
-    <div aria-live="polite" aria-atomic="true" className="sr-only">
+    <div aria-live="polite" aria-atomic="true" className="sr-only" data-testid="live-unread">
       {announced.current.text}
     </div>
   );

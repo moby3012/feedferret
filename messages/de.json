@@ -1,5 +1,12 @@
 {
   "settings": {
+    "countDisplay": "Zähler anzeigen",
+    "countDisplayDescription": "Wo ungelesene Zahlen erscheinen. Ungelesenes bleibt immer als Punkt sichtbar.",
+    "countDisplayOptions": {
+      "all": "Alle",
+      "categories": "Nur Kategorien",
+      "off": "Aus"
+    },
     "title": "Einstellungen",
     "breadcrumb": "FeedFerret",
     "appearance": "Erscheinungsbild",
@@ -806,6 +813,11 @@
     "recentlyRead": "Zuletzt gelesen"
   },
   "articleList": {
+    "newItems": "{count} neu",
+    "newItemsAria": "{count, plural, one {# neuer Artikel – oben anzeigen} other {# neue Artikel – oben anzeigen}}",
+    "newItemsRefresh": "Aktualisieren",
+    "newItemsRefreshAria": "Liste aktualisieren – oben anzeigen",
+    "newItemsFailed": "Neue Artikel konnten nicht geladen werden",
     "noArticles": "Keine Artikel",
     "noArticlesDescription": "Es gibt keine Artikel, die deinen aktuellen Filtern entsprechen.",
     "noFeedsYet": "Noch keine Feeds",

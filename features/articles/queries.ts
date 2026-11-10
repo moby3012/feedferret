@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type QueryKey } from "@tanstack/react-query";
-import { fetchCluster, shouldRetry } from "./api";
-import { findCachedArticle, overlayPendingState, pruneReadRows } from "./cache";
+import { fetchArticlePage, fetchCluster, fetchHead, shouldRetry } from "./api";
+import { findCachedArticle, overlayPendingState, pruneReadRows, trackRowRewrites, waitForArticleWrites } from "./cache";
 import { qk } from "./keys";
 import type { ListKey } from "./scope";
-import type { ArticleDetail, ArticleListItem, ArticlePage } from "./types";
+import { appliedListData, EMPTY_HEAD, isCountsFetch, probeApplies, type ProbeWindow } from "./new-items";
+import type { ArticleDetail, ArticleListItem, ArticlePage, HeadProbe } from "./types";
 import { fetchDetailOrStored, fetchPageOrStored, recordOpened } from "@/features/offline/offline";
+import { useOnline } from "@/features/bootstrap/online";
 
 const DISABLED_KEY = ["list", "__disabled__"] as const;
 
@@ -113,6 +115,99 @@ export function useArticleList(key: ListKey | null, o: { active: boolean }): Art
     snapshotAt: data?.pages[0]?.snapshotAt ?? null,
     retry,
   };
+}
+
+export interface NewItemsProbe {
+  /** Rows of the bound list created after its snapshot (capped at 100; stories in grouped lists). */
+  count: number;
+  /**
+   * Replaces the snapshot with a fresh first page (new rows on top; read rows
+   * of an unread list drop out, later pages page in again). Unsettled article
+   * writes are awaited first, and rewrites made while the page is on the wire
+   * are replayed onto it. `canCommit` is asked right before the write: false
+   * keeps the old snapshot (and the buffer). Resolves true when applied. The
+   * caller scrolls.
+   */
+  apply(canCommit?: () => boolean): Promise<boolean>;
+  /** One probe now (shared with one already on the wire); the new count, 0 when the list is not probed. */
+  recheck(): Promise<number>;
+}
+
+/**
+ * "↑ N neu" probe of the bound list (spec §2.3 `head`, §4.8). Piggybacks on
+ * the counts poll instead of a timer of its own: one `GET …/head` follows
+ * every counts response (120 s poll while visible, focus, reconnect, after a
+ * sync), only for the active pane, only online. No request on bind: a fresh
+ * snapshot has nothing newer yet. Hidden tab → counts do not poll → neither
+ * does the probe; offline → paused.
+ *
+ * The window is `probeWindow`: a fixed `since` (the snapshot) plus the loaded
+ * rows past it, which are sent as "already shown" (read when the probe runs,
+ * not part of the cache key — paging in such a row does not reset the count).
+ */
+export function useNewItemsProbe(key: ListKey | null, probeWin: ProbeWindow, o: { active: boolean }): NewItemsProbe {
+  const qc = useQueryClient();
+  const online = useOnline();
+  const { since } = probeWin;
+  const probeKey = probeApplies(key) && since != null ? key : null;
+  const enabled = !!probeKey && o.active && online;
+  const exclude = useRef(probeWin.exclude);
+  exclude.current = probeWin.exclude;
+  const query = useQuery<HeadProbe>({
+    queryKey: probeKey ? [...qk.head(probeKey), since] : ["head", "__none__"],
+    queryFn: ({ signal }) => fetchHead(probeKey!, since!, exclude.current, signal),
+    enabled,
+    // Seeded "nothing new" for a fresh snapshot; only the counts-driven refetch below asks the server.
+    initialData: EMPTY_HEAD,
+    staleTime: Infinity,
+    gcTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  });
+
+  const live = useRef({ enabled, refetch: query.refetch });
+  live.current = { enabled, refetch: query.refetch };
+  useEffect(
+    () =>
+      qc.getQueryCache().subscribe((event) => {
+        // Joins a probe already on the wire (e.g. `recheck` after a refresh) instead of restarting it.
+        if (live.current.enabled && isCountsFetch(event)) void live.current.refetch({ cancelRefetch: false });
+      }),
+    [qc],
+  );
+
+  const recheck = useCallback(async () => {
+    if (!live.current.enabled) return 0;
+    const result = await live.current.refetch({ cancelRefetch: false });
+    return result.data?.count ?? 0;
+  }, []);
+
+  const apply = useCallback(
+    async (canCommit?: () => boolean) => {
+      if (!key) return false;
+      const listKey = qk.list(key);
+      // Every row rewrite from here on is replayed onto the fetched page…
+      const rewrites = trackRowRewrites(qc, listKey);
+      try {
+        // …which is read only once every earlier write has settled.
+        await waitForArticleWrites(qc);
+        const page = await fetchArticlePage(key, null);
+        if (canCommit && !canCommit()) return false;
+        await qc.cancelQueries({ queryKey: listKey, exact: true });
+        if (canCommit && !canCommit()) return false;
+        const items = page.items.map((item) => overlayPendingState(qc, item));
+        qc.setQueryData(listKey, rewrites.replay(appliedListData({ ...page, items })));
+        return true;
+      } finally {
+        rewrites.stop();
+      }
+    },
+    [key, qc],
+  );
+
+  return { count: enabled ? query.data.count : 0, apply, recheck };
 }
 
 export interface ArticleResult {

@@ -1,5 +1,6 @@
 "use client";
 
+import { isCountDisplay } from "@/lib/count-display";
 import { ApiPasswordSettings } from "@/components/api-password-settings";
 import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
@@ -46,6 +47,7 @@ import {
   ChevronRight,
   Plus,
   EyeOff,
+  Hash,
   Cloud,
   Lock,
   Globe,
@@ -586,6 +588,29 @@ export function SettingsForm() {
                 checked={prefs?.hideEmptyLabels ?? false}
                 onCheckedChange={(checked) => update({ hideEmptyLabels: checked })}
               />
+            </PrefRow>
+
+            {/* Where unread numbers show (spec §4.9.3) */}
+            <PrefRow
+              icon={Hash}
+              title={t("settings.countDisplay")}
+              description={t("settings.countDisplayDescription")}
+            >
+              <Select
+                value={prefs?.countDisplay ?? "all"}
+                onValueChange={(v) => {
+                  if (isCountDisplay(v)) update({ countDisplay: v });
+                }}
+              >
+                <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-44" aria-label={t("settings.countDisplay")} data-testid="count-display-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">
+                  <SelectItem value="all">{t("settings.countDisplayOptions.all")}</SelectItem>
+                  <SelectItem value="categories">{t("settings.countDisplayOptions.categories")}</SelectItem>
+                  <SelectItem value="off">{t("settings.countDisplayOptions.off")}</SelectItem>
+                </SelectContent>
+              </Select>
             </PrefRow>
 
             {/* Offline reading: storage in use */}

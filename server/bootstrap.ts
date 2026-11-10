@@ -1,3 +1,4 @@
+import { parseCountDisplay } from "@/lib/count-display";
 import { cache } from "react";
 import { db } from "@/lib/db";
 import type { Counts } from "@/features/bootstrap/types";
@@ -101,6 +102,7 @@ export async function loadReadingPreferences(userId: string) {
       layoutDirection: true,
       hideEmptyFeeds: true,
       hideEmptyLabels: true,
+      countDisplay: true,
       uiLanguage: true,
       displayTimezone: true,
       autoMuteFailingFeedsAfter: true,
@@ -123,6 +125,7 @@ export async function loadReadingPreferences(userId: string) {
     layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
     hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
     hideEmptyLabels: user?.hideEmptyLabels ?? false,
+    countDisplay: parseCountDisplay(user?.countDisplay),
     uiLanguage: user?.uiLanguage ?? "en",
     displayTimezone: user?.displayTimezone ?? null,
     autoMuteFailingFeedsAfter: user?.autoMuteFailingFeedsAfter ?? 10,

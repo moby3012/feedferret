@@ -32,6 +32,15 @@ export function showApplies(scope: Scope): boolean {
   return scope.kind === "all" || scope.kind === "feed" || scope.kind === "category" || scope.kind === "label" || scope.kind === "saved-search";
 }
 
+/**
+ * The list folds story clusters into one card per story (`groupStories`):
+ * everything but the personal smart views. The "↑ N neu" probe counts
+ * stories for these, articles for the rest.
+ */
+export function groupsStories(scope: Scope): boolean {
+  return scope.kind !== "later" && scope.kind !== "starred" && scope.kind !== "recent";
+}
+
 export function scopeKey(scope: Scope): string {
   switch (scope.kind) {
     case "all":

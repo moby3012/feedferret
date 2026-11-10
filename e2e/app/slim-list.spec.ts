@@ -140,8 +140,17 @@ test("unread view keeps rows read this session across toggles and focus; an expl
   expect(Math.abs((await viewport.evaluate((el) => el.scrollTop)) - before)).toBeLessThanOrEqual(2);
   expect(Math.abs((await rowTop()) - rowTopBefore)).toBeLessThanOrEqual(2);
 
-  // An explicit refresh (keyboard "r") resets the snapshot (shell spec §2.3 /
-  // §4.8): the server no longer returns the three read rows, so they leave.
+  // An explicit refresh (keyboard "r") at the top resets the snapshot (shell
+  // spec §2.3 / §4.8): the server no longer returns the three read rows, so
+  // they leave. (Scrolled down or with an article open in the reader, a
+  // refresh only buffers — e2e/app/new-items.spec.ts.)
+  if (!app.isMobile) {
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press("Escape");
+    await expect(page.locator("article")).toHaveCount(0);
+  }
+  await viewport.evaluate((el) => el.scrollTo(0, 0));
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBe(0);
   const refetched = page.waitForResponse((r) => LIST_URL.test(r.url()) && r.request().method() === "GET", { timeout: 30_000 });
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.keyboard.press("r");

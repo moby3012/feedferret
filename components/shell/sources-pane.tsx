@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { PanelLeftClose, Plus, Settings } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useCounts } from "@/features/bootstrap/queries";
+import { parseCountDisplay } from "@/lib/count-display";
 import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import { scopeFromSidebarKey, sidebarSelectionOf } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
@@ -53,6 +54,7 @@ function useSidebarProps() {
     onAddFeed: () => shell.requestAddFeed(),
     hideEmptyFeeds: prefs?.hideEmptyFeeds ?? false,
     hideEmptyLabels: prefs?.hideEmptyLabels ?? false,
+    countDisplay: parseCountDisplay(prefs?.countDisplay),
     onOpenArticle: (id: string) => void nav.openArticle(id),
   };
 }

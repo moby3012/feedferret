@@ -94,6 +94,9 @@ model User {
   layoutDirection         String    @default("ltr")     // "ltr" | "rtl"
   hideEmptyFeeds          Boolean   @default(false)
   hideEmptyLabels         Boolean   @default(false)
+  // PR 9 anti-anxiety (spec §4.9.3): where unread numbers show in the sources and the list top bar.
+  // "all" | "categories" (folders + smart views only, no per-feed numbers) | "off". null = "all".
+  countDisplay            String?   @default("all")
   uiLanguage              String    @default("en")     // BCP-47 tag e.g. "en" | "de"
   // Display timezone for every timestamp shown in the app (article dates,
   // reader, etc. — distinct from digestTimezone, which only affects when the

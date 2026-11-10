@@ -218,6 +218,15 @@ export const RATE_LIMITS = {
     windowSecs: 60,
     prefix: "greader",
   } satisfies RateLimitConfig,
+
+  // "↑ N neu" head probe: one per counts poll (~2 min), focus, reconnect or
+  // refresh — 30/min per user leaves room for several tabs and stops a
+  // runaway loop.
+  headProbe: {
+    limit: 30,
+    windowSecs: 60,
+    prefix: "head-probe",
+  } satisfies RateLimitConfig,
 } as const;
 
 /**
