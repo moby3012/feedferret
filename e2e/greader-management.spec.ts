@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/greader-test";
 
 test("FreshRSS PHP aliases preserve POST credentials and repeated subscription fields", async ({ request }) => {
   const probe = await request.get("/api/greader.php");
