@@ -26,6 +26,7 @@ import {
 import { EXTRACTION_SOURCE_TYPES, normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { MAX_SEARCH_QUERY, validateFeedUrl, validateOpml } from "@/lib/validation";
 import { translateFreshRssReadFilters } from "./frss-filters";
+import { assertSafeHttpOptionsProxy, proxyFromHttpOptions } from "@/lib/ssrf";
 
 /** `local`: a file the signed-in user uploaded. `remote`: fetched from a third-party URL (dynamic OPML). */
 export type ImportTrust = "local" | "remote";
@@ -341,6 +342,25 @@ export async function applyOpmlImportPlan(
     else report.feedsAdded += 1;
 
     const d = feed.data;
+    // A proxy host is a connection target: same SSRF rules as feed URLs. An unsafe one is
+    // dropped (and reported) instead of failing the whole import; the rest of the feed imports.
+    if (d.httpOptions && proxyFromHttpOptions(d.httpOptions)) {
+      try {
+        await assertSafeHttpOptionsProxy(d.httpOptions);
+      } catch (error) {
+        const options = JSON.parse(d.httpOptions) as Record<string, unknown>;
+        delete options.CURLOPT_PROXY;
+        delete options.CURLOPT_PROXYTYPE;
+        d.httpOptions = stringifyNonEmpty(options);
+        report.issues.push({
+          kind: "unsupported",
+          code: "proxy-blocked",
+          subject: feed.name,
+          attribute: "CURLOPT_PROXY",
+          detail: `${error instanceof Error ? error.message : "unsafe proxy"} — proxy not imported`,
+        });
+      }
+    }
     // Creating a feed writes every field. Updating an existing feed writes only what the
     // outline actually carries: a bare outline (or a remote dynamic-OPML sync) must not
     // blank the name, description, priority, scraper config or HTTP options set locally.

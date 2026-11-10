@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { syncUserFeeds, syncFeed } from "@/lib/rss-sync";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
-import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { assertSafeHttpOptionsProxy, fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { generateOpml } from "@/lib/opml";
 import { importOpmlXml } from "@/lib/import/opml-import";
 import {
@@ -763,6 +763,8 @@ export async function updateFeed(feedId: string, data: {
         });
         if (!category) throw new Error("Invalid category");
     }
+
+    if (data.httpOptions) await assertSafeHttpOptionsProxy(data.httpOptions);
 
     const READER_FONT_SIZES = new Set(["small", "medium", "large", "xl"]);
     const READER_WIDTHS = new Set(["normal", "wide", "full"]);

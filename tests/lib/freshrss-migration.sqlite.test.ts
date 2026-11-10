@@ -12,7 +12,10 @@ const state = vi.hoisted(() => ({ db: null as unknown as PrismaClient, userId: "
 vi.mock("@/lib/db", () => ({ get db() { return state.db; }, getDatabaseProvider: () => "sqlite" }));
 vi.mock("@/auth", () => ({ auth: async () => (state.userId ? { user: { id: state.userId } } : null) }));
 vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
-vi.mock("@/lib/ssrf", () => ({
+// Real SSRF rules (IP literals, localhost), but hostnames "resolve" to a public address.
+vi.mock("dns/promises", () => ({ default: { lookup: async () => [{ address: "93.184.216.34", family: 4 }] } }));
+vi.mock("@/lib/ssrf", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/ssrf")>()),
   fetchTextWithSsrfProtection: async () => state.remoteOpml,
   isTrustedFeedFetchingAllowed: async () => false,
 }));
@@ -20,7 +23,8 @@ vi.mock("@/lib/ssrf", () => ({
 vi.mock("@/lib/rss-sync", () => ({ syncUserFeeds: vi.fn(), syncFeed: vi.fn() }));
 
 import { importOpml } from "../../app/actions/feeds";
-import { POST as v1 } from "../../app/api/v1/[...path]/route";
+import { POST as v1, PATCH as v1Patch } from "../../app/api/v1/[...path]/route";
+import { updateFeed } from "../../app/actions/feeds";
 import { POST as mcp } from "../../app/api/mcp/route";
 import { POST as uploadRoute } from "../../app/api/import/freshrss/route";
 import { handleFreshRssUpload } from "../../lib/import/freshrss-upload";
@@ -603,7 +607,7 @@ describe("review hardening: limits, update semantics, identity", () => {
     const row = await state.db.article.findFirstOrThrow({ where: { userId } });
     expect(row.externalId).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(row.title.length).toBe(1000);
-    expect(row.dedupeKey.length).toBeLessThan(200);
+    expect(row.dedupeKey!.length).toBeLessThan(200);
   });
 
   it("stamps imported UNREAD items with the import time but keeps crawl time for read/starred ones", async () => {
@@ -619,5 +623,53 @@ describe("review hardening: limits, update semantics, identity", () => {
     expect(await at("u1")).toBeGreaterThan(before);
     expect(await at("r1")).toBe(1577836800000);
     expect(await at("s1")).toBe(1577836800000);
+  });
+});
+
+describe("per-feed proxy is validated against SSRF rules at save time", () => {
+  const unsafe = JSON.stringify({ CURLOPT_PROXY: "http://169.254.169.254:80" });
+  const safe = JSON.stringify({ CURLOPT_PROXY: "http://proxy.example.net:3128", CURLOPT_MAXREDIRS: 3 });
+  const patch = (feedId: string, body: unknown) =>
+    v1Patch(new Request(`https://example.test/api/v1/feeds/${feedId}`, { method: "PATCH", body: JSON.stringify(body), headers: { "content-type": "application/json" } }), { params: Promise.resolve({ path: ["feeds", feedId] }) });
+
+  it("REST v1 PATCH rejects loopback/link-local/private/non-http proxies and accepts a public one", async () => {
+    const userId = await newUser();
+    const feed = await withFeed(userId);
+    for (const proxy of ["http://169.254.169.254", "http://127.0.0.1:8080", "http://localhost:3128", "http://10.0.0.5:3128", "http://[::1]:3128", "socks5://proxy.example.net:1080", "proxy.example.net:3128"]) {
+      const res = await patch(feed.id, { httpOptions: JSON.stringify({ CURLOPT_PROXY: proxy }) });
+      expect(res.status, proxy).toBe(422);
+      expect((await res.json()).error.message, proxy).toMatch(/Proxy/);
+    }
+    expect((await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).httpOptions).toBeNull();
+    expect((await patch(feed.id, { httpOptions: safe })).status).toBe(200);
+    expect((await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).httpOptions).toBe(safe);
+  });
+
+  it("the UI server action rejects an internal proxy and keeps the stored options", async () => {
+    const userId = await newUser();
+    const feed = await withFeed(userId, { httpOptions: safe });
+    await expect(updateFeed(feed.id, { httpOptions: unsafe })).rejects.toThrow(/Proxy URL points to a private IP/);
+    expect((await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).httpOptions).toBe(safe);
+    await updateFeed(feed.id, { httpOptions: null });
+    await updateFeed(feed.id, { name: "renamed" });
+  });
+
+  it("MCP update_feed cannot set httpOptions at all", async () => {
+    const userId = await newUser();
+    const feed = await withFeed(userId);
+    const res = await mcp(new Request("https://example.test/api/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "feedferret.update_feed", arguments: { feedId: feed.id, httpOptions: unsafe } } }) }));
+    await res.json();
+    expect((await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).httpOptions).toBeNull();
+  });
+
+  it("OPML import drops an unsafe proxy (reported) but imports the feed and its other options", async () => {
+    const userId = await newUser();
+    const xml = (proxy: string) => `<?xml version="1.0"?><opml version="2.0" xmlns:frss="https://freshrss.org/opml"><head/><body><outline text="P" type="rss" xmlUrl="https://rh.example.com/p.xml" frss:CURLOPT_PROXY="${proxy}" frss:CURLOPT_MAXREDIRS="3"/><outline text="Q" type="rss" xmlUrl="https://rh.example.com/q.xml" frss:CURLOPT_PROXY="http://proxy.example.net:3128"/></body></opml>`;
+    const dry = await runFreshRssMigration(userId, Buffer.from(xml("http://127.0.0.1:3128")), { dryRun: true });
+    expect(dry.issues.some((i) => i.code === "proxy-blocked" && i.subject === "P")).toBe(true);
+    const report = await runFreshRssMigration(userId, Buffer.from(xml("http://127.0.0.1:3128")));
+    expect(report.issues.filter((i) => i.code === "proxy-blocked").map((i) => i.subject)).toEqual(["P"]);
+    expect(JSON.parse((await state.db.feed.findFirstOrThrow({ where: { userId, url: "https://rh.example.com/p.xml" } })).httpOptions!)).toEqual({ CURLOPT_MAXREDIRS: 3 });
+    expect(JSON.parse((await state.db.feed.findFirstOrThrow({ where: { userId, url: "https://rh.example.com/q.xml" } })).httpOptions!)).toMatchObject({ CURLOPT_PROXY: "http://proxy.example.net:3128" });
   });
 });

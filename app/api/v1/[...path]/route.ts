@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+import { assertSafeHttpOptionsProxy } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { apiError, clampInt, parseBool, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
@@ -456,6 +457,13 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
     "autoMuted",
   ] as const) {
     if (body[key] !== undefined) data[key] = body[key];
+  }
+  if (data.httpOptions) {
+    try {
+      await assertSafeHttpOptionsProxy(data.httpOptions);
+    } catch (error) {
+      return apiError(error instanceof Error ? error.message : "Invalid proxy", 422);
+    }
   }
   const result = await db.feed.updateMany({ where: { id: feedId, userId: user.id }, data });
   if (!result.count) return apiError("Feed not found", 404);
