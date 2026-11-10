@@ -63,7 +63,11 @@
         cursor: pointer;
       }
       .btn.quiet { background: transparent; color: var(--fg); border: 1px solid var(--line); margin-top: 0; }
-      #reader[hidden], #lists[hidden] { display: none; }
+      #reader[hidden], #lists[hidden], #slow[hidden] { display: none; }
+      #slow .btn { margin-right: 0.5rem; }
+      #slow .btn.quiet { margin-top: 1.25rem; }
+      #login[hidden] { display: none; }
+      #login { display: inline-flex; align-items: center; text-decoration: none; }
       #reader h2 { all: unset; display: block; margin: 1rem 0 0.25rem; font-size: 1.5rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.02em; }
       #reader .m { margin-bottom: 1rem; }
       #body { width: 100%; border: 0; display: block; background: transparent; min-height: 40vh; }
@@ -76,10 +80,16 @@
         <img src="/logo.svg" alt="" />
         <h1 id="title">You are offline</h1>
       </header>
+      <section id="slow" hidden>
+        <p id="slow-text"></p>
+        <button class="btn" id="wait" type="button"></button>
+        <button class="btn quiet" id="show-offline" type="button"></button>
+      </section>
       <section id="lists">
         <p id="intro">FeedFerret is installed, but this page needs a connection. Reconnect and try again.</p>
         <div id="sections"></div>
         <button class="btn" id="retry" type="button" onclick="location.reload()">Try again</button>
+        <a class="btn" id="login" href="/login" hidden></a>
       </section>
       <section id="reader" hidden>
         <button class="btn quiet" id="back" type="button">Back</button>

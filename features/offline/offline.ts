@@ -2,7 +2,7 @@ import { ApiError, fetchArticleDetail, fetchArticlePage } from "@/features/artic
 import type { ListKey } from "@/features/articles/scope";
 import type { ArticleDetail, ArticleListItem, ArticlePage } from "@/features/articles/types";
 import { isOnline } from "@/features/bootstrap/online";
-import { getOfflineUser } from "./session";
+import { getOfflineScope, getOfflineUser, isOfflineSessionExpired, whenOfflineScope } from "./session";
 import { enforceLimits, getBody, listRows, saveArticle, touchArticle, type IndexRow } from "./store";
 
 // Read-side glue between the article queries and the IndexedDB store.
@@ -13,15 +13,32 @@ export function isNetworkFailure(error: unknown): boolean {
   return error instanceof Error && error.name !== "AbortError";
 }
 
+/** The account whose store may be read right now: known, and verified by the server recently enough (policy in store.ts). */
+function readableUser(): string | null {
+  const userId = getOfflineUser();
+  return userId !== null && !isOfflineSessionExpired() ? userId : null;
+}
+
 /** Whether a list/detail request should be answered from the store instead of the network. */
 export function shouldReadOffline(): boolean {
-  return !isOnline() && getOfflineUser() !== null;
+  return !isOnline() && readableUser() !== null;
 }
 
 // What was answered from the store: after reconnecting these cache entries are
 // stale by definition (lists are otherwise snapshots that never refetch on reconnect).
 const servedLists = new Map<string, ListKey>();
 const servedDetails = new Set<string>();
+const servedListeners = new Set<() => void>();
+
+function served() {
+  for (const listener of [...servedListeners]) listener();
+}
+
+/** Something was just answered from the store (offline, or the server was unreachable): recovery should be watched for. */
+export function onServedOffline(listener: () => void): () => void {
+  servedListeners.add(listener);
+  return () => servedListeners.delete(listener);
+}
 
 /** Hands out (and forgets) the cache entries that were served from the store. */
 export function takeServedOffline(): { lists: ListKey[]; details: string[] } {
@@ -32,21 +49,24 @@ export function takeServedOffline(): { lists: ListKey[]; details: string[] } {
 }
 
 export async function readStoredDetail(id: string): Promise<ArticleDetail | undefined> {
-  const userId = getOfflineUser();
+  const userId = readableUser();
   if (!userId) return undefined;
   const body = await getBody(userId, id);
   if (body) {
     servedDetails.add(id);
-    void touchArticle(userId, id);
+    const scope = getOfflineScope();
+    if (scope) void touchArticle(scope, id);
+    served();
   }
   return body;
 }
 
 /** The user opened an article: keep its body (LRU "last opened") and mirror its flags. */
 export async function recordOpened(detail: ArticleDetail): Promise<void> {
-  const userId = getOfflineUser();
-  if (!userId) return;
-  if (await saveArticle(userId, detail, { opened: true, readLater: detail.isReadLater })) await enforceLimits(userId);
+  // The claim on the store may still be in flight when the very first article is opened.
+  const scope = getOfflineScope() ?? (await whenOfflineScope());
+  if (!scope) return;
+  if ((await saveArticle(scope, detail, { opened: true, readLater: detail.isReadLater })) === "saved") await enforceLimits(scope);
 }
 
 function newest(a: ArticleListItem, b: ArticleListItem) {
@@ -77,11 +97,12 @@ export function itemsForScope(rows: readonly IndexRow[], key: Pick<ListKey, "sco
 
 /** A single page with everything stored for `key` — `null` when there is nothing to show instead of the network. */
 export async function readStoredPage(key: ListKey): Promise<ArticlePage | null> {
-  const userId = getOfflineUser();
+  const userId = readableUser();
   if (!userId) return null;
   const items = itemsForScope(await listRows(userId), key);
   if (!items) return null;
   servedLists.set(key.id + key.sort, key);
+  served();
   return { items, nextCursor: null };
 }
 

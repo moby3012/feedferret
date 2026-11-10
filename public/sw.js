@@ -2,16 +2,23 @@
 //  - PRECACHE   static shell for offline use (offline page + its reader script + icons). Survives logout.
 //  - STATIC     `/_next/static/*`: content-hashed, immutable → cache-first, bounded. Public bundles, survives logout.
 //  - RUNTIME    other same-origin script/style/image/font → stale-while-revalidate, bounded. Cleared on logout (lib/logout.ts).
-// Never cached here: navigations (they carry the signed-in user's page) and `/api/*` (authenticated JSON).
+// Never cached here: navigations (they carry the signed-in user's page — the only HTML ever stored is the public
+// /offline.html from the precache, also when it is served in place of a slow page) and `/api/*` (authenticated JSON).
 // Offline article data lives in IndexedDB (features/offline), not in these caches.
 const CACHE_NAME = "feedferret-pwa-v4";
 const STATIC_CACHE = "feedferret-static-v1";
 const RUNTIME_CACHE = "feedferret-runtime-v3";
 const STATIC_MAX_ENTRIES = 150;
 const RUNTIME_MAX_ENTRIES = 60;
-// Network-first navigations give up on a hanging connection ("lie-fi") after this
-// and show the offline page, which lists what is stored for offline reading.
-const NAVIGATION_TIMEOUT_MS = 3000;
+// Network-first navigations. A connection that fails outright shows the offline page at once. One that merely
+// HANGS ("lie-fi", cold server) is not abandoned: after NAVIGATION_TIMEOUT_MS the offline page is shown in its
+// "slow" mode — "server answering slowly: offline view / keep waiting" — while the real request keeps running
+// (up to NAVIGATION_HARD_CAP_MS). "Keep waiting" reloads and gets that very response; nothing is cancelled for the user.
+const NAVIGATION_TIMEOUT_MS = 8000;
+const NAVIGATION_HARD_CAP_MS = 60_000;
+// Sign-in and OAuth hops are never second-guessed by a timer (a slow identity provider is normal there): no slow
+// page, no abort — only a hard network failure falls back to the offline page.
+const PATIENT_PATHS = ["/login", "/register", "/setup"];
 // cache.addAll() is all-or-nothing: a single 404 in this list fails the whole
 // install event, so the service worker never installs at all (not even
 // partially) for any user. Keep this to files that actually exist and that
@@ -97,17 +104,59 @@ async function offlinePage() {
   );
 }
 
-/** Network-first; a failed or hanging (> NAVIGATION_TIMEOUT_MS) request falls back to the offline page. HTTP errors pass through. */
-async function navigate(request) {
+function isPatientNavigation(url) {
+  return PATIENT_PATHS.includes(url.pathname) || url.pathname === "/api" || url.pathname.startsWith("/api/");
+}
+
+/** The precached offline page, flagged as "slow" (the request is still running) for its script. */
+async function slowPage() {
+  const page = await offlinePage();
+  if (page.status !== 200) return page;
+  const html = (await page.text()).replace("<body>", '<body data-mode="slow">');
+  return new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+
+// Requests that outlived the timeout, by URL, for "keep waiting" (a reload of the same URL picks the result up).
+const pendingNavigations = new Map();
+
+function startNavigation(request) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), NAVIGATION_TIMEOUT_MS);
-  try {
-    return await fetch(request, { signal: controller.signal });
-  } catch {
-    return offlinePage();
-  } finally {
-    clearTimeout(timer);
+  const timer = setTimeout(() => controller.abort(), NAVIGATION_HARD_CAP_MS);
+  return fetch(request, { signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
+function takePending(url) {
+  const entry = pendingNavigations.get(url);
+  pendingNavigations.delete(url);
+  return entry && Date.now() - entry.at < NAVIGATION_HARD_CAP_MS ? entry.attempt : null;
+}
+
+/** Network-first. HTTP errors pass through; a failed request shows the offline page; a hanging one the "slow" offline page. */
+async function navigate(event) {
+  const { request } = event;
+  if (isPatientNavigation(new URL(request.url))) {
+    try {
+      return await fetch(request);
+    } catch {
+      return offlinePage();
+    }
   }
+  const attempt = takePending(request.url) || startNavigation(request);
+  event.waitUntil(attempt.catch(() => {}));
+  let timer;
+  const outcome = await Promise.race([
+    attempt.then((response) => ({ response }), () => ({ failed: true })),
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ slow: true }), NAVIGATION_TIMEOUT_MS);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (outcome.response) return outcome.response;
+  if (outcome.failed) return offlinePage();
+  for (const [key, entry] of pendingNavigations) if (Date.now() - entry.at >= NAVIGATION_HARD_CAP_MS) pendingNavigations.delete(key);
+  attempt.catch(() => {});
+  pendingNavigations.set(request.url, { attempt, at: Date.now() });
+  return slowPage();
 }
 
 self.addEventListener("fetch", (event) => {
@@ -118,7 +167,7 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(navigate(request));
+    event.respondWith(navigate(event));
     return;
   }
 

@@ -95,7 +95,8 @@
     "offlineUsage": "{count, plural, one {# article} other {# articles}} · {size} stored offline",
     "offlineUsageEmpty": "Nothing stored offline yet.",
     "offlineBrowserStorage": "Browser storage in use: {used} of {quota}",
-    "offlineClear": "Clear offline data"
+    "offlineClear": "Clear offline data",
+    "offlineQuotaFailed": "Browser storage is full: not everything could be saved for offline reading (older articles were removed to make room)."
   },
   "profile": {
     "changePassword": "Change password",

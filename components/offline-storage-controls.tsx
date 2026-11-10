@@ -4,18 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { formatBytes, readStorageEstimate, type StorageEstimate } from "@/features/offline/storage";
-import { clearAllOffline, getActiveUser, getUsage, type StoreUsage } from "@/features/offline/store";
+import { clearOfflineArticles, getActiveUser, getUsage, readStatus, type OfflineStatus, type StoreUsage } from "@/features/offline/store";
 
 /** Settings: how much the offline reading store holds (+ the browser's quota) and a way to empty it. */
 export function OfflineStorageControls() {
   const t = useTranslations("settings");
   const [usage, setUsage] = useState<StoreUsage | null>(null);
   const [estimate, setEstimate] = useState<StorageEstimate | null>(null);
+  const [status, setStatus] = useState<OfflineStatus | null>(null);
 
   const refresh = useCallback(async () => {
     const user = await getActiveUser();
     setUsage(user ? await getUsage(user) : { count: 0, bytes: 0 });
     setEstimate(await readStorageEstimate());
+    setStatus((await readStatus()) ?? null);
   }, []);
   useEffect(() => {
     void refresh();
@@ -31,12 +33,17 @@ export function OfflineStorageControls() {
           {t("offlineBrowserStorage", { used: formatBytes(estimate.usage), quota: formatBytes(estimate.quota) })}
         </p>
       )}
+      {status?.quotaFailed && (
+        <p className="text-footnote text-destructive" role="status" data-testid="offline-quota-warning">
+          {t("offlineQuotaFailed")}
+        </p>
+      )}
       <Button
         variant="outline"
         size="sm"
         disabled={!usage?.count}
         onClick={async () => {
-          await clearAllOffline();
+          await clearOfflineArticles();
           await refresh();
         }}
       >
