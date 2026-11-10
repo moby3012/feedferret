@@ -1,6 +1,8 @@
 "use client";
 import { signOut as authSignOut } from "next-auth/react";
 import { getStateBatcher } from "@/features/articles/batcher-registry";
+import { setOfflineUser } from "@/features/offline/session";
+import { clearAllOffline } from "@/features/offline/store";
 import { clearLastSync } from "@/features/sync/last-sync";
 import { getActiveQueryClient } from "@/lib/active-query-client";
 
@@ -20,6 +22,9 @@ export async function signOut(options?: Parameters<typeof authSignOut>[0]) {
   // …then nothing of this account survives in memory or storage for the next one.
   qc?.cancelQueries();
   qc?.clear();
+  // Offline article bodies are account data too (IndexedDB, all users on this device).
+  setOfflineUser(null);
+  await clearAllOffline();
   try {
     for (const key of ACCOUNT_STORAGE_KEYS) localStorage.removeItem(key);
     clearLastSync(localStorage);

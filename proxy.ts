@@ -29,6 +29,9 @@ export default auth((request: NextRequest) => {
   return response;
 });
 
+// Public static files stay outside the auth gate: the service worker precaches
+// them (also on the login page, before any session exists) and a redirect to
+// /login would be cached as the "offline page".
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|logo.svg).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|logo.svg|sw.js|offline.html|offline-reader.js|manifest.json|icon-[\\w-]+\\.png).*)"],
 };

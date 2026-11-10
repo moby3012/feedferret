@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { BootstrapHydrator } from "@/components/shell/bootstrap-hydrator";
 import { ReaderShell } from "@/components/shell/reader-shell";
 import { ShellSkeleton } from "@/components/shell/shell-skeleton";
+import { OfflineSync } from "@/features/offline/offline-sync";
 import { UI_COOKIE, parseUiCookie } from "@/features/reader/layout/ui-prefs";
 import { readingPreferencesFor } from "@/server/bootstrap";
 import { currentSession } from "@/server/session";
@@ -42,6 +43,7 @@ export default async function ReaderPage({ searchParams }: { searchParams: Searc
   return (
     <Suspense fallback={<ShellSkeleton href={href} ui={ui} viewMode={prefs.defaultViewMode} />}>
       <BootstrapHydrator userId={userId} href={href}>
+        <OfflineSync userId={userId} />
         <ReaderShell initialHref={href} initialUi={ui} userId={userId} />
       </BootstrapHydrator>
     </Suspense>

@@ -235,7 +235,8 @@ When enabled, any admin without 2FA active receives an error on every admin serv
 - Local and OAuth/OIDC registration allow bootstrap with zero users, including with a disabled setting. Only an installation with zero users AND no GlobalSettings row initializes a persisted disabled setting. After bootstrap, new users require registration to be enabled. Legacy installations with users and no settings row retain open registration; existing settings values are preserved. Local registration uses a serializable transaction to create one bootstrap ADMIN. Serialization/time-out conflicts return 409 for retry; duplicate accounts return generic 400.
 - Deleted or inactive users lose JWT identity; admin actions re-read role and active status. Legacy GReader tokens now reject inactive users, but still lack expiry/password-change revocation.
 - MCP write tools and Fever mark operations require write/admin token scope. Fever rejects expired tokens; read-later uses the common active-user resolver.
-- Service workers cache no navigation responses and logout clears FeedFerret runtime caches while retaining the static offline precache.
+- Service workers cache no navigation responses and no `/api/*` responses; logout clears FeedFerret runtime caches while retaining the static offline precache. `_next/static` (public, content-hashed) is cached separately and bounded.
+- Offline reading keeps sanitized article bodies in IndexedDB (`feedferret-offline`), keyed per user id and bounded (≤ 300 entries, ≤ 50 MB, LRU). Logout, an account switch, and landing on `/login` clear it; nothing in it is a credential or token. Offline is read-only: no write queue exists. The static offline page renders stored bodies in a script-less, sandboxed iframe.
 
 ## Configuration Security Notes
 

@@ -2,50 +2,92 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#1a1b23" />
     <title>FeedFerret Offline</title>
     <style>
-      :root { color-scheme: light dark; }
+      /* Static page: the app's hashed CSS is not available offline, so the few tokens it needs are mirrored here. */
+      :root {
+        color-scheme: light dark;
+        --bg: #f5f6fb;
+        --fg: #11131a;
+        --muted: rgba(17, 19, 26, 0.68);
+        --card: #ffffff;
+        --line: rgba(17, 19, 26, 0.14);
+        --accent: #3f86b5;
+        --accent-fg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #11131a;
+          --fg: #f5f6fb;
+          --muted: rgba(245, 246, 251, 0.72);
+          --card: rgba(255, 255, 255, 0.06);
+          --line: rgba(255, 255, 255, 0.14);
+          --accent: #5ba4cf;
+          --accent-fg: #08111d;
+        }
+      }
+      * { box-sizing: border-box; }
       body {
         margin: 0;
         min-height: 100vh;
-        display: grid;
-        place-items: center;
         font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: #11131a;
-        color: #f5f6fb;
+        background: var(--bg);
+        color: var(--fg);
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
       }
-      main {
-        width: min(28rem, calc(100vw - 2rem));
-        border: 1px solid rgba(255,255,255,.12);
-        border-radius: 2rem;
-        padding: 2rem;
-        background: rgba(255,255,255,.06);
-        box-shadow: 0 1.5rem 4rem rgba(0,0,0,.25);
-      }
-      img { width: 3rem; height: 3rem; filter: invert(1); }
-      h1 { margin: 1.25rem 0 .5rem; font-size: 1.6rem; letter-spacing: -.04em; }
-      p { margin: 0; color: rgba(245,246,251,.72); line-height: 1.6; }
-      button {
-        margin-top: 1.5rem;
-        width: 100%;
-        min-height: 3rem;
+      main { width: min(40rem, calc(100vw - 2rem)); margin: 0 auto; padding: 2rem 0 3rem; }
+      header { display: flex; align-items: center; gap: 0.75rem; }
+      header img { width: 2.25rem; height: 2.25rem; }
+      @media (prefers-color-scheme: dark) { header img { filter: invert(1); } }
+      h1 { margin: 0; font-size: 1.4rem; letter-spacing: -0.03em; }
+      h2 { margin: 2rem 0 0.5rem; font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+      p { margin: 0.5rem 0 0; color: var(--muted); line-height: 1.6; }
+      ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 1rem; background: var(--card); overflow: hidden; }
+      li + li { border-top: 1px solid var(--line); }
+      li button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 0.85rem 1rem; cursor: pointer; }
+      li button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+      .t { display: block; font-weight: 600; line-height: 1.35; }
+      .m { display: block; margin-top: 0.15rem; font-size: 0.8rem; color: var(--muted); }
+      .btn {
+        margin-top: 1.25rem;
+        min-height: 2.75rem;
+        padding: 0 1.25rem;
         border: 0;
-        border-radius: 1rem;
+        border-radius: 0.9rem;
         font: inherit;
         font-weight: 700;
-        color: #11131a;
-        background: #f5f6fb;
+        color: var(--accent-fg);
+        background: var(--accent);
+        cursor: pointer;
       }
+      .btn.quiet { background: transparent; color: var(--fg); border: 1px solid var(--line); margin-top: 0; }
+      #reader[hidden], #lists[hidden] { display: none; }
+      #reader h2 { all: unset; display: block; margin: 1rem 0 0.25rem; font-size: 1.5rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.02em; }
+      #reader .m { margin-bottom: 1rem; }
+      #body { width: 100%; border: 0; display: block; background: transparent; min-height: 40vh; }
+      .missing { color: var(--muted); font-style: italic; }
     </style>
   </head>
   <body>
     <main>
-      <img src="/logo.svg" alt="" />
-      <h1>You are offline</h1>
-      <p>FeedFerret is installed, but this page needs a connection. Reconnect and try again.</p>
-      <button onclick="location.reload()">Try again</button>
+      <header>
+        <img src="/logo.svg" alt="" />
+        <h1 id="title">You are offline</h1>
+      </header>
+      <section id="lists">
+        <p id="intro">FeedFerret is installed, but this page needs a connection. Reconnect and try again.</p>
+        <div id="sections"></div>
+        <button class="btn" id="retry" type="button" onclick="location.reload()">Try again</button>
+      </section>
+      <section id="reader" hidden>
+        <button class="btn quiet" id="back" type="button">Back</button>
+        <h2 id="r-title"></h2>
+        <span class="m" id="r-meta"></span>
+        <iframe id="body" title="" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
+      </section>
     </main>
+    <script src="/offline-reader.js"></script>
   </body>
 </html>

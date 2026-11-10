@@ -49,6 +49,7 @@ import {
   Cloud,
   Lock,
   Globe,
+  HardDrive,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -62,6 +63,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { deleteOwnAccount } from "@/app/actions/account";
 import { Button } from "@/components/ui/button";
+import { OfflineStorageControls } from "@/components/offline-storage-controls";
 import { Badge } from "@/components/ui/badge";
 import { useFormatter } from "next-intl";
 import {
@@ -567,6 +569,15 @@ export function SettingsForm() {
                 checked={prefs?.hideEmptyLabels ?? false}
                 onCheckedChange={(checked) => update({ hideEmptyLabels: checked })}
               />
+            </PrefRow>
+
+            {/* Offline reading: storage in use */}
+            <PrefRow
+              icon={HardDrive}
+              title={t("settings.offlineReading")}
+              description={t("settings.offlineReadingDescription")}
+            >
+              <OfflineStorageControls />
             </PrefRow>
 
           </TabsContent>

@@ -89,7 +89,13 @@
       "account": "Konto",
       "notifications": "Benachrichtigungen",
       "integrations": "Integrationen"
-    }
+    },
+    "offlineReading": "Offline lesen",
+    "offlineReadingDescription": "Artikel unter „Später lesen“ und deine zuletzt geöffneten Artikel kannst du auch ohne Verbindung lesen. Änderungen brauchen eine Verbindung.",
+    "offlineUsage": "{count, plural, one {# Artikel} other {# Artikel}} · {size} offline gespeichert",
+    "offlineUsageEmpty": "Noch nichts offline gespeichert.",
+    "offlineBrowserStorage": "Speicher im Browser: {used} von {quota}",
+    "offlineClear": "Offline-Daten löschen"
   },
   "profile": {
     "changePassword": "Passwort ändern",
@@ -1774,7 +1780,7 @@
   },
   "articleState": {
     "toggleFailed": "Änderung konnte nicht gespeichert werden und wurde zurückgenommen.",
-    "offlineReadOnly": "Offline – nur Lesen",
+    "offlineReadOnly": "Offline – Änderungen erst wieder online",
     "offline": "Offline",
     "labelsFailed": "Labels konnten nicht geändert werden."
   },
