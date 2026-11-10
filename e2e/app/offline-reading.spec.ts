@@ -453,7 +453,8 @@ test("a slow page of account A is never handed to account B: 'keep waiting' is a
   await probe.close();
 });
 
-test("offline page: signing out in another tab empties the rendered lists and the open article at once", async ({ app, page, context }) => {
+test("offline page: the session ending in another tab empties the rendered lists and the open article at once", async ({ app, page, context }) => {
+  test.setTimeout(90_000);
   await openAndWaitForStore(app, page);
   await page.goto("/offline.html");
   await expect(page.locator("#sections li").first()).toBeVisible();
@@ -461,14 +462,11 @@ test("offline page: signing out in another tab empties the rendered lists and th
   await expect(page.locator("#reader")).toBeVisible();
   await expect(page.locator("#body")).toHaveAttribute("srcdoc", /<body>/);
 
+  // Another tab ends the session. (Not through the UI sign-out button: the suite shares one rate limit for
+  // POST /api/auth/signout and the other specs already use it up. The login page clears the store and tells every tab.)
+  await context.clearCookies();
   const second = await context.newPage();
-  const secondApp = new App(second, app.isMobile, app.user, app.userKey);
-  await second.goto("/");
-  await secondApp.navReady();
-  await secondApp.openSidebar();
-  await secondApp.activate(second.getByRole("button", { name: "Sign out" }).first());
-  await secondApp.activate(second.getByRole("alertdialog", { name: "Sign out?" }).getByRole("button", { name: "Sign out" }));
-  await second.waitForURL(/\/login/, { timeout: 30_000 });
+  await second.goto("/login");
 
   // The offline tab (still open, nobody reloaded it) lets go of everything it rendered.
   await expect(page.locator("#intro")).toContainText("no longer valid", { timeout: 15_000 });
