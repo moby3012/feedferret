@@ -30,23 +30,23 @@ Supported query parameters for stream endpoints:
 
 | Param | Description |
 |---|---|
-| `s` | Stream ID (reading-list, starred, specific feed URL, label) |
-| `n` | Page size (default 20; positive sizes have no artificial maximum; zero/negative = unlimited, as FreshRSS) |
+| `s` | Stream ID (reading-list, starred, numeric feed ID or legacy feed URL, label) |
+| `n` | Page size: default/invalid = 20. IDs: maximum 10,000; zero/negative requests use that cap. Stream contents: maximum 1,000; zero/negative requests use 20. Explicit-ID contents requests accept at most 1,000 unique IDs, independently of `n`. |
 | `c` | Continuation token for pagination |
 | `it` | Include state filter (e.g. `user/-/state/com.google/read`) |
 | `xt` | Exclude state filter |
 | `ot` | Oldest timestamp (Unix seconds): discovery >= ot OR modification >= ot |
-| `nt` | Newest timestamp (Unix seconds): discovery <= nt AND modification <= nt |
+| `nt` | Newest timestamp (Unix seconds): discovery and modification before the end of the `nt` second (inclusive seconds) |
 | `r` | Sort order: `o` = oldest first; default is newest first |
 
-The `POST stream/items/contents` body uses `application/x-www-form-urlencoded` with one or more `i=<itemId>` fields. Item IDs use the `tag:feedferret,2026:article/<id>` format returned by `stream/items/ids`.
+The `POST stream/items/contents` body uses `application/x-www-form-urlencoded` with one or more `i=<itemId>` fields. `stream/items/ids` returns decimal numeric strings. Contents use `tag:google.com,2005:reader/item/<16-hex>`; both forms and legacy FeedFerret CUID references are accepted. Only the explicit Google namespace is parsed as hexadecimal; bare strings are preserved.
 
 Supported stream targets:
 
 - `user/-/state/com.google/reading-list` — articles from category/main/important feeds
-- `user/-/state/com.google/starred` — starred articles
+- `user/-/state/com.google/starred` — starred articles from all non-hidden feeds (including feed-only priority, as FreshRSS)
 - `user/-/state/com.google/read` — read articles
-- `feed/<url>` — specific feed
+- `feed/<numeric-id>` — specific feed (legacy `feed/<url>` also accepted)
 - `user/-/label/<name>` — user label or folder/category
 
 ### Metadata
@@ -80,7 +80,7 @@ Use `https://your-feedferret-host/api/greader` with a **Google Reader compatible
 
 | Client target | Contract coverage | Native-client status |
 |---|---|---|
-| Reeder Classic, FeedMe | IDs → repeated POST `i`, full summary, state edits | Not certified; numeric-ID adapter still required |
+| Reeder Classic, FeedMe | IDs → repeated POST `i`, full summary, state edits | Protocol contracts tested; native app release not certified |
 | Read You, Fluent Reader, ReadKit | Stream filters, delta bounds, ordering, continuation | Not certified; verify the app's selected protocol/version |
 | NetNewsWire | No supported FreshRSS/GReader adapter established | Unsupported/unverified; Feedbin support does not imply GReader support |
 
@@ -92,12 +92,13 @@ Reference baseline: [FreshRSS a24ff145 GReader API](https://github.com/FreshRSS/
 
 - Google Reader "folders" map to FeedFerret categories and appear in `tag/list`, `unread-count`, stream contents, and subscription metadata.
 - Google Reader labels map to FeedFerret article labels.
-- Reading list includes category/main/important feeds; feed-only and hidden priorities require explicit feed access. `org.freshrss/main` includes main/important feeds; `org.freshrss/important` includes important feeds. Explicit feed streams can access hidden feeds.
+- Reading list includes category/main/important feeds; feed-only articles are also available through starred; hidden articles require explicit feed access. `org.freshrss/main` includes main/important feeds; `org.freshrss/important` includes important feeds. Explicit feed streams can access hidden feeds.
+- Folder/label unions include category/main/important feeds; feed-only and hidden articles are excluded even when explicitly labelled. Starred includes feed-only articles and excludes hidden feeds, matching FreshRSS’s starred scope.
 - Unread, read, starred, folder/label and feed targets combine with repeated `it`/`xt` filters using AND. Unknown targets return no items.
 - Read/starred states map directly to FeedFerret article flags.
-- Item IDs retain `tag:feedferret,2026:article/<cuid>`. Numeric-only clients can fail to sync: persistent external numeric identities are deferred to the next PR. Raw database IDs and FeedFerret refs round-trip; decimal raw IDs and Google hex references resolve only when the underlying stored ID is that decimal string. No numeric mapping is fabricated for CUIDs.
+- Article/feed identities persist independently of CUIDs; decimal references and Google hex contents round-trip without `Number` conversion. See [numeric identity deployment details](numeric-api-ids.md) for startup backfill, Fever contracts and remaining timestamp limitations.
 - Ordering uses discovery (`createdAt`) plus ID, not publication. Continuations preserve a discovery high-water mark and use direction-aware keyset comparisons. Items arriving after that mark appear in the next sync. Changes to stream membership during pagination are not a database snapshot.
-- `ot` also includes modified older articles; `nt` bounds both discovery and modification. FeedFerret uses its combined `updatedAt` clock because it has no separate FreshRSS `lastModified` field.
+- `ot` also includes modified older articles; `nt` bounds both discovery and modification. Both bounds use whole Unix seconds; non-finite or out-of-range dates return HTTP 400. FeedFerret uses its combined `updatedAt` clock because it has no separate FreshRSS `lastModified` field.
 - Bulk read `ts` compares discovery in microseconds, including the cutoff; invalid cutoffs are rejected.
 - Full readable HTML (rendered from Markdown where needed) is supplied in both `summary.content` and `content.content`. Origin uses the feed website, and timestamps use discovery. RSS enclosures are retained on fetch and emitted as FreshRSS `enclosure` arrays; old rows need a feed refresh to populate metadata.
 
@@ -109,6 +110,8 @@ Reference baseline: [FreshRSS a24ff145 GReader API](https://github.com/FreshRSS/
 - The starred stream
 - Each visible feed and folder/article-label union (same-name scopes are counted once)
 
+Timestamps use all articles in each scope, independently of the unread count; a scope containing only read articles retains its newest timestamp. Empty scopes return `"0"`. Feed and tag aggregates use a constant number of queries.
+
 `max` reflects the actual reading-list unread total; counts are not truncated to 1,000.
 
 ## Known limitations
@@ -118,3 +121,7 @@ Reference baseline: [FreshRSS a24ff145 GReader API](https://github.com/FreshRSS/
 - OPML import/export is available via the FeedFerret web UI; clients that rely on a GReader `opml` endpoint should use the web UI instead.
 
 FreshRSS compat mode uses `summary`; FeedFerret additionally retains `content` and `updated` for existing consumers. `alternate` omits the MIME type as FreshRSS compat mode does. Content is not truncated.
+
+## Numeric IDs and concurrent ingestion
+
+See [numeric API identities](numeric-api-ids.md) for upgrade/full re-sync instructions and the allocation-before-commit limitation. Concurrent writers can commit IDs out of order; Fever since_id consumers need periodic full reconciliation to recover late commits and backfilled rows.

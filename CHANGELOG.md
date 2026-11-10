@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Changed — numeric sync identities
+
+- Google Reader and Fever now use persistent numeric IDs. Operators must perform a **one-time full re-sync of GReader/Fever clients after upgrade** (remove and re-add the account if the client has no full re-sync option).
+
 ### Security (2026-11-09 — audit quick wins)
 
 - Registration policy (local and OAuth/OIDC): zero users may bootstrap even when registration is disabled. Only zero users AND no GlobalSettings row initializes a persisted disabled setting; subsequent new users are denied unless enabled. Existing installations with users and no settings row retain legacy open registration. Existing settings values and existing active-user sign-ins remain unchanged.

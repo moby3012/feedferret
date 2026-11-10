@@ -1,3 +1,4 @@
+import { withExternalIds } from "./external-id-store";
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -69,13 +70,13 @@ function createAdapter() {
   return new PrismaPg(new pg.Pool({ connectionString: url }));
 }
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+const globalForPrisma = globalThis as unknown as { prisma: ReturnType<typeof createDb> };
 
 const createDb = () =>
-  new PrismaClient({
+  withExternalIds(new PrismaClient({
     adapter: createAdapter(),
     log: ["error"],
-  });
+  }));
 
 export const db = globalForPrisma.prisma || createDb();
 

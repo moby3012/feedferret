@@ -12,6 +12,14 @@ export async function register() {
     const { ensureSearchIndexes } = await import("./lib/search-indexes");
     await ensureSearchIndexes();
 
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+        void (async () => {
+            const { db } = await import("./lib/db");
+            const { backfillExternalIds } = await import("./lib/external-id-store");
+            await backfillExternalIds(db as unknown as import("@prisma/client").PrismaClient);
+        })().catch((error) => console.error("[external-ids] startup backfill failed; will retry during background sync", error));
+    }
+
     const { startBackgroundSync } = await import("./lib/background-sync");
     startBackgroundSync();
 }

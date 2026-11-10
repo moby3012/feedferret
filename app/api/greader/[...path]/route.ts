@@ -1,3 +1,4 @@
+import { decimalExternalId, externalItemWhere, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { syncFeed } from "@/lib/rss-sync";
@@ -81,11 +82,19 @@ function getStreamId(pathParts: string[], url: URL, marker: string) {
 }
 
 async function getArticlesForStream(userId: string, streamId: string, url: URL, idsOnly = false) {
-  const requested = greaderLimit(url.searchParams.get("n"));
-  const limit = idsOnly ? requested : Math.min(requested > 0 ? requested : 20, 1000);
+  const limit = greaderLimit(url.searchParams.get("n"), idsOnly);
+  const timestamp = (name: "ot" | "nt") => {
+    const value = Number(url.searchParams.get(name));
+    // nt includes the whole second; validate its exclusive upper bound too.
+    const ms = (Math.trunc(value) + (name === "nt" ? 1 : 0)) * 1000;
+    if (!Number.isFinite(value) || !Number.isFinite(new Date(ms).getTime())) {
+      throw new InvalidRequestError(`Invalid ${name}`);
+    }
+    return value;
+  };
   const cursor = parseContinuationToken(url.searchParams.get("c"));
   const ascending = url.searchParams.get("r") === "o";
-  const scope = buildStreamWhere(userId, streamId, url.searchParams.getAll("it"), url.searchParams.getAll("xt"), Number(url.searchParams.get("ot")), Number(url.searchParams.get("nt")));
+  const scope = buildStreamWhere(userId, streamId, url.searchParams.getAll("it"), url.searchParams.getAll("xt"), timestamp("ot"), timestamp("nt"));
   // Freeze the discovery high-water mark, including its ID tie-breaker. New arrivals
   // are picked up by the next sync, not inserted into this pagination sequence.
   const newest = cursor?.ceiling ? null : await db.article.findFirst({ where: scope, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true, id: true } });
@@ -99,10 +108,10 @@ async function getArticlesForStream(userId: string, streamId: string, url: URL, 
     where,
     include: { feed: { include: { category: true } }, ...(!idsOnly ? { labels: { include: { label: true } } } : {}) },
     orderBy: [{ createdAt: direction }, { id: direction }],
-    ...(limit > 0 ? { take: limit + 1 } : {}),
+    take: limit + 1,
   });
-  const articles = limit > 0 ? rows.slice(0, limit) : rows;
-  return { articles, continuation: limit > 0 && rows.length > limit ? createContinuationToken(articles[articles.length - 1], ceiling) : undefined };
+  const articles = rows.slice(0, limit);
+  return { articles, continuation: rows.length > limit ? createContinuationToken(articles[articles.length - 1], ceiling) : undefined };
 }
 
 async function getItemsByIds(userId: string, ids: string[], order: string | null) {
@@ -110,7 +119,7 @@ async function getItemsByIds(userId: string, ids: string[], order: string | null
   const rows = [];
   for (const batch of chunks(itemIds(ids))) {
     rows.push(...await db.article.findMany({
-      where: { userId, id: { in: batch } },
+      where: { userId, extId: { not: null }, feed: { extId: { not: null } }, ...externalItemWhere(batch) },
       include: { feed: { include: { category: true } }, labels: { include: { label: true } } },
     }));
   }
@@ -169,7 +178,7 @@ async function getOrCreateLabel(userId: string, name: string) {
  * `createMany`/`deleteMany` (keyed on `articleId: { in: ids }`) for labels.
  */
 async function applyTagEdit(userId: string, ids: string[], add: string[], remove: string[]) {
-  const owned = await db.article.findMany({ where: { userId, id: { in: ids } }, select: { id: true } });
+  const owned = await db.article.findMany({ where: { userId, ...externalItemWhere(ids) }, select: { id: true } });
   ids = [...new Set(owned.map((row) => row.id))];
   if (ids.length === 0) return;
 
@@ -222,9 +231,15 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
   const feedUrl = String(form.get("quickadd") || form.get("url") || "").trim();
   if (!feedUrl) return textResponse("Missing quickadd parameter", 400);
 
-  const existing = await db.feed.findFirst({ where: { userId, url: feedUrl } });
+  const existing = await db.feed.findFirst({ where: { userId, ...(/^\d+$/.test(feedUrl) ? { extId: storedExternalId(feedUrl) } : { url: feedUrl }) } });
   if (existing) {
-    return NextResponse.json({ numResults: 1, query: feedUrl, streamId: `feed/${existing.url}`, numSubscribers: 1, title: existing.name });
+    if (!existing.extId) {
+      const { allocateExternalIds } = await import("@/lib/external-id-store");
+      const [extId] = await allocateExternalIds(db as unknown as import("@prisma/client").PrismaClient, 1);
+      await db.feed.updateMany({ where: { id: existing.id, extId: null }, data: { extId } });
+      existing.extId = (await db.feed.findUniqueOrThrow({ where: { id: existing.id } })).extId;
+    }
+    return NextResponse.json({ numResults: 1, query: feedUrl, streamId: `feed/${decimalExternalId(existing.extId)}`, numSubscribers: 1, title: existing.name });
   }
 
   const remoteFeed = await fetchFeedArticles({ url: feedUrl });
@@ -244,7 +259,7 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
   return NextResponse.json({
     numResults: 1,
     query: feedUrl,
-    streamId: `feed/${feed.url}`,
+    streamId: `feed/${decimalExternalId(feed.extId)}`,
     numSubscribers: 1,
     title: feed.name,
   });
@@ -255,7 +270,7 @@ async function handleSubscriptionEdit(userId: string, form: FormData) {
   if (!streamId.startsWith("feed/")) return textResponse("Unsupported subscription", 400);
 
   const feedUrl = streamId.slice(5);
-  const feed = await db.feed.findFirst({ where: { userId, url: feedUrl } });
+  const feed = await db.feed.findFirst({ where: { userId, ...(/^\d+$/.test(feedUrl) ? { extId: storedExternalId(feedUrl) } : { url: feedUrl }) } });
   if (!feed) return textResponse("Feed not found", 404);
 
   const action = String(form.get("ac") || "edit").toLowerCase();
@@ -362,8 +377,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
       });
 
       return NextResponse.json({
-        subscriptions: feeds.map((feed: { id: string; url: string; name: string; category: { name: string } | null }) => ({
-          id: `feed/${feed.url}`,
+        subscriptions: feeds.filter((feed) => feed.extId).map((feed: { id: string; extId: string | null; url: string; name: string; category: { name: string } | null }) => ({
+          id: `feed/${decimalExternalId(feed.extId)}`,
           title: feed.name,
           categories: feed.category
             ? [{ id: `${GREADER_LABEL_PREFIX}${feed.category.name}`, label: feed.category.name }]

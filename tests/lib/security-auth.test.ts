@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/db", () => ({ db: {
   user: { findUnique: mocks.user }, apiToken: { findFirst: mocks.token },
-  loginAttempt: { create: mocks.log }, article: { updateMany: mocks.marks },
+  loginAttempt: { create: mocks.log }, feed: { aggregate: async () => ({ _max: { lastFetchedAt: null } }) }, article: { updateMany: mocks.marks, findMany: async () => [] },
 } }));
 vi.mock("bcryptjs", () => ({ default: { compare: mocks.compare } }));
 vi.mock("@/lib/markdown-render", () => ({ renderMarkdownToHtml: vi.fn() }));
@@ -48,7 +48,7 @@ describe("GReader password authentication", () => {
   });
 });
 describe("Fever token guards", () => {
-  const request = () => new Request("https://example.test/api/fever?api&mark=item&as=read&id=a1", {
+  const request = () => new Request("https://example.test/api/fever?api&mark=item&as=read&id=1", {
     method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "api_key=key",
   });
   it.each([{ expiresAt: new Date(0), user }, { user: { ...user, isActive: false } }])("rejects expired/inactive credentials", async overrides => {
@@ -66,6 +66,6 @@ describe("Fever token guards", () => {
   it("allows marks with write scope", async () => {
     mocks.token.mockResolvedValue({ user, scope: "write" });
     expect((await fever(request())).status).toBe(200);
-    expect(mocks.marks).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "a1", userId: user.id } }));
+    expect(mocks.marks).toHaveBeenCalledWith(expect.objectContaining({ where: { extId: { in: ["0000000000000000001"] }, userId: user.id } }));
   });
 });

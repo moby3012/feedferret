@@ -260,6 +260,8 @@ model VerificationToken {
 }
 
 model Category {
+  // Fixed-width decimal numeric identity; nullable only during startup backfill.
+  extId String? @unique
   id        String   @id @default(cuid())
   name      String
   userId    String
@@ -280,6 +282,8 @@ model Category {
 }
 
 model Feed {
+  // Fixed-width decimal numeric identity; nullable only during startup backfill.
+  extId String? @unique
   id              String   @id @default(cuid())
   url             String
   name            String
@@ -343,6 +347,8 @@ model Feed {
 }
 
 model Article {
+  // Fixed-width decimal numeric identity; nullable only during startup backfill.
+  extId String? @unique
   id          String   @id @default(cuid())
   feedId      String
   userId      String
@@ -399,6 +405,8 @@ model Article {
 }
 
 model Label {
+  // Fixed-width decimal numeric identity; nullable only during startup backfill.
+  extId String? @unique
   id        String   @id @default(cuid())
   userId    String
   name      String
@@ -581,4 +589,10 @@ model DiscoveryCatalogFeed {
   updatedAt   DateTime @updatedAt
   @@index([category, enabled, popularity])
   @@index([language, enabled])
+}
+
+// Atomic, database-wide allocator, shared by every process and protocol.
+model ExternalIdSequence {
+  name String @id
+  value BigInt
 }

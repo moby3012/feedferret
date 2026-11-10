@@ -1,3 +1,5 @@
+import { db } from "./db";
+import { backfillExternalIds } from "./external-id-store";
 import { syncAllFeeds } from "./rss-sync";
 import { runDigestScheduler } from "./digest-scheduler";
 import { flushDueNotifications } from "./notifications";
@@ -35,6 +37,8 @@ async function tick() {
     if (state.running) return;
     state.running = true;
     try {
+        await backfillExternalIds(db as unknown as import("@prisma/client").PrismaClient)
+            .catch((error) => logger.error("[external-ids] backfill failed:", error));
         const results = await syncAllFeeds();
         const synced = results.filter((r: any) => r.success && !r.skipped).length;
         const failed = results.filter((r: any) => !r.success).length;
