@@ -672,4 +672,16 @@ describe("per-feed proxy is validated against SSRF rules at save time", () => {
     expect(JSON.parse((await state.db.feed.findFirstOrThrow({ where: { userId, url: "https://rh.example.com/p.xml" } })).httpOptions!)).toEqual({ CURLOPT_MAXREDIRS: 3 });
     expect(JSON.parse((await state.db.feed.findFirstOrThrow({ where: { userId, url: "https://rh.example.com/q.xml" } })).httpOptions!)).toMatchObject({ CURLOPT_PROXY: "http://proxy.example.net:3128" });
   });
+
+  it("OPML import gives curl-style bare host:port proxies a scheme and reports SOCKS", async () => {
+    const userId = await newUser();
+    const xml = `<?xml version="1.0"?><opml version="2.0" xmlns:frss="https://freshrss.org/opml"><head/><body><outline text="H" type="rss" xmlUrl="https://rh.example.com/h.xml" frss:CURLOPT_PROXY="proxy.example.net:3128"/><outline text="S" type="rss" xmlUrl="https://rh.example.com/s.xml" frss:CURLOPT_PROXY="proxy.example.net:1080" frss:CURLOPT_PROXYTYPE="5"/></body></opml>`;
+    const report = await runFreshRssMigration(userId, Buffer.from(xml));
+    expect(report.issues.some((i) => i.code === "proxy-blocked")).toBe(false);
+    expect(report.issues.filter((i) => i.code === "proxy-socks").map((i) => i.subject)).toEqual(["S"]);
+    const h = await state.db.feed.findFirstOrThrow({ where: { userId, url: "https://rh.example.com/h.xml" } });
+    expect(JSON.parse(h.httpOptions!)).toMatchObject({ CURLOPT_PROXY: "http://proxy.example.net:3128" });
+    const sFeed = await state.db.feed.findFirstOrThrow({ where: { userId, url: "https://rh.example.com/s.xml" } });
+    expect(sFeed.httpOptions ? JSON.parse(sFeed.httpOptions).CURLOPT_PROXY : undefined).toBeUndefined();
+  });
 });

@@ -1180,6 +1180,7 @@
         "css-without-selector": "Volltext-Einstellungen ohne Inhalts-Selektor",
         "filter-untranslatable": "Filter hat keine Entsprechung",
         "proxy-blocked": "Proxy nicht erlaubt (interne Adresse), nicht importiert",
+        "proxy-socks": "SOCKS-Proxy wird nicht unterstützt, nicht importiert",
         "filter-too-long": "Übersetzter Filter ist zu lang",
         "filter-rule-remote-dropped": "Regeln werden aus Remote-OPML nicht angelegt",
         "filter-rule-created": "Filter als Auto-Lesen-Regel angelegt",

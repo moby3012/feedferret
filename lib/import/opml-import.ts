@@ -342,6 +342,30 @@ export async function applyOpmlImportPlan(
     else report.feedsAdded += 1;
 
     const d = feed.data;
+    // FreshRSS stores CURLOPT_PROXY as curl does: often bare `host:port`, with the
+    // scheme implied by CURLOPT_PROXYTYPE (0/absent = HTTP, 2 = HTTPS, 4–7 = SOCKS).
+    // Give HTTP(S) proxies an explicit scheme; SOCKS is not supported by the fetcher.
+    if (d.httpOptions) {
+      const options = JSON.parse(d.httpOptions) as Record<string, unknown>;
+      const proxy = typeof options.CURLOPT_PROXY === "string" ? options.CURLOPT_PROXY.trim() : "";
+      if (proxy && !proxy.includes("://")) {
+        const type = Number(options.CURLOPT_PROXYTYPE ?? 0);
+        if (type >= 4 && type <= 7) {
+          delete options.CURLOPT_PROXY;
+          delete options.CURLOPT_PROXYTYPE;
+          report.issues.push({
+            kind: "unsupported",
+            code: "proxy-socks",
+            subject: feed.name,
+            attribute: "CURLOPT_PROXYTYPE",
+            detail: "SOCKS proxies are not supported — proxy not imported",
+          });
+        } else {
+          options.CURLOPT_PROXY = `${type === 2 ? "https" : "http"}://${proxy}`;
+        }
+        d.httpOptions = stringifyNonEmpty(options);
+      }
+    }
     // A proxy host is a connection target: same SSRF rules as feed URLs. An unsafe one is
     // dropped (and reported) instead of failing the whole import; the rest of the feed imports.
     if (d.httpOptions && proxyFromHttpOptions(d.httpOptions)) {

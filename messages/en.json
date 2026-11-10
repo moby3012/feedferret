@@ -1180,6 +1180,7 @@
         "css-without-selector": "Full-text settings without a content selector",
         "filter-untranslatable": "Filter has no equivalent",
         "proxy-blocked": "Proxy not allowed (internal address), not imported",
+        "proxy-socks": "SOCKS proxy not supported, not imported",
         "filter-too-long": "Translated filter is too long",
         "filter-rule-remote-dropped": "Rules are not created from remote OPML",
         "filter-rule-created": "Filter imported as auto-read rule",
