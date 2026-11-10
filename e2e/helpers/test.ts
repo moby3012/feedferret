@@ -87,20 +87,46 @@ export class App {
     await this.navReady();
   }
 
-  /** Desktop: sidebar is always visible. Mobile: it is a sheet behind the "Feeds" button. */
+  /** Compact navigation: the floating tab bar (Neu · Gemerkt · Feeds · Suche). */
+  tabBar(): Locator {
+    return this.page.getByTestId("tab-bar");
+  }
+  /** A tab of the compact tab bar: "New" | "Saved" | "Feeds" | "Search". */
+  tab(name: "New" | "Saved" | "Feeds" | "Search"): Locator {
+    return this.tabBar().getByRole("tab", { name, exact: true });
+  }
+
+  /** Tab to return to after `openSidebar()` on mobile. */
+  private returnTab: "New" | "Saved" | "Feeds" | "Search" | null = null;
+
+  /**
+   * Desktop: the sidebar is always visible. Mobile: the feeds tree is the
+   * Feeds tab's root — switch to it (a second tap pops a pushed feed list).
+   */
   async openSidebar() {
     if (!this.isMobile) return;
-    if (await this.page.getByRole("dialog", { name: /feed navigation/i }).isVisible()) return;
-    await this.page.getByRole("button", { name: "Feeds", exact: true }).tap();
-    await expect(this.page.getByRole("dialog", { name: /feed navigation/i })).toBeVisible();
+    if (this.where() === "/?tab=feeds") return;
+    const current = await this.tabBar().getByRole("tab", { selected: true }).textContent();
+    this.returnTab = (["New", "Saved", "Feeds", "Search"] as const).find((n) => n === current?.trim()) ?? "New";
+    await this.tab("Feeds").tap();
+    if (this.where() !== "/?tab=feeds") {
+      await expect.poll(() => this.page.locator(".ff-shell").getAttribute("data-tab")).toBe("feeds");
+      if (this.where() !== "/?tab=feeds") await this.tab("Feeds").tap(); // active tab with a pushed level: up
+    }
+    await expect.poll(() => this.where()).toBe("/?tab=feeds");
+    await expect(this.sidebar().getByRole("button", { name: /^All articles/ }).first()).toBeVisible();
   }
+  /** Mobile: back to the tab `openSidebar()` came from. */
   async closeSidebar() {
     if (!this.isMobile) return;
-    await this.page.keyboard.press("Escape");
-    await expect(this.page.getByRole("dialog", { name: /feed navigation/i })).toBeHidden();
+    const back = this.returnTab ?? "New";
+    this.returnTab = null;
+    if (back === "Feeds") return;
+    await this.tab(back).tap();
+    await expect(this.tab(back)).toHaveAttribute("aria-selected", "true");
   }
   sidebar(): Locator {
-    return this.isMobile ? this.page.getByRole("dialog", { name: /feed navigation/i }) : this.page.locator("body");
+    return this.isMobile ? this.page.locator('[data-pane="sources"]') : this.page.locator("body");
   }
   /** Sidebar badge number for "All articles" | "Starred" | "Read later" | label | feed. */
   async sidebarCount(name: string): Promise<number> {
@@ -114,8 +140,34 @@ export class App {
   }
   async selectSidebar(name: string | RegExp) {
     await this.openSidebar();
+    this.returnTab = null; // selecting navigates: nothing to return to
     await this.sidebar().getByRole("button", { name }).first().click();
-    if (this.isMobile) await this.page.getByRole("dialog", { name: /feed navigation/i }).waitFor({ state: "hidden" }).catch(() => {});
+    // Compact Feeds root → feed is a push: let the pane slide in before measuring anything.
+    if (this.isMobile) await this.panesSettled();
+  }
+  /** No pane transition (push / pop slide) is running. */
+  async panesSettled() {
+    await this.page.waitForFunction(() =>
+      document.getAnimations().every((a) => {
+        const target = (a.effect as KeyframeEffect | null)?.target as Element | null;
+        return a.playState !== "running" || !target?.matches(".ff-shell > [data-pane]");
+      }),
+    );
+  }
+  /** Search: the Suche tab (mobile) / the sidebar's search icon (desktop); the field gets focus. */
+  async openSearch() {
+    if (this.isMobile) await this.tab("Search").tap();
+    else await this.page.getByRole("button", { name: "Search articles" }).first().click();
+    await expect(this.page.getByTestId("search-field").filter({ visible: true })).toBeFocused();
+  }
+  /** "Mark all as read" of the visible list: top-bar button (wide) / the "…" menu (compact). */
+  async markAllRead() {
+    if (!this.isMobile) {
+      await this.page.getByRole("button", { name: "Mark all as read" }).filter({ visible: true }).first().click();
+      return;
+    }
+    await this.page.locator(`${ACTIVE_LIST} [data-testid="list-menu-button"]`).tap();
+    await this.page.getByRole("menuitem", { name: "Mark all as read" }).tap();
   }
   /** Tap/click (touch-aware) */
   async activate(locator: Locator) {

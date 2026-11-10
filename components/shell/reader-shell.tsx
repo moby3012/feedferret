@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { ListPane } from "@/components/list/list-pane";
 import { ReaderPane } from "@/components/reader/reader-pane";
 import { useCounts, useScopeUnread } from "@/features/bootstrap/queries";
-import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import type { UiPrefs } from "@/features/reader/layout/ui-prefs";
 import { UiPrefsProvider } from "@/features/reader/layout/ui-prefs-context";
 import { TAB_IDS } from "@/features/reader/nav/location";
@@ -14,12 +13,12 @@ import { NavProvider, bootNav, useNav } from "@/features/reader/nav/store";
 import { useAppBadge } from "@/hooks/use-app-badge";
 import { markInAppNavigation } from "@/lib/in-app-back";
 import { browserStorage, recordSyncResult, syncedWithin } from "@/features/sync/last-sync";
-import { BottomBar } from "./bottom-bar";
 import { PaneResizer } from "./pane-resizer";
 import { ShellOverlays } from "./shell-overlays";
-import { ShellProvider, useShellActions, useShellData, type ShellActions } from "./shell-context";
+import { ShellProvider, useShellActions, useShellData, useSourcesCollapsed, type ShellActions } from "./shell-context";
 import { useSearchCommit } from "./search-draft";
 import { SourcesPane } from "./sources-pane";
+import { TabBar } from "./tab-bar";
 import { useShellKeys } from "./use-shell-keys";
 
 interface ReaderShellProps {
@@ -51,8 +50,7 @@ function ShellRoot({ initialUi, userId }: { initialUi: UiPrefs; userId: string }
   const tab = useNav((s) => s.loc.tab);
   const hasScope = useNav((s) => !!s.loc.scope);
   const readerOpen = useNav((s) => !!s.loc.articleId);
-  // Compact reader covers the bottom controls: out of focus order / a11y tree.
-  const bottomCovered = useLayoutClass() === "compact" && readerOpen;
+  const sourcesCollapsed = useSourcesCollapsed();
   const shell = useShellActions();
   useShellKeys(shell);
   useSearchCommit();
@@ -72,6 +70,7 @@ function ShellRoot({ initialUi, userId }: { initialUi: UiPrefs; userId: string }
       data-tab={tab}
       data-scope={hasScope ? "1" : "0"}
       data-reader={readerOpen ? "open" : "closed"}
+      data-sources={sourcesCollapsed ? "rail" : "full"}
       style={style}
     >
       <LiveRegion />
@@ -81,9 +80,7 @@ function ShellRoot({ initialUi, userId }: { initialUi: UiPrefs; userId: string }
       ))}
       <ReaderPane />
       <PaneResizer initialWidth={initialUi.listW} />
-      <div className="ff-shell-bottom" inert={bottomCovered || undefined} aria-hidden={bottomCovered || undefined}>
-        <BottomBar />
-      </div>
+      <TabBar />
       <ShellOverlays />
     </div>
   );
@@ -94,7 +91,7 @@ function useBoot(shell: ShellActions) {
   useEffect(() => {
     markInAppNavigation();
     const stop = bootNav((intents) => shell.requestAddFeed(intents.sharedUrl ?? undefined));
-    // Sidebar search icon (until SourcesView, PR 7).
+    // Sidebar search icon → the Suche tab with its field focused.
     const onFocusSearch = () => shell.openSearch();
     window.addEventListener("focus-search", onFocusSearch);
     return () => {

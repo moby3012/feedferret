@@ -266,7 +266,7 @@ describe("reload", () => {
 
   it("on an overlay entry over a root: boots on the root, Back leaves the app", async () => {
     await boot("/");
-    await store.nav.openOverlay("search");
+    await store.nav.openOverlay("save-search");
     await store.nav.openOverlay("palette"); // swapped, still one transient entry
     await reload();
     expect(nav().overlay).toBeNull();
@@ -287,7 +287,7 @@ describe("reload", () => {
 describe("overlays", () => {
   it("system Back closes an overlay without navigating beneath it", async () => {
     await boot("/?feed=F&a=X");
-    for (const id of ["palette", "shortcuts", "add-feed", "search", "sources"] as const) {
+    for (const id of ["palette", "shortcuts", "add-feed", "save-search", "sources"] as const) {
       await store.nav.openOverlay(id);
       expect(nav().overlay).toBe(id);
       await systemBack();
@@ -311,9 +311,9 @@ describe("overlays", () => {
 
   it("closeOverlay(id) only closes that overlay; toggle opens and closes", async () => {
     await boot("/");
-    await store.nav.openOverlay("search");
+    await store.nav.openOverlay("save-search");
     await store.nav.closeOverlay("palette");
-    expect(nav().overlay).toBe("search");
+    expect(nav().overlay).toBe("save-search");
     await store.nav.toggleOverlay("palette");
     expect(nav().overlay).toBe("palette");
     await store.nav.toggleOverlay("palette");
@@ -330,5 +330,53 @@ describe("overlays", () => {
     expect(history.length).toBe(depth);
     await store.nav.closeOverlay();
     expect(nav().overlay).toBeNull();
+  });
+});
+
+describe("tabs (PR 7): own stacks, search lives in Suche", () => {
+  it("a tab switch restores the other tab's stack; at its root nothing app-pushed is beneath", async () => {
+    await boot("/");
+    await store.nav.goTab("feeds");
+    await settle();
+    expect(history.here()).toBe("/?tab=feeds");
+    expect(nav().index).toBe(0);
+    await store.nav.goScope({ kind: "feed", id: "F" });
+    expect(nav().index).toBe(1);
+    await store.nav.goTab("new");
+    await settle();
+    expect(history.here()).toBe("/");
+    expect(nav().index).toBe(0);
+    await store.nav.goTab("feeds");
+    await settle();
+    expect(history.here()).toBe("/?feed=F");
+    expect(nav().index).toBe(1); // Feeds root beneath the remembered feed
+    await systemBack();
+    expect(history.here()).toBe("/?tab=feeds");
+    expect(nav().index).toBe(0);
+  });
+
+  it("labels belong to Gemerkt: label ⇄ Später is a same-depth replace", async () => {
+    await boot("/?v=later");
+    expect(here().tab).toBe("saved");
+    await store.nav.goScope({ kind: "label", id: "L" });
+    expect(here().tab).toBe("saved");
+    expect(nav().index).toBe(0);
+    expect(history.here()).toBe("/?label=L");
+  });
+
+  it("a query commits in place in Suche; clearing returns to the Suche root, not to another tab", async () => {
+    await boot("/?tab=search");
+    await store.nav.setQuery("needle");
+    expect(history.here()).toBe("/?q=needle");
+    expect(nav().index).toBe(0);
+    await store.nav.setQuery("");
+    expect(history.here()).toBe("/?tab=search");
+    expect(here().tab).toBe("search");
+  });
+
+  it("clearing an empty query outside Suche does nothing", async () => {
+    await boot("/?feed=F");
+    await store.nav.setQuery("");
+    expect(history.here()).toBe("/?feed=F");
   });
 });

@@ -112,7 +112,7 @@ test.describe("explicit mark-all + undo", () => {
     const soloBefore = unreadCountForFeed(app.userKey, "Solo Blog");
     expect(soloBefore).toBeGreaterThan(5);
     // Pre-existing read article in the same feed must stay read after undo.
-    await app.activate(page.getByRole("button", { name: "Mark all as read" }).first());
+    await app.markAllRead();
 
     await expect.poll(() => unreadCountForFeed(app.userKey, "Solo Blog")).toBe(0);
     // Other feeds untouched, still on the same view (no auto-jump).
@@ -128,7 +128,7 @@ test.describe("explicit mark-all + undo", () => {
 
   test("the Undo toast stays for ~6 seconds", async ({ app, page }) => {
     await openSoloBlog(app, page);
-    await app.activate(page.getByRole("button", { name: "Mark all as read" }).first());
+    await app.markAllRead();
     // Desktop: sonner pauses its timer while the mouse hovers the toast area,
     // so park the mouse elsewhere. (Touch needs no such help — see the tap-only test.)
     if (!app.isMobile) await page.mouse.move(1, 1);
@@ -142,7 +142,7 @@ test.describe("explicit mark-all + undo", () => {
     test.skip(!app.isMobile, "tap-only behaviour");
     await openSoloBlog(app, page);
     // Tap (synthesised mouse events included) — and never touch the mouse again.
-    await app.activate(page.getByRole("button", { name: "Mark all as read" }).filter({ visible: true }).first());
+    await app.markAllRead();
     await expect(toast(page)).toBeVisible();
     await page.waitForTimeout(4500);
     await expect(toast(page)).toBeVisible();
@@ -154,12 +154,14 @@ test.describe("explicit mark-all + undo", () => {
     await app.open();
     const sidebar = await app.sidebarCount("All articles");
     expect(sidebar).toBe(app.user.counts.total); // 300 > 200 loaded rows
-    const header = page.locator("header").filter({ has: page.getByRole("heading", { level: 2, name: "All articles" }) });
-    await expect(header.getByText(/^\d+\s+unread$/)).toHaveText(`${sidebar} unread`);
+    // The bar shows a muted, capped count ("99+"); the exact server count is its data / tooltip.
+    const count = page.locator(`${ACTIVE_LIST} [data-testid="list-count"]`);
+    await expect(count).toHaveAttribute("data-count", String(sidebar));
+    await expect(count).toHaveText(sidebar > 99 ? "99+" : String(sidebar));
+    await expect(count).toHaveAttribute("title", `${sidebar} unread`);
   });
 });
 
-const visibleMarkAll = (page: Page) => page.getByRole("button", { name: "Mark all as read" }).filter({ visible: true }).first();
 
 test.describe("every bulk mark-read path is undoable and scoped to the visible view", () => {
   test("sidebar feed menu 'Mark all as read' shows the Undo toast and undo restores exactly that feed", async ({ app, page }) => {
@@ -192,14 +194,14 @@ test.describe("every bulk mark-read path is undoable and scoped to the visible v
     expect(matching.length).toBeGreaterThan(0);
     expect(before.length).toBeGreaterThan(matching.length);
 
-    await app.activate(page.getByRole("button", { name: "Search articles" }).first());
+    await app.openSearch();
     await page.keyboard.type(needle);
     await page.keyboard.press("Enter");
     await expect(page.getByRole("heading", { level: 2, name: new RegExp(needle) })).toBeVisible();
     await expect(app.rowsMatching(needle)).toHaveCount(app.user.sample.needleHits);
 
-    // Search view: desktop has the Shift+A shortcut, mobile the bottom-bar button.
-    if (app.isMobile) await app.activate(visibleMarkAll(page));
+    // Search view: desktop has the Shift+A shortcut, mobile the top bar's "…" menu.
+    if (app.isMobile) await app.markAllRead();
     else await page.keyboard.press("Shift+A");
     await expect(toast(page)).toBeVisible();
     await expect.poll(() => unreadIdsMatching(app.userKey, needle)).toEqual([]);
@@ -235,7 +237,7 @@ test.describe("every bulk mark-read path is undoable and scoped to the visible v
     await expect.poll(() => articleFlags(id).isRead).toBe(false);
     await expect(app.row(8)).toHaveAttribute("aria-label", /^Unread:/);
 
-    await app.activate(visibleMarkAll(page));
+    await app.markAllRead();
     await expect.poll(() => articleFlags(id).isRead).toBe(true);
     // Default list is "unread only": the now-read article must be gone, not
     // lingering as a stale "unread" session copy.
@@ -405,6 +407,7 @@ test("sign-out asks for confirmation first", async ({ app, page }) => {
   await expect(dialog).toBeVisible();
   await app.activate(dialog.getByRole("button", { name: "Cancel" }));
   await expect(dialog).toBeHidden();
-  await expect(page).toHaveURL(/\/$/);
+  // Still where it was (mobile: the Feeds tab hosts the sign-out button).
+  await expect(page).toHaveURL(app.isMobile ? /\/\?tab=feeds$/ : /\/$/);
   await expect(page.getByRole("button", { name: "Sign out" }).first()).toBeVisible(); // still signed in
 });

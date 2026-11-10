@@ -3,6 +3,8 @@
 //
 //   tab   feeds | search            only on a tab root without scope
 //   v     later | starred | recent | spoiler
+// Tabs: q / tab=search → Suche · v=later|starred, label → Gemerkt ·
+// feed|cat|ss|v=recent|spoiler, tab=feeds → Feeds · else Neu.
 //   feed · cat · label · ss  <id>   mutually exclusive with each other and v
 //   show  all                       include read items (all/feed/cat/label/ss only)
 //   q     <text>                    ad-hoc search
@@ -43,6 +45,8 @@ export function tabOfScope(scope: Scope | null, rootTab: TabId = "new"): TabId {
       return "search";
     case "later":
     case "starred":
+    case "label":
+      // Gemerkt = Später | Favoriten + the user's labels (owner decision, PR 7).
       return "saved";
     case "all":
       return "new";

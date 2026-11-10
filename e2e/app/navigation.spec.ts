@@ -12,7 +12,7 @@ const reader = (page: Page, num: number) => page.locator("article").filter({ has
 const historyLength = (page: Page) => page.evaluate(() => history.length);
 const backButton = (page: Page) => page.getByRole("button", { name: /^(Back to list|Back)$/ }).first();
 
-/** Opens the Solo Blog feed (sidebar on desktop, feed sheet on mobile). */
+/** Opens the Solo Blog feed (sidebar on desktop, Feeds tab on mobile). */
 async function openSoloBlog(app: App, page: Page) {
   await app.selectSidebar(/^Solo Blog\s*\d+$/);
   await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
@@ -137,16 +137,6 @@ test("mobile: back goes reader → feed list → Feeds root and never leaves the
   expect(app.where()).toBe(feedUrl);
   await page.goBack();
   await expect.poll(() => app.where()).toBe("/?tab=feeds");
-});
-
-test("the feed sheet is a history level: back closes it instead of navigating", async ({ app, page, isMobile }) => {
-  test.skip(!isMobile, "the feed sheet is the compact feed picker");
-  await app.open();
-  await app.openSidebar();
-  await page.goBack();
-  await expect(page.getByRole("dialog", { name: /feed navigation/i })).toBeHidden();
-  await expect.poll(() => app.where()).toBe("/");
-  await expect(app.row(1)).toBeVisible();
 });
 
 test("reload restores selected feed and open article (P1-03)", async ({ app, page }) => {
@@ -292,7 +282,7 @@ test("resizing 390 → 1280 without reload keeps the open article and the list",
   await expect(reader(page, 2)).toBeVisible();
 });
 
-test("medium 820x1180: list and reader side by side, feeds in a drawer", async ({ app, page, isMobile }) => {
+test("medium 820x1180: rail + list + reader side by side, feeds in a drawer from the rail", async ({ app, page, isMobile }) => {
   test.skip(isMobile, "desktop project drives the viewport");
   await page.setViewportSize({ width: 820, height: 1180 });
   await app.open();
@@ -302,6 +292,15 @@ test("medium 820x1180: list and reader side by side, feeds in a drawer", async (
   const article = await reader(page, 1).boundingBox();
   expect(list && article).toBeTruthy();
   expect(list!.x + list!.width).toBeLessThanOrEqual(article!.x + 1);
-  await page.getByRole("button", { name: "Feeds", exact: true }).first().click();
+  // The rail is the navigation; its Feeds tab (no feed yet) opens the tree as a drawer.
+  const rail = page.getByTestId("shell-rail");
+  await expect(rail).toBeVisible();
+  await expect(page.getByTestId("tab-bar")).toBeHidden();
+  expect((await rail.boundingBox())!.x + (await rail.boundingBox())!.width).toBeLessThanOrEqual(list!.x + 1);
+  await rail.getByRole("tab", { name: "Feeds" }).click();
   await expect(page.getByRole("dialog", { name: /feed navigation/i })).toBeVisible();
+  await page.getByRole("dialog", { name: /feed navigation/i }).getByRole("button", { name: /^Solo Blog\s*\d+$/ }).click();
+  await expect(page.getByRole("dialog", { name: /feed navigation/i })).toBeHidden();
+  await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
+  await expect(rail.getByRole("tab", { name: "Feeds" })).toHaveAttribute("aria-selected", "true");
 });

@@ -101,7 +101,7 @@ describe("tabOf", () => {
     [{ kind: "spoiler" }, "feeds"],
     [{ kind: "feed", id: "f" }, "feeds"],
     [{ kind: "category", id: "c" }, "feeds"],
-    [{ kind: "label", id: "l" }, "feeds"],
+    [{ kind: "label", id: "l" }, "saved"],
     [{ kind: "saved-search", id: "s" }, "feeds"],
     [{ kind: "query", q: "x" }, "search"],
   ] as const)("%j → %s", (scope, tab) => {

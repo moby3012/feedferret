@@ -3,15 +3,11 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { getNavState, nav, subscribeNav, useNav } from "@/features/reader/nav/store";
 
-// Search draft text (spec §1.3 — not in the URL while typing). Two separate
-// drafts so a dismissed dialog can never leak into a commit:
-//   · inline (header / bottom-bar field): this module's store, committed to
-//     `?q=` (replace) 300 ms after the last keystroke;
-//   · dialog (search overlay): local state of the dialog, committed only on
-//     submit and discarded on every other dismissal (X, Esc, scrim, system
-//     Back) — see `SearchDialog`.
-// Any history traversal (system / UI back) cancels a pending inline commit and
-// resets the draft to what the landed entry has committed.
+// Search draft text (spec §1.3 — not in the URL while typing).
+// The field in the Suche tab's top bar edits this module's draft; it is
+// committed to `?q=` (replace) 300 ms after the last keystroke, or at once on
+// Enter. Any history traversal (system / UI back) or tab switch cancels a
+// pending commit and resets the draft to what the landed entry has committed.
 
 export const SEARCH_COMMIT_DELAY_MS = 300;
 
@@ -93,8 +89,8 @@ export function useSearchCommit() {
     });
     const unsubscribeNav = subscribeNav(() => {
       const cause = getNavState().cause;
-      if ((cause !== "pop-os" && cause !== "pop-ui") || !committer.pending) return;
-      // Back while an edit was pending: it is dismissed, not committed.
+      if ((cause !== "pop-os" && cause !== "pop-ui" && cause !== "tab") || !committer.pending) return;
+      // Back (or a tab switch) while an edit was pending: it is dismissed, not committed.
       committer.cancel();
       syncing = true;
       searchDraft.set(committedQuery());
@@ -108,7 +104,7 @@ export function useSearchCommit() {
   }, []);
 }
 
-/** Commit right away (dialog submit / Enter): closes the dialog entry first. */
+/** Commit right away (Enter, a recent / saved query). */
 export function commitSearch(text = searchDraft.get()) {
   return nav.setQuery(text);
 }

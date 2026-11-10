@@ -3,17 +3,22 @@
 import { useCallback, useMemo, useState, memo } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
+import { PanelLeftClose, Plus, Settings } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useCounts } from "@/features/bootstrap/queries";
 import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import { scopeFromSidebarKey, sidebarSelectionOf } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
-import { useShellActions, useShellData } from "./shell-context";
+import { ShellRail } from "./shell-rail";
+import { useShellActions, useShellData, useSourcesCollapsed } from "./shell-context";
 
-// Feeds navigation (the pre-shell RssSidebar, reused) in its two hosts until
-// SourcesView lands (PR 7): the sources column on expanded / the Feeds root on
-// compact (`SourcesPane`), and a drawer on medium + the compact feed sheet
-// (`SourcesSheet`). Selection goes through the nav store.
+// Feeds navigation (the pre-shell RssSidebar tree, reused) in its hosts:
+//   · `SourcesPane` — the sources column: the full tree on expanded and as the
+//     compact Feeds root (Feeds tab), the 72 px icon rail on medium and on
+//     expanded with the sidebar collapsed (`[`);
+//   · `SourcesSheet` — the tree as a left drawer from the rail.
+// Selection goes through the nav store. The compact feed sheet is gone: the
+// Feeds tab is the feed picker.
 
 // The sidebar (with dnd-kit reordering) only ever mounts after hydration —
 // expanded column, compact Feeds root, sheet / drawer — so it is a chunk of
@@ -57,53 +62,92 @@ const selectFeed = (feedId: string | null) => {
 const selectCategory = (key: string) => void nav.goScope(scopeFromSidebarKey(key));
 
 /**
- * Sources column (expanded) / Feeds root (compact). Mounts after hydration
- * (post-mount widget: the grid column is CSS, so nothing shifts) and only
- * where it is shown: never on medium, on compact once the Feeds root opened.
+ * Sources column. The rail is static markup (CSS shows it on medium / the
+ * collapsed expanded layout). The tree mounts after hydration (post-mount
+ * widget: the grid column is CSS, so nothing shifts) and only where it is
+ * shown: the expanded sidebar, and the compact Feeds root once opened.
  */
 export const SourcesPane = memo(function SourcesPane() {
   const layout = useLayoutClass();
+  const sourcesCollapsed = useSourcesCollapsed();
   const atFeedsRoot = useNav((s) => s.loc.tab === "feeds" && !s.loc.scope);
   const [visitedRoot, setVisitedRoot] = useState(false);
   if (atFeedsRoot && layout === "compact" && !visitedRoot) setVisitedRoot(true);
-  const mounted = layout === "expanded" || (layout === "compact" && (visitedRoot || atFeedsRoot));
+  const mounted = (layout === "expanded" && !sourcesCollapsed) || (layout === "compact" && (visitedRoot || atFeedsRoot));
   // Covered on compact by a pushed feed list or the reader (also over the Feeds root).
   const readerOpen = useNav((s) => !!s.loc.articleId);
   const inert = layout === "compact" && (!atFeedsRoot || readerOpen);
   return (
-    <div data-pane="sources" inert={inert || undefined} aria-hidden={inert || undefined} className="overflow-hidden">
-      {mounted && <SourcesHost />}
+    <div id="ff-pane-sources" data-pane="sources" inert={inert || undefined} aria-hidden={inert || undefined} className="overflow-hidden">
+      <ShellRail />
+      <div className="ff-sources-full">
+        <FeedsHeader />
+        {mounted && <SourcesHost />}
+      </div>
     </div>
   );
 });
 
-function SourcesHost() {
-  const props = useSidebarProps();
-  return <RssSidebar {...props} onSelectFeed={selectFeed} onSelectCategory={selectCategory} />;
+/** Compact Feeds root: large title + add feed + settings (spec §4.6). */
+function FeedsHeader() {
+  const t = useTranslations("tabs");
+  const tSidebar = useTranslations("sidebar");
+  const shell = useShellActions();
+  const btn = "hit-slop inline-flex size-11 items-center justify-center rounded-control text-muted-foreground active:bg-surface-sunken";
+  return (
+    <header className="ff-feeds-header items-center gap-1 ps-(--gutter) pe-2 pt-[max(var(--safe-t),8px)] pb-1">
+      <h2 className="min-w-0 flex-1 truncate text-headline text-foreground">{t("feeds")}</h2>
+      <button type="button" className={btn} onClick={() => shell.requestAddFeed()} aria-label={tSidebar("addFeed")} title={tSidebar("addFeed")}>
+        <Plus className="size-5" aria-hidden />
+      </button>
+      <button type="button" className={btn} onClick={shell.openSettings} aria-label={t("settings")} title={t("settings")}>
+        <Settings className="size-5" aria-hidden />
+      </button>
+    </header>
+  );
 }
 
-/** Feed sheet (compact, from the bottom controls) / left drawer (medium). Open state = nav overlay "sources". */
+/** Expanded sidebar: collapse to the rail (`[`). */
+function CollapseButton() {
+  const t = useTranslations("tabs");
+  const shell = useShellActions();
+  return (
+    <button
+      type="button"
+      className="hidden size-8 shrink-0 items-center justify-center rounded-control text-muted-foreground hover:bg-surface-sunken hover:text-foreground expanded:inline-flex"
+      onClick={shell.toggleSourcesCollapsed}
+      aria-label={t("collapseSidebar")}
+      title={`${t("collapseSidebar")} ([)`}
+    >
+      <PanelLeftClose className="size-4" aria-hidden />
+    </button>
+  );
+}
+
+function SourcesHost({ inDrawer = false }: { inDrawer?: boolean }) {
+  const props = useSidebarProps();
+  return <RssSidebar {...props} onSelectFeed={selectFeed} onSelectCategory={selectCategory} headerAction={inDrawer ? undefined : <CollapseButton />} />;
+}
+
+/** The tree as a left drawer from the rail (medium, collapsed expanded). Open state = nav overlay "sources". */
 export function SourcesSheet() {
   const t = useTranslations("sidebar");
   const open = useNav((s) => s.overlay === "sources");
   const layout = useLayoutClass();
+  const sourcesCollapsed = useSourcesCollapsed();
   const onOpenChange = useCallback((next: boolean) => {
     if (next) void nav.openOverlay("sources");
-    else void nav.closeOverlay();
+    else void nav.closeOverlay("sources");
   }, []);
-  if (layout === "expanded") return null;
-  const side = layout === "medium" ? "left" : "bottom";
+  if (layout === "compact" || layout === null || (layout === "expanded" && !sourcesCollapsed)) return null;
   return (
     // A Radix Sheet (not vaul): the sidebar hosts Radix dialogs (delete /
     // sign-out confirms) that portal to <body>; nested inside vaul they lose
     // text focus on iOS. Add Feed is a shell overlay of its own (never nested).
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side={side}
-        className={side === "bottom" ? "h-[86dvh] rounded-t-sheet border-border/70 p-0 pt-12 gap-0" : "w-(--sidebar-w) max-w-[86vw] p-0 pt-12 gap-0"}
-      >
+      <SheetContent side="left" className="w-(--sidebar-w) max-w-[86vw] p-0 pt-12 gap-0">
         <SheetTitle className="sr-only">{t("feedNavigation")}</SheetTitle>
-        {open && <SourcesHost />}
+        {open && <SourcesHost inDrawer />}
       </SheetContent>
     </Sheet>
   );
