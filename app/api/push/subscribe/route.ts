@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { hasPushConfig } from "@/lib/push";
 import { assertSafeFetchUrl } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
+import { isSameOriginRequest } from "@/lib/same-origin";
 
 const VALID_PLATFORMS = ["web", "android", "ios"] as const;
 const VALID_FREQUENCIES = ["instant", "hourly", "daily"] as const;
@@ -18,6 +19,8 @@ type IncomingSubscription = {
 };
 
 export async function POST(request: Request) {
+  // CSRF: the session cookie is ambient; refuse cross-site mutations (audit #2 wave 3).
+  if (!isSameOriginRequest(request)) return new Response("Forbidden", { status: 403 });
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!hasPushConfig()) return NextResponse.json({ error: "Push is not configured" }, { status: 503 });

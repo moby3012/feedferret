@@ -76,7 +76,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useUpdateDisplayTimezone, useChangePassword, useUpdateProfile, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, usePreviewDigest, useFeeds, useLabels, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useContentFetchSettings, useUpdateContentFetchSettings, useTestContentFetchConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel, useExportSettings, useUpdateExportSettings, useTestWallabagExportConnection } from "@/hooks/use-rss-data";
+import { useReadingPreferences, useUpdateGlobalSettings, useUpdateUiLanguage, useUpdateDisplayTimezone, useChangePassword, useUpdateProfile, useEmailChangeMailStatus, useDigestSettings, useUpdateDigestSettings, useSendTestDigest, usePreviewDigest, useFeeds, useLabels, useTwoFactorStatus, useBeginTwoFactorSetup, useConfirmTwoFactorSetup, useDisableTwoFactor, useAiSettings, useUpdateAiSettings, useTestAiConnection, useContentFetchSettings, useUpdateContentFetchSettings, useTestContentFetchConnection, useNotificationChannels, useUpdateNotificationChannels, useTestNotificationChannel, useExportSettings, useUpdateExportSettings, useTestWallabagExportConnection } from "@/hooks/use-rss-data";
 import { useInstance } from "@/hooks/use-instance";
 import { useState, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -1021,12 +1021,13 @@ function PushNotificationSection() {
 function EmailSection({ currentEmail }: { currentEmail: string | null }) {
   const t = useTranslations();
   const updateProfile = useUpdateProfile();
+  const mailStatus = useEmailChangeMailStatus();
   const { update: updateSession } = useSession();
   const [email, setEmail] = useState("");
   const [proof, setProof] = useState("");
 
   const handleSubmit = async () => {
-    const next = email.trim();
+    const next = email.trim().toLowerCase();
     if (!next || next === currentEmail) return;
     try {
       // The proof field takes the current login password or a TOTP code; the
@@ -1034,6 +1035,7 @@ function EmailSection({ currentEmail }: { currentEmail: string | null }) {
       const result = await updateProfile.mutateAsync({ email: next, currentPassword: proof, totp: proof });
       if (result.success) {
         toast.success(t("profile.emailChanged"));
+        if (result.emailNotice === "failed") toast.warning(t("profile.emailChangeNoticeFailed"));
         setEmail("");
         setProof("");
         await updateSession?.().catch(() => undefined);
@@ -1044,6 +1046,7 @@ function EmailSection({ currentEmail }: { currentEmail: string | null }) {
         reloginRequired: t("apiPassword.reloginRequired"),
         rateLimited: t("profile.emailChangeRateLimited"),
         invalidEmail: t("profile.invalidEmail"),
+        emailTaken: t("profile.emailTaken"),
       } as const;
       toast.error(messages[result.code] ?? t("profile.emailChangeFailed"));
     } catch {
@@ -1089,10 +1092,16 @@ function EmailSection({ currentEmail }: { currentEmail: string | null }) {
           />
           <p id="email-step-up-hint" className="text-xs text-muted-foreground">{t("profile.emailStepUpHint")}</p>
         </div>
+        {mailStatus.data && !mailStatus.data.mailConfigured ? (
+          <p role="note" className="flex items-start gap-2 rounded-2xl border border-warning/20 bg-warning/10 p-3 text-sm text-warning" data-testid="email-change-no-mail">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{t("profile.emailChangeNoMail")}</span>
+          </p>
+        ) : null}
         <Button
           type="button"
           onClick={handleSubmit}
-          disabled={updateProfile.isPending || !email.trim() || email.trim() === currentEmail}
+          disabled={updateProfile.isPending || !email.trim() || email.trim().toLowerCase() === currentEmail}
           className="h-11 w-fit rounded-2xl px-5"
         >
           {updateProfile.isPending ? t("profile.updating") : t("profile.updateEmail")}

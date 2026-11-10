@@ -43,7 +43,7 @@ import {
   GREADER_MAX_LABELS,
   MAX_GREADER_LABEL_NAME,
 } from "@/lib/greader";
-import { redactFeedsForClient } from "@/lib/connector-secrets";
+import { connectorFeedUrlError, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
 
 
 class UnauthorizedError extends Error {}
@@ -260,6 +260,9 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
   const discovery = await discoverFeeds(feedUrl);
   feedUrl = discovery.feeds[0]?.url || feedUrl;
   try { await assertSafeFetchUrl(feedUrl); } catch { return NextResponse.json({ numResults: 0, error: "Unsafe feed URL" }); }
+  // Only allowed connector routes (no /rsshub/transform/…, no all-watches feed); stored without secrets (N3).
+  if (await connectorFeedUrlError(feedUrl)) return NextResponse.json({ numResults: 0, error: "Connector route not allowed" });
+  feedUrl = await stripConnectorSecrets(feedUrl);
   const resolvedExisting = await db.feed.findFirst({ where: { userId, url: feedUrl } });
   if (resolvedExisting?.extId) return NextResponse.json({ numResults: 1, streamId: `feed/${decimalExternalId(resolvedExisting.extId)}`, streamName: resolvedExisting.name, title: resolvedExisting.name });
   const remoteFeed = await fetchFeedArticles({ url: feedUrl });

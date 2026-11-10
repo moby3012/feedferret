@@ -152,7 +152,10 @@
     "emailChanged": "Email changed. Reconnect your Google Reader and Fever clients.",
     "emailChangeFailed": "Could not change the email. Please try again.",
     "emailChangeRateLimited": "Too many attempts. Wait 15 minutes and try again.",
-    "invalidEmail": "Enter a valid email address."
+    "invalidEmail": "Enter a valid email address.",
+    "emailTaken": "This email address is already in use.",
+    "emailChangeNoMail": "This server has no email delivery configured: no confirmation will be sent to the new address and no notice to the old one. Double-check the new address.",
+    "emailChangeNoticeFailed": "Email changed, but the notification emails could not be sent."
   },
   "twoFactor": {
     "title": "Two-factor authentication",
@@ -1309,6 +1312,7 @@
         "css-without-selector": "Full-text settings without a content selector",
         "filter-untranslatable": "Filter has no equivalent",
         "proxy-blocked": "Proxy not allowed (internal address), not imported",
+        "connector-route-blocked": "This connector address (RSSHub/changedetection.io) is not allowed, not imported",
         "proxy-socks": "SOCKS proxy not supported, not imported",
         "filter-too-long": "Translated filter is too long",
         "filter-rule-remote-dropped": "Rules are not created from remote OPML",
@@ -1866,7 +1870,11 @@
     "signInButton": "Sign in",
     "signInIgnore": "If you didn't request this email, you can safely ignore it.",
     "testSubject": "FeedFerret mail provider test",
-    "testBody": "If you received this message, your FeedFerret email provider is configured correctly."
+    "testBody": "If you received this message, your FeedFerret email provider is configured correctly.",
+    "emailChangedOldSubject": "Your FeedFerret sign-in address was changed",
+    "emailChangedOldBody": "The sign-in email of your FeedFerret account was just changed to {newEmail}. If this wasn't you, contact your administrator right away — your account may be compromised.",
+    "emailChangedNewSubject": "Your new FeedFerret sign-in address",
+    "emailChangedNewBody": "This address is now the sign-in email of your FeedFerret account (previously {oldEmail}). Reconnect your Google Reader and Fever clients with the new address."
   },
   "commandPalette": {
     "title": "Command palette",

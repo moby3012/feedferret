@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { generateApiToken, hashApiToken, generateFeverKey } from "@/lib/token";
+import { isSameOriginRequest } from "@/lib/same-origin";
 
 function requireSession() {
   return auth().then((s) => s?.user?.id ?? null);
@@ -26,6 +27,8 @@ export async function GET() {
 // POST /api/user/tokens — create a new token
 // Body: { name?: string, scope?: "read"|"write"|"admin", expiresAt?: string|null }
 export async function POST(request: Request) {
+  // CSRF: the session cookie is ambient; refuse cross-site mutations (audit #2 wave 3).
+  if (!isSameOriginRequest(request)) return new Response("Forbidden", { status: 403 });
   const userId = await requireSession();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

@@ -6,6 +6,7 @@ import { checkRateLimit, peekRateLimit, releaseRateLimit, getClientIdentifier, R
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
+import { getConnectorSecretRules, stripConnectorSecretsWith } from "@/lib/connector-secrets";
 
 export const GREADER_READING_LIST = "user/-/state/com.google/reading-list";
 export const GREADER_UNREAD = "user/-/state/com.google/unread";
@@ -42,6 +43,8 @@ export function verifyGReaderToken(token: string) {
 }
 
 const passwordCache = new Map<string, { key: string; expires: number }>();
+/** identity -> hash of a password verified within the last minute (lets that client skip the budget peek). */
+const recentLogins = new Map<string, { key: string; expires: number }>();
 
 /** Conditional update avoids a write on every poll, including across instances. */
 export async function touchApiPassword(userId: string, lastUsed: Date | null) {
@@ -77,10 +80,19 @@ export async function authenticateGReaderPassword(request: Request, email: strin
     reserved = true;
     return ipLimit.success && accountLimit.success;
   };
+  // A login verified within the last minute (same identity + password) skips
+  // the budget peek: a client re-authenticating in a loop must not lock itself
+  // out once other traffic spent the IP budget. The full check (user, policy,
+  // token version, cached verification) still runs below.
+  const passwordKey = hashApiToken(password);
+  const recent = recentLogins.get(identity);
+  const recentlyVerified = recent?.key === passwordKey && recent.expires > Date.now();
   // Cheap early exit (no DB, no bcrypt) once a budget is spent.
-  if (!peekRateLimit(ip, ipConfig).success || !peekRateLimit(identity, emailConfig).success) failReason = "rate_limit";
+  if (!recentlyVerified && (!peekRateLimit(ip, ipConfig).success || !peekRateLimit(identity, emailConfig).success)) failReason = "rate_limit";
   else {
     user = email ? await db.user.findUnique({ where: { email } }) : null;
+    // Addresses are stored lower-case since the email-change normalization.
+    if (!user && identity && identity !== email) user = await db.user.findUnique({ where: { email: identity } });
     if (!user || (!user.password && !user.apiPasswordHash)) failReason = reserve() ? "no_account" : "rate_limit";
     else if (!user.isActive) failReason = reserve() ? "inactive" : "rate_limit";
     else {
@@ -97,6 +109,8 @@ export async function authenticateGReaderPassword(request: Request, email: strin
           if (passwordCache.size >= 5000) passwordCache.delete(passwordCache.keys().next().value!);
           passwordCache.set(user.id, { key, expires: Date.now() + 60_000 });
         }
+        if (recentLogins.size >= 5000 && !recentLogins.has(identity)) recentLogins.delete(recentLogins.keys().next().value!);
+        recentLogins.set(identity, { key: passwordKey, expires: Date.now() + 60_000 });
         if (user.apiPasswordHash) await touchApiPassword(user.id, user.apiPasswordLastUsedAt);
       }
     }
@@ -452,7 +466,8 @@ export async function toGReaderArticle(article: any) {
     origin: {
       streamId: `feed/${decimalExternalId(article.feed.extId)}`,
       title: article.feed.name,
-      htmlUrl: article.feed.htmlUrl || article.feed.url,
+      // Fallback feed URL without connector secrets (N3).
+      htmlUrl: article.feed.htmlUrl || (article.feed.url ? stripConnectorSecretsWith(await getConnectorSecretRules(), article.feed.url) : article.feed.url),
     },
     ...(article.author?.trim() ? { author: article.author } : {}),
     summary: { content: content || article.excerpt || "" },

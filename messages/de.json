@@ -152,7 +152,10 @@
     "emailChanged": "E-Mail-Adresse geändert. Verbinde deine Google-Reader- und Fever-Clients neu.",
     "emailChangeFailed": "Die E-Mail-Adresse konnte nicht geändert werden. Bitte versuch es noch einmal.",
     "emailChangeRateLimited": "Zu viele Versuche. Warte 15 Minuten und versuch es dann erneut.",
-    "invalidEmail": "Gib eine gültige E-Mail-Adresse ein."
+    "invalidEmail": "Gib eine gültige E-Mail-Adresse ein.",
+    "emailTaken": "Diese E-Mail-Adresse ist bereits vergeben.",
+    "emailChangeNoMail": "Auf diesem Server ist kein E-Mail-Versand eingerichtet: Es wird keine Bestätigung an die neue Adresse und keine Benachrichtigung an die alte Adresse geschickt. Prüf die neue Adresse deshalb genau.",
+    "emailChangeNoticeFailed": "E-Mail-Adresse geändert, aber die Benachrichtigungs-Mails konnten nicht gesendet werden."
   },
   "twoFactor": {
     "title": "Zwei-Faktor-Authentifizierung",
@@ -1309,6 +1312,7 @@
         "css-without-selector": "Volltext-Einstellungen ohne Inhalts-Selektor",
         "filter-untranslatable": "Filter hat keine Entsprechung",
         "proxy-blocked": "Proxy nicht erlaubt (interne Adresse), nicht importiert",
+        "connector-route-blocked": "Diese Connector-Adresse (RSSHub/changedetection.io) ist nicht erlaubt, nicht importiert",
         "proxy-socks": "SOCKS-Proxy wird nicht unterstützt, nicht importiert",
         "filter-too-long": "Übersetzter Filter ist zu lang",
         "filter-rule-remote-dropped": "Regeln werden aus Remote-OPML nicht angelegt",
@@ -1866,7 +1870,11 @@
     "signInButton": "Anmelden",
     "signInIgnore": "Wenn du diese E-Mail nicht angefordert hast, kannst du sie ignorieren.",
     "testSubject": "FeedFerret E-Mail-Provider-Test",
-    "testBody": "Wenn du diese Nachricht erhalten hast, ist dein FeedFerret-E-Mail-Provider korrekt konfiguriert."
+    "testBody": "Wenn du diese Nachricht erhalten hast, ist dein FeedFerret-E-Mail-Provider korrekt konfiguriert.",
+    "emailChangedOldSubject": "Deine FeedFerret-Anmeldeadresse wurde geändert",
+    "emailChangedOldBody": "Die Anmelde-E-Mail deines FeedFerret-Kontos wurde gerade auf {newEmail} geändert. Warst du das nicht, melde dich sofort bei deiner Administration – dein Konto ist möglicherweise kompromittiert.",
+    "emailChangedNewSubject": "Deine neue FeedFerret-Anmeldeadresse",
+    "emailChangedNewBody": "Diese Adresse ist jetzt die Anmelde-E-Mail deines FeedFerret-Kontos (vorher {oldEmail}). Verbinde deine Google-Reader- und Fever-Clients mit der neuen Adresse neu."
   },
   "commandPalette": {
     "title": "Befehlspalette",

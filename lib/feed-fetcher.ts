@@ -9,7 +9,6 @@ import {
   parseJsonObject,
 } from "./feed-extraction";
 import { assertSafeProxyUrl, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed, type ConditionalFetchResult } from "./ssrf";
-import { isTrustedConnectorUrl } from "./connector-hosts";
 import { logger } from "./logger";
 import { stripStyleBlocks } from "./html-utils";
 import { parseDurationSecs } from "./article-kind";
@@ -35,8 +34,8 @@ export type FeedFetchConfig = {
    * the SSRF private-address block. Used by trusted optional connectors
    * (RSSHub route validation) whose base URL is a private Docker hostname.
    * When unset, internal access is allowed only if the instance-wide
-   * "allow internal feed URLs" setting is on, or the URL's host is a
-   * configured connector host (see lib/connector-hosts.ts).
+   * "allow internal feed URLs" setting is on, or the URL is an allowed feed
+   * route on a configured connector (see lib/connector-secrets.ts).
    */
   allowInternal?: boolean;
   /**
@@ -303,11 +302,17 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
   };
 
   // Internal fetch targets are allowed when: the caller forced it (trusted
-  // connector validation), OR the instance-wide switch is on, OR the URL's
-  // host is a configured optional-connector host (RSSHub / changedetection.io
-  // on the private Docker network) — see lib/connector-hosts.ts.
+  // connector validation), OR the instance-wide switch is on, OR the URL is an
+  // allowed feed route on a configured optional connector (RSSHub platform
+  // route / changedetection.io single-watch feed on the private Docker
+  // network). Only those routes also get the connector secret (RSSHub key,
+  // changedetection.io token), which is never stored in feed URLs or shown to
+  // users: any other path on the connector host (`/rsshub/transform/…`, …)
+  // gets neither, so it can't be used as a read-SSRF proxy (N3).
   const trustedInstance = feed.allowInternal === true || (await isTrustedFeedFetchingAllowed());
-  const allowInternal = trustedInstance || (await isTrustedConnectorUrl(feed.url));
+  const { resolveConnectorRequest } = await import("./connector-secrets");
+  const connector = await resolveConnectorRequest(feed.url);
+  const allowInternal = trustedInstance || connector.trusted;
 
   if (http.CURLOPT_PROXY) {
     // The proxy host is a connection target of its own: apply the same SSRF rules as to the
@@ -329,12 +334,7 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
     }
   }
 
-  // Connector secrets (RSSHub key, changedetection.io token) are never stored
-  // in feed URLs or shown to users; they are added here, server-side only.
-  const { applyConnectorSecrets } = await import("./connector-secrets");
-  const requestUrl = await applyConnectorSecrets(feed.url);
-
-  return fetchWithSsrfProtection(requestUrl, init, {
+  return fetchWithSsrfProtection(connector.url, init, {
     allowInternal,
     includeErrorBody: feed.includeErrorBody,
     context: "Feed fetch",

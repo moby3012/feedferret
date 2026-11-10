@@ -17,7 +17,7 @@ import { logger } from "@/lib/logger";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
 import { isRsshubConfigured, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
-import { getConnectorSecretRules, redactFeedForClient, redactFeedWith, stripConnectorSecrets } from "@/lib/connector-secrets";
+import { connectorFeedUrlError, getConnectorSecretRules, redactFeedForClient, redactFeedsForClient, redactFeedWith, stripConnectorSecrets } from "@/lib/connector-secrets";
 import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
@@ -311,6 +311,9 @@ async function createFeedFromUrl(
   url: string,
   opts: { name?: string; categoryId?: string; icon?: string; sync?: boolean; fallbackName?: string },
 ) {
+  // Only allowed connector routes (no /rsshub/transform/…, no all-watches feed) — N3.
+  const connectorError = await connectorFeedUrlError(url);
+  if (connectorError) return apiError(connectorError, 400);
   url = await stripConnectorSecrets(url);
   const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
   const order = await db.feed.count({ where: { userId: user.id } });
@@ -645,7 +648,8 @@ async function exportOpml(user: ApiUser) {
     db.feed.findMany({ where: { userId: user.id }, include: { category: true }, orderBy: [{ category: { name: "asc" } }, { name: "asc" }] }),
     db.category.findMany({ where: { userId: user.id }, orderBy: [{ order: "asc" }, { name: "asc" }] }),
   ]);
-  return new NextResponse(generateApiOpml(feeds, categories), { headers: { "content-type": "application/xml; charset=utf-8" } });
+  // Connector secrets never leave the server (N3), also not via OPML.
+  return new NextResponse(generateApiOpml(await redactFeedsForClient(feeds), categories), { headers: { "content-type": "application/xml; charset=utf-8" } });
 }
 
 async function importOpml(user: ApiUser, request: Request) {

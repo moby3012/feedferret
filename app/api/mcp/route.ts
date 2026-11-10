@@ -10,7 +10,7 @@ import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
 import { isRsshubConfigured, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
-import { redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
+import { connectorFeedUrlError, getConnectorSecretRules, redactFeedForClient, redactFeedsForClient, redactFeedWith, stripConnectorSecrets } from "@/lib/connector-secrets";
 import { stripFeedSecrets } from "@/lib/feed-secrets";
 import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } from "@/lib/changedetection";
@@ -226,7 +226,7 @@ async function searchArticles(user: ApiUser, args: any) {
     if (Object.keys(advancedWhere).length) where.AND = [...(where.AND || []), advancedWhere];
   }
   const limit = Math.min(50, Math.max(1, clampInt(args.limit, 10, 1, 50)));
-  return db.article.findMany({
+  const articles = await db.article.findMany({
     where,
     orderBy: { publishedAt: "desc" },
     take: limit,
@@ -237,6 +237,9 @@ async function searchArticles(user: ApiUser, args: any) {
       labels: { include: { label: true } },
     },
   });
+  // feed.url without connector secrets (N3).
+  const rules = await getConnectorSecretRules();
+  return articles.map((article) => (article.feed ? { ...article, feed: redactFeedWith(rules, article.feed) } : article));
 }
 
 // Shared feed-creation core for the MCP add-feed + connector-feed tools. The
@@ -247,6 +250,9 @@ async function createFeedForUser(
   url: string,
   opts: { name?: unknown; categoryId?: unknown; icon?: unknown; fallbackName?: string; sync?: boolean },
 ) {
+  // Only allowed connector routes (no /rsshub/transform/…, no all-watches feed) — N3.
+  const connectorError = await connectorFeedUrlError(url);
+  if (connectorError) throw new Error(connectorError);
   url = await stripConnectorSecrets(url);
   const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
   const order = await db.feed.count({ where: { userId } });

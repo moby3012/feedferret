@@ -183,6 +183,8 @@ it("requires step-up, rejects short chosen secrets, generates a secret and throt
   expect((await configure()).status).toBe(429);
 });
 it("shares Fever failures with Basic and stops before credential lookup", async () => {
+  // Age out beforeEach's verified login: only a recently verified client skips the budget peek.
+  vi.spyOn(Date, "now").mockReturnValue(clock += 61_000);
   for (let i = 0; i < 10; i++) expect((await (await feverAuth("wrong", "shared-ip")).json()).auth).toBe(0);
   const lookup = vi.spyOn(db.user, "findUnique");
   const response = await GET(new Request("http://localhost/api/greader/tag/list", { headers: { "x-forwarded-for": "shared-ip", Authorization: `Basic ${Buffer.from("u@example.org:login-password").toString("base64")}` } }), { params: Promise.resolve({ path: ["tag", "list"] }) });
@@ -237,7 +239,18 @@ it("throttles last-used writes, verifies Basic once per minute and reloads versi
   expect(compare).toHaveBeenCalledTimes(2);
   compare.mockRestore(); writes.mockRestore();
 });
+it("a client verified within the last minute is not locked out by a spent IP budget", async () => {
+  for (let i = 0; i < 10; i++) expect((await (await feverAuth("wrong", "shared-ip-2")).json()).auth).toBe(0);
+  const basic = (pw: string) => GET(new Request("http://localhost/api/greader/tag/list", { headers: { "x-forwarded-for": "shared-ip-2", Authorization: `Basic ${Buffer.from(`u@example.org:${pw}`).toString("base64")}` } }), { params: Promise.resolve({ path: ["tag", "list"] }) });
+  // beforeEach signed in with this password a moment ago.
+  expect((await basic("login-password")).status).toBe(200);
+  // A different (wrong) password gets no such pass.
+  const lookup = vi.spyOn(db.user, "findUnique");
+  expect((await basic("guess")).status).toBe(401);
+  expect(lookup).not.toHaveBeenCalled(); lookup.mockRestore();
+});
 it("Fever observes Basic lockout before lookup", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(clock += 61_000);
   for (let i = 0; i < 10; i++) await GET(new Request("http://localhost/api/greader/tag/list", { headers: { "x-forwarded-for": "basic-fail-ip", Authorization: `Basic ${Buffer.from(`missing-${i}@example.org:wrong`).toString("base64")}` } }), { params: Promise.resolve({ path: ["tag", "list"] }) });
   const lookup = vi.spyOn(db.user, "findUnique");
   expect((await (await feverAuth(password, "basic-fail-ip")).json()).auth).toBe(0);

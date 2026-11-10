@@ -11,6 +11,7 @@ import { buildDedupeKey } from "./dedupe-key";
 import { decryptIfValue } from "./crypto";
 import type { AiConfig } from "./ai-summary";
 import { logger, urlForLog } from "./logger";
+import { getConnectorSecretRules, redactConnectorTextWith, stripConnectorSecretsWith } from "./connector-secrets";
 import { getSanitizer } from "./sanitize-html";
 import { resolveFullTextMode } from "./full-text-mode";
 import { fetchAndExtractReadable } from "./readability-extract";
@@ -51,6 +52,11 @@ export interface ArticleSyncInput {
     isSponsored?: boolean | null;
     isClickbait?: boolean | null;
     enrichSource?: string | null;
+    // Not persisted: the item had no link and `link` is the synthetic
+    // `<feed url>#<dedupe key>` fallback. A rewrite of only that synthetic link
+    // (feed URL changed, connector secret stripped) is not a content change and
+    // must not bump Article.updatedAt (GReader ot/nt sync depends on it).
+    linkSynthetic?: boolean;
 }
 
 export interface ArticleSyncResult {
@@ -195,6 +201,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
             publishedAt: true,
             imageUrl: true,
             enclosures: true,
+            updatedAt: true,
         },
     });
     const existingByDedupeKey = new Map(
@@ -216,20 +223,23 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
         upsertedIds.push(existing.id);
 
         const next = updatableFields(article);
-        const changed =
-            existing.title !== next.title ||
-            existing.link !== next.link ||
+        const linkChanged = existing.link !== next.link;
+        const otherChanged =
             existing.externalId !== next.externalId ||
             existing.content !== next.content ||
             existing.excerpt !== next.excerpt ||
             existing.author !== next.author ||
             existing.publishedAt.getTime() !== next.publishedAt.getTime() ||
             (existing.imageUrl ?? null) !== next.imageUrl ||
-            (existing.enclosures ?? null) !== next.enclosures;
+            (existing.enclosures ?? null) !== next.enclosures ||
+            existing.title !== next.title;
 
-        if (changed) {
+        if (otherChanged || (linkChanged && !article.linkSynthetic)) {
             await db.article.update({ where: { id: existing.id }, data: next });
             if (upsertedIds.length % 25 === 0) await yieldToLoop();
+        } else if (linkChanged) {
+            // Synthetic-link rewrite only: store it, keep updatedAt.
+            await db.article.update({ where: { id: existing.id }, data: { link: next.link, updatedAt: existing.updatedAt } });
         }
     }
 
@@ -379,6 +389,12 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
 
     if (!feed) throw new Error("Feed not found");
 
+    // Connector secrets (RSSHub key / changedetection.io token) must not reach
+    // stored article links, feed errors, notifications or rule payloads.
+    const secretRules = await getConnectorSecretRules();
+    const publicFeedUrl = stripConnectorSecretsWith(secretRules, feed.url);
+    const redact = (text: string) => redactConnectorTextWith(secretRules, text);
+
     try {
         const remoteFeed = await fetchFeedArticles(feed);
 
@@ -430,7 +446,9 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
 
             const externalId = item.externalId || item.link || null;
             const dedupeKey = buildDedupeKey(feed, item, externalId);
-            const link = item.link || `${feed.url}#${encodeURIComponent(dedupeKey)}`;
+            // Linkless items get a synthetic link from the feed URL — without
+            // connector secrets (legacy rows may still carry the RSSHub key).
+            const link = item.link || `${publicFeedUrl}#${encodeURIComponent(dedupeKey)}`;
 
             const sanitizedContent = DOMPurify.sanitize(content);
             const title = item.title || "Untitled";
@@ -441,7 +459,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 link,
                 imageUrl: item.imageUrl,
                 enclosures: item.enclosures,
-                feedUrl: feed.url,
+                feedUrl: publicFeedUrl,
                 mediaUrl: item.media?.url,
                 mediaType: item.media?.type,
                 durationSecs: item.durationSecs,
@@ -452,6 +470,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 userId: userId,
                 title,
                 link,
+                ...(item.link ? {} : { linkSynthetic: true }),
                 externalId,
                 dedupeKey,
                 contentHash: computeContentHash(link),
@@ -537,19 +556,19 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             data: {
                 lastFetchedAt: new Date(),
                 lastStatus: "error",
-                lastError: String(error).slice(0, 1000),
+                lastError: redact(String(error)).slice(0, 1000),
                 consecutiveFailureCount: failureUpdate.consecutiveFailureCount,
                 autoMuted: failureUpdate.autoMuted,
             },
         });
-        const errorMessage = String(error).slice(0, 500);
+        const errorMessage = redact(String(error)).slice(0, 500);
         // Fire matching feed_error rules (in-app/push/email/webhook actions)
         import("@/lib/auto-read-rules")
             .then(({ applyFeedErrorRules }) =>
                 applyFeedErrorRules(userId, {
                     feedId: feed.id,
                     feedName: feed.name,
-                    feedUrl: feed.url,
+                    feedUrl: publicFeedUrl,
                     error: errorMessage,
                 }),
             )
@@ -571,7 +590,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 })
                 .catch((e: unknown) => logger.warn("[rss-sync] feed_auto_muted notification failed:", e));
         }
-        return { success: false, error: String(error) };
+        return { success: false, error: redact(String(error)) };
     }
 }
 
@@ -958,7 +977,10 @@ export async function syncUserFeeds(userId: string) {
         },
     });
 
-    const results = await mapWithConcurrency(feeds, getSyncConcurrency(), async (feed) => {
+    // Results reach clients (sync action, API v1, MCP): no connector secrets.
+    const secretRules = await getConnectorSecretRules();
+    const results = await mapWithConcurrency(feeds, getSyncConcurrency(), async (rawFeed) => {
+        const feed = { ...rawFeed, url: stripConnectorSecretsWith(secretRules, rawFeed.url) };
         // F6: an auto-muted feed is deliberately not actively re-fetched
         // by background sync (stop wasting cycles hitting a dead URL) —
         // a manual "Refresh now" (syncFeed called directly) still works

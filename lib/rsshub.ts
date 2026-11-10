@@ -14,6 +14,7 @@ import { assertSafeFetchUrl } from "@/lib/ssrf";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { type AiConfig, runAiPrompt } from "@/lib/ai-summary";
 import { matchRadarRules, type RadarMatch } from "@/lib/rsshub-radar-rules";
+import { rsshubRouteError } from "@/lib/rsshub-route";
 
 export type RsshubConfig = { baseUrl: string; apiKey: string | null };
 
@@ -32,6 +33,18 @@ const RSSHUB_DISABLED = truthy(process.env.FEEDFERRET_DISABLE_RSSHUB);
  * whatever is asking for it.
  */
 export async function getRsshubConfig(): Promise<RsshubConfig | null> {
+  try {
+    return await loadRsshubConfig();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Like `getRsshubConfig`, but a DB error throws instead of reading as "not
+ * configured" — for callers that cache the answer (lib/connector-secrets.ts).
+ */
+export async function loadRsshubConfig(): Promise<RsshubConfig | null> {
   if (RSSHUB_DISABLED) return null;
 
   const envUrl = process.env.FEEDFERRET_RSSHUB_URL?.trim();
@@ -39,19 +52,15 @@ export async function getRsshubConfig(): Promise<RsshubConfig | null> {
     return { baseUrl: envUrl, apiKey: process.env.FEEDFERRET_RSSHUB_KEY?.trim() || null };
   }
 
-  try {
-    const settings = await db.globalSettings.findUnique({
-      where: { id: "global" },
-      select: { rsshubEnabled: true, rsshubBaseUrl: true, rsshubApiKey: true },
-    });
-    if (!settings?.rsshubEnabled || !settings.rsshubBaseUrl?.trim()) return null;
-    return {
-      baseUrl: settings.rsshubBaseUrl.trim(),
-      apiKey: decryptIfValue(settings.rsshubApiKey) || null,
-    };
-  } catch {
-    return null;
-  }
+  const settings = await db.globalSettings.findUnique({
+    where: { id: "global" },
+    select: { rsshubEnabled: true, rsshubBaseUrl: true, rsshubApiKey: true },
+  });
+  if (!settings?.rsshubEnabled || !settings.rsshubBaseUrl?.trim()) return null;
+  return {
+    baseUrl: settings.rsshubBaseUrl.trim(),
+    apiKey: decryptIfValue(settings.rsshubApiKey) || null,
+  };
 }
 
 /** Cheap "is the RSSHub connector available?" check for UI gating. */
@@ -103,26 +112,7 @@ export function applyRsshubKeyWith(config: RsshubConfig | null, feedUrl: string)
   }
 }
 
-/**
- * Rejects route paths that are not ordinary platform routes: RSSHub's own
- * built-in `/rsshub/*` routes (incl. `/rsshub/transform/*`, which fetch an
- * arbitrary URL from inside the RSSHub network), path traversal, absolute or
- * scheme-relative URLs, and an attempt to pass its own `key`. Returns the
- * reason, or null when the path is acceptable. Pure (exported for tests).
- */
-export function rsshubRouteError(routePath: string): string | null {
-  const route = String(routePath ?? "").trim();
-  if (!route.startsWith("/") || route.startsWith("//")) return "RSSHub route must start with a single \"/\"";
-  if (route.length > 512) return "RSSHub route is too long";
-  if (/[\\\s#]/.test(route) || /(^|\/)(\.|%2e){1,2}(\/|$|\?)/i.test(route) || /%5c/i.test(route)) {
-    return "RSSHub route contains characters that are not allowed";
-  }
-  const [path, query = ""] = route.split("?", 2);
-  const first = path.split("/")[1]?.toLowerCase() ?? "";
-  if (!first || first === "rsshub" || first === "api") return "This RSSHub route is not allowed";
-  if (new URLSearchParams(query).has("key")) return "RSSHub route must not contain an access key";
-  return null;
-}
+export { rsshubRouteError } from "@/lib/rsshub-route";
 
 export type RsshubValidation =
   | { ok: true; title: string | null; itemCount: number; sampleTitles: string[] }

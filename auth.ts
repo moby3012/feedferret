@@ -59,7 +59,12 @@ const config = {
           } catch { /* never crash auth on log failure */ }
         };
 
-        const user = await db.user.findUnique({ where: { email } });
+        const normalizedEmail = email.trim().toLowerCase();
+        // Addresses are stored lower-case since the email-change normalization;
+        // older rows keep their spelling, so try the exact form first.
+        const user =
+          (await db.user.findUnique({ where: { email } })) ??
+          (normalizedEmail && normalizedEmail !== email ? await db.user.findUnique({ where: { email: normalizedEmail } }) : null);
 
         if (!user?.password) { await logAttempt(false, undefined, "no_account"); return null; }
 

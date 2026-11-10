@@ -314,6 +314,12 @@ export async function updateGlobalSettings(data: Record<string, unknown>) {
     update: sanitized,
     create: { id: "global", ...sanitized },
   });
+  // Connector base URL / key / token changes take effect for the fetcher's
+  // secret injection and output redaction immediately, not after the 15 s memo.
+  if (Object.keys(sanitized).some((key) => key.startsWith("rsshub") || key.startsWith("changedetection"))) {
+    const { resetConnectorSecretRulesCache } = await import("@/lib/connector-secrets");
+    resetConnectorSecretRulesCache();
+  }
 
   const session = await auth();
   if (session?.user?.id) {

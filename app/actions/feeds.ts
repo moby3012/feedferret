@@ -36,7 +36,7 @@ import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-
 import { pickFields } from "@/lib/pick-fields";
 import { clampFeedLimits } from "@/lib/feed-limits";
 import { assertOwnedCategories, MAX_REORDER_ITEMS } from "@/lib/owned-categories";
-import { redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
+import { connectorFeedUrlError, redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
 import { FEED_CLIENT_SELECT, stripFeedSecrets } from "@/lib/feed-secrets";
 
 export async function refreshAllFeeds() {
@@ -258,6 +258,9 @@ export async function addFeed(url: string, categoryId?: string) {
 
     const urlError = validateFeedUrl(url);
     if (urlError) return { success: false, error: urlError };
+    // Only allowed connector routes (no /rsshub/transform/…, no all-watches feed) — N3.
+    const connectorError = await connectorFeedUrlError(url);
+    if (connectorError) return { success: false, error: connectorError };
 
     if (categoryId) {
         const category = await db.category.findFirst({

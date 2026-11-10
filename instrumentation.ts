@@ -45,14 +45,20 @@ export async function register() {
         })().catch((error) => console.error("[external-ids] startup backfill failed; will retry during background sync", error));
     }
 
-    // Security audit #2 N3: legacy feed URLs carried the RSSHub key /
-    // changedetection.io token; strip them once (idempotent, background).
+    // Security audit #2 N3: legacy feed URLs (and synthetic article links)
+    // carried the RSSHub key / changedetection.io token; strip them
+    // (idempotent, background). Opt-in this release so a rollback to an older
+    // build, which expects keyed URLs, keeps working: FEEDFERRET_MIGRATE_CONNECTOR_URLS=1.
+    // Fetch-time injection and output redaction work for keyed and keyless rows.
     if (process.env.NEXT_PHASE !== "phase-production-build") {
         void (async () => {
+            const { connectorUrlMigrationEnabled, migrateConnectorFeedUrls, scrubConnectorSecretsFromArticleLinks } = await import("./lib/connector-secrets");
+            if (!connectorUrlMigrationEnabled()) return;
             const { db } = await import("./lib/db");
-            const { migrateConnectorFeedUrls } = await import("./lib/connector-secrets");
-            const result = await migrateConnectorFeedUrls(db as never);
-            if (result.migrated || result.skipped) console.info("[connector-secrets] feed URL migration", result);
+            const feeds = await migrateConnectorFeedUrls(db as never);
+            if (feeds.migrated || feeds.skipped) console.info("[connector-secrets] feed URL migration", feeds);
+            const articles = await scrubConnectorSecretsFromArticleLinks(db as never);
+            if (articles.scrubbed) console.info("[connector-secrets] article link cleanup", articles);
         })().catch((error) => console.error("[connector-secrets] feed URL migration failed; secrets stay redacted on output", error));
     }
 

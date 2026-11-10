@@ -25,6 +25,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { connectorFeedUrlErrorWith, getConnectorSecretRules, stripConnectorSecretsWith } from "@/lib/connector-secrets";
 import type { PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import { allocateExternalIds } from "@/lib/external-id-store";
@@ -289,14 +290,29 @@ export async function importFreshRssArticles(
   const labelCache = new Map<string, string>(); // name -> id
   const pendingLabelNames = new Set<string>(); // dry-run only
 
+  // Connector feed URLs (N3): stored without the RSSHub key / changedetection
+  // token; a URL that is not an allowed connector route (e.g. RSSHub's
+  // /rsshub/transform/…) becomes an unfetchable placeholder instead.
+  const secretRules = await getConnectorSecretRules();
+  const storedUrlFor = (url: string) =>
+    connectorFeedUrlErrorWith(secretRules, url)
+      ? `urn:freshrss:blocked-connector-route:${createHash("sha256").update(url).digest("hex").slice(0, 16)}`
+      : stripConnectorSecretsWith(secretRules, url);
+
   const resolveFeeds = async (items: NormalizedFrssItem[]) => {
     const missingUrls = Array.from(new Set(items.map((item) => item.feedUrl))).filter((url) => !feedCache.has(url));
     if (missingUrls.length) {
-      const rows = await db.feed.findMany({ where: { userId, url: { in: missingUrls } }, select: { id: true, url: true, unicityCriteria: true } });
-      for (const row of rows) feedCache.set(row.url, row);
+      const byStoredUrl = new Map(missingUrls.map((url) => [storedUrlFor(url), url] as const));
+      const rows = await db.feed.findMany({ where: { userId, url: { in: Array.from(byStoredUrl.keys()) } }, select: { id: true, url: true, unicityCriteria: true } });
+      for (const row of rows) feedCache.set(byStoredUrl.get(row.url) ?? row.url, row);
     }
     for (const item of items) {
       if (feedCache.has(item.feedUrl)) continue;
+      const sameStored = Array.from(feedCache.entries()).find(([, row]) => row.url === storedUrlFor(item.feedUrl) && !row.id.startsWith("dry:"));
+      if (sameStored) {
+        feedCache.set(item.feedUrl, sameStored[1]);
+        continue;
+      }
       // Origin feed is not subscribed: keep its articles under an orphan feed. It is
       // muted so importing never triggers network fetches; the report lists it.
       const planned = options.plannedFeeds?.get(item.feedUrl);
@@ -316,16 +332,16 @@ export async function importFreshRssArticles(
       const created = await db.feed.create({
         data: {
           userId,
-          url: item.feedUrl,
+          url: storedUrlFor(item.feedUrl),
           name: orphanFeedName(item).slice(0, 200),
           htmlUrl: item.feedHtmlUrl,
           description: "Imported from FreshRSS (feed not subscribed in FeedFerret)",
           sourceType: "rss",
-          autoMuted: !isPlanned,
+          autoMuted: !isPlanned || connectorFeedUrlErrorWith(secretRules, item.feedUrl) !== null,
         },
         select: { id: true, url: true, unicityCriteria: true },
       });
-      feedCache.set(created.url, created);
+      feedCache.set(item.feedUrl, created);
     }
   };
 

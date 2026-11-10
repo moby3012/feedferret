@@ -3,9 +3,12 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
+import { isSameOriginRequest } from "@/lib/same-origin";
 
 // DELETE /api/user/tokens/:id — revoke one token
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  // CSRF: the session cookie is ambient; refuse cross-site mutations (audit #2 wave 3).
+  if (!isSameOriginRequest(request)) return new Response("Forbidden", { status: 403 });
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -18,6 +21,8 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
 
 // PATCH /api/user/tokens/:id — rename a token
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  // CSRF: the session cookie is ambient; refuse cross-site mutations (audit #2 wave 3).
+  if (!isSameOriginRequest(request)) return new Response("Forbidden", { status: 403 });
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

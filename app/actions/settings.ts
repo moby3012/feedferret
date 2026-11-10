@@ -24,8 +24,25 @@ async function requireUser() {
 }
 
 export type UpdateProfileResult =
-    | { success: true; emailChanged: boolean; feverRotationRequired: boolean }
-    | { success: false; code: "stepUpRequired" | "reloginRequired" | "rateLimited" | "invalidEmail" };
+    | {
+          success: true;
+          emailChanged: boolean;
+          feverRotationRequired: boolean;
+          /** Email change only: "sent" = old + new address notified, "failed" = mail configured but a send failed, "unavailable" = no mail delivery. */
+          emailNotice?: "sent" | "failed" | "unavailable";
+      }
+    | { success: false; code: "stepUpRequired" | "reloginRequired" | "rateLimited" | "invalidEmail" | "emailTaken" };
+
+function isUniqueViolation(error: unknown): boolean {
+  return !!error && typeof error === "object" && (error as { code?: unknown }).code === "P2002";
+}
+
+/** Whether an email change can send the confirmation / old-address notice (UI warns when not). */
+export async function getEmailChangeMailStatus(): Promise<{ mailConfigured: boolean }> {
+  await requireUser();
+  const { isMailServiceEnabled } = await import("@/lib/mail");
+  return { mailConfigured: await isMailServiceEnabled() };
+}
 
 export async function updateProfile(data: {
     name?: string;
@@ -40,9 +57,11 @@ export async function updateProfile(data: {
   for (const [key, value] of Object.entries(profile)) {
     if (value !== null && typeof value !== "string") throw new Error(`Invalid ${key}`);
   }
-  if (typeof profile.email === "string") profile.email = profile.email.trim();
+  // Login identities are compared case-insensitively by mail providers and the
+  // magic-link flow lower-cases them: store the normalized form.
+  if (typeof profile.email === "string") profile.email = profile.email.trim().toLowerCase();
 
-  const current = await db.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { email: true } });
+  const current = await db.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { email: true, uiLanguage: true } });
   if (profile.email !== undefined && profile.email !== current.email) {
     // The account email is the login identity (and the GReader/Fever username).
     if (typeof profile.email !== "string" || !/^[^\s@]+@[^\s@]+$/.test(profile.email) || profile.email.length > 254) {
@@ -58,9 +77,14 @@ export async function updateProfile(data: {
       { currentPassword: data?.currentPassword, totp: data?.totp },
     );
     if (!stepUp.ok) return { success: false, code: stepUp.code };
+    // Checked after the step-up so a bare session can't probe which addresses exist.
+    const taken = await db.user.findFirst({ where: { email: profile.email, NOT: { id: session.user.id } }, select: { id: true } });
+    if (taken) return { success: false, code: "emailTaken" };
   }
 
-  const emailChanged = await db.$transaction(async (tx) => {
+  let emailChanged: boolean;
+  try {
+    emailChanged = await db.$transaction(async (tx) => {
     const previous = await tx.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { email: true } });
     const emailChanged = profile.email !== undefined && profile.email !== previous.email;
     // A concurrent change between the step-up check and here would compare
@@ -72,10 +96,26 @@ export async function updateProfile(data: {
     // Hashes cannot be recomputed without the original secret. Rotate after email changes.
     if (emailChanged) await tx.apiToken.updateMany({ where: { userId: session.user.id }, data: { feverKey: null } });
     return emailChanged;
-  });
+    });
+  } catch (error) {
+    // Lost a race against another account taking the same address.
+    if (isUniqueViolation(error)) return { success: false, code: "emailTaken" };
+    throw error;
+  }
+
+  let emailNotice: "sent" | "failed" | "unavailable" | undefined;
+  if (emailChanged && current.email && typeof profile.email === "string") {
+    const { isMailServiceEnabled, sendEmailChangeNotices } = await import("@/lib/mail");
+    if (!(await isMailServiceEnabled())) emailNotice = "unavailable";
+    else {
+      emailNotice = (await sendEmailChangeNotices({ oldEmail: current.email, newEmail: profile.email, locale: current.uiLanguage }).catch(() => false))
+        ? "sent"
+        : "failed";
+    }
+  }
 
   revalidatePath("/");
-  return { success: true, emailChanged, feverRotationRequired: emailChanged };
+  return { success: true, emailChanged, feverRotationRequired: emailChanged, ...(emailNotice ? { emailNotice } : {}) };
 }
 
 export async function changePassword(data: {
