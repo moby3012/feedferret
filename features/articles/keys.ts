@@ -9,6 +9,8 @@ export const qk = {
   savedSearches: ["saved-searches"],
   prefs: ["reading-preferences"],
   counts: ["counts"],
+  /** The sidebar's notification list (hooks/use-rss-data.ts#useNotifications). */
+  notifications: ["notifications"],
   /** Every article list (infinite queries of `ArticlePage`). */
   lists: ["list"],
   list: (k: ListKey) => ["list", k.scopeKey, k.show, k.sort] as const,

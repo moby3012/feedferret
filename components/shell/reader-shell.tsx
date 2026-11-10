@@ -98,7 +98,19 @@ function useBoot(shell: ShellActions) {
   }, [shell]);
 }
 
-/** Lazy sync on load + app badge. */
+/** Boot sync is skipped when the last one finished less than this ago. */
+const BOOT_SYNC_MIN_INTERVAL_MS = 5 * 60_000;
+
+function syncedRecently(): boolean {
+  try {
+    const last = Date.parse(localStorage.getItem("lastSync") ?? "");
+    return Number.isFinite(last) && Date.now() - last >= 0 && Date.now() - last < BOOT_SYNC_MIN_INTERVAL_MS;
+  } catch {
+    return false;
+  }
+}
+
+/** Lazy sync on load (at most every 5 min) + app badge. */
 function useBackgroundWork() {
   const t = useTranslations("sidebar");
   const counts = useCounts(true);
@@ -107,6 +119,9 @@ function useBackgroundWork() {
 
   const toastShown = useRef(false);
   useEffect(() => {
+    // A reload / reopen within minutes of the last sync does not sync again
+    // (spec §2.5.4); the server's background sync keeps feeds fresh meanwhile.
+    if (syncedRecently()) return;
     fetch("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" } })
       .then((res) => {
         if (!res.ok) throw new Error(`Sync request failed (${res.status})`);
