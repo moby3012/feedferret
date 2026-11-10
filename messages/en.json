@@ -1761,5 +1761,19 @@
     "offlineReadOnly": "Offline – read only",
     "offline": "Offline",
     "labelsFailed": "Couldn't update labels."
+  },
+  "apiPassword": {
+    "title": "API password",
+    "description": "Use a separate password for Google Reader and Fever clients. Two-factor accounts require it. Without an API password or two-factor authentication, your login password works unless you require an API password. Rotating, revoking, or changing this policy disconnects Google Reader clients. Revoking keeps API passwords required.",
+    "password": "New API password (16–72 bytes)",
+    "required": "Require an API password",
+    "rotate": "Set / rotate password",
+    "revoke": "Revoke password",
+    "savePolicy": "Save requirement",
+    "configured": "API password configured",
+    "unconfigured": "No API password configured",
+    "lastUsed": "Last used: {date}",
+    "saved": "API credentials updated",
+    "failed": "Could not update API credentials"
   }
 }

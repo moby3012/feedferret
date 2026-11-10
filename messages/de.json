@@ -1761,5 +1761,19 @@
     "offlineReadOnly": "Offline – nur Lesen",
     "offline": "Offline",
     "labelsFailed": "Labels konnten nicht geändert werden."
+  },
+  "apiPassword": {
+    "title": "API-Passwort",
+    "description": "Nutze ein separates Passwort für Google-Reader- und Fever-Clients. Mit Zwei-Faktor-Anmeldung ist es erforderlich. Ohne API-Passwort und Zwei-Faktor-Anmeldung funktioniert dein Anmeldepasswort, solange du kein API-Passwort verlangst. Rotation, Widerruf und Richtlinienänderungen trennen Google-Reader-Clients. Nach einem Widerruf bleibt das API-Passwort erforderlich.",
+    "password": "Neues API-Passwort (16–72 Bytes)",
+    "required": "API-Passwort verlangen",
+    "rotate": "Passwort setzen / erneuern",
+    "revoke": "Passwort widerrufen",
+    "savePolicy": "Anforderung speichern",
+    "configured": "API-Passwort eingerichtet",
+    "unconfigured": "Kein API-Passwort eingerichtet",
+    "lastUsed": "Zuletzt genutzt: {date}",
+    "saved": "API-Zugangsdaten aktualisiert",
+    "failed": "API-Zugangsdaten konnten nicht aktualisiert werden"
   }
 }

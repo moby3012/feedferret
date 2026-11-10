@@ -1,5 +1,6 @@
 import { decimalExternalId, storedExternalId } from "./external-ids";
-import { Prisma } from "@prisma/client";
+import { hashApiToken } from "@/lib/token";
+import { Prisma, type User } from "@prisma/client";
 import crypto from "crypto";
 import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
@@ -26,16 +27,17 @@ function secret() {
   throw new Error("AUTH_SECRET must be set for Google Reader API tokens.");
 }
 
-export function createGReaderToken(userId: string) {
-  const sig = crypto.createHmac("sha256", secret()).update(userId).digest("hex");
-  return `${userId}.${sig}`;
+export function createGReaderToken(userId: string, version = 0) {
+  const payload = `${userId}:${version}`;
+  const sig = crypto.createHmac("sha256", secret()).update(payload).digest("hex");
+  return `${userId}.${version}.${sig}`;
 }
 
 export function verifyGReaderToken(token: string) {
-  const [userId, sig] = token.split(".");
-  if (!userId || !sig) return null;
-  const expected = crypto.createHmac("sha256", secret()).update(userId).digest("hex");
-  if (sig.length !== expected.length) return null;
+  const parts = token.split(".");
+  const [userId, version, sig] = parts;
+  if (parts.length !== 3 || !userId || !/^\d+$/.test(version) || !/^[a-f0-9]{64}$/.test(sig)) return null;
+  const expected = crypto.createHmac("sha256", secret()).update(`${userId}:${version}`).digest("hex");
   return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)) ? userId : null;
 }
 
@@ -52,10 +54,13 @@ export async function authenticateGReaderPassword(request: Request, email: strin
   if (!ipLimit.success || !accountLimit.success) failReason = "rate_limit";
   else {
     user = email ? await db.user.findUnique({ where: { email } }) : null;
-    if (!user?.password) failReason = "no_account";
+    if (!user || (!user.password && !user.apiPasswordHash)) failReason = "no_account";
     else if (!user.isActive) failReason = "inactive";
-    else if (user.twoFactorEnabled) failReason = "otp";
-    else if (!(await bcrypt.compare(password, user.password))) failReason = "password";
+    else {
+      const hash = user.apiPasswordHash || (!user.twoFactorEnabled && !user.apiPasswordRequired ? user.password : null);
+      if (!hash || !(await bcrypt.compare(password, hash))) failReason = "password";
+      else if (user.apiPasswordHash) await db.user.update({ where: { id: user.id }, data: { apiPasswordLastUsedAt: new Date() } });
+    }
   }
   if (!failReason) return user;
   if (failReason !== "rate_limit") {
@@ -71,7 +76,7 @@ export async function authenticateGReaderPassword(request: Request, email: strin
   return failReason ? null : user;
 }
 
-export async function authenticateGReaderRequest(request: Request) {
+export async function authenticateGReaderRequest(request: Request): Promise<(User & { tokenScope?: string }) | null> {
   const header = request.headers.get("authorization") || "";
   const googleLogin = header.match(/GoogleLogin\s+auth=(.+)$/i);
   const bearer = header.match(/^Bearer\s+(.+)$/i);
@@ -80,10 +85,14 @@ export async function authenticateGReaderRequest(request: Request) {
     const userId = verifyGReaderToken(token.trim());
     if (userId) {
       const user = await db.user.findUnique({ where: { id: userId } });
-      if (user?.isActive) return user;
+      if (user?.isActive && Number(token.trim().split(".")[1]) === user.apiTokenVersion) return user;
     }
   }
 
+  if (bearer && !googleLogin) {
+    const record = await db.apiToken.findUnique({ where: { tokenHash: hashApiToken(bearer[1].trim()) }, include: { user: true } });
+    if (record?.user.isActive && (!record.expiresAt || record.expiresAt > new Date())) return { ...record.user, tokenScope: record.scope };
+  }
   if (header.startsWith("Basic ")) {
     const raw = Buffer.from(header.slice(6), "base64").toString("utf8");
     const separator = raw.indexOf(":");
@@ -150,8 +159,9 @@ export function greaderLimit(value: string | null, idsOnly = true) {
 
 export function normalizeCategoryNameFromTag(tag: string) {
   if (!tag.startsWith(GREADER_LABEL_PREFIX)) return null;
-  const name = decodeURIComponent(tag.slice(GREADER_LABEL_PREFIX.length)).trim();
-  return name || null;
+  let name: string;
+  try { name = decodeURIComponent(tag.slice(GREADER_LABEL_PREFIX.length)).trim(); } catch { name = tag.slice(GREADER_LABEL_PREFIX.length).trim(); }
+  return name && name.length <= 255 ? name : null;
 }
 
 export function isKnownGReaderStream(streamId: string) {
@@ -276,7 +286,7 @@ export async function listGReaderTags(userId: string) {
     const name = item.name.trim();
     if (!name || seen.has(name)) return [];
     seen.add(name);
-    return [{ id: `${GREADER_LABEL_PREFIX}${name}`, type: "label", sortid: name }];
+    return [{ id: `${GREADER_LABEL_PREFIX}${name}`, type: categories.some((category) => category.name === name) ? "folder" : "tag", sortid: name }];
   });
 
   return [...systemTags, ...customTags];

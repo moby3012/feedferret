@@ -23,6 +23,11 @@ async function authenticateFever(
   const apiKey = body.api_key || params.get("api_key");
   if (!apiKey) return null;
 
+  const passwordUser = await db.user.findUnique({ where: { apiFeverKey: apiKey } });
+  if (passwordUser?.isActive && passwordUser.apiPasswordHash) {
+    await db.user.update({ where: { id: passwordUser.id }, data: { apiPasswordLastUsedAt: new Date() } });
+    return { id: passwordUser.id, email: passwordUser.email, tokenScope: "write" };
+  }
   const token = await db.apiToken.findFirst({
     where: { feverKey: apiKey },
     include: { user: { select: { id: true, email: true, isActive: true } } },

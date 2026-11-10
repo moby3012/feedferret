@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ suspended: true, userId: user.id, email: user.email, alreadySuspended: true });
   }
 
-  await db.user.update({ where: { id: user.id }, data: { isActive: false } });
+  await db.user.update({ where: { id: user.id }, data: { isActive: false, apiTokenVersion: { increment: 1 } } });
 
   return NextResponse.json({ suspended: true, userId: user.id, email: user.email });
 }

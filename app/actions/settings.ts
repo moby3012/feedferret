@@ -210,7 +210,7 @@ export async function confirmTwoFactorSetup(code: string) {
 
   await db.user.update({
     where: { id: session.user.id },
-    data: { twoFactorEnabled: true, sessionVersion: { increment: 1 } },
+    data: { twoFactorEnabled: true, sessionVersion: { increment: 1 }, apiTokenVersion: { increment: 1 } },
   });
 
   revalidatePath("/settings");

@@ -1,5 +1,6 @@
 "use client";
 
+import { ApiPasswordSettings } from "@/components/api-password-settings";
 import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
 import { signOut } from "@/lib/logout";
@@ -607,6 +608,7 @@ export function SettingsForm() {
             <TwoFactorSection />
 
             {/* API Access */}
+            <ApiPasswordSettings />
             <ApiTokenSection />
 
             {/* Add to Home Screen */}
