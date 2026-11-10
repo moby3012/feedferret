@@ -319,6 +319,36 @@ test("portrait tablet 820x1180: the reader pushes over the list at a readable me
   await expect(rail.getByRole("tab", { name: "Feeds" })).toHaveAttribute("aria-selected", "true");
 });
 
+test("959/960 boundary: focus follows the reader when a resize makes it cover the list, and back", async ({ app, page, isMobile }) => {
+  test.skip(isMobile, "desktop project drives the viewport");
+  const inReader = () => page.evaluate(() => !!document.activeElement?.closest('[data-pane="reader"]'));
+  const onBody = () => page.evaluate(() => document.activeElement === document.body || document.activeElement === null);
+  await page.setViewportSize({ width: 960, height: 900 });
+  await app.open();
+  // Keyboard open at 960 px (two panes): focus stays on the row.
+  await app.row(1).focus();
+  await page.keyboard.press("Enter");
+  await expect(reader(page, 1)).toBeVisible();
+  await expect(page.locator('[data-pane="list-new"]')).not.toHaveAttribute("inert", "");
+
+  // 959 px: the reader now covers the inert list — focus must not fall to <body>.
+  await page.setViewportSize({ width: 959, height: 900 });
+  await expect(page.locator('[data-pane="list-new"]')).toHaveAttribute("inert", "");
+  await expect.poll(inReader).toBe(true);
+
+  // Back to 960 px: two panes, focus still somewhere real.
+  await page.setViewportSize({ width: 960, height: 900 });
+  await expect(page.locator('[data-pane="list-new"]')).not.toHaveAttribute("inert", "");
+  await expect.poll(onBody).toBe(false);
+
+  // Stacked again, then close: focus returns to the row it came from.
+  await page.setViewportSize({ width: 959, height: 900 });
+  await expect.poll(inReader).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-pane="list-new"]')).not.toHaveAttribute("inert", "");
+  await expect.poll(() => page.evaluate(() => document.activeElement?.closest("[aria-label]")?.getAttribute("aria-label") ?? "")).toContain("(#001)");
+});
+
 test("landscape tablet 1180x820: rail + list + reader side by side", async ({ app, page, isMobile }) => {
   test.skip(isMobile, "desktop project drives the viewport");
   await page.setViewportSize({ width: 1180, height: 820 });
