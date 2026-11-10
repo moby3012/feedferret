@@ -145,18 +145,21 @@ export function estimateReadMinutes(text: string): number | null {
 }
 
 /** iTunes duration: "3723", "62:03", "1:02:03" (or a number of seconds). */
+// Stored in a Postgres `Int` column (signed 32-bit); anything larger is bogus feed data.
+const MAX_DURATION_SECS = 2_147_483_647;
+const inRange = (n: number) => (Number.isFinite(n) && n > 0 && n <= MAX_DURATION_SECS ? n : null);
+
 export function parseDurationSecs(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+  if (typeof value === "number") return inRange(Math.round(value));
   if (typeof value !== "string") return null;
   const v = value.trim();
   if (!v) return null;
   if (/^\d+(\.\d+)?$/.test(v)) {
-    const n = Math.round(Number(v));
-    return n > 0 ? n : null;
+    return inRange(Math.round(Number(v)));
   }
   if (!/^\d+(:\d{1,2}){1,2}$/.test(v)) return null;
   const secs = v.split(":").map(Number).reduce((acc, part) => acc * 60 + part, 0);
-  return secs > 0 ? secs : null;
+  return inRange(secs);
 }
 
 export interface MediaInfo {
