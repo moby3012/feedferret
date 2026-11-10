@@ -6,7 +6,7 @@
 // navigation never calls router.push/replace (no RSC round-trip).
 import { createContext, createElement, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { showApplies } from "@/features/articles/scope";
-import { getLayoutClass, isCoarsePointer } from "../layout/layout-class";
+import { getLayoutClass, isCoarsePointer, subscribeLayoutClass } from "../layout/layout-class";
 import { isIOS, keepFfAcrossRouterWrites, pushEntry, readFf, replaceEntry, setNavAnim, whenRouterReady, type FfState } from "./history";
 import {
   TAB_ROOTS,
@@ -45,6 +45,8 @@ const listeners = new Set<() => void>();
 let pending: { resolve: () => void; timer: number } | null = null;
 let searchReturn: Loc | null = null;
 let queue: Promise<void> | null = null;
+/** Layout family the owned history stack was last written for (compact has the Feeds root level). */
+let stackLayout: NavLayout | null = null;
 
 const searchOf = (href: string) => href.split("?")[1] ?? "";
 const navLayout = (): NavLayout => (getLayoutClass() === "compact" ? "compact" : "wide");
@@ -126,8 +128,13 @@ function goAndWait(delta: number): Promise<void> {
   });
 }
 
-/** Serializes ops; a sync op on an idle queue runs (and paints) in the same task. */
-function run(op: () => void | Promise<void>): Promise<void> {
+/**
+ * Serializes ops; a sync op on an idle queue runs (and paints) in the same
+ * task. Every op first brings the owned stack in line with the current
+ * layout (no-op unless the compact breakpoint was crossed).
+ */
+function run(task: () => void | Promise<void>): Promise<void> {
+  const op = () => after(reconcileLayoutInner(), task);
   if (!queue) {
     const result = op();
     if (!result) return Promise.resolve();
@@ -191,6 +198,7 @@ async function resetStackInner(entries: Loc[]) {
   const s = getNavState();
   if (s.index > 0) await goAndWait(-s.index);
   const layout = navLayout();
+  stackLayout = layout;
   entries.forEach((loc, j) => write(j === 0 ? "replace" : "push", loc, { i: j, k: entryKindOf(loc, layout) }));
   setNavAnim("none");
   commit({ loc: entries[entries.length - 1], overlay: null, index: entries.length - 1, cause: "tab" });
@@ -242,6 +250,51 @@ function closeOverlayInner() {
   if (!s.overlay) return;
   if (readFf()?.k === "overlay") return popBack();
   commit({ ...s, overlay: null, cause: "replace" });
+}
+
+/**
+ * Crossing the compact breakpoint changes the depth of a location (compact
+ * has the Feeds root level beneath a feed). Rewrite the owned stack for the
+ * new layout so Back stays one level up — e.g. a wide deep link `/?feed=F`
+ * resized to compact must Back to the Feeds root, not out of the app. An open
+ * overlay survives (it is re-opened on top of the rewritten stack).
+ */
+function reconcileLayoutInner(): void | Promise<void> {
+  const layout = navLayout();
+  if (stackLayout === null || layout === stackLayout) return;
+  stackLayout = layout;
+  const s = getNavState();
+  const onOverlayEntry = readFf()?.k === "overlay";
+  const depth = s.index - (onOverlayEntry ? 1 : 0);
+  const chain = stackOf(s.loc, layout);
+  if (depth === chain.length - 1) {
+    // Same depth: only the entry kinds may differ ("scope" ⇄ "root").
+    if (!onOverlayEntry) replaceEntry(formatLoc(s.loc), { i: s.index, k: entryKindOf(s.loc, layout) });
+    return;
+  }
+  const overlay = s.overlay;
+  return resetStackInner(chain).then(() => {
+    if (overlay) openOverlayInner(overlay);
+  });
+}
+
+function openOverlayInner(id: OverlayId) {
+  const s = getNavState();
+  if (s.overlay === id) return;
+  const ff = readFf();
+  if (s.overlay && ff?.k === "overlay") {
+    // Overlays never nest: swap the one that is open.
+    replaceEntry(formatLoc(s.loc), { ...ff, o: id });
+    commit({ ...s, overlay: id, cause: "replace" });
+    return;
+  }
+  if (navLayout() === "compact" || isCoarsePointer()) {
+    const index = s.index + 1;
+    pushEntry(formatLoc(s.loc), { i: index, k: "overlay", o: id });
+    commit({ ...s, overlay: id, index, cause: "push" });
+  } else {
+    commit({ ...s, overlay: id, cause: "replace" });
+  }
 }
 
 function goScopeInner(scope: Scope, show: Show): void | Promise<void> {
@@ -300,26 +353,12 @@ export const nav = {
   /** Any location as a fresh stack (cross-tab jump, consumed deep-link intents). */
   goTo: (loc: Loc) => run(() => after(dropOverlay(), () => resetStackInner(stackOf(loc, navLayout())))),
   goTab: (tab: TabId) => run(() => after(dropOverlay(), () => resetStackInner(stackOf(tabMemoryLoc(tab), navLayout())))),
-  openOverlay: (id: OverlayId) =>
-    run(() => {
-      const s = getNavState();
-      if (s.overlay === id) return;
-      const ff = readFf();
-      if (s.overlay && ff?.k === "overlay") {
-        // Overlays never nest: swap the one that is open.
-        replaceEntry(formatLoc(s.loc), { ...ff, o: id });
-        commit({ ...s, overlay: id, cause: "replace" });
-        return;
-      }
-      if (navLayout() === "compact" || isCoarsePointer()) {
-        const index = s.index + 1;
-        pushEntry(formatLoc(s.loc), { i: index, k: "overlay", o: id });
-        commit({ ...s, overlay: id, index, cause: "push" });
-      } else {
-        commit({ ...s, overlay: id, cause: "replace" });
-      }
-    }),
-  closeOverlay: () => run(() => closeOverlayInner()),
+  /** Opens an overlay (palette, shortcuts, add-feed, sheet, search); swaps an open one — overlays never nest. */
+  openOverlay: (id: OverlayId) => run(() => openOverlayInner(id)),
+  /** Closes the open overlay (`only`: just when it is that one); history.back() when its entry was pushed. */
+  closeOverlay: (only?: OverlayId) => run(() => (!only || getNavState().overlay === only ? closeOverlayInner() : undefined)),
+  /** Toggle (⌘K): open, or close when this overlay is the open one. */
+  toggleOverlay: (id: OverlayId) => run(() => (getNavState().overlay === id ? closeOverlayInner() : openOverlayInner(id))),
 };
 
 /**
@@ -339,6 +378,7 @@ export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
     const ff = readFf();
     const layout = navLayout();
     let index = ff?.i ?? 0;
+    stackLayout = layout;
     if (!ff) {
       const chain = stackOf(loc, layout);
       chain.forEach((l, j) => write(j === 0 ? "replace" : "push", l, { i: j, k: entryKindOf(l, layout) }));
@@ -351,9 +391,14 @@ export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
     commit({ loc, overlay: null, index, cause: "init" });
     if (intents.addFeed || intents.sharedUrl) onIntents(intents);
   });
+  const unwatchLayout = subscribeLayoutClass(() => {
+    if (stackLayout !== null && navLayout() !== stackLayout) void run(() => reconcileLayoutInner());
+  });
   return () => {
     cancel();
     unguard();
+    unwatchLayout();
+    stackLayout = null;
     window.removeEventListener("popstate", onPopState);
     if (pending) window.clearTimeout(pending.timer);
     pending = null;

@@ -6,7 +6,7 @@
 //   feed · cat · label · ss  <id>   mutually exclusive with each other and v
 //   show  all                       include read items (all/feed/cat/label/ss only)
 //   q     <text>                    ad-hoc search
-//   a     <articleId>               open article
+//   a     <articleId>               open article (also on a tab root: /?tab=feeds&a=X)
 //
 // Old links (manifest shortcuts, notifications, push) keep working through
 // aliases that the shell rewrites with replaceState at boot.
@@ -100,12 +100,14 @@ export function parseLoc(search: string): Loc {
     else scope = alias;
   }
 
+  const articleId = validId(sp.get("a")) ?? validId(sp.get("article"));
   const rawTab = sp.get("tab");
   if (!scope) {
-    if (rawTab === "feeds" || rawTab === "search") return { tab: rawTab, scope: null, show: "unread", articleId: null };
+    // A tab root keeps its open article (opened from the Feeds root, e.g. a
+    // notification): reload / back / forward must land on the same reader.
+    if (rawTab === "feeds" || rawTab === "search") return { tab: rawTab, scope: null, show: "unread", articleId };
     scope = { kind: "all" };
   }
-  const articleId = validId(sp.get("a")) ?? validId(sp.get("article"));
   return locOf(scope, show, articleId);
 }
 

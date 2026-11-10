@@ -20,6 +20,8 @@ const CANONICAL = [
   "/?a=art1",
   "/?tab=feeds",
   "/?tab=search",
+  "/?tab=feeds&a=n1",
+  "/?tab=search&a=n2",
   "/?v=later",
   "/?v=starred",
   "/?v=recent",
@@ -112,6 +114,23 @@ describe("tabOf", () => {
     expect(parseLoc("v=later").tab).toBe("saved");
     expect(parseLoc("tab=feeds").tab).toBe("feeds");
     expect(parseLoc("tab=search").tab).toBe("search");
+  });
+});
+
+describe("tab roots keep the open article (reload / back / forward)", () => {
+  it("parses `a` on a scope-less tab root", () => {
+    expect(parseLoc("tab=feeds&a=X")).toEqual({ tab: "feeds", scope: null, show: "unread", articleId: "X" });
+    expect(parseLoc("tab=search&article=Y").articleId).toBe("Y");
+  });
+  it("normalizeSearch leaves the canonical root+article URL unchanged", () => {
+    expect(normalizeSearch("?tab=feeds&a=X")).toMatchObject({ href: "/?tab=feeds&a=X", changed: false });
+    expect(normalizeSearch("?tab=feeds&article=X")).toMatchObject({ href: "/?tab=feeds&a=X", changed: true });
+  });
+  it("its parent is the root, its stack root → article", () => {
+    const loc = parseLoc("tab=feeds&a=X");
+    expect(formatLoc(parentOf(loc, "compact")!)).toBe("/?tab=feeds");
+    expect(stackOf(loc, "compact").map(formatLoc)).toEqual(["/?tab=feeds", "/?tab=feeds&a=X"]);
+    expect(entryKindOf(loc)).toBe("article");
   });
 });
 

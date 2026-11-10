@@ -29,6 +29,11 @@ export function isCoarsePointer(): boolean {
   return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
 }
 
+/** Fires when the layout class may have changed (any breakpoint crossed). */
+export function subscribeLayoutClass(onChange: () => void): () => void {
+  return subscribe(onChange);
+}
+
 function subscribe(onChange: () => void) {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
   const lists = [window.matchMedia(MEDIUM), window.matchMedia(EXPANDED)];
