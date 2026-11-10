@@ -95,7 +95,8 @@
       "reading": "Lesen",
       "account": "Konto",
       "notifications": "Benachrichtigungen",
-      "integrations": "Integrationen"
+      "integrations": "Integrationen",
+      "gestures": "Gesten & Hilfe"
     },
     "offlineReading": "Offline lesen",
     "offlineReadingDescription": "Artikel unter „Später lesen“ und deine zuletzt geöffneten Artikel kannst du auch ohne Verbindung lesen. Änderungen brauchen eine Verbindung.",
@@ -129,7 +130,46 @@
     "appBadge": {
       "title": "Badge am App-Symbol",
       "description": "Zeigt die Zahl ungelesener Artikel am Symbol der installierten App. Gilt für dieses Gerät."
-    }
+    },
+    "gesturesHelp": {
+      "title": "So bedienst du FeedFerret",
+      "description": "Auf Handy und Tablet haben Zeilen keine Knöpfe: Gesten und langes Drücken übernehmen das. Mit der Maus zeigen Zeilen ihre Knöpfe beim Darüberfahren, Rechtsklick öffnet das Menü.",
+      "longPress": "Lange drücken",
+      "list": {
+        "title": "Artikelliste",
+        "swipe": "Zeile wischen",
+        "swipeResult": "Führt die oben eingestellte Aktion für diese Richtung aus (z. B. gelesen, später).",
+        "longPressResult": "Alle Aktionen für den Artikel, inkl. „Bis hier als gelesen“.",
+        "pull": "Oben nach unten ziehen",
+        "pullResult": "Aktualisiert die Feeds."
+      },
+      "feeds": {
+        "title": "Feeds",
+        "longPressResult": "Aktionen für Feed oder Ordner: aktualisieren, als gelesen markieren, bearbeiten, löschen.",
+        "arrow": "Pfeil eines Ordners antippen",
+        "arrowResult": "Öffnet oder schließt den Ordner; der Name zeigt alle Artikel darin.",
+        "markAll": "Alle als gelesen markieren",
+        "markAllResult": "Fragt immer nach – dafür gibt es keine Geste."
+      },
+      "reader": {
+        "title": "Leseansicht",
+        "pullNext": "Am Ende nach oben ziehen",
+        "pullNextResult": "Öffnet den nächsten Artikel.",
+        "edge": "Vom linken Rand wischen",
+        "edgeResult": "Zurück zur Liste (Systemgeste)."
+      },
+      "everywhere": {
+        "title": "Überall",
+        "tabTwice": "Aktiven Tab erneut antippen",
+        "tabTwiceResult": "Eine Ebene zurück, dann nach oben.",
+        "rightClick": "Rechtsklick / Kontextmenü-Taste",
+        "rightClickResult": "Öffnet dasselbe Menü wie langes Drücken."
+      },
+      "showFeedsHint": "Feeds-Tipp erneut zeigen",
+      "feedsHintReset": "Der Tipp erscheint wieder im Feeds-Tab."
+    },
+    "sectionsNav": "Bereiche der Einstellungen",
+    "backToSettings": "Einstellungen"
   },
   "profile": {
     "changePassword": "Passwort ändern",
@@ -2045,5 +2085,22 @@
       "star": "Favorit",
       "none": "nichts"
     }
+  },
+  "feedsScreen": {
+    "overview": "Übersicht",
+    "openFolder": "Ordner öffnen",
+    "markAllTitle": "Alle als gelesen markieren?",
+    "markAllDescription": "{count, plural, one {Ein ungelesener Artikel in „{name}“ wird} other {# ungelesene Artikel in „{name}“ werden}} als gelesen markiert.",
+    "markAllConfirm": "Als gelesen markieren",
+    "actionsShort": "Aktionen",
+    "actionsFor": "Aktionen für {name}",
+    "hintTitle": "Lange drücken für Aktionen",
+    "hintBody": "Feed oder Ordner lange drücken: aktualisieren, als gelesen markieren, bearbeiten oder löschen. Pfeil antippen öffnet oder schließt einen Ordner.",
+    "hintHelp": "Gesten & Hilfe",
+    "menuTitle": "Feeds",
+    "notificationsUnread": "Benachrichtigungen ({count} neu)",
+    "gesturesHelp": "Gesten & Hilfe",
+    "more": "Mehr",
+    "moreWithNotifications": "Mehr, {count} neue Benachrichtigungen"
   }
 }

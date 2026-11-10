@@ -117,13 +117,7 @@ test("prefetches every Read-later body, bounded and per user", async ({ app, pag
   // Storage was asked to persist (best effort: the headless browser may decline, the API must exist).
   expect(await page.evaluate(() => typeof navigator.storage?.persist)).toBe("function");
   // Settings shows what is stored.
-  await page.goto("/settings");
-  if (app.isMobile) {
-    await page.getByRole("combobox").first().tap();
-    await page.getByRole("option", { name: "Reading" }).tap();
-  } else {
-    await page.getByRole("tab", { name: "Reading" }).click();
-  }
+  await app.openSettings("Reading");
   await expect(page.getByTestId("offline-usage")).toContainText(`${rows.length} articles`);
 });
 
@@ -209,9 +203,8 @@ test("opened articles are kept as 'recently read offline'", async ({ app, page, 
 test("signing out clears the offline store", async ({ app, page }) => {
   await openAndWaitForStore(app, page);
   expect((await storedRows(page)).length).toBeGreaterThan(0);
-  await app.openSidebar();
-  await app.activate(page.getByRole("button", { name: "Sign out" }).first());
-  await app.activate(page.getByRole("alertdialog", { name: "Sign out?" }).getByRole("button", { name: "Sign out" }));
+  const dialog = await app.startSignOut();
+  await app.activate(dialog.getByRole("button", { name: "Sign out" }));
   await page.waitForURL(/\/login/, { timeout: 30_000 });
   expect(await storedRows(page)).toEqual([]);
 });
@@ -312,12 +305,11 @@ test("sign-out in another tab: a prefetch still in flight in this tab leaves not
   const secondApp = new App(second, app.isMobile, app.user, app.userKey);
   await second.goto("/");
   await secondApp.navReady();
-  await secondApp.openSidebar();
-  await secondApp.activate(second.getByRole("button", { name: "Sign out" }).first());
+  const dialog = await secondApp.startSignOut();
   // Sign-out must be accepted by the server: its own rate-limit budget, never the sign-in one (a refused
   // sign-out answers 429, leaves the session cookie valid and this tab on "/" — the original flake).
   const signOutResponse = second.waitForResponse((r) => r.url().endsWith("/api/auth/signout") && r.request().method() === "POST");
-  await secondApp.activate(second.getByRole("alertdialog", { name: "Sign out?" }).getByRole("button", { name: "Sign out" }));
+  await secondApp.activate(dialog.getByRole("button", { name: "Sign out" }));
   expect((await signOutResponse).status()).toBe(200);
   await second.waitForURL(/\/login/, { timeout: 30_000 });
   // The signed-out tab leaves by itself, even though it never saw a response.
@@ -427,13 +419,7 @@ test("storage full: older entries are evicted, the retry failure is reported in 
   await page.evaluate(() => navigator.serviceWorker.ready);
   await expect.poll(async () => (await readMeta<{ quotaFailed: boolean }>(page, "status"))?.quotaFailed, { timeout: 60_000 }).toBe(true);
   expect((await storedRows(page)).filter((r) => r.readLater)).toHaveLength(0);
-  await page.goto("/settings");
-  if (app.isMobile) {
-    await page.getByRole("combobox").first().tap();
-    await page.getByRole("option", { name: "Reading" }).tap();
-  } else {
-    await page.getByRole("tab", { name: "Reading" }).click();
-  }
+  await app.openSettings("Reading");
   await expect(page.getByTestId("offline-quota-warning")).toBeVisible();
 });
 

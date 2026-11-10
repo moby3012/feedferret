@@ -12,6 +12,7 @@ import {
   TAB_ROOTS,
   entryKindOf,
   formatLoc,
+  inFeedsTab,
   locOf,
   normalizeSearch,
   parentOf,
@@ -315,9 +316,11 @@ function openOverlayInner(id: OverlayId) {
   }
 }
 
-function goScopeInner(scope: Scope, show: Show): void | Promise<void> {
+function goScopeInner(scope: Scope, show: Show, inFeeds: boolean): void | Promise<void> {
   const s = getNavState();
-  const target = locOf(scope, show);
+  const own = locOf(scope, show);
+  // Compact Feeds screen: a smart view / label is a level of the Feeds tab (Back → Feeds root).
+  const target = inFeeds && navLayout() === "compact" ? inFeedsTab(own) : own;
   if (sameLoc(target, s.loc)) return;
   if (navLayout() === "wide") return replaceOrReset(target);
   // compact: Feeds root → scope drills one level down.
@@ -357,12 +360,15 @@ export const nav = {
   closeArticle: () => run(() => (getNavState().loc.articleId ? upInner() : undefined)),
   /** One level up: overlay → article → scope; history.back() when the level was pushed. */
   up: () => run(() => upInner()),
-  goScope: (scope: Scope, o: { show?: Show } = {}) => run(() => after(dropOverlay(), () => goScopeInner(scope, o.show ?? "unread"))),
+  /** `inFeeds`: opened from the compact Feeds screen — the scope stays a level of the Feeds tab. */
+  goScope: (scope: Scope, o: { show?: Show; inFeeds?: boolean } = {}) =>
+    run(() => after(dropOverlay(), () => goScopeInner(scope, o.show ?? "unread", o.inFeeds ?? false))),
   setShow: (show: Show) =>
     run(() => {
       const s = getNavState();
       if (!s.loc.scope || !showApplies(s.loc.scope) || s.loc.show === show) return;
-      const loc = locOf(s.loc.scope, show, s.loc.articleId);
+      const own = locOf(s.loc.scope, show, s.loc.articleId);
+      const loc = s.loc.tab === "feeds" ? inFeedsTab(own) : own;
       write("replace", loc, readFf() ?? { i: s.index, k: entryKindOf(loc, navLayout()) });
       setNavAnim("none");
       commit({ ...s, loc, cause: "replace" });

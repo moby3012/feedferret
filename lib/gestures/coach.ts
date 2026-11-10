@@ -11,33 +11,65 @@ import { useSyncExternalStore } from "react";
 //   ff:gesture-hint   "done" = dismissed / learned
 
 export const GESTURE_HINT_KEY = "ff:gesture-hint";
+//   ff:feeds-hint     the same for the Feeds screen ("long-press a feed for its actions")
+export const FEEDS_HINT_KEY = "ff:feeds-hint";
 
-const listeners = new Set<() => void>();
-let snapshot: boolean | null = null;
-
-function read(): boolean {
-  try {
-    return window.localStorage.getItem(GESTURE_HINT_KEY) === "done";
-  } catch {
-    return false;
-  }
+/** One per-device "seen" flag in localStorage with a React subscription. */
+function createHintFlag(key: string) {
+  const listeners = new Set<() => void>();
+  let snapshot: boolean | null = null;
+  const read = (): boolean => {
+    try {
+      return window.localStorage.getItem(key) === "done";
+    } catch {
+      return false;
+    }
+  };
+  const write = (done: boolean) => {
+    try {
+      if (done) window.localStorage.setItem(key, "done");
+      else window.localStorage.removeItem(key);
+    } catch {
+      /* private mode: this page view only */
+    }
+    snapshot = done;
+    for (const listener of [...listeners]) listener();
+  };
+  const subscribe = (onChange: () => void) => {
+    listeners.add(onChange);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== key) return;
+      snapshot = read();
+      onChange();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      listeners.delete(onChange);
+      window.removeEventListener("storage", onStorage);
+    };
+  };
+  return {
+    complete() {
+      if (snapshot === true || (snapshot === null && read())) return;
+      write(true);
+    },
+    reset: () => write(false),
+    /** `true` while still due on this device; `false` on the server / during hydration. */
+    useDue: (): boolean =>
+      useSyncExternalStore(
+        subscribe,
+        () => !(snapshot ??= read()),
+        () => false,
+      ),
+  };
 }
 
-function write(done: boolean) {
-  try {
-    if (done) window.localStorage.setItem(GESTURE_HINT_KEY, "done");
-    else window.localStorage.removeItem(GESTURE_HINT_KEY);
-  } catch {
-    /* private mode: this page view only */
-  }
-  snapshot = done;
-  for (const listener of [...listeners]) listener();
-}
+const gestureHint = createHintFlag(GESTURE_HINT_KEY);
+const feedsHint = createHintFlag(FEEDS_HINT_KEY);
 
 /** The hint was dismissed or the gestures were used: never show it again on this device. */
 export function completeGestureHint() {
-  if (snapshot === true || (snapshot === null && read())) return;
-  write(true);
+  gestureHint.complete();
 }
 
 /** Settings: show the hint again next time a list is shown. */
@@ -48,30 +80,26 @@ export function resetGestureHint() {
   } catch {
     /* ignore */
   }
-  write(false);
-}
-
-function subscribe(onChange: () => void) {
-  listeners.add(onChange);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key !== GESTURE_HINT_KEY) return;
-    snapshot = read();
-    onChange();
-  };
-  window.addEventListener("storage", onStorage);
-  return () => {
-    listeners.delete(onChange);
-    window.removeEventListener("storage", onStorage);
-  };
+  gestureHint.reset();
 }
 
 /** `true` while the hint is still due on this device; `false` on the server / during hydration. */
 export function useGestureHintDue(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => !(snapshot ??= read()),
-    () => false,
-  );
+  return gestureHint.useDue();
+}
+
+/** Feeds screen tip ("long-press a feed: actions") dismissed, or a feed menu was opened by a gesture. */
+export function completeFeedsHint() {
+  feedsHint.complete();
+}
+
+/** Settings → Gesten & Hilfe: show the Feeds screen tip again. */
+export function resetFeedsHint() {
+  feedsHint.reset();
+}
+
+export function useFeedsHintDue(): boolean {
+  return feedsHint.useDue();
 }
 
 // The nudge (first row slides open once) plays at most once per browser

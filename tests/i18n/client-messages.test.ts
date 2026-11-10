@@ -27,6 +27,8 @@ const ROUTE_SCOPED_FILES = new Set([
   "components/server-management-dialog.tsx",
   "app/setup/page.tsx",
 ]);
+/** Directories rendered only inside a wrapped route (the settings sections, split out of settings-form). */
+const ROUTE_SCOPED_DIRS = ["components/settings/"];
 const WRAPPED_ROUTES = ["settings", "manage-feeds", "server-settings", "setup"];
 
 function clientFiles(): string[] {
@@ -59,7 +61,7 @@ describe("client messages (perf audit C15)", () => {
   it("no client file outside the wrapped routes uses a route-only namespace", () => {
     const offenders: string[] = [];
     for (const file of clientFiles()) {
-      if (ROUTE_SCOPED_FILES.has(file)) continue;
+      if (ROUTE_SCOPED_FILES.has(file) || ROUTE_SCOPED_DIRS.some((dir) => file.startsWith(dir))) continue;
       const src = fs.readFileSync(path.join(root, file), "utf8");
       for (const ns of ROUTE_ONLY_NAMESPACES) {
         // useTranslations("ns") · getTranslations("ns") · t("ns.key") · `ns.${…}` · namespace: "ns"

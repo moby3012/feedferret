@@ -1,6 +1,6 @@
 import { preloadReaderChunks } from "@/components/reader/reader-view";
 import { loadCommandPalette, loadShortcutsDialog } from "@/components/shell/shell-overlays";
-import { loadRssSidebar } from "@/components/shell/sources-pane";
+import { loadFeedsScreen, loadRssSidebar } from "@/components/shell/sources-pane";
 
 /**
  * The cold-start work made parts of the shell lazy chunks (sources pane, the reader's body / chrome /
@@ -11,5 +11,5 @@ import { loadRssSidebar } from "@/components/shell/sources-pane";
  * Nothing is rendered; the modules are only fetched and evaluated.
  */
 export function warmShellChunks(): Promise<unknown> {
-  return Promise.allSettled([loadRssSidebar(), preloadReaderChunks(), loadCommandPalette(), loadShortcutsDialog()]);
+  return Promise.allSettled([loadRssSidebar(), loadFeedsScreen(), preloadReaderChunks(), loadCommandPalette(), loadShortcutsDialog()]);
 }

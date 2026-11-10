@@ -14,4 +14,5 @@ export type OverlayId =
   | "reader-menu"
   | "reader-aa"
   | "feed-menu"
+  | "feeds-menu"
   | "notifications";

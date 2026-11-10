@@ -11,21 +11,16 @@ test("search finds the seeded needle articles", async ({ app, page }) => {
   await expect(app.row(18)).toBeVisible(); // needle articles are #018, #118, #218
 });
 
-test("settings page opens and a tab switch works", async ({ app, page }) => {
+test("settings page opens and a section switch works", async ({ app, page }) => {
   await app.open();
   await page.goto("/settings");
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole("tabpanel", { name: "Appearance" })).toBeVisible();
-
-  if (app.isMobile) {
-    // Phone: tabs collapse into a <Select> (audit P1-14 replaces it with a segmented control).
-    await page.getByRole("combobox").first().tap();
-    await page.getByRole("option", { name: "Reading" }).tap();
-  } else {
-    await page.getByRole("tab", { name: "Reading" }).click();
-  }
-  await expect(page.getByRole("tabpanel", { name: "Reading" })).toBeVisible();
-  await expect(page.getByRole("tabpanel", { name: "Appearance" })).toBeHidden();
+  // Phone: the navigation list first; wide: two panes with Appearance open.
+  if (!app.isMobile) await expect(page.getByTestId("settings-section-appearance")).toBeVisible();
+  await app.openSettings("Reading");
+  await expect(page.getByTestId("settings-section-reading")).toBeVisible();
+  await expect(page.getByTestId("count-display-select")).toBeVisible();
+  await expect(page.getByTestId("settings-section-appearance")).toHaveCount(0);
 });
 
 test("settings back button returns to the app", async ({ app, page }) => {

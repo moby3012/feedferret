@@ -6,6 +6,7 @@ import { touchHoldOn } from "./gestures";
 export const PWA_DISMISSED_KEY = "feedferret:pwa-install-prompt-dismissed";
 /** localStorage key of the one-time gesture hint (lib/gestures/coach.ts): "done" = never show. */
 export const GESTURE_HINT_KEY = "ff:gesture-hint";
+export const FEEDS_HINT_KEY = "ff:feeds-hint";
 
 export type RowToggle = "read" | "star" | "later";
 const MENU_ITEM: Record<RowToggle, RegExp> = {
@@ -248,6 +249,32 @@ export class App {
     // Compact Feeds root → feed is a push: let the pane slide in before measuring anything.
     if (this.isMobile) await this.panesSettled();
   }
+  /**
+   * "All articles" in the Neu tab. Mobile: the Neu tab (the Feeds screen's
+   * "All articles" stays a level of the Feeds tab); desktop: the sidebar entry.
+   */
+  async openAllArticles() {
+    if (!this.isMobile) return this.selectSidebar(/^All articles\s*\d*$/);
+    await this.tab("New").tap();
+    await expect.poll(() => this.where()).toBe("/");
+    await this.panesSettled();
+  }
+  /**
+   * "Sign out" up to its confirm dialog. Desktop: the sidebar footer; mobile:
+   * the Feeds screen's header "…".
+   */
+  async startSignOut() {
+    if (this.isMobile) {
+      await this.openSidebar();
+      await this.page.getByTestId("feeds-menu-button").tap();
+      await this.page.getByTestId("feeds-menu").getByRole("menuitem", { name: "Sign out" }).tap();
+    } else {
+      await this.page.getByRole("button", { name: "Sign out" }).first().click();
+    }
+    const dialog = this.page.getByRole("alertdialog", { name: "Sign out?" });
+    await expect(dialog).toBeVisible();
+    return dialog;
+  }
   /** No pane transition (push / pop slide) is running. */
   async panesSettled() {
     await this.page.waitForFunction(() =>
@@ -272,6 +299,31 @@ export class App {
     await this.page.locator(`${ACTIVE_LIST} [data-testid="list-menu-button"]`).tap();
     await this.page.getByRole("menuitem", { name: "Mark all as read" }).tap();
   }
+  /**
+   * Settings → a section. Mobile: `/settings` is the navigation list, the
+   * section is a pushed level; desktop: two panes, the list on the left.
+   */
+  async openSettings(section: "Appearance" | "Reading" | "Gestures & help" | "Account" | "Notifications" | "Integrations") {
+    await openSettingsSection(this.page, this.isMobile, section);
+  }
+  /**
+   * The first visible feed's action menu. Desktop: the sidebar row's "…";
+   * mobile: long-press the row on the Feeds screen (rows carry no buttons).
+   */
+  async openFeedMenu(name?: string): Promise<Locator> {
+    await this.openSidebar();
+    if (this.isMobile) {
+      const rows = this.sidebar().locator(".ff-feeds-line[data-feed-id] > .ff-feeds-row");
+      await touchHoldOn(this.page, name ? rows.filter({ hasText: name }).first() : rows.first(), 22);
+    } else if (name) {
+      const row = this.sidebar().getByRole("button", { name: new RegExp(`^${name}\\s*\\d*$`) }).first().locator('xpath=ancestor::div[contains(@class,"group/row")][1]');
+      await row.hover();
+      await row.getByRole("button", { name: "Feed actions" }).click();
+    } else await this.sidebar().getByTestId("feed-menu-button").first().click();
+    const menu = this.page.getByTestId("feed-menu");
+    await expect(menu).toBeVisible();
+    return menu;
+  }
   /** Tap/click (touch-aware) */
   async activate(locator: Locator) {
     if (this.isMobile) await locator.tap();
@@ -289,18 +341,32 @@ export const test = base.extend<{ app: App; gestureHint: boolean }>({
     // Headless Chromium shell crashes the renderer on the SW's Badge API call;
     // the SW is not under test here and would add cross-test caching.
     await page.context().addInitScript(
-      ([key, hintKey, hint]) => {
+      ([key, hintKey, feedsHintKey, hint]) => {
         try {
           localStorage.setItem(key, "1");
-          if (!hint) localStorage.setItem(hintKey, "done");
+          if (!hint) {
+            localStorage.setItem(hintKey, "done");
+            localStorage.setItem(feedsHintKey, "done");
+          }
         } catch {
           /* ignore */
         }
       },
-      [PWA_DISMISSED_KEY, GESTURE_HINT_KEY, gestureHint] as const,
+      [PWA_DISMISSED_KEY, GESTURE_HINT_KEY, FEEDS_HINT_KEY, gestureHint] as const,
     );
     await provide(new App(page, isMobile, manifest().users[userKey], userKey));
   },
 });
+
+/** Settings → a section through the real navigation (also for specs without the `app` fixture). */
+export async function openSettingsSection(page: Page, isMobile: boolean, section: string) {
+  await page.goto("/settings");
+  const nav = page.getByRole("navigation", { name: "Settings sections" });
+  await expect(nav).toBeVisible({ timeout: 20_000 });
+  const item = nav.getByRole("link", { name: section, exact: true });
+  if (isMobile) await item.tap();
+  else await item.click();
+  await expect(page.locator("#settings-section-title").filter({ hasText: section })).toBeVisible();
+}
 
 export { expect };

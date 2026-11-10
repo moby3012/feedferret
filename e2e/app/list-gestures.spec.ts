@@ -369,10 +369,7 @@ test("row v2: each content kind renders its variant in every density, without la
 
 test("settings: swipe mapping per direction is honoured, haptics can be switched off", async ({ app, page }) => {
   test.skip(!app.isMobile, "touch gestures");
-  await page.goto("/settings");
-  // Compact settings: the section tabs are a select.
-  await page.getByRole("combobox").first().tap();
-  await page.getByRole("option", { name: "Reading" }).tap();
+  await app.openSettings("Gestures & help");
   const section = page.getByTestId("gesture-settings");
   await expect(section).toBeVisible();
   await section.getByRole("combobox", { name: "Swipe right" }).tap();

@@ -280,17 +280,19 @@ test.describe("overlays: Back closes the menu, not the screen beneath", () => {
 
   test("feed '…' and notifications on the Feeds screen", async ({ app, page }) => {
     await app.open();
-    await app.openSidebar();
-    const sources = app.sidebar();
-    await app.activate(sources.getByTestId("feed-menu-button").first());
-    const feedMenu = page.getByTestId("feed-menu");
-    await expect(feedMenu).toBeVisible();
+    const feedMenu = await app.openFeedMenu();
     await expect(feedMenu.getByRole("menuitem", { name: "Feed health" })).toBeVisible();
     await page.goBack();
     await expect(feedMenu).toHaveCount(0);
-    await expect.poll(() => app.where()).toBe("/?tab=feeds");
+    if (app.isMobile) await expect.poll(() => app.where()).toBe("/?tab=feeds");
 
-    await app.activate(sources.getByRole("button", { name: "Notifications" }));
+    if (app.isMobile) {
+      // Compact: notifications are a step of the Feeds header "…" sheet.
+      await page.getByTestId("feeds-menu-button").tap();
+      await page.getByTestId("feeds-menu").getByRole("menuitem", { name: /^Notifications/ }).tap();
+    } else {
+      await page.getByRole("button", { name: "Notifications" }).click();
+    }
     await expect(page.getByRole("menu")).toBeVisible();
     await page.goBack();
     await expect(page.getByRole("menu")).toHaveCount(0);
@@ -301,9 +303,8 @@ test.describe("overlays: Back closes the menu, not the screen beneath", () => {
 test.describe("links and settings", () => {
   test("Feed health opens the Health tab of feed management", async ({ app, page }) => {
     await app.open();
-    await app.openSidebar();
-    await app.activate(app.sidebar().getByTestId("feed-menu-button").first());
-    await app.activate(page.getByTestId("feed-menu").getByRole("menuitem", { name: "Feed health" }));
+    const feedMenu = await app.openFeedMenu();
+    await app.activate(feedMenu.getByRole("menuitem", { name: "Feed health" }));
     await expect.poll(() => app.where()).toBe("/manage-feeds?tab=health");
     // The active tab panel is Health (phones navigate the tabs with a select, so check the panel).
     await expect(page.locator('[role="tabpanel"][data-state="active"]').getByRole("heading", { name: "Feed Health Dashboard" })).toBeVisible();
