@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       cursor,
       limit: clampInt(sp.get("limit") ?? undefined, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE),
     });
-    return appJson(page, { request });
+    return await appJson(page, { request });
   } catch (error) {
     if (error instanceof InvalidCursorError) return appError("Invalid cursor", 400);
     logger.error("[api/app/articles] list failed:", error);

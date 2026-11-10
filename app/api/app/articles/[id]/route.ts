@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     const detail = await getArticleDetail(user.id, id);
     if (!detail) return appError("Not found", 404);
-    return appJson(detail, { request });
+    return await appJson(detail, { request });
   } catch (error) {
     logger.error("[api/app/articles/:id] detail failed:", error);
     return appError("Could not load article", 500);

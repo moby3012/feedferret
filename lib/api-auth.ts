@@ -2,7 +2,10 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { hashApiToken } from "@/lib/token";
-import { gzipSync } from "node:zlib";
+import { promisify } from "node:util";
+import { gzip as gzipCallback } from "node:zlib";
+
+const gzip = promisify(gzipCallback);
 
 export type ApiUser = {
   id: string;
@@ -116,17 +119,42 @@ const APP_HEADERS = { "Cache-Control": "private, no-store" } as const;
 const GZIP_MIN_BYTES = 1024;
 
 /**
+ * Whether an `Accept-Encoding` header allows gzip (RFC 9110 §12.5.3):
+ * `gzip`/`x-gzip` or `*` with a q-value above 0; an explicit `gzip;q=0`
+ * refuses it even when `*` is listed.
+ */
+export function acceptsGzip(header: string | null | undefined): boolean {
+  if (!header) return false;
+  let gzipQ: number | null = null;
+  let starQ: number | null = null;
+  for (const part of header.split(",")) {
+    const [rawName, ...params] = part.trim().split(";");
+    const name = rawName.trim().toLowerCase();
+    if (!name) continue;
+    let q = 1;
+    for (const param of params) {
+      const m = /^\s*q\s*=\s*([0-9.]+)\s*$/i.exec(param);
+      if (m) q = Number(m[1]);
+    }
+    if (!Number.isFinite(q)) q = 0;
+    if (name === "gzip" || name === "x-gzip") gzipQ = Math.max(gzipQ ?? 0, q);
+    else if (name === "*") starQ = q;
+  }
+  return (gzipQ ?? starQ ?? 0) > 0;
+}
+
+/**
  * JSON response for `/api/app/*`: per-user data, never cached by browsers or
  * proxies. Gzipped here when the client accepts it: Next's built-in
  * compression does not apply to App Router route-handler responses, and the
  * article list is the hottest payload of the app.
  */
-export function appJson(body: unknown, opts: { request?: Request; status?: number } = {}) {
+export async function appJson(body: unknown, opts: { request?: Request; status?: number } = {}) {
   const json = JSON.stringify(body);
   const status = opts.status ?? 200;
-  const acceptsGzip = /\bgzip\b/i.test(opts.request?.headers.get("accept-encoding") ?? "");
-  if (acceptsGzip && json.length >= GZIP_MIN_BYTES) {
-    return new NextResponse(new Uint8Array(gzipSync(json)), {
+  if (json.length >= GZIP_MIN_BYTES && acceptsGzip(opts.request?.headers.get("accept-encoding"))) {
+    // Async: compression runs on the libuv pool, not the request thread.
+    return new NextResponse(new Uint8Array(await gzip(json)), {
       status,
       headers: { ...APP_HEADERS, "Content-Type": "application/json", "Content-Encoding": "gzip", Vary: "Accept-Encoding" },
     });

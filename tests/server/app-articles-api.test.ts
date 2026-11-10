@@ -172,6 +172,18 @@ describe("auth", () => {
     expect(raw.length).toBeLessThan(JSON.stringify(page).length / 3);
   });
 
+  it("honours Accept-Encoding q-values: gzip;q=0 and identity get plain JSON", async () => {
+    for (const header of ["gzip;q=0", "gzip;q=0, deflate", "*;q=1, gzip;q=0", "identity", "br"]) {
+      const res = await listGET(new Request("https://ff.test/api/app/articles", { headers: { "accept-encoding": header } }));
+      expect(res.headers.get("content-encoding"), header).toBeNull();
+      expect(((await res.json()) as ArticlePage).items).toHaveLength(50);
+    }
+    for (const header of ["gzip;q=0.5", "*", "deflate, *;q=0.1", "GZIP"]) {
+      const res = await listGET(new Request("https://ff.test/api/app/articles", { headers: { "accept-encoding": header } }));
+      expect(res.headers.get("content-encoding"), header).toBe("gzip");
+    }
+  });
+
   it("responses are private and never cached", async () => {
     const { headers } = await list("");
     expect(headers.get("cache-control")).toBe("private, no-store");
@@ -327,7 +339,15 @@ describe("metadata backfill", () => {
   it("fills null rows in batches, keeps updatedAt, is idempotent", async () => {
     const before = await state.db.article.findUnique({ where: { id: "a-001" } });
     expect(before?.kind).toBeNull();
+    const nullRows = await state.db.article.count({ where: { kind: null } });
+    const findMany = vi.spyOn(state.db.article, "findMany");
     const n = await runArticleMetaBackfill({ batchSize: 64, pauseMs: 0 });
+    // Linear: one read per batch, each after the previous batch's last id.
+    const reads = findMany.mock.calls.map(([args]) => (args as { where: { id?: { gt: string } } }).where);
+    findMany.mockRestore();
+    expect(reads).toHaveLength(Math.floor(nullRows / 64) + 1);
+    expect(reads[0].id).toBeUndefined();
+    for (const where of reads.slice(1)) expect(typeof where.id?.gt).toBe("string");
     expect(n).toBe(await state.db.article.count());
     expect(await state.db.article.count({ where: { kind: null } })).toBe(0);
     const after = await state.db.article.findUnique({ where: { id: "a-001" } });

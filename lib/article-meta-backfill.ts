@@ -26,10 +26,18 @@ function state(): BackfillState {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** One batch; returns rows seen and rows actually updated (`seen: 0` = nothing left). */
-export async function backfillArticleMetaBatch(batchSize = BATCH_SIZE): Promise<{ seen: number; updated: number }> {
+/**
+ * One batch of rows after `afterId` (id order); returns rows seen, rows
+ * actually updated and the last id for the next call (`seen < batchSize` =
+ * nothing left). The id cursor keeps the whole run linear: rows a batch could
+ * not update (a concurrent sync won) are never re-read.
+ */
+export async function backfillArticleMetaBatch(
+  batchSize = BATCH_SIZE,
+  afterId: string | null = null,
+): Promise<{ seen: number; updated: number; lastId: string | null }> {
   const rows = await db.article.findMany({
-    where: { kind: null },
+    where: { kind: null, ...(afterId ? { id: { gt: afterId } } : {}) },
     select: {
       id: true,
       title: true,
@@ -44,7 +52,7 @@ export async function backfillArticleMetaBatch(batchSize = BATCH_SIZE): Promise<
     orderBy: { id: "asc" },
     take: batchSize,
   });
-  if (rows.length === 0) return { seen: 0, updated: 0 };
+  if (rows.length === 0) return { seen: 0, updated: 0, lastId: afterId };
 
   const results = await db.$transaction(
     rows.map((row) => {
@@ -65,7 +73,7 @@ export async function backfillArticleMetaBatch(batchSize = BATCH_SIZE): Promise<
       });
     }),
   );
-  return { seen: rows.length, updated: results.reduce((sum, r) => sum + r.count, 0) };
+  return { seen: rows.length, updated: results.reduce((sum, r) => sum + r.count, 0), lastId: rows[rows.length - 1].id };
 }
 
 /** Runs the backfill to completion in small batches. Safe to call repeatedly. */
@@ -76,11 +84,14 @@ export async function runArticleMetaBackfill(opts: { batchSize?: number; pauseMs
   let total = 0;
   try {
     const batchSize = opts.batchSize ?? BATCH_SIZE;
+    let afterId: string | null = null;
     for (;;) {
-      const { seen, updated } = await backfillArticleMetaBatch(batchSize);
-      total += updated;
-      // A full batch that changed nothing would be re-read forever: stop.
-      if (seen < batchSize || updated === 0) break;
+      const batch = await backfillArticleMetaBatch(batchSize, afterId);
+      total += batch.updated;
+      afterId = batch.lastId;
+      // Only a short batch means the end: a full batch where a concurrent
+      // sync won every row is simply skipped by the cursor.
+      if (batch.seen < batchSize) break;
       await sleep(opts.pauseMs ?? PAUSE_MS);
     }
     s.done = true;
