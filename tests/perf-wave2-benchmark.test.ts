@@ -20,7 +20,7 @@ const ENABLED = process.env.PERF_WAVE2_BENCH === "1";
 const dir = ENABLED ? mkdtempSync(join(tmpdir(), "perf-wave2-")) : "";
 if (ENABLED) {
   // PERF_BENCH_DATABASE_URL=postgresql://… runs the same benchmark on a disposable Postgres
-  // (the schema is force-reset!); default is a temp SQLite file.
+  // (use an EMPTY throwaway database; the schema is pushed into it); default is a temp SQLite file.
   process.env.DATABASE_PROVIDER = process.env.PERF_BENCH_DATABASE_URL ? "postgresql" : "sqlite";
   process.env.DATABASE_URL = process.env.PERF_BENCH_DATABASE_URL ?? `file:${join(dir, "bench.db")}`;
   process.env.TRUSTED_FEED_FETCHING = "true";
@@ -52,7 +52,7 @@ describe.skipIf(!ENABLED)("wave-2 performance benchmark (50 k articles)", () => 
 
   beforeAll(async () => {
     execFileSync("node", ["scripts/prepare-prisma-schema.mjs"], { env: process.env, stdio: "pipe" });
-    execFileSync("npx", ["prisma", "db", "push", "--schema", "prisma/schema.generated.prisma", "--accept-data-loss", ...(process.env.PERF_BENCH_DATABASE_URL ? ["--force-reset"] : [])], { env: process.env, stdio: "pipe" });
+    execFileSync("npx", ["prisma", "db", "push", "--schema", "prisma/schema.generated.prisma", "--accept-data-loss"], { env: process.env, stdio: "pipe" });
     const { db } = await import("@/lib/db");
     // Boot does this once in instrumentation.ts (first JSDOM window = ~300 ms stall otherwise).
     await (await import("@/lib/sanitize-html")).warmSanitizer();
