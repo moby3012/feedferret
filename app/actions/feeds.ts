@@ -977,15 +977,15 @@ export async function toggleArticleStarred(articleId: string, isStarred: boolean
  * server/articles/view-scope.ts (shared with GET /api/app/articles) so the
  * list, the header count and "mark all read" always describe the same set.
  */
-async function buildLegacyViewScope(userId: string, feedId?: string | null, category?: string, search?: string) {
-    return buildViewScope(userId, legacyViewScopeInput(feedId, category), search);
+async function buildLegacyViewScope(userId: string, feedId?: string | null, category?: string, search?: string, categoryId?: string | null) {
+    return buildViewScope(userId, legacyViewScopeInput(feedId, category, categoryId), search);
 }
 
 /**
  * Server-side unread count for a list view. The list is paged, so counting
  * unread rows client-side under-reports big views; this counts the whole view.
  */
-export async function getViewUnreadCount(feedId?: string | null, category?: string, search?: string) {
+export async function getViewUnreadCount(feedId?: string | null, category?: string, search?: string, categoryId?: string | null) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -993,7 +993,7 @@ export async function getViewUnreadCount(feedId?: string | null, category?: stri
     // report 0 instead of counting unrelated unread rows.
     if (!isMarkAllAllowed(feedId, category)) return 0;
 
-    const { where } = await buildLegacyViewScope(session.user.id, feedId, category, search);
+    const { where } = await buildLegacyViewScope(session.user.id, feedId, category, search, categoryId);
     where.isRead = false;
     return db.article.count({ where });
 }
@@ -1228,7 +1228,7 @@ export async function fetchFullText(articleId: string) {
  * lists the ids that were really changed plus a server-side, user-scoped
  * `undoToken` for `markArticlesAsUnread`.
  */
-export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null; search?: string | null }) {
+export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null; categoryId?: string | null; search?: string | null }) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
     const userId = session.user.id;
@@ -1239,7 +1239,7 @@ export async function markAllAsRead(scope?: { feedId?: string | null; category?:
 
     if (!isMarkAllAllowed(feedId, category)) return { ids: [] as string[], undoToken: null as string | null };
 
-    const { where } = await buildLegacyViewScope(userId, feedId, category, search);
+    const { where } = await buildLegacyViewScope(userId, feedId, category, search, scope?.categoryId || null);
     where.isRead = false;
 
     const readAt = new Date();

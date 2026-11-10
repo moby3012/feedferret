@@ -138,6 +138,7 @@ export default function RSSReaderPage() {
     isSearchActive ? "All Articles" : selectedCategory,
     debouncedSearchQuery || undefined,
     isAuthenticated,
+    listScope?.kind === "category" ? listScope.id : null,
   );
 
   const refresh = useRefresh();
@@ -638,8 +639,8 @@ export default function RSSReaderPage() {
       markViewRead({ feedId: null, category: "All Articles", search: debouncedSearchQuery });
       return;
     }
-    markViewRead({ feedId: selectedFeed, category: selectedFeed ? null : selectedCategory });
-  }, [canMarkAllRead, isSearchActive, debouncedSearchQuery, markViewRead, selectedFeed, selectedCategory]);
+    markViewRead({ feedId: selectedFeed, category: selectedFeed ? null : selectedCategory, categoryId: listScope?.kind === "category" ? listScope.id : null });
+  }, [canMarkAllRead, isSearchActive, debouncedSearchQuery, markViewRead, selectedFeed, selectedCategory, listScope]);
 
   // Reconcile locally held article copies (session snapshots, open reader) with
   // what the server just committed — bulk mark-read and its Undo, from any

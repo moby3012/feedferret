@@ -121,8 +121,14 @@ export async function buildViewScope(userId: string, scope: ViewScopeInput, sear
   return { where, keyset };
 }
 
-/** Maps the legacy `(feedId, category)` pair used by the old actions and sidebar menus. */
-export function legacyViewScopeInput(feedId?: string | null, category?: string | null): ViewScopeInput {
+/**
+ * Maps the legacy `(feedId, category)` pair used by the old actions and sidebar
+ * menus. `categoryId` is the category the list resolved the name to: names are
+ * not unique (same name under another parent, or twice at the root), so the
+ * count and "mark all read" must address that one category, not every
+ * category of that name.
+ */
+export function legacyViewScopeInput(feedId?: string | null, category?: string | null, categoryId?: string | null): ViewScopeInput {
   if (feedId) return { kind: "feed", id: feedId };
   if (!category || category === "All" || category === "All Articles") return { kind: "all" };
   if (category === "Starred") return { kind: "starred" };
@@ -132,5 +138,6 @@ export function legacyViewScopeInput(feedId?: string | null, category?: string |
   if (category === "New Articles") return { kind: "unread-only" };
   if (category.startsWith("Label:")) return { kind: "label", id: category.slice("Label:".length) };
   if (category.startsWith("Search:")) return { kind: "saved-search", id: category.slice("Search:".length) };
+  if (categoryId) return { kind: "category", id: categoryId };
   return { kind: "category-name", name: category };
 }
