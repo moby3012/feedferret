@@ -1,0 +1,232 @@
+/*
+ * Reader chrome (spec §4.7) — loaded with the lazy chrome chunk
+ * (components/reader/reader-chrome.tsx), not with the cold-start CSS.
+ *   .ff-reader[data-chrome="shown|hidden"]  hide-on-scroll top bar
+ *   --reader-progress (0–1) on .ff-reader   progress line
+ *   --pull-p / data-pull on .ff-reader-pull pull past the end → next
+ */
+
+/* ------------------------------------------------------------------ top bar */
+.ff-reader-bar {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  z-index: var(--z-sticky);
+  padding-top: var(--safe-t);
+  background: var(--surface-bar);
+  backdrop-filter: blur(var(--blur-bar)) saturate(1.4);
+  border-bottom: 1px solid var(--divider);
+  user-select: none;
+  -webkit-touch-callout: none;
+  transition: transform var(--dur-base) var(--ease-standard);
+}
+.ff-reader[data-chrome="hidden"] .ff-reader-bar {
+  transform: translateY(-100%);
+}
+.ff-reader-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--bar-h);
+  padding-inline: max(4px, var(--safe-l)) max(4px, var(--safe-r));
+}
+.ff-reader-bar-feed {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 44px;
+  padding-inline: 6px;
+  border-radius: var(--radius-control);
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: start;
+}
+/* Progress: a 2 px brand line under the bar; when the bar hides it stays at the top edge. */
+.ff-reader-progress {
+  position: absolute;
+  inset-inline: 0;
+  bottom: -2px;
+  height: 2px;
+  background: var(--brand);
+  transform: scaleX(var(--reader-progress, 0));
+  transform-origin: left center;
+  pointer-events: none;
+}
+[dir="rtl"] .ff-reader-progress {
+  transform-origin: right center;
+}
+
+/* ------------------------------------------------------------------ buttons */
+.ff-chrome-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  transition:
+    background-color var(--dur-press) linear,
+    color var(--dur-press) linear,
+    transform var(--dur-press) linear;
+}
+.ff-chrome-btn[aria-pressed="true"] {
+  color: var(--text-primary);
+}
+.ff-chrome-btn:active,
+.ff-chrome-btn[data-state="open"] {
+  background: var(--surface-sunken);
+}
+@media (hover: hover) and (pointer: fine) {
+  .ff-chrome-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .ff-chrome-btn:hover {
+    background: var(--surface-sunken);
+    color: var(--text-primary);
+  }
+}
+.ff-chrome-btn:focus-visible,
+.ff-reader-bar-feed:focus-visible,
+.ff-reader-feedline:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.ff-chrome-btn:disabled,
+.ff-chrome-btn[aria-disabled="true"] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.ff-aa-btn {
+  font-size: var(--text-body);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ------------------------------------------------------------------ action pill (compact) */
+.ff-reader-pill {
+  position: absolute;
+  inset-inline: max(12px, var(--safe-l)) max(12px, var(--safe-r));
+  bottom: calc(var(--safe-b) + var(--tabbar-inset));
+  z-index: var(--z-bar);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  max-width: 420px;
+  height: var(--tabbar-h);
+  margin-inline: auto;
+  padding-inline: 6px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sheet);
+  background: var(--surface-bar);
+  backdrop-filter: blur(var(--blur-bar)) saturate(1.4);
+  box-shadow: var(--shadow-bar);
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+/* Wide: the top bar carries the actions; the feed name sits in the content. */
+@media (width >= 48rem) {
+  .ff-reader-pill,
+  .ff-reader-bar-feed {
+    display: none;
+  }
+}
+.ff-reader-pill .ff-chrome-btn {
+  flex: 1;
+  width: auto;
+  max-width: 64px;
+  height: 52px;
+  border-radius: var(--radius-panel);
+}
+.ff-reader-pill .ff-chrome-btn:active {
+  transform: scale(0.97);
+}
+
+/* ------------------------------------------------------------------ pull past the end → next */
+.ff-reader-pull {
+  --p: min(1, var(--pull-p, 0));
+  position: absolute;
+  inset-inline: 0;
+  bottom: calc(var(--tabbar-h) + var(--tabbar-inset) + var(--safe-b) + 12px);
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-inline: var(--reader-gutter);
+  pointer-events: none;
+  opacity: var(--p);
+  transform: translateY(calc((1 - var(--p)) * 16px));
+}
+.ff-reader-pull[data-pull="idle"] {
+  visibility: hidden;
+}
+@media (width >= 48rem) {
+  .ff-reader-pull {
+    bottom: calc(var(--safe-b) + 16px);
+  }
+}
+.ff-reader-pull-ring {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: conic-gradient(var(--brand) calc(var(--p) * 1turn), var(--divider) 0);
+}
+.ff-reader-pull-ring > svg {
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  border-radius: 9999px;
+  background: var(--surface-base);
+  color: var(--text-secondary);
+}
+.ff-reader-pull[data-pull="armed"] .ff-reader-pull-ring > svg {
+  background: var(--brand);
+  color: var(--brand-foreground);
+}
+.ff-reader-pull-label {
+  display: grid;
+  justify-items: center;
+  max-width: min(100%, 28rem);
+  text-align: center;
+}
+.ff-reader-pull-hint {
+  font-size: var(--text-footnote);
+  line-height: var(--text-footnote--line-height);
+  color: var(--text-secondary);
+}
+.ff-reader-pull:not([data-pull="tracking"]) .ff-reader-pull-hint[data-when="tracking"],
+.ff-reader-pull:not([data-pull="armed"]) .ff-reader-pull-hint[data-when="armed"] {
+  display: none;
+}
+.ff-reader-pull-title {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The bar fades instead of sliding. */
+  .ff-reader-bar {
+    transition: opacity 120ms linear;
+  }
+  .ff-reader[data-chrome="hidden"] .ff-reader-bar {
+    transform: none;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .ff-reader[data-chrome="hidden"] .ff-reader-bar:focus-within {
+    opacity: 1;
+  }
+}

@@ -16,7 +16,7 @@ import { shellMessages } from "@/i18n/client-messages";
 import { readingPreferencesFor } from "@/server/bootstrap";
 import { currentSession } from "@/server/session";
 import "./globals.css";
-// KaTeX + highlight.js CSS live with the article body (components/article-reader.tsx),
+// KaTeX + highlight.js CSS live with the article body (components/reader/reader-body.tsx),
 // out of the critical path of every page.
 
 const APP_DESCRIPTION =
@@ -115,7 +115,7 @@ export default async function RootLayout({
                 <ServiceWorkerRegister />
                 <TimezoneSync />
                 {/* Fixed mobile bottom bars (rss-header/mobile-bottom-controls,
-                    article-reader) are h-16 with safe-area padding; keep toasts
+                    reader action pill) are h-16 with safe-area padding; keep toasts
                     clear of them on small screens (UX audit U-12). */}
                 <Toaster
                   position="bottom-right"

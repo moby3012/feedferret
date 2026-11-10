@@ -357,7 +357,9 @@ test.describe("reader gestures (P1-02)", () => {
     await expect(article).toBeVisible();
   });
 
-  test("panning a code block never navigates; the same swipe on plain text still goes back", async ({ app, page }) => {
+  // Reader chrome v2 (spec §4.7): the reader has no horizontal app gestures at
+  // all — back is the chevron, Esc and the system back gesture.
+  test("panning a code block never navigates, and neither does the same swipe on plain text", async ({ app, page }) => {
     await app.open();
     await page
       .getByRole("button", { name: new RegExp(app.user.sample.code.replace(/[()#]/g, "\\$&")) })
@@ -374,11 +376,11 @@ test.describe("reader gestures (P1-02)", () => {
     await page.waitForTimeout(600);
     await expect(article).toBeVisible(); // reader still open
 
-    // Control: a right swipe on ordinary article text is still "back".
     const para = article.locator("p").first();
     await para.scrollIntoViewIfNeeded();
     await swipeOn(page, para, 240);
-    await expect(article).toBeHidden({ timeout: 5000 });
+    await page.waitForTimeout(600);
+    await expect(article).toBeVisible();
   });
 
   test("clicking the headline does not open the original", async ({ app, page }) => {

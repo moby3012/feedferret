@@ -6,6 +6,7 @@ const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, "../..", r
 const tokens = read("app/styles/tokens.css");
 const motion = read("app/styles/motion.css");
 const globals = read("app/globals.css");
+const reader = read("app/styles/reader.css") + read("app/styles/reader-chrome.css") + read("app/styles/reader-aa.css");
 
 function px(v: string): number {
   return v.endsWith("rem") ? parseFloat(v) * 16 : parseFloat(v);
@@ -77,7 +78,7 @@ describe("motion", () => {
   });
 
   it("no animation/transition in CSS runs longer than 320ms (infinite loaders excepted)", () => {
-    for (const [file, css] of [["globals", globals], ["motion", motion], ["tokens", tokens]] as const) {
+    for (const [file, css] of [["globals", globals], ["motion", motion], ["tokens", tokens], ["reader", reader]] as const) {
       for (const m of css.matchAll(/(?:animation|transition)(?:-duration)?:\s*([^;]+);/g)) {
         if (/infinite/.test(m[1])) continue;
         for (const t of m[1].matchAll(/(?<![\w.-])(\d*\.?\d+)(ms|s)(?![\w-])/g)) {

@@ -13,7 +13,9 @@
  * in dark, --ring …) is defined *from* --brand, never from a literal.
  */
 
-@custom-variant dark (&:is(.dark *));
+/* `dark:` follows the nearest scheme scope: html.dark, or a reader rendered in
+   its own theme (.dark = reader "Dunkel"; light/sepia readers opt out). */
+@custom-variant dark (&:is(.dark *):not(:where([data-reader-theme="light"] *, [data-reader-theme="sepia"] *)));
 
 /* Layout classes + input capability (spec §0 terms). `sm:`/`lg:` must not be
    used as "has a mouse" / "is desktop" in shell code. */
@@ -27,7 +29,11 @@
 
 /* ---------------------------------------------------------------------------
  * 1. Colour roles (spec §4.1). Light = :root, dark = .dark (next-themes class).
+ *    The reader's own themes (app/styles/reader.css) are scopes: "Hell" and
+ *    "Sepia" re-declare the light roles, "Dunkel" is a nested .dark.
  * ------------------------------------------------------------------------- */
+[data-reader-theme="light"],
+[data-reader-theme="sepia"],
 :root {
   --brand: #5BA4CF;
   --brand-secondary: #F0963C;
@@ -159,7 +165,8 @@
    resolve against whichever element carries the scheme (html.dark in the app,
    but also any nested .dark scope). */
 :root,
-.dark {
+.dark,
+[data-reader-theme] {
   --surface-bar: color-mix(in oklab, var(--surface-bar-solid) var(--bar-alpha), transparent);
   --surface-overlay: color-mix(in oklab, var(--surface-overlay-solid) var(--overlay-alpha), transparent);
   --selected: var(--sidebar-accent); /* + 2px --brand inline-start bar */
@@ -183,13 +190,17 @@
 /* Translucent surfaces fall back to alpha 1 without backdrop-filter support
    or when the user asks for reduced transparency. */
 @media (prefers-reduced-transparency: reduce) {
-  :root {
+  :root,
+  [data-reader-theme],
+  .dark {
     --surface-bar: var(--surface-bar-solid);
     --surface-overlay: var(--surface-overlay-solid);
   }
 }
 @supports not (backdrop-filter: blur(1px)) {
-  :root {
+  :root,
+  [data-reader-theme],
+  .dark {
     --surface-bar: var(--surface-bar-solid);
     --surface-overlay: var(--surface-overlay-solid);
   }

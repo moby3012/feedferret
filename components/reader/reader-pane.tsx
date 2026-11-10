@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, memo, type RefObject } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import dynamic from "next/dynamic";
 import { useShellActions, useShellData } from "@/components/shell/shell-context";
 import { toLegacyArticle, withDetail } from "@/features/articles/legacy-adapter";
 import { useArticleActions, useIsFetchingFullText } from "@/features/articles/mutations";
@@ -12,15 +11,13 @@ import { useArticle } from "@/features/articles/queries";
 import { getLayoutClass } from "@/features/reader/layout/layout-class";
 import { getNavState, nav, useNav } from "@/features/reader/nav/store";
 import { ReaderEmptyState } from "./reader-empty";
+import { preloadReaderChunks, ReaderLazyWarmup, ReaderView } from "./reader-view";
 
-// The reader (its UI, menus, export / AI hooks, KaTeX + highlight.js CSS) is
-// its own chunk: off the cold-start path, preloaded once the shell is idle so
-// the first tap still paints the reader at once. A deep link (`?a=`) renders
-// it on the server and loads the chunk with the page.
-export const loadReader = () => import("@/components/article-reader");
-const ArticleReader = dynamic(() => loadReader().then((m) => m.ArticleReader), {
-  loading: () => <div className="flex-1 bg-background" />,
-});
+// The reader chrome + header ship with the shell, so a tap paints the title
+// from the list row in the same frame (spec §2.4: ≤100 ms). Only the body
+// (KaTeX + highlight.js CSS), the "…" menu and the "Aa" sheet are lazy chunks,
+// preloaded once the shell is idle; a deep link (`?a=`) renders the body on
+// the server.
 
 /**
  * Reader container: the open article comes from the URL (`a`). On compact it
@@ -60,7 +57,7 @@ export const ReaderPane = memo(function ReaderPane() {
   }, [articleId, shownId]);
 
   useReaderFocus(paneRef, articleId);
-  usePreloadReader();
+  const warm = usePreloadReader();
 
   const list = useSyncExternalStore(shell.activeList.subscribe, shell.activeList.get, shell.activeList.get);
   const { item, detail, status } = useArticle(shownId);
@@ -119,11 +116,13 @@ export const ReaderPane = memo(function ReaderPane() {
       className="flex bg-background outline-none"
     >
       {readerArticle ? (
-        <ArticleReader
+        <ReaderView
           article={readerArticle}
+          index={index}
+          nextTitle={index >= 0 ? (list.articles[index + 1]?.title ?? null) : null}
           isBodyLoading={!!article && status === "pending"}
           onToggleStar={shell.toggleStar}
-          onToggleReadLater={shell.toggleLater}
+          onToggleLater={shell.toggleLater}
           onToggleRead={shell.toggleRead}
           onFetchFullText={actions.fetchFullText}
           isFetchingFullText={isFetchingFullText}
@@ -131,33 +130,53 @@ export const ReaderPane = memo(function ReaderPane() {
           onSetLabels={actions.setLabels}
           onBack={() => void nav.up()}
           onOpenFeed={(feedId) => void nav.goScope({ kind: "feed", id: feedId })}
-          showBackButton={!!articleId}
-          onPreviousArticle={() => step(-1)}
-          onNextArticle={() => step(1)}
-          hasPreviousArticle={index > 0}
-          hasNextArticle={index >= 0 && index < list.articles.length - 1}
-          readerWidth={(feed?.readerWidthOverride ?? prefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
-          readerFontSize={(feed?.readerFontSizeOverride ?? prefs?.readerFontSize ?? "medium") as "small" | "medium" | "large" | "xl"}
+          onPrevious={() => step(-1)}
+          onNext={() => step(1)}
+          hasPrevious={index > 0}
+          hasNext={index >= 0 && index < list.articles.length - 1}
+          typographyFallback={{
+            readerWidth: feed?.readerWidthOverride ?? prefs?.readerWidth ?? null,
+            readerFontSize: feed?.readerFontSizeOverride ?? prefs?.readerFontSize ?? null,
+          }}
           hideArticleImage={feed?.hideArticleImage ?? false}
         />
       ) : (
         <ReaderEmptyState />
       )}
+      {warm && <ReaderLazyWarmup />}
     </section>
   );
 });
 
-/** Loads the reader chunk once the browser is idle after boot (no-op when already loaded). */
+/**
+ * Loads the reader's lazy chunks once the browser is idle after boot, then
+ * reports `true` so they get mounted (warmed) once — later mounts render at once.
+ */
 function usePreloadReader() {
+  const [warm, setWarm] = useState(false);
   useEffect(() => {
-    const run = () => void loadReader();
+    let alive = true;
+    const run = () =>
+      void preloadReaderChunks().then(
+        () => alive && setWarm(true),
+        () => {
+          /* offline / chunk error: the reader loads them on demand */
+        },
+      );
     if (typeof window.requestIdleCallback === "function") {
       const handle = window.requestIdleCallback(run, { timeout: 4000 });
-      return () => window.cancelIdleCallback(handle);
+      return () => {
+        alive = false;
+        window.cancelIdleCallback(handle);
+      };
     }
     const handle = window.setTimeout(run, 1500);
-    return () => window.clearTimeout(handle);
+    return () => {
+      alive = false;
+      window.clearTimeout(handle);
+    };
   }, []);
+  return warm;
 }
 
 /**
