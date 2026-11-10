@@ -99,12 +99,24 @@ export function ThemeColorApplier() {
   // meta gets it: with a forced theme the OS media query may disagree.
   // Independent of the session: public pages (login, register, setup) follow
   // the persisted next-themes choice (localStorage) too.
+  // Next re-renders the viewport metadata after hydration (router.refresh —
+  // e.g. TimezoneSync on a first visit —, revalidating server actions,
+  // navigations) and re-inserts fresh metas with the server's
+  // media-query defaults: a one-shot write would be undone, so every
+  // (re)inserted or rewritten theme-color meta is corrected again (in the
+  // observer's microtask, before the next paint).
   useEffect(() => {
     if (!resolvedTheme) return;
     const barColor = themeColorFor(resolvedTheme);
-    document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
-      if (meta.getAttribute("content") !== barColor) meta.setAttribute("content", barColor);
-    });
+    const apply = () => {
+      document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
+        if (meta.getAttribute("content") !== barColor) meta.setAttribute("content", barColor);
+      });
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ["content"] });
+    return () => observer.disconnect();
   }, [resolvedTheme]);
 
   return null;

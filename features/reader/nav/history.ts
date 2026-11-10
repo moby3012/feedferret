@@ -52,8 +52,16 @@ export function pushEntry(url: string, ff: FfState) {
   window.history.pushState({ ...unpatchedNextKeys(), ff }, "", url);
 }
 
+/** Our own replaceState is in progress (the router-write guard must let it through as is). */
+let ownWrite = false;
+
 export function replaceEntry(url: string, ff: FfState) {
-  window.history.replaceState({ ...unpatchedNextKeys(), ...customState(ff) }, "", url);
+  ownWrite = true;
+  try {
+    window.history.replaceState({ ...unpatchedNextKeys(), ...customState(ff) }, "", url);
+  } finally {
+    ownWrite = false;
+  }
 }
 
 /** True once Next's router has patched the history methods (writes are then router-synced). */
@@ -98,18 +106,32 @@ export function setNavAnim(anim: NavAnim) {
 }
 
 /**
- * Next rewrites the current entry's state after some router updates (a
- * server action that revalidates `/`, router.refresh) WITHOUT custom keys —
- * that would drop `ff` and with it the depth. Layered on top of Next's patch:
- * a Next write (has `__NA`, no `ff`) of the same entry keeps the current `ff`.
+ * Guards Next's own writes of the current entry (layered on top of its patch).
+ *
+ * 1. After some router updates (a server action that revalidates `/`,
+ *    router.refresh) Next rewrites the entry's state WITHOUT custom keys —
+ *    that would drop `ff` and with it the depth. A Next write (has `__NA`, no
+ *    `ff`) of the same entry keeps the current `ff`.
+ * 2. Every push/replace of ours is mirrored into Next's router by a restore
+ *    (a transition); when it commits, Next's HistoryUpdater replaceState()s
+ *    the CURRENT entry with the restore's URL. If the user traversed before
+ *    that commit (Back right after a cold deep link was seeded, on a busy
+ *    main thread), that URL is stale: the parent entry would be rewritten to
+ *    the article URL. A restore never moves the URL, and only a restore
+ *    preserves custom state (its write carries our `ff`): such a write keeps
+ *    the URL the entry already has.
  */
 export function keepFfAcrossRouterWrites(): () => void {
   const next = window.history.replaceState;
   const guarded: typeof window.history.replaceState = function (this: History, data, unused, url) {
-    if (data && typeof data === "object" && (data as Record<string, unknown>).__NA && !(data as Record<string, unknown>).ff) {
+    // Our own writes may carry `__NA` too (unpatched fallback): never touched.
+    const nextData = !ownWrite && data && typeof data === "object" && (data as Record<string, unknown>).__NA ? (data as Record<string, unknown>) : null;
+    if (nextData && !nextData.ff) {
       const ff = readFf();
       const sameEntry = !url || new URL(String(url), window.location.href).pathname === window.location.pathname;
-      if (ff && sameEntry) data = { ...(data as Record<string, unknown>), ff };
+      if (ff && sameEntry) data = { ...nextData, ff };
+    } else if (nextData && url != null && new URL(String(url), window.location.href).href !== window.location.href) {
+      url = window.location.href;
     }
     return next.call(this, data, unused, url);
   };

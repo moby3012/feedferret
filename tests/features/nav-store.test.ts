@@ -107,6 +107,24 @@ describe("deep-link stack seeding", () => {
     expect(history.exited).toBe(true);
   });
 
+  it("Back before Next commits the seeding restore: its late write keeps the parent entry's URL", async () => {
+    await boot("/?a=X", "expanded");
+    expect(history.backStack()).toEqual(["/", "/?a=X"]);
+    const stale = history.current.url.href;
+    await systemBack();
+    expect(history.here()).toBe("/");
+    // Next's HistoryUpdater committing the restore of our push only now: it
+    // preserves the custom state (our `ff`) and writes the restore's URL.
+    const routerHistory = (globalThis as unknown as { window: { history: History } }).window.history;
+    routerHistory.replaceState({ ...(history.state as object), __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: {} }, "", stale);
+    expect(history.here()).toBe("/");
+    expect((history.state as { ff: unknown }).ff).toEqual({ i: 0, k: "root" });
+    expect(here().articleId).toBeNull();
+    // Next writes without custom state (refresh / navigation) are not pinned.
+    routerHistory.replaceState({ __NA: true }, "", "/?tab=search&q=x");
+    expect(history.here()).toBe("/?tab=search&q=x");
+  });
+
   it("UI up() walks the same levels and never writes past the root", async () => {
     await boot("/?feed=F&a=X");
     await store.nav.up();
