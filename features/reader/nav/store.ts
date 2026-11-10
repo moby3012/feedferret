@@ -153,16 +153,7 @@ function run(task: () => void | Promise<void>): Promise<void> {
   return p;
 }
 
-/**
- * The single popstate listener (capture phase: it runs before Next's). A
- * traversal between two shell entries is ours alone — Next's router would
- * `restore` it and replaceState() the landed entry once that commits, i.e. a
- * second, late history write after every Back. Traversals to another route
- * (no `ff` / another path) are left to Next, which unmounts the shell.
- */
-function onPopState(event?: Event) {
-  const ownEntry = window.location.pathname === "/" && !!readFf();
-  if (ownEntry) event?.stopImmediatePropagation?.();
+function onPopState() {
   if (pending) {
     const p = pending;
     pending = null;
@@ -398,7 +389,7 @@ export const nav = {
  */
 export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
   if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
-  window.addEventListener("popstate", onPopState, { capture: true });
+  window.addEventListener("popstate", onPopState);
   let unguard = () => {};
   let disposed = false;
   const settleBoot = () => {
@@ -444,7 +435,7 @@ export function bootNav(onIntents: (intents: LocIntents) => void): () => void {
     setNavReady(false);
     stackLayout = null;
     reconcileQueued = false;
-    window.removeEventListener("popstate", onPopState, { capture: true });
+    window.removeEventListener("popstate", onPopState);
     if (pending) window.clearTimeout(pending.timer);
     pending = null;
     queue = null;

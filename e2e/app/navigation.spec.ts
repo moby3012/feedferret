@@ -102,7 +102,7 @@ test("browser/Android back from the reader returns to the list at the same offse
   expect(app.where()).toBe(`/?a=${id}`);
 
   await page.goBack();
-  expect(app.where()).toBe("/"); // still inside the app, article dropped from the URL
+  await expect.poll(() => app.where()).toBe("/"); // still inside the app, article dropped from the URL
   await expect(page.locator(`[data-pane="reader"] article`)).toHaveCount(0, { timeout: 5000 });
   await expect(page.locator(`[data-article-id="${id}"] [role="button"]`).first()).toBeVisible();
   // List stayed mounted under the reader: exactly where it was (±1 px).
@@ -122,11 +122,11 @@ test("mobile: back goes reader → feed list → Feeds root and never leaves the
 
   await page.goBack(); // reader → feed list
   await expect(reader(page, 8)).toBeHidden();
-  expect(app.where()).toBe(feedUrl);
+  await expect.poll(() => app.where()).toBe(feedUrl);
   await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
 
   await page.goBack(); // feed list → Feeds root (sources)
-  expect(app.where()).toBe("/?tab=feeds");
+  await expect.poll(() => app.where()).toBe("/?tab=feeds");
   const sources = page.locator('[data-pane="sources"]');
   await expect(sources.getByRole("button", { name: /^Solo Blog\s*\d+$/ })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeHidden();
@@ -136,7 +136,7 @@ test("mobile: back goes reader → feed list → Feeds root and never leaves the
   await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
   expect(app.where()).toBe(feedUrl);
   await page.goBack();
-  expect(app.where()).toBe("/?tab=feeds");
+  await expect.poll(() => app.where()).toBe("/?tab=feeds");
 });
 
 test("the feed sheet is a history level: back closes it instead of navigating", async ({ app, page, isMobile }) => {
@@ -145,7 +145,7 @@ test("the feed sheet is a history level: back closes it instead of navigating", 
   await app.openSidebar();
   await page.goBack();
   await expect(page.getByRole("dialog", { name: /feed navigation/i })).toBeHidden();
-  expect(app.where()).toBe("/");
+  await expect.poll(() => app.where()).toBe("/");
   await expect(app.row(1)).toBeVisible();
 });
 
@@ -174,7 +174,7 @@ test("cold deep link ?a=<id> opens the reader with the list underneath; back sta
   // The list is mounted under the reader (compact) / beside it (wide).
   await expect(app.row(1)).toHaveCount(1);
   await page.goBack(); // seeded parent entry
-  expect(app.where()).toBe("/");
+  await expect.poll(() => app.where()).toBe("/");
   await expect(reader(page, 3)).toBeHidden();
   await expect(app.row(1)).toBeVisible();
 });
@@ -188,11 +188,11 @@ test("cold deep link into a feed article: back goes to that feed's list", async 
   await expect(reader(page, 8)).toBeVisible({ timeout: 30_000 });
   await app.navReady();
   await page.goBack();
-  expect(app.where()).toBe(feedUrl);
+  await expect.poll(() => app.where()).toBe(feedUrl);
   await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
   if (app.isMobile) {
     await page.goBack();
-    expect(app.where()).toBe("/?tab=feeds");
+    await expect.poll(() => app.where()).toBe("/?tab=feeds");
   }
 });
 
@@ -215,7 +215,7 @@ test("j/k moves between articles without growing history", async ({ app, page, i
   expect(app.where()).toBe(`/?a=${app.articleId(1)}`);
   // One back still returns to the list.
   await page.goBack();
-  expect(app.where()).toBe("/");
+  await expect.poll(() => app.where()).toBe("/");
 });
 
 test("Esc closes the reader", async ({ app, page, isMobile }) => {

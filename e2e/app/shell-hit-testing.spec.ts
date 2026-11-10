@@ -36,18 +36,46 @@ test("a row action tapped right after Back hits the list, not the closing reader
   await app.open();
   await app.activate(app.row(2));
   await expect(page.locator("article").filter({ hasText: "(#002)" })).toBeVisible();
-  await app.activate(page.getByRole("button", { name: /^(Back to list|Back)$/ }).first());
-  // Hit-test at once, during the pop transition (no Playwright retry / scroll).
-  const onTop = await app.rowActions(3).read.evaluate((button) => {
-    const r = button.getBoundingClientRect();
-    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-    return button.contains(hit) ? "row" : (hit?.closest("[data-pane]")?.getAttribute("data-pane") ?? hit?.tagName ?? "none");
-  });
-  expect(onTop).toBe("row");
+  const back = (await page.getByRole("button", { name: /^(Back to list|Back)$/ }).first().elementHandle())!;
+  // CSS, not getByRole: under the open reader the list is inert (out of the a11y tree).
+  const target = (await app.row(3).locator('button[aria-label^="Mark as "]').elementHandle())!;
+  // One synchronous probe: stretch the pop transition (so a busy main thread
+  // cannot skip past it), press Back, wait rAF by rAF until the reader is
+  // closed but still visible and sliding out OVER the target, and hit-test there.
+  const probe = await page.evaluate(
+    async ([backButton, button]) => {
+      document.documentElement.style.setProperty("--dur-base", "3000ms");
+      const pane = document.querySelector<HTMLElement>('.ff-shell > [data-pane="reader"]')!;
+      const shell = pane.parentElement!;
+      (backButton as HTMLElement).click();
+      const deadline = performance.now() + 2500;
+      for (;;) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const closing =
+          shell.dataset.reader === "closed" &&
+          getComputedStyle(pane).visibility === "visible" &&
+          pane.getAnimations().some((a) => a.playState === "running");
+        if (closing) break;
+        if (performance.now() > deadline) return { closing: false, covered: false, hit: "timeout" };
+      }
+      const r = button.getBoundingClientRect();
+      const [x, y] = [r.x + r.width / 2, r.y + r.height / 2];
+      const hit = document.elementFromPoint(x, y);
+      const p = pane.getBoundingClientRect();
+      return {
+        closing: pane.getAnimations().some((a) => a.playState === "running"),
+        covered: p.left <= x && x <= p.right && p.top <= y && y <= p.bottom,
+        hit: button.contains(hit) ? "row" : (hit?.closest("[data-pane]")?.getAttribute("data-pane") ?? hit?.tagName ?? "none"),
+      };
+    },
+    [back, target] as const,
+  );
+  expect(probe).toEqual({ closing: true, covered: true, hit: "row" });
   const before = await app.listScroller().evaluate((el) => el.scrollTop);
   await app.activate(app.rowActions(3).read);
   expect(await app.listScroller().evaluate((el) => el.scrollTop)).toBe(before);
   expect(await shellScrollLeft(page)).toBe(0);
+  await page.evaluate(() => document.documentElement.style.removeProperty("--dur-base"));
 });
 
 test("the shell is never programmatically scrollable sideways", async ({ app, page }) => {

@@ -24,7 +24,7 @@ test.describe("overlays are history levels on touch / compact", () => {
     await expect(page.getByPlaceholder(/command/i)).toBeVisible();
     await page.goBack();
     await expect(page.getByPlaceholder(/command/i)).toBeHidden();
-    expect(app.where()).toBe(url);
+    await expect.poll(() => app.where()).toBe(url);
     await expect(page.locator('[data-pane="reader"] article')).toBeVisible();
 
     // Palette → "Keyboard shortcuts": swapped, not stacked — one Back closes it.
@@ -36,7 +36,7 @@ test.describe("overlays are history levels on touch / compact", () => {
     expect(await page.evaluate(() => history.length)).toBe(length);
     await page.goBack();
     await expect(dialog(page, /keyboard shortcuts/i)).toBeHidden();
-    expect(app.where()).toBe(url);
+    await expect.poll(() => app.where()).toBe(url);
   });
 
   test("Add Feed from the feed sheet replaces the sheet; Back closes it and stays in the app", async ({ app, page, isMobile }) => {
@@ -49,7 +49,7 @@ test.describe("overlays are history levels on touch / compact", () => {
     expect(app.where()).toBe("/?tab=feeds");
     await page.goBack();
     await expect(dialog(page, "Add Feed")).toBeHidden();
-    expect(app.where()).toBe("/?tab=feeds");
+    await expect.poll(() => app.where()).toBe("/?tab=feeds");
     await expect(page.locator('[data-pane="sources"]').getByRole("button", { name: /^Solo Blog\s*\d+$/ })).toBeVisible();
   });
 
@@ -60,7 +60,7 @@ test.describe("overlays are history levels on touch / compact", () => {
     await expect.poll(() => app.where()).toBe("/?tab=feeds");
     await page.goBack();
     await expect(dialog(page, "Add Feed")).toBeHidden();
-    expect(app.where()).toBe("/?tab=feeds");
+    await expect.poll(() => app.where()).toBe("/?tab=feeds");
   });
 
   test("a search-dialog draft dismissed by system Back within 300 ms is never committed", async ({ app, page, isMobile }) => {

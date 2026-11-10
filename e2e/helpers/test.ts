@@ -44,9 +44,11 @@ export class App {
     return this.page.locator('[data-pane="reader"] [data-testid="reader-scroller"]');
   }
   /**
-   * The shell has booted its history (`<html data-nav-ready>`): seeding / alias
-   * rewrite are done, and from here on every nav op writes history exactly
-   * once, synchronously (no late router write a Back could race with).
+   * The shell has booted its history (`<html data-nav-ready>`): deep-link
+   * parents are seeded and alias rewrites done, so a Back now traverses the
+   * shell's stack. Next's router still mirrors each shell write a moment later
+   * (a same-URL replaceState, which can make `page.goBack()` resolve before the
+   * traversal): after goBack/goForward, poll the URL instead of reading it once.
    */
   async navReady() {
     await expect(this.page.locator("html")).toHaveAttribute("data-nav-ready", "true");

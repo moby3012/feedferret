@@ -5,15 +5,10 @@
 //   k  "root" | "scope" | "article" | "overlay"
 //   o  overlay id when k = "overlay"
 //
-// The shell owns the URL while it is mounted; Next's router is NOT told about
-// in-shell entries. Next patches pushState/replaceState (in an effect of its
-// root) and, for a write without its keys, mirrors the URL into the router with
-// a `restore` transition whose commit replaceState()s the current entry AGAIN —
-// tens to hundreds of ms later on a slow device, after whatever the user (or a
-// test driver) did in between. Our writes therefore carry Next's keys (__NA and
-// the tree of the current entry), which makes the patch pass them straight
-// through: one op = exactly one synchronous history write. Nothing in the
-// shell reads useSearchParams/usePathname; the nav store is the source of truth.
+// Next's app router patches pushState/replaceState (in an effect of its root)
+// so native history calls keep `useSearchParams` in sync without an RSC
+// round-trip. Its keys (__NA, the tree) must never be passed in by us — the
+// patch copies them; passing them would make it skip the router sync.
 import type { OverlayId } from "./overlays";
 
 export type EntryKind = "root" | "scope" | "article" | "overlay";
@@ -24,7 +19,8 @@ export interface FfState {
   o?: OverlayId;
 }
 
-const NEXT_KEYS = new Set(["__NA", "__PRIVATE_NEXTJS_INTERNALS_TREE", "_N"]);
+/** Next's own history-state keys (pinned by tests/features/next-history-contract.test.ts). */
+export const NEXT_KEYS: ReadonlySet<string> = new Set(["__NA", "__PRIVATE_NEXTJS_INTERNALS_TREE", "_N"]);
 
 export function readFf(): FfState | null {
   const ff = (window.history.state as { ff?: unknown } | null)?.ff;
@@ -44,12 +40,9 @@ function customState(ff: FfState): Record<string, unknown> {
   return out;
 }
 
-/**
- * Next's keys of the current entry. Carried on every write of ours: Next's
- * patch then skips its router sync (no deferred echo write), and a later Back
- * onto the entry is still restorable by Next (no reload) once the shell is gone.
- */
-function nextKeys(): Record<string, unknown> {
+/** Fallback only (router patch not installed): carry Next's keys ourselves so a later Back is not a reload. */
+function unpatchedNextKeys(): Record<string, unknown> {
+  if (isRouterPatched()) return {};
   const current = (window.history.state ?? {}) as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const key of NEXT_KEYS) if (key in current) out[key] = current[key];
@@ -57,7 +50,7 @@ function nextKeys(): Record<string, unknown> {
 }
 
 export function pushEntry(url: string, ff: FfState) {
-  window.history.pushState({ ...nextKeys(), ff }, "", url);
+  window.history.pushState({ ...unpatchedNextKeys(), ff }, "", url);
 }
 
 /** Our own replaceState is in progress (the router-write guard must let it through as is). */
@@ -66,13 +59,13 @@ let ownWrite = false;
 export function replaceEntry(url: string, ff: FfState) {
   ownWrite = true;
   try {
-    window.history.replaceState({ ...nextKeys(), ...customState(ff) }, "", url);
+    window.history.replaceState({ ...unpatchedNextKeys(), ...customState(ff) }, "", url);
   } finally {
     ownWrite = false;
   }
 }
 
-/** True once Next's router has patched the history methods. */
+/** True once Next's router has patched the history methods (writes are then router-synced). */
 export function isRouterPatched(): boolean {
   try {
     return !Function.prototype.toString.call(window.history.pushState).includes("[native code]");
@@ -114,25 +107,31 @@ export function setNavAnim(anim: NavAnim) {
 }
 
 /**
- * Guards Next's own writes of the current entry while the shell owns the URL
- * (layered on top of Next's patch).
+ * Guards Next's own writes of the current entry (layered on top of its patch).
  *
- * Next's router state does not follow in-shell entries (see top), so whenever
- * it writes history on its own — the commit after a server action or
- * router.refresh(), a late commit of anything it started before the shell
- * took over — it writes ITS (stale) canonical URL and drops custom state. A
- * Next write of the shell's own path therefore keeps the entry's URL and
- * `ff`. Writes for another path (a router navigation away) pass unchanged.
+ * 1. After some router updates (a server action that revalidates `/`,
+ *    router.refresh) Next rewrites the entry's state WITHOUT custom keys —
+ *    that would drop `ff` and with it the depth. A Next write (has `__NA`, no
+ *    `ff`) of the same entry keeps the current `ff`.
+ * 2. Every push/replace of ours is mirrored into Next's router by a restore
+ *    (a transition); when it commits, Next's HistoryUpdater replaceState()s
+ *    the CURRENT entry with the restore's URL. If the user traversed before
+ *    that commit (Back right after a cold deep link was seeded, on a busy
+ *    main thread), that URL is stale: the parent entry would be rewritten to
+ *    the article URL. A restore never moves the URL, and only a restore
+ *    preserves custom state (its write carries our `ff`): such a write keeps
+ *    the URL the entry already has.
  */
 export function keepFfAcrossRouterWrites(): () => void {
   const next = window.history.replaceState;
   const guarded: typeof window.history.replaceState = function (this: History, data, unused, url) {
-    // Our own writes carry `__NA` too: never touched.
+    // Our own writes may carry `__NA` too (unpatched fallback): never touched.
     const nextData = !ownWrite && data && typeof data === "object" && (data as Record<string, unknown>).__NA ? (data as Record<string, unknown>) : null;
-    const target = url == null ? null : new URL(String(url), window.location.href);
-    if (nextData && (!target || target.pathname === window.location.pathname)) {
+    if (nextData && !nextData.ff) {
       const ff = readFf();
-      if (ff && !nextData.ff) data = { ...nextData, ff };
+      const sameEntry = !url || new URL(String(url), window.location.href).pathname === window.location.pathname;
+      if (ff && sameEntry) data = { ...nextData, ff };
+    } else if (nextData && url != null && new URL(String(url), window.location.href).href !== window.location.href) {
       url = window.location.href;
     }
     return next.call(this, data, unused, url);
@@ -143,7 +142,7 @@ export function keepFfAcrossRouterWrites(): () => void {
   };
 }
 
-/** Explicit boot signal (`<html data-nav-ready>`): the owned stack is seeded and every later write is synchronous. */
+/** Explicit boot signal (`<html data-nav-ready>`): the shell's stack is seeded (deep-link parents, alias rewrite done). */
 export function setNavReady(ready: boolean) {
   if (ready) document.documentElement.dataset.navReady = "true";
   else delete document.documentElement.dataset.navReady;
