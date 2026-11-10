@@ -11,6 +11,7 @@ import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import { ChangePasswordSchema } from "@/lib/validation";
 import type { AiProvider } from "@/lib/ai-summary";
 import { fetchViaHostedApiDetailed, type HostedFetchProvider } from "@/lib/hosted-fetch";
+import { loadReadingPreferences } from "@/server/bootstrap";
 
 async function requireUser() {
   const session = await auth();
@@ -69,51 +70,7 @@ export async function changePassword(data: {
 
 export async function getReadingPreferences() {
   const session = await requireUser();
-  const user = await db.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      openOriginalByDefault: true,
-      markReadAfterDelaySecs: true,
-      defaultViewMode: true,
-      readerWidth: true,
-      readerFontSize: true,
-      defaultArticleSort: true,
-      accentColor: true,
-      secondaryColor: true,
-      hideDuplicates: true,
-      markReadOnScroll: true,
-      markReadOnAdvance: true,
-      storyClustering: true,
-      clusterReadMode: true,
-      layoutDirection: true,
-      hideEmptyFeeds: true,
-      hideEmptyLabels: true,
-      uiLanguage: true,
-      displayTimezone: true,
-      autoMuteFailingFeedsAfter: true,
-    },
-  });
-  return {
-    openOriginalByDefault: user?.openOriginalByDefault ?? false,
-    markReadAfterDelaySecs: user?.markReadAfterDelaySecs ?? null,
-    defaultViewMode: user?.defaultViewMode ?? "list",
-    readerWidth: user?.readerWidth ?? "normal",
-    readerFontSize: user?.readerFontSize ?? "medium",
-    defaultArticleSort: user?.defaultArticleSort ?? "newest",
-    accentColor: user?.accentColor ?? "#5BA4CF",
-    secondaryColor: user?.secondaryColor ?? "#F0963C",
-    hideDuplicates: user?.hideDuplicates ?? true,
-    markReadOnScroll: user?.markReadOnScroll ?? false,
-    markReadOnAdvance: user?.markReadOnAdvance ?? false,
-    storyClustering: user?.storyClustering ?? true,
-    clusterReadMode: (user?.clusterReadMode === "story" ? "story" : "article") as "story" | "article",
-    layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
-    hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
-    hideEmptyLabels: user?.hideEmptyLabels ?? false,
-    uiLanguage: user?.uiLanguage ?? "en",
-    displayTimezone: user?.displayTimezone ?? null,
-    autoMuteFailingFeedsAfter: user?.autoMuteFailingFeedsAfter ?? 10,
-  };
+  return loadReadingPreferences(session.user.id);
 }
 
 export async function updateGlobalSettings(data: {
