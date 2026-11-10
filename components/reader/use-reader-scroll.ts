@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
-import { startsInPannableContent } from "@/lib/gesture-guards";
+import { createPull, PULL_TRIGGER_PX } from "@/lib/gestures";
 import { readReaderPosition, saveReaderPosition } from "@/features/reader/reader-position";
-import { createPullToNext, PULL_TRIGGER_PX } from "./pull-to-next";
 
 // Everything the reader does with its scroller, all outside React renders:
 // the hide-on-scroll top bar + reading progress (one rAF writer on the root's
@@ -172,13 +171,11 @@ export function useReaderPosition(scrollerRef: RefObject<HTMLElement | null>, co
 }
 
 /**
- * Tracked pull past the end of the article → next article (touch only).
- * Writes `--pull-p` (pull after resistance / trigger distance; ≥1 = armed)
- * and `data-pull` = idle|tracking|armed on `indicator`; no React renders
- * during the drag. Releasing armed calls `onTrigger`. `touchmove` is
- * non-passive so the pull can suppress the native overscroll only while it
- * is tracking. Arbitration (pannable content, axis lock, second finger) and
- * the TODO to move onto lib/gestures live in ./pull-to-next.ts.
+ * Tracked pull past the end of the article → next article (touch only), on
+ * the shared `createPull` (lib/gestures: pannable-content guard, axis lock,
+ * second-finger cancel, haptics, spring back). Writes `--pull-p` (pull after
+ * resistance / trigger distance; ≥1 = armed) and `data-pull` =
+ * idle|tracking|armed on `indicator`; no React renders during the drag.
  */
 export function usePullToNext(
   scrollerRef: RefObject<HTMLElement | null>,
@@ -189,52 +186,16 @@ export function usePullToNext(
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    let frame = 0;
-    let pull = 0;
-    let armed = false;
-    const write = () => {
-      frame = 0;
-      const indicator = indicatorRef.current;
-      if (!indicator) return;
-      indicator.style.setProperty("--pull-p", (pull / PULL_TRIGGER_PX).toFixed(3));
-      indicator.dataset.pull = pull <= 0 ? "idle" : armed ? "armed" : "tracking";
-    };
-    const pullToNext = createPullToNext({
-      atEnd: () => scroller.scrollTop >= maxScroll(scroller) - END_SLACK_PX,
-      startsInPannable: (target) => startsInPannableContent(target, scroller),
+    return createPull(scroller, {
+      edge: "bottom",
       enabled: () => enabledRef.current,
-      render: (p, a) => {
-        pull = p;
-        armed = a;
-        if (!frame) frame = requestAnimationFrame(write);
-      },
-      onArm: haptic,
       onTrigger: () => onTriggerRef.current(),
+      render: (px, state) => {
+        const indicator = indicatorRef.current;
+        if (!indicator) return;
+        indicator.style.setProperty("--pull-p", (px / PULL_TRIGGER_PX).toFixed(3));
+        indicator.dataset.pull = state === "pulling" ? "tracking" : state;
+      },
     });
-    const onStart = (e: TouchEvent) => pullToNext.start(e);
-    const onMove = (e: TouchEvent) => pullToNext.move(e);
-    const onEnd = (e: TouchEvent) => pullToNext.end(e);
-    const onCancel = () => pullToNext.cancel();
-    scroller.addEventListener("touchstart", onStart, { passive: true });
-    scroller.addEventListener("touchmove", onMove, { passive: false });
-    scroller.addEventListener("touchend", onEnd, { passive: true });
-    scroller.addEventListener("touchcancel", onCancel, { passive: true });
-    return () => {
-      if (frame) cancelAnimationFrame(frame);
-      scroller.removeEventListener("touchstart", onStart);
-      scroller.removeEventListener("touchmove", onMove);
-      scroller.removeEventListener("touchend", onEnd);
-      scroller.removeEventListener("touchcancel", onCancel);
-    };
   }, [scrollerRef, indicatorRef, enabledRef, onTriggerRef]);
-}
-
-function haptic() {
-  try {
-    if (localStorage.getItem("ff:haptics") === "0") return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  } catch {
-    /* storage blocked: still fine to vibrate */
-  }
-  if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") navigator.vibrate(8);
 }
