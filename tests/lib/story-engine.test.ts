@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assignClusters } from "../../lib/story-clustering/engine";
+import { ClusterEngine, assignClusters } from "../../lib/story-clustering/engine";
+import { computeStorySig } from "../../lib/story-clustering/normalize";
 import { CONFIG, flatIdf, makeIdf, prepare, scorePair } from "../../lib/story-clustering/similarity";
 import type { ClusterState, PendingItem, StorySig, WindowItem } from "../../lib/story-clustering/types";
 import { NOW, allItems, evaluate, groups, holdoutGroups } from "./story-fixtures";
@@ -144,6 +145,44 @@ describe("engine properties", () => {
     expect(scorePair(prepare(last.sig), prepare(chain[0].sig), flatIdf, 8 * H)!.score).toBeLessThan(CONFIG.driftThreshold);
   });
 
+  it("drift anchor: a chain of lead swaps cannot leave the story the cluster started as", () => {
+    // Every newcomer is a better lead than the previous one (q rises) and resembles its predecessor, so
+    // a lead-only guard is satisfied forever. The anchor (first two members) still stops the walk.
+    const chain: PendingItem[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `c${i}`,
+      feedId: `feed${i}`,
+      publishedAt: NOW - (8 - i) * H,
+      sig: sig(words(i, i + 5), { q: 1 + i * 0.1 }),
+    }));
+    const head = new ClusterEngine(chain.slice(0, 4), [], []);
+    head.step(Infinity);
+    const clusters = head.drainTouched();
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0].size).toBe(4);
+    expect(clusters[0].leadArticleId).toBe("c3"); // swapped three times
+    expect(clusters[0].sig.anchor?.length).toBe(2);
+    const window: WindowItem[] = chain.slice(0, 4).map((c) => ({ id: c.id, feedId: c.feedId, publishedAt: c.publishedAt, clusterId: clusters[0].id, sig: c.sig }));
+    const tail = chain.slice(4);
+
+    // Control: the same cluster without an anchor (clusters written before the field existed) keeps absorbing the chain.
+    const legacy = structuredClone(clusters[0]);
+    delete legacy.sig.anchor;
+    const control = assignClusters(tail, window, [legacy]).decisions;
+    expect(control.filter((d) => d.action === "join")).toHaveLength(tail.length);
+
+    // With the anchor the walk stops: the lead still matches c4's neighbour, but nothing of c0/c1 is left in c5+.
+    const anchored = assignClusters(tail, window, clusters).decisions;
+    const joined = anchored.filter((d) => d.action === "join").map((d) => d.articleId);
+    expect(joined.length).toBeLessThan(tail.length);
+    expect(joined).not.toContain(tail[tail.length - 1].id);
+    // … and the cut is exactly where the newcomer no longer resembles either anchor member.
+    for (const item of tail) {
+      const vs = clusters[0].sig.anchor!.map((a) => scorePair(prepare(item.sig), prepare(a), flatIdf, 8 * H)?.score ?? 0);
+      const inCluster = joined.includes(item.id);
+      if (!inCluster) expect(Math.max(...vs)).toBeLessThan(CONFIG.driftThreshold);
+    }
+  });
+
   it("size cap: a full cluster (50) accepts no further sources, 49 still does", () => {
     const lead: WindowItem = { id: "lead", feedId: "f0", publishedAt: NOW - H, clusterId: "cl", sig: sig(["alpha", "beta", "gamma", "delta"]) };
     const cluster = (size: number): ClusterState => ({
@@ -194,5 +233,29 @@ describe("engine properties", () => {
     const { clusters } = assignClusters([better, tie], [a], []);
     expect(clusters[0].leadArticleId).toBe("b");
     expect(clusters[0].size).toBe(3);
+  });
+});
+
+describe("hard negatives (contradictions, series, same entity)", () => {
+  const sigOf = (title: string) => computeStorySig({ title, link: "https://x.test/a", feedName: "x", feedPriority: "main" });
+  const pending = (id: string, feedId: string, title: string, hoursAgo = 2): PendingItem => ({ id, feedId, publishedAt: NOW - hoursAgo * H, sig: sigOf(title) });
+  const clusteredTogether = (a: PendingItem, b: PendingItem) => assignClusters([a, b], [], []).decisions.some((d) => d.action === "create");
+
+  it.each([
+    ["DAX up vs down", "DAX steigt auf Rekordhoch über 19.000 Punkte", "DAX fällt unter 18.000 Punkte: Anleger verunsichert"],
+    ["same wording, one flipped direction", "DAX steigt über 19.000 Punkte: Anleger erleichtert", "DAX fällt über 19.000 Punkte: Anleger erleichtert"],
+    ["Zinssenkung vs Zinserhöhung", "EZB beschließt Zinssenkung um 0,25 Prozentpunkte", "EZB beschließt Zinserhöhung um 0,25 Prozentpunkte"],
+    ["cuts vs raises", "Fed cuts rates by 25 basis points", "Fed raises rates by 25 basis points"],
+    ["im Plus vs im Minus", "Börse am Montag: Dax startet im Plus", "Börse am Dienstag: Dax startet im Minus"],
+    ["recurring series, other weekday", "Wetter am Montag: Sonne und bis zu 20 Grad", "Wetter am Dienstag: Sonne und bis zu 20 Grad"],
+    ["same entity, different event", "Tesla ruft 120.000 Fahrzeuge wegen Bremsproblemen zurück", "Tesla eröffnet neue Gigafactory in Indien"],
+  ])("%s never merge", (_label, a, b) => {
+    expect(clusteredTogether(pending("a", "f0", a), pending("b", "f1", b))).toBe(false);
+  });
+
+  it("controls: the same story reworded, and headlines naming both directions, still merge", () => {
+    expect(clusteredTogether(pending("a", "f0", "EZB beschließt Zinssenkung um 0,25 Prozentpunkte"), pending("b", "f1", "EZB senkt Leitzins: Zinssenkung um 0,25 Prozentpunkte"))).toBe(true);
+    expect(clusteredTogether(pending("a", "f0", "Wetter am Montag: Sonne und bis zu 20 Grad"), pending("b", "f1", "Wetter am Montag: Sonne, bis zu 20 Grad"))).toBe(true);
+    expect(clusteredTogether(pending("a", "f0", "DAX steigt nach Zinssenkung auf Rekordhoch über 19.000 Punkte"), pending("b", "f1", "Zinssenkung: DAX fällt nach Rekordhoch nicht, bleibt über 19.000 Punkte"))).toBe(true);
   });
 });

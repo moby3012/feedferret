@@ -156,6 +156,98 @@
      "hoursAgo": 15
     }
    ]
+  },
+  {
+   "id": "h-neg-dax",
+   "lang": "de",
+   "expect": "distinct",
+   "note": "opposite market moves, same index",
+   "items": [
+    {
+     "feed": "faz",
+     "title": "DAX steigt auf Rekordhoch über 19.000 Punkte",
+     "hoursAgo": 6
+    },
+    {
+     "feed": "spiegel",
+     "title": "DAX fällt unter 18.000 Punkte: Anleger verunsichert",
+     "hoursAgo": 5
+    }
+   ]
+  },
+  {
+   "id": "h-neg-zins",
+   "lang": "de",
+   "expect": "distinct",
+   "note": "opposite rate decisions with identical wording otherwise",
+   "items": [
+    {
+     "feed": "tagesschau",
+     "title": "EZB beschließt Zinssenkung um 0,25 Prozentpunkte",
+     "hoursAgo": 9
+    },
+    {
+     "feed": "faz",
+     "title": "EZB beschließt Zinserhöhung um 0,25 Prozentpunkte",
+     "hoursAgo": 8
+    }
+   ]
+  },
+  {
+   "id": "h-neg-series",
+   "lang": "de",
+   "expect": "distinct",
+   "note": "recurring series headlines: same format, different day",
+   "items": [
+    {
+     "feed": "spiegel",
+     "title": "Wetter am Montag: Sonne und bis zu 20 Grad",
+     "hoursAgo": 30
+    },
+    {
+     "feed": "zeit",
+     "title": "Wetter am Dienstag: Sonne und bis zu 20 Grad",
+     "hoursAgo": 6
+    },
+    {
+     "feed": "tagesschau",
+     "title": "Börse am Montag: Dax startet im Plus",
+     "hoursAgo": 29
+    },
+    {
+     "feed": "faz",
+     "title": "Börse am Dienstag: Dax startet im Minus",
+     "hoursAgo": 5
+    },
+    {
+     "feed": "heise",
+     "title": "Börse am Mittwoch: Dax startet im Plus",
+     "hoursAgo": 4
+    }
+   ]
+  },
+  {
+   "id": "h-neg-entity",
+   "lang": "de",
+   "expect": "distinct",
+   "note": "same entity, different events",
+   "items": [
+    {
+     "feed": "heise",
+     "title": "Tesla eröffnet neue Gigafactory in Indien",
+     "hoursAgo": 10
+    },
+    {
+     "feed": "golem",
+     "title": "Tesla senkt Preise für Model 3 in Europa",
+     "hoursAgo": 9
+    },
+    {
+     "feed": "spiegel",
+     "title": "Tesla-Chef Musk kündigt Rücktritt als Verwaltungsratsvorsitzender an",
+     "hoursAgo": 8
+    }
+   ]
   }
  ]
 }

@@ -34,15 +34,20 @@ function bump(map: Map<string, Node[]>, key: string, node: Node) {
 }
 
 /** Lead order: higher quality, then earlier, then smaller id. */
-function betterLead(a: { q: number; t: number; id: string }, b: { q: number; t: number; id: string }): boolean {
+export function betterLead(a: { q: number; t: number; id: string }, b: { q: number; t: number; id: string }): boolean {
   if (a.q !== b.q) return a.q > b.q;
   if (a.t !== b.t) return a.t < b.t;
   return a.id < b.id;
 }
 
-function clusterSigOf(tokenCounts: Map<string, number>, entities: string[], lead: StorySig): ClusterSig {
+function clusterSigOf(tokenCounts: Map<string, number>, entities: string[], lead: StorySig, anchor?: StorySig[]): ClusterSig {
   const top = [...tokenCounts].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).slice(0, TOP_TOKENS);
-  return { t: Object.fromEntries(top), e: entities.slice(0, MAX_CLUSTER_ENTITIES), lead };
+  return { t: Object.fromEntries(top), e: entities.slice(0, MAX_CLUSTER_ENTITIES), lead, ...(anchor?.length ? { anchor } : {}) };
+}
+
+/** Compact copy of a signature for the cluster's drift anchor (no link hashes, no lead-pick fields). */
+export function anchorOf(sig: StorySig): StorySig {
+  return { v: 1, t: sig.t, e: sig.e, l: [], ...(sig.g ? { g: sig.g } : {}) };
 }
 
 /**
@@ -192,6 +197,17 @@ function buildEngine(
         const drift = scorePair(prepared, prepare(cluster.sig.lead), idf, Math.abs(item.publishedAt - (nodes.get(cluster.leadArticleId)?.t ?? cluster.firstSeenAt)));
         // lead outside the time window → fall back to cluster span for the time term
         if (!drift || drift.score < CONFIG.driftThreshold) continue;
+        // Anchor of the first two members: the lead may have been swapped several times, so
+        // resembling it is not enough — the joiner must also resemble where the story began.
+        const anchors = cluster.sig.anchor;
+        if (anchors?.length) {
+          const dt = Math.min(CONFIG.windowMs, Math.abs(item.publishedAt - cluster.firstSeenAt));
+          const anchored = anchors.some((a) => {
+            const s = scorePair(prepared, prepare(a), idf, dt);
+            return !!s && s.score >= CONFIG.driftThreshold;
+          });
+          if (!anchored) continue;
+        }
         firstSeen = cluster.firstSeenAt;
       }
       if (
@@ -225,9 +241,9 @@ function buildEngine(
       const lead = betterLead(cand, cur) ? item : null;
       if (lead) {
         cluster.leadArticleId = item.id;
-        cluster.sig = clusterSigOf(counts2, entities, item.sig);
+        cluster.sig = clusterSigOf(counts2, entities, item.sig, cluster.sig.anchor);
       } else {
-        cluster.sig = clusterSigOf(counts2, entities, cluster.sig.lead);
+        cluster.sig = clusterSigOf(counts2, entities, cluster.sig.lead, cluster.sig.anchor);
       }
       touched.add(cluster.id);
       index(node);
@@ -250,7 +266,7 @@ function buildEngine(
         feedIds: [partner.feedId, item.feedId],
         firstSeenAt: Math.min(partner.t, item.publishedAt),
         lastSeenAt: Math.max(partner.t, item.publishedAt),
-        sig: clusterSigOf(counts2, [...new Set([...partner.sig.e, ...item.sig.e])], leadNode.sig),
+        sig: clusterSigOf(counts2, [...new Set([...partner.sig.e, ...item.sig.e])], leadNode.sig, [anchorOf(partner.sig), anchorOf(item.sig)]),
       });
       members.set(id, [partner]);
       touched.add(id);

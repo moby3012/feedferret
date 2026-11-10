@@ -73,6 +73,45 @@ function trigrams(p: PreparedSig): Set<string> {
   return p.tri;
 }
 
+// ---- contradictions: opposite moves and recurring series
+// Headlines of one format with a flipped direction ("DAX steigt" / "DAX fällt",
+// "Zinssenkung" / "Zinserhöhung", "im Plus" / "im Minus") share nearly all
+// tokens but report opposite news; the overlap terms cannot see that. Token
+// forms are the folded + stemmed ones the signature holds.
+const UP_EXACT = new Set("raise steigt steig stieg stiegen anstieg plus rise rises rose climb climbs surge surges jump jumps rally rallies gain gains higher hoeher hoch".split(" "));
+const DOWN_EXACT = new Set("cut faellt faell fiel fielen sinkt sink sank minus fall falls fell drop drops dropped slump plunge plunges tumble tumbles decline declines lower niedriger rueckgang".split(" "));
+const UP_PREFIX = ["zinserhoeh", "erhoeh", "anheb", "preiserhoeh"];
+const DOWN_PREFIX = ["zinssenk", "senkung", "absenk", "preissenk", "zinsenk"];
+const WEEKDAYS = new Set("montag dienstag mittwoch donnerstag freitag samstag sonntag monday tuesday wednesday thursday friday saturday sunday".split(" "));
+
+interface Polarity {
+  up: boolean;
+  down: boolean;
+  days: string[];
+}
+const polarityCache = new WeakMap<StorySig, Polarity>();
+function polarity(sig: StorySig): Polarity {
+  let p = polarityCache.get(sig);
+  if (!p) {
+    p = { up: false, down: false, days: [] };
+    for (const t of sig.t) {
+      if (UP_EXACT.has(t) || UP_PREFIX.some((x) => t.startsWith(x))) p.up = true;
+      if (DOWN_EXACT.has(t) || DOWN_PREFIX.some((x) => t.startsWith(x))) p.down = true;
+      if (WEEKDAYS.has(t)) p.days.push(t);
+    }
+    polarityCache.set(sig, p);
+  }
+  return p;
+}
+/** One side only goes up, the other only down. Mixed headlines ("Dax steigt nach Zinssenkung") never conflict. */
+function opposite(a: Polarity, b: Polarity): boolean {
+  return (a.up && !a.down && b.down && !b.up) || (a.down && !a.up && b.up && !b.down);
+}
+/** Both name weekdays and none in common: same series format on different days. */
+function otherDay(a: Polarity, b: Polarity): boolean {
+  return a.days.length > 0 && b.days.length > 0 && !a.days.some((d) => b.days.includes(d));
+}
+
 /** Entities that carry identity (acronyms, codes, numbers, brands) — mismatches count as conflict. Weak "~name" entities (capitalized English words) do not. */
 const isIdentityEntity = (e: string) => !e.startsWith("~");
 
@@ -87,6 +126,10 @@ export interface PairScore {
   conflict: 0 | 1;
   shared: number;
   sharedEntities: number;
+  /** Opposite directions ("steigt" vs "fällt"): the score is capped below the join threshold. */
+  opposite?: 0 | 1;
+  /** Different weekdays named on both sides (recurring series): same veto. */
+  otherDay?: 0 | 1;
   /** Passes the minimum-evidence gate (≥2 shared tokens, or link / entity paths). */
   gate: boolean;
   join: boolean;
@@ -154,9 +197,16 @@ export function scorePair(a: PreparedSig, b: PreparedSig, idf: IdfFn, dtMs: numb
   const idB = [...b.e].filter((e) => isIdentityEntity(e));
   const conflict: 0 | 1 = ((idA.length > 0 && b.e.size > 0) || (idB.length > 0 && a.e.size > 0)) && sharedEntities === 0 ? 1 : 0;
 
+  const pa = polarity(a.sig);
+  const pb = polarity(b.sig);
+  const opp: 0 | 1 = opposite(pa, pb) ? 1 : 0;
+  const day: 0 | 1 = otherDay(pa, pb) ? 1 : 0;
+
   const w = CONFIG.weights;
-  const score =
+  let score =
     w.W * W + w.A * A + w.C * C + w.E * E + w.L * L - w.conflict * conflict - (dtMs > CONFIG.lateMs ? w.late : 0);
+  // Contradictions veto the join: the rest of such a pair is near-identical by construction.
+  if (opp || day) score = Math.min(score, CONFIG.joinThreshold - 0.05);
   return {
     score,
     W,
@@ -166,6 +216,8 @@ export function scorePair(a: PreparedSig, b: PreparedSig, idf: IdfFn, dtMs: numb
     E,
     L,
     conflict,
+    opposite: opp,
+    otherDay: day,
     shared,
     sharedEntities,
     gate: true,

@@ -89,9 +89,11 @@ async function storyCascadeIds(
   ops: ArticleStateOp[],
   owned: Array<{ id: string; clusterId?: string | null; cluster?: { leadArticleId: string } | null }>,
 ): Promise<string[]> {
-  const readOps = new Set(ops.filter((op) => op.isRead === true).map((op) => op.id));
-  // Last op per id decides: a later isRead:false cancels an earlier isRead:true.
-  for (const op of ops) if (op.isRead === false) readOps.delete(op.id);
+  // Last isRead op per id decides ([true, false, true] ends as read, [true, false] as unread) —
+  // the same "later op wins" rule `groupStateOps` applies to the write itself.
+  const lastRead = new Map<string, boolean>();
+  for (const op of ops) if (op.isRead !== undefined) lastRead.set(op.id, op.isRead);
+  const readOps = new Set([...lastRead].filter(([, value]) => value).map(([id]) => id));
   const clusterIds = new Set<string>();
   for (const row of owned) {
     if (readOps.has(row.id) && row.clusterId && row.cluster?.leadArticleId === row.id) clusterIds.add(row.clusterId);

@@ -22,8 +22,16 @@ export interface ClusterSig {
   /** token -> number of members containing it (top 24). */
   t: Record<string, number>;
   e: string[];
-  /** Signature of the lead article, the drift-guard anchor. */
+  /** Signature of the lead article, the primary drift-guard anchor. */
   lead: StorySig;
+  /**
+   * Trimmed signatures (tokens + entities only) of the cluster's first two
+   * members. Stable across lead swaps: a joiner must resemble the lead AND at
+   * least one of these, so a chain of lead swaps cannot walk a cluster away
+   * from the story it started as. Absent on clusters written before this field
+   * existed (guard then falls back to the lead only).
+   */
+  anchor?: StorySig[];
 }
 
 export interface WindowItem {

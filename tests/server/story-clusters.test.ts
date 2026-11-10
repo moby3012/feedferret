@@ -21,7 +21,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { GET as listGET } from "../../app/api/app/articles/route";
 import { GET as clusterGET } from "../../app/api/app/clusters/[id]/route";
-import { clusterUser, cleanupStoryClusters, runStoryClustering, PENDING_BATCH, STEP_SIZE } from "../../lib/story-clustering/job";
+import { clusterUser, cleanupStoryClusters, reconcileCluster, runStoryClustering, PENDING_BATCH, STEP_SIZE } from "../../lib/story-clustering/job";
 import { applyArticleStateOps } from "../../server/articles/state";
 import { getReadingPreferences, updateGlobalSettings } from "../../app/actions/settings";
 import type { ArticlePage, ClusterDetail } from "../../features/articles/types";
@@ -96,7 +96,7 @@ describe("clusterUser", () => {
   it("clusters the story, leaves singletons unclustered, stores signatures, ignores rows outside the window", async () => {
     const r = await clusterUser(ids.alice, { budgetMs: 5_000, now: NOW });
     // ezb-0 is a singleton until ezb-1 pairs with it (create), ezb-2 joins; the Bayern item stays single
-    expect(r).toMatchObject({ processed: 4, created: 1, joined: 1, singles: 2, morePending: false });
+    expect(r).toMatchObject({ processed: 4, created: 1, joined: 1, singles: 2, morePending: false, expired: 1 });
     const rows = await state.db.article.findMany({ where: { userId: ids.alice }, orderBy: { id: "asc" } });
     const ezb = rows.filter((a) => a.id.startsWith("a-ezb"));
     expect(new Set(ezb.map((a) => a.clusterId)).size).toBe(1);
@@ -106,7 +106,9 @@ describe("clusterUser", () => {
     expect(other.clusteredAt).not.toBeNull(); // processed singleton
     expect(other.storySig).toContain('"v":1');
     const old = rows.find((a) => a.id === "a-old")!;
-    expect(old.clusteredAt).toBeNull(); // never touched
+    expect(old.clusteredAt).not.toBeNull(); // older than the window: settled without a cluster, never pending forever
+    expect(old.clusterId).toBeNull();
+    expect(old.storySig).toBeNull();
     const cluster = await state.db.storyCluster.findUniqueOrThrow({ where: { id: ezb[0].clusterId! } });
     expect(cluster).toMatchObject({ userId: ids.alice, size: 3, feedCount: 3, algoVersion: 1 });
     expect(ezb.map((a) => a.id)).toContain(cluster.leadArticleId);
@@ -202,6 +204,81 @@ describe("clusterUser", () => {
   });
 });
 
+describe("Article.updatedAt is not a clustering side effect (GReader ot / updated)", () => {
+  const T0 = new Date(NOW - 10 * 24 * H); // long before any clustering write
+  const updatedAtOf = async (id: string) => (await state.db.article.findUniqueOrThrow({ where: { id } })).updatedAt.getTime();
+  beforeEach(() => resetUser(ids.alice));
+
+  it("singleton claim, join claim and partner write all leave updatedAt unchanged", async () => {
+    // u-0 + u-1 form a cluster (create), u-2 joins it, u-3 stays a singleton
+    await addArticle(ids.alice, ids.aF[0], "u-0", EZB[0], 5, { updatedAt: T0 });
+    await addArticle(ids.alice, ids.aF[1], "u-1", EZB[1], 4, { updatedAt: T0 });
+    await addArticle(ids.alice, ids.aF[2], "u-2", EZB[2], 3, { updatedAt: T0 });
+    await addArticle(ids.alice, ids.aF[3], "u-3", "Bayern München gewinnt 3:1 gegen Dortmund", 2, { updatedAt: T0 });
+    await clusterUser(ids.alice, { budgetMs: 5_000, now: NOW });
+    const rows = await state.db.article.findMany({ where: { userId: ids.alice }, orderBy: { id: "asc" } });
+    expect(rows.every((r) => r.clusteredAt !== null)).toBe(true);
+    expect(rows.filter((r) => r.clusterId).length).toBe(3); // create (+ partner) and join
+    expect(rows.find((r) => r.id === "u-3")!.clusterId).toBeNull(); // singleton
+    for (const r of rows) expect(r.updatedAt.getTime(), r.id).toBe(T0.getTime());
+  });
+
+  it("partner of a later create: the already-processed singleton gets its clusterId without a new updatedAt", async () => {
+    await addArticle(ids.alice, ids.aF[0], "p-0", EZB[0], 5, { updatedAt: T0 });
+    await clusterUser(ids.alice, { budgetMs: 5_000, now: NOW }); // p-0 → processed singleton
+    expect((await state.db.article.findUniqueOrThrow({ where: { id: "p-0" } })).clusterId).toBeNull();
+    await addArticle(ids.alice, ids.aF[1], "p-1", EZB[1], 4, { updatedAt: T0 });
+    await clusterUser(ids.alice, { budgetMs: 5_000, now: NOW });
+    const p0 = await state.db.article.findUniqueOrThrow({ where: { id: "p-0" } });
+    expect(p0.clusterId).not.toBeNull();
+    expect(p0.updatedAt.getTime()).toBe(T0.getTime());
+    expect(await updatedAtOf("p-1")).toBe(T0.getTime());
+  });
+
+  it("a row changed between read and write (read toggle) is retried and keeps the NEW updatedAt", async () => {
+    await addArticle(ids.alice, ids.aF[0], "r-0", "Bayern München gewinnt 3:1 gegen Dortmund", 2, { updatedAt: T0 });
+    const original = state.db.$transaction.bind(state.db);
+    let bumped: Date | null = null;
+    const spy = vi.spyOn(state.db, "$transaction").mockImplementationOnce((async (ops: unknown) => {
+      bumped = (await state.db.article.update({ where: { id: "r-0" }, data: { isStarred: true } })).updatedAt; // concurrent user action
+      return original(ops as never);
+    }) as never);
+    await clusterUser(ids.alice, { budgetMs: 5_000, now: NOW });
+    spy.mockRestore();
+    const row = await state.db.article.findUniqueOrThrow({ where: { id: "r-0" } });
+    expect(row.clusteredAt).not.toBeNull(); // the retry claimed it
+    expect(row.isStarred).toBe(true);
+    expect(bumped).not.toBeNull();
+    expect(row.updatedAt.getTime()).toBe(bumped!.getTime()); // the user's modification time, not T0, not the claim time
+    expect(row.updatedAt.getTime()).toBeGreaterThan(T0.getTime());
+  });
+
+  it("lost partner race: a cluster that ends up with one member is dissolved instead of keeping size 2", async () => {
+    await addArticle(ids.alice, ids.aF[0], "x-0", EZB[0], 5, { updatedAt: T0 });
+    await clusterUser(ids.alice, { budgetMs: 5_000, now: NOW }); // x-0 processed singleton
+    await state.db.storyCluster.create({
+      data: { id: "other", userId: ids.alice, leadArticleId: "x-0", size: 2, feedCount: 2, firstSeenAt: new Date(NOW), lastSeenAt: new Date(NOW), sig: "{}" },
+    });
+    await addArticle(ids.alice, ids.aF[1], "x-1", EZB[1], 4, { updatedAt: T0 });
+    // another instance grabs the partner right after our cluster rows were written (first transaction of the step)
+    const original = state.db.$transaction.bind(state.db);
+    const spy = vi.spyOn(state.db, "$transaction").mockImplementationOnce((async (ops: unknown) => {
+      const res = await original(ops as never);
+      await state.db.article.updateMany({ where: { id: "x-0" }, data: { clusterId: "other" } });
+      return res;
+    }) as never);
+    await clusterUser(ids.alice, { budgetMs: 5_000, now: NOW });
+    spy.mockRestore();
+    const clusters = await state.db.storyCluster.findMany({ where: { userId: ids.alice, id: { not: "other" } } });
+    const x1 = await state.db.article.findUniqueOrThrow({ where: { id: "x-1" } });
+    for (const c of clusters) expect(await state.db.article.count({ where: { clusterId: c.id } })).toBe(c.size); // never size 2 with one member
+    expect(clusters).toHaveLength(0);
+    expect(x1.clusterId).toBeNull();
+    expect(x1.clusteredAt).not.toBeNull();
+    expect((await state.db.article.findUniqueOrThrow({ where: { id: "x-0" } })).clusterId).toBe("other");
+  });
+});
+
 describe("runStoryClustering", () => {
   it("is a no-op with DISABLE_STORY_CLUSTERING=true and for users who turned it off", async () => {
     await resetUser(ids.alice);
@@ -225,21 +302,120 @@ describe("runStoryClustering", () => {
     spy.mockRestore();
   });
 
+  it("runs with nothing pending: only users with pending rows are visited", async () => {
+    await resetUser(ids.alice);
+    await resetUser(ids.bob);
+    const spy = vi.spyOn(state.db.article, "findMany");
+    const r = await runStoryClustering({ budgetMs: 1000, now: NOW });
+    expect(r).toMatchObject({ users: 0, processed: 0 });
+    expect(spy).not.toHaveBeenCalled(); // not even a per-user pending query
+    spy.mockRestore();
+  });
+
+  it("overlapping runs: the second returns at once and nothing is processed twice", async () => {
+    await resetUser(ids.alice);
+    await addArticle(ids.alice, ids.aF[0], "o-0", EZB[0], 5);
+    await addArticle(ids.alice, ids.aF[1], "o-1", EZB[1], 4);
+    await addArticle(ids.alice, ids.aF[2], "o-2", EZB[2], 3);
+    const [r1, r2] = await Promise.all([runStoryClustering({ budgetMs: 5000, now: NOW }), runStoryClustering({ budgetMs: 5000, now: NOW })]);
+    const processed = r1.processed + r2.processed;
+    expect(processed).toBe(3); // exactly once
+    expect([r1.morePending, r2.morePending].filter(Boolean)).toHaveLength(1); // the loser reports "try again"
+    const clusters = await state.db.storyCluster.findMany({ where: { userId: ids.alice }, include: { _count: { select: { articles: true } } } });
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0].size).toBe(clusters[0]._count.articles);
+    expect(await state.db.article.count({ where: { userId: ids.alice, clusteredAt: null } })).toBe(0);
+  });
+
+  it("budget: the first user always advances; later users wait while the budget is spent; window load is skipped when nothing may progress", async () => {
+    await resetUser(ids.alice);
+    await resetUser(ids.bob);
+    await addArticle(ids.alice, ids.aF[0], "u-a", EZB[0], 5);
+    await addArticle(ids.bob, ids.bF[0], "u-b", EZB[0], 5);
+    const spy = vi.spyOn(state.db.storyCluster, "findMany");
+    const idle = await clusterUser(ids.alice, { budgetMs: 0, now: NOW, mustProgress: false });
+    expect(idle).toMatchObject({ processed: 0, morePending: true });
+    expect(spy).not.toHaveBeenCalled(); // window / cluster load skipped
+    spy.mockRestore();
+    const r = await runStoryClustering({ budgetMs: 0, now: NOW });
+    expect(r).toMatchObject({ users: 1, processed: 1, morePending: true });
+    const r2 = await runStoryClustering({ budgetMs: 0, now: NOW }); // rotation: the other user is next
+    expect(r2).toMatchObject({ users: 1, processed: 1 });
+    expect(await state.db.article.count({ where: { clusteredAt: null, id: { in: ["u-a", "u-b"] } } })).toBe(0);
+  });
+
   it("cleanup removes stale and memberless clusters only", async () => {
     await resetUser(ids.alice);
-    const mk = (id: string, daysAgo: number) =>
+    const mk = (id: string, daysAgo: number, extra: Record<string, unknown> = {}) =>
       state.db.storyCluster.create({
-        data: { id, userId: ids.alice, leadArticleId: "x", size: 2, feedCount: 2, firstSeenAt: new Date(NOW), lastSeenAt: new Date(NOW - daysAgo * 24 * H), sig: "{}" },
+        data: { id, userId: ids.alice, leadArticleId: "k-0", size: 2, feedCount: 2, firstSeenAt: new Date(NOW - H), lastSeenAt: new Date(NOW - daysAgo * 24 * H), sig: "{}", ...extra },
       });
     await mk("keep", 1);
     await mk("stale", 20);
     await mk("empty", 1);
     await addArticle(ids.alice, ids.aF[0], "k-0", "x y z", 1, { clusterId: "keep" });
+    await addArticle(ids.alice, ids.aF[2], "k-2", "x y z", 1, { clusterId: "keep" });
     await addArticle(ids.alice, ids.aF[1], "k-1", "x y z", 1, { clusterId: "stale" });
     const r = await cleanupStoryClusters(NOW);
-    expect(r.deleted).toBe(2);
+    expect(r).toEqual({ deleted: 2, repaired: 0 }); // `keep` has 2 members and its lead: healthy
     expect((await state.db.storyCluster.findMany({ where: { userId: ids.alice } })).map((c) => c.id)).toEqual(["keep"]);
     expect((await state.db.article.findUniqueOrThrow({ where: { id: "k-1" } })).clusterId).toBeNull(); // SetNull
+    // second run: nothing left to do
+    expect(await cleanupStoryClusters(NOW)).toEqual({ deleted: 0, repaired: 0 });
+  });
+});
+
+describe("stale clusters (daily cleanup)", () => {
+  const mkCluster = (id: string, data: Record<string, unknown> = {}) =>
+    state.db.storyCluster.create({
+      data: { id, userId: ids.alice, leadArticleId: `${id}-0`, size: 3, feedCount: 3, firstSeenAt: new Date(NOW - 5 * H), lastSeenAt: new Date(NOW - 3 * H), sig: JSON.stringify({ t: { x: 1 }, e: [], lead: { v: 1, t: ["x"], e: [], l: [] } }), ...data },
+    });
+  const member = (cluster: string, i: number, extra: Record<string, unknown> = {}) =>
+    addArticle(ids.alice, ids.aF[i], `${cluster}-${i}`, `story ${cluster} ${i}`, 5 - i, { clusterId: cluster, clusteredAt: new Date(NOW), storySig: JSON.stringify({ v: 1, t: ["x"], e: [], l: [], q: 1 }), ...extra });
+
+  beforeEach(() => resetUser(ids.alice));
+
+  it("a deleted member: size / feedCount / span are recounted", async () => {
+    await mkCluster("m");
+    for (const i of [0, 1, 2]) await member("m", i);
+    await state.db.article.delete({ where: { id: "m-2" } }); // e.g. retention
+    const r = await cleanupStoryClusters(NOW);
+    expect(r).toMatchObject({ deleted: 0, repaired: 1 });
+    expect(await state.db.storyCluster.findUniqueOrThrow({ where: { id: "m" } })).toMatchObject({ size: 2, feedCount: 2, leadArticleId: "m-0" });
+  });
+
+  it("members down to one: the cluster is dissolved and the remaining member loses its clusterId", async () => {
+    await mkCluster("d");
+    for (const i of [0, 1, 2]) await member("d", i);
+    await state.db.article.deleteMany({ where: { id: { in: ["d-1", "d-2"] } } });
+    const r = await cleanupStoryClusters(NOW);
+    expect(r.deleted).toBe(1);
+    expect(await state.db.storyCluster.findUnique({ where: { id: "d" } })).toBeNull();
+    const left = await state.db.article.findUniqueOrThrow({ where: { id: "d-0" } });
+    expect(left.clusterId).toBeNull();
+    expect(left.clusteredAt).not.toBeNull(); // stays processed: not re-clustered into a one-member cluster
+  });
+
+  it("dangling leadArticleId: re-picked among the members (quality, then earliest)", async () => {
+    await mkCluster("l");
+    await member("l", 0, { storySig: JSON.stringify({ v: 1, t: ["x"], e: [], l: [], q: 1 }) });
+    await member("l", 1, { storySig: JSON.stringify({ v: 1, t: ["y"], e: [], l: [], q: 3 }) });
+    await member("l", 2, { storySig: JSON.stringify({ v: 1, t: ["z"], e: [], l: [], q: 2 }) });
+    await state.db.article.delete({ where: { id: "l-0" } }); // the lead goes away
+    const r = await cleanupStoryClusters(NOW);
+    expect(r.repaired).toBe(1);
+    const c = await state.db.storyCluster.findUniqueOrThrow({ where: { id: "l" } });
+    expect(c.leadArticleId).toBe("l-1");
+    expect(c.size).toBe(2);
+    expect(JSON.parse(c.sig).lead.t).toEqual(["y"]); // the drift anchor follows the new lead
+  });
+
+  it("a healthy cluster is left alone; reconcileCluster on a missing id is a no-op", async () => {
+    await mkCluster("h", { size: 2, feedCount: 2, firstSeenAt: new Date(NOW - 5 * H), lastSeenAt: new Date(NOW - 4 * H) });
+    await member("h", 0);
+    await member("h", 1);
+    expect(await cleanupStoryClusters(NOW)).toEqual({ deleted: 0, repaired: 0 });
+    expect(await reconcileCluster(ids.alice, "nope")).toBe("missing");
   });
 });
 
@@ -358,6 +534,22 @@ describe("story read cascade (clusterReadMode)", () => {
     expect(await isRead(members[1])).toBe(true);
   });
 
+  it("last op per id decides: [read, unread, read] cascades, [read, unread] does not", async () => {
+    const res = await applyArticleStateOps(ids.alice, [{ id: lead, isRead: true }, { id: lead, isRead: false }, { id: lead, isRead: true }]);
+    expect(res.affected.sort()).toEqual(members.sort());
+    expect(await isRead(lead)).toBe(true);
+    for (const id of members) expect(await isRead(id)).toBe(true);
+    // reset and try the other order
+    await state.db.article.updateMany({ where: { userId: ids.alice }, data: { isRead: false } });
+    const none = await applyArticleStateOps(ids.alice, [{ id: lead, isRead: true }, { id: lead, isRead: false }]);
+    expect(none.affected).toEqual([]);
+    expect(await isRead(lead)).toBe(false);
+    for (const id of members) expect(await isRead(id)).toBe(false);
+    // an interleaved star op for the lead does not hide its isRead history
+    const mixed = await applyArticleStateOps(ids.alice, [{ id: lead, isRead: true }, { id: lead, isStarred: true }]);
+    expect(mixed.affected.sort()).toEqual(members.sort());
+  });
+
   it("is user-scoped: another user's lead id cascades nothing and is reported failed", async () => {
     const res = await applyArticleStateOps(ids.bob, [{ id: lead, isRead: true }]);
     expect(res).toEqual({ failed: [lead], affected: [] });
@@ -365,8 +557,64 @@ describe("story read cascade (clusterReadMode)", () => {
   });
 });
 
+describe("getClusterDetail visibility (matches the list's 'all feeds' rules)", () => {
+  let clusterId = "";
+  beforeEach(async () => {
+    await resetUser(ids.alice);
+    await state.db.feed.updateMany({ where: { userId: ids.alice }, data: { hideFromAllFeeds: false } });
+    await addArticle(ids.alice, ids.aF[0], "v-0", EZB[0], 5);
+    await addArticle(ids.alice, ids.aF[1], "v-1", EZB[1], 4);
+    await addArticle(ids.alice, ids.aF[2], "v-2", EZB[2], 3);
+    await clusterUser(ids.alice, { budgetMs: 5_000, now: NOW });
+    clusterId = (await state.db.article.findUniqueOrThrow({ where: { id: "v-0" } })).clusterId!;
+  });
+  afterAll(() => state.db.feed.updateMany({ where: { userId: ids.alice }, data: { hideFromAllFeeds: false } }));
+
+  async function detail() {
+    state.session = { user: { id: ids.alice } };
+    const res = await clusterGET(new Request(`https://ff.test/api/app/clusters/${clusterId}`), { params: Promise.resolve({ id: clusterId }) });
+    return { status: res.status, body: (await res.json()) as ClusterDetail };
+  }
+
+  it("members of a feed the user hid from all feeds are not returned and not counted", async () => {
+    await state.db.feed.update({ where: { id: ids.aF[1] }, data: { hideFromAllFeeds: true } });
+    const { status, body } = await detail();
+    expect(status).toBe(200);
+    expect(body.members.map((m) => m.id)).toEqual(["v-0", "v-2"]);
+    expect(body.size).toBe(2); // visible members, not the stored 3
+    expect((await state.db.storyCluster.findUniqueOrThrow({ where: { id: clusterId } })).size).toBe(3);
+  });
+
+  it("members of a hidden category and spoilers follow the list rules too", async () => {
+    const cat = await state.db.category.create({ data: { name: "Hidden", userId: ids.alice, hideFromAllFeeds: true } });
+    await state.db.feed.update({ where: { id: ids.aF[0] }, data: { categoryId: cat.id } });
+    await state.db.article.update({ where: { id: "v-2" }, data: { isSpoiler: true } });
+    const { body } = await detail();
+    expect(body.members.map((m) => m.id)).toEqual(["v-1"]);
+    expect(body.size).toBe(1);
+    expect(body.members.map((m) => m.id)).toContain(body.leadId); // lead falls back to a visible member
+    await state.db.feed.update({ where: { id: ids.aF[0] }, data: { categoryId: null } });
+    await state.db.category.delete({ where: { id: cat.id } });
+  });
+
+  it("404 when no member is visible any more", async () => {
+    await state.db.feed.updateMany({ where: { id: { in: ids.aF.slice(0, 3) } }, data: { hideFromAllFeeds: true } });
+    expect((await detail()).status).toBe(404);
+  });
+});
+
 describe("settings", () => {
-  it("exposes clusterReadMode (default 'story') and storyClustering, validates writes", async () => {
+  it("defaults to clusterReadMode 'article' (the schema default and the fallback for unknown values)", async () => {
+    const carol = await state.db.user.create({ data: { email: "carol@test", name: "Carol" } });
+    expect(carol.clusterReadMode).toBe("article");
+    state.session = { user: { id: carol.id } };
+    expect(await getReadingPreferences()).toMatchObject({ clusterReadMode: "article", storyClustering: true });
+    await state.db.user.update({ where: { id: carol.id }, data: { clusterReadMode: "bogus" } });
+    expect(await getReadingPreferences()).toMatchObject({ clusterReadMode: "article" });
+    state.session = { user: { id: ids.alice } };
+  });
+
+  it("exposes clusterReadMode and storyClustering, validates writes", async () => {
     await state.db.user.update({ where: { id: ids.alice }, data: { clusterReadMode: "story", storyClustering: true } });
     expect(await getReadingPreferences()).toMatchObject({ clusterReadMode: "story", storyClustering: true });
     await updateGlobalSettings({ clusterReadMode: "article", storyClustering: false });

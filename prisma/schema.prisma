@@ -425,6 +425,8 @@ model Article {
   @@index([duplicateOf])
   // K1: cluster member lookups and the pending / 48h window scans of the clustering job
   @@index([userId, clusterId])
+  // K1: cluster-keyed lookups without userId (cleanup recount, ON DELETE SET NULL of a cluster)
+  @@index([clusterId])
   @@index([userId, clusteredAt, publishedAt])
 }
 
