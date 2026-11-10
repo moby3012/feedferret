@@ -42,7 +42,7 @@ const RULES = [
     msg: "Palette status colour. Use the role tokens: warning | success | danger | info (+ -subtle), destructive, brand.",
   },
   {
-    re: new RegExp(P + String.raw`backdrop-blur(?:-(?:none|xs|sm|md|lg|xl|2xl|3xl))?(?![\w-])`),
+    re: new RegExp(P + String.raw`backdrop-blur(?:-(?:none|xs|sm|md|lg|xl|2xl|3xl|\[[^\]]*\]))?(?![\w-])`),
     msg: "Raw backdrop blur. Only two levels exist: backdrop-blur-bar | backdrop-blur-overlay (rows, cards and list panels never blur).",
   },
   {
@@ -79,8 +79,16 @@ const rule = {
       Property(node) {
         const k = node.key;
         const name = k.type === "Identifier" ? k.name : k.type === "Literal" ? String(k.value) : "";
-        if (name === "zIndex" && node.value.type === "Literal" && typeof node.value.value === "number") {
-          context.report({ node, message: "Raw zIndex. Use \"var(--z-…)\" from tokens.css." });
+        if (name === "zIndex" || name === "z-index") {
+          // Catch literals also inside `cond ? 50 : undefined` / `a && 10`.
+          const hasRawNumber = (n) =>
+            !!n &&
+            ((n.type === "Literal" && typeof n.value === "number") ||
+              (n.type === "ConditionalExpression" && (hasRawNumber(n.consequent) || hasRawNumber(n.alternate))) ||
+              (n.type === "LogicalExpression" && (hasRawNumber(n.left) || hasRawNumber(n.right))));
+          if (hasRawNumber(node.value)) {
+            context.report({ node, message: "Raw zIndex. Use \"var(--z-…)\" from tokens.css." });
+          }
         }
       },
     };

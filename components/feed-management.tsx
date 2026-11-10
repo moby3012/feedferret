@@ -1739,7 +1739,7 @@ export function FeedManagement({
                         <Info className="w-4 h-4 shrink-0" />
                         {t("rules.howRulesWork")}
                       </span>
-                      <span className="text-xs text-info/70">
+                      <span className="text-xs text-info">
                         {showRuleTutorial ? t("rules.hide") : t("rules.show")}
                       </span>
                     </button>

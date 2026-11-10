@@ -25,6 +25,9 @@ describe("design-token lint guard", () => {
     ["env(safe-area-inset-top)", '<div className="pt-[env(safe-area-inset-top)]" />'],
     ["duration-500", '<div className="duration-500" />'],
     ["zIndex literal", "const s = { zIndex: 50 };"],
+    ["zIndex ternary", "const s = { zIndex: dragging ? 50 : undefined };"],
+    ["zIndex logical", "const s = { zIndex: open && 10 };"],
+    ["backdrop-blur-[12px]", '<div className="backdrop-blur-[12px]" />'],
   ])("rejects %s", async (_name, code) => {
     expect((await lint(code)).length).toBeGreaterThan(0);
   });

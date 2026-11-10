@@ -226,7 +226,7 @@ export default function RSSReaderPage() {
           <button
             type="button"
             onClick={() => setSpoilerRevealed(true)}
-            className="rounded-2xl bg-warning px-6 py-3 text-sm font-semibold text-warning shadow-sm hover:bg-warning active:scale-[0.98] transition-all"
+            className="rounded-2xl bg-warning-subtle px-6 py-3 text-sm font-semibold text-warning shadow-sm hover:bg-warning/20 active:scale-[0.98] transition-all"
           >
             {t("revealSpoilers")}
           </button>
@@ -238,7 +238,7 @@ export default function RSSReaderPage() {
               });
             }}
             disabled={releaseAllSpoilers.isPending}
-            className="text-xs text-warning hover:text-warning disabled:opacity-50"
+            className="text-xs text-warning hover:underline disabled:opacity-50"
           >
             {releaseAllSpoilers.isPending ? t("clearingSpoilerFlags") : t("clearSpoilerFlags")}
           </button>

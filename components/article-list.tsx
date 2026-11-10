@@ -664,7 +664,7 @@ function ArticlePreview({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onReleaseSpoiler(article.id); }}
-                  className="rounded-md p-1 transition-colors text-warning hover:text-warning hover:bg-warning/10"
+                  className="rounded-md p-1 transition-colors text-warning hover:bg-warning/10"
                   aria-label={t("releaseSpoiler")}
                   title={t("releaseSpoiler")}
                 >
@@ -846,7 +846,7 @@ function ArticlePreview({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onReleaseSpoiler(article.id); }}
-                  className="rounded-lg p-1.5 transition-colors text-warning hover:text-warning hover:bg-warning/10"
+                  className="rounded-lg p-1.5 transition-colors text-warning hover:bg-warning/10"
                   aria-label={t("releaseSpoiler")}
                   title={t("releaseSpoiler")}
                 >

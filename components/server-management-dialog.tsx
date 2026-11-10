@@ -694,7 +694,7 @@ export function ServerManagementDialog({
                         <AlertCircle className="w-5 h-5" />
                         <h4 className="font-bold">{t("registrations.securityNote")}</h4>
                       </div>
-                      <p className="text-sm text-warning/80 leading-relaxed">
+                      <p className="text-sm text-warning leading-relaxed">
                         {t("registrations.disableRegistrations")}
                       </p>
                     </div>
