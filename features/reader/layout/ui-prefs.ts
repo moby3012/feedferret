@@ -1,6 +1,8 @@
 // Per-device UI prefs in the `ff_ui` cookie (server-readable, so first paint
 // can use them — never localStorage/matchMedia before mount). Spec §1.6.
 
+import { sanitizeTypography, type ReaderTypography } from "@/features/reader/typography/values";
+
 export const UI_COOKIE = "ff_ui";
 export const LIST_W_MIN = 320;
 export const LIST_W_MAX = 480;
@@ -11,6 +13,8 @@ export interface UiPrefs {
   sidebarCollapsed?: boolean;
   /** K2 briefing card: 1 = collapsed, 0 = expanded (absent = expanded). */
   bc?: 0 | 1;
+  /** Reader typography of the "Aa" sheet (absent = defaults); SSR'd so a cold `?a=` paints styled. */
+  rt?: ReaderTypography;
 }
 
 export function clampListW(px: number): number {
@@ -25,6 +29,8 @@ export function parseUiCookie(raw: string | undefined | null): UiPrefs {
     if (typeof value.listW === "number" && Number.isFinite(value.listW)) out.listW = clampListW(value.listW);
     if (typeof value.sidebarCollapsed === "boolean") out.sidebarCollapsed = value.sidebarCollapsed;
     if (value.bc === 0 || value.bc === 1) out.bc = value.bc;
+    const rt = sanitizeTypography(value.rt);
+    if (Object.keys(rt).length) out.rt = rt;
     return out;
   } catch {
     return {};

@@ -160,6 +160,36 @@ test("connection drops inside the app: Read later list and reader open from the 
   await expect(page.getByTestId("offline-chip")).toHaveCount(0);
 });
 
+test("fresh session, then offline: a stored article opens with the full reader chrome (body, bar, pill, menu, Aa sheet)", async ({ app, page, context }) => {
+  // A fresh document: the store is filled only after the offline layer warmed the lazy shell chunks
+  // (features/offline/warm-chunks.ts → the reader's body / chrome / "…" menu / "Aa" sheet).
+  await openAndWaitForStore(app, page);
+  const chunkErrors: string[] = [];
+  page.on("pageerror", (e) => /ChunkLoadError|Loading chunk|dynamically imported module/i.test(e.message) && chunkErrors.push(e.message));
+  page.on("console", (m) => m.type() === "error" && /ChunkLoadError|Loading chunk/i.test(m.text()) && chunkErrors.push(m.text()));
+  await context.setOffline(true);
+  try {
+    await expect(page.getByTestId("offline-chip")).toBeVisible();
+    await app.selectSidebar(/^Read later\s*\d*$/);
+    await app.activate(app.rows().first());
+    const reader = page.locator('[data-pane="reader"]');
+    await expect(reader.locator("article .article-content p").first()).toBeVisible();
+    const bar = reader.locator(".ff-reader-bar");
+    await expect(bar.getByRole("button", { name: "Previous article" })).toBeVisible();
+    if (app.isMobile) await expect(reader.getByRole("navigation", { name: "Article actions" })).toBeVisible();
+    // The two sub-chunks of the chrome open offline too.
+    await app.activate(bar.getByRole("button", { name: "Text appearance" }));
+    await expect(page.getByRole("dialog", { name: "Text appearance" }).getByRole("radio", { name: "Serif" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await app.activate(reader.getByRole("button", { name: "More actions" }).first());
+    await expect(page.getByRole("menuitem", { name: "Copy link" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    expect(chunkErrors).toEqual([]);
+  } finally {
+    await context.setOffline(false);
+  }
+});
+
 test("opened articles are kept as 'recently read offline'", async ({ app, page, context }) => {
   await app.open();
   await page.evaluate(() => navigator.serviceWorker.ready);

@@ -21,7 +21,7 @@ import { ChromeButton } from "./chrome-button";
 import "@/app/styles/reader-aa.css";
 
 const FONT_KEY = { sans: "fontSans", serif: "fontSerif", rounded: "fontRounded" } as const;
-const WIDTH_KEY = { narrow: "widthNarrow", medium: "widthMedium", wide: "widthWide" } as const;
+const WIDTH_KEY = { narrow: "widthNarrow", medium: "widthMedium", wide: "widthWide", full: "widthFull" } as const;
 const LEADING_KEY = { 1.45: "leadingTight", 1.6: "leadingNormal", 1.8: "leadingLoose" } as const;
 const THEME_KEY = { auto: "themeAuto", light: "themeLight", dark: "themeDark", sepia: "themeSepia" } as const;
 
@@ -122,13 +122,17 @@ function Segmented<T extends string>({
   onChange: (v: T) => void;
 }) {
   const id = useId();
+  // Roving tab stop: the checked option; with none checked (a value the
+  // options do not represent), the first one — the group stays reachable.
+  const checked = options.findIndex((o) => o.value === value);
+  const tabStop = checked >= 0 ? checked : 0;
   return (
     <div className="ff-aa-row">
       <span className="ff-aa-label" id={id}>
         {label}
       </span>
       <div className="ff-aa-segmented" role="radiogroup" aria-labelledby={id}>
-        {options.map((o) => (
+        {options.map((o, index) => (
           <button
             key={o.value}
             type="button"
@@ -139,7 +143,7 @@ function Segmented<T extends string>({
             className={cn("ff-aa-seg", o.value === value && "is-on")}
             onClick={() => onChange(o.value)}
             onKeyDown={(e) => {
-              const i = options.findIndex((x) => x.value === value);
+              const i = checked >= 0 ? checked : index;
               const dir = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
               if (!dir) return;
               e.preventDefault();
@@ -149,7 +153,7 @@ function Segmented<T extends string>({
               (e.currentTarget.parentElement?.querySelector(`[data-value="${next.value}"]`) as HTMLElement | null)?.focus();
             }}
             data-value={o.value}
-            tabIndex={o.value === value ? 0 : -1}
+            tabIndex={index === tabStop ? 0 : -1}
           >
             {o.label}
           </button>

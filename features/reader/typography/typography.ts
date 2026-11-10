@@ -2,35 +2,33 @@
 
 // Reader typography ("Aa" sheet, .pm/research-reeder.md §4.3): font style,
 // measure, size, leading and a reader theme that is independent of the app
-// theme. Device-local (localStorage `ff:reader-typography`): typography is a
-// per-screen choice, like the app theme. Every field is optional; an unset
+// theme. A per-device choice (like the app theme), kept in the `ff_ui` cookie
+// (`rt`, spec §0.3): server-readable, so a cold `?a=` deep link is rendered
+// styled and hydration changes nothing. Every field is optional; an unset
 // field falls back to the per-feed override, then the account preference
 // (Settings → reader width / font size), then the design tokens.
 //
 // The values reach the page only as data attributes + CSS custom properties on
 // the reader root (app/styles/reader.css), so a change repaints without
 // re-rendering the article.
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { readUiPrefsFromDocument, writeUiPrefs } from "@/features/reader/layout/ui-prefs";
+import { useUiPrefs } from "@/features/reader/layout/ui-prefs-context";
+import { EMPTY_TYPOGRAPHY, sameTypography, sanitizeTypography, type ReaderTypography, type ReaderWidth, type ReaderFont, type ReaderTheme } from "./values";
 
-export const READER_FONTS = ["sans", "serif", "rounded"] as const;
-export const READER_WIDTHS = ["narrow", "medium", "wide"] as const;
-export const READER_THEMES = ["auto", "light", "dark", "sepia"] as const;
-export const READER_LEADINGS = [1.45, 1.6, 1.8] as const;
-export const READER_SIZE_MIN = 15;
-export const READER_SIZE_MAX = 24;
-
-export type ReaderFont = (typeof READER_FONTS)[number];
-export type ReaderWidth = (typeof READER_WIDTHS)[number];
-export type ReaderTheme = (typeof READER_THEMES)[number];
-
-export interface ReaderTypography {
-  font?: ReaderFont;
-  width?: ReaderWidth;
-  /** Body size in px (15–24). */
-  size?: number;
-  leading?: number;
-  theme?: ReaderTheme;
-}
+export {
+  READER_FONTS,
+  READER_LEADINGS,
+  READER_SIZE_MAX,
+  READER_SIZE_MIN,
+  READER_THEMES,
+  READER_WIDTHS,
+  clampSize,
+  type ReaderFont,
+  type ReaderTheme,
+  type ReaderTypography,
+  type ReaderWidth,
+} from "./values";
 
 /** Account / per-feed preferences the sheet's unset fields fall back to. */
 export interface ReaderAccountPrefs {
@@ -38,63 +36,53 @@ export interface ReaderAccountPrefs {
   readerFontSize?: string | null;
 }
 
-const STORAGE_KEY = "ff:reader-typography";
-const EMPTY: ReaderTypography = Object.freeze({}) as ReaderTypography;
-
 let current: ReaderTypography | null = null;
 const listeners = new Set<() => void>();
 
-function sanitize(raw: unknown): ReaderTypography {
-  if (!raw || typeof raw !== "object") return EMPTY;
-  const r = raw as Record<string, unknown>;
-  const out: ReaderTypography = {};
-  if (READER_FONTS.includes(r.font as ReaderFont)) out.font = r.font as ReaderFont;
-  if (READER_WIDTHS.includes(r.width as ReaderWidth)) out.width = r.width as ReaderWidth;
-  if (READER_THEMES.includes(r.theme as ReaderTheme) && r.theme !== "auto") out.theme = r.theme as ReaderTheme;
-  if (typeof r.size === "number" && Number.isFinite(r.size)) out.size = clampSize(r.size);
-  if (typeof r.leading === "number" && READER_LEADINGS.includes(r.leading as (typeof READER_LEADINGS)[number])) out.leading = r.leading;
-  return out;
-}
-
-export function clampSize(px: number): number {
-  return Math.min(READER_SIZE_MAX, Math.max(READER_SIZE_MIN, Math.round(px)));
-}
-
 function read(): ReaderTypography {
   try {
-    return sanitize(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null"));
+    return sanitizeTypography(readUiPrefsFromDocument().rt);
   } catch {
-    return EMPTY;
+    return EMPTY_TYPOGRAPHY;
   }
 }
 
 export function getReaderTypography(): ReaderTypography {
-  if (typeof window === "undefined") return EMPTY;
+  if (typeof window === "undefined") return EMPTY_TYPOGRAPHY;
   if (!current) current = read();
   return current;
 }
 
+/** Another tab may have changed the cookie: pick it up when this one comes back. */
+function refresh() {
+  if (document.visibilityState === "hidden") return;
+  const next = read();
+  if (current && sameTypography(current, next)) return;
+  current = next;
+  listeners.forEach((l) => l());
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key !== STORAGE_KEY) return;
-    current = read();
-    listener();
-  };
-  window.addEventListener("storage", onStorage);
+  if (listeners.size === 1) {
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+  }
   return () => {
     listeners.delete(listener);
-    window.removeEventListener("storage", onStorage);
+    if (listeners.size === 0) {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    }
   };
 }
 
 function commit(next: ReaderTypography) {
-  current = sanitize(next);
+  current = sanitizeTypography(next);
   try {
-    if (Object.keys(current).length === 0) localStorage.removeItem(STORAGE_KEY);
-    else localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+    writeUiPrefs({ rt: Object.keys(current).length ? current : undefined });
   } catch {
-    /* private mode / quota: the choice still applies for this page */
+    /* cookies blocked: the choice still applies for this page */
   }
   listeners.forEach((l) => l());
 }
@@ -110,11 +98,22 @@ export function resetReaderTypography() {
   commit({});
 }
 
-/** Server snapshot = nothing chosen (the SSR'd deep-link reader matches the first client render). */
-const serverSnapshot = () => EMPTY;
+/** Tests only: forget the module copy (re-read the cookie on next access). */
+export function resetReaderTypographyCache() {
+  current = null;
+}
 
+/**
+ * The typography for this render. Server + hydration render use what the
+ * server parsed from `ff_ui` for this request (UiPrefsProvider), so the
+ * SSR'd reader and the first client render agree — no restyle, no reflow.
+ */
 export function useReaderTypography(): ReaderTypography {
-  return useSyncExternalStore(subscribe, getReaderTypography, serverSnapshot);
+  const ui = useUiPrefs();
+  const [ssr] = useState(() => sanitizeTypography(ui.current.rt));
+  // After hydration the client snapshot is read from the same cookie: equal
+  // values, so the follow-up render writes no attribute.
+  return useSyncExternalStore(subscribe, getReaderTypography, () => ssr);
 }
 
 // ------------------------------------------------------------ resolution
@@ -122,11 +121,11 @@ export function useReaderTypography(): ReaderTypography {
 /** Account font size names → px delta on the token default (17 compact / 19 wide). */
 const SIZE_DELTA: Record<string, number> = { small: -2, medium: 0, large: 2, xl: 4 };
 /** Account width names → measure. */
-const ACCOUNT_WIDTH: Record<string, ReaderWidth | "full"> = { normal: "medium", wide: "wide", full: "full" };
+const ACCOUNT_WIDTH: Record<string, ReaderWidth> = { normal: "medium", wide: "wide", full: "full" };
 
 export interface ResolvedTypography {
   font: ReaderFont;
-  width: ReaderWidth | "full";
+  width: ReaderWidth;
   theme: ReaderTheme;
   /** Explicit px from the sheet, else null (token default + `sizeDelta`). */
   size: number | null;

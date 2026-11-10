@@ -1,4 +1,6 @@
+import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page } from "@playwright/test";
+import { setUserSettings } from "../helpers/db";
 import { test, expect, type App } from "../helpers/test";
 
 /**
@@ -215,32 +217,142 @@ test("Aa sheet: font, size, spacing, width and reader theme apply live and persi
   await app.activate(page.getByRole("dialog", { name: "Text appearance" }).getByRole("button", { name: "Reset" }));
   await expect(readerRoot(page)).not.toHaveAttribute("data-reader-theme", /.+/);
   await expect(readerRoot(page)).toHaveAttribute("data-reader-font", "sans");
-  expect(await page.evaluate(() => localStorage.getItem("ff:reader-typography"))).toBeNull();
+  expect(await uiCookie(page)).not.toHaveProperty("rt");
+});
+
+/** The `ff_ui` cookie (device prefs, server-readable) as the browser holds it. */
+async function uiCookie(page: Page): Promise<Record<string, unknown>> {
+  const raw = (await page.context().cookies()).find((c) => c.name === "ff_ui")?.value;
+  return raw ? JSON.parse(decodeURIComponent(raw)) : {};
+}
+
+async function setReaderTypographyCookie(page: Page, rt: Record<string, unknown> | null) {
+  const current = await uiCookie(page);
+  if (rt) current.rt = rt;
+  else delete current.rt;
+  await page.context().addCookies([{ name: "ff_ui", value: encodeURIComponent(JSON.stringify(current)), url: test.info().project.use.baseURL! }]);
+}
+
+test("non-default Aa prefs are rendered on the server: no restyle or layout shift of the body across hydration", async ({ app, page }) => {
+  const rt = { font: "serif", size: 21, leading: 1.8, width: "narrow", theme: "sepia" };
+  await setReaderTypographyCookie(page, rt);
+  try {
+    const href = `/?a=${app.articleId(5)}`;
+    // 1) The server HTML already carries the typography on the reader root.
+    const html = await (await page.request.get(href)).text();
+    const root = html.match(/<[^>]*class="[^"]*ff-reader[ "][^>]*>/)?.[0] ?? "";
+    expect(root).toContain('data-reader-font="serif"');
+    expect(root).toContain('data-reader-width="narrow"');
+    expect(root).toContain('data-reader-theme="sepia"');
+    expect(root).toMatch(/--reader-size-user:\s*21px/);
+    expect(root).toMatch(/--reader-leading-user:\s*1\.8/);
+
+    // 2) In the browser: watch the reader root + body from the first parsed byte.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __rt: { mutations: string[]; shifts: number; firstRect: string | null } };
+      w.__rt = { mutations: [], shifts: 0, firstRect: null };
+      try {
+        new PerformanceObserver((list) => {
+          for (const e of list.getEntries() as Array<PerformanceEntry & { value: number; hadRecentInput: boolean }>) if (!e.hadRecentInput) w.__rt.shifts += e.value;
+        }).observe({ type: "layout-shift", buffered: true });
+      } catch {
+        /* layout-shift unsupported */
+      }
+      const watch = new MutationObserver(() => {
+        const rootEl = document.querySelector('[data-pane="reader"] .ff-reader');
+        const body = rootEl?.querySelector(".article-content");
+        if (!rootEl || !body) return;
+        watch.disconnect();
+        const r = body.getBoundingClientRect();
+        w.__rt.firstRect = `${Math.round(r.left)},${Math.round(r.width)}`;
+        // Typography = the data-reader-* attributes, the `.dark` scope and the --reader-*-user/-delta
+        // properties (the scroll hook's --reader-progress / data-chrome are not typography).
+        const typo = (el: HTMLElement) =>
+          ["--reader-size-user", "--reader-size-delta", "--reader-leading-user"].map((p) => `${p}:${el.style.getPropertyValue(p)}`).join(";") +
+          `|dark=${el.classList.contains("dark")}`;
+        const first = typo(rootEl as HTMLElement);
+        new MutationObserver((ms) => {
+          for (const m of ms) {
+            if (m.attributeName?.startsWith("data-reader-")) w.__rt.mutations.push(`${m.attributeName}=${(m.target as Element).getAttribute(m.attributeName)}`);
+            else if (typo(rootEl as HTMLElement) !== first) w.__rt.mutations.push(`${first} → ${typo(rootEl as HTMLElement)}`);
+          }
+        }).observe(rootEl, { attributes: true, attributeFilter: ["data-reader-font", "data-reader-width", "data-reader-theme", "style", "class"] });
+      });
+      watch.observe(document, { childList: true, subtree: true });
+    });
+    await page.goto(href);
+    await expect(readerArticle(page, 5).locator(".article-content")).toBeVisible({ timeout: 30_000 });
+    await expect(readerRoot(page)).toHaveAttribute("data-reader-font", "serif");
+    // Hydrated (the chrome is client-only) and settled.
+    await expect(topBar(page).getByRole("button", { name: "Text appearance" })).toBeVisible();
+    await page.waitForTimeout(500);
+    const seen = await page.evaluate(() => (window as unknown as { __rt: { mutations: string[]; shifts: number; firstRect: string | null } }).__rt);
+    const body = await readerArticle(page, 5).locator(".article-content").boundingBox();
+    expect(seen.firstRect).toBe(`${Math.round(body!.x)},${Math.round(body!.width)}`);
+    // The typography attributes of the root never change after the server rendered them.
+    expect(seen.mutations).toEqual([]);
+    expect(seen.shifts).toBeLessThan(0.01);
+  } finally {
+    await setReaderTypographyCookie(page, null);
+  }
+});
+
+test("Aa sheet: the account width 'Full' is represented and keyboard reachable", async ({ app, page }) => {
+  setUserSettings(app.userKey, { readerWidth: "full" });
+  try {
+    await openArticle(app, page, 1);
+    await expect(readerRoot(page)).toHaveAttribute("data-reader-width", "full");
+    await app.activate(topBar(page).getByRole("button", { name: "Text appearance" }));
+    const sheet = page.getByRole("dialog", { name: "Text appearance" });
+    const widths = sheet.getByRole("radiogroup", { name: "Line width" });
+    const full = widths.getByRole("radio", { name: "Full" });
+    await expect(full).toHaveAttribute("aria-checked", "true");
+    await expect(full).toHaveAttribute("tabindex", "0");
+    // Every radiogroup in the sheet has exactly one tab stop.
+    const stops = await sheet.getByRole("radiogroup").evaluateAll((groups) => groups.map((g) => g.querySelectorAll('[role="radio"][tabindex="0"]').length));
+    expect(stops.every((n) => n === 1)).toBe(true);
+    // Keyboard: focus the group's tab stop, arrows move the choice.
+    await full.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(widths.getByRole("radio", { name: "Wide" })).toHaveAttribute("aria-checked", "true");
+    await expect(widths.getByRole("radio", { name: "Wide" })).toBeFocused();
+    await expect(readerRoot(page)).toHaveAttribute("data-reader-width", "wide");
+    // Contrast is measured on the settled sheet (not mid fade-in / colour transition).
+    await page.locator(".ff-aa-sheet").evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
+    const axe = await new AxeBuilder({ page }).include(".ff-aa-sheet").withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((x) => `${x.target.join(" ")} — ${x.failureSummary}`).join("\n")}`)).toEqual([]);
+    await app.activate(sheet.getByRole("button", { name: "Reset" }));
+    await expect(readerRoot(page)).toHaveAttribute("data-reader-width", "full");
+  } finally {
+    setUserSettings(app.userKey, { readerWidth: "normal" });
+  }
 });
 
 /** Touch sequence on the reader scroller; returns the indicator state seen before the finger lifts. */
-async function pullUp(page: Page, dy: number) {
-  return page.locator('[data-pane="reader"] [data-testid="reader-scroller"]').evaluate(async (scroller, dy) => {
+async function pullUp(page: Page, dy: number, o: { dx?: number; startIn?: string } = {}) {
+  return page.locator('[data-pane="reader"] [data-testid="reader-scroller"]').evaluate(async (scroller, { dy, dx, startIn }) => {
     const box = scroller.getBoundingClientRect();
-    const x = box.left + box.width / 2;
+    const x0 = box.left + box.width / 2;
     const y0 = box.top + box.height * 0.6;
-    const target = document.elementFromPoint(x, y0) ?? scroller;
-    const touch = (y: number) => new Touch({ identifier: 7, target, clientX: x, clientY: y, pageX: x, pageY: y, screenX: x, screenY: y });
-    const fire = (type: string, y: number, ended = false) => {
-      const t = touch(y);
+    const target = (startIn && scroller.querySelector(startIn)) || document.elementFromPoint(x0, y0) || scroller;
+    const touch = (x: number, y: number) => new Touch({ identifier: 7, target, clientX: x, clientY: y, pageX: x, pageY: y, screenX: x, screenY: y });
+    const fire = (type: string, x: number, y: number, ended = false) => {
+      const t = touch(x, y);
       target.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, composed: true, touches: ended ? [] : [t], targetTouches: ended ? [] : [t], changedTouches: [t] }));
     };
     const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    fire("touchstart", y0);
-    for (let i = 1; i <= 12; i++) {
-      fire("touchmove", y0 + (dy * i) / 12);
+    fire("touchstart", x0, y0);
+    // Sideways first (dx): the first moves go horizontal only, then the vertical pull follows.
+    const steps = [...(dx ? [1, 2, 3].map((i) => [x0 + (dx * i) / 3, y0]) : []), ...Array.from({ length: 12 }, (_, i) => [x0 + (dx ?? 0), y0 + (dy * (i + 1)) / 12])];
+    for (const [x, y] of steps) {
+      fire("touchmove", x, y);
       await frame();
     }
     const indicator = document.querySelector<HTMLElement>('[data-testid="reader-pull"]');
     const seen = indicator?.dataset.pull ?? "missing";
-    fire("touchend", y0 + dy, true);
+    fire("touchend", x0 + (dx ?? 0), y0 + dy, true);
     return seen;
-  }, dy);
+  }, { dy, dx: o.dx, startIn: o.startIn });
 }
 
 test("pull past the end of an article tracks an indicator and opens the next one", async ({ app, page, isMobile }) => {
@@ -268,4 +380,26 @@ test("pulling in the middle of an article does nothing", async ({ app, page, isM
   expect(await pullUp(page, -260)).toBe("idle");
   await page.waitForTimeout(300);
   await expect(readerArticle(page, 5)).toBeVisible();
+});
+
+test("a pull that starts in a code block or goes sideways first does not navigate", async ({ app, page, isMobile }) => {
+  test.skip(!isMobile, "touch gesture (compact)");
+  await openArticle(app, page, 2);
+  const scroller = app.readerScroller();
+  // A code block at the end of the article (pannable content: it scrolls sideways on its own).
+  await readerArticle(page, 2)
+    .locator(".article-content")
+    .evaluate((el) => {
+      const pre = document.createElement("pre");
+      pre.dataset.testid = "e2e-pre";
+      pre.textContent = "const x = 1;".repeat(40);
+      el.appendChild(pre);
+    });
+  await scroller.evaluate((el) => (el.scrollTop = el.scrollHeight));
+
+  expect(await pullUp(page, -260, { startIn: '[data-testid="e2e-pre"]' })).toBe("idle");
+  expect(await pullUp(page, -260, { dx: 40 })).toBe("idle");
+  await page.waitForTimeout(300);
+  await expect(readerArticle(page, 2)).toBeVisible();
+  await expect.poll(() => app.where()).toBe(`/?a=${app.articleId(2)}`);
 });

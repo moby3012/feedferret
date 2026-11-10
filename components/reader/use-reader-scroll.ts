@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { startsInPannableContent } from "@/lib/gesture-guards";
 import { readReaderPosition, saveReaderPosition } from "@/features/reader/reader-position";
+import { createPullToNext, PULL_TRIGGER_PX } from "./pull-to-next";
 
 // Everything the reader does with its scroller, all outside React renders:
 // the hide-on-scroll top bar + reading progress (one rAF writer on the root's
@@ -169,20 +171,14 @@ export function useReaderPosition(scrollerRef: RefObject<HTMLElement | null>, co
   }, [scrollerRef, contentRef, articleId]);
 }
 
-const PULL_RESISTANCE = 0.45;
-export const PULL_TRIGGER_PX = 64;
-const PULL_MAX_PX = 96;
-
 /**
  * Tracked pull past the end of the article → next article (touch only).
  * Writes `--pull-p` (pull after resistance / trigger distance; ≥1 = armed)
- * and `data-pull` = idle|tracking|armed
- * on `indicator`; no React renders during the drag. Releasing armed calls
- * `onTrigger`. `touchmove` is non-passive so the pull can suppress the
- * native overscroll only while it is tracking.
- *
- * TODO(gestures): move onto the shared `createPull` from lib/gestures/pull.ts
- * (spec §5, list PR #235) once it is on main — same arbitration and haptics.
+ * and `data-pull` = idle|tracking|armed on `indicator`; no React renders
+ * during the drag. Releasing armed calls `onTrigger`. `touchmove` is
+ * non-passive so the pull can suppress the native overscroll only while it
+ * is tracking. Arbitration (pannable content, axis lock, second finger) and
+ * the TODO to move onto lib/gestures live in ./pull-to-next.ts.
  */
 export function usePullToNext(
   scrollerRef: RefObject<HTMLElement | null>,
@@ -193,10 +189,9 @@ export function usePullToNext(
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    let anchorY: number | null = null;
+    let frame = 0;
     let pull = 0;
     let armed = false;
-    let frame = 0;
     const write = () => {
       frame = 0;
       const indicator = indicatorRef.current;
@@ -204,57 +199,32 @@ export function usePullToNext(
       indicator.style.setProperty("--pull-p", (pull / PULL_TRIGGER_PX).toFixed(3));
       indicator.dataset.pull = pull <= 0 ? "idle" : armed ? "armed" : "tracking";
     };
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(write);
-    };
-    const reset = () => {
-      anchorY = null;
-      pull = 0;
-      armed = false;
-      schedule();
-    };
-    const atEnd = () => scroller.scrollTop >= maxScroll(scroller) - END_SLACK_PX;
-    const onStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1 || !enabledRef.current) return reset();
-      anchorY = atEnd() ? e.touches[0].clientY : null;
-    };
-    const onMove = (e: TouchEvent) => {
-      if (e.touches.length !== 1 || !enabledRef.current) return;
-      const y = e.touches[0].clientY;
-      if (!atEnd()) {
-        if (pull > 0) reset();
-        anchorY = null;
-        return;
-      }
-      if (anchorY === null) anchorY = y; // reached the end during this touch
-      const raw = anchorY - y; // finger moving up past the end
-      if (raw <= 0) {
-        anchorY = y;
-        if (pull > 0) reset();
-        return;
-      }
-      if (e.cancelable) e.preventDefault();
-      pull = Math.min(PULL_MAX_PX, raw * PULL_RESISTANCE);
-      const nowArmed = pull >= PULL_TRIGGER_PX;
-      if (nowArmed && !armed) haptic();
-      armed = nowArmed;
-      schedule();
-    };
-    const onEnd = () => {
-      const fire = armed;
-      reset();
-      if (fire) onTriggerRef.current();
-    };
+    const pullToNext = createPullToNext({
+      atEnd: () => scroller.scrollTop >= maxScroll(scroller) - END_SLACK_PX,
+      startsInPannable: (target) => startsInPannableContent(target, scroller),
+      enabled: () => enabledRef.current,
+      render: (p, a) => {
+        pull = p;
+        armed = a;
+        if (!frame) frame = requestAnimationFrame(write);
+      },
+      onArm: haptic,
+      onTrigger: () => onTriggerRef.current(),
+    });
+    const onStart = (e: TouchEvent) => pullToNext.start(e);
+    const onMove = (e: TouchEvent) => pullToNext.move(e);
+    const onEnd = (e: TouchEvent) => pullToNext.end(e);
+    const onCancel = () => pullToNext.cancel();
     scroller.addEventListener("touchstart", onStart, { passive: true });
     scroller.addEventListener("touchmove", onMove, { passive: false });
     scroller.addEventListener("touchend", onEnd, { passive: true });
-    scroller.addEventListener("touchcancel", reset, { passive: true });
+    scroller.addEventListener("touchcancel", onCancel, { passive: true });
     return () => {
       if (frame) cancelAnimationFrame(frame);
       scroller.removeEventListener("touchstart", onStart);
       scroller.removeEventListener("touchmove", onMove);
       scroller.removeEventListener("touchend", onEnd);
-      scroller.removeEventListener("touchcancel", reset);
+      scroller.removeEventListener("touchcancel", onCancel);
     };
   }, [scrollerRef, indicatorRef, enabledRef, onTriggerRef]);
 }

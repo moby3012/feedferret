@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { POSITION_TTL_MS, readReaderPosition, resetReaderPositionCache, saveReaderPosition } from "../../features/reader/reader-position";
+import { resetOfflineSessionForTests, revokeOfflineScope, setOfflineUser } from "../../features/offline/session";
+import {
+  clearReaderPositions,
+  POSITION_TTL_MS,
+  readReaderPosition,
+  resetReaderPositionCache,
+  saveReaderPosition,
+} from "../../features/reader/reader-position";
 
 function memoryStorage() {
   const map = new Map<string, string>();
@@ -15,10 +22,34 @@ function memoryStorage() {
   };
 }
 
+/** `document.cookie` semantics: the setter writes one cookie (max-age=0 deletes), the getter lists them. */
+function cookieDocument() {
+  const jar = new Map<string, string>();
+  return {
+    jar,
+    visibilityState: "visible",
+    addEventListener() {},
+    removeEventListener() {},
+    get cookie() {
+      return [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+    },
+    set cookie(raw: string) {
+      const [pair, ...attrs] = raw.split("; ");
+      const eq = pair.indexOf("=");
+      const name = pair.slice(0, eq);
+      if (attrs.some((a) => a === "max-age=0")) jar.delete(name);
+      else jar.set(name, pair.slice(eq + 1));
+    },
+  };
+}
+
 beforeEach(() => {
   vi.stubGlobal("localStorage", memoryStorage());
+  vi.stubGlobal("document", cookieDocument());
   vi.stubGlobal("window", { addEventListener() {}, removeEventListener() {} });
   resetReaderPositionCache();
+  resetOfflineSessionForTests();
+  setOfflineUser("u1");
   vi.resetModules();
 });
 afterEach(() => {
@@ -62,6 +93,65 @@ describe("reader position memory (per article, 24 h)", () => {
   });
 });
 
+describe("reader position memory is account data", () => {
+  it("is stored per user: another account on the device sees none of it", () => {
+    const now = 2_000_000;
+    saveReaderPosition("a", 0.4, now);
+    expect(localStorage.getItem("ff:reader-pos")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("ff:reader-pos:u1")!)).toEqual({ a: { r: 0.4, t: now } });
+    resetOfflineSessionForTests();
+    setOfflineUser("u2");
+    expect(readReaderPosition("a", now)).toBeNull(); // the module cache is per user too
+    saveReaderPosition("a", 0.7, now);
+    expect(readReaderPosition("a", now)).toBe(0.7);
+    expect(readReaderPosition("a", now, "u1")).toBe(0.4);
+  });
+
+  it("without a known user (revoked / signed out) nothing is read or written", () => {
+    const now = 3_000_000;
+    saveReaderPosition("a", 0.4, now);
+    revokeOfflineScope();
+    expect(readReaderPosition("a", now)).toBeNull();
+    saveReaderPosition("b", 0.5, now);
+    expect(localStorage.length).toBe(1);
+  });
+
+  it("clearReaderPositions drops storage and memory of every account (logout)", () => {
+    const now = 4_000_000;
+    saveReaderPosition("a", 0.4, now);
+    saveReaderPosition("b", 0.5, now, "u2");
+    localStorage.setItem("ff:reader-pos", "{}");
+    localStorage.setItem("ff:offline-other-device-pref", "1");
+    clearReaderPositions();
+    expect(readReaderPosition("a", now)).toBeNull(); // memory gone, not only storage
+    expect(localStorage.getItem("ff:reader-pos:u1")).toBeNull();
+    expect(localStorage.getItem("ff:reader-pos:u2")).toBeNull();
+    expect(localStorage.getItem("ff:reader-pos")).toBeNull();
+    expect(localStorage.getItem("ff:offline-other-device-pref")).toBe("1"); // nothing else is touched
+  });
+
+  it("an account switch keeps only the new account's positions", () => {
+    const now = 5_000_000;
+    saveReaderPosition("a", 0.4, now);
+    saveReaderPosition("b", 0.5, now, "u2");
+    clearReaderPositions("u1");
+    expect(readReaderPosition("a", now)).toBe(0.4);
+    expect(localStorage.getItem("ff:reader-pos:u2")).toBeNull();
+  });
+
+  it("logout's clearAccountBrowserData clears them", async () => {
+    vi.doMock("next-auth/react", () => ({ signOut: vi.fn() }));
+    const now = 6_000_000;
+    saveReaderPosition("a", 0.4, now);
+    const positions = await import("../../features/reader/reader-position");
+    const { clearAccountBrowserData } = await import("../../lib/logout");
+    await clearAccountBrowserData();
+    expect(localStorage.getItem("ff:reader-pos:u1")).toBeNull();
+    expect(positions.readReaderPosition("a", now, "u1")).toBeNull();
+    vi.doUnmock("next-auth/react");
+  });
+});
+
 describe("reader typography (Aa sheet)", () => {
   it("unset fields fall back to the per-feed / account prefs, then the tokens", async () => {
     const { resolveTypography, typographyAttrs } = await import("../../features/reader/typography/typography");
@@ -84,21 +174,35 @@ describe("reader typography (Aa sheet)", () => {
     expect(attrs.style).toEqual({ "--reader-size-user": "21px", "--reader-leading-user": "1.8" });
   });
 
-  it("persists sanitized values; clearing a field and reset remove them", async () => {
+  it("persists sanitized values in the ff_ui cookie (server-readable); clearing a field and reset remove them", async () => {
     const t = await import("../../features/reader/typography/typography");
+    const { parseUiCookie, UI_COOKIE, writeUiPrefs } = await import("../../features/reader/layout/ui-prefs");
+    const ui = () => parseUiCookie((document as unknown as { jar: Map<string, string> }).jar.get(UI_COOKIE));
+    writeUiPrefs({ listW: 400, bc: 1 });
     t.setReaderTypography({ font: "rounded", size: 40, theme: "sepia" });
     expect(t.getReaderTypography()).toEqual({ font: "rounded", size: 24, theme: "sepia" });
-    expect(JSON.parse(localStorage.getItem("ff:reader-typography")!)).toEqual({ font: "rounded", size: 24, theme: "sepia" });
+    expect(ui()).toEqual({ listW: 400, bc: 1, rt: { font: "rounded", size: 24, theme: "sepia" } }); // other prefs kept
     t.setReaderTypography({ theme: undefined, size: 3 });
     expect(t.getReaderTypography()).toEqual({ font: "rounded", size: 15 });
     t.resetReaderTypography();
     expect(t.getReaderTypography()).toEqual({});
-    expect(localStorage.getItem("ff:reader-typography")).toBeNull();
+    expect(ui()).toEqual({ listW: 400, bc: 1 });
+    expect(localStorage.length).toBe(0);
   });
 
-  it("ignores garbage in storage", async () => {
-    localStorage.setItem("ff:reader-typography", JSON.stringify({ font: "comic", width: 3, leading: 9, theme: "neon", size: "big" }));
+  it("a fresh page reads the cookie; garbage in it is ignored", async () => {
+    const { serializeUiCookie, UI_COOKIE } = await import("../../features/reader/layout/ui-prefs");
+    document.cookie = `${UI_COOKIE}=${serializeUiCookie({ rt: { font: "serif", width: "full", leading: 1.8 } })}; path=/`;
     const t = await import("../../features/reader/typography/typography");
+    expect(t.getReaderTypography()).toEqual({ font: "serif", width: "full", leading: 1.8 });
+    t.resetReaderTypographyCache();
+    document.cookie = `${UI_COOKIE}=${encodeURIComponent(JSON.stringify({ rt: { font: "comic", width: 3, leading: 9, theme: "neon", size: "big" } }))}; path=/`;
     expect(t.getReaderTypography()).toEqual({});
+  });
+
+  it("the server parses rt from ff_ui with the same sanitizer", async () => {
+    const { parseUiCookie, serializeUiCookie } = await import("../../features/reader/layout/ui-prefs");
+    expect(parseUiCookie(serializeUiCookie({ rt: { font: "serif", size: 99, theme: "auto" as never } }))).toEqual({ rt: { font: "serif", size: 24 } });
+    expect(parseUiCookie(encodeURIComponent(JSON.stringify({ rt: "x", listW: 400 })))).toEqual({ listW: 400 });
   });
 });
