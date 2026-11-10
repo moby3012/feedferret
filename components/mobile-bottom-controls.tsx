@@ -82,7 +82,7 @@ export function MobileBottomControls({
 
   if (isSearchActive && !isEditingSearch) {
     return (
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-(--z-reader) bg-background/95 backdrop-blur-bar pl-[max(1rem,var(--safe-l))] pr-[max(1rem,var(--safe-r))] pb-[max(0.75rem,var(--safe-b))] lg:hidden">
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-(--z-bar) bg-background/95 backdrop-blur-bar pl-[max(1rem,var(--safe-l))] pr-[max(1rem,var(--safe-r))] pb-[max(0.75rem,var(--safe-b))] wide:hidden">
         <nav className="pointer-events-auto flex h-16 items-center gap-1.5 rounded-sheet border border-border/70 bg-background/90 px-2 shadow-overlay backdrop-blur-bar supports-[backdrop-filter]:bg-background/75">
           <Button
             type="button"
@@ -136,7 +136,7 @@ export function MobileBottomControls({
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-(--z-reader) bg-background/95 backdrop-blur-bar pl-[max(1rem,var(--safe-l))] pr-[max(1rem,var(--safe-r))] pb-[max(0.75rem,var(--safe-b))] lg:hidden">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-(--z-bar) bg-background/95 backdrop-blur-bar pl-[max(1rem,var(--safe-l))] pr-[max(1rem,var(--safe-r))] pb-[max(0.75rem,var(--safe-b))] wide:hidden">
       {searchOpen && (
         <div className="pointer-events-auto mb-2 rounded-sheet border border-border/70 bg-background/95 p-2 shadow-overlay backdrop-blur-bar">
           <div className="relative">

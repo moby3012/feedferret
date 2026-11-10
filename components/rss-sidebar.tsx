@@ -73,6 +73,7 @@ import { signOut } from "@/lib/logout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { categoryKey } from "@/features/reader/nav/sidebar-keys";
 import {
   useAddFeed,
   useCategories,
@@ -198,6 +199,8 @@ interface RssSidebarProps {
   // F7: PWA share-target deep link (?sharedUrl=...) — opens the Add-Feed
   // dialog directly on the "From web page" tab with this URL pre-filled.
   initialWebpageUrl?: string;
+  /** Opens an article in the shell (notification items); falls back to a full navigation. */
+  onOpenArticle?: (articleId: string) => void;
 }
 
 export function RssSidebar({
@@ -211,6 +214,7 @@ export function RssSidebar({
   hideEmptyFeeds = false,
   hideEmptyLabels = false,
   initialWebpageUrl,
+  onOpenArticle,
 }: RssSidebarProps) {
   const t = useTranslations();
   const locale = useLocale();
@@ -563,7 +567,7 @@ export function RssSidebar({
 
   return (
     <>
-    <aside role="navigation" aria-label={t("sidebar.feedNavigation")} className="h-full w-full lg:w-80 bg-sidebar/85 backdrop-blur-overlay border-e border-sidebar-border/70 flex flex-col overflow-hidden">
+    <aside role="navigation" aria-label={t("sidebar.feedNavigation")} className="h-full w-full bg-sidebar/85 backdrop-blur-overlay border-e border-sidebar-border/70 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-5 border-b border-sidebar-border/70">
         <div className="flex items-center justify-between mb-5">
@@ -913,7 +917,8 @@ export function RssSidebar({
                             onClick={() => {
                               if (!notification.isRead) markNotificationRead.mutate(notification.id);
                               if (notification.articleId) {
-                                window.location.href = `/?article=${encodeURIComponent(notification.articleId)}`;
+                                if (onOpenArticle) onOpenArticle(notification.articleId);
+                                else window.location.href = `/?a=${encodeURIComponent(notification.articleId)}`;
                               }
                             }}
                           >
@@ -1301,7 +1306,7 @@ function SortableCategory({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const isActiveCategory = selectedFeed === null && selectedCategory === category.name;
+  const isActiveCategory = selectedFeed === null && selectedCategory === categoryKey(category.id);
   const categoryUnreadCount = feeds.reduce((sum: number, f: any) => sum + (f.unreadCount || 0), 0);
 
   return (
@@ -1326,7 +1331,7 @@ function SortableCategory({
           <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
         </div>
         <button
-          onClick={() => onSelectCategory?.(category.name)}
+          onClick={() => onSelectCategory?.(categoryKey(category.id))}
           className={cn(
             "flex-1 flex items-center text-xs font-bold uppercase tracking-wider transition-colors",
             isActiveCategory

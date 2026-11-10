@@ -1,6 +1,5 @@
 import type { Article } from "@/lib/rss-data";
 import type { ArticleDetail, ArticleListItem } from "./types";
-import type { Scope } from "./scope";
 
 // Thin adapter between the slim list rows and the existing (pre-shell) list and
 // reader components, which expect the old `Article` shape (feed name/icon
@@ -75,38 +74,4 @@ export function withDetail<T extends Article>(article: T, detail: ArticleDetail 
     aiSummarizedAt: detail.aiSummarizedAt,
     readAt: detail.readAt,
   };
-}
-
-/**
- * Maps the page's legacy view state (sidebar sentinel strings, category by
- * NAME) onto a `Scope`. Returns `null` while a category name cannot be
- * resolved yet (categories still loading).
- */
-export function legacyScope(
-  feedId: string | null,
-  category: string,
-  search: string,
-  categories: ReadonlyArray<{ id: string; name: string }>,
-): Scope | null {
-  const q = search.trim();
-  if (q) return { kind: "query", q };
-  if (feedId) return { kind: "feed", id: feedId };
-  switch (category) {
-    case "All":
-    case "All Articles":
-    case "New Articles":
-      return { kind: "all" };
-    case "Starred":
-      return { kind: "starred" };
-    case "Read Later":
-      return { kind: "later" };
-    case "Spoiler":
-      return { kind: "spoiler" };
-    case "Recently Read":
-      return { kind: "recent" };
-  }
-  if (category.startsWith("Label:")) return { kind: "label", id: category.slice("Label:".length) };
-  if (category.startsWith("Search:")) return { kind: "saved-search", id: category.slice("Search:".length) };
-  const match = categories.find((c) => c.name === category);
-  return match ? { kind: "category", id: match.id } : null;
 }

@@ -5,9 +5,15 @@ import { manifest, resetArticleState, type SeedUser } from "./db";
 export const PWA_DISMISSED_KEY = "feedferret:pwa-install-prompt-dismissed";
 
 /**
- * Thin page object for the CURRENT (pre-refactor) UI. When selectors change
- * during refactors (e.g. URL-based navigation) only this file should need
- * updating, not the specs.
+ * The visible list pane. The shell keeps one list pane per tab mounted (hidden
+ * + inert when inactive, so its scroll offset survives): row selectors must be
+ * scoped to the active one.
+ */
+export const ACTIVE_LIST = '[data-pane^="list-"][data-active="true"]';
+
+/**
+ * Thin page object. When selectors change during refactors (e.g. URL-based
+ * navigation) only this file should need updating, not the specs.
  */
 export class App {
   constructor(
@@ -19,7 +25,28 @@ export class App {
 
   /** "#007" -> article row (role=button wrapper with aria-label "[Unread: ]Title — Feed"). */
   row(num: number): Locator {
-    return this.page.locator(`[role="button"][aria-label*="(#${String(num).padStart(3, "0")})"]`);
+    return this.page.locator(`${ACTIVE_LIST} [role="button"][aria-label*="(#${String(num).padStart(3, "0")})"]`);
+  }
+  /** Every article row of the visible list. */
+  rows(): Locator {
+    return this.page.locator(`${ACTIVE_LIST} [data-article-id]`);
+  }
+  /** Rows of the visible list whose accessible name contains `text`. */
+  rowsMatching(text: string): Locator {
+    return this.page.locator(`${ACTIVE_LIST} [role="button"][aria-label*="${text}"]`);
+  }
+  /** Native scroller of the visible list. */
+  listScroller(): Locator {
+    return this.page.locator(`${ACTIVE_LIST} [data-testid="list-scroller"]`);
+  }
+  /** Native scroller of the reader. */
+  readerScroller(): Locator {
+    return this.page.locator('[data-pane="reader"] [data-testid="reader-scroller"]');
+  }
+  /** Current URL as path + search ("/?feed=…"). */
+  where(): string {
+    const url = new URL(this.page.url());
+    return url.pathname + url.search;
   }
   /** Article id for a seeded article number (1-based, as in the title). */
   articleId(num: number) {

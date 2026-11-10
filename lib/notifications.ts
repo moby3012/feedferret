@@ -42,7 +42,7 @@ async function buildPayload(userId: string, articles: Array<{ id: string; title:
       : includeTitles
         ? articles.slice(0, 3).map((article) => article.title).join(" · ")
         : "Neue Artikel sind verfügbar.",
-    url: count === 1 ? `/?article=${encodeURIComponent(first.id)}` : "/?view=new",
+    url: count === 1 ? `/?a=${encodeURIComponent(first.id)}` : "/",
     articleId: count === 1 ? first.id : undefined,
     feedId: count === 1 ? first.feedId : undefined,
     unreadCount: await unreadCount(userId),

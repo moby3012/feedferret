@@ -22,6 +22,7 @@ import {
   CheckCheck,
   BookmarkPlus,
   MoreHorizontal,
+  PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
@@ -90,6 +91,17 @@ export function RssHeader({
   return (
     <header className="min-h-16 flex items-center justify-between px-4 sm:px-5 pt-(--safe-t) border-b border-border/60 bg-card/75 backdrop-blur-bar animate-fade-in relative z-(--z-bar)">
       <div className="flex items-center gap-3 min-w-0 flex-1">
+        {/* Medium (768–1199): the sources column is 0 wide — the sidebar opens as a drawer. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden medium:inline-flex w-10 h-10 rounded-xl text-muted-foreground"
+          onClick={onToggleSidebar}
+          aria-label={t("openSources")}
+          title={t("openSources")}
+        >
+          <PanelLeft className="w-4 h-4" />
+        </Button>
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-foreground tracking-title truncate">
             {title}
@@ -104,7 +116,7 @@ export function RssHeader({
       </div>
 
       {/* Mobile: sort + view cycle */}
-      <div className="flex items-center gap-1 lg:hidden flex-shrink-0">
+      <div className="flex items-center gap-1 wide:hidden flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
@@ -134,7 +146,7 @@ export function RssHeader({
       </div>
 
       {/* Desktop: responsive button bar */}
-      <div className="hidden items-center gap-0.5 lg:flex xl:gap-1 flex-shrink-0">
+      <div className="hidden items-center gap-0.5 wide:flex xl:gap-1 flex-shrink-0">
         {/* Filter – always visible */}
         <Button
           variant="ghost"

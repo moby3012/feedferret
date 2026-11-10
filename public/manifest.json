@@ -25,7 +25,7 @@
       "purpose": "maskable"
     }
   ],
-  "start_url": "/?view=new",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1b23",
   "theme_color": "#1a1b23",
@@ -47,7 +47,7 @@
       "name": "New Articles",
       "short_name": "New",
       "description": "Open unread articles.",
-      "url": "/?view=new",
+      "url": "/",
       "icons": [
         {
           "src": "/icon-192.png",
@@ -60,7 +60,7 @@
       "name": "Read Later",
       "short_name": "Later",
       "description": "Open saved read-later articles.",
-      "url": "/?view=readlater",
+      "url": "/?v=later",
       "icons": [
         {
           "src": "/icon-192.png",
@@ -73,7 +73,7 @@
       "name": "Starred",
       "short_name": "Starred",
       "description": "Open starred articles.",
-      "url": "/?view=starred",
+      "url": "/?v=starred",
       "icons": [
         {
           "src": "/icon-192.png",

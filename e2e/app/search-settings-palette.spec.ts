@@ -7,7 +7,7 @@ test("search finds the seeded needle articles", async ({ app, page }) => {
   await page.keyboard.type(app.user.sample.needle);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { level: 2, name: new RegExp(app.user.sample.needle) })).toBeVisible();
-  const hits = page.locator(`[role="button"][aria-label*="${app.user.sample.needle}"]`);
+  const hits = app.rowsMatching(app.user.sample.needle);
   await expect(hits).toHaveCount(app.user.sample.needleHits);
   await expect(app.row(18)).toBeVisible(); // needle articles are #018, #118, #218
 });

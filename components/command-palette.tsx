@@ -52,7 +52,8 @@ interface CommandPaletteProps {
   onOpenSettings: () => void;
   onShowShortcuts: () => void;
   onSelectFeed: (feedId: string) => void;
-  onSelectCategory: (categoryName: string) => void;
+  /** Category by ID (names are not unique across parents). */
+  onSelectCategory: (categoryId: string) => void;
   onSelectLabel: (labelId: string) => void;
 }
 
@@ -175,7 +176,7 @@ export function CommandPalette({
               <CommandItem
                 key={category.id}
                 value={`${t("groups.categories")} ${category.name}`}
-                onSelect={() => runAction(() => onSelectCategory(category.name))}
+                onSelect={() => runAction(() => onSelectCategory(category.id))}
               >
                 <FolderOpen />
                 {category.name}

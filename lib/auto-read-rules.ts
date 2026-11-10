@@ -245,7 +245,7 @@ async function applySingleAction(
         await sendPushToUser(userId, {
             title: `Rule: ${rule.name}`,
             body: matches.length === 1 ? first.title : `${matches.length} matching articles`,
-            url: matches.length === 1 ? `/?article=${encodeURIComponent(first.id)}` : "/?view=new",
+            url: matches.length === 1 ? `/?a=${encodeURIComponent(first.id)}` : "/",
             articleId: matches.length === 1 ? first.id : undefined,
             feedId: matches.length === 1 ? first.feed.id : undefined,
             tag: `rule:${rule.id}`,

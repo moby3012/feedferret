@@ -4,6 +4,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeColorApplier } from "@/components/theme-color-applier";
+import { THEME_COLOR } from "@/lib/theme-color";
 import { Providers } from "@/components/providers";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
@@ -70,10 +71,11 @@ export const viewport: Viewport = {
   // Soft keyboards resize the layout viewport instead of overlaying it, so
   // fixed bars follow the keyboard (--keyboard-inset is the iOS fallback).
   interactiveWidget: "resizes-content",
-  // Match --surface-base (tokens.css) so the status bar has no seam.
+  // The bar surface (tokens.css --surface-bar-solid) so the status bar
+  // continues the top bars; ThemeColorApplier follows a forced theme.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f7f9" },
-    { media: "(prefers-color-scheme: dark)", color: "#05080c" },
+    { media: "(prefers-color-scheme: light)", color: THEME_COLOR.light },
+    { media: "(prefers-color-scheme: dark)", color: THEME_COLOR.dark },
   ],
 };
 

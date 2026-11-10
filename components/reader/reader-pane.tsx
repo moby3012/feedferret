@@ -1,0 +1,120 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useTranslations } from "next-intl";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArticleReader } from "@/components/article-reader";
+import { useShellActions, useShellData } from "@/components/shell/shell-context";
+import { toLegacyArticle, withDetail } from "@/features/articles/legacy-adapter";
+import { useArticleActions, useIsFetchingFullText } from "@/features/articles/mutations";
+import { prefetchArticle } from "@/features/articles/prefetch";
+import { useArticle } from "@/features/articles/queries";
+import { nav, useNav } from "@/features/reader/nav/store";
+
+/**
+ * Reader container: the open article comes from the URL (`a`). On compact it
+ * is a fixed layer above the (still mounted) list; on wide the right column.
+ * Keeps the last article while the compact close transition runs.
+ */
+export function ReaderPane() {
+  const tA11y = useTranslations("accessibility");
+  const qc = useQueryClient();
+  const articleId = useNav((s) => s.loc.articleId);
+  const { labels, prefs, feeds, legacyContext, suppressed } = useShellData();
+  const shell = useShellActions();
+  const actions = useArticleActions();
+  const isFetchingFullText = useIsFetchingFullText();
+  const paneRef = useRef<HTMLElement>(null);
+
+  // Last opened id survives the close until the pane's transition has ended.
+  const [shownId, setShownId] = useState(articleId);
+  if (articleId && articleId !== shownId) setShownId(articleId);
+  useEffect(() => {
+    if (articleId || !shownId) return;
+    const pane = paneRef.current;
+    const duration = pane ? parseFloat(getComputedStyle(pane).transitionDuration) || 0 : 0;
+    if (!pane || duration === 0) {
+      setShownId(null);
+      return;
+    }
+    const done = (e: TransitionEvent) => {
+      if (e.target === pane) setShownId(null);
+    };
+    pane.addEventListener("transitionend", done);
+    pane.addEventListener("transitioncancel", done);
+    return () => {
+      pane.removeEventListener("transitionend", done);
+      pane.removeEventListener("transitioncancel", done);
+    };
+  }, [articleId, shownId]);
+
+  const list = useSyncExternalStore(shell.activeList.subscribe, shell.activeList.get, shell.activeList.get);
+  const { item, detail, status } = useArticle(shownId);
+  const article = useMemo(() => {
+    if (!shownId) return null;
+    const inList = list.articles.find((a) => a.id === shownId);
+    if (inList) return inList;
+    return item ? toLegacyArticle(item, legacyContext) : null;
+  }, [list.articles, shownId, item, legacyContext]);
+  const readerArticle = useMemo(() => (article ? withDetail(article, detail) : null), [article, detail]);
+  const index = shownId ? list.articles.findIndex((a) => a.id === shownId) : -1;
+
+  // Unknown / foreign id in a deep link: back to the list instead of an empty reader.
+  useEffect(() => {
+    if (articleId && status === "error" && !item) void nav.closeArticle();
+  }, [articleId, status, item]);
+
+  // Auto mark-read after the configured delay (null → 1 s, 0 → off).
+  useEffect(() => {
+    if (!articleId || !article || article.id !== articleId || article.isRead || suppressed.includes(article.id)) return;
+    const delaySecs = prefs?.markReadAfterDelaySecs ?? null;
+    if (delaySecs === 0) return;
+    const timer = window.setTimeout(() => shell.markAutoRead(article, "auto"), delaySecs !== null ? delaySecs * 1000 : 1000);
+    return () => window.clearTimeout(timer);
+  }, [articleId, article, suppressed, prefs?.markReadAfterDelaySecs, shell]);
+
+  // Idle prefetch of the next two bodies in list order.
+  useEffect(() => {
+    if (!articleId || index < 0) return;
+    const next = list.articles.slice(index + 1, index + 3);
+    const run = () => next.forEach((a) => prefetchArticle(qc, a.id));
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(run, { timeout: 2000 });
+      return () => window.cancelIdleCallback(handle);
+    }
+    const handle = window.setTimeout(run, 300);
+    return () => window.clearTimeout(handle);
+  }, [articleId, index, list.articles, qc]);
+
+  const feed = feeds.find((f: any) => f.id === readerArticle?.feedId);
+  const step = (dir: 1 | -1) => {
+    const target = list.articles[index + dir];
+    if (target) void nav.stepArticle(target.id);
+  };
+
+  return (
+    <section ref={paneRef} data-pane="reader" role="region" aria-label={tA11y("articleReader")} className="flex bg-background">
+      <ArticleReader
+        article={readerArticle}
+        isBodyLoading={!!article && status === "pending"}
+        onToggleStar={shell.toggleStar}
+        onToggleReadLater={shell.toggleLater}
+        onToggleRead={shell.toggleRead}
+        onFetchFullText={actions.fetchFullText}
+        isFetchingFullText={isFetchingFullText}
+        labels={labels}
+        onSetLabels={actions.setLabels}
+        onBack={() => void nav.up()}
+        onOpenFeed={(feedId) => void nav.goScope({ kind: "feed", id: feedId })}
+        showBackButton={!!articleId}
+        onPreviousArticle={() => step(-1)}
+        onNextArticle={() => step(1)}
+        hasPreviousArticle={index > 0}
+        hasNextArticle={index >= 0 && index < list.articles.length - 1}
+        readerWidth={(feed?.readerWidthOverride ?? prefs?.readerWidth ?? "normal") as "normal" | "wide" | "full"}
+        readerFontSize={(feed?.readerFontSizeOverride ?? prefs?.readerFontSize ?? "medium") as "small" | "medium" | "large" | "xl"}
+        hideArticleImage={feed?.hideArticleImage ?? false}
+      />
+    </section>
+  );
+}

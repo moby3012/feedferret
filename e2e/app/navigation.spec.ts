@@ -1,12 +1,33 @@
-import { test, expect } from "../helpers/test";
+import type { Page } from "@playwright/test";
+import { test, expect, type App } from "../helpers/test";
 
 /**
- * Characterization of CURRENT navigation behaviour (desktop 1280x800 and
- * mobile 390x844 touch). Selection / reader state lives only in React state:
- * the URL stays "/" and history is not used. Tests marked `fixme` describe
- * the desired behaviour from the UX audit and are enabled when URL-based
- * navigation lands (.pm/audit-ux.md P1-03).
+ * Navigation (desktop 1280x800 and mobile 390x844 touch). URL + history are
+ * the source of truth (.pm/spec-shell-design.md §1.3/§1.4, audit P1-03/P1-04):
+ * the open article is `?a=`, feeds/categories are `?feed=` / `?cat=`, system
+ * back goes one level up and never leaves the app while a level is open.
  */
+
+const reader = (page: Page, num: number) => page.locator("article").filter({ hasText: `(#${String(num).padStart(3, "0")})` });
+const historyLength = (page: Page) => page.evaluate(() => history.length);
+const backButton = (page: Page) => page.getByRole("button", { name: /^(Back to list|Back)$/ }).first();
+
+/** Opens the Solo Blog feed (sidebar on desktop, feed sheet on mobile). */
+async function openSoloBlog(app: App, page: Page) {
+  await app.selectSidebar(/^Solo Blog\s*\d+$/);
+  await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
+  await expect(app.row(8)).toBeVisible();
+}
+
+/** Records RSC (server component) requests: in-shell navigation must not cause any. */
+function trackRsc(page: Page) {
+  const hits: string[] = [];
+  page.on("request", (r) => {
+    // Only the shell route: <Link> prefetches of /settings etc. are fine.
+    if (new URL(r.url()).pathname === "/" && (r.headers()["rsc"] === "1" || /[?&]_rsc=/.test(r.url()))) hits.push(r.url());
+  });
+  return hits;
+}
 
 test("app opens: list visible with seeded articles and sidebar", async ({ app, page }) => {
   await app.open();
@@ -21,82 +42,263 @@ test("app opens: list visible with seeded articles and sidebar", async ({ app, p
   await app.closeSidebar();
 });
 
-test("selecting a feed narrows the list to that feed", async ({ app, page }) => {
+test("selecting a feed narrows the list to that feed and puts it in the URL", async ({ app, page }) => {
   await app.open();
-  await app.selectSidebar(/^Solo Blog\s*\d+$/);
-  await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
+  await openSoloBlog(app, page);
+  expect(app.where()).toMatch(/^\/\?feed=[^&]+$/);
   // Article #008 belongs to Solo Blog, #001 (Hacker Dispatch) must be gone.
-  await expect(app.row(8)).toBeVisible();
   await expect(app.row(1)).toHaveCount(0);
-  const labels = await page.locator('[role="button"][aria-label*="—"]').evaluateAll((els) =>
-    els.map((e) => e.getAttribute("aria-label") ?? ""),
-  );
+  const labels = await app.rowsMatching("—").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""));
   expect(labels.length).toBeGreaterThan(5);
   for (const l of labels) expect(l.endsWith("— Solo Blog")).toBe(true);
 });
 
-test("opening an article shows title and content in the reader", async ({ app, page }) => {
+test("opening an article shows title and content in the reader; the article is in the URL", async ({ app, page }) => {
+  const rsc = trackRsc(page);
   await app.open();
   await app.activate(app.row(1));
-  const reader = page.locator("article").filter({ hasText: app.user.firstArticleTitle });
-  await expect(reader).toBeVisible();
-  await expect(reader.getByRole("heading", { level: 1, name: app.user.firstArticleTitle })).toBeVisible();
-  await expect(reader).toContainText(app.user.firstArticleBodyStart.slice(0, 25));
-  // Current behaviour: opening a reader does not touch the URL or history (P1-03).
-  expect(new URL(page.url()).pathname).toBe("/");
+  const open = page.locator("article").filter({ hasText: app.user.firstArticleTitle });
+  await expect(open).toBeVisible();
+  await expect(open.getByRole("heading", { level: 1, name: app.user.firstArticleTitle })).toBeVisible();
+  await expect(open).toContainText(app.user.firstArticleBodyStart.slice(0, 25));
+  expect(app.where()).toBe(`/?a=${app.articleId(1)}`);
+  expect(rsc).toEqual([]); // history API, no server round-trip
 });
 
 test("reader renders images and code blocks", async ({ app, page }) => {
   await app.open();
-  await page.getByRole("button", { name: new RegExp(app.user.sample.code.replace(/[()#]/g, "\\$&")) }).first().scrollIntoViewIfNeeded();
-  await app.activate(page.getByRole("button", { name: new RegExp(app.user.sample.code.replace(/[()#]/g, "\\$&")) }).first());
-  const reader = page.locator("article").filter({ hasText: app.user.sample.code });
-  await expect(reader.locator("pre code")).toBeVisible();
+  const row = page.getByRole("button", { name: new RegExp(app.user.sample.code.replace(/[()#]/g, "\\$&")) }).first();
+  await row.scrollIntoViewIfNeeded();
+  await app.activate(row);
+  await expect(page.locator("article").filter({ hasText: app.user.sample.code }).locator("pre code")).toBeVisible();
 });
 
 test("close reader returns to the list", async ({ app, page }) => {
   await app.open();
   await app.activate(app.row(1));
-  const reader = page.locator("article").filter({ hasText: app.user.firstArticleTitle });
-  await expect(reader).toBeVisible();
-  await app.activate(page.getByRole("button", { name: /^(Back to list|Back)$/ }).first());
-  await expect(reader).toBeHidden();
+  await expect(reader(page, 1)).toBeVisible();
+  await app.activate(backButton(page));
+  await expect(reader(page, 1)).toBeHidden();
   await expect(app.row(2)).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe("/");
+  expect(app.where()).toBe("/");
 });
 
-test.fixme("browser/Android back from the reader returns to the list, not out of the app (P1-03)", async ({ app, page }) => {
-  // Known-bad today: no history entry is pushed when the reader opens, so
-  // history.back() leaves the app (to /login or the previous site).
+test("browser/Android back from the reader returns to the list at the same offset, not out of the app (P1-03/P1-04)", async ({ app, page }) => {
+  const rsc = trackRsc(page);
   await app.open();
-  await app.activate(app.row(1));
-  await expect(page.locator("article").filter({ hasText: app.user.firstArticleTitle })).toBeVisible();
+  const scroller = app.listScroller();
+  await scroller.evaluate((el) => el.scrollTo({ top: 600, behavior: "instant" }));
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(500);
+  const before = await scroller.evaluate((el) => el.scrollTop);
+  // A row that is fully visible at this offset.
+  const id = await scroller.evaluate((el) => {
+    const top = el.getBoundingClientRect().top;
+    const row = [...el.querySelectorAll<HTMLElement>("[data-article-id]")].find((r) => r.getBoundingClientRect().top > top + 40);
+    return row!.getAttribute("data-article-id")!;
+  });
+  const lengthBefore = await historyLength(page);
+  await app.activate(page.locator(`[data-article-id="${id}"] [role="button"]`).first());
+  await expect(page.locator("article h1").first()).toBeVisible();
+  expect(app.where()).toBe(`/?a=${id}`);
+
   await page.goBack();
-  expect(new URL(page.url()).pathname).toBe("/"); // still inside the app
-  await expect(page.locator("article").filter({ hasText: app.user.firstArticleTitle })).toBeHidden();
-  await expect(app.row(2)).toBeVisible();
+  expect(app.where()).toBe("/"); // still inside the app, article dropped from the URL
+  await expect(page.locator(`[data-pane="reader"] article`)).toHaveCount(0, { timeout: 5000 });
+  await expect(page.locator(`[data-article-id="${id}"] [role="button"]`).first()).toBeVisible();
+  // List stayed mounted under the reader: exactly where it was (±1 px).
+  expect(Math.abs((await scroller.evaluate((el) => el.scrollTop)) - before)).toBeLessThanOrEqual(1);
+  expect(await historyLength(page)).toBe(lengthBefore + 1); // one forward entry (the article), nothing else
+  expect(rsc).toEqual([]);
 });
 
-test.fixme("reload restores selected feed and open article (P1-03)", async ({ app, page }) => {
+test("mobile: back goes reader → feed list → Feeds root and never leaves the app while a level is open", async ({ app, page, isMobile }) => {
+  test.skip(!isMobile, "compact layout has the Feeds root level");
   await app.open();
-  await app.selectSidebar(/^Solo Blog\s*\d+$/);
+  await openSoloBlog(app, page);
+  const feedUrl = app.where();
   await app.activate(app.row(8));
-  await page.reload();
+  await expect(reader(page, 8)).toBeVisible();
+  expect(app.where()).toBe(`${feedUrl}&a=${app.articleId(8)}`);
+
+  await page.goBack(); // reader → feed list
+  await expect(reader(page, 8)).toBeHidden();
+  expect(app.where()).toBe(feedUrl);
   await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
-  await expect(page.locator("article").filter({ hasText: "(#008)" })).toBeVisible();
+
+  await page.goBack(); // feed list → Feeds root (sources)
+  expect(app.where()).toBe("/?tab=feeds");
+  const sources = page.locator('[data-pane="sources"]');
+  await expect(sources.getByRole("button", { name: /^Solo Blog\s*\d+$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeHidden();
+
+  // Feeds root → a feed drills down again (push), and back returns.
+  await app.activate(sources.getByRole("button", { name: /^Solo Blog\s*\d+$/ }));
+  await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
+  expect(app.where()).toBe(feedUrl);
+  await page.goBack();
+  expect(app.where()).toBe("/?tab=feeds");
 });
 
-// Guard for P1-03: when URL-based navigation lands, j/k must keep REPLACING
-// the entry (not pushing), so history length must stay constant while moving.
+test("the feed sheet is a history level: back closes it instead of navigating", async ({ app, page, isMobile }) => {
+  test.skip(!isMobile, "the feed sheet is the compact feed picker");
+  await app.open();
+  await app.openSidebar();
+  await page.goBack();
+  await expect(page.getByRole("dialog", { name: /feed navigation/i })).toBeHidden();
+  expect(app.where()).toBe("/");
+  await expect(app.row(1)).toBeVisible();
+});
+
+test("reload restores selected feed and open article (P1-03)", async ({ app, page }) => {
+  await app.open();
+  await openSoloBlog(app, page);
+  await app.activate(app.row(8));
+  await expect(reader(page, 8)).toBeVisible();
+  const url = app.where();
+  await page.reload();
+  expect(app.where()).toBe(url);
+  await expect(reader(page, 8)).toBeVisible({ timeout: 30_000 });
+  if (!app.isMobile) await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
+  // Back after the reload still lands on the feed list.
+  await page.goBack();
+  await expect(reader(page, 8)).toBeHidden();
+  await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
+  await expect(app.row(8)).toBeVisible();
+});
+
+test("cold deep link ?a=<id> opens the reader with the list underneath; back stays in the app", async ({ app, page }) => {
+  await page.goto(`/?a=${app.articleId(3)}`);
+  await expect(reader(page, 3)).toBeVisible({ timeout: 30_000 });
+  // The list is mounted under the reader (compact) / beside it (wide).
+  await expect(app.row(1)).toHaveCount(1);
+  await page.goBack(); // seeded parent entry
+  expect(app.where()).toBe("/");
+  await expect(reader(page, 3)).toBeHidden();
+  await expect(app.row(1)).toBeVisible();
+});
+
+test("cold deep link into a feed article: back goes to that feed's list", async ({ app, page }) => {
+  await app.open();
+  await openSoloBlog(app, page);
+  const feedUrl = app.where();
+  await page.goto("about:blank");
+  await page.goto(`${feedUrl}&a=${app.articleId(8)}`);
+  await expect(reader(page, 8)).toBeVisible({ timeout: 30_000 });
+  await page.goBack();
+  expect(app.where()).toBe(feedUrl);
+  await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
+  if (app.isMobile) {
+    await page.goBack();
+    expect(app.where()).toBe("/?tab=feeds");
+  }
+});
+
+// j/k REPLACE the entry (only opening the first article pushes).
 test("j/k moves between articles without growing history", async ({ app, page, isMobile }) => {
   test.skip(isMobile, "keyboard shortcut; desktop only");
   await app.open();
   await app.activate(app.row(1));
-  await expect(page.locator("article").filter({ hasText: "(#001)" })).toBeVisible();
-  const before = await page.evaluate(() => history.length);
-  await page.keyboard.press("j");
-  await expect(page.locator("article").filter({ hasText: "(#002)" })).toBeVisible();
-  await page.keyboard.press("k");
-  await expect(page.locator("article").filter({ hasText: "(#001)" })).toBeVisible();
-  expect(await page.evaluate(() => history.length)).toBe(before);
+  await expect(reader(page, 1)).toBeVisible();
+  const before = await historyLength(page);
+  for (let i = 0; i < 5; i++) {
+    await page.keyboard.press("j");
+    await expect(reader(page, i + 2)).toBeVisible();
+  }
+  for (let i = 5; i > 0; i--) {
+    await page.keyboard.press("k");
+    await expect(reader(page, i)).toBeVisible();
+  }
+  expect(await historyLength(page)).toBe(before);
+  expect(app.where()).toBe(`/?a=${app.articleId(1)}`);
+  // One back still returns to the list.
+  await page.goBack();
+  expect(app.where()).toBe("/");
+});
+
+test("Esc closes the reader", async ({ app, page, isMobile }) => {
+  test.skip(isMobile, "keyboard; desktop only");
+  await app.open();
+  await app.activate(app.row(2));
+  await expect(reader(page, 2)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(reader(page, 2)).toBeHidden();
+  expect(app.where()).toBe("/");
+});
+
+test.describe("old links keep working (aliases → canonical URL)", () => {
+  test("manifest shortcut ?view=readlater → /?v=later", async ({ app, page }) => {
+    await page.goto("/?view=readlater");
+    await expect(page.getByRole("heading", { level: 2, name: "Read later" })).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => app.where()).toBe("/?v=later");
+  });
+
+  test("?view=starred and ?view=new", async ({ app, page }) => {
+    await page.goto("/?view=starred");
+    await expect(page.getByRole("heading", { level: 2, name: "Starred" })).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => app.where()).toBe("/?v=starred");
+    await page.goto("/?view=new");
+    await expect(page.getByRole("heading", { level: 2, name: "All articles" })).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => app.where()).toBe("/");
+  });
+
+  test("notification link ?article=<id> → /?a=<id>", async ({ app, page }) => {
+    await page.goto(`/?article=${app.articleId(4)}`);
+    await expect(reader(page, 4)).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => app.where()).toBe(`/?a=${app.articleId(4)}`);
+  });
+
+  test("?addFeed=1 opens Add Feed once and is stripped", async ({ app, page }) => {
+    await page.goto("/?addFeed=1");
+    await expect(page.getByRole("dialog", { name: "Add Feed" })).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => app.where()).toBe(app.isMobile ? "/?tab=feeds" : "/");
+  });
+
+  test("share target ?sharedUrl= still pre-fills Add Feed (and is stripped)", async ({ app, page }) => {
+    await page.goto(`/?sharedUrl=${encodeURIComponent("https://example.org/blog")}`);
+    const dialog = page.getByRole("dialog", { name: "Add Feed" });
+    await expect(dialog).toBeVisible({ timeout: 30_000 });
+    await expect(dialog.getByPlaceholder("Feed or site URL, @handle, or topic")).toHaveValue("https://example.org/blog");
+    expect(app.where()).not.toContain("sharedUrl");
+  });
+});
+
+test("no layout spinner at any time during boot", async ({ app, page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { __spinner: boolean }).__spinner = false;
+    new MutationObserver(() => {
+      if (document.querySelector('[class*="rounded-icon"][class*="animate-spin"]')) (window as unknown as { __spinner: boolean }).__spinner = true;
+    }).observe(document, { subtree: true, childList: true, attributes: true });
+  });
+  await app.open();
+  await app.activate(app.row(1));
+  await expect(reader(page, 1)).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __spinner: boolean }).__spinner)).toBe(false);
+});
+
+test("resizing 390 → 1280 without reload keeps the open article and the list", async ({ app, page, isMobile }) => {
+  test.skip(isMobile, "desktop project drives the viewport");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await app.open();
+  await app.activate(app.row(2));
+  await expect(reader(page, 2)).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(reader(page, 2)).toBeVisible();
+  await expect(app.row(1)).toBeVisible();
+  expect(app.where()).toBe(`/?a=${app.articleId(2)}`);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(reader(page, 2)).toBeVisible();
+});
+
+test("medium 820x1180: list and reader side by side, feeds in a drawer", async ({ app, page, isMobile }) => {
+  test.skip(isMobile, "desktop project drives the viewport");
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await app.open();
+  await app.activate(app.row(1));
+  await expect(reader(page, 1)).toBeVisible();
+  const list = await app.row(2).boundingBox();
+  const article = await reader(page, 1).boundingBox();
+  expect(list && article).toBeTruthy();
+  expect(list!.x + list!.width).toBeLessThanOrEqual(article!.x + 1);
+  await page.getByRole("button", { name: "Feeds", exact: true }).first().click();
+  await expect(page.getByRole("dialog", { name: /feed navigation/i })).toBeVisible();
 });

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Article } from "@/lib/rss-data";
 import { Star, Circle, Clock, CheckCircle2, CircleDot, Bookmark, Layers, RefreshCw, ShieldOff } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useScrollMemory } from "@/features/reader/nav/scroll-memory";
 import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { extractHighlightTerms, highlightText } from "@/lib/highlight-search-terms";
@@ -107,15 +107,18 @@ interface ArticleListProps {
   enablePullToRefresh?: boolean;
   isRefreshing?: boolean;
   onPullToRefresh?: () => void;
-  filterKey?: string;
-  transitionStyle?: "fade" | "flip" | "filter";
+  /**
+   * Scroll-memory key of the bound list (canonical list URL). The offset is
+   * remembered under it and restored when the key is bound again (scope
+   * change, remount after /settings, reload) — the list is never remounted.
+   */
+  scrollMemoryKey?: string | null;
   /**
    * Rendered once after the last row in every view mode (and instead of the
    * generic empty state when nothing is left): the explicit "end of list"
    * card. Switching feeds is always a deliberate tap — never a gesture.
    */
   endOfList?: React.ReactNode;
-  scrollBackToId?: string | null;
   hasFeeds?: boolean;
   // When set, highlights occurrences of the query's free-text terms in each
   // article's title/excerpt so it's visible *where* a search matched.
@@ -144,10 +147,8 @@ export function ArticleList({
   enablePullToRefresh = false,
   isRefreshing = false,
   onPullToRefresh,
-  filterKey,
-  transitionStyle = "fade",
+  scrollMemoryKey = null,
   endOfList,
-  scrollBackToId,
   hasFeeds = true,
   searchQuery,
   hasMorePages = false,
@@ -157,12 +158,6 @@ export function ArticleList({
 }: ArticleListProps) {
   const t = useTranslations("articleList");
   const highlightTerms = useMemo(() => extractHighlightTerms(searchQuery ?? ""), [searchQuery]);
-  const transitionClass =
-    transitionStyle === "flip"
-      ? "animate-feed-flip"
-      : transitionStyle === "filter"
-        ? "animate-filter-swap"
-        : "animate-fade-in";
 
   const [visibleCount, setVisibleCount] = useState(pageSize ?? 30);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -179,23 +174,9 @@ export function ArticleList({
     setVisibleCount(pageSize ?? 30);
   }, [firstArticleId, pageSize]);
 
-  // Restore scroll position to the previously selected article when the reader closes
-  useEffect(() => {
-    if (!scrollBackToId || !scrollRoot) return;
-    const el = contentRef.current?.querySelector<HTMLElement>(`[data-article-id="${scrollBackToId}"]`);
-    if (!el) return;
-    const elTop = el.getBoundingClientRect().top;
-    const rootTop = scrollRoot.getBoundingClientRect().top;
-    const offset = scrollRoot.scrollTop + elTop - rootTop - 80;
-    scrollRoot.scrollTo({ top: Math.max(0, offset), behavior: "instant" });
-  }, [scrollBackToId, scrollRoot]);
-
-  useEffect(() => {
-    const nextRoot = contentRef.current?.closest(
-      '[data-slot="scroll-area-viewport"]',
-    ) as HTMLElement | null;
-    setScrollRoot(nextRoot);
-  }, [articles.length, viewMode]);
+  // Native scroller (no Radix ScrollArea): the list keeps its DOM (and so
+  // its offset) under the reader; scroll memory covers rebinding a key.
+  useScrollMemory(scrollRoot, scrollMemoryKey, articles.length > 0);
 
   useEffect(() => {
     if (!isRefreshing) setPullTriggered(false);
@@ -306,10 +287,9 @@ export function ArticleList({
     const skeletonCount = viewMode === "magazine" ? 4 : viewMode === "minimal" ? 8 : 6;
     return (
       <div
-        key={filterKey ?? "loading"}
         className={cn(
-          "flex-1 overflow-hidden p-3 pb-28 lg:pb-3 space-y-2.5",
-          viewMode === "magazine" && "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 space-y-0",
+          "flex-1 overflow-hidden p-3 pb-28 wide:pb-3 space-y-2.5",
+          viewMode === "magazine" && "grid grid-cols-1 gap-4 space-y-0",
         )}
       >
         {Array.from({ length: skeletonCount }).map((_, i) => (
@@ -320,9 +300,10 @@ export function ArticleList({
   }
 
   return (
-    <ScrollArea
-      key={filterKey ?? "default"}
-      className={cn("flex-1 overflow-hidden min-h-0", transitionClass)}
+    <div
+      ref={setScrollRoot}
+      data-testid="list-scroller"
+      className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
     >
       {showPullIndicator && (
         <div className="pointer-events-none absolute inset-x-0 top-3 z-(--z-sticky) flex justify-center px-3">
@@ -341,7 +322,7 @@ export function ArticleList({
       {articles.length === 0 && endOfList ? (
         // Nothing left to show: the end card is the empty state ("Du bist auf
         // dem Laufenden" + the way on), so the user never faces a blank list.
-        <div ref={contentRef} className="p-3 pb-28 lg:pb-3">
+        <div ref={contentRef} className="p-3 pb-28 wide:pb-3">
           {endOfList}
         </div>
       ) : articles.length === 0 ? (
@@ -365,9 +346,8 @@ export function ArticleList({
             transition: isPulling ? "none" : "transform 180ms cubic-bezier(0.16, 1, 0.3, 1)",
           }}
           className={cn(
-            "p-3 pb-28 lg:pb-3 space-y-2.5",
-            viewMode === "magazine" &&
-              "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-4 space-y-0",
+            "p-3 pb-28 wide:pb-3 space-y-2.5",
+            viewMode === "magazine" && "grid grid-cols-1 gap-4 space-y-0",
           )}
         >
           {visibleArticles.map((article, index) => (
@@ -408,7 +388,7 @@ export function ArticleList({
           )}
         </div>
       )}
-    </ScrollArea>
+    </div>
   );
 }
 
@@ -538,7 +518,7 @@ function ArticlePreview({
     if (!el) return;
     const root =
       scrollRoot ??
-      (el.closest('[data-slot="scroll-area-viewport"]') as HTMLElement | null);
+      (el.closest('[data-testid="list-scroller"]') as HTMLElement | null);
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {

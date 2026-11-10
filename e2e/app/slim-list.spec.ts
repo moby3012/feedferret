@@ -94,7 +94,7 @@ test("app endpoints need a session", async ({ playwright }, testInfo) => {
 
 test("unread view keeps rows read this session across toggles and focus; an explicit refresh resets the snapshot", async ({ app, page }) => {
   await app.open();
-  const viewport = page.getByRole("region", { name: "Article list" }).locator('[data-slot="scroll-area-viewport"]').first();
+  const viewport = app.listScroller();
   // Scroll a bit so the position check means something.
   await viewport.evaluate((el) => el.scrollTo(0, 240));
 

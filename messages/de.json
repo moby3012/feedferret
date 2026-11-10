@@ -770,7 +770,8 @@
     "labelFallback": "Label",
     "savedSearchFallback": "Gespeicherte Suche",
     "feedNavigation": "Feed-Navigation",
-    "feedActions": "Feed-Aktionen"
+    "feedActions": "Feed-Aktionen",
+    "recentlyRead": "Zuletzt gelesen"
   },
   "articleList": {
     "noArticles": "Keine Artikel",
@@ -854,7 +855,8 @@
     "markAllAsRead": "Alle als gelesen markieren",
     "saveSearch": "Suche speichern",
     "moreOptions": "Weitere Optionen",
-    "unreadSuffix": "ungelesen"
+    "unreadSuffix": "ungelesen",
+    "openSources": "Feeds"
   },
   "discovery": {
     "searchPlaceholder": "Feeds suchen…",
@@ -1784,5 +1786,8 @@
     "stepUpRequired": "Gib dein aktuelles Anmeldepasswort oder einen neuen, noch nicht verwendeten TOTP-Code ein.",
     "passwordlessHint": "Wenn du dich ohne Passwort und ohne Zwei-Faktor-Authentifizierung anmeldest, melde dich erneut an und speichere innerhalb von 10 Minuten. Lass das Feld für das Anmeldepasswort leer.",
     "emailChangeWarning": "Wenn du deine E-Mail-Adresse änderst, werden Google-Reader-Clients getrennt und alle Fever-Schlüssel gelöscht. Erneuere dein API-Passwort und erstelle die für Fever verwendeten API-Token neu. Verbinde deine Clients danach erneut."
+  },
+  "shell": {
+    "chooseFeed": "Wähle links einen Feed oder Ordner."
   }
 }

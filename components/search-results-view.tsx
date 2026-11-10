@@ -21,9 +21,8 @@ interface SearchResultsViewProps {
   onToggleReadLater?: (articleId: string) => void;
   onMarkRead?: (articleId: string) => void;
   markReadOnScroll?: boolean;
-  filterKey?: string;
-  transitionStyle?: "fade" | "flip" | "filter";
-  isMobile?: boolean;
+  /** Scroll-memory key of the result list (canonical `/?q=` URL). */
+  scrollMemoryKey?: string | null;
   hasMorePages?: boolean;
   isFetchingMore?: boolean;
   onLoadMore?: () => void;
@@ -45,9 +44,7 @@ export function SearchResultsView({
   onToggleReadLater,
   onMarkRead,
   markReadOnScroll,
-  filterKey,
-  transitionStyle,
-  isMobile,
+  scrollMemoryKey,
   hasMorePages,
   isFetchingMore,
   onLoadMore,
@@ -146,7 +143,7 @@ export function SearchResultsView({
           </Button>
         </div>
       ) : (
-        <div className={cn("flex flex-1 min-h-0 flex-col", isMobile && "pb-24")}>
+        <div className="flex flex-1 min-h-0 flex-col compact:pb-24">
           <ArticleList
             articles={articles}
             selectedArticle={selectedArticle}
@@ -157,8 +154,7 @@ export function SearchResultsView({
             viewMode="list"
             isLoading={isLoading}
             markReadOnScroll={markReadOnScroll}
-            filterKey={filterKey}
-            transitionStyle={transitionStyle}
+            scrollMemoryKey={scrollMemoryKey}
             onMarkRead={onMarkRead}
             searchQuery={searchQuery}
             hasMorePages={hasMorePages}

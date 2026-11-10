@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useSession } from "next-auth/react";
 import { useReadingPreferences } from "@/hooks/use-rss-data";
+import { THEME_COLOR } from "@/lib/theme-color";
 
 function normalizeHexColor(value: string | null | undefined, fallback: string) {
   const raw = value?.trim();
@@ -91,22 +92,14 @@ export function ThemeColorApplier() {
       root.setAttribute("dir", dir);
     }
 
-    // Push the personalized accent to the OS chrome (Android status bar /
-    // task-switcher strip) by updating the live theme-color meta(s). layout.tsx
-    // declares one meta per color-scheme media query; update whichever matches
-    // the currently resolved theme so we don't clobber the other scheme's tag.
-    const themeColorMetas = document.querySelectorAll<HTMLMetaElement>(
-      'meta[name="theme-color"]',
-    );
-    if (themeColorMetas.length > 0) {
-      const isDark = resolvedTheme === "dark";
-      const matchingMeta =
-        Array.from(themeColorMetas).find((meta) => {
-          const media = meta.getAttribute("media") || "";
-          return isDark ? media.includes("dark") : media.includes("light");
-        }) ?? themeColorMetas[0];
-      matchingMeta.setAttribute("content", accentColor);
-    }
+    // OS chrome (Android status bar / task switcher, iOS standalone bar)
+    // matches the app's bar surface of the resolved theme — not the user's
+    // accent (PM decision; the accent stays for in-app UI). Every theme-color
+    // meta gets it: with a forced theme the OS media query may disagree.
+    const barColor = resolvedTheme === "dark" ? THEME_COLOR.dark : THEME_COLOR.light;
+    document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((meta) => {
+      if (meta.getAttribute("content") !== barColor) meta.setAttribute("content", barColor);
+    });
   }, [prefs, resolvedTheme]);
 
   return null;
