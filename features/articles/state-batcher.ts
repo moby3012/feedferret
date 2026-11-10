@@ -43,6 +43,9 @@ type Pending = { op: StateOp; base: boolean };
 
 const keyOf = (id: string, field: StateField) => `${id}\u0000${field}`;
 
+/** Server cap per call (`applyArticleStateOps`, one wire op per article). */
+export const MAX_ARTICLES_PER_CALL = 200;
+
 export function toWireOps(ops: StateOp[]): WireStateOp[] {
   const byId = new Map<string, WireStateOp>();
   for (const op of ops) {
@@ -56,6 +59,7 @@ export function toWireOps(ops: StateOp[]): WireStateOp[] {
 export class StateBatcher {
   private readonly pending = new Map<string, Pending>();
   private inFlight = false;
+  private inFlightOps: StateOp[] = [];
   private flushWhenSettled = false;
   private trailingTimer: unknown = null;
   private maxTimer: unknown = null;
@@ -89,6 +93,21 @@ export class StateBatcher {
     this.schedule();
   }
 
+  /**
+   * The value the user last set for this field that the server may not have
+   * yet (queued, or sent and not settled). Used to overlay fetched data so a
+   * response that raced a write never brings back the old flag.
+   */
+  latestValue(id: string, field: StateField): boolean | undefined {
+    const queued = this.pending.get(keyOf(id, field));
+    if (queued) return queued.op.value;
+    for (let i = this.inFlightOps.length - 1; i >= 0; i--) {
+      const op = this.inFlightOps[i];
+      if (op.id === id && op.field === field) return op.value;
+    }
+    return undefined;
+  }
+
   /** A write for this field is queued (not yet sent). */
   hasPending(id: string, field: StateField): boolean {
     return this.pending.has(keyOf(id, field));
@@ -115,9 +134,19 @@ export class StateBatcher {
       this.flushWhenSettled = true;
       return;
     }
-    const ops = [...this.pending.values()].map((p) => p.op);
-    this.pending.clear();
+    // At most MAX_ARTICLES_PER_CALL articles per call; the rest is sent right
+    // after this call settles (the server would reject an oversized call whole).
+    const ops: StateOp[] = [];
+    const ids = new Set<string>();
+    for (const [key, p] of this.pending) {
+      if (!ids.has(p.op.id) && ids.size >= MAX_ARTICLES_PER_CALL) continue;
+      ids.add(p.op.id);
+      ops.push(p.op);
+      this.pending.delete(key);
+    }
+    if (this.pending.size > 0) this.flushWhenSettled = true;
     this.inFlight = true;
+    this.inFlightOps = ops;
     let settled: SettledFlush;
     void this.options
       .send(toWireOps(ops))
@@ -132,6 +161,7 @@ export class StateBatcher {
       )
       .then(() => {
         this.inFlight = false;
+        this.inFlightOps = [];
         try {
           this.options.onSettled?.(settled);
         } finally {

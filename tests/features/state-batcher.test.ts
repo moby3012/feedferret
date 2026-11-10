@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { StateBatcher, toWireOps, type SettledFlush, type WireStateOp } from "../../features/articles/state-batcher";
+import { MAX_ARTICLES_PER_CALL, StateBatcher, toWireOps, type SettledFlush, type WireStateOp } from "../../features/articles/state-batcher";
 
 function deferred<T>() {
   let resolve!: (v: T) => void;
@@ -128,5 +128,48 @@ describe("toWireOps", () => {
         { id: "a", field: "isReadLater", value: false },
       ]),
     ).toEqual([{ id: "a", isRead: true, isReadLater: false }, { id: "b", isRead: false }]);
+  });
+});
+
+describe("StateBatcher limits and overlay", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const setup = (send: (ops: WireStateOp[]) => Promise<{ failed: string[] }>) => {
+    const calls: WireStateOp[][] = [];
+    const batcher = new StateBatcher({ send: (ops) => { calls.push(ops); return send(ops); } });
+    return { batcher, calls };
+  };
+
+  it("never sends more than the server cap per call; the rest follows right after", async () => {
+    const d = deferred<{ failed: string[] }>();
+    let first = true;
+    const { batcher, calls } = setup(() => (first ? ((first = false), d.promise) : Promise.resolve({ failed: [] })));
+    for (let i = 0; i < MAX_ARTICLES_PER_CALL + 50; i++) {
+      batcher.enqueue({ id: `a${i}`, field: "isRead", value: true }, false);
+      batcher.enqueue({ id: `a${i}`, field: "isStarred", value: true }, false);
+    }
+    batcher.flush();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toHaveLength(MAX_ARTICLES_PER_CALL);
+    expect(calls[0].every((op: WireStateOp) => op.isRead === true && op.isStarred === true)).toBe(true);
+    d.resolve({ failed: [] });
+    await vi.runAllTimersAsync();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toHaveLength(50);
+    await batcher.whenIdle();
+  });
+
+  it("reports the latest queued or in-flight value per field", async () => {
+    const d = deferred<{ failed: string[] }>();
+    const { batcher } = setup(() => d.promise);
+    expect(batcher.latestValue("a", "isStarred")).toBeUndefined();
+    batcher.enqueue({ id: "a", field: "isStarred", value: true }, false);
+    expect(batcher.latestValue("a", "isStarred")).toBe(true);
+    batcher.flush(); // now in flight
+    expect(batcher.latestValue("a", "isStarred")).toBe(true);
+    d.resolve({ failed: [] });
+    await vi.runAllTimersAsync();
+    expect(batcher.latestValue("a", "isStarred")).toBeUndefined();
   });
 });

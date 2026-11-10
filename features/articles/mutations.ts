@@ -111,7 +111,13 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
   }, [qc, batcher]);
 
   const { mutate: undoMutate } = useMutation({
-    mutationFn: (undoToken: string) => markArticlesAsUnread(undoToken),
+    mutationFn: async (undoToken: string) => {
+      // Queued single toggles must reach the server first, or they would land
+      // after the bulk write and leave server and cache disagreeing.
+      batcher.flush();
+      await batcher.whenIdle();
+      return markArticlesAsUnread(undoToken);
+    },
     onSuccess: (result) => {
       applyBulkRead(qc, result.ids, false);
       invalidateCounts(qc);
@@ -124,7 +130,11 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
 
   const { mutate: markAllMutate } = useMutation({
     mutationKey: MARK_VIEW_READ_KEY,
-    mutationFn: (scope: MarkViewScope) => markAllAsRead(scope),
+    mutationFn: async (scope: MarkViewScope) => {
+      batcher.flush();
+      await batcher.whenIdle();
+      return markAllAsRead(scope);
+    },
     onSuccess: (result) => {
       const ids = result?.ids ?? [];
       if (ids.length === 0) return;

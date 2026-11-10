@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { fetchArticleDetail, fetchArticlePage, shouldRetry } from "./api";
-import { findCachedArticle, pruneReadRows } from "./cache";
+import { findCachedArticle, overlayPendingState, pruneReadRows } from "./cache";
 import { qk } from "./keys";
 import type { ListKey } from "./scope";
 import type { ArticleDetail, ArticleListItem } from "./types";
@@ -54,7 +54,10 @@ export function useArticleList(key: ListKey | null, o: { active: boolean }): Art
 
   const query = useInfiniteQuery({
     queryKey,
-    queryFn: ({ pageParam, signal }) => fetchArticlePage(key!, pageParam, signal),
+    queryFn: async ({ pageParam, signal }) => {
+      const page = await fetchArticlePage(key!, pageParam, signal);
+      return { ...page, items: page.items.map((item) => overlayPendingState(qc, item)) };
+    },
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
     enabled: !!key && o.active,
@@ -121,7 +124,7 @@ export function useArticle(id: string | null): ArticleResult {
   const qc = useQueryClient();
   const detailQuery = useQuery({
     queryKey: id ? qk.article(id) : ["article", "__none__"],
-    queryFn: ({ signal }) => fetchArticleDetail(id!, signal),
+    queryFn: async ({ signal }) => overlayPendingState(qc, await fetchArticleDetail(id!, signal)),
     enabled: !!id,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,

@@ -4,6 +4,7 @@ import type { ArticleDetail, ArticleListItem, ArticlePage } from "./types";
 import type { ListKey } from "./scope";
 import type { Counts } from "@/features/bootstrap/types";
 import type { StateField, StateOp } from "./state-batcher";
+import { getStateBatcher } from "./batcher-registry";
 
 // Cache helpers over the list (`["list", …]`, infinite `ArticlePage`s), detail
 // (`["article", id]`) and counts (`["counts"]`) entries. The TanStack cache is
@@ -234,7 +235,11 @@ export function applyArticlePatch(qc: QueryClient, id: string, patch: StatePatch
   if (Object.keys(changed).length === 0) return null;
 
   void qc.cancelQueries({ queryKey: qk.counts });
-  void qc.cancelQueries({ queryKey: qk.article(id) });
+  // Cancelling a detail query whose first load is still running would revert
+  // it to "pending" with nothing fetching (reader stuck on its skeleton). Only
+  // cancel refetches of a body we already have; a fetch that lands later is
+  // overlaid with queued writes (`overlayPendingState`).
+  if (qc.getQueryState(qk.article(id))?.data !== undefined) void qc.cancelQueries({ queryKey: qk.article(id) });
 
   patchCachedArticle(qc, id, changed);
   const hidden = isHiddenFromAll(qc, before.feedId);
@@ -271,4 +276,20 @@ export function rollbackFailedOps(qc: QueryClient, failed: StateOp[], hasPending
     reverted.push(op);
   }
   return reverted;
+}
+
+/**
+ * Overlays writes the server may not have applied yet onto freshly fetched
+ * rows (detail and list pages), so a response that raced a toggle never shows
+ * — or becomes the base for — the old flag.
+ */
+export function overlayPendingState<T extends Partial<Record<StateField, boolean>> & { id: string }>(qc: QueryClient, row: T): T {
+  const batcher = getStateBatcher(qc);
+  if (!batcher) return row;
+  let out = row;
+  for (const field of ["isRead", "isStarred", "isReadLater"] as const) {
+    const v = batcher.latestValue(row.id, field);
+    if (v !== undefined && out[field] !== v) out = { ...out, [field]: v };
+  }
+  return out;
 }
