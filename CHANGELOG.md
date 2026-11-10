@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — AI enrichment in the tagging call (sponsored / clickbait / entities)
+
+- The existing AI auto-tag call now also returns `entities`, `sponsored`, `clickbait` and a neutral `cleanTitle` — **no extra AI call per article**, same per-sync cap, +80 output tokens. Weak models that still answer with the old bare tag array keep working (flags stay "unknown").
+- Deterministic no-AI heuristics at sync mark obvious ads (`Anzeige`, `Werbung`, `Sponsored`, advertorial, `rel="sponsored"`, `utm_medium=affiliate|sponsored|paid`; ambiguous words only as `[Anzeige]`, `Anzeige | …` or a trailing `– Anzeige`, so "Anzeige: Polizei ermittelt" and "Werbung – Neue Regeln für Influencer" are not flagged; a body link counts only in the first ~600 chars or when ≥ 2 sponsored links exist) and obvious clickbait phrases. Heuristics only ever set `true`; the AI can add but never weaken a heuristic sponsored flag.
+- New search operators (and therefore auto-read rules): `is:sponsored`, `is:clickbait`, `entity:Name` / `entity:"Two Words"`; `-is:sponsored` / `-entity:X` keep unenriched articles. `key:"two words"` now stays one token for every field operator.
+- New AI setting "Sachliche Titel bei Clickbait" (default off); `/api/app/articles` rows gain optional `isSponsored`, `isClickbait`, `displayTitle`, the detail `entities`, `originalTitle` (existing fields unchanged).
+- Background enrichment keeps `Article.updatedAt` (GReader `ot`/`nt`) unchanged for flags/entities/clean title (guarded write like the meta backfill) and bumps it only when it creates NEW label assignments, so incremental GReader clients receive the new tags. A suggested clean title must be ≥ 50 % grounded in the real title/lede, ≤ 1.5× its length and contain no new URL/e-mail/number. Rules using `is:sponsored`, `is:clickbait` or `entity:` cannot use the `delete` action (rejected at save time, skipped at run time). `entities` gets a pg_trgm index on Postgres. Model output is zod-validated, length-capped and sanitized; article text reaches the model escaped inside `<article>` as untrusted data.
+- Schema (additive, nullable): `Article.entities/isSponsored/isClickbait/cleanTitle/enrichSource`, `User.aiCleanTitles`.
+
 ### Added — story clustering engine (no-AI tier, server side)
 
 - Articles of different feeds that cover the same story are grouped per user over a 48 h window (`lib/story-clustering/`, see `docs/story-clustering.md`): normalization (de/en), entity/link heuristics, idf-weighted scoring, drift guard, incremental background job (≤ 400 ms per tick, idempotent) with first-run backfill. Off with `DISABLE_STORY_CLUSTERING=true` or per user (`storyClustering`).

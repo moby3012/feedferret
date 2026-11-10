@@ -17,6 +17,8 @@ import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed
 import { importOpmlXml, OpmlImportInputError } from "@/lib/import/opml-import";
 import { OpmlParseError } from "@/lib/opml";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactWebhookConfigs } from "@/lib/webhooks";
+import { AI_OPERATOR_DELETE_ERROR, ruleHasAiDeleteConflict } from "@/lib/rule-ai-operators";
+import { parseRuleActions } from "@/lib/auto-read-rules";
 
 function rpc(id: unknown, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result });
@@ -465,6 +467,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       const query = typeof args.query === "string" ? args.query.trim() : "";
       if (!name || !query) throw new Error("name and query are required");
       const actions = Array.isArray(args.actions) ? args.actions.filter((a: unknown) => typeof a === "string") : null;
+      if (ruleHasAiDeleteConflict(query, actions ?? ["mark_read"])) throw new Error(AI_OPERATOR_DELETE_ERROR);
       const { configs, valid } = sanitizeWebhookConfigs(args.webhookConfigs);
       if (!valid) throw new Error("Each webhook needs a valid http(s) URL");
       if (actions && !actionsReferenceConfigs(actions, configs.length)) throw new Error("A webhook_call action references a missing webhook config");
@@ -495,6 +498,13 @@ async function callTool(user: ApiUser, name: string, args: any) {
       if (typeof args.order === "number") data.order = args.order;
       const nextActions = Array.isArray(args.actions) ? args.actions.filter((a: unknown) => typeof a === "string") : null;
       if (nextActions) data.actions = JSON.stringify(nextActions);
+      if (data.query !== undefined || nextActions) {
+        const current = await db.autoReadRule.findFirst({ where: { id: String(args.ruleId), userId: user.id } });
+        if (!current) throw new Error("Rule not found");
+        if (ruleHasAiDeleteConflict(data.query ?? current.query, nextActions ?? parseRuleActions(current))) {
+          throw new Error(AI_OPERATOR_DELETE_ERROR);
+        }
+      }
       if (args.webhookConfigs !== undefined) {
         const { configs, valid } = sanitizeWebhookConfigs(args.webhookConfigs);
         if (!valid) throw new Error("Each webhook needs a valid http(s) URL");

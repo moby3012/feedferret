@@ -862,6 +862,8 @@ export function useUpdateAiSettings() {
         mutationFn: (data: Parameters<typeof updateAiSettings>[0]) => updateAiSettings(data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["ai-settings"] })
+            // "Sachliche Titel bei Clickbait" changes list rows (displayTitle).
+            queryClient.invalidateQueries({ queryKey: ["list"] })
             toast.success("AI settings saved")
         },
         onError: (err) => {

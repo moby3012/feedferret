@@ -87,10 +87,13 @@ async function buildFreeTextCondition(userId: string, term: string): Promise<obj
 
 export function tokenizeSearch(query: string) {
     const tokens: string[] = [];
-    const re = /"([^"]+)"|'([^']+)'|(\S+)/g;
+    // `key:"two words"` / `-key:'two words'` stay ONE token (value unquoted), so
+    // `entity:"Angela Merkel"` and `author:"Jane Doe"` work like their one-word forms.
+    const re = /([-!]?[A-Za-z]+:)(?:"([^"]+)"|'([^']+)')|"([^"]+)"|'([^']+)'|(\S+)/g;
     let match: RegExpExecArray | null;
     while ((match = re.exec(query)) !== null) {
-        tokens.push(match[1] || match[2] || match[3]);
+        if (match[1]) tokens.push(match[1] + (match[2] || match[3]));
+        else tokens.push(match[4] || match[5] || match[6]);
     }
     return tokens;
 }
@@ -126,6 +129,9 @@ async function processGroupTokens(userId: string, tokens: string[]): Promise<obj
         if (!value) continue;
 
         let condition: any | null = null;
+        // Nullable tri-state flags: `NOT (col = true)` is NULL (= excluded) for
+        // unknown rows in SQL, so their negation is spelled out explicitly.
+        let negatedCondition: any | null = null;
 
         if (token.startsWith("#")) {
             condition = {
@@ -194,6 +200,25 @@ async function processGroupTokens(userId: string, tokens: string[]): Promise<obj
                 if (["starred", "favorite", "favourite"].includes(normalized)) condition = { isStarred: true };
                 if (["unstarred"].includes(normalized)) condition = { isStarred: false };
                 if (["readlater", "later", "saved", "toread"].includes(normalized)) condition = { isReadLater: true };
+                // K3 enrichment flags (nullable: null = unknown, so `-is:sponsored` keeps unknown rows).
+                if (["sponsored", "ad", "ads", "anzeige", "werbung"].includes(normalized)) {
+                    condition = { isSponsored: true };
+                    negatedCondition = { OR: [{ isSponsored: null }, { isSponsored: false }] };
+                }
+                if (["clickbait"].includes(normalized)) {
+                    condition = { isClickbait: true };
+                    negatedCondition = { OR: [{ isClickbait: null }, { isClickbait: false }] };
+                }
+            } else if (["entity", "entities", "ent"].includes(key)) {
+                // `entities` is a JSON string[] column: match the quoted element so
+                // `entity:EZB` does not hit "EZB-Chefin". Quotes/backslashes cannot
+                // occur in stored entities (sanitized at write time).
+                const entity = value.replace(/["\\]/g, "").trim();
+                if (entity) {
+                    condition = { entities: ci(`"${entity}"`) };
+                    // Articles without enrichment have entities = NULL and must survive `-entity:X`.
+                    negatedCondition = { OR: [{ entities: null }, { NOT: condition }] };
+                }
             } else if (["after", "since"].includes(key)) {
                 const date = parseDateToken(value);
                 if (date) condition = { publishedAt: { gte: date } };
@@ -211,7 +236,7 @@ async function processGroupTokens(userId: string, tokens: string[]): Promise<obj
             continue;
         }
 
-        and.push(negated ? { NOT: condition } : condition);
+        and.push(negated ? (negatedCondition ?? { NOT: condition }) : condition);
     }
 
     const freeTextConditions = await Promise.all(

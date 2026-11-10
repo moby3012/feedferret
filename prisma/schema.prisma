@@ -105,6 +105,7 @@ model User {
   aiAutoSummarize         Boolean   @default(false)
   aiSummaryLanguage       String    @default("same")   // "same" | BCP-47 tag e.g. "de"
   aiAutoTag               Boolean   @default(false)     // F8: auto-tag new articles via Label/ArticleLabel on sync
+  aiCleanTitles           Boolean   @default(false)     // K3: show the neutral AI title (Article.cleanTitle) for clickbait headlines in the app list
   // BYOK hosted-fetch connector (M7-T3): per-user, opt-in, own API key.
   // The last-resort tier for pages that beat even the browser-render sidecar
   // (M7-T2) — an active anti-bot challenge. Unlike every earlier tier, the
@@ -396,6 +397,13 @@ model Article {
   aiSummary      String?
   aiSummarizedAt DateTime?
   aiTaggedAt     DateTime?                              // F8: set once auto-tagging has run, whether or not it produced any tags — avoids re-asking every sync
+  // K3 enrichment (lib/enrichment-heuristics.ts at sync, lib/article-enrichment.ts from the tagging call).
+  // All nullable/additive; written WITHOUT touching updatedAt (GReader ot/nt clock).
+  entities       String?                                // JSON string[] (≤8, each ≤48 chars, original case)
+  isSponsored    Boolean?                               // null = unknown; heuristic only ever sets true, AI sets true/false
+  isClickbait    Boolean?
+  cleanTitle     String?                                // ≤140 chars, neutral title; only stored when isClickbait = true
+  enrichSource   String?                                // "heuristic" | "ai"
   digestedAt     DateTime?                              // set when article is sent in a digest
   // List metadata (lib/article-kind.ts), computed at sync. Nullable: rows from
   // before these columns existed are filled by lib/article-meta-backfill.ts and
@@ -424,6 +432,7 @@ model Article {
   @@index([feedId, publishedAt(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
   @@index([spoilerRuleId])
   @@index([userId, digestedAt])
+  @@index([userId, isSponsored])
   // Perf: serves the default list ORDER BY publishedAt DESC, createdAt DESC, id DESC
   @@index([userId, publishedAt(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
   // Perf: serves per-feed unread counts (groupBy feedId WHERE userId, isRead=false, isSpoiler=false)

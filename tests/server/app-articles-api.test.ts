@@ -200,7 +200,7 @@ describe("list", () => {
       expect(item).not.toHaveProperty("content");
       expect(item).not.toHaveProperty("html");
       expect(Object.keys(item).sort()).toEqual(
-        ["author", "canonicalFeedName", "createdAt", "duplicateCount", "excerpt", "feedId", "id", "imageUrl", "isDuplicate", "isRead", "isReadLater", "isSpoiler", "isStarred", "kind", "labelIds", "link", "media", "publishedAt", "readMinutes", "title"].sort(),
+        ["author", "canonicalFeedName", "createdAt", "duplicateCount", "excerpt", "feedId", "id", "imageUrl", "isDuplicate", "isRead", "isReadLater", "isSpoiler", "isStarred", "kind", "labelIds", "link", "media", "publishedAt", "readMinutes", "title", /* K3, additive */ "displayTitle", "isClickbait", "isSponsored"].sort(),
       );
     }
     expect(JSON.stringify(body)).not.toContain('"content"');

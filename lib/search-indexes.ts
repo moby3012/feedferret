@@ -22,7 +22,12 @@ import { db, getDatabaseProvider } from "./db";
 // degrade to "search still works, just unaccelerated," not crash the server
 // or block feed sync.
 
-const ARTICLE_TEXT_COLUMNS = ["title", "content", "excerpt", "author"] as const;
+// `entities` (K3, JSON string[] stored as text) is hit by the `entity:` operator's
+// `contains` (ILIKE '%"X"%'), so it gets a trigram index on Postgres. On SQLite
+// that operator stays a plain LIKE on purpose: article_fts only serves the
+// free-text path (lib/search.ts ftsMatchIds), and entities are short, so adding
+// the column to the FTS table would just bloat the index and force a rebuild.
+const ARTICLE_TEXT_COLUMNS = ["title", "content", "excerpt", "author", "entities"] as const;
 
 export async function ensureSearchIndexes(): Promise<void> {
     try {

@@ -2018,6 +2018,7 @@ function AiSummarySection() {
   const [language, setLanguage] = useState("same");
   const [autoSummarize, setAutoSummarize] = useState(false);
   const [autoTag, setAutoTag] = useState(false);
+  const [cleanTitles, setCleanTitles] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
 
   useEffect(() => {
@@ -2028,6 +2029,7 @@ function AiSummarySection() {
     setLanguage(ai.language ?? "same");
     setAutoSummarize(ai.autoSummarize ?? false);
     setAutoTag(ai.autoTag ?? false);
+    setCleanTitles(ai.cleanTitles ?? false);
   }, [ai]);
 
   const handleSave = () => {
@@ -2040,6 +2042,7 @@ function AiSummarySection() {
       autoSummarize,
       language,
       autoTag,
+      cleanTitles,
     });
   };
 
@@ -2193,6 +2196,16 @@ function AiSummarySection() {
               checked={autoTag}
               onCheckedChange={setAutoTag}
             />
+          </div>
+        )}
+
+        {provider !== "none" && (
+          <div className="ui-control-surface flex items-center justify-between rounded-2xl border px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">{t("ai.cleanTitles")}</p>
+              <p className="text-xs text-muted-foreground">{t("ai.cleanTitlesDescription")}</p>
+            </div>
+            <Switch checked={cleanTitles} onCheckedChange={setCleanTitles} />
           </div>
         )}
 

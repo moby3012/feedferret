@@ -304,6 +304,8 @@
     "autoSummarizeDescription": "Automatically summarize new articles (uses API credits)",
     "autoTag": "Auto-tag on sync",
     "autoTagDescription": "Automatically suggest labels for new articles (uses API credits)",
+    "cleanTitles": "Neutral titles for clickbait",
+    "cleanTitlesDescription": "Show the AI-written neutral title in the list instead of a clickbait headline. Needs auto-tag. Search with is:sponsored, is:clickbait or entity:Name (also usable in auto-read rules).",
     "save": "Save",
     "saving": "Saving…",
     "testConnection": "Test connection",
@@ -1028,7 +1030,8 @@
       "migrating": "Migrating…",
       "legacyAlertsFound": "{count, plural, one {# legacy keyword alert found} other {# legacy keyword alerts found}}",
       "alertsAndRulesMerged": "Alerts and rules have been merged. Convert your alerts into rules to manage them here.",
-      "removeSpoilerOnDeleteLabel": "Remove spoiler flag from all flagged articles when this rule is deleted"
+      "removeSpoilerOnDeleteLabel": "Remove spoiler flag from all flagged articles when this rule is deleted",
+      "aiOperatorDeleteBlocked": "Rules that use is:sponsored, is:clickbait or entity: rely on AI detection and can be wrong, so they cannot delete articles. Pick a different action or remove that operator."
     },
     "alerts": {
       "keywordAlerts": "Keyword alerts",

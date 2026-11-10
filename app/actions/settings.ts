@@ -584,6 +584,7 @@ export async function getAiSettings() {
       aiAutoSummarize: true,
       aiSummaryLanguage: true,
       aiAutoTag: true,
+      aiCleanTitles: true,
     },
   });
   return {
@@ -594,6 +595,7 @@ export async function getAiSettings() {
     autoSummarize: user?.aiAutoSummarize ?? false,
     language: user?.aiSummaryLanguage ?? "same",
     autoTag: user?.aiAutoTag ?? false,
+    cleanTitles: user?.aiCleanTitles ?? false,
   };
 }
 
@@ -606,6 +608,7 @@ export async function updateAiSettings(data: {
   autoSummarize?: boolean;
   language?: string;
   autoTag?: boolean;
+  cleanTitles?: boolean;
 }) {
   const session = await requireUser();
   const updateData: Record<string, unknown> = {};
@@ -620,6 +623,7 @@ export async function updateAiSettings(data: {
   if ("autoSummarize" in data) updateData.aiAutoSummarize = data.autoSummarize;
   if ("language" in data) updateData.aiSummaryLanguage = data.language;
   if ("autoTag" in data) updateData.aiAutoTag = data.autoTag;
+  if ("cleanTitles" in data) updateData.aiCleanTitles = data.cleanTitles === true;
   await db.user.update({ where: { id: session.user.id }, data: updateData });
   revalidatePath("/settings");
 }

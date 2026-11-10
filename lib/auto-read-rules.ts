@@ -9,6 +9,7 @@ import {
   sendNtfyNotification,
 } from "./notification-channels";
 import { logger } from "./logger";
+import { ruleHasAiDeleteConflict } from "./rule-ai-operators";
 
 export type RuleAction = string;
 
@@ -321,6 +322,10 @@ export async function applyAutoReadRules(
     userId: string,
     options: { onlyArticleIds?: string[] } = {},
 ): Promise<{ applied: number }> {
+    // An explicitly empty scope means "no articles": never fall through to an
+    // unscoped run over the user's whole library.
+    if (options.onlyArticleIds && options.onlyArticleIds.length === 0) return { applied: 0 };
+
     const rules = await db.autoReadRule.findMany({
         where: { userId, enabled: true, trigger: "article" },
         orderBy: { order: "asc" },
@@ -331,11 +336,18 @@ export async function applyAutoReadRules(
     let applied = 0;
 
     for (const rule of rules) {
+        // Rules saved before the save-time check (or written straight to the DB)
+        // may still combine AI-derived operators with `delete`: never run those.
+        if (ruleHasAiDeleteConflict(rule.query, parseRuleActions(rule))) {
+            logger.warn(`[auto-read-rules] rule "${rule.name}" skipped: AI-derived operators cannot be combined with delete`);
+            continue;
+        }
+
         const searchWhere = await buildAdvancedSearchWhere(userId, rule.query);
         if (!Object.keys(searchWhere).length) continue;
 
         const baseWhere: any = { userId, ...scopeWhere(rule.scope), ...searchWhere };
-        if (options.onlyArticleIds && options.onlyArticleIds.length > 0) {
+        if (options.onlyArticleIds) {
             baseWhere.id = { in: options.onlyArticleIds };
         }
 
