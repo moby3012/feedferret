@@ -1,4 +1,5 @@
-import type { ArticleDetail, ArticlePage, ClusterDetail } from "./types";
+import type { ArticleDetail, ArticlePage, ClusterDetail, HeadProbe } from "./types";
+import { headUrl } from "./new-items";
 import type { ListKey } from "./scope";
 
 export class ApiError extends Error {
@@ -59,4 +60,9 @@ export function fetchViewCount(key: ListKey, signal?: AbortSignal): Promise<{ un
 /** `GET /api/app/clusters/:id` — every visible source of one story (slim rows, oldest first). */
 export function fetchCluster(id: string, signal?: AbortSignal): Promise<ClusterDetail> {
   return getJson<ClusterDetail>(`/api/app/clusters/${encodeURIComponent(id)}`, signal);
+}
+
+/** `GET /api/app/articles/head` — rows of the list created after `since` (the "↑ N neu" probe). */
+export function fetchHead(key: ListKey, since: number, signal?: AbortSignal): Promise<HeadProbe> {
+  return getJson<HeadProbe>(headUrl(key, since), signal);
 }

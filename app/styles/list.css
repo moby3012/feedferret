@@ -252,6 +252,61 @@
   }
 }
 
+/* ---------------------------------------------------------- "↑ N neu" pill
+ * Spec §4.8: sticky zero-height host as the scroller's first child — showing
+ * or hiding the pill never moves a row. Enter / exit = opacity + 8 px Y.
+ * ------------------------------------------------------------------------- */
+.ff-new-pill-host {
+  position: sticky;
+  top: 8px;
+  z-index: var(--z-sticky);
+  height: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.ff-new-pill {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  border: 1px solid var(--divider);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-bar);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard),
+    visibility 0s linear 0s;
+}
+.ff-new-pill[data-state="hidden"] {
+  opacity: 0;
+  transform: translateY(-8px);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard),
+    visibility 0s linear var(--dur-fast);
+}
+.ff-new-pill:disabled {
+  opacity: 0.7;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-new-pill,
+  .ff-new-pill[data-state="hidden"] {
+    transform: none;
+  }
+}
+
 /* -------------------------------------------------------- pull-to-refresh */
 
 .ff-pull-indicator {

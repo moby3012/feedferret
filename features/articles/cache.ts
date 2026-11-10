@@ -162,6 +162,19 @@ export function invalidateArticleQueries(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: qk.articles, refetchType: "none" });
 }
 
+/**
+ * After a feed sync (refresh, single-feed refresh, boot sync): counts
+ * refetch — and with them the "↑ N neu" probe of the bound list — while
+ * every list is only marked stale. The bound list never refetches under the
+ * finger (spec §0.5): its new rows wait behind the pill, or enter right away
+ * when the user is idle at the very top. Other lists refetch on rebind.
+ */
+export function invalidateAfterSync(qc: QueryClient) {
+  markListsStale(qc);
+  invalidateCounts(qc);
+  qc.invalidateQueries({ queryKey: qk.articles, refetchType: "none" });
+}
+
 /** One counts refetch (+ the server-side per-scope counts of saved searches / search). */
 export function invalidateCounts(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: qk.counts });

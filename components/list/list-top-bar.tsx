@@ -1,5 +1,6 @@
 "use client";
 
+import { formatUnreadCount, parseCountDisplay, showsCount } from "@/lib/count-display";
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -70,7 +71,9 @@ export const ListTopBar = memo(function ListTopBar(p: ListTopBarProps) {
   const saved = p.tab === "saved" && !!scope;
   const search = p.tab === "search";
   const isQuery = scope?.kind === "query";
-  const countText = p.unreadCount > 99 ? "99+" : String(p.unreadCount);
+  const countText = formatUnreadCount(p.unreadCount);
+  // "Zähler anzeigen" (spec §4.9.3): a feed's number is per-feed; every other scope is a group.
+  const showCount = p.unreadCount > 0 && showsCount(parseCountDisplay(data.prefs?.countDisplay), scope?.kind === "feed" ? "feed" : "group");
 
   // Bar elevation once the list is scrolled (attribute only: no React render per scroll).
   useEffect(() => {
@@ -121,7 +124,7 @@ export const ListTopBar = memo(function ListTopBar(p: ListTopBarProps) {
   const titleButton = (
     <button type="button" onClick={p.onScrollTop} className="flex min-h-11 min-w-0 max-w-full items-center gap-2 text-start">
       <h2 className="truncate text-title-sm text-foreground">{p.title}</h2>
-      {p.unreadCount > 0 && (
+      {showCount && (
         <span
           className="shrink-0 text-footnote tabular-nums text-muted-foreground"
           data-testid="list-count"

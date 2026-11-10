@@ -11,7 +11,8 @@ import { scrollTabToTop, sourcesAreRail, tabLabelIdOf } from "@/components/shell
 import { toLegacyArticle, type LegacyArticle } from "@/features/articles/legacy-adapter";
 import { useArticleActions, useIsMarkingViewRead } from "@/features/articles/mutations";
 import { prefetchArticle } from "@/features/articles/prefetch";
-import { useArticleList, type ArticleListResult } from "@/features/articles/queries";
+import { useArticleList, useNewItemsProbe, type ArticleListResult, type NewItemsProbe } from "@/features/articles/queries";
+import { probeSince } from "@/features/articles/new-items";
 import { showsBriefing } from "@/features/briefing/api";
 import { useBriefing } from "@/features/briefing/queries";
 import { showApplies, type ListKey } from "@/features/articles/scope";
@@ -89,6 +90,9 @@ function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: bool
   const data = useShellData();
   const listKey = useMemo(() => listKeyOfLoc(loc, data.sortOrder === "oldest" ? "old" : "new"), [loc, data.sortOrder]);
   const list = useArticleList(listKey, { active });
+  // "↑ N neu": rows newer than this snapshot are counted, never written into the bound list.
+  const since = useMemo(() => probeSince(list.snapshotAt, list.items), [list.snapshotAt, list.items]);
+  const newItems = useNewItemsProbe(listKey, since, { active });
   // K2 card: shown on the Neu list (all, unread) from the first row paint on.
   // Its GET starts here, together with the list query, so a fast answer is
   // part of the first paint (the card then opens by itself).
@@ -112,6 +116,8 @@ function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: bool
       isMarkingAllRead={isMarkingAllRead}
       selectedId={selectedId}
       showBriefing={showBriefing}
+      newCount={newItems.count}
+      applyNew={newItems.apply}
     />
   );
 }
@@ -128,6 +134,8 @@ interface ViewProps {
   isMarkingAllRead: boolean;
   selectedId: string | null;
   showBriefing: boolean;
+  newCount: number;
+  applyNew: NewItemsProbe["apply"];
 }
 
 // Frozen while inactive: no re-render for hidden panes (data and cache writes included).
@@ -214,6 +222,8 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
   };
 
   const scrollTop = () => scrollTabToTop(p.tab);
+  // Only the active pane buffers (its pill unmounts while hidden).
+  const newItems = useMemo(() => (active ? { count: p.newCount, apply: p.applyNew } : null), [active, p.newCount, p.applyNew]);
   const title = scope ? scopeTitle(scope, data, t) : tSearchHome("title");
 
   if (p.tab === "search") {
@@ -289,6 +299,8 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
           onReleaseSpoiler={isSpoiler ? (id) => releaseArticleSpoiler.mutate(id) : undefined}
           enablePullToRefresh
           isRefreshing={loading || data.isRefreshing}
+          isSyncing={data.isRefreshing}
+          newItems={newItems}
           onPullToRefresh={shell.refresh}
           endOfList={
             <EndOfListCard

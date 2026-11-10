@@ -39,6 +39,25 @@ export class App {
   listScroller(): Locator {
     return this.page.locator(`${ACTIVE_LIST} [data-testid="list-scroller"]`);
   }
+  /** "↑ N neu" pill of the visible list (rendered hidden at 0). */
+  newItemsPill(): Locator {
+    return this.page.locator(`${ACTIVE_LIST} [data-testid="new-items-pill"]`);
+  }
+  /** Muted unread number in the list top bar (absent when 0 or hidden by "Show counts"). */
+  listCount(): Locator {
+    return this.page.locator(`${ACTIVE_LIST} [data-testid="list-count"]`);
+  }
+  /** First row whose bottom is below the scroller's top edge: its id and viewport y. */
+  async firstVisibleRow(): Promise<{ id: string; top: number }> {
+    return this.listScroller().evaluate((el) => {
+      const edge = el.getBoundingClientRect().top;
+      for (const row of Array.from(el.querySelectorAll<HTMLElement>("[data-article-id]"))) {
+        const r = row.getBoundingClientRect();
+        if (r.bottom > edge + 1) return { id: row.dataset.articleId ?? "", top: r.top };
+      }
+      return { id: "", top: -1 };
+    });
+  }
   /** Native scroller of the reader. */
   readerScroller(): Locator {
     return this.page.locator('[data-pane="reader"] [data-testid="reader-scroller"]');
@@ -131,10 +150,11 @@ export class App {
   /** Sidebar badge number for "All articles" | "Starred" | "Read later" | label | feed. */
   async sidebarCount(name: string): Promise<number> {
     await this.openSidebar();
-    // The badge is omitted when the count is 0.
-    const btn = this.sidebar().getByRole("button", { name: new RegExp(`^${name}\\s*\\d*$`) }).first();
-    const text = (await btn.textContent()) ?? "";
-    const n = Number(text.replace(/\D+/g, "") || 0);
+    // The muted count is omitted at 0 and reads "99+" above 99: the exact number is `data-unread-count`.
+    const btn = this.sidebar().getByRole("button", { name: new RegExp(`^${name}(\\s*(\\d+|99\\+))?$`) }).first();
+    await expect(btn).toBeVisible();
+    const count = btn.locator("[data-unread-count]");
+    const n = (await count.count()) ? Number(await count.first().getAttribute("data-unread-count")) : 0;
     await this.closeSidebar();
     return n;
   }

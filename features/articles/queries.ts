@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type QueryKey } from "@tanstack/react-query";
-import { fetchCluster, shouldRetry } from "./api";
+import { fetchArticlePage, fetchCluster, fetchHead, shouldRetry } from "./api";
 import { findCachedArticle, overlayPendingState, pruneReadRows } from "./cache";
 import { qk } from "./keys";
 import type { ListKey } from "./scope";
-import type { ArticleDetail, ArticleListItem, ArticlePage } from "./types";
+import { appliedListData, EMPTY_HEAD, isCountsFetch, probeApplies } from "./new-items";
+import type { ArticleDetail, ArticleListItem, ArticlePage, HeadProbe } from "./types";
 import { fetchDetailOrStored, fetchPageOrStored, recordOpened } from "@/features/offline/offline";
+import { useOnline } from "@/features/bootstrap/online";
 
 const DISABLED_KEY = ["list", "__disabled__"] as const;
 
@@ -113,6 +115,64 @@ export function useArticleList(key: ListKey | null, o: { active: boolean }): Art
     snapshotAt: data?.pages[0]?.snapshotAt ?? null,
     retry,
   };
+}
+
+export interface NewItemsProbe {
+  /** Rows of the bound list created after its snapshot (capped at 100). */
+  count: number;
+  /**
+   * Inserts them: page 1 is fetched again and replaces the snapshot (read rows
+   * of an unread list drop out, later pages page in again). The caller scrolls.
+   */
+  apply(): Promise<void>;
+}
+
+/**
+ * "↑ N neu" probe of the bound list (spec §2.3 `head`, §4.8). Piggybacks on
+ * the counts poll instead of a timer of its own: one `GET …/head` follows
+ * every counts response (120 s poll while visible, focus, reconnect, after a
+ * sync), only for the active pane, only online. No request on bind: a fresh
+ * snapshot has nothing newer yet. Hidden tab → counts do not poll → neither
+ * does the probe; offline → paused.
+ */
+export function useNewItemsProbe(key: ListKey | null, since: number | null, o: { active: boolean }): NewItemsProbe {
+  const qc = useQueryClient();
+  const online = useOnline();
+  const probeKey = probeApplies(key) && since != null ? key : null;
+  const enabled = !!probeKey && o.active && online;
+  const query = useQuery<HeadProbe>({
+    queryKey: probeKey ? [...qk.head(probeKey), since] : ["head", "__none__"],
+    queryFn: ({ signal }) => fetchHead(probeKey!, since!, signal),
+    enabled,
+    // Seeded "nothing new" for a fresh snapshot; only the counts-driven refetch below asks the server.
+    initialData: EMPTY_HEAD,
+    staleTime: Infinity,
+    gcTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  });
+
+  const live = useRef({ enabled, refetch: query.refetch });
+  live.current = { enabled, refetch: query.refetch };
+  useEffect(
+    () =>
+      qc.getQueryCache().subscribe((event) => {
+        if (live.current.enabled && isCountsFetch(event)) void live.current.refetch();
+      }),
+    [qc],
+  );
+
+  const apply = useCallback(async () => {
+    if (!key) return;
+    const page = await fetchArticlePage(key, null);
+    const items = page.items.map((item) => overlayPendingState(qc, item));
+    await qc.cancelQueries({ queryKey: qk.list(key), exact: true });
+    qc.setQueryData(qk.list(key), appliedListData({ ...page, items }));
+  }, [key, qc]);
+
+  return { count: enabled ? query.data.count : 0, apply };
 }
 
 export interface ArticleResult {

@@ -22,6 +22,7 @@ import { ArticleRow, type Density, type RowCluster, type RowHandlers, type RowSw
 import { ArticleListSkeleton } from "./article-skeleton";
 import { ClusterMembers, groupStories, type DisplayRow } from "./story-cluster";
 import { planMarkUpToHere } from "./mark-up-to-here";
+import { NewItemsPill, type NewItemsBinding } from "./new-items-pill";
 
 /**
  * The bound list for "Alles bis hier": canonical key + sort, and the server
@@ -92,6 +93,10 @@ export interface ArticleListViewProps {
    * collapsed card are skipped; an expanded card's loaded members follow it.
    */
   onNavOrderChange?: (articles: LegacyArticle[]) => void;
+  /** "↑ N neu" of the bound (active) list: buffered new rows behind a pill. */
+  newItems?: NewItemsBinding | null;
+  /** A feed sync (pull-to-refresh, "Aktualisieren") is running — not the list's own loading. */
+  isSyncing?: boolean;
 }
 
 const MENU_OVERLAY = "article-menu";
@@ -413,6 +418,7 @@ export function ArticleListView(props: ArticleListViewProps) {
       // scroll-padding keeps focus / keyboard paging from parking a row under it.
       className="ff-list-scroller relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain scroll-pb-[calc(5rem_+_var(--safe-b))] wide:scroll-pb-0"
     >
+      {props.newItems && <NewItemsPill scrollRoot={scrollRoot} binding={props.newItems} refreshing={props.isSyncing ?? false} />}
       {enablePullToRefresh && (
         <div className="ff-pull-indicator" aria-hidden>
           <div className="flex items-center gap-2 rounded-full border border-divider bg-surface-raised px-3 py-1.5 text-footnote text-muted-foreground shadow-(--shadow-bar)">

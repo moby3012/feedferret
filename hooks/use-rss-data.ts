@@ -9,7 +9,7 @@ import { getExportSettings, updateExportSettings, testWallabagExportConnection, 
 import { updateUiLanguage } from "@/app/actions/locale"
 import { updateDisplayTimezone } from "@/app/actions/timezone"
 import { toast } from "sonner"
-import { invalidateArticleQueries, invalidateCounts, markListsStale, removeCachedArticle, removeLabelFromCachedArticles, restoreArticleCaches, snapshotArticleCaches } from "@/features/articles/cache"
+import { invalidateAfterSync, invalidateArticleQueries, invalidateCounts, markListsStale, removeCachedArticle, removeLabelFromCachedArticles, restoreArticleCaches, snapshotArticleCaches } from "@/features/articles/cache"
 import { qk } from "@/features/articles/keys"
 import type { Counts } from "@/features/bootstrap/types"
 import { useCountsQuery } from "@/features/bootstrap/queries"
@@ -99,7 +99,8 @@ export function useRefresh() {
         mutationFn: () => refreshAllFeeds(),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
-            invalidateArticleQueries(queryClient)
+            // New rows are buffered behind "↑ N neu" (never inserted under the finger).
+            invalidateAfterSync(queryClient)
         },
     })
 }
@@ -110,7 +111,7 @@ export function useRefreshFeed() {
         mutationFn: (feedId: string) => refreshFeed(feedId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
-            invalidateArticleQueries(queryClient)
+            invalidateAfterSync(queryClient)
             queryClient.invalidateQueries({ queryKey: ["feed-health"] })
             toast.success("Feed refreshed")
         },

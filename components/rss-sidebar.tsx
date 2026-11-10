@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -102,6 +102,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { SpoilerIcon } from "@/components/icons/spoiler-icon";
+import { UnreadCount } from "@/components/ui/unread-count";
+import { showsCount, type CountDisplay } from "@/lib/count-display";
+
+/** Where unread numbers show (`User.countDisplay`); read by the nested rows. */
+const CountDisplayContext = createContext<CountDisplay>("all");
 
 
 interface RssSidebarProps {
@@ -113,6 +118,8 @@ interface RssSidebarProps {
   isCollapsed?: boolean;
   hideEmptyFeeds?: boolean;
   hideEmptyLabels?: boolean;
+  /** Where unread numbers show (spec §4.9.3). */
+  countDisplay?: CountDisplay;
   /** Opens the Add Feed dialog (a shell overlay, see components/add-feed-dialog.tsx). */
   onAddFeed: () => void;
   /** Opens an article in the shell (notification items); falls back to a full navigation. */
@@ -130,6 +137,7 @@ export function RssSidebar({
   isCollapsed = false,
   hideEmptyFeeds = false,
   hideEmptyLabels = false,
+  countDisplay = "all",
   onAddFeed,
   onOpenArticle,
   headerAction,
@@ -319,10 +327,8 @@ export function RssSidebar({
             }}
           >
             <item.icon className={cn("w-5 h-5", isActiveNav ? "text-sidebar-accent-foreground" : "text-sidebar-foreground")} />
-            {item.count !== null && item.count > 0 && (
-              <span className="absolute -top-1 -end-1 w-5 h-5 rounded-full bg-brand/90 text-white text-xs flex items-center justify-center font-semibold shadow-sm">
-                {item.count > 99 ? "99+" : item.count}
-              </span>
+            {item.count !== null && showsCount(countDisplay, item.id === "all" ? "total" : "group") && (
+              <UnreadCount count={item.count} className="absolute -bottom-1 inset-x-0 text-center text-caption" />
             )}
           </Button>
           );
@@ -332,7 +338,7 @@ export function RssSidebar({
   }
 
   return (
-    <>
+    <CountDisplayContext.Provider value={countDisplay}>
     <aside role="navigation" aria-label={t("sidebar.feedNavigation")} className="h-full w-full bg-sidebar/85 backdrop-blur-overlay border-e border-sidebar-border/70 flex flex-col overflow-hidden">
       {/* Header (hidden on the compact Feeds screen, which has its own large title) */}
       <div className="ff-sidebar-header p-5 border-b border-sidebar-border/70">
@@ -360,13 +366,17 @@ export function RssSidebar({
               </h1>
               <p
                 className="text-sm text-muted-foreground"
-                aria-live="polite"
-                aria-label={t("sidebar.unreadAriaLabel", { count: totalUnread })}
+                // No aria-live: the shell's live region announces the count on scope change only (spec §4.9.8).
+                aria-label={showsCount(countDisplay, "total") ? t("sidebar.unreadAriaLabel", { count: totalUnread }) : undefined}
               >
-                <span className={cn("tabular-nums", totalUnread > 0 && "text-brand font-semibold")}>
-                  {totalUnread}
-                </span>{" "}
-                {t("sidebar.unreadSuffix")}
+                {showsCount(countDisplay, "total") && (
+                  <>
+                    <span className="tabular-nums" data-unread-count={totalUnread}>
+                      {totalUnread > 99 ? "99+" : totalUnread}
+                    </span>{" "}
+                    {t("sidebar.unreadSuffix")}
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -406,11 +416,7 @@ export function RssSidebar({
               >
                 <item.icon className="w-5 h-5" />
                 <span className="flex-1 text-start">{item.label}</span>
-                {item.count !== null && item.count > 0 && (
-                  <span className="text-xs tabular-nums text-brand bg-muted px-2 py-0.5 rounded-full font-semibold">
-                    {item.count}
-                  </span>
-                )}
+                {item.count !== null && showsCount(countDisplay, item.id === "all" ? "total" : "group") && <UnreadCount count={item.count} />}
               </button>
             ))}
           </nav>
@@ -474,11 +480,7 @@ export function RssSidebar({
                       <span className="flex-1 truncate text-start">
                         {item.name}
                       </span>
-                      {item._count?.articles > 0 && (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
-                          {item._count.articles}
-                        </span>
-                      )}
+                      {showsCount(countDisplay, "group") && <UnreadCount count={item._count?.articles ?? 0} />}
                     </button>
                   ))}
                 </div>
@@ -793,7 +795,7 @@ export function RssSidebar({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-    </>
+    </CountDisplayContext.Provider>
   );
 }
 
@@ -828,6 +830,7 @@ function SortableCategory({
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const countDisplay = useContext(CountDisplayContext);
   const isActiveCategory = selectedFeed === null && selectedCategory === categoryKey(category.id);
   const categoryUnreadCount = feeds.reduce((sum: number, f: any) => sum + (f.unreadCount || 0), 0);
 
@@ -863,11 +866,7 @@ function SortableCategory({
         >
           <span>{category.name}</span>
         </button>
-        {!expanded && categoryUnreadCount > 0 && (
-          <span className="min-w-5 rounded-full bg-brand px-1.5 py-0.5 text-center text-caption font-bold leading-none text-brand-foreground">
-            {categoryUnreadCount}
-          </span>
-        )}
+        {!expanded && showsCount(countDisplay, "group") && <UnreadCount count={categoryUnreadCount} />}
         <button
           onClick={onToggle}
           className="p-1 rounded hover:bg-muted transition-colors"
@@ -948,6 +947,7 @@ function SortableFeedItem({ feed, renderFeedRow }: any) {
 
 function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
   const t = useTranslations();
+  const countDisplay = useContext(CountDisplayContext);
   return (
     <button
       onClick={onSelect}
@@ -985,17 +985,8 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
           <AlertCircle className={cn("h-3.5 w-3.5 shrink-0 text-destructive", isSelected && "text-primary-foreground/70")} />
         </span>
       )}
-      {!hideUnreadBadge && feed.unreadCount > 0 && (
-        <span
-          className={cn(
-            "shrink-0 text-caption px-1.5 py-0.5 rounded-full font-bold tabular-nums",
-            isSelected
-              ? "bg-primary-foreground/20 text-primary-foreground"
-              : "bg-brand text-brand-foreground",
-          )}
-        >
-          {feed.unreadCount}
-        </span>
+      {!hideUnreadBadge && showsCount(countDisplay, "feed") && (
+        <UnreadCount count={feed.unreadCount} className={cn(isSelected && "text-primary-foreground/80")} />
       )}
     </button>
   );

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAfterSync } from "@/features/articles/cache";
 import { ListPane } from "@/components/list/list-pane";
 import { ReaderPane } from "@/components/reader/reader-pane";
 import { useCounts, useScopeUnread } from "@/features/bootstrap/queries";
@@ -107,6 +109,7 @@ const BOOT_SYNC_MIN_INTERVAL_MS = 5 * 60_000;
 /** Lazy sync on load (at most every 5 min per user) + app badge. */
 function useBackgroundWork(userId: string) {
   const t = useTranslations("sidebar");
+  const qc = useQueryClient();
   const counts = useCounts(true);
   const unreadBadge = useMemo(() => Object.values(counts.byFeed).reduce((sum, n) => sum + n, 0), [counts.byFeed]);
   useAppBadge(unreadBadge, true);
@@ -121,14 +124,17 @@ function useBackgroundWork(userId: string) {
       .then(async (res) => {
         if (!res.ok) throw new Error(`Sync request failed (${res.status})`);
         // Stamped only for a sync that ran for this user (not `already_syncing`).
-        recordSyncResult(browserStorage(), userId, await res.json().catch(() => null));
+        const body = await res.json().catch(() => null);
+        recordSyncResult(browserStorage(), userId, body);
+        // Spec §2.5.4: feeds were synced → counts refetch, and the "↑ N neu" probe with them.
+        if (typeof body?.synced === "number" && body.synced > 0) invalidateAfterSync(qc);
       })
       .catch(() => {
         if (toastShown.current) return;
         toastShown.current = true;
         toast.error(t("syncFailedToast"));
       });
-  }, [t, userId]);
+  }, [qc, t, userId]);
 }
 
 /** Announces the unread count of the bound scope (spec §4.9.8: on scope change, not per mark-read). */
