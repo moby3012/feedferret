@@ -15,10 +15,9 @@ import {
   authenticateGReaderRequest,
   buildCursorWhere,
   buildStreamWhere,
-  countGReaderFeedsAndTags,
+  getGReaderUnreadCounts,
   isKnownGReaderStream,
   normalizeGReaderReadStream,
-  countGReaderUnread,
   greaderLimit,
   createContinuationToken,
   createGReaderToken,
@@ -452,11 +451,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
     }
 
     if (path.endsWith("unread-count")) {
-      const [reading, starred, grouped] = await Promise.all([
-        countGReaderUnread(user.id, GREADER_READING_LIST), countGReaderUnread(user.id, GREADER_STARRED),
-        countGReaderFeedsAndTags(user.id),
-      ]);
-      return NextResponse.json({ max: reading.count, unreadcounts: [reading, starred, ...grouped] });
+      return NextResponse.json(await getGReaderUnreadCounts(user.id));
     }
 
     if ((path.includes("stream/items/contents") || path.includes("stream/contents")) && url.searchParams.has("i")) {

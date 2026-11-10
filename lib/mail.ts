@@ -5,6 +5,8 @@ import { decryptIfValue } from "@/lib/crypto";
 import { createEmailTranslator } from "@/lib/email-i18n";
 import { writeSystemLog } from "@/lib/system-log";
 
+const SMTP_TIMEOUT_MS = 30_000;
+
 export type MailProviderId = "smtp" | "resend" | "postmark" | "mailgun" | "sendgrid";
 
 export interface MailProviderOption {
@@ -177,6 +179,10 @@ async function sendWithSmtp({
     host: settings.smtpHost,
     port: settings.smtpPort,
     ...tlsOpts,
+    // Without these nodemailer waits for a silent SMTP server for minutes (its defaults: 2 min / 30 s / 10 min).
+    connectionTimeout: SMTP_TIMEOUT_MS,
+    greetingTimeout: SMTP_TIMEOUT_MS,
+    socketTimeout: SMTP_TIMEOUT_MS,
     auth:
       settings.smtpUser && smtpPassword
         ? { user: settings.smtpUser, pass: smtpPassword }

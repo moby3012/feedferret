@@ -383,13 +383,42 @@ export async function countGReaderUnread(userId: string, streamId: string) {
   return { id: streamId, count, newestItemTimestampUsec: newest ? String(newest.createdAt.getTime() * 1000) : "0" };
 }
 
-/** Constant query count regardless of subscription/tag count. */
-export async function countGReaderFeedsAndTags(userId: string) {
-  const [feeds, categories, labels, unread, newestByFeed, tagged] = await Promise.all([
+/**
+ * Per-feed unread counts. `groupBy feedId WHERE userId, isRead = false` (no `isSpoiler`) cannot use the
+ * covering `(userId, isRead, isSpoiler, feedId)` index and walks every article of the user (46 ms
+ * at 50 k rows on SQLite); with the boolean pinned it is a 0.5 ms index-only range scan, so the two
+ * values are queried separately and added up (same total, spoilers included).
+ */
+async function unreadCountsByFeed(userId: string) {
+  const [plain, spoiler] = await Promise.all([
+    db.article.groupBy({ by: ["feedId"], where: { userId, isRead: false, isSpoiler: false }, _count: true }),
+    db.article.groupBy({ by: ["feedId"], where: { userId, isRead: false, isSpoiler: true }, _count: true }),
+  ]);
+  const counts = new Map<string, number>();
+  for (const row of [...plain, ...spoiler]) counts.set(row.feedId, (counts.get(row.feedId) ?? 0) + row._count);
+  return counts;
+}
+
+const READING_LIST_PRIORITIES = ["category", "main", "important"];
+
+/**
+ * Everything `unread-count` needs, in a constant number of index-friendly queries
+ * (no per-feed queries, no full-table scans):
+ *  - per-feed unread counts: index-only range scans (see unreadCountsByFeed);
+ *  - newest article per feed: `groupBy feedId _max(createdAt)` served by the covering
+ *    `(userId, feedId, createdAt)` index (it was a 57 ms full walk of the user's articles);
+ *  - the reading-list unread total is the sum of the per-feed counts of the feeds in the reading
+ *    list, minus unread rows without an external id (only legacy rows awaiting backfill: GReader
+ *    never lists them). That equals the former joined `count()` (57 ms, planner walked every feed).
+ */
+async function loadGReaderCounts(userId: string) {
+  const [feeds, categories, labels, unreadByFeed, noExtId, anyNoExtId, newestByFeed, tagged] = await Promise.all([
     db.feed.findMany({ where: { userId }, select: { id: true, extId: true, url: true, priority: true, categoryId: true } }),
     db.category.findMany({ where: { userId }, select: { id: true, name: true } }),
     db.label.findMany({ where: { userId }, select: { name: true } }),
-    db.article.groupBy({ by: ["feedId"], where: { userId, isRead: false }, _count: true }),
+    unreadCountsByFeed(userId),
+    db.article.groupBy({ by: ["feedId"], where: { userId, isRead: false, extId: null }, _count: true }),
+    db.article.findFirst({ where: { userId, extId: null }, select: { id: true } }),
     db.article.groupBy({ by: ["feedId"], where: { userId }, _max: { createdAt: true } }),
     // Exclude folder matches from label totals to count the folder/label union once.
     // COUNT and timestamps are normalized below for SQLite and PostgreSQL adapters.
@@ -409,17 +438,22 @@ export async function countGReaderFeedsAndTags(userId: string) {
       GROUP BY l."name"
     `),
   ]);
-  const byFeed = new Map(unread.map((row) => [row.feedId, row]));
+  const withoutExtId = new Map(noExtId.map((row) => [row.feedId, row._count]));
   const newestForFeed = new Map(newestByFeed.map((row) => [row.feedId, row._max.createdAt?.getTime() ?? 0]));
   const categoryNames = new Map(categories.map((row) => [row.id, row.name]));
   const tags = new Map([...categories, ...labels].map((row) => [row.name, { count: 0, newest: 0 }]));
   const result = (id: string, count: number, newest: number) => ({ id, count, newestItemTimestampUsec: String(newest * 1000) });
+  let readingListUnread = 0;
+  let readingListNewest = 0;
   const feedCounts = feeds.flatMap((feed) => {
-    const row = byFeed.get(feed.id);
-    const count = row?._count ?? 0;
+    const count = unreadByFeed.get(feed.id) ?? 0;
     const newest = newestForFeed.get(feed.id) ?? 0;
+    if (feed.extId && READING_LIST_PRIORITIES.includes(feed.priority)) {
+      readingListUnread += count - (withoutExtId.get(feed.id) ?? 0);
+      readingListNewest = Math.max(readingListNewest, newest);
+    }
     const name = feed.categoryId ? categoryNames.get(feed.categoryId) : undefined;
-    if (name && ["category", "main", "important"].includes(feed.priority)) {
+    if (name && READING_LIST_PRIORITIES.includes(feed.priority)) {
       const tag = tags.get(name)!;
       tag.count += count; tag.newest = Math.max(tag.newest, newest);
     }
@@ -430,7 +464,30 @@ export async function countGReaderFeedsAndTags(userId: string) {
     tag.count += Number(row.count);
     tag.newest = Math.max(tag.newest, row.newest === null ? 0 : new Date(row.newest).getTime());
   }
-  return [...feedCounts, ...Array.from(tags, ([name, tag]) => result(`${GREADER_LABEL_PREFIX}${name}`, tag.count, tag.newest))];
+  const entries = [...feedCounts, ...Array.from(tags, ([name, tag]) => result(`${GREADER_LABEL_PREFIX}${name}`, tag.count, tag.newest))];
+  // The reading list's newest timestamp is the newest article of its feeds -- unless legacy rows
+  // without an external id exist (they are not part of the stream): then it is looked up exactly.
+  return { entries, readingListUnread, readingListNewest: anyNoExtId ? null : readingListNewest };
+}
+
+/** Constant query count regardless of subscription/tag count. */
+export async function countGReaderFeedsAndTags(userId: string) {
+  return (await loadGReaderCounts(userId)).entries;
+}
+
+/** Body of `GET unread-count`: `{ max, unreadcounts }` (response shape unchanged). */
+export async function getGReaderUnreadCounts(userId: string) {
+  const [{ entries, readingListUnread, readingListNewest }, starred] = await Promise.all([
+    loadGReaderCounts(userId),
+    countGReaderUnread(userId, GREADER_STARRED),
+  ]);
+  let newest = readingListNewest;
+  if (newest === null) {
+    const row = await db.article.findFirst({ where: buildStreamWhere(userId, GREADER_READING_LIST), orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { createdAt: true } });
+    newest = row ? row.createdAt.getTime() : 0;
+  }
+  const reading = { id: GREADER_READING_LIST, count: readingListUnread, newestItemTimestampUsec: String(newest * 1000) };
+  return { max: reading.count, unreadcounts: [reading, starred, ...entries] };
 }
 
 export async function toGReaderArticle(article: any) {

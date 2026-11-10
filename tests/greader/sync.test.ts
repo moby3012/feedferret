@@ -171,8 +171,51 @@ it("bounds unread-count SQL queries with 300 feeds", async () => {
   await article("scale-article");
   fixture.queries = 0;
   const result = await request("unread-count");
-  expect(fixture.queries).toBe(10);
+  // Constant (independent of the 300 feeds): spoiler/non-spoiler unread groupBys, no-extId groupBy, newest-per-feed groupBy, ...
+  expect(fixture.queries).toBe(11);
   expect(result.unreadcounts.filter((x: { id: string }) => x.id.startsWith("feed/"))).toHaveLength(300);
+});
+
+it("unread-count: totals, per-feed counts and newest timestamps equal a brute-force oracle (spoilers, hidden feeds, legacy rows without extId)", async () => {
+  await db.feed.create({ data: { id: "h", userId: "u", name: "Hidden", url: "https://hidden.org/rss", priority: "hidden" } });
+  await db.feed.create({ data: { id: "m", userId: "u", name: "Main", url: "https://main.org/rss", priority: "main", categoryId: "cat" } });
+  await article("a1", 0); await article("a2", 3, { isRead: true }); await article("a3", 4, { isSpoiler: true });
+  await article("g1", 5, { feedId: "g" }); await article("m1", 6, { feedId: "m", isSpoiler: true }); await article("m2", 7, { feedId: "m", isRead: true });
+  await article("h1", 8, { feedId: "h" }); await article("o1", 9, { userId: "other", feedId: "f" });
+  await article("legacy", 12, { feedId: "g" });
+  // Pre-backfill row: GReader never lists it, so it must not count towards the reading list.
+  await db.$executeRawUnsafe(`UPDATE "Article" SET "extId" = NULL WHERE "id" = 'legacy'`);
+  await db.articleLabel.create({ data: { articleId: "g1", labelId: "tag", userId: "u" } });
+
+  const feeds = await db.feed.findMany({ where: { userId: "u" } });
+  const articles = await db.article.findMany({ where: { userId: "u" } });
+  const inReadingList = (f: { priority: string; extId: string | null }) => !!f.extId && ["category", "main", "important"].includes(f.priority);
+  const expectedMax = articles.filter((a) => !a.isRead && a.extId && inReadingList(feeds.find((f) => f.id === a.feedId)!)).length;
+
+  const counts = await request("unread-count");
+  expect(counts.max).toBe(expectedMax);
+  expect(counts.unreadcounts[0]).toMatchObject({ id: state("reading-list"), count: expectedMax });
+  for (const feed of feeds.filter((f) => f.extId && f.priority !== "hidden")) {
+    const own = articles.filter((a) => a.feedId === feed.id);
+    const entry = counts.unreadcounts.find((x: { id: string }) => x.id === `feed/${fixtureId(feed.id)}`);
+    expect(entry, feed.id).toEqual({
+      id: `feed/${fixtureId(feed.id)}`,
+      count: own.filter((a) => !a.isRead).length,
+      newestItemTimestampUsec: String(Math.max(0, ...own.map((a) => a.createdAt.getTime())) * 1000),
+    });
+  }
+  expect(counts.unreadcounts.some((x: { id: string }) => x.id === `feed/${fixtureId("h")}`)).toBe(false);
+  expect(counts.unreadcounts.map((x: { id: string }) => x.id).slice(0, 2)).toEqual([state("reading-list"), state("starred")]);
+  // Newest reading-list timestamp ignores the legacy row (exact fallback) ...
+  const newestListed = (rows: typeof articles) => String(Math.max(...rows.filter((a) => a.extId && inReadingList(feeds.find((f) => f.id === a.feedId)!)).map((a) => a.createdAt.getTime())) * 1000);
+  expect(counts.unreadcounts[0].newestItemTimestampUsec).toBe(newestListed(articles));
+  expect(Number(counts.unreadcounts[0].newestItemTimestampUsec)).toBeLessThan(date(epoch + 12).getTime() * 1000);
+  // ... and once the legacy row is gone the derived fast path returns the same shape and numbers.
+  await db.article.delete({ where: { id: "legacy" } });
+  const after = await request("unread-count");
+  const remaining = articles.filter((a) => a.id !== "legacy");
+  expect(after.unreadcounts[0]).toEqual({ id: state("reading-list"), count: expectedMax, newestItemTimestampUsec: newestListed(remaining) });
+  expect(after.max).toBe(expectedMax);
 });
 
 it("ignores unknown read filters and falls back for unknown content streams", async () => {

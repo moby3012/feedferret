@@ -463,6 +463,9 @@ model Article {
   // K1: cluster-keyed lookups without userId (cleanup recount, ON DELETE SET NULL of a cluster)
   @@index([clusterId])
   @@index([userId, clusteredAt, publishedAt])
+  // Perf (GReader unread-count): newest article per feed (`groupBy feedId _max(createdAt)`) as a
+  // covering index-only scan instead of a walk over all of the user's articles. Additive.
+  @@index([userId, feedId, createdAt])
 }
 
 // K1: a group of >= 2 articles (of different feeds) covering the same story. Per user; singletons get no row.

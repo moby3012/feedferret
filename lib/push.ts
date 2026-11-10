@@ -2,6 +2,9 @@ import { db } from "@/lib/db";
 import webpush, { type PushSubscription as WebPushSubscription } from "web-push";
 import { logger } from "@/lib/logger";
 
+/** web-push has no default request timeout: a tarpit endpoint would hang the sender forever. */
+const PUSH_REQUEST_TIMEOUT_MS = 10_000;
+
 export type BrowserPushPayload = {
   title: string;
   body?: string;
@@ -73,7 +76,7 @@ export async function sendPushToUser(userId: string, payload: BrowserPushPayload
 
   for (const subscription of subscriptions) {
     try {
-      await webpush.sendNotification(toWebPushSubscription(subscription), body);
+      await webpush.sendNotification(toWebPushSubscription(subscription), body, { timeout: PUSH_REQUEST_TIMEOUT_MS });
       sent += 1;
       await db.pushSubscription.update({
         where: { id: subscription.id },
