@@ -341,7 +341,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 px-2 text-xs shrink-0"
+                        className="h-6 px-2 text-footnote shrink-0"
                         onClick={() => {
                           setGoogleNewsQuery(newFeedUrl.trim());
                           setMoreSource("news");
@@ -474,7 +474,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
             {moreSources.length > 1 && (
               <div
                 className={cn(
-                  "grid w-full gap-1 rounded-xl bg-muted/60 p-1",
+                  "grid w-full gap-1 rounded-panel bg-muted/60 p-1",
                   // 4 sources → 2×2, so labels never squeeze at phone width.
                   moreSources.length === 3 ? "grid-cols-3" : "grid-cols-2",
                 )}
