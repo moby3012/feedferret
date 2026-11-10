@@ -1,10 +1,17 @@
 "use client";
 
-import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryCache, QueryClient, QueryClientProvider, notifyManager } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ApiError } from "@/features/articles/api";
 import { ArticleActionsProvider } from "@/features/articles/mutations";
 import { setActiveQueryClient } from "@/lib/active-query-client";
+
+// Optimistic patches (`setQueryData`) must reach React before the next frame:
+// star / read-later / read flip in the same frame as the tap. TanStack's
+// default notify scheduler is setTimeout(0), a separate task the browser may
+// run only after the next rAF + paint, so a click could still show the old
+// icon one frame later. A microtask runs before any rendering opportunity.
+notifyManager.setScheduler(queueMicrotask);
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

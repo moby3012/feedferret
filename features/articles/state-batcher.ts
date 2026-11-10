@@ -4,8 +4,8 @@
 // reaches the server and WHEN:
 // - per (article, field) the last write wins; a toggle followed by its inverse
 //   cancels out before anything is sent,
-// - flush 150 ms after the last enqueue (trailing), at the latest 1 s after
-//   the first one, or immediately via `flush()` (page hidden),
+// - flush TRAILING_MS after the last enqueue (trailing), at the latest 1 s
+//   after the first one, or immediately via `flush()` (page hidden),
 // - one call per flush, at most one call in flight (later ops wait for it, so
 //   the server sees writes of one field in order),
 // - after each call `onSettled` gets the ops the server did not apply
@@ -41,6 +41,17 @@ export interface StateBatcherOptions {
 
 type Pending = { op: StateOp; base: boolean };
 
+/**
+ * Quiet time after the last write before a flush. It must be longer than the
+ * gap between two rapid taps, or every tap is flushed on its own and a toggle
+ * and its inverse can never cancel: rapid human taps land 150–300 ms apart,
+ * Playwright taps on mobile-emulated CI ~200 ms. 150 ms (the first value) was
+ * below that cadence, so 10 rapid toggles became 10 calls.
+ */
+export const TRAILING_MS = 400;
+/** Upper bound on how long a write may wait while writes keep coming. */
+export const MAX_WAIT_MS = 1000;
+
 const keyOf = (id: string, field: StateField) => `${id}\u0000${field}`;
 
 /** Server cap per call (`applyArticleStateOps`, one wire op per article). */
@@ -70,8 +81,8 @@ export class StateBatcher {
   private readonly clearTimer: (handle: unknown) => void;
 
   constructor(private readonly options: StateBatcherOptions) {
-    this.trailingMs = options.trailingMs ?? 150;
-    this.maxMs = options.maxMs ?? 1000;
+    this.trailingMs = options.trailingMs ?? TRAILING_MS;
+    this.maxMs = options.maxMs ?? MAX_WAIT_MS;
     this.setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = options.clearTimer ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
   }
