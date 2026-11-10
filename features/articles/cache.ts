@@ -1,5 +1,5 @@
-import type { InfiniteData, QueryClient, QueryKey } from "@tanstack/react-query";
-import { qk } from "./keys";
+import { hashKey, type InfiniteData, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { MARK_VIEW_READ_KEY, qk } from "./keys";
 import type { ArticleDetail, ArticleListItem, ArticlePage } from "./types";
 import type { ListKey } from "./scope";
 import type { Counts } from "@/features/bootstrap/types";
@@ -72,6 +72,8 @@ function updateListRows(qc: QueryClient, fn: (item: ArticleListItem) => ArticleL
     // current pages do not hold it (the next page, a first load, an article known
     // only via another cache): queue the rewrite for every fetching list.
     if (query.state.fetchStatus === "fetching") reapplyAfterFetch(qc, query, fn);
+    // Same for a page 1 fetched outside the query (the "↑ N neu" apply).
+    tracked.get(query.queryHash)?.forEach((fns) => fns.push(fn));
     const data = query.state.data;
     const next = mapListItems(data, fn);
     if (next !== data) writeRows(qc, query, next);
@@ -112,6 +114,66 @@ function reapplyAfterFetch(qc: QueryClient, query: ListQuery, fn: RowFn) {
     const data = query.state.data;
     const next = fns.reduce<unknown>((acc, f) => mapListItems(acc, f), data);
     if (next !== data) writeRows(qc, query, next);
+  });
+}
+
+/** Row rewrites recorded for fetches made outside TanStack (by query hash). */
+const tracked = new Map<string, Set<RowFn[]>>();
+
+export interface RowRewriteTracker {
+  /** `data` with every rewrite made since `trackRowRewrites` re-applied, in order. */
+  replay<T>(data: T): T;
+  stop(): void;
+}
+
+/**
+ * Records the row rewrites (optimistic toggles, rollbacks, bulk mark-read,
+ * removals) made to one list while a replacement for it is on the wire
+ * outside TanStack — `reapplyAfterFetch` for a fetch the query does not know
+ * about. The fetched page is the server state of when it was READ: a write
+ * that settled after that would otherwise come back in its old state.
+ */
+export function trackRowRewrites(qc: QueryClient, queryKey: QueryKey): RowRewriteTracker {
+  const hash = hashKey(queryKey);
+  const fns: RowFn[] = [];
+  let set = tracked.get(hash);
+  if (!set) tracked.set(hash, (set = new Set()));
+  set.add(fns);
+  return {
+    replay: <T>(data: T) => fns.reduce<unknown>((acc, f) => mapListItems(acc, f), data) as T,
+    stop() {
+      const current = tracked.get(hash);
+      current?.delete(fns);
+      if (current?.size === 0) tracked.delete(hash);
+    },
+  };
+}
+
+/**
+ * Resolves once no article write is unsettled: the state batcher is idle and
+ * no bulk mark-read is in flight (or after `timeoutMs`). A page fetched after
+ * this reflects every write the user made before it.
+ */
+export function waitForArticleWrites(qc: QueryClient, timeoutMs = 10_000): Promise<void> {
+  const batcher = getStateBatcher(qc);
+  const bulkIdle = () => qc.isMutating({ mutationKey: MARK_VIEW_READ_KEY }) === 0;
+  if ((!batcher || batcher.isIdle()) && bulkIdle()) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let done = false;
+    let unsubscribe = () => {};
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      unsubscribe();
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    const check = () => {
+      if (bulkIdle()) void (batcher?.whenIdle() ?? Promise.resolve()).then(() => bulkIdle() && finish());
+    };
+    unsubscribe = qc.getMutationCache().subscribe(check);
+    check();
   });
 }
 
@@ -169,16 +231,18 @@ export function invalidateArticleQueries(qc: QueryClient) {
  * finger (spec §0.5): its new rows wait behind the pill, or enter right away
  * when the user is idle at the very top. Other lists refetch on rebind.
  */
-export function invalidateAfterSync(qc: QueryClient) {
+export function invalidateAfterSync(qc: QueryClient): Promise<void> {
   markListsStale(qc);
-  invalidateCounts(qc);
-  qc.invalidateQueries({ queryKey: qk.articles, refetchType: "none" });
+  void qc.invalidateQueries({ queryKey: qk.articles, refetchType: "none" });
+  return invalidateCounts(qc);
 }
 
-/** One counts refetch (+ the server-side per-scope counts of saved searches / search). */
-export function invalidateCounts(qc: QueryClient) {
-  qc.invalidateQueries({ queryKey: qk.counts });
-  qc.invalidateQueries({ queryKey: ["view-count"] });
+/** One counts refetch (+ the server-side per-scope counts of saved searches / search); resolves when they are back. */
+export function invalidateCounts(qc: QueryClient): Promise<void> {
+  return Promise.all([qc.invalidateQueries({ queryKey: qk.counts }), qc.invalidateQueries({ queryKey: ["view-count"] })]).then(
+    () => undefined,
+    () => undefined,
+  );
 }
 
 // ─── Optimistic state patches (spec §2.4) ────────────────────────────────────

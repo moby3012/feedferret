@@ -815,6 +815,8 @@
   "articleList": {
     "newItems": "{count} neu",
     "newItemsAria": "{count, plural, one {# neuer Artikel – oben anzeigen} other {# neue Artikel – oben anzeigen}}",
+    "newItemsRefresh": "Aktualisieren",
+    "newItemsRefreshAria": "Liste aktualisieren – oben anzeigen",
     "newItemsFailed": "Neue Artikel konnten nicht geladen werden",
     "noArticles": "Keine Artikel",
     "noArticlesDescription": "Es gibt keine Artikel, die deinen aktuellen Filtern entsprechen.",

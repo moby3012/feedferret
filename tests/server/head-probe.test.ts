@@ -10,7 +10,16 @@ import { execFileSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
-const state = vi.hoisted(() => ({ db: null as unknown as PrismaClient, session: null as null | { user: { id: string } } }));
+const state = vi.hoisted(() => ({ db: null as unknown as PrismaClient, session: null as null | { user: { id: string } }, limit: false }));
+// The per-user limit is exercised by its own test; elsewhere it would count every call of the file.
+vi.mock("@/lib/rate-limit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/rate-limit")>();
+  return {
+    ...actual,
+    checkRateLimit: (id: string, config: Parameters<typeof actual.checkRateLimit>[1]) =>
+      state.limit ? actual.checkRateLimit(id, config) : { success: true, remaining: config.limit, resetAt: Date.now() + 60_000 },
+  };
+});
 vi.mock("@/lib/db", () => ({
   get db() {
     return state.db;
@@ -24,7 +33,7 @@ import { GET as listGET } from "../../app/api/app/articles/route";
 import { HEAD_COUNT_CAP } from "../../server/articles/head";
 
 const dir = mkdtempSync(join(tmpdir(), "feedferret-head-probe-"));
-const ids = { alice: "", bob: "", feed: "", feed2: "", hidden: "", cat: "", bobFeed: "" };
+const ids = { alice: "", bob: "", feed: "", feed2: "", hidden: "", cat: "", bobFeed: "", storyFeed: "" };
 
 const T0 = Date.UTC(2026, 10, 10, 8);
 const SNAPSHOT = T0 + 60 * 60_000;
@@ -46,6 +55,11 @@ beforeAll(async () => {
   ids.feed2 = (await db.feed.create({ data: { name: "A2", url: "https://a2.example/feed", userId: ids.alice } })).id;
   ids.hidden = (await db.feed.create({ data: { name: "Hidden", url: "https://h.example/feed", userId: ids.alice, hideFromAllFeeds: true } })).id;
   ids.bobFeed = (await db.feed.create({ data: { name: "B1", url: "https://b.example/feed", userId: ids.bob } })).id;
+  // Hidden from "All articles" so the story rows below do not change the All counts of the other tests.
+  ids.storyFeed = (await db.feed.create({ data: { name: "Stories", url: "https://s.example/feed", userId: ids.alice, hideFromAllFeeds: true } })).id;
+  const cluster = { userId: ids.alice, leadArticleId: "story-a", firstSeenAt: before(5), lastSeenAt: after(3), sig: "{}" };
+  await db.storyCluster.create({ data: { id: "cl-1", ...cluster, size: 3 } });
+  await db.storyCluster.create({ data: { id: "cl-solo", ...cluster, leadArticleId: "story-solo", size: 1, feedCount: 1 } });
 
   const row = (id: string, userId: string, feedId: string, createdAt: Date, extra: Record<string, unknown> = {}) => ({
     id,
@@ -72,6 +86,13 @@ beforeAll(async () => {
       row("new-spoiler", ids.alice, ids.feed, after(6), { isSpoiler: true }),
       // Old publishedAt, synced late: still new (it was not in the snapshot).
       row("new-backdated", ids.alice, ids.feed, after(7), { publishedAt: before(600) }),
+      // One story from two sources (+ a member already in the snapshot) in the clustered feed.
+      row("story-old", ids.alice, ids.storyFeed, before(5), { clusterId: "cl-1" }),
+      row("story-a", ids.alice, ids.storyFeed, after(2), { clusterId: "cl-1" }),
+      row("story-b", ids.alice, ids.storyFeed, after(3), { clusterId: "cl-1" }),
+      // clusterId but size 1: a plain row in the list (groupStories folds size ≥ 2 only).
+      row("story-solo", ids.alice, ids.storyFeed, after(4), { clusterId: "cl-solo" }),
+      row("story-plain", ids.alice, ids.storyFeed, after(5)),
       row("bob-new", ids.bob, ids.bobFeed, after(8)),
     ],
   });
@@ -84,6 +105,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   state.session = { user: { id: ids.alice } };
+  state.limit = false;
 });
 
 async function head(qs: string) {
@@ -172,5 +194,40 @@ describe("GET /api/app/articles/head", () => {
     await head(`since=${SNAPSHOT}`);
     await head(`since=${SNAPSHOT}&feed=${ids.feed}&show=all`);
     expect(await snapshot()).toEqual(beforeRows);
+  });
+
+  it("counts display stories in clustered lists, articles in the others", async () => {
+    // Feed list (groups stories): cl-1 (story-a + story-b) once, story-solo, story-plain.
+    expect((await head(`since=${SNAPSHOT}&feed=${ids.storyFeed}`)).body).toEqual({ count: 3, newestCursor: String(after(5).getTime()) });
+    // Starred / Read later never fold clusters: every starred arrival counts.
+    await state.db.article.updateMany({ where: { id: { in: ["story-a", "story-b"] } }, data: { isStarred: true } });
+    try {
+      expect((await head(`since=${SNAPSHOT}&v=starred`)).body.count).toBe(2);
+    } finally {
+      await state.db.article.updateMany({ where: { id: { in: ["story-a", "story-b"] } }, data: { isStarred: false } });
+    }
+  });
+
+  it("does not count rows the client already shows (x=…), and rejects oversized lists", async () => {
+    expect((await head(`since=${SNAPSHOT}&feed=${ids.feed}&x=new-backdated`)).body.count).toBe(2);
+    expect((await head(`since=${SNAPSHOT}&feed=${ids.feed}&x=new-backdated,new-2`)).body).toEqual({ count: 1, newestCursor: String(after(1).getTime()) });
+    // Both story members shown: the story is not new any more.
+    expect((await head(`since=${SNAPSHOT}&feed=${ids.storyFeed}&x=story-a,story-b`)).body.count).toBe(2);
+    const tooMany = Array.from({ length: 51 }, (_, i) => `id${i}`).join(",");
+    expect((await head(`since=${SNAPSHOT}&x=${tooMany}`)).status).toBe(400);
+  });
+
+  it("is rate-limited per user", async () => {
+    state.limit = true;
+    state.session = { user: { id: ids.bob } };
+    const statuses: number[] = [];
+    for (let i = 0; i < 31; i++) statuses.push((await head(`since=${SNAPSHOT}`)).status);
+    expect(statuses.slice(0, 30).every((s) => s === 200)).toBe(true);
+    const limited = await head(`since=${SNAPSHOT}`);
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBeTruthy();
+    // Another user has their own budget.
+    state.session = { user: { id: ids.alice } };
+    expect((await head(`since=${SNAPSHOT}`)).status).toBe(200);
   });
 });

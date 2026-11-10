@@ -27,3 +27,6 @@ export const qk = {
   articles: ["article"],
   article: (id: string) => ["article", id] as const,
 } as const;
+
+/** Mutation key of bulk mark-read (view / ids / range). */
+export const MARK_VIEW_READ_KEY = ["mark-view-read"] as const;

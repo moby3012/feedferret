@@ -19,33 +19,52 @@ export function formatNewCount(n: number): string {
   return n > NEW_COUNT_CAP ? `${NEW_COUNT_CAP}+` : String(Math.max(0, n));
 }
 
-/** Lists that are a newest-first timeline of arrivals. Search and "Recently read" never get a pill. */
+/**
+ * Lists that are a newest-first timeline of arrivals: only these are probed
+ * for a count. Search, oldest-first and "Recently read" have no count, but an
+ * explicit refresh still updates them (see `NewItemsPill`: "Aktualisieren").
+ */
 export function probeApplies(key: ListKey | null): key is ListKey {
   return !!key && key.sort === "new" && key.scopeKey !== "v:recent" && !key.scopeKey.startsWith("q:");
 }
 
+/** At most this many loaded ids are sent to the probe as "already shown". */
+export const MAX_EXCLUDED_IDS = 50;
+
+export interface ProbeWindow {
+  /** The list snapshot's server time: fixed for the snapshot's lifetime (never advanced by later pages). */
+  since: number | null;
+  /**
+   * Loaded rows created after `since` (synced while page 1 was being read,
+   * or a back-dated row that paged in later): already on screen, so the
+   * probe must not count them. Comma-joined (stable for memoisation).
+   */
+  exclude: string;
+}
+
 /**
- * The probe's lower bound: the list snapshot's server time, raised to the
- * newest `createdAt` already shown — a row synced while the first page was
- * being read is past `snapshotAt` but already on screen and must not be
- * counted as new.
+ * The probe's window. The boundary is the snapshot's `snapshotAt` and stays
+ * there: raising it to the newest loaded `createdAt` would hide real arrivals
+ * that are older than a late-synced, back-dated row on a later page.
  */
-export function probeSince(snapshotAt: number | null, items: ReadonlyArray<Pick<ArticleListItem, "createdAt">>): number | null {
-  if (snapshotAt == null) return null;
-  let since = snapshotAt;
+export function probeWindow(snapshotAt: number | null, items: ReadonlyArray<Pick<ArticleListItem, "id" | "createdAt">>): ProbeWindow {
+  if (snapshotAt == null) return { since: null, exclude: "" };
+  const ids: string[] = [];
   for (const item of items) {
     const t = Date.parse(item.createdAt);
-    if (Number.isFinite(t) && t > since) since = t;
+    if (Number.isFinite(t) && t > snapshotAt) ids.push(item.id);
+    if (ids.length >= MAX_EXCLUDED_IDS) break;
   }
-  return since;
+  return { since: snapshotAt, exclude: ids.join(",") };
 }
 
 /** `GET /api/app/articles/head` URL of a list key (its canonical id carries the scope params). */
-export function headUrl(key: ListKey, since: number): string {
+export function headUrl(key: ListKey, since: number, exclude = ""): string {
   const params = new URLSearchParams(key.id.startsWith("/?") ? key.id.slice(2) : "");
   params.set("show", key.show);
   params.set("sort", key.sort);
   params.set("since", String(Math.trunc(since)));
+  if (exclude) params.set("x", exclude);
   return `/api/app/articles/head?${params.toString()}`;
 }
 
@@ -55,14 +74,18 @@ export interface ScrollerState {
   pointerDown: boolean;
   /** A row gesture (swipe, long-press, pull) is in progress. */
   gestureActive: boolean;
+  /** An article is open in the reader of this tab: rows must not shift under its prev / next. */
+  readerOpen?: boolean;
 }
 
 /**
  * New rows may be inserted without asking only when nothing can move under
- * the user: the list is at the very top and no pointer / gesture is active.
+ * the user: the list is at the very top, no pointer / gesture is active and
+ * no article is open in the reader. Checked when the decision is made AND
+ * again right before the fetched rows are committed.
  */
 export function canAutoApply(s: ScrollerState): boolean {
-  return s.scrollTop <= AT_TOP_PX && !s.pointerDown && !s.gestureActive;
+  return s.scrollTop <= AT_TOP_PX && !s.pointerDown && !s.gestureActive && !s.readerOpen;
 }
 
 /** Scroll back up smoothly only over a short distance (< 3 viewports); jump otherwise. */

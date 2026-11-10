@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { applyArticleStateOps, markArticleIdsRead, markListRangeRead } from "@/app/actions/article-state";
 import { fetchFullText as fetchFullTextAction, markAllAsRead, markArticlesAsUnread, setArticleLabels, updateFeed } from "@/app/actions/feeds";
 import { adjustCounts, adjustLabelCounts, applyArticlePatch, findCachedArticle, invalidateCounts, isHiddenFromAll, patchCachedArticle, patchCachedArticles, rollbackFailedOps } from "./cache";
-import { qk } from "./keys";
+import { MARK_VIEW_READ_KEY, qk } from "./keys";
 import { registerStateBatcher, unregisterStateBatcher } from "./batcher-registry";
 import { StateBatcher, type StateField, type StoryCascade } from "./state-batcher";
 import { planStoryCascade } from "./story-cascade";
@@ -63,7 +63,6 @@ export interface ArticleActions {
   markRangeRead(range: MarkRange): void;
 }
 
-const MARK_VIEW_READ_KEY = ["mark-view-read"] as const;
 const STORY_TOAST_ID = "story-cascade";
 
 type BulkReadRequest = { kind: "scope"; scope: MarkViewScope } | { kind: "ids"; ids: string[] } | { kind: "range"; range: MarkRange };

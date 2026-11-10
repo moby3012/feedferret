@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -127,7 +127,7 @@ function useBackgroundWork(userId: string) {
         const body = await res.json().catch(() => null);
         recordSyncResult(browserStorage(), userId, body);
         // Spec §2.5.4: feeds were synced → counts refetch, and the "↑ N neu" probe with them.
-        if (typeof body?.synced === "number" && body.synced > 0) invalidateAfterSync(qc);
+        if (typeof body?.synced === "number" && body.synced > 0) void invalidateAfterSync(qc);
       })
       .catch(() => {
         if (toastShown.current) return;
@@ -137,18 +137,31 @@ function useBackgroundWork(userId: string) {
   }, [qc, t, userId]);
 }
 
-/** Announces the unread count of the bound scope (spec §4.9.8: on scope change, not per mark-read). */
+/**
+ * Announces the unread count of the bound scope (spec §4.9.8): on scope
+ * change and when an explicit refresh completed (its counts are refetched
+ * before `isRefreshing` ends) — never per (optimistic) mark-read.
+ */
 function LiveRegion() {
   const scope = useNav((s) => s.loc.scope);
-  const { feeds } = useShellData();
+  const { feeds, isRefreshing } = useShellData();
   const unread = useScopeUnread(scope, feeds, true);
   const scopeId = useNav((s) => (s.loc.scope ? JSON.stringify(s.loc.scope) : ""));
-  const announced = useRef<{ scopeId: string; text: string }>({ scopeId: "", text: "" });
-  if (unread !== undefined && announced.current.scopeId !== scopeId) {
-    announced.current = { scopeId, text: `${unread} unread ${unread === 1 ? "article" : "articles"}` };
+  const [refreshes, setRefreshes] = useState(0);
+  const wasRefreshing = useRef(isRefreshing);
+  useEffect(() => {
+    if (wasRefreshing.current && !isRefreshing) setRefreshes((n) => n + 1);
+    wasRefreshing.current = isRefreshing;
+  }, [isRefreshing]);
+  const announced = useRef<{ key: string; text: string }>({ key: "", text: "" });
+  const key = `${scopeId}#${refreshes}`;
+  if (unread !== undefined && announced.current.key !== key) {
+    const text = `${unread} unread ${unread === 1 ? "article" : "articles"}`;
+    // The same words again would not be re-read: a trailing no-break space makes it a change.
+    announced.current = { key, text: text === announced.current.text ? `${text}\u00a0` : text };
   }
   return (
-    <div aria-live="polite" aria-atomic="true" className="sr-only">
+    <div aria-live="polite" aria-atomic="true" className="sr-only" data-testid="live-unread">
       {announced.current.text}
     </div>
   );

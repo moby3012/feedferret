@@ -3,9 +3,9 @@
 // asks the server (only after a real counts response, only for the active
 // pane, only online) and what `apply` writes into the list cache.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, createElement } from "react";
+import { act, createElement, useMemo } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider, type InfiniteData } from "@tanstack/react-query";
+import { MutationObserver, QueryClient, QueryClientProvider, type InfiniteData } from "@tanstack/react-query";
 import {
   AT_TOP_PX,
   appliedListData,
@@ -14,11 +14,15 @@ import {
   formatNewCount,
   headUrl,
   probeApplies,
-  probeSince,
+  probeWindow,
+  MAX_EXCLUDED_IDS,
   scrollBehaviorFor,
 } from "../../features/articles/new-items";
 import { listKeyOf } from "../../features/articles/scope";
-import { qk } from "../../features/articles/keys";
+import { MARK_VIEW_READ_KEY, qk } from "../../features/articles/keys";
+import { patchCachedArticle, patchCachedArticles } from "../../features/articles/cache";
+import { registerStateBatcher } from "../../features/articles/batcher-registry";
+import type { StateBatcher } from "../../features/articles/state-batcher";
 import type { ArticleListItem, ArticlePage } from "../../features/articles/types";
 
 vi.mock("@/features/offline/offline", () => ({
@@ -76,14 +80,20 @@ describe("buffering rules", () => {
     expect(probeApplies(null)).toBe(false);
   });
 
-  it("starts the window at the snapshot, raised to the newest row already shown", () => {
+  it("keeps the window at the snapshot and excludes loaded rows past it", () => {
     const snap = Date.parse("2026-11-10T10:00:00Z");
-    expect(probeSince(null, [])).toBeNull();
-    expect(probeSince(snap, [])).toBe(snap);
-    expect(probeSince(snap, [item("a", "2026-11-10T09:00:00Z")])).toBe(snap);
-    // Synced while page 1 was being read: already on screen, so not "new".
-    expect(probeSince(snap, [item("a", "2026-11-10T09:00:00Z"), item("b", "2026-11-10T10:00:02Z")])).toBe(snap + 2000);
-    expect(probeSince(snap, [item("bad", "not a date")])).toBe(snap);
+    expect(probeWindow(null, [])).toEqual({ since: null, exclude: "" });
+    expect(probeWindow(snap, [])).toEqual({ since: snap, exclude: "" });
+    expect(probeWindow(snap, [item("a", "2026-11-10T09:00:00Z")])).toEqual({ since: snap, exclude: "" });
+    // Synced while page 1 was being read / a back-dated row paged in later: on screen, so
+    // excluded by id — the boundary itself never moves (a later page must not hide real arrivals).
+    expect(probeWindow(snap, [item("a", "2026-11-10T09:00:00Z"), item("b", "2026-11-10T10:00:02Z"), item("c", "2026-11-10T10:05:00Z")])).toEqual({
+      since: snap,
+      exclude: "b,c",
+    });
+    expect(probeWindow(snap, [item("bad", "not a date")])).toEqual({ since: snap, exclude: "" });
+    const many = Array.from({ length: MAX_EXCLUDED_IDS + 5 }, (_, i) => item(`n${i}`, "2026-11-10T11:00:00Z"));
+    expect(probeWindow(snap, many).exclude.split(",")).toHaveLength(MAX_EXCLUDED_IDS);
   });
 
   it("inserts silently only at the very top with nothing under the finger", () => {
@@ -93,6 +103,9 @@ describe("buffering rules", () => {
     expect(canAutoApply({ ...idleTop, scrollTop: AT_TOP_PX + 1 })).toBe(false);
     expect(canAutoApply({ ...idleTop, pointerDown: true })).toBe(false);
     expect(canAutoApply({ ...idleTop, gestureActive: true })).toBe(false);
+    // An article open in the reader: buffer only (prev / next must not shift).
+    expect(canAutoApply({ ...idleTop, readerOpen: true })).toBe(false);
+    expect(bufferDecision(3, { ...idleTop, readerOpen: true })).toBe("pill");
 
     expect(bufferDecision(0, idleTop)).toBe("none");
     expect(bufferDecision(3, idleTop)).toBe("apply");
@@ -110,6 +123,7 @@ describe("buffering rules", () => {
   it("builds the head URL from the list key", () => {
     expect(headUrl(ALL, 1234.9)).toBe("/api/app/articles/head?show=unread&sort=new&since=1234");
     expect(headUrl(FEED, 5)).toBe("/api/app/articles/head?feed=f1&show=all&sort=new&since=5");
+    expect(headUrl(FEED, 5, "a,b")).toBe("/api/app/articles/head?feed=f1&show=all&sort=new&since=5&x=a%2Cb");
   });
 
   it("an applied list is the fresh first page alone", () => {
@@ -126,12 +140,13 @@ let qc: QueryClient;
 let fetchMock: ReturnType<typeof vi.fn>;
 const result: { current: NewItemsProbe | null } = { current: null };
 
-function Probe(p: { listKey: typeof ALL | null; since: number | null; active: boolean }) {
-  result.current = useNewItemsProbe(p.listKey, p.since, { active: p.active });
+function Probe(p: { listKey: typeof ALL | null; since: number | null; active: boolean; exclude?: string }) {
+  const win = useMemo(() => ({ since: p.since, exclude: p.exclude ?? "" }), [p.since, p.exclude]);
+  result.current = useNewItemsProbe(p.listKey, win, { active: p.active });
   return null;
 }
 
-function render(p: { listKey: typeof ALL | null; since: number | null; active: boolean }) {
+function render(p: { listKey: typeof ALL | null; since: number | null; active: boolean; exclude?: string }) {
   act(() => root.render(createElement(QueryClientProvider, { client: qc }, createElement(Probe, p))));
 }
 
@@ -234,7 +249,7 @@ describe("useNewItemsProbe", () => {
     qc.setQueryData(qk.list(ALL), old);
     render({ listKey: ALL, since: 1000, active: true });
     await act(async () => {
-      await result.current!.apply();
+      expect(await result.current!.apply()).toBe(true);
     });
     const data = qc.getQueryData<InfiniteData<ArticlePage, string | null>>(qk.list(ALL))!;
     expect(data.pageParams).toEqual([null]);
@@ -242,5 +257,103 @@ describe("useNewItemsProbe", () => {
     expect(data.pages[0].items.map((i) => i.id)).toEqual(["new"]);
     expect(data.pages[0].snapshotAt).toBe(42);
     expect(fetchMock.mock.calls.map((c) => String(c[0]))).toEqual(["/api/app/articles?show=unread&sort=new&limit=50"]);
+  });
+
+  it("asks the server to skip loaded rows past the snapshot", async () => {
+    render({ listKey: ALL, since: 1000, active: true, exclude: "b,c" });
+    await countsFetch();
+    await vi.waitFor(() => expect(headCalls()).toEqual(["/api/app/articles/head?show=unread&sort=new&since=1000&x=b%2Cc"]));
+  });
+
+  it("recheck probes now and joins a probe already on the wire", async () => {
+    render({ listKey: ALL, since: 1000, active: true });
+    let count = 0;
+    await act(async () => {
+      const a = result.current!.recheck();
+      const b = result.current!.recheck();
+      count = (await Promise.all([a, b]))[0];
+    });
+    expect(count).toBe(4);
+    expect(headCalls()).toHaveLength(1);
+    // Lists without a probe: 0, no request.
+    render({ listKey: listKeyOf({ kind: "query", q: "x" }, "all", "new"), since: 1000, active: true });
+    await act(async () => {
+      count = await result.current!.recheck();
+    });
+    expect(count).toBe(0);
+    expect(headCalls()).toHaveLength(1);
+  });
+
+  it("apply keeps the old snapshot when the commit check fails (scrolled / touched while on the wire)", async () => {
+    const old: InfiniteData<ArticlePage, string | null> = { pages: [{ items: [item("a", "2026-11-10T09:00:00Z")], nextCursor: null, snapshotAt: 1000 }], pageParams: [null] };
+    qc.setQueryData(qk.list(ALL), old);
+    render({ listKey: ALL, since: 1000, active: true });
+    let applied: boolean | null = null;
+    await act(async () => {
+      applied = await result.current!.apply(() => false);
+    });
+    expect(applied).toBe(false);
+    expect(qc.getQueryData(qk.list(ALL))).toBe(old);
+  });
+
+  it("apply replays row rewrites made while page 1 was on the wire (a toggle settled meanwhile is kept)", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    fetchMock.mockImplementation(async (url: string) => {
+      await gate;
+      // The server read happened before the writes below: the page has the old flags.
+      const body = { items: [item("new", "2026-11-10T11:00:00Z"), item("a", "2026-11-10T09:00:00Z")], nextCursor: null, snapshotAt: 42 };
+      return new Response(JSON.stringify(url.startsWith("/api/app/articles/head") ? { count: 0, newestCursor: null } : body), { status: 200 });
+    });
+    qc.setQueryData(qk.list(ALL), { pages: [{ items: [item("a", "2026-11-10T09:00:00Z")], nextCursor: null, snapshotAt: 1000 }], pageParams: [null] });
+    render({ listKey: ALL, since: 1000, active: true });
+    let done!: Promise<boolean>;
+    await act(async () => {
+      done = result.current!.apply();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // A toggle (row known only in the old snapshot) and a bulk mark-read (row known nowhere yet).
+    act(() => {
+      patchCachedArticle(qc, "a", { isStarred: true });
+      patchCachedArticles(qc, ["new"], { isRead: true });
+    });
+    await act(async () => {
+      release();
+      await done;
+    });
+    const rows = qc.getQueryData<InfiniteData<ArticlePage, string | null>>(qk.list(ALL))!.pages[0].items;
+    expect(rows.find((r) => r.id === "a")?.isStarred).toBe(true);
+    expect(rows.find((r) => r.id === "new")?.isRead).toBe(true);
+  });
+
+  it("apply waits for unsettled writes before reading page 1", async () => {
+    let idle = false;
+    let settle!: () => void;
+    const idlePromise = new Promise<void>((r) => (settle = r));
+    const batcher = { isIdle: () => idle, whenIdle: () => idlePromise, latestValue: () => undefined } as unknown as StateBatcher;
+    registerStateBatcher(qc, batcher);
+    let bulkDone!: () => void;
+    const bulk = new MutationObserver(qc, { mutationKey: MARK_VIEW_READ_KEY, mutationFn: () => new Promise<void>((r) => (bulkDone = r)) });
+    void bulk.mutate();
+    render({ listKey: ALL, since: 1000, active: true });
+    let done!: Promise<boolean>;
+    await act(async () => {
+      done = result.current!.apply();
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    const listCalls = () => fetchMock.mock.calls.filter((c) => String(c[0]).startsWith("/api/app/articles?"));
+    expect(listCalls()).toHaveLength(0);
+    await act(async () => {
+      idle = true;
+      settle();
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    // The bulk mark-read is still in flight.
+    expect(listCalls()).toHaveLength(0);
+    await act(async () => {
+      bulkDone();
+      await done;
+    });
+    expect(listCalls()).toHaveLength(1);
   });
 });

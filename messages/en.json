@@ -815,6 +815,8 @@
   "articleList": {
     "newItems": "{count} new",
     "newItemsAria": "{count, plural, one {# new article – show at top} other {# new articles – show at top}}",
+    "newItemsRefresh": "Refresh",
+    "newItemsRefreshAria": "Refresh list – show at top",
     "newItemsFailed": "Could not load new articles",
     "noArticles": "No articles",
     "noArticlesDescription": "There are no articles matching your current filters.",

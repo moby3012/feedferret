@@ -63,6 +63,6 @@ export function fetchCluster(id: string, signal?: AbortSignal): Promise<ClusterD
 }
 
 /** `GET /api/app/articles/head` — rows of the list created after `since` (the "↑ N neu" probe). */
-export function fetchHead(key: ListKey, since: number, signal?: AbortSignal): Promise<HeadProbe> {
-  return getJson<HeadProbe>(headUrl(key, since), signal);
+export function fetchHead(key: ListKey, since: number, exclude: string, signal?: AbortSignal): Promise<HeadProbe> {
+  return getJson<HeadProbe>(headUrl(key, since, exclude), signal);
 }
