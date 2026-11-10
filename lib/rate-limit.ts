@@ -180,6 +180,22 @@ export const RATE_LIMITS = {
     prefix: "internal-api",
   } satisfies RateLimitConfig,
 
+  // OPML import (UI action, REST v1, MCP): each call parses a document and writes
+  // many rows — 10 per minute per user.
+  opmlImport: {
+    limit: 10,
+    windowSecs: 60,
+    prefix: "opml-import",
+  } satisfies RateLimitConfig,
+
+  // FreshRSS migration upload (ZIP/JSON, dry-run and real): heavy parse + bulk
+  // writes — 6 per 10 minutes per user.
+  freshrssImport: {
+    limit: 6,
+    windowSecs: 10 * 60,
+    prefix: "freshrss-import",
+  } satisfies RateLimitConfig,
+
   // Fever compatible API — 120 req/min per user
   fever: {
     limit: 120,

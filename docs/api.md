@@ -558,23 +558,35 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ### `POST /api/v1/opml`
 
-Imports OPML.
+Imports OPML (incl. FreshRSS `frss:*` extension attributes). Add `"dryRun": true` to preview without writing.
 
 ```json
-{ "xml": "<?xml version=\"1.0\"?><opml>...</opml>" }
+{ "xml": "<?xml version=\"1.0\"?><opml>...</opml>", "dryRun": false }
 ```
 
 Response:
 
 ```json
 {
+  "dryRun": false,
   "feedsAdded": 10,
   "feedsUpdated": 2,
   "categoriesAdded": 3,
   "categoriesUpdated": 1,
-  "errors": []
+  "rulesCreated": 1,
+  "rulesUpdated": 0,
+  "errors": [],
+  "issues": [
+    { "kind": "unsupported", "code": "filter-untranslatable", "subject": "Hacker News", "attribute": "filtersActionRead", "detail": "date:P1D/ — 'date:' filters have no FeedFerret equivalent" }
+  ]
 }
 ```
+
+`issues[].kind` is `unsupported` (not imported), `adapted` (imported with a different semantic) or `preserved` (kept but inactive). Nothing is dropped silently.
+
+### `POST /api/v1/import/freshrss`
+
+Raw request body: a FreshRSS export ZIP, an OPML file or an article JSON file (max 64 MB). `?dryRun=1` returns the summary without writing. See [freshrss-migration.md](freshrss-migration.md) for the mapping, ordering and limits. Requires `write` scope; rate limited.
 
 ---
 

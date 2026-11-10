@@ -54,6 +54,8 @@ export type FeedExtractionConfig = {
   xpath?: Record<string, string>;
   json?: Record<string, string>;
   xPathToJson?: string;
+  /** Source-specific extension attributes (e.g. unknown `frss:*` OPML attributes) preserved verbatim. */
+  extensions?: Record<string, string>;
 };
 
 export type FeedHttpOptions = Record<string, string | number | boolean>;

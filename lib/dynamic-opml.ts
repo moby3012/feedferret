@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { httpOptionsFromOutline, OpmlOutline, parseOpml, scraperConfigFromOutline } from "@/lib/opml";
-import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
+import { parseOpml } from "@/lib/opml";
+import { applyOpmlImportPlan, planOpmlImport } from "@/lib/import/opml-import";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { logger } from "./logger";
 
@@ -20,67 +20,6 @@ async function fetchSafeOpml(url: string) {
   );
 }
 
-function feedDataFromOutline(outline: OpmlOutline, userId: string, categoryId: string) {
-  const extensions = outline.extensions ?? {};
-  const scraperConfig = scraperConfigFromOutline(outline);
-  const httpOptions = httpOptionsFromOutline(outline);
-  return {
-    userId,
-    url: outline.xmlUrl!,
-    name: outline.text,
-    categoryId,
-    sourceType: normalizeSourceType(outline.type),
-    htmlUrl: outline.htmlUrl || null,
-    description: outline.description || null,
-    priority: extensions.priority || "main",
-    unicityCriteria: extensions.unicityCriteria || "id",
-    unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1",
-    scraperConfig: stringifyNonEmpty(scraperConfig),
-    httpOptions: stringifyNonEmpty(httpOptions),
-    fullTextSelector: extensions.cssFullContent || null,
-    fullTextConditions: extensions.cssFullContentConditions || null,
-    fullTextRemoveSelectors: extensions.cssContentFilter || extensions.cssFullContentFilter || null,
-    filtersActionRead: extensions.filtersActionRead || null,
-    customUserAgent: typeof httpOptions.CURLOPT_USERAGENT === "string" ? httpOptions.CURLOPT_USERAGENT : undefined,
-  };
-}
-
-async function importDynamicOutline(userId: string, outline: OpmlOutline, parentCategoryId: string) {
-  if (outline.xmlUrl) {
-    const data = feedDataFromOutline(outline, userId, parentCategoryId);
-    await db.feed.upsert({
-      where: { userId_url: { userId, url: data.url } },
-      update: {
-        name: data.name,
-        categoryId: parentCategoryId,
-        sourceType: data.sourceType,
-        htmlUrl: data.htmlUrl,
-        description: data.description,
-        priority: data.priority,
-        unicityCriteria: data.unicityCriteria,
-        unicityCriteriaForced: data.unicityCriteriaForced,
-        scraperConfig: data.scraperConfig,
-        httpOptions: data.httpOptions,
-        fullTextSelector: data.fullTextSelector,
-        fullTextConditions: data.fullTextConditions,
-        fullTextRemoveSelectors: data.fullTextRemoveSelectors,
-        filtersActionRead: data.filtersActionRead,
-        ...(data.customUserAgent ? { customUserAgent: data.customUserAgent } : {}),
-      },
-      create: data,
-    });
-    return;
-  }
-
-  if (!outline.children?.length) return;
-  const category = await db.category.upsert({
-    where: { userId_name_parentId: { userId, name: outline.text, parentId: parentCategoryId } },
-    update: { opmlUrl: outline.extensions?.opmlUrl ?? undefined },
-    create: { userId, name: outline.text, parentId: parentCategoryId, opmlUrl: outline.extensions?.opmlUrl ?? undefined },
-  });
-  for (const child of outline.children) await importDynamicOutline(userId, child, category.id);
-}
-
 export async function syncDynamicOpmlCategories(userId?: string) {
   const categories = await db.category.findMany({
     where: { opmlUrl: { not: null }, ...(userId ? { userId } : {}) },
@@ -98,7 +37,12 @@ export async function syncDynamicOpmlCategories(userId?: string) {
         try {
           const xml = await fetchSafeOpml(category.opmlUrl);
           const outlines = await parseOpml(xml);
-          for (const outline of outlines) await importDynamicOutline(category.userId, outline, category.id);
+          // Remote OPML is third-party controlled: same mapping as a local import, but
+          // cookies/headers/proxy/POST options, nested dynamic categories and auto-read
+          // rules are not accepted (see `trust: "remote"` in lib/import/opml-import).
+          const plan = planOpmlImport(outlines, { trust: "remote" });
+          const report = await applyOpmlImportPlan(category.userId, plan, { parentCategoryId: category.id });
+          for (const error of report.errors) logger.warn(`[dynamic-opml] ${category.name}: ${error}`);
           return { category: category.name, success: true, count: outlines.length };
         } catch (error) {
           logger.error(`[dynamic-opml] failed for ${category.opmlUrl}:`, error);

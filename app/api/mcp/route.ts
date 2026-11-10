@@ -14,6 +14,8 @@ import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
+import { importOpmlXml, OpmlImportInputError } from "@/lib/import/opml-import";
+import { OpmlParseError } from "@/lib/opml";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactWebhookConfigs } from "@/lib/webhooks";
 
 function rpc(id: unknown, result: unknown) {
@@ -140,6 +142,7 @@ const tools = [
     },
   },
   // Category management
+  { name: "feedferret.import_opml", description: "Import subscriptions from an OPML document (any reader; FreshRSS `frss:*` extension attributes such as XPath/JSON scraping, full-content CSS selector, read filters, ttl/mute and empty categories are mapped). Returns counts plus `issues`: every attribute that was adapted, preserved or not supported. Use dryRun to preview without writing.", inputSchema: { type: "object", properties: { xml: { type: "string", description: "The OPML document (max 5 MB)." }, dryRun: { type: "boolean", description: "Only report what would change." } }, required: ["xml"] } },
   { name: "feedferret.create_category", description: "Create a feed category/folder.", inputSchema: { type: "object", properties: { name: { type: "string" }, parentId: { type: "string" } }, required: ["name"] } },
   { name: "feedferret.update_category", description: "Update a feed category name, parent or order.", inputSchema: { type: "object", properties: { categoryId: { type: "string" }, name: { type: "string" }, parentId: { type: ["string", "null"] }, order: { type: "number" } }, required: ["categoryId"] } },
   { name: "feedferret.delete_category", description: "Delete a feed category.", inputSchema: { type: "object", properties: { categoryId: { type: "string" } }, required: ["categoryId"] } },
@@ -521,6 +524,17 @@ async function callTool(user: ApiUser, name: string, args: any) {
       if (!checkRateLimit(`user:${user.id}`, RATE_LIMITS.urlDiscover).success) throw new Error("Rate limit exceeded for feed discovery");
       const { mode, feeds } = await discoverFeeds(query, { locale });
       return { mode, feeds };
+    }
+    case "feedferret.import_opml": {
+      const xml = typeof args.xml === "string" ? args.xml : "";
+      if (!xml) throw new Error("xml is required");
+      if (!checkRateLimit(`user:${user.id}`, RATE_LIMITS.opmlImport).success) throw new Error("Rate limit exceeded for OPML import");
+      try {
+        return await importOpmlXml(user.id, xml, { dryRun: args.dryRun === true });
+      } catch (error) {
+        if (error instanceof OpmlImportInputError || error instanceof OpmlParseError) throw new Error(error.message);
+        throw error;
+      }
     }
     case "feedferret.list_connectors": {
       const [rsshub, changedetection] = await Promise.all([isRsshubConfigured(), isChangedetectionConfigured()]);
