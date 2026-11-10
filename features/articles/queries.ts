@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import { useInfiniteQuery, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { shouldRetry } from "./api";
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type QueryKey } from "@tanstack/react-query";
+import { fetchCluster, shouldRetry } from "./api";
 import { findCachedArticle, overlayPendingState, pruneReadRows } from "./cache";
 import { qk } from "./keys";
 import type { ListKey } from "./scope";
@@ -153,6 +153,45 @@ export function useArticle(id: string | null): ArticleResult {
     item,
     detail: detailQuery.data,
     status: detailQuery.data ? "ready" : detailQuery.isError ? "error" : "pending",
+    retry,
+  };
+}
+
+export interface ClusterMembersResult {
+  items: ArticleListItem[];
+  status: "pending" | "ready" | "error";
+  retry(): void;
+}
+
+/**
+ * The sources of one story cluster (story card "+N Quellen"), fetched when
+ * the card is expanded. Cached as a one-page list (`qk.cluster`) so toggles on
+ * member rows go through the same optimistic patch as every list row.
+ */
+export function useClusterMembers(clusterId: string | null): ClusterMembersResult {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: clusterId ? qk.cluster(clusterId) : ["list", "__no-cluster__"],
+    queryFn: async ({ signal }): Promise<InfiniteData<ArticlePage, string | null>> => {
+      const detail = await fetchCluster(clusterId!, signal);
+      const items = detail.members.map((item) => overlayPendingState(qc, item));
+      return { pages: [{ items, nextCursor: null }], pageParams: [null] };
+    },
+    enabled: !!clusterId,
+    // Offline: fail fast into the retry state instead of pausing with skeletons forever (like the list / detail queries).
+    networkMode: "always",
+    staleTime: LIST_REBIND_STALE_MS,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: shouldRetry,
+  });
+  const { refetch } = query;
+  const retry = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+  return {
+    items: query.data?.pages[0]?.items ?? [],
+    status: query.data ? "ready" : query.isError ? "error" : "pending",
     retry,
   };
 }

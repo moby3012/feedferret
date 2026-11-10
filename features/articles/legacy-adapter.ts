@@ -1,5 +1,5 @@
 import type { Article } from "@/lib/rss-data";
-import type { ArticleDetail, ArticleListItem } from "./types";
+import type { ArticleDetail, ArticleKind, ArticleListItem, ArticleMedia } from "./types";
 
 // Thin adapter between the slim list rows and the existing (pre-shell) list and
 // reader components, which expect the old `Article` shape (feed name/icon
@@ -9,7 +9,19 @@ import type { ArticleDetail, ArticleListItem } from "./types";
 type FeedLike = { id: string; name: string; icon?: string | null };
 type LabelLike = { id: string; name: string; color: string };
 
-export type LegacyArticle = Article & { createdAtRaw: number; labelIds: string[] };
+export type LegacyArticle = Article & {
+  createdAtRaw: number;
+  labelIds: string[];
+  /** Row v2 (content kind × density) — straight copies of the list row. */
+  kind: ArticleKind;
+  media: ArticleMedia | null;
+  isSponsored: boolean;
+  /** Neutral title (user enabled clean titles and the headline is clickbait); `title` stays the original. */
+  displayTitle: string | null;
+  clusterId: string | null;
+  clusterSize: number;
+  clusterLeadId: string | null;
+};
 
 export interface LegacyContext {
   feedsById: ReadonlyMap<string, FeedLike>;
@@ -52,6 +64,13 @@ export function toLegacyArticle(item: ArticleListItem, ctx: LegacyContext): Lega
     duplicateCount: item.duplicateCount,
     canonicalFeedName: item.canonicalFeedName,
     labelIds: item.labelIds,
+    kind: item.kind ?? "article",
+    media: item.media ?? null,
+    isSponsored: item.isSponsored === true,
+    displayTitle: item.displayTitle || null,
+    clusterId: item.clusterId ?? null,
+    clusterSize: item.clusterSize ?? 0,
+    clusterLeadId: item.clusterLeadId ?? null,
     labels: item.labelIds.flatMap((id) => {
       const label = ctx.labelsById.get(id);
       if (label) return [{ label: { id: label.id, name: label.name, color: label.color } }];

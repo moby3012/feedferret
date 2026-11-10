@@ -82,6 +82,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Empty, EmptyMedia, EmptyTitle, EmptyContent } from "@/components/ui/empty";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { GestureSettings } from "@/components/gesture-settings";
 import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
 import { MobileFloatingBackButton } from "@/components/mobile-floating-back-button";
 import { toast } from "sonner";
@@ -445,6 +446,22 @@ export function SettingsForm() {
                 onCheckedChange={(checked) => update({ markReadOnAdvance: checked })}
               />
             </PrefRow>
+
+            {/* Story cluster card: marking a story marks all of its sources */}
+            <PrefRow
+              icon={Layers}
+              title={t("settings.storyReadMode")}
+              description={t("settings.storyReadModeDescription")}
+            >
+              <Switch
+                aria-label={t("settings.storyReadMode")}
+                checked={(prefs?.clusterReadMode ?? "story") === "story"}
+                onCheckedChange={(checked) => update({ clusterReadMode: checked ? "story" : "article" })}
+              />
+            </PrefRow>
+
+            {/* Swipe mapping + haptics (per device) */}
+            <GestureSettings />
 
             {/* Open original */}
             <PrefRow

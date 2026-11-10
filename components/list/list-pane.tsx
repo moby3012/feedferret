@@ -4,7 +4,6 @@ import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useSta
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArticleList } from "@/components/article-list";
 import { EndOfListCard } from "@/components/end-of-list-card";
 import { BriefingCard } from "@/components/briefing/briefing-card";
 import { RssHeader } from "@/components/rss-header";
@@ -24,6 +23,7 @@ import { useLayoutClass } from "@/features/reader/layout/layout-class";
 import { canMarkAll, markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
 import { useReleaseArticleSpoiler } from "@/hooks/use-rss-data";
+import { ArticleListView } from "./article-list-view";
 import { scopeTitle } from "./scope-title";
 import { SpoilerGate } from "./spoiler-gate";
 
@@ -223,6 +223,8 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
     isFetchingMore: list.isFetchingMore,
     onLoadMore: list.fetchMore,
     loadedCount: list.items.length,
+    clusterReadMode: data.prefs?.clusterReadMode === "article" ? ("article" as const) : ("story" as const),
+    legacyContext: data.legacyContext,
   };
 
   if (scope.kind === "query") {
@@ -269,8 +271,9 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
       {isSpoiler && spoilerRevealed !== spoilerKey ? (
         <SpoilerGate onReveal={() => setSpoilerRevealed(spoilerKey)} />
       ) : (
-        <ArticleList
+        <ArticleListView
           {...listProps}
+          groupStories={scope.kind !== "later" && scope.kind !== "starred" && scope.kind !== "recent"}
           viewMode={data.viewMode}
           onReleaseSpoiler={isSpoiler ? (id) => releaseArticleSpoiler.mutate(id) : undefined}
           enablePullToRefresh

@@ -119,7 +119,7 @@ export async function loadReadingPreferences(userId: string) {
     markReadOnScroll: user?.markReadOnScroll ?? false,
     markReadOnAdvance: user?.markReadOnAdvance ?? false,
     storyClustering: user?.storyClustering ?? true,
-    clusterReadMode: (user?.clusterReadMode === "story" ? "story" : "article") as "story" | "article",
+    clusterReadMode: (user?.clusterReadMode === "article" ? "article" : "story") as "story" | "article",
     layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
     hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
     hideEmptyLabels: user?.hideEmptyLabels ?? false,

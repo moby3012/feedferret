@@ -4,6 +4,7 @@
 @import './styles/tokens.css';
 @import './styles/motion.css';
 @import './styles/shell.css';
+@import './styles/list.css';
 
 .article-content {
   @apply prose prose-neutral dark:prose-invert max-w-none;
@@ -226,24 +227,3 @@
   max-width: 100%;
 }
 
-/* content-visibility optimization for long article lists (audit P-10).
-   Skips style/layout/paint work for off-screen rows while keeping them
-   mounted, so scroll-restore, read-on-scroll observers, and swipe gestures
-   (which rely on the DOM node staying present) keep working. The
-   contain-intrinsic-size values are placeholder row heights used only
-   while a row is off-screen — the browser swaps in the real size once it
-   scrolls into view, so they only need to be plausible, not exact. */
-.cv-auto-list {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 190px;
-}
-
-.cv-auto-minimal {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 56px;
-}
-
-.cv-auto-magazine {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 360px;
-}

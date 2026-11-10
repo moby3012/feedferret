@@ -26,12 +26,17 @@ export type WireStateOp = { id: string } & Partial<Record<StateField, boolean>>;
 export interface SettledFlush {
   ops: StateOp[];
   failed: StateOp[];
+  /**
+   * Extra article ids the server marked read on its own (story cascade,
+   * `clusterReadMode = "story"`): the caller patches them into the cache.
+   */
+  affected: string[];
   /** Set when the whole call was rejected (network, server error). */
   error?: unknown;
 }
 
 export interface StateBatcherOptions {
-  send(ops: WireStateOp[]): Promise<{ failed: string[] }>;
+  send(ops: WireStateOp[]): Promise<{ failed: string[]; affected?: string[] }>;
   onSettled?(result: SettledFlush): void;
   trailingMs?: number;
   maxMs?: number;
@@ -164,10 +169,10 @@ export class StateBatcher {
       .then(
         (result) => {
           const failedIds = new Set(result?.failed ?? []);
-          settled = { ops, failed: ops.filter((op) => failedIds.has(op.id)) };
+          settled = { ops, failed: ops.filter((op) => failedIds.has(op.id)), affected: Array.isArray(result?.affected) ? result.affected : [] };
         },
         (error: unknown) => {
-          settled = { ops, failed: ops, error };
+          settled = { ops, failed: ops, affected: [], error };
         },
       )
       .then(() => {

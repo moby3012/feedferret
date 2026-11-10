@@ -185,3 +185,87 @@ export function makeSpoilers(userKey: string, count: number) {
     db.close();
   }
 }
+
+const ARTICLE_EXTRA_COLUMNS = ["kind", "mediaUrl", "mediaType", "mediaDurationSecs", "imageUrl", "isSponsored", "isClickbait", "cleanTitle", "clusterId"] as const;
+type ArticleExtraColumn = (typeof ARTICLE_EXTRA_COLUMNS)[number];
+
+/**
+ * Overwrites list-metadata columns (kind, media, K3 enrichment, cluster) of
+ * some seeded articles and returns a function that restores the previous
+ * values. Callers restore in `finally` — the seed has none of these set.
+ */
+export function patchArticles(articleIds: string[], values: Partial<Record<ArticleExtraColumn, string | number | null>>): () => void {
+  const cols = Object.keys(values) as ArticleExtraColumn[];
+  for (const c of cols) if (!ARTICLE_EXTRA_COLUMNS.includes(c)) throw new Error(`patchArticles: column ${c} not allowed`);
+  const db = open();
+  let before: Array<Record<string, unknown>>;
+  try {
+    before = articleIds.map((id) => db.prepare(`SELECT id, ${cols.map((c) => `"${c}"`).join(", ")} FROM "Article" WHERE id = ?`).get(id) as Record<string, unknown>);
+    const set = db.prepare(`UPDATE "Article" SET ${cols.map((c) => `"${c}" = @${c}`).join(", ")} WHERE id = @id`);
+    for (const id of articleIds) set.run({ ...values, id });
+  } finally {
+    db.close();
+  }
+  return () => {
+    const restore = open();
+    try {
+      const set = restore.prepare(`UPDATE "Article" SET ${cols.map((c) => `"${c}" = @${c}`).join(", ")} WHERE id = @id`);
+      for (const row of before) set.run(row);
+    } finally {
+      restore.close();
+    }
+  };
+}
+
+/**
+ * Creates a story cluster over `articleIds` (lead first) for one user and
+ * returns a cleanup that detaches the members and deletes the cluster.
+ */
+export function makeStoryCluster(userKey: string, articleIds: string[]): () => void {
+  const { userId } = manifest().users[userKey];
+  const id = `e2e-cluster-${userKey}-${Date.now()}`;
+  const now = new Date().toISOString();
+  const db = open();
+  try {
+    db.prepare(
+      `INSERT INTO "StoryCluster" (id, userId, leadArticleId, size, feedCount, firstSeenAt, lastSeenAt, sig, algoVersion, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, '{}', 1, ?, ?)`,
+    ).run(id, userId, articleIds[0], articleIds.length, articleIds.length, now, now, now, now);
+    const set = db.prepare(`UPDATE "Article" SET clusterId = ? WHERE id = ? AND userId = ?`);
+    for (const articleId of articleIds) set.run(id, articleId, userId);
+  } finally {
+    db.close();
+  }
+  return () => {
+    const c = open();
+    try {
+      c.prepare(`UPDATE "Article" SET clusterId = NULL WHERE clusterId = ?`).run(id);
+      c.prepare(`DELETE FROM "StoryCluster" WHERE id = ?`).run(id);
+    } finally {
+      c.close();
+    }
+  };
+}
+
+/** User flags the list specs flip (restored by the returned function). */
+export function setUserFlags(userKey: string, values: { aiCleanTitles?: boolean; clusterReadMode?: "story" | "article"; defaultViewMode?: string }): () => void {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  let before: { aiCleanTitles: number; clusterReadMode: string; defaultViewMode: string };
+  try {
+    before = db.prepare(`SELECT aiCleanTitles, clusterReadMode, defaultViewMode FROM "User" WHERE id = ?`).get(userId) as typeof before;
+    if (values.aiCleanTitles !== undefined) db.prepare(`UPDATE "User" SET aiCleanTitles = ? WHERE id = ?`).run(values.aiCleanTitles ? 1 : 0, userId);
+    if (values.clusterReadMode !== undefined) db.prepare(`UPDATE "User" SET clusterReadMode = ? WHERE id = ?`).run(values.clusterReadMode, userId);
+    if (values.defaultViewMode !== undefined) db.prepare(`UPDATE "User" SET defaultViewMode = ? WHERE id = ?`).run(values.defaultViewMode, userId);
+  } finally {
+    db.close();
+  }
+  return () => {
+    const c = open();
+    try {
+      c.prepare(`UPDATE "User" SET aiCleanTitles = ?, clusterReadMode = ?, defaultViewMode = ? WHERE id = ?`).run(before.aiCleanTitles, before.clusterReadMode, before.defaultViewMode, userId);
+    } finally {
+      c.close();
+    }
+  };
+}

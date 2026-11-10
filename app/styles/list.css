@@ -1,0 +1,299 @@
+/* ---------------------------------------------------------------------------
+ * Article list: rows (kind × density), swipe reveal, pull-to-refresh, story
+ * cluster card. Owner: PR 6 (.pm/spec-shell-design.md §4.5, §5).
+ *
+ * Gesture state arrives as attributes written by lib/gestures (never React):
+ *   .ff-row[data-swipe="leading|trailing"][data-armed][data-swiping] + --swipe-p
+ *   .ff-list-scroller[data-pull="pulling|armed"] + --pull
+ * ------------------------------------------------------------------------- */
+
+.ff-list-scroller {
+  container: list / inline-size;
+}
+
+.ff-list {
+  display: flex;
+  flex-direction: column;
+  padding-block: 4px var(--content-pad-bottom);
+}
+/* Only while a pull is running (incl. its spring back, driven from JS): a
+   permanent transform would make the list its own layer above the panes. */
+.ff-list-scroller[data-pull] .ff-list {
+  transform: translate3d(0, var(--pull, 0px), 0);
+}
+
+.ff-list[data-density="magazine"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding-inline: var(--gutter);
+  padding-top: 12px;
+}
+@container list (min-width: 560px) {
+  .ff-list[data-density="magazine"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container list (min-width: 900px) {
+  .ff-list[data-density="magazine"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.ff-list > .ff-span-all {
+  grid-column: 1 / -1;
+}
+
+/* ------------------------------------------------------------------ rows */
+
+.ff-row {
+  position: relative;
+  overflow: clip;
+  /* Chrome: rows are not text; long-press opens our menu, not the callout. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: pan-y;
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--row-intrinsic, 130px);
+}
+.ff-row img {
+  -webkit-user-drag: none;
+}
+/* Off-screen size estimates (measured: a text row is ~148 px). Close
+   estimates keep scrollIntoView / anchored taps from landing on a moving row
+   while rows above render for the first time. */
+.ff-row[data-density="list"] {
+  --row-intrinsic: 148px;
+}
+.ff-row[data-density="list"][data-kind="image"] {
+  --row-intrinsic: 420px;
+}
+.ff-row[data-density="list"][data-kind="social"] {
+  --row-intrinsic: 200px;
+}
+.ff-row[data-density="minimal"] {
+  --row-intrinsic: 44px;
+}
+.ff-row[data-density="magazine"] {
+  --row-intrinsic: 340px;
+  border-radius: var(--radius-row);
+}
+@media (hover: hover) and (pointer: fine) {
+  .ff-row[data-density="minimal"] {
+    --row-intrinsic: 36px;
+  }
+}
+
+/* Hairline divider inset by the gutter at inline-start (flat list, no cards). */
+.ff-row:not([data-density="magazine"])::after {
+  content: "";
+  position: absolute;
+  inset-inline: var(--gutter) 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--divider);
+  pointer-events: none;
+}
+
+.ff-row-content {
+  position: relative;
+  background: var(--surface-base);
+  outline: none;
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard);
+}
+.ff-row[data-density="magazine"] .ff-row-content {
+  background: var(--surface-raised);
+  border: 1px solid var(--divider);
+  border-radius: inherit;
+  overflow: clip;
+  height: 100%;
+}
+.ff-row[data-swiping] .ff-row-content {
+  will-change: transform;
+}
+@media (hover: hover) and (pointer: fine) {
+  .ff-row-content:hover {
+    background: color-mix(in oklch, var(--surface-sunken) 60%, var(--surface-base));
+  }
+}
+.ff-row-content:active {
+  background: var(--surface-sunken);
+}
+.ff-row[data-selected] .ff-row-content {
+  background: var(--selected);
+}
+.ff-row-content:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+.ff-row[data-nested] .ff-row-content {
+  padding-inline-start: calc(var(--gutter) * 2);
+}
+
+/* Unread = brand dot in the start gutter on the first text line + weight. */
+.ff-row-dot {
+  position: relative;
+}
+.ff-row[data-unread] .ff-row-dot::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(var(--gutter) / -2 - 3px);
+  top: calc((1lh - 6px) / 2);
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--unread);
+}
+.ff-row[data-nested][data-unread] .ff-row-dot::before {
+  inset-inline-start: calc(var(--gutter) / -2 - 3px);
+}
+.ff-row[data-density="magazine"][data-unread] .ff-row-dot::before {
+  inset-inline-start: -10px;
+}
+
+/* Read rows: media dims, text goes secondary — never the whole row. */
+.ff-row:not([data-unread]) .ff-row-media {
+  opacity: 0.72;
+}
+
+/* Media boxes reserve their space up front (no layout shift when images load). */
+.ff-media-thumb {
+  width: 80px;
+  height: 80px;
+}
+@container list (min-width: 480px) {
+  .ff-media-thumb {
+    width: 88px;
+    height: 88px;
+  }
+}
+.ff-media-video {
+  width: 128px;
+  height: 72px;
+}
+.ff-media-audio {
+  width: 64px;
+  height: 64px;
+}
+.ff-media-wide {
+  aspect-ratio: 16 / 9;
+  max-height: 220px;
+  width: 100%;
+}
+.ff-media-image {
+  aspect-ratio: 4 / 3;
+  max-height: 320px;
+  width: 100%;
+}
+.ff-media-cover {
+  width: 72px;
+  height: 72px;
+}
+
+/* ------------------------------------------------------------ swipe reveal */
+
+.ff-row-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 20px;
+  opacity: 0;
+  pointer-events: none;
+  color: var(--reveal);
+  background: color-mix(in oklch, var(--reveal) 14%, var(--surface-base));
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ff-row-reveal[data-side="leading"] {
+  justify-content: flex-start;
+}
+.ff-row-reveal[data-side="trailing"] {
+  justify-content: flex-end;
+}
+.ff-row-reveal[data-action="read"] {
+  --reveal: var(--success);
+}
+.ff-row-reveal[data-action="later"] {
+  --reveal: var(--brand-secondary);
+}
+.ff-row-reveal[data-action="star"] {
+  --reveal: var(--brand);
+}
+.ff-row[data-swipe="leading"] > .ff-row-reveal[data-side="leading"],
+.ff-row[data-swipe="trailing"] > .ff-row-reveal[data-side="trailing"] {
+  opacity: 1;
+}
+.ff-row[data-armed] > .ff-row-reveal {
+  background: var(--reveal);
+  color: var(--brand-foreground);
+}
+.ff-row-reveal-icon {
+  transform: scale(1);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.ff-row[data-armed] .ff-row-reveal-icon {
+  animation: ff-reveal-pop var(--dur-fast) var(--ease-out);
+  transform: scale(1.1);
+}
+/* Label once ~48 px are revealed. */
+.ff-row-reveal-label {
+  opacity: clamp(0, calc((var(--swipe-p, 0) - 0.3) * 6), 1);
+}
+@keyframes ff-reveal-pop {
+  0% {
+    transform: scale(1);
+  }
+  60% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1.1);
+  }
+}
+
+/* -------------------------------------------------------- pull-to-refresh */
+
+.ff-pull-indicator {
+  position: absolute;
+  inset-inline: 0;
+  top: 8px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: var(--z-sticky);
+  opacity: 0;
+  transform: translate3d(0, calc(var(--pull, 0px) - 32px), 0);
+}
+.ff-list-scroller[data-pull] .ff-pull-indicator,
+.ff-list-scroller[data-refreshing] .ff-pull-indicator {
+  opacity: 1;
+}
+.ff-list-scroller[data-refreshing]:not([data-pull]) .ff-pull-indicator {
+  transform: translate3d(0, 8px, 0);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.ff-pull-ring {
+  --p: clamp(0, calc(var(--pull-p, 0)), 1);
+}
+.ff-list-scroller[data-pull="armed"] .ff-pull-ring {
+  color: var(--foreground);
+}
+
+/* --------------------------------------------------------- story cluster */
+
+.ff-cluster-members {
+  position: relative;
+  background: color-mix(in oklch, var(--surface-sunken) 45%, var(--surface-base));
+}
+.ff-list[data-density="magazine"] > .ff-cluster-members {
+  grid-column: 1 / -1;
+  border-radius: var(--radius-row);
+  overflow: clip;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-row[data-armed] .ff-row-reveal-icon {
+    animation: none;
+  }
+}

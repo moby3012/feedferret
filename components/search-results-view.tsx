@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { Search as SearchIcon, X as XIcon, BookmarkPlus, Pencil, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ArticleList } from "@/components/article-list";
+import { ArticleListView } from "@/components/list/article-list-view";
 import { cn } from "@/lib/utils";
 
 interface SearchResultsViewProps {
@@ -144,7 +144,7 @@ export function SearchResultsView({
         </div>
       ) : (
         <div className="flex flex-1 min-h-0 flex-col compact:pb-24">
-          <ArticleList
+          <ArticleListView
             articles={articles}
             selectedArticle={selectedArticle}
             onSelectArticle={onSelectArticle}

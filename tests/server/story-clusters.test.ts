@@ -24,6 +24,8 @@ import { GET as clusterGET } from "../../app/api/app/clusters/[id]/route";
 import { clusterUser, cleanupStoryClusters, reconcileCluster, runStoryClustering, PENDING_BATCH, STEP_SIZE } from "../../lib/story-clustering/job";
 import { applyArticleStateOps } from "../../server/articles/state";
 import { getReadingPreferences, updateGlobalSettings } from "../../app/actions/settings";
+import { markArticleIdsRead } from "../../app/actions/article-state";
+import { markArticlesAsUnread } from "../../app/actions/feeds";
 import type { ArticlePage, ClusterDetail } from "../../features/articles/types";
 
 const dir = mkdtempSync(join(tmpdir(), "feedferret-story-"));
@@ -604,12 +606,14 @@ describe("getClusterDetail visibility (matches the list's 'all feeds' rules)", (
 });
 
 describe("settings", () => {
-  it("defaults to clusterReadMode 'article' (the schema default and the fallback for unknown values)", async () => {
+  it("defaults to clusterReadMode 'story' (the schema default since the story card, and the fallback for unknown values)", async () => {
     const carol = await state.db.user.create({ data: { email: "carol@test", name: "Carol" } });
-    expect(carol.clusterReadMode).toBe("article");
+    expect(carol.clusterReadMode).toBe("story");
     state.session = { user: { id: carol.id } };
-    expect(await getReadingPreferences()).toMatchObject({ clusterReadMode: "article", storyClustering: true });
+    expect(await getReadingPreferences()).toMatchObject({ clusterReadMode: "story", storyClustering: true });
     await state.db.user.update({ where: { id: carol.id }, data: { clusterReadMode: "bogus" } });
+    expect(await getReadingPreferences()).toMatchObject({ clusterReadMode: "story" });
+    await state.db.user.update({ where: { id: carol.id }, data: { clusterReadMode: "article" } });
     expect(await getReadingPreferences()).toMatchObject({ clusterReadMode: "article" });
     state.session = { user: { id: ids.alice } };
   });
@@ -621,5 +625,41 @@ describe("settings", () => {
     expect(await getReadingPreferences()).toMatchObject({ clusterReadMode: "article", storyClustering: false });
     await expect(updateGlobalSettings({ clusterReadMode: "everything" as never })).rejects.toThrow(/clusterReadMode/);
     expect(await getReadingPreferences()).toMatchObject({ clusterReadMode: "article" });
+  });
+});
+
+describe("markArticleIdsRead (row menu: \"Alles bis hier als gelesen\")", () => {
+  it("marks exactly the user's own unread ids, returns them with an undo token, and undo restores them", async () => {
+    await resetUser(ids.alice);
+    await resetUser(ids.bob);
+    await addArticle(ids.alice, ids.aF[0], "up-1", "One", 1);
+    await addArticle(ids.alice, ids.aF[0], "up-2", "Two", 2);
+    await addArticle(ids.alice, ids.aF[0], "up-3", "Three", 3, { isRead: true, readAt: new Date(NOW - 9 * H) });
+    await addArticle(ids.bob, ids.bF[0], "up-bob", "Bob's", 1);
+    const result = await markArticleIdsRead(["up-1", "up-2", "up-3", "up-bob", "missing"]);
+    expect(result.ids.sort()).toEqual(["up-1", "up-2"]);
+    expect(result.undoToken).toEqual(expect.any(String));
+    const flags = async (id: string) => (await state.db.article.findUniqueOrThrow({ where: { id } })).isRead;
+    expect(await flags("up-1")).toBe(true);
+    expect(await flags("up-bob")).toBe(false);
+    // The already-read row keeps its original readAt.
+    expect((await state.db.article.findUniqueOrThrow({ where: { id: "up-3" } })).readAt?.getTime()).toBe(NOW - 9 * H);
+    const undone = await markArticlesAsUnread(result.undoToken!);
+    expect(undone.ids.sort()).toEqual(["up-1", "up-2"]);
+    expect(await flags("up-1")).toBe(false);
+    expect(await flags("up-3")).toBe(true);
+  });
+
+  it("rejects invalid input and requires a session", async () => {
+    await expect(markArticleIdsRead([])).rejects.toThrow(/Invalid ids/);
+    await expect(markArticleIdsRead("up-1")).rejects.toThrow(/Invalid ids/);
+    state.session = null;
+    await expect(markArticleIdsRead(["up-1"])).rejects.toThrow(/Unauthorized/);
+  });
+
+  it("returns no undo token when nothing changed", async () => {
+    await resetUser(ids.alice);
+    await addArticle(ids.alice, ids.aF[0], "up-r", "Read", 1, { isRead: true });
+    expect(await markArticleIdsRead(["up-r"])).toEqual({ ids: [], undoToken: null });
   });
 });

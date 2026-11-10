@@ -15,7 +15,7 @@ describe("StateBatcher", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  const setup = (send?: (ops: WireStateOp[]) => Promise<{ failed: string[] }>) => {
+  const setup = (send?: (ops: WireStateOp[]) => Promise<{ failed: string[]; affected?: string[] }>) => {
     const calls: WireStateOp[][] = [];
     const settled: SettledFlush[] = [];
     const batcher = new StateBatcher({
@@ -38,6 +38,18 @@ describe("StateBatcher", () => {
     expect(calls).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1);
     expect(calls).toEqual([[{ id: "a", isRead: true, isStarred: true }, { id: "b", isStarred: true }]]);
+  });
+
+  it("passes the story cascade's extra ids (`affected`) to onSettled; none on a rejected call", async () => {
+    let n = 0;
+    const { batcher, settled } = setup(() => (n++ === 0 ? Promise.resolve({ failed: [], affected: ["m1", "m2"] }) : Promise.reject(new Error("500"))));
+    batcher.enqueue({ id: "lead", field: "isRead", value: true }, false);
+    await vi.advanceTimersByTimeAsync(TRAILING_MS);
+    expect(settled[0]).toMatchObject({ failed: [], affected: ["m1", "m2"] });
+    batcher.enqueue({ id: "x", field: "isRead", value: true }, false);
+    await vi.advanceTimersByTimeAsync(TRAILING_MS);
+    expect(settled[1].affected).toEqual([]);
+    expect(settled[1].failed).toHaveLength(1);
   });
 
   it("a toggle followed by its inverse cancels: nothing is sent", async () => {

@@ -149,3 +149,36 @@ export async function applyArticleStateOps(userId: string, ops: ArticleStateOp[]
   );
   return { failed, affected };
 }
+
+/** Upper bound of ids one "mark up to here" call may send (loaded rows of a list, not a whole view). */
+export const MAX_MARK_IDS = 1000;
+
+const MarkIdsSchema = z.array(z.string().min(1).max(MAX_ID_LENGTH)).min(1).max(MAX_MARK_IDS);
+
+export function parseMarkIds(input: unknown): { ok: true; ids: string[] } | { ok: false; error: string } {
+  const parsed = MarkIdsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid ids" };
+  return { ok: true, ids: [...new Set(parsed.data)] };
+}
+
+/**
+ * Bulk mark-read of explicit ids ("Alles bis hier als gelesen"): only the
+ * user's own, still-unread articles change; returns exactly those ids (the
+ * undo set). One `updateMany` per chunk inside one transaction; `readAt` is
+ * stamped so the changed rows can be told apart from concurrent writers.
+ */
+export async function markIdsRead(userId: string, ids: string[]): Promise<string[]> {
+  const readAt = new Date();
+  return db.$transaction(async (tx) => {
+    const changed: string[] = [];
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      const candidates = await tx.article.findMany({ where: { userId, id: { in: chunk }, isRead: false }, select: { id: true } });
+      if (candidates.length === 0) continue;
+      const candidateIds = candidates.map((a) => a.id);
+      await tx.article.updateMany({ where: { userId, id: { in: candidateIds }, isRead: false }, data: { isRead: true, readAt } });
+      changed.push(...candidateIds);
+    }
+    return changed;
+  });
+}

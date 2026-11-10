@@ -88,7 +88,7 @@ model User {
   // K1 story clustering (lib/story-clustering). storyClustering = background job on/off for this user;
   // clusterReadMode: "story" = marking a story's lead read marks its sources read, "article" = only that row.
   storyClustering         Boolean   @default(true)
-  clusterReadMode         String    @default("article")  // "story" | "article" — flips to "story" with the cluster card UI
+  clusterReadMode         String    @default("story")    // "story" | "article" — "story" since the story card UI (PR 6)
   markReadOnScroll        Boolean   @default(false)
   markReadOnAdvance       Boolean   @default(false)     // end-of-list "Weiter zu …" also marks the current view read
   layoutDirection         String    @default("ltr")     // "ltr" | "rtl"

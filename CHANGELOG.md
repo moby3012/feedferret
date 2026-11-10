@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — list gestures, row v2 per content type, story cluster card
+
+- One shared gesture module (`lib/gestures/`) on Pointer Events: row swipes write transforms from one rAF loop (no React render per move), 10 px slop, axis lock `|dx| > 1.5·|dy|` (a vertical scroll with ≤ 30° drift never arms a swipe), commit at 35 % of the row width or a flick (≥ 0.5 px/ms), rubber band past the commit point, spring release; swipes that start in the 24 px screen edges are left to the OS back gesture; no swipe starts during momentum scroll; mouse never swipes. Pull-to-refresh uses the same arbitration.
+- Swipe right (inline-end) toggles **read**, swipe left toggles **Später** by default; both directions are configurable per device (Settings → Lesen → Wischgesten: Gelesen / Später / Favorit / Nichts) with a haptics switch (Android `vibrate`; iOS 18 switch-haptic at release, best effort).
+- Long-press (touch) / right-click / context-menu key opens the row menu — a sheet on touch, a menu at the pointer otherwise: Gelesen · Später · Favorit · Original öffnen · Link kopieren · Quellen · **Alles bis hier als gelesen** (one call, server-issued Undo token like mark-all). Every swipe action stays reachable through the row buttons, the menu and the keyboard.
+- Row v2: article / video / audio / social / image rows × list / minimal / magazine densities with fixed media boxes (no layout shift), unread dot + weight, dimmed media for read rows; small icon buttons use the `rounded-control` / `rounded-chip` roles again.
+- Story cluster card: one row per story with "+N Quellen" that expands the other sources (`GET /api/app/clusters/:id`). In story mode, reading or marking the card marks every source; ids the server cascade marked (`affected`) are patched into the cache with an Undo toast, and marking the story unread again restores them.
+- "Anzeige" chip for sponsored articles; clean titles show the neutral headline with the original as tooltip / accessible description / menu subtitle.
+- `User.clusterReadMode` now defaults to `story` (additive default change; existing users keep their stored value) with a switch in Settings → Lesen.
 ### Added — "Catch me up" briefing on the Neu list (K2)
 
 - A collapsible card above the first row of **Neu** summarizes the unread stories since your last briefing (what happened · why it matters · in brief). Every point cites its sources (tap a chip to open the article); uncited, unknown or ungrounded model lines are dropped server-side. Without AI (or below 3 stories) the card shows a headline overview grouped by story instead. Cloud providers generate on tap; a local Ollama model can generate automatically. Only titles, excerpts (≤ 350 chars) and feed names are sent to the provider.
@@ -37,7 +46,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 - Articles of different feeds that cover the same story are grouped per user over a 48 h window (`lib/story-clustering/`, see `docs/story-clustering.md`): normalization (de/en), entity/link heuristics, idf-weighted scoring, drift guard, incremental background job (≤ 400 ms per tick, idempotent) with first-run backfill. Off with `DISABLE_STORY_CLUSTERING=true` or per user (`storyClustering`).
 - API for the upcoming cluster card: optional `clusterId` / `clusterSize` / `clusterLeadId` on `GET /api/app/articles` items, `GET /api/app/clusters/:id`, and `affected` ids from the batched read action.
-- New setting `clusterReadMode` (default `article` until the cluster card ships; `story` = reading a story's lead marks its other sources read).
+- New setting `clusterReadMode` (`story` = reading a story's lead marks its other sources read; default `story` since the cluster card).
 
 ### Security — sync credentials upgrade
 

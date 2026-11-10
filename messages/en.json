@@ -96,7 +96,23 @@
     "offlineUsageEmpty": "Nothing stored offline yet.",
     "offlineBrowserStorage": "Browser storage in use: {used} of {quota}",
     "offlineClear": "Clear offline data",
-    "offlineQuotaFailed": "Browser storage is full: not everything could be saved for offline reading (older articles were removed to make room)."
+    "offlineQuotaFailed": "Browser storage is full: not everything could be saved for offline reading (older articles were removed to make room).",
+    "storyReadMode": "Read stories as a whole",
+    "storyReadModeDescription": "When you read or mark a story, all of its sources are marked as read too. Off: only the article you opened.",
+    "gestures": {
+      "title": "Swipe gestures",
+      "description": "Applies to this device. Every action is also in the long-press menu and on the row buttons.",
+      "swipeRight": "Swipe right",
+      "swipeLeft": "Swipe left",
+      "actions": {
+        "read": "Read / unread",
+        "later": "Read later",
+        "star": "Favorite",
+        "none": "Nothing"
+      },
+      "haptics": "Haptic feedback",
+      "hapticsDescription": "A short vibration when a swipe or pull-to-refresh triggers, where this device supports it."
+    }
   },
   "profile": {
     "changePassword": "Change password",
@@ -814,7 +830,32 @@
     "markAsUnread": "Mark as unread",
     "markAsRead": "Mark as read",
     "alsoIn": "Also in",
-    "duplicateBadge": "Duplicate"
+    "duplicateBadge": "Duplicate",
+    "sponsored": "Sponsored",
+    "sponsoredHint": "Detected as paid or affiliate content",
+    "originalTitle": "Original title: {title}",
+    "moreSources": "+{count, plural, one {# source} other {# sources}}",
+    "showSources": "Show all sources of this story",
+    "hideSources": "Hide the sources of this story",
+    "storySources": "Sources of this story",
+    "sourcesFailed": "Couldn't load the sources.",
+    "retry": "Retry",
+    "swipeRead": "Read",
+    "swipeUnread": "Unread",
+    "swipeLater": "Later",
+    "swipeLaterRemove": "Remove",
+    "swipeStar": "Favorite",
+    "swipeUnstar": "Unfavorite",
+    "articleActions": "Article actions",
+    "openOriginal": "Open original",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied",
+    "markUpToHere": "Mark all up to here as read",
+    "kindVideo": "Video",
+    "kindAudio": "Audio",
+    "kindImage": "Image",
+    "kindSocial": "Post",
+    "duration": "Duration {time}"
   },
   "articleReader": {
     "loadingBody": "Loading article…",
@@ -1783,7 +1824,8 @@
     "toggleFailed": "Couldn't save that change — it was undone.",
     "offlineReadOnly": "Offline – changes only when back online",
     "offline": "Offline",
-    "labelsFailed": "Couldn't update labels."
+    "labelsFailed": "Couldn't update labels.",
+    "storyMarkedRead": "{count, plural, one {# more source of this story} other {# more sources of this story}} marked as read"
   },
   "apiPassword": {
     "title": "API password",
