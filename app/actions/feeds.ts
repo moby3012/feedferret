@@ -33,6 +33,9 @@ import { AI_OPERATOR_DELETE_ERROR, ruleHasAiDeleteConflict } from "@/lib/rule-ai
 import { parseRuleActions } from "@/lib/auto-read-rules";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-fetch";
+import { pickFields } from "@/lib/pick-fields";
+import { clampFeedLimits } from "@/lib/feed-limits";
+import { assertOwnedCategories, MAX_REORDER_ITEMS } from "@/lib/owned-categories";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -616,6 +619,41 @@ export async function deleteFeed(feedId: string) {
     revalidatePath("/");
 }
 
+const UPDATE_FEED_FIELDS = [
+    "name",
+    "categoryId",
+    "updateFrequency",
+    "retentionDays",
+    "keepMinArticles",
+    "authType",
+    "authUsername",
+    "authPassword",
+    "customUserAgent",
+    "fetchTimeoutSecs",
+    "sslVerify",
+    "maxSizeKb",
+    "fullTextSelector",
+    "fullTextRemoveSelectors",
+    "autoFetchFullText",
+    "fullTextMode",
+    "defaultContentFormat",
+    "fullTextConditions",
+    "fullTextAutoSuggestDismissed",
+    "filtersActionRead",
+    "sourceType",
+    "priority",
+    "unicityCriteria",
+    "unicityCriteriaForced",
+    "scraperConfig",
+    "httpOptions",
+    "hideFromAllFeeds",
+    "hideArticleImage",
+    "readerFontSizeOverride",
+    "readerWidthOverride",
+    "openOriginalOverride",
+    "autoMuted",
+] as const;
+
 export async function updateFeed(feedId: string, data: {
     name?: string;
     categoryId?: string | null;
@@ -675,10 +713,13 @@ export async function updateFeed(feedId: string, data: {
     const FULL_TEXT_MODES = new Set(["off", "auto", "selector"]);
     const CONTENT_FORMATS = new Set(["html", "markdown"]);
 
+    // Allowlist: server-action input is untrusted at runtime; spreading it let a
+    // caller set userId (re-assign the feed to another account) or internal fields.
+    const allowed = clampFeedLimits(pickFields(data, UPDATE_FEED_FIELDS));
     await db.feed.update({
         where: { id: feedId, userId: session.user.id },
         data: {
-            ...data,
+            ...allowed,
             ...(data.readerFontSizeOverride !== undefined ? {
                 readerFontSizeOverride: data.readerFontSizeOverride && READER_FONT_SIZES.has(data.readerFontSizeOverride)
                     ? data.readerFontSizeOverride
@@ -778,6 +819,7 @@ export async function addCategory(name: string, parentId?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
+    if (parentId) await assertOwnedCategories(session.user.id, [parentId]);
     const category = await db.category.create({
         data: {
             name,
@@ -794,9 +836,11 @@ export async function updateCategory(categoryId: string, data: { name?: string; 
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
+    const allowed = pickFields(data, ["name", "updateFrequency"] as const);
+    if (allowed.name !== undefined && typeof allowed.name !== "string") throw new Error("Invalid name");
     await db.category.update({
         where: { id: categoryId, userId: session.user.id },
-        data,
+        data: clampFeedLimits(allowed),
     });
 
     revalidatePath("/");
@@ -817,6 +861,14 @@ export async function updateCategoryOrder(orders: { id: string; order: number; p
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
+    // parentId must be one of the user's own categories (never another account's).
+    if (!Array.isArray(orders) || orders.length > MAX_REORDER_ITEMS) throw new Error("Too many items");
+    try {
+        await assertOwnedCategories(session.user.id, orders.map((o) => o.parentId));
+    } catch {
+        throw new Error("Invalid parent category");
+    }
+
     await db.$transaction(
         orders.map((o) =>
             db.category.update({
@@ -832,6 +884,8 @@ export async function updateCategoryOrder(orders: { id: string; order: number; p
 export async function updateFeedOrder(orders: { id: string; order: number; categoryId?: string | null }[]) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+    if (!Array.isArray(orders) || orders.length > MAX_REORDER_ITEMS) throw new Error("Too many items");
+    await assertOwnedCategories(session.user.id, orders.map((o) => o.categoryId));
 
     await db.$transaction(
         orders.map((o) =>

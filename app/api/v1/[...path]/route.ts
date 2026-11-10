@@ -24,6 +24,7 @@ import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed
 import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactWebhookConfigs } from "@/lib/webhooks";
 import { AI_OPERATOR_DELETE_ERROR, ruleHasAiDeleteConflict } from "@/lib/rule-ai-operators";
 import { parseRuleActions } from "@/lib/auto-read-rules";
+import { clampFeedLimits } from "@/lib/feed-limits";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
@@ -460,6 +461,11 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
   ] as const) {
     if (body[key] !== undefined) data[key] = body[key];
   }
+  if (data.categoryId) {
+    const owned = await db.category.findFirst({ where: { id: String(data.categoryId), userId: user.id }, select: { id: true } });
+    if (!owned) return apiError("Invalid category", 422);
+  }
+  clampFeedLimits(data);
   if (data.httpOptions) {
     try {
       await assertSafeHttpOptionsProxy(data.httpOptions);
@@ -527,7 +533,12 @@ async function createCategory(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
   const name = allowedString(body?.name);
   if (!name) return apiError("name is required", 400);
-  const category = await db.category.create({ data: { userId: user.id, name, parentId: allowedString(body?.parentId), order: Number.isFinite(Number(body?.order)) ? Number(body.order) : 0 } });
+  const parentId = allowedString(body?.parentId);
+  if (parentId) {
+    const owned = await db.category.findFirst({ where: { id: parentId, userId: user.id }, select: { id: true } });
+    if (!owned) return apiError("Invalid parent category", 422);
+  }
+  const category = await db.category.create({ data: { userId: user.id, name, parentId, order: Number.isFinite(Number(body?.order)) ? Number(body.order) : 0 } });
   return NextResponse.json(category, { status: 201 });
 }
 
@@ -536,6 +547,11 @@ async function patchCategory(user: ApiUser, categoryId: string, request: Request
   if (!body) return apiError("Invalid JSON body", 400);
   const data: any = {};
   for (const key of ["name", "parentId", "order", "updateFrequency"] as const) if (body[key] !== undefined) data[key] = body[key];
+  if (data.parentId) {
+    const owned = await db.category.findFirst({ where: { id: String(data.parentId), userId: user.id }, select: { id: true } });
+    if (!owned || data.parentId === categoryId) return apiError("Invalid parent category", 422);
+  }
+  clampFeedLimits(data);
   const result = await db.category.updateMany({ where: { id: categoryId, userId: user.id }, data });
   if (!result.count) return apiError("Category not found", 404);
   return NextResponse.json(await db.category.findFirst({ where: { id: categoryId, userId: user.id } }));

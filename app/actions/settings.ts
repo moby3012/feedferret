@@ -13,6 +13,7 @@ import type { AiProvider } from "@/lib/ai-summary";
 import { fetchViaHostedApiDetailed, type HostedFetchProvider } from "@/lib/hosted-fetch";
 import { loadReadingPreferences } from "@/server/bootstrap";
 import { isCountDisplay, type CountDisplay } from "@/lib/count-display";
+import { pickFields } from "@/lib/pick-fields";
 
 async function requireUser() {
   const session = await auth();
@@ -23,11 +24,15 @@ async function requireUser() {
 export async function updateProfile(data: { name?: string; email?: string }) {
   const session = await requireUser();
 
+  const profile = pickFields(data, ["name", "email"] as const);
+  for (const [key, value] of Object.entries(profile)) {
+    if (value !== null && typeof value !== "string") throw new Error(`Invalid ${key}`);
+  }
   const emailChanged = await db.$transaction(async (tx) => {
     const previous = await tx.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { email: true } });
-    const emailChanged = data.email !== undefined && data.email !== previous.email;
+    const emailChanged = profile.email !== undefined && profile.email !== previous.email;
     await tx.user.update({ where: { id: session.user.id }, data: {
-      ...data, ...(emailChanged ? { apiFeverKey: null, apiTokenVersion: { increment: 1 } } : {}),
+      ...profile, ...(emailChanged ? { apiFeverKey: null, apiTokenVersion: { increment: 1 } } : {}),
     } });
     // Hashes cannot be recomputed without the original secret. Rotate after email changes.
     if (emailChanged) await tx.apiToken.updateMany({ where: { userId: session.user.id }, data: { feverKey: null } });
@@ -74,6 +79,30 @@ export async function getReadingPreferences() {
   return loadReadingPreferences(session.user.id);
 }
 
+const GLOBAL_SETTINGS_TYPES = {
+  defaultUpdateFrequency: "number",
+  defaultRetentionDays: "number",
+  openOriginalByDefault: "boolean",
+  markReadAfterDelaySecs: "number",
+  defaultViewMode: "string",
+  readerWidth: "string",
+  readerFontSize: "string",
+  defaultArticleSort: "string",
+  accentColor: "string",
+  secondaryColor: "string",
+  hideDuplicates: "boolean",
+  markReadOnScroll: "boolean",
+  markReadOnAdvance: "boolean",
+  storyClustering: "boolean",
+  clusterReadMode: "string",
+  layoutDirection: "string",
+  hideEmptyFeeds: "boolean",
+  hideEmptyLabels: "boolean",
+  countDisplay: "string",
+  autoMuteFailingFeedsAfter: "number",
+} as const;
+const GLOBAL_SETTINGS_FIELDS = Object.keys(GLOBAL_SETTINGS_TYPES) as (keyof typeof GLOBAL_SETTINGS_TYPES)[];
+
 export async function updateGlobalSettings(data: {
   defaultUpdateFrequency?: number;
   defaultRetentionDays?: number;
@@ -98,7 +127,19 @@ export async function updateGlobalSettings(data: {
 }) {
   const session = await requireUser();
 
-  const updateData: Record<string, unknown> = { ...data };
+  // Server actions receive arbitrary client JSON at runtime — the TypeScript type
+  // above is not enforced. Only copy explicitly allowed preference fields; never
+  // spread `data` into the update (that allowed setting role, email, passwordHash…).
+  const updateData: Record<string, unknown> = {};
+  const input = (data ?? {}) as Record<string, unknown>;
+  for (const key of GLOBAL_SETTINGS_FIELDS) {
+    if (input[key] !== undefined) updateData[key] = input[key];
+  }
+  for (const [key, type] of Object.entries(GLOBAL_SETTINGS_TYPES)) {
+    const value = updateData[key];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== type) throw new Error(`Invalid ${key}`);
+  }
   if (data.autoMuteFailingFeedsAfter !== undefined) {
     // 0 = disabled/opt-out; otherwise clamp to a sane range.
     updateData.autoMuteFailingFeedsAfter =
@@ -286,7 +327,14 @@ export async function updateDigestSettings(data: {
 }) {
   const session = await requireUser();
 
-  const updateData: Record<string, unknown> = { ...data };
+  // Allowlist: never spread untrusted server-action input into a user update.
+  const updateData: Record<string, unknown> = pickFields(data, [
+    "digestEnabled", "digestFrequency", "digestDayOfWeek", "digestHour", "digestTimezone", "digestScope",
+    "digestFeedIds", "digestLabelIds", "digestMaxArticles", "digestMinArticles", "digestLookbackHours",
+    "digestGroupByFeed", "digestAiSummary", "digestSkipFeatured", "digestPausedUntil",
+  ] as const);
+  if (data.digestFeedIds !== undefined && !Array.isArray(data.digestFeedIds)) throw new Error("Invalid digestFeedIds");
+  if (data.digestLabelIds !== undefined && !Array.isArray(data.digestLabelIds)) throw new Error("Invalid digestLabelIds");
 
   if (data.digestFeedIds !== undefined) {
     updateData.digestFeedIds =
