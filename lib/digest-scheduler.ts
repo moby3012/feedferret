@@ -5,6 +5,8 @@ import { decryptIfValue } from "@/lib/crypto";
 import { randomBytes } from "crypto";
 import { logger } from "./logger";
 import { writeSystemLog } from "@/lib/system-log";
+import { AiBudgetError } from "@/lib/ai/errors";
+import { warnBudgetOnce } from "@/lib/ai/usage";
 
 function getBaseUrl(): string {
     if (process.env.AUTH_URL) return process.env.AUTH_URL.replace(/\/$/, "");
@@ -89,6 +91,8 @@ async function buildAiExtras(
         model: user.aiModel,
         ollamaBaseUrl: user.aiOllamaBaseUrl,
         language: user.aiSummaryLanguage,
+        // K2: daily token cap + usage accounting.
+        usage: { userId: user.id, feature: "digest" as const },
     };
 
     let overall: string | null = null;
@@ -118,6 +122,8 @@ async function buildAiExtras(
                     );
                     if (s) perFeed[feedId] = s;
                 } catch (err) {
+                    // Daily token cap reached: stop all AI work for this digest (handled below).
+                    if (err instanceof AiBudgetError) throw err;
                     logger.error(`[digest] per-feed AI summary failed for feed ${feedId}:`, err);
                 }
             }
@@ -131,8 +137,13 @@ async function buildAiExtras(
             ) || null;
         }
     } catch (err) {
-        logger.error("[digest] AI summary/subject failed:", err);
-        await writeSystemLog("warn", "digest", `AI summary failed: ${String(err)}`, { userId: user.id });
+        if (err instanceof AiBudgetError) {
+            // The digest still goes out, without (further) AI extras.
+            warnBudgetOnce(user.id, "digest", err);
+        } else {
+            logger.error("[digest] AI summary/subject failed:", err);
+            await writeSystemLog("warn", "digest", `AI summary failed: ${String(err)}`, { userId: user.id });
+        }
     }
 
     return { overall, perFeed, subject };

@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArticleList } from "@/components/article-list";
 import { EndOfListCard } from "@/components/end-of-list-card";
+import { BriefingCard } from "@/components/briefing/briefing-card";
 import { RssHeader } from "@/components/rss-header";
 import { SearchResultsView } from "@/components/search-results-view";
 import { OfflineChip } from "@/components/shell/offline-chip";
@@ -14,6 +15,7 @@ import { toLegacyArticle } from "@/features/articles/legacy-adapter";
 import { useArticleActions, useIsMarkingViewRead } from "@/features/articles/mutations";
 import { prefetchArticle } from "@/features/articles/prefetch";
 import { useArticleList, type ArticleListResult } from "@/features/articles/queries";
+import { useBriefing } from "@/features/briefing/queries";
 import { showApplies, type ListKey } from "@/features/articles/scope";
 import { useCounts, useOnline, useScopeUnread } from "@/features/bootstrap/queries";
 import { formatLoc, listKeyOfLoc, type Loc, type TabId } from "@/features/reader/nav/location";
@@ -82,6 +84,11 @@ function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: bool
   const data = useShellData();
   const listKey = useMemo(() => listKeyOfLoc(loc, data.sortOrder === "oldest" ? "old" : "new"), [loc, data.sortOrder]);
   const list = useArticleList(listKey, { active });
+  // K2 card: shown on the Neu list (all, unread) from the first row paint on.
+  // Its GET starts here, together with the list query, so a fast answer is
+  // part of the first paint (the card then opens by itself).
+  const showBriefing = tab === "new" && loc.scope?.kind === "all" && loc.show === "unread";
+  useBriefing("new", showBriefing);
   const counts = useCounts(true);
   const scopeUnread = useScopeUnread(loc.scope, data.feeds, true);
   const isMarkingAllRead = useIsMarkingViewRead();
@@ -103,6 +110,7 @@ function ListPaneData({ tab, loc, active }: { tab: TabId; loc: Loc; active: bool
       online={online}
       draft={draft}
       selectedId={selectedId}
+      showBriefing={showBriefing}
     />
   );
 }
@@ -120,6 +128,7 @@ interface ViewProps {
   online: boolean;
   draft: string;
   selectedId: string | null;
+  showBriefing: boolean;
 }
 
 // Frozen while inactive: no re-render for hidden panes (data and cache writes included).
@@ -273,6 +282,7 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
             />
           }
           hasFeeds={data.feeds.length > 0}
+          header={p.showBriefing ? <BriefingCard scopeKey="new" active={active} /> : undefined}
         />
       )}
     </>

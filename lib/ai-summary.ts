@@ -1,6 +1,21 @@
 import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { fakePrompt, isFakeAiEnabled } from "@/lib/ai/fake";
+import { classifyAiError } from "@/lib/ai/errors";
+import { estimateTokens, reserveBudget, settleUsage, type AiFeature } from "@/lib/ai/usage";
 
-export type AiProvider = "openai" | "anthropic" | "ollama" | "gemini" | "openrouter";
+/** "fake" is the deterministic CI provider (lib/ai/fake.ts); it only exists behind its test gate. */
+export type AiProvider = "openai" | "anthropic" | "ollama" | "gemini" | "openrouter" | "fake";
+
+export const REAL_AI_PROVIDERS = ["openai", "anthropic", "ollama", "gemini", "openrouter"] as const;
+
+/** Providers a user may select right now (the fake one only behind its gate). */
+export function selectableAiProviders(): AiProvider[] {
+  return isFakeAiEnabled() ? [...REAL_AI_PROVIDERS, "fake"] : [...REAL_AI_PROVIDERS];
+}
+
+export function isSelectableAiProvider(value: unknown): value is AiProvider {
+  return typeof value === "string" && (selectableAiProviders() as string[]).includes(value);
+}
 
 export type AiConfig = {
   provider: AiProvider;
@@ -8,6 +23,11 @@ export type AiConfig = {
   model?: string | null;
   ollamaBaseUrl?: string | null;
   language?: string | null;
+  /**
+   * K2: when set, the call is checked against the user's daily token cap
+   * (throws AiBudgetError) and its (estimated) tokens are recorded in AiUsage.
+   */
+  usage?: { userId: string; feature: AiFeature };
 };
 
 const MAX_CONTENT_CHARS = 8_000;
@@ -88,6 +108,24 @@ export async function generateDigestSubject(
 }
 
 export async function runAiPrompt(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
+  if (!config.usage) return dispatchAiPrompt(prompt, config, maxTokens);
+  const { userId, feature } = config.usage;
+  const estIn = estimateTokens(prompt);
+  // Atomic reservation of input + max output BEFORE the call (throws AiBudgetError).
+  const reservation = await reserveBudget(userId, config.provider, estIn + maxTokens);
+  let output: string;
+  try {
+    output = await dispatchAiPrompt(prompt, config, maxTokens);
+  } catch (error) {
+    // Aborted / timed out: the provider most likely processed (and billed) the input.
+    await settleUsage(reservation, feature, classifyAiError(error) === "timeout" ? estIn : 0, 0);
+    throw error;
+  }
+  await settleUsage(reservation, feature, estIn, estimateTokens(output));
+  return output;
+}
+
+async function dispatchAiPrompt(prompt: string, config: AiConfig, maxTokens: number): Promise<string> {
   switch (config.provider) {
     case "openai":
       return summarizeOpenAI(prompt, config, maxTokens);
@@ -99,6 +137,9 @@ export async function runAiPrompt(prompt: string, config: AiConfig, maxTokens = 
       return summarizeGemini(prompt, config, maxTokens);
     case "openrouter":
       return summarizeOpenRouter(prompt, config, maxTokens);
+    case "fake":
+      if (isFakeAiEnabled()) return fakePrompt(prompt, config.model);
+      throw new Error("Unknown AI provider: fake");
     default:
       throw new Error(`Unknown AI provider: ${(config as any).provider}`);
   }

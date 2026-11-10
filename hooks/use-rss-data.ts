@@ -864,6 +864,8 @@ export function useUpdateAiSettings() {
             queryClient.invalidateQueries({ queryKey: ["ai-settings"] })
             // "Sachliche Titel bei Clickbait" changes list rows (displayTitle).
             queryClient.invalidateQueries({ queryKey: ["list"] })
+            // Provider / cap / auto changes the briefing card's state (K2).
+            queryClient.invalidateQueries({ queryKey: ["briefing"] })
             toast.success("AI settings saved")
         },
         onError: (err) => {

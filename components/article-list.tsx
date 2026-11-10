@@ -119,6 +119,11 @@ interface ArticleListProps {
    * card. Switching feeds is always a deliberate tap — never a gesture.
    */
   endOfList?: React.ReactNode;
+  /**
+   * Rendered once above the first row, inside the scroller (scrolls with the
+   * list, never sticky) — e.g. the K2 briefing card of the Neu list.
+   */
+  header?: React.ReactNode;
   hasFeeds?: boolean;
   // When set, highlights occurrences of the query's free-text terms in each
   // article's title/excerpt so it's visible *where* a search matched.
@@ -149,6 +154,7 @@ export function ArticleList({
   onPullToRefresh,
   scrollMemoryKey = null,
   endOfList,
+  header,
   hasFeeds = true,
   searchQuery,
   hasMorePages = false,
@@ -332,7 +338,8 @@ export function ArticleList({
       {articles.length === 0 && endOfList ? (
         // Nothing left to show: the end card is the empty state ("Du bist auf
         // dem Laufenden" + the way on), so the user never faces a blank list.
-        <div ref={contentRef} className="p-3 pb-28 wide:pb-3">
+        <div ref={contentRef} className="p-3 pb-28 wide:pb-3 space-y-2.5">
+          {header}
           {endOfList}
         </div>
       ) : articles.length === 0 ? (
@@ -360,6 +367,7 @@ export function ArticleList({
             viewMode === "magazine" && "grid grid-cols-1 gap-4 space-y-0",
           )}
         >
+          {header}
           {visibleArticles.map((article, index) => (
             <ArticlePreview
               key={article.id}

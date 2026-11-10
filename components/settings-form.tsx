@@ -2009,6 +2009,7 @@ function ApiTokenSection() {
 
 function AiSummarySection() {
   const t = useTranslations();
+  const format = useFormatter();
   const { data: ai } = useAiSettings();
   const updateAi = useUpdateAiSettings();
   const testAi = useTestAiConnection();
@@ -2020,6 +2021,8 @@ function AiSummarySection() {
   const [autoSummarize, setAutoSummarize] = useState(false);
   const [autoTag, setAutoTag] = useState(false);
   const [cleanTitles, setCleanTitles] = useState(false);
+  const [briefingAuto, setBriefingAuto] = useState(true);
+  const [dailyCap, setDailyCap] = useState("");
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
 
   useEffect(() => {
@@ -2031,6 +2034,8 @@ function AiSummarySection() {
     setAutoSummarize(ai.autoSummarize ?? false);
     setAutoTag(ai.autoTag ?? false);
     setCleanTitles(ai.cleanTitles ?? false);
+    setBriefingAuto(ai.briefingAuto ?? true);
+    setDailyCap(ai.dailyCap === null || ai.dailyCap === undefined ? "" : String(ai.dailyCap));
   }, [ai]);
 
   const handleSave = () => {
@@ -2044,6 +2049,8 @@ function AiSummarySection() {
       language,
       autoTag,
       cleanTitles,
+      briefingAuto,
+      dailyCap: dailyCap.trim() === "" ? null : dailyCap.trim(),
     });
   };
 
@@ -2090,6 +2097,7 @@ function AiSummarySection() {
               <SelectItem value="gemini">{t("ai.providers.gemini")}</SelectItem>
               <SelectItem value="openrouter">{t("ai.providers.openrouter")}</SelectItem>
               <SelectItem value="ollama">{t("ai.providers.ollama")}</SelectItem>
+              {ai?.fakeProviderAvailable && <SelectItem value="fake">Fake (CI)</SelectItem>}
             </SelectContent>
           </Select>
         </div>
@@ -2207,6 +2215,48 @@ function AiSummarySection() {
               <p className="text-xs text-muted-foreground">{t("ai.cleanTitlesDescription")}</p>
             </div>
             <Switch checked={cleanTitles} onCheckedChange={setCleanTitles} />
+          </div>
+        )}
+
+        {provider !== "none" && (
+          <div className="ui-control-surface flex items-center justify-between gap-4 rounded-2xl border px-4 py-3">
+            <div>
+              <p className="text-sm font-medium" id="ai-briefing-auto-label">{t("ai.briefingAuto")}</p>
+              <p className="text-xs text-muted-foreground">{t("ai.briefingAutoDescription")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{t("ai.briefingPrivacy")}</p>
+            </div>
+            <Switch checked={briefingAuto} onCheckedChange={setBriefingAuto} aria-labelledby="ai-briefing-auto-label" />
+          </div>
+        )}
+
+        {provider !== "none" && (
+          <div className="grid gap-1.5">
+            <label className="text-sm font-medium" htmlFor="ai-daily-cap-input">{t("ai.dailyCap")}</label>
+            <Input
+              id="ai-daily-cap-input"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1000}
+              value={dailyCap}
+              placeholder={String(ai?.defaultDailyCap ?? 150000)}
+              onChange={(e) => setDailyCap(e.target.value)}
+              className="h-10 rounded-2xl"
+              aria-describedby="ai-daily-cap-hint"
+            />
+            <p id="ai-daily-cap-hint" className="text-xs text-muted-foreground">
+              {t("ai.dailyCapDescription", { default: (ai?.defaultDailyCap ?? 150000).toLocaleString() })}{" "}
+              {t("ai.dailyCapDay", { time: ai?.budgetResetsAt ? format.dateTime(new Date(ai.budgetResetsAt), { hour: "2-digit", minute: "2-digit" }) : "00:00 UTC" })}
+            </p>
+            <p className="text-xs text-muted-foreground" data-testid="ai-usage-today">
+              {t("ai.usageTodayCloud", { count: (ai?.usedToday ?? 0).toLocaleString() })}
+              {(ai?.localUsedToday ?? 0) > 0 && <> · {t("ai.usageTodayLocal", { count: (ai?.localUsedToday ?? 0).toLocaleString() })}</>}
+            </p>
+            {ai?.budgetPaused && (
+              <p role="status" className="rounded-2xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-foreground" data-testid="ai-budget-paused">
+                {t("ai.budgetPaused", { time: format.dateTime(new Date(ai.budgetResetsAt), { weekday: "short", hour: "2-digit", minute: "2-digit" }) })}
+              </p>
+            )}
           </div>
         )}
 

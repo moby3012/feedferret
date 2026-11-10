@@ -1647,7 +1647,12 @@ export async function previewFeedExtraction(feedId: string, articleUrl: string) 
     };
 }
 
-export async function summarizeArticle(articleId: string): Promise<{ summary: string }> {
+/**
+ * On-demand article summary. The daily AI token cap is an expected outcome,
+ * not a failure: it comes back as `{ error: "budget" }` (server actions mask
+ * thrown messages in production) so the UI can say why.
+ */
+export async function summarizeArticle(articleId: string): Promise<{ summary: string; error?: undefined } | { summary?: undefined; error: "budget" | "ai_off" }> {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -1673,13 +1678,22 @@ export async function summarizeArticle(articleId: string): Promise<{ summary: st
 
     const { generateSummary } = await import("@/lib/ai-summary");
 
-    const summary = await generateSummary(article.content, {
-        provider: user.aiProvider as AiProvider,
-        apiKey: decryptIfValue(user.aiApiKey),
-        model: user.aiModel,
-        ollamaBaseUrl: user.aiOllamaBaseUrl,
-        language: user.aiSummaryLanguage,
-    });
+    const { AiBudgetError } = await import("@/lib/ai/errors");
+
+    let summary: string;
+    try {
+        summary = await generateSummary(article.content, {
+            provider: user.aiProvider as AiProvider,
+            apiKey: decryptIfValue(user.aiApiKey),
+            model: user.aiModel,
+            ollamaBaseUrl: user.aiOllamaBaseUrl,
+            language: user.aiSummaryLanguage,
+            usage: { userId: session.user.id, feature: "summary" },
+        });
+    } catch (error) {
+        if (error instanceof AiBudgetError) return { error: error.cap === 0 ? "ai_off" : "budget" };
+        throw error;
+    }
 
     await db.article.update({
         where: { id: articleId, userId: session.user.id },

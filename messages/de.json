@@ -336,7 +336,16 @@
       "spanish": "Spanisch",
       "japanese": "Japanisch",
       "chinese": "Chinesisch"
-    }
+    },
+    "briefingAuto": "Überblick automatisch erstellen",
+    "briefingAutoDescription": "Nur mit lokalem Modell (Ollama): erstellt den Überblick, sobald du „Neu“ öffnest. Bei Cloud-Anbietern tippst du auf „Überblick erstellen“.",
+    "dailyCap": "Tageslimit (Tokens)",
+    "dailyCapDescription": "Gilt für alle KI-Funktionen mit Cloud-Anbietern. Leer = Server-Standard ({default}), 0 = KI aus. Ollama läuft lokal und wird nicht begrenzt.",
+    "dailyCapDay": "Der Tag zählt nach UTC – das Limit setzt sich um {time} (deine Zeit) zurück.",
+    "usageTodayCloud": "Heute verbraucht (Cloud, zählt zum Limit): {count} Tokens",
+    "usageTodayLocal": "lokal (Ollama, unbegrenzt): {count} Tokens",
+    "budgetPaused": "Tageslimit erreicht – automatische KI-Funktionen pausiert bis {time}.",
+    "briefingPrivacy": "Für den Überblick werden nur Titel, Anrisse (max. 350 Zeichen) und Feed-Namen an den Anbieter gesendet."
   },
   "contentFetch": {
     "title": "Volltext-Abruf-Fallback (BYOK)",
@@ -837,6 +846,8 @@
     "nextArticle": "Nächster Artikel",
     "summarizeFailed": "Zusammenfassung fehlgeschlagen. Bitte die KI-Anbieter-Einstellungen prüfen.",
     "summarizeFailedInline": "Zusammenfassung fehlgeschlagen — bitte erneut versuchen.",
+    "summarizeBudget": "Tageslimit für KI erreicht – du kannst morgen wieder zusammenfassen lassen oder das Limit in den Einstellungen erhöhen.",
+    "summarizeAiOff": "KI ist für dein Konto ausgeschaltet (Tageslimit 0).",
     "fetchingFullTextStatus": "Volltext des Artikels wird abgerufen…",
     "fullTextLoaded": "Volltext geladen",
     "fullTextUnavailable": "Volltext nicht verfügbar. Öffne stattdessen den Originalartikel.",
@@ -1789,5 +1800,51 @@
   },
   "shell": {
     "chooseFeed": "Wähle links einen Feed oder Ordner."
+  },
+  "briefing": {
+    "title": "Dein Überblick",
+    "titleHeadlines": "Schlagzeilen-Überblick",
+    "meta": "{count, plural, one {# Geschichte} other {# Geschichten}} seit {time}",
+    "tooFew": "Nur {count, plural, one {# neue Geschichte} other {# neue Geschichten}}",
+    "what": "Was passiert ist",
+    "why": "Warum es wichtig ist",
+    "brief": "Kurz notiert",
+    "headlines": "Schlagzeilen",
+    "seen": "Gesehen ✓",
+    "refresh": "Aktualisieren",
+    "generate": "Überblick erstellen",
+    "retry": "Erneut versuchen",
+    "listen": "Vorlesen",
+    "stop": "Stopp",
+    "generating": "Überblick wird erstellt…",
+    "done": "Überblick fertig, {count, plural, one {# Punkt} other {# Punkte}}",
+    "showMore": "Mehr anzeigen",
+    "empty": "Alles gelesen seit {time}",
+    "source": "Quelle {index}: {title} — {feed}",
+    "privacyNote": "KI · {model} · nur Titel & Anrisse gesendet",
+    "headlinesNote": "Ohne KI: Schlagzeilen nach Geschichten gruppiert",
+    "staleNote": "{count, plural, one {# neue Geschichte} other {# neue Geschichten}} seit diesem Überblick",
+    "error": {
+      "rate_limited": "Zu viele Überblicke in kurzer Zeit – versuch es später noch einmal.",
+      "provider_auth": "Der KI-Anbieter hat den API-Schlüssel abgelehnt. Prüfe die KI-Einstellungen.",
+      "provider_down": "Der KI-Anbieter ist gerade nicht erreichbar.",
+      "timeout": "Der KI-Anbieter hat zu lange gebraucht.",
+      "invalid_output": "Die KI-Antwort war unbrauchbar – hier sind die Schlagzeilen.",
+      "budget": "Dein tägliches KI-Limit ist erreicht."
+    },
+    "fallback": {
+      "no_ai": "Keine KI eingerichtet – Schlagzeilen nach Geschichten gruppiert.",
+      "budget": "Tageslimit erreicht – Schlagzeilen statt KI-Überblick.",
+      "invalid_output": "Die KI-Antwort war unbrauchbar – Schlagzeilen statt KI-Überblick.",
+      "provider_error": "KI nicht verfügbar – Schlagzeilen statt KI-Überblick.",
+      "too_few": "Zu wenige neue Geschichten für einen Überblick.",
+      "rate_limited": "Gerade zu viele Anfragen – Schlagzeilen statt KI-Überblick."
+    },
+    "heading": "Überblick",
+    "loading": "Wird geladen…",
+    "create": "Erstellen",
+    "show": "Anzeigen",
+    "none": "Keine neuen Geschichten",
+    "newStories": "Neu: {count, plural, one {# Geschichte} other {# Geschichten}}"
   }
 }
