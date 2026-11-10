@@ -54,4 +54,3 @@ export function isPrivateIp(ip: string) {
   if (version === 6) return isPrivateIpv6(normalized);
   return true;
 }
-
