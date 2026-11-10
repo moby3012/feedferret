@@ -38,6 +38,8 @@ import { clampFeedLimits } from "@/lib/feed-limits";
 import { assertOwnedCategories, MAX_REORDER_ITEMS } from "@/lib/owned-categories";
 import { connectorFeedUrlError, redactArticleForClient, redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
 import { FEED_CLIENT_SELECT, stripFeedSecrets } from "@/lib/feed-secrets";
+import { parseGoogleNewsFeedUrl } from "@/lib/google-news";
+import { googleNewsFeedName } from "@/lib/google-news-url";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -275,10 +277,12 @@ export async function addFeed(url: string, categoryId?: string) {
         url = await stripConnectorSecrets(url);
         const remoteFeed = await fetchFeedArticles({ url });
 
+        // G1: keyword feeds get "Google News: <query>" instead of Google's title.
+        const googleNews = parseGoogleNewsFeedUrl(url);
         const feed = await db.feed.create({
             data: {
                 url,
-                name: remoteFeed.title || "New Feed",
+                name: googleNews ? googleNewsFeedName(googleNews.query) : remoteFeed.title || "New Feed",
                 userId: session.user.id,
                 categoryId,
                 lastStatus: "pending",

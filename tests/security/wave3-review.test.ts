@@ -160,6 +160,23 @@ describe("N3 review: secrets stay out of stored article links and feed errors", 
     await upsertArticleBatch([{ ...base, title: "T2", link: "https://rsshub.test/x/y#d1", linkSynthetic: true }]);
     expect((await state.db.article.findUniqueOrThrow({ where: { id: created.id } })).updatedAt.getTime()).toBeGreaterThan(before.getTime());
   });
+
+  it("G1: resolving a Google News redirect link on a later sync keeps Article.updatedAt", async () => {
+    const feed = await state.db.feed.create({ data: { userId: ids.alice, name: "Google News: x", url: "https://news.google.com/rss/search?q=x&hl=de&gl=DE&ceid=DE%3Ade" } });
+    const publishedAt = new Date("2026-01-01T00:00:00Z");
+    const base = {
+      feedId: feed.id, userId: ids.alice, title: "T", externalId: "CBMiabc", dedupeKey: "CBMiabc", contentHash: "h-google",
+      content: "c", excerpt: "c", author: null, publishedAt, imageUrl: null, enclosures: null,
+    };
+    const created = await state.db.article.create({ data: { ...base, link: "https://news.google.com/rss/articles/CBMiabcdefghij?oc=5" } });
+    const before = (await state.db.article.findUniqueOrThrow({ where: { id: created.id } })).updatedAt;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    await upsertArticleBatch([{ ...base, link: "https://publisher.example/story", contentHash: "h-publisher", linkCosmetic: true }]);
+    const after = await state.db.article.findUniqueOrThrow({ where: { id: created.id } });
+    expect(after.link).toBe("https://publisher.example/story");
+    expect(after.contentHash).toBe("h-publisher");
+    expect(after.updatedAt.getTime()).toBe(before.getTime());
+  });
 });
 
 describe("email change review: normalization, duplicates, notices", () => {

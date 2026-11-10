@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAddFeed, useCategories, useChangedetectionStatus, useImportOpml, useRsshubStatus } from "@/hooks/use-rss-data";
 import { DEFAULT_STARTER_PACKS, starterPackToOpml, type StarterPack } from "@/lib/starter-packs";
 import { cn } from "@/lib/utils";
+import { isGoogleNewsRssUrl } from "@/lib/google-news-url";
 
 // Lazy-loaded: only rendered inside the "Add feed → Discover" tab, so it doesn't
 // need to be in the initial sidebar bundle.
@@ -32,6 +33,19 @@ const DiscoveryPanel = dynamic(
 // Lazy-loaded: only rendered inside the "Add feed → From web page" tab.
 const PageFeedPanel = dynamic(
   () => import("@/components/page-feed-panel").then((m) => m.PageFeedPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-10 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    ),
+  },
+);
+
+// Lazy-loaded: only rendered inside "Add feed → More sources → Google News".
+const GoogleNewsPanel = dynamic(
+  () => import("@/components/google-news-panel").then((m) => m.GoogleNewsPanel),
   {
     ssr: false,
     loading: () => (
@@ -104,7 +118,9 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
   const [addingFeedUrl, setAddingFeedUrl] = useState<string | null>(null);
   const [addFeedTab, setAddFeedTab] = useState<"url" | "discover" | "more">("url");
   // Which specialized source is shown inside the consolidated "More sources" tab.
-  const [moreSource, setMoreSource] = useState<"webpage" | "platform" | "monitor">("webpage");
+  const [moreSource, setMoreSource] = useState<"news" | "webpage" | "platform" | "monitor">("news");
+  // Topic search → "Customize" on the Google News result pre-fills the keyword panel.
+  const [googleNewsQuery, setGoogleNewsQuery] = useState<string | undefined>(undefined);
 
   const addNewFeed = useAddFeed();
   const importOpml = useImportOpml();
@@ -118,6 +134,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
   const moreSources = useMemo(
     () =>
       [
+        { value: "news" as const, label: t("googleNews.tabLabel") },
         { value: "webpage" as const, label: t("sidebar.webpage.tabLabel") },
         ...(rsshubConfigured ? [{ value: "platform" as const, label: t("sidebar.rsshub.tabLabel") }] : []),
         ...(changedetectionConfigured ? [{ value: "monitor" as const, label: t("sidebar.changedetection.tabLabel") }] : []),
@@ -163,6 +180,8 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
     setDiscoveredFeeds([]);
     setDiscoveryMessage(null);
     setAddFeedTab("url");
+    setMoreSource("news");
+    setGoogleNewsQuery(undefined);
   }, [open]);
 
   const handleDiscover = async (value: string = newFeedUrl) => {
@@ -318,6 +337,20 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
                         {t.has(`sidebar.kinds.${f.kind}`) ? t(`sidebar.kinds.${f.kind}`) : f.kind}
                       </span>
                     )}
+                    {discoveryMode === "topic" && isGoogleNewsRssUrl(f.url) && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs shrink-0"
+                        onClick={() => {
+                          setGoogleNewsQuery(newFeedUrl.trim());
+                          setMoreSource("news");
+                          setAddFeedTab("more");
+                        }}
+                      >
+                        {t("googleNews.customize")}
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       className="h-6 px-2 text-xs shrink-0"
@@ -439,11 +472,20 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
               inner selector, plus one shared category picker. */}
           <TabsContent value="more" className="mt-3 min-w-0 overflow-hidden space-y-3">
             {moreSources.length > 1 && (
-              <div className="grid w-full grid-cols-3 gap-1 rounded-xl bg-muted/60 p-1">
+              <div
+                className={cn(
+                  "grid w-full gap-1 rounded-xl bg-muted/60 p-1",
+                  // 4 sources → 2×2, so labels never squeeze at phone width.
+                  moreSources.length === 3 ? "grid-cols-3" : "grid-cols-2",
+                )}
+                role="group"
+                aria-label={t("sidebar.moreSources")}
+              >
                 {moreSources.map((src) => (
                   <button
                     key={src.value}
                     type="button"
+                    aria-pressed={moreSource === src.value}
                     onClick={() => setMoreSource(src.value)}
                     className={cn(
                       "rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
@@ -475,6 +517,16 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
               </SelectContent>
             </Select>
 
+            {moreSource === "news" && (
+              <GoogleNewsPanel
+                categoryId={newFeedCategoryId}
+                initialQuery={googleNewsQuery}
+                onCreated={(feed) => {
+                  toast.success(t("sidebar.feedAdded", { name: feed.name }));
+                  onOpenChange(false);
+                }}
+              />
+            )}
             {moreSource === "webpage" && (
               <PageFeedPanel
                 categoryId={newFeedCategoryId}

@@ -21,6 +21,10 @@ import { computeHeuristicEnrichment } from "./enrichment-heuristics";
 import { persistEnrichment } from "./article-enrichment";
 import { AiBudgetError } from "./ai/errors";
 import { warnBudgetOnce } from "./ai/usage";
+import { isGoogleNewsFeedUrl } from "./google-news";
+import { prepareGoogleNewsArticles, type GoogleNewsPreparedArticle } from "./google-news-ingest";
+import { GOOGLE_NEWS_MIN_UPDATE_MINUTES } from "./google-news-url";
+import type { ResolveOptions } from "./google-news";
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 const MAX_AUTO_TAG_PER_SYNC = 3;
@@ -57,6 +61,10 @@ export interface ArticleSyncInput {
     // (feed URL changed, connector secret stripped) is not a content change and
     // must not bump Article.updatedAt (GReader ot/nt sync depends on it).
     linkSynthetic?: boolean;
+    // Not persisted: a link-only rewrite of an existing row because a Google
+    // News redirect link was resolved to the publisher URL on a later sync
+    // (lib/google-news-ingest.ts). Same rule: keep Article.updatedAt.
+    linkCosmetic?: boolean;
 }
 
 export interface ArticleSyncResult {
@@ -234,12 +242,20 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
             (existing.enclosures ?? null) !== next.enclosures ||
             existing.title !== next.title;
 
-        if (otherChanged || (linkChanged && !article.linkSynthetic)) {
+        const cosmeticLink = article.linkSynthetic || article.linkCosmetic;
+        if (otherChanged || (linkChanged && !cosmeticLink)) {
             await db.article.update({ where: { id: existing.id }, data: next });
             if (upsertedIds.length % 25 === 0) await yieldToLoop();
         } else if (linkChanged) {
-            // Synthetic-link rewrite only: store it, keep updatedAt.
-            await db.article.update({ where: { id: existing.id }, data: { link: next.link, updatedAt: existing.updatedAt } });
+            // Synthetic / resolved-redirect link rewrite only: store it, keep updatedAt.
+            await db.article.update({
+                where: { id: existing.id },
+                data: {
+                    link: next.link,
+                    ...(article.linkCosmetic && article.contentHash ? { contentHash: article.contentHash } : {}),
+                    updatedAt: existing.updatedAt,
+                },
+            });
         }
     }
 
@@ -376,6 +392,8 @@ export interface SyncFeedOptions {
      * articles would only evaluate (and fire) the same rules twice.
      */
     deferAutoReadRules?: boolean;
+    /** Google News link resolution limits (tests / interactive add). */
+    googleNews?: ResolveOptions;
 }
 
 /**
@@ -397,6 +415,11 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
 
     try {
         const remoteFeed = await fetchFeedArticles(feed);
+        // G1: Google News keyword feeds — resolve redirect links to publisher
+        // URLs (bounded, cached; falls back to the Google link).
+        if (!remoteFeed.notModified && isGoogleNewsFeedUrl(feed.url) && remoteFeed.articles.length > 0) {
+            remoteFeed.articles = await prepareGoogleNewsArticles(feed, userId, remoteFeed.articles, options.googleNews);
+        }
 
         if (remoteFeed.notModified) {
             // Conditional GET (P-2): server confirmed nothing changed since our last
@@ -471,6 +494,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 title,
                 link,
                 ...(item.link ? {} : { linkSynthetic: true }),
+                ...((item as GoogleNewsPreparedArticle).linkCosmetic ? { linkCosmetic: true } : {}),
                 externalId,
                 dedupeKey,
                 contentHash: computeContentHash(link),
@@ -967,6 +991,7 @@ export async function syncUserFeeds(userId: string) {
             updateFrequency: true,
             lastFetchedAt: true,
             autoMuted: true,
+            consecutiveFailureCount: true,
             category: {
                 select: {
                     parentId: true,
@@ -989,9 +1014,9 @@ export async function syncUserFeeds(userId: string) {
             return { feed: feed.url, success: true, skipped: true, count: 0 };
         }
 
-        const effectiveUpdateFrequency = computeEffectiveUpdateFrequency(
+        const effectiveUpdateFrequency = politeUpdateFrequency(
             feed,
-            userDefaultUpdateFrequency,
+            computeEffectiveUpdateFrequency(feed, userDefaultUpdateFrequency),
         );
         const now = new Date();
         const lastSync = feed.lastFetchedAt || new Date(0);
@@ -1028,6 +1053,7 @@ export async function syncAllFeeds() {
             updateFrequency: true,
             lastFetchedAt: true,
             autoMuted: true,
+            consecutiveFailureCount: true,
             category: {
                 select: {
                     parentId: true,
@@ -1046,9 +1072,9 @@ export async function syncAllFeeds() {
             return { feed: feed.url, success: true, skipped: true, count: 0 };
         }
 
-        const effectiveUpdateFrequency = computeEffectiveUpdateFrequency(
+        const effectiveUpdateFrequency = politeUpdateFrequency(
             feed,
-            feed.user.defaultUpdateFrequency,
+            computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency),
         );
         const now = new Date();
         const lastSync = feed.lastFetchedAt || new Date(0);
@@ -1063,6 +1089,22 @@ export async function syncAllFeeds() {
     });
 
     return results;
+}
+
+/**
+ * G1: Google News throttles aggressive pollers (429 / "unusual traffic"), so
+ * its feeds are polled at most every GOOGLE_NEWS_MIN_UPDATE_MINUTES and back
+ * off exponentially after consecutive failures (x2 per failure, capped at
+ * 16x / 24 h). Other feeds are unaffected.
+ */
+export function politeUpdateFrequency(
+    feed: { url: string; consecutiveFailureCount?: number | null },
+    minutes: number,
+): number {
+    if (!isGoogleNewsFeedUrl(feed.url)) return minutes;
+    const base = Math.max(minutes, GOOGLE_NEWS_MIN_UPDATE_MINUTES);
+    const failures = Math.max(0, Math.min(4, feed.consecutiveFailureCount ?? 0));
+    return Math.min(base * 2 ** failures, 24 * 60);
 }
 
 type FrequencyResolutionFeed = {

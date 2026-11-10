@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
 import { getFeeds, getCategories, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, updateCategoryOrder, updateFeedOrder, getLabels, createLabel, updateLabel, deleteLabel, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers, suggestFeedFromUrl, createFeedFromPage, proposeAiFeedConfig, proposeAiFullTextSelector, getRsshubStatus, previewRsshubFeed, getChangedetectionStatus, createChangedetectionFeed } from "@/app/actions/feeds"
+import { previewGoogleNewsFeed, addGoogleNewsFeed, updateGoogleNewsFeedQuery, getGoogleNewsFeedSearch } from "@/app/actions/google-news"
 import { updateProfile, getEmailChangeMailStatus, changePassword, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, previewDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getContentFetchSettings, updateContentFetchSettings, testContentFetchConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
 import { getExportSettings, updateExportSettings, testWallabagExportConnection, buildObsidianExportLink, exportArticleToWallabag } from "@/app/actions/export"
 import { updateUiLanguage } from "@/app/actions/locale"
@@ -167,6 +168,48 @@ export function useAddFeed() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
         },
+    })
+}
+
+export function usePreviewGoogleNewsFeed() {
+    return useMutation({
+        mutationFn: (input: Parameters<typeof previewGoogleNewsFeed>[0]) => previewGoogleNewsFeed(input),
+    })
+}
+
+export function useAddGoogleNewsFeed() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: Parameters<typeof addGoogleNewsFeed>[0]) => addGoogleNewsFeed(input),
+        onSuccess: async (result) => {
+            if (!result?.success) return
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            await invalidateAfterSync(queryClient)
+        },
+    })
+}
+
+export function useUpdateGoogleNewsFeedQuery() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ feedId, search }: { feedId: string; search: Parameters<typeof updateGoogleNewsFeedQuery>[1] }) =>
+            updateGoogleNewsFeedQuery(feedId, search),
+        onSuccess: async (result, { feedId }) => {
+            if (!result?.success) return
+            queryClient.invalidateQueries({ queryKey: ["feeds"] })
+            queryClient.invalidateQueries({ queryKey: ["google-news-search", feedId] })
+            queryClient.invalidateQueries({ queryKey: ["feed-health"] })
+            await invalidateAfterSync(queryClient)
+        },
+    })
+}
+
+export function useGoogleNewsFeedSearch(feedId: string | null | undefined, enabled: boolean) {
+    return useQuery({
+        queryKey: ["google-news-search", feedId],
+        queryFn: () => getGoogleNewsFeedSearch(feedId as string),
+        enabled: Boolean(feedId) && enabled,
+        staleTime: 60_000,
     })
 }
 

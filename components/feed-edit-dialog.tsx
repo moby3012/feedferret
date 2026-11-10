@@ -39,6 +39,12 @@ import { CheckCircle2, Eye, Loader2, Sparkles } from "lucide-react";
 import { useUpdateFeed, usePreviewFeedExtraction, useProposeAiFullTextSelector, useAiSettings } from "@/hooks/use-rss-data";
 import { resolveFullTextMode, type FullTextMode } from "@/lib/full-text-mode";
 import { getFeedEditConfig } from "@/app/actions/feeds";
+import { GoogleNewsQueryEditor } from "@/components/google-news-panel";
+
+/** Cheap client-side gate; the server re-checks (origin may be admin-overridden). */
+function looksLikeGoogleNewsSearch(url: string) {
+  return url.includes("/rss/search?") && url.includes("ceid=");
+}
 
 interface FeedEditDialogProps {
   feed: {
@@ -597,6 +603,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             </TabsContent>
 
             <TabsContent value="fetch" className="mt-0 space-y-5">
+              {/* G1: a Google News keyword feed's search stays editable. */}
+              {looksLikeGoogleNewsSearch(feed.url) && <GoogleNewsQueryEditor feedId={feed.id} />}
               <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold">{t("fetch.transparency.title")}</p>
