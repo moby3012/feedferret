@@ -462,6 +462,17 @@ html[data-nav-anim="none"] .ff-shell > [data-pane] {
 .ff-feeds-line[data-folder-id] > .ff-feeds-row {
   padding-inline-start: 0;
 }
+/* Feeds inside an open folder: the favicon sits under the folder name. */
+.ff-feeds-row[data-nested] {
+  padding-inline-start: calc(var(--gutter) + 32px);
+}
+.ff-feeds-empty-folder {
+  padding-block: 8px;
+  padding-inline-start: calc(var(--gutter) + 32px);
+  font-size: var(--text-footnote);
+  line-height: var(--text-footnote--line-height);
+  color: var(--muted-foreground);
+}
 
 /* Row "…": a mouse gets it on hover / focus; touch rows only keep a screen-reader "Aktionen" (like article rows). */
 .ff-feeds-actions {

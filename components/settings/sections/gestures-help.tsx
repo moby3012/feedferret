@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Hand, Keyboard, MousePointer2, MoveHorizontal, Rss, Undo2, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, Hand, Keyboard, CheckCheck, MousePointer2, MoveHorizontal, Rss, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GestureSettings } from "@/components/gesture-settings";
 import { PrefRow } from "@/components/settings/pref-row";
@@ -69,7 +69,7 @@ function GestureReference() {
       items: [
         { icon: Hand, gesture: t("longPress"), result: t("feeds.longPressResult") },
         { icon: Rss, gesture: t("feeds.arrow"), result: t("feeds.arrowResult") },
-        { icon: Undo2, gesture: t("feeds.markAll"), result: t("feeds.markAllResult") },
+        { icon: CheckCheck, gesture: t("feeds.markAll"), result: t("feeds.markAllResult") },
       ],
     },
     {

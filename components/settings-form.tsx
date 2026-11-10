@@ -91,8 +91,10 @@ export function SettingsForm({ initialTab }: { initialTab?: string } = {}) {
 
   useEffect(() => {
     const onPop = () => {
-      drilled = false;
-      setActive(sectionFromLocation());
+      const section = sectionFromLocation();
+      // Forward into a section re-enters the pushed level: in-app back may pop it again.
+      drilled = section !== null && isCompact();
+      setActive(section);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);

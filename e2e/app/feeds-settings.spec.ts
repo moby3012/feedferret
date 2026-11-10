@@ -66,6 +66,12 @@ test.describe("Feeds screen (mobile)", () => {
     await toggle.tap();
     await expect(screen.getByRole("button", { name: "Collapse Tech" })).toHaveAttribute("aria-expanded", "true");
     await expect(screen.getByRole("button", { name: /^Hacker Dispatch/ })).toBeVisible();
+    // Feeds inside a folder are indented to the folder name; an unfiled feed is not.
+    const textStart = (name: RegExp) =>
+      screen.getByRole("button", { name }).first().locator("span.truncate").evaluate((el) => el.getBoundingClientRect().left);
+    const nested = await textStart(/^Hacker Dispatch/);
+    expect(Math.abs(nested - (await textStart(/^Tech\s*\d*$/)) - 32)).toBeLessThanOrEqual(2); // favicon under the folder name (20 px + 12 px gap)
+    expect(nested - (await textStart(/^Solo Blog/))).toBeGreaterThanOrEqual(30);
     await page.reload();
     await app.navReady();
     await expect(app.sidebar().getByTestId("feeds-screen").getByRole("button", { name: /^Hacker Dispatch/ })).toBeVisible();

@@ -169,13 +169,12 @@ test.describe("every bulk mark-read path is undoable and scoped to the visible v
     const before = unreadIds(app.userKey);
     const solo = unreadCountForFeed(app.userKey, "Solo Blog");
     const menu = await app.openFeedMenu("Solo Blog");
-    if (app.isMobile) {
-      // Compact Feeds screen: it always asks first.
-      await menu.getByRole("menuitem", { name: "Mark all as read…" }).tap();
-      await page.getByTestId("feeds-mark-all-confirm").getByRole("button", { name: "Mark as read" }).tap();
-    } else {
-      await app.activate(menu.getByRole("menuitem", { name: "Mark all as read" }));
-    }
+    // A feed's "Mark all as read" always asks first (Feeds screen and desktop sidebar alike).
+    await app.activate(menu.getByRole("menuitem", { name: "Mark all as read…" }));
+    const confirm = page.getByTestId("feeds-mark-all-confirm");
+    await expect(confirm).toContainText(`${solo} unread articles in “Solo Blog”`);
+    expect(unreadCountForFeed(app.userKey, "Solo Blog")).toBe(solo); // nothing marked before the confirm
+    await app.activate(confirm.getByRole("button", { name: "Mark as read" }));
 
     await expect.poll(() => unreadCountForFeed(app.userKey, "Solo Blog")).toBe(0);
     expect(unreadCountInDb(app.userKey)).toBe(before.length - solo);

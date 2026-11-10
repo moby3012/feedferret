@@ -50,7 +50,7 @@ import { EMPTY_COUNTS } from "@/features/bootstrap/types";
 import type { Scope } from "@/features/articles/scope";
 import { isCoarsePointer } from "@/features/reader/layout/layout-class";
 import { markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
-import { nav, useNav } from "@/features/reader/nav/store";
+import { getNavState, nav, useNav } from "@/features/reader/nav/store";
 import { useOwnedOverlay } from "@/features/reader/nav/use-owned-overlay";
 import { useArticleActions } from "@/features/articles/mutations";
 import {
@@ -181,6 +181,8 @@ export function FeedsScreen() {
 
   const openMenu = useCallback(
     (target: MenuTarget) => {
+      // One menu per gesture: the context-menu key also fires `contextmenu` (keydown + event → one overlay entry).
+      if (getNavState().overlay === "feed-menu") return;
       if (target.point.pointerType === "touch" || target.point.pointerType === "pen") completeFeedsHint();
       setMenu(target);
       setMenuOpen(true);
@@ -333,7 +335,7 @@ export function FeedsScreen() {
                     {isOpen && (
                       <ul className="ff-feeds-folder" aria-label={c.name}>
                         {inFolder.length === 0 ? (
-                          <li className="ps-14 py-2 text-footnote text-muted-foreground">{tSidebar("noFeeds")}</li>
+                          <li className="ff-feeds-empty-folder">{tSidebar("noFeeds")}</li>
                         ) : (
                           inFolder.map((f) => (
                             <li key={f.id}>
@@ -572,7 +574,8 @@ function FeedRow({
       <button
         ref={ref}
         type="button"
-        className={cn("ff-feeds-row", nested && "ps-14")}
+        className="ff-feeds-row"
+        data-nested={nested ? "" : undefined}
         onClick={() => open({ kind: "feed", id: feed.id })}
         onKeyDown={onKeyDown}
       >
