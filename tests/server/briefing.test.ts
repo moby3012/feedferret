@@ -637,9 +637,9 @@ describe("review fixes: atomic cap, accounting, selection signals", () => {
     const scope = (await resolveBriefingScope(u.id, { kind: "new" }))!;
     const input = await selectBriefingInput(u.id, { kind: "new" }, scope);
     const score = (id: string) => [...input.top, ...input.brief].find((x) => x.leadId === id)!.score;
-    expect(score(ai.id)).toBeCloseTo(score(plain.id), 6);
-    expect(score(mine.id)).toBeCloseTo(score(plain.id) + 0.3, 6);
-    expect(score(alerted.id)).toBeCloseTo(score(plain.id) + 0.3, 6);
+    expect(score(ai.id)).toBeCloseTo(score(plain.id), 4); // recency decays per ms between rows; 1e-4 is far below the 0.3 signal
+    expect(score(mine.id)).toBeCloseTo(score(plain.id) + 0.3, 4); // recency decays per ms between rows; 1e-4 is far below the 0.3 signal
+    expect(score(alerted.id)).toBeCloseTo(score(plain.id) + 0.3, 4); // recency decays per ms between rows; 1e-4 is far below the 0.3 signal
   });
 
   it("stale only with new stories; briefings older than 72 h are ignored", async () => {
