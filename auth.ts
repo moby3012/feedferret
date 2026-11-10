@@ -130,7 +130,7 @@ const config = {
 
       const user = (await db.user.findUnique({
         where: { id: token.sub },
-        select: { isActive: true, sessionVersion: true, role: true },
+        select: { isActive: true, sessionVersion: true, role: true, email: true },
       })) as any;
 
       if (!user || !user.isActive) {
@@ -145,6 +145,8 @@ const config = {
         }
         token.role = user.role;
         token.sv = user.sessionVersion;
+        // Follow a (step-up protected) email change without a re-login.
+        if (user.email) token.email = user.email;
       }
 
       return token;

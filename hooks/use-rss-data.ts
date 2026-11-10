@@ -337,7 +337,7 @@ export function useReadingPreferences(enabled = true, initialData?: ReadingPrefe
 
 export function useUpdateProfile() {
     return useMutation({
-        mutationFn: (data: { name?: string; email?: string }) => updateProfile(data),
+        mutationFn: (data: Parameters<typeof updateProfile>[0]) => updateProfile(data),
     })
 }
 

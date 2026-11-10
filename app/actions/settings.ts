@@ -14,6 +14,8 @@ import { fetchViaHostedApiDetailed, type HostedFetchProvider } from "@/lib/hoste
 import { loadReadingPreferences } from "@/server/bootstrap";
 import { isCountDisplay, type CountDisplay } from "@/lib/count-display";
 import { pickFields } from "@/lib/pick-fields";
+import { verifyStepUp } from "@/lib/step-up";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 async function requireUser() {
   const session = await auth();
@@ -21,16 +23,49 @@ async function requireUser() {
   return session;
 }
 
-export async function updateProfile(data: { name?: string; email?: string }) {
+export type UpdateProfileResult =
+    | { success: true; emailChanged: boolean; feverRotationRequired: boolean }
+    | { success: false; code: "stepUpRequired" | "reloginRequired" | "rateLimited" | "invalidEmail" };
+
+export async function updateProfile(data: {
+    name?: string;
+    email?: string;
+    /** Step-up for an email change (N17): current password, or a TOTP code. */
+    currentPassword?: string;
+    totp?: string;
+}): Promise<UpdateProfileResult> {
   const session = await requireUser();
 
   const profile = pickFields(data, ["name", "email"] as const);
   for (const [key, value] of Object.entries(profile)) {
     if (value !== null && typeof value !== "string") throw new Error(`Invalid ${key}`);
   }
+  if (typeof profile.email === "string") profile.email = profile.email.trim();
+
+  const current = await db.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { email: true } });
+  if (profile.email !== undefined && profile.email !== current.email) {
+    // The account email is the login identity (and the GReader/Fever username).
+    if (typeof profile.email !== "string" || !/^[^\s@]+@[^\s@]+$/.test(profile.email) || profile.email.length > 254) {
+      return { success: false, code: "invalidEmail" };
+    }
+    // Changing the login email hands the account to whoever owns the new
+    // address (magic link / password reset), so a stolen or borrowed session
+    // alone must not be enough: same step-up as the API password (#227).
+    const limit = checkRateLimit(session.user.id, { prefix: "email-change-step-up", limit: 10, windowSecs: 900 });
+    if (!limit.success) return { success: false, code: "rateLimited" };
+    const stepUp = await verifyStepUp(
+      { id: session.user.id, authenticatedAt: (session as { authenticatedAt?: number }).authenticatedAt },
+      { currentPassword: data?.currentPassword, totp: data?.totp },
+    );
+    if (!stepUp.ok) return { success: false, code: stepUp.code };
+  }
+
   const emailChanged = await db.$transaction(async (tx) => {
     const previous = await tx.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { email: true } });
     const emailChanged = profile.email !== undefined && profile.email !== previous.email;
+    // A concurrent change between the step-up check and here would compare
+    // against a different address than the one the user re-authenticated for.
+    if (emailChanged && previous.email !== current.email) throw new Error("Profile changed concurrently, try again");
     await tx.user.update({ where: { id: session.user.id }, data: {
       ...profile, ...(emailChanged ? { apiFeverKey: null, apiTokenVersion: { increment: 1 } } : {}),
     } });
@@ -40,7 +75,7 @@ export async function updateProfile(data: { name?: string; email?: string }) {
   });
 
   revalidatePath("/");
-  return { emailChanged, feverRotationRequired: emailChanged };
+  return { success: true, emailChanged, feverRotationRequired: emailChanged };
 }
 
 export async function changePassword(data: {

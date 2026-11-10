@@ -251,7 +251,9 @@ it("allows an enabled TOTP for step-up and clears Fever keys when email changes"
   await db.user.update({ where: { id: "u" }, data: { twoFactorEnabled: true, twoFactorSecret: secret } });
   expect((await configure({ currentPassword: "", totp: generateTotpToken(secret) })).status).toBe(200);
   await db.apiToken.create({ data: { userId: "u", name: "Fever", tokenHash: "email-test", feverKey: hashApiToken("old-email-key") } });
-  await updateProfile({ email: "new@example.org" });
+  // N17: an email change needs its own step-up (the TOTP above is consumed).
+  expect(await updateProfile({ email: "new@example.org" })).toEqual({ success: false, code: "stepUpRequired" });
+  expect(await updateProfile({ email: "new@example.org", currentPassword: "login-password" })).toMatchObject({ success: true, emailChanged: true });
   expect((await db.user.findUniqueOrThrow({ where: { id: "u" } })).apiFeverKey).toBeNull();
   expect((await db.apiToken.findFirstOrThrow({ where: { userId: "u" } })).feverKey).toBeNull();
   expect((await (await feverAuth(password)).json()).auth).toBe(0);
