@@ -224,6 +224,8 @@ export async function listArticles(userId: string, params: ListArticlesParams): 
   if (params.show === "unread" && showApplies(params.scope)) where.isRead = false;
 
   const direction = params.sort === "old" ? "asc" : "desc";
+  // Taken before the read: a row created while it runs is past the snapshot (safe side).
+  const snapshotAt = params.cursor ? undefined : Date.now();
   if (params.cursor) {
     const values = decodeCursor(params.cursor, keyset);
     where.AND = [...(where.AND || []), keysetWhere(keyset, values, direction)];
@@ -244,5 +246,6 @@ export async function listArticles(userId: string, params: ListArticlesParams): 
   return {
     items: pageRows.map((row) => toListItem(row, { cleanTitles })),
     nextCursor: hasMore ? encodeCursor(pageRows[pageRows.length - 1], keyset) : null,
+    ...(snapshotAt !== undefined ? { snapshotAt } : {}),
   };
 }

@@ -23,7 +23,7 @@ const h = vi.hoisted(() => {
   };
   return { store, db };
 });
-vi.mock("@/lib/db", () => ({ db: h.db }));
+vi.mock("@/lib/db", () => ({ db: h.db, getDatabaseProvider: () => "sqlite" }));
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => (h.store.user ? { user: { id: h.store.user } } : null)) }));
 
 import { MAX_STATE_OPS, applyArticleStateOps, groupStateOps, parseStateOps } from "../../server/articles/state";
@@ -105,7 +105,7 @@ describe("applyArticleStateOps (server action)", () => {
   });
   it("is scoped to the signed-in user", async () => {
     h.store.user = "bob";
-    expect(await action([{ id: "a1", isStarred: true }])).toEqual({ failed: ["a1"], affected: [] });
+    expect(await action([{ id: "a1", isStarred: true }])).toEqual({ failed: ["a1"], affected: [], cascades: [] });
     expect(row("a1").isStarred).toBe(false);
   });
 });

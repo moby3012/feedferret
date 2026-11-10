@@ -15,6 +15,7 @@ const root = path.resolve(__dirname, "../..");
 const ROUTE_SCOPED_FILES = new Set([
   "app/settings/page.tsx",
   "components/settings-form.tsx",
+  "components/gesture-settings.tsx", // rendered only by settings-form (swipe mapping + haptics)
   "components/api-password-settings.tsx",
   "components/offline-storage-controls.tsx",
   "app/manage-feeds/page.tsx",

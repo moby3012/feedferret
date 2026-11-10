@@ -96,7 +96,23 @@
     "offlineUsageEmpty": "Noch nichts offline gespeichert.",
     "offlineBrowserStorage": "Speicher im Browser: {used} von {quota}",
     "offlineClear": "Offline-Daten löschen",
-    "offlineQuotaFailed": "Der Browser-Speicher ist voll: nicht alles konnte für das Offline-Lesen gespeichert werden (ältere Artikel wurden entfernt, um Platz zu schaffen)."
+    "offlineQuotaFailed": "Der Browser-Speicher ist voll: nicht alles konnte für das Offline-Lesen gespeichert werden (ältere Artikel wurden entfernt, um Platz zu schaffen).",
+    "storyReadMode": "Storys als Ganzes lesen",
+    "storyReadModeDescription": "Wenn du eine Story liest oder markierst, werden auch alle ihre Quellen als gelesen markiert. Aus: nur der geöffnete Artikel.",
+    "gestures": {
+      "title": "Wischgesten",
+      "description": "Gilt für dieses Gerät. Jede Aktion findest du auch im Menü per langem Drücken und an den Knöpfen der Zeile.",
+      "swipeRight": "Nach rechts wischen",
+      "swipeLeft": "Nach links wischen",
+      "actions": {
+        "read": "Gelesen / ungelesen",
+        "later": "Später lesen",
+        "star": "Favorit",
+        "none": "Nichts"
+      },
+      "haptics": "Haptisches Feedback",
+      "hapticsDescription": "Eine kurze Vibration, wenn eine Wischgeste oder das Ziehen zum Aktualisieren auslöst – sofern dein Gerät das kann."
+    }
   },
   "profile": {
     "changePassword": "Passwort ändern",
@@ -814,7 +830,33 @@
     "markAsUnread": "Als ungelesen markieren",
     "markAsRead": "Als gelesen markieren",
     "alsoIn": "Auch in",
-    "duplicateBadge": "Duplikat"
+    "duplicateBadge": "Duplikat",
+    "sponsored": "Anzeige",
+    "sponsoredHint": "Als bezahlter oder Affiliate-Inhalt erkannt",
+    "originalTitle": "Originaltitel: {title}",
+    "moreSources": "+{count, plural, one {# Quelle} other {# Quellen}}",
+    "showSources": "Alle Quellen dieser Story anzeigen",
+    "hideSources": "Quellen dieser Story ausblenden",
+    "storySources": "Quellen dieser Story",
+    "sourcesFailed": "Die Quellen konnten nicht geladen werden.",
+    "retry": "Erneut versuchen",
+    "swipeRead": "Gelesen",
+    "swipeUnread": "Ungelesen",
+    "swipeLater": "Später",
+    "swipeLaterRemove": "Entfernen",
+    "swipeStar": "Favorit",
+    "swipeUnstar": "Kein Favorit",
+    "articleActions": "Artikelaktionen",
+    "openOriginal": "Original öffnen",
+    "copyLink": "Link kopieren",
+    "linkCopied": "Link kopiert",
+    "markUpToHere": "Alles bis hier als gelesen",
+    "markUpToHereTooMany": "Zu viele Artikel auf einmal (max. {count}) – nichts markiert. Markiere ab einem weiter oben liegenden Artikel.",
+    "kindVideo": "Video",
+    "kindAudio": "Audio",
+    "kindImage": "Bild",
+    "kindSocial": "Beitrag",
+    "duration": "Dauer {time}"
   },
   "articleReader": {
     "loadingBody": "Artikel wird geladen…",
@@ -1783,7 +1825,8 @@
     "toggleFailed": "Änderung konnte nicht gespeichert werden und wurde zurückgenommen.",
     "offlineReadOnly": "Offline – Änderungen erst wieder online",
     "offline": "Offline",
-    "labelsFailed": "Labels konnten nicht geändert werden."
+    "labelsFailed": "Labels konnten nicht geändert werden.",
+    "storyMarkedRead": "{count, plural, one {# weitere Quelle dieser Story} other {# weitere Quellen dieser Story}} als gelesen markiert"
   },
   "apiPassword": {
     "title": "API-Passwort",

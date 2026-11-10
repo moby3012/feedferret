@@ -5,6 +5,7 @@ import { BootstrapHydrator } from "@/components/shell/bootstrap-hydrator";
 import { ReaderShell } from "@/components/shell/reader-shell";
 import { ShellSkeleton } from "@/components/shell/shell-skeleton";
 import { OfflineSync } from "@/features/offline/offline-sync";
+import { RowClockProvider } from "@/components/list/row-clock";
 import { UI_COOKIE, parseUiCookie } from "@/features/reader/layout/ui-prefs";
 import { readingPreferencesFor } from "@/server/bootstrap";
 import { currentSession } from "@/server/session";
@@ -44,7 +45,10 @@ export default async function ReaderPage({ searchParams }: { searchParams: Searc
     <Suspense fallback={<ShellSkeleton href={href} ui={ui} viewMode={prefs.defaultViewMode} />}>
       <BootstrapHydrator userId={userId} href={href}>
         <OfflineSync userId={userId} />
-        <ReaderShell initialHref={href} initialUi={ui} userId={userId} />
+        {/* Request time for the rows' relative dates: server render and hydration agree. */}
+        <RowClockProvider now={Date.now()}>
+          <ReaderShell initialHref={href} initialUi={ui} userId={userId} />
+        </RowClockProvider>
       </BootstrapHydrator>
     </Suspense>
   );

@@ -13,7 +13,7 @@ import {
   unreadIdsMatching,
   userSettings,
 } from "../helpers/db";
-import { swipeAt, swipeOn } from "../helpers/gestures";
+import { swipeAt, swipeOn, touchSwipeOn } from "../helpers/gestures";
 
 /**
  * "No accidental mark-all-read" (UX audit P1-01 / P1-02). Owner decisions:
@@ -97,7 +97,7 @@ test.describe("no gesture or scroll marks anything read in bulk", () => {
     const before = unreadCountInDb(app.userKey);
     const row = app.row(8);
     await expect(row).toBeVisible();
-    await swipeOn(page, row, 160, 0, { x: 60 });
+    await touchSwipeOn(page, row, 220, { offsetX: 60 });
     await expect.poll(() => articleFlags(app.articleId(8)).isRead).toBe(true);
     await page.waitForTimeout(800);
     expect(unreadCountInDb(app.userKey)).toBe(before - 1);

@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { Search as SearchIcon, X as XIcon, BookmarkPlus, Pencil, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ArticleList } from "@/components/article-list";
+import { ArticleListView, type MarkRangeBinding } from "@/components/list/article-list-view";
 import { cn } from "@/lib/utils";
 
 interface SearchResultsViewProps {
@@ -27,6 +27,8 @@ interface SearchResultsViewProps {
   isFetchingMore?: boolean;
   onLoadMore?: () => void;
   loadedCount?: number;
+  /** Bound list for the server-side "Alles bis hier" range. */
+  markRange?: MarkRangeBinding | null;
 }
 
 export function SearchResultsView({
@@ -49,6 +51,7 @@ export function SearchResultsView({
   isFetchingMore,
   onLoadMore,
   loadedCount,
+  markRange,
 }: SearchResultsViewProps) {
   const t = useTranslations("searchResults");
   const tA11y = useTranslations("accessibility");
@@ -144,7 +147,7 @@ export function SearchResultsView({
         </div>
       ) : (
         <div className="flex flex-1 min-h-0 flex-col compact:pb-24">
-          <ArticleList
+          <ArticleListView
             articles={articles}
             selectedArticle={selectedArticle}
             onSelectArticle={onSelectArticle}
@@ -161,6 +164,7 @@ export function SearchResultsView({
             isFetchingMore={isFetchingMore}
             onLoadMore={onLoadMore}
             loadedCount={loadedCount}
+            markRange={markRange}
           />
         </div>
       )}

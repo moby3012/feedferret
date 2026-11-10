@@ -185,3 +185,174 @@ export function makeSpoilers(userKey: string, count: number) {
     db.close();
   }
 }
+
+const ARTICLE_EXTRA_COLUMNS = ["kind", "mediaUrl", "mediaType", "mediaDurationSecs", "imageUrl", "isSponsored", "isClickbait", "cleanTitle", "clusterId"] as const;
+type ArticleExtraColumn = (typeof ARTICLE_EXTRA_COLUMNS)[number];
+
+/**
+ * Overwrites list-metadata columns (kind, media, K3 enrichment, cluster) of
+ * some seeded articles and returns a function that restores the previous
+ * values. Callers restore in `finally` — the seed has none of these set.
+ */
+export function patchArticles(articleIds: string[], values: Partial<Record<ArticleExtraColumn, string | number | null>>): () => void {
+  const cols = Object.keys(values) as ArticleExtraColumn[];
+  for (const c of cols) if (!ARTICLE_EXTRA_COLUMNS.includes(c)) throw new Error(`patchArticles: column ${c} not allowed`);
+  const db = open();
+  let before: Array<Record<string, unknown>>;
+  try {
+    before = articleIds.map((id) => db.prepare(`SELECT id, ${cols.map((c) => `"${c}"`).join(", ")} FROM "Article" WHERE id = ?`).get(id) as Record<string, unknown>);
+    const set = db.prepare(`UPDATE "Article" SET ${cols.map((c) => `"${c}" = @${c}`).join(", ")} WHERE id = @id`);
+    for (const id of articleIds) set.run({ ...values, id });
+  } finally {
+    db.close();
+  }
+  return () => {
+    const restore = open();
+    try {
+      const set = restore.prepare(`UPDATE "Article" SET ${cols.map((c) => `"${c}" = @${c}`).join(", ")} WHERE id = @id`);
+      for (const row of before) set.run(row);
+    } finally {
+      restore.close();
+    }
+  };
+}
+
+/**
+ * Creates a story cluster over `articleIds` (lead first) for one user and
+ * returns a cleanup that detaches the members and deletes the cluster.
+ */
+let clusterSeq = 0;
+export function makeStoryCluster(userKey: string, articleIds: string[]): () => void {
+  const { userId } = manifest().users[userKey];
+  // Two clusters in the same millisecond must not share an id.
+  const id = `e2e-cluster-${userKey}-${Date.now()}-${clusterSeq++}`;
+  const now = new Date().toISOString();
+  const db = open();
+  try {
+    db.prepare(
+      `INSERT INTO "StoryCluster" (id, userId, leadArticleId, size, feedCount, firstSeenAt, lastSeenAt, sig, algoVersion, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, '{}', 1, ?, ?)`,
+    ).run(id, userId, articleIds[0], articleIds.length, articleIds.length, now, now, now, now);
+    const set = db.prepare(`UPDATE "Article" SET clusterId = ? WHERE id = ? AND userId = ?`);
+    for (const articleId of articleIds) set.run(id, articleId, userId);
+  } finally {
+    db.close();
+  }
+  return () => {
+    const c = open();
+    try {
+      c.prepare(`UPDATE "Article" SET clusterId = NULL WHERE clusterId = ?`).run(id);
+      c.prepare(`DELETE FROM "StoryCluster" WHERE id = ?`).run(id);
+    } finally {
+      c.close();
+    }
+  };
+}
+
+/** User flags the list specs flip (restored by the returned function). */
+export function setUserFlags(userKey: string, values: { aiCleanTitles?: boolean; clusterReadMode?: "story" | "article"; defaultViewMode?: string }): () => void {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  let before: { aiCleanTitles: number; clusterReadMode: string; defaultViewMode: string };
+  try {
+    before = db.prepare(`SELECT aiCleanTitles, clusterReadMode, defaultViewMode FROM "User" WHERE id = ?`).get(userId) as typeof before;
+    if (values.aiCleanTitles !== undefined) db.prepare(`UPDATE "User" SET aiCleanTitles = ? WHERE id = ?`).run(values.aiCleanTitles ? 1 : 0, userId);
+    if (values.clusterReadMode !== undefined) db.prepare(`UPDATE "User" SET clusterReadMode = ? WHERE id = ?`).run(values.clusterReadMode, userId);
+    if (values.defaultViewMode !== undefined) db.prepare(`UPDATE "User" SET defaultViewMode = ? WHERE id = ?`).run(values.defaultViewMode, userId);
+  } finally {
+    db.close();
+  }
+  return () => {
+    const c = open();
+    try {
+      c.prepare(`UPDATE "User" SET aiCleanTitles = ?, clusterReadMode = ?, defaultViewMode = ? WHERE id = ?`).run(before.aiCleanTitles, before.clusterReadMode, before.defaultViewMode, userId);
+    } finally {
+      c.close();
+    }
+  };
+}
+
+/**
+ * Creates a feed with `count` unread articles for one user ("Bulk n" titles,
+ * newest first = n 0) and returns its id, the article ids in list order and a
+ * cleanup that deletes both. Callers clean up in `finally` (resetArticleState
+ * only knows the seeded rows).
+ */
+export function insertBulkFeed(userKey: string, count: number): { feedId: string; ids: string[]; cleanup: () => void } {
+  const { userId } = manifest().users[userKey];
+  const feedId = `e2e-bulk-feed-${userKey}-${Date.now()}`;
+  const ids = Array.from({ length: count }, (_, i) => `e2e-bulk-${userKey}-${String(i).padStart(5, "0")}`);
+  const db = open();
+  try {
+    const now = new Date();
+    // Prisma's SQLite text format ("…+00:00", not "…Z"): DateTime filters compare as text.
+    const iso = (d: Date) => d.toISOString().replace("Z", "+00:00");
+    const created = iso(new Date(now.getTime() - 60_000));
+    db.prepare(`INSERT INTO "Feed" (id, url, name, userId, updatedAt) VALUES (?, ?, ?, ?, ?)`).run(feedId, `https://bulk.e2e.test/${feedId}`, "Bulk feed", userId, iso(now));
+    const insert = db.prepare(
+      `INSERT INTO "Article" (id, feedId, userId, title, link, content, excerpt, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?)`,
+    );
+    db.prepare("BEGIN").run();
+    ids.forEach((id, i) => insert.run(id, feedId, userId, `Bulk ${i}`, `https://bulk.e2e.test/${id}`, iso(new Date(now.getTime() - (i + 1) * 60_000)), created, created));
+    db.prepare("COMMIT").run();
+  } finally {
+    db.close();
+  }
+  return {
+    feedId,
+    ids,
+    cleanup: () => {
+      const c = open();
+      try {
+        c.prepare(`DELETE FROM "Article" WHERE feedId = ?`).run(feedId);
+        c.prepare(`DELETE FROM "Feed" WHERE id = ?`).run(feedId);
+      } finally {
+        c.close();
+      }
+    },
+  };
+}
+
+/** Read flags of many articles at once (id → isRead). */
+export function readFlags(articleIds: string[]): Map<string, boolean> {
+  const db = open();
+  try {
+    const out = new Map<string, boolean>();
+    for (let i = 0; i < articleIds.length; i += 500) {
+      const chunk = articleIds.slice(i, i + 500);
+      const rows = db.prepare(`SELECT id, isRead FROM "Article" WHERE id IN (${chunk.map(() => "?").join(",")})`).all(...chunk) as { id: string; isRead: number }[];
+      for (const r of rows) out.set(r.id, !!r.isRead);
+    }
+    return out;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * A NEW unread article (createdAt = now) placed in list order right below
+ * `belowId` (publishedAt 30 s older, same feed): a backdated arrival that
+ * lands inside an already loaded span. Removed by the returned function.
+ */
+export function insertArrivalBelow(belowId: string, id: string): () => void {
+  const db = open();
+  try {
+    const iso = (d: Date) => d.toISOString().replace("Z", "+00:00");
+    const ref = db.prepare(`SELECT feedId, userId, publishedAt FROM "Article" WHERE id = ?`).get(belowId) as { feedId: string; userId: string; publishedAt: string };
+    const publishedAt = new Date(new Date(ref.publishedAt).getTime() - 30_000);
+    const now = iso(new Date());
+    db.prepare(
+      `INSERT INTO "Article" (id, feedId, userId, title, link, content, excerpt, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?)`,
+    ).run(id, ref.feedId, ref.userId, `Arrival ${id}`, `https://arrival.e2e.test/${id}`, iso(publishedAt), now, now);
+  } finally {
+    db.close();
+  }
+  return () => {
+    const c = open();
+    try {
+      c.prepare(`DELETE FROM "Article" WHERE id = ?`).run(id);
+    } finally {
+      c.close();
+    }
+  };
+}

@@ -1,15 +1,16 @@
 "use client";
 
-import { createContext, createElement, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useIsMutating, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { applyArticleStateOps } from "@/app/actions/article-state";
+import { applyArticleStateOps, markArticleIdsRead, markListRangeRead } from "@/app/actions/article-state";
 import { fetchFullText as fetchFullTextAction, markAllAsRead, markArticlesAsUnread, setArticleLabels, updateFeed } from "@/app/actions/feeds";
 import { adjustCounts, adjustLabelCounts, applyArticlePatch, findCachedArticle, invalidateCounts, isHiddenFromAll, patchCachedArticle, patchCachedArticles, rollbackFailedOps } from "./cache";
 import { qk } from "./keys";
 import { registerStateBatcher, unregisterStateBatcher } from "./batcher-registry";
-import { StateBatcher, type SettledFlush, type StateField } from "./state-batcher";
+import { StateBatcher, type StateField, type StoryCascade } from "./state-batcher";
+import { planStoryCascade } from "./story-cascade";
 import type { ArticleListItem, ArticlePage } from "./types";
 import type { Counts } from "@/features/bootstrap/types";
 import { isOnline } from "@/features/bootstrap/online";
@@ -24,8 +25,28 @@ export type ToggleSource = "tap" | "swipe" | "key" | "auto" | "scroll";
 /** `categoryId`: the category a by-name selection resolved to (names are not unique). */
 export type MarkViewScope = { feedId?: string | null; category?: string | null; categoryId?: string | null; search?: string | null };
 
+/**
+ * "Alles bis hier" as a server-side range of the bound list (`listKey`, its
+ * `sort`): from the first loaded row `fromId` down to `toId`, plus folded story
+ * members `extraIds`; `maxCreatedAt` = the list's snapshot time (keeps rows
+ * that arrived later out). See `markRangeRead` on the server.
+ */
+export interface MarkRange {
+  listKey: string;
+  sort: "new" | "old";
+  fromId: string;
+  toId: string;
+  maxCreatedAt: number;
+  extraIds: string[];
+}
+
+export interface SetReadOptions {
+  /** The row stands for its whole story (story card): the server cascades to the cluster. */
+  story?: boolean;
+}
+
 export interface ArticleActions {
-  setRead(id: string, read: boolean, src?: ToggleSource): void;
+  setRead(id: string, read: boolean, src?: ToggleSource, opts?: SetReadOptions): void;
   toggleRead(id: string): void;
   toggleStar(id: string): void;
   toggleLater(id: string): void;
@@ -33,9 +54,19 @@ export interface ArticleActions {
   fetchFullText(id: string): void;
   /** Bulk mark-read of a whole view with the 6 s Undo toast (server-issued undo token). */
   markViewRead(scope: MarkViewScope): void;
+  /**
+   * Bulk mark-read of explicit loaded rows ("Alles bis hier als gelesen") with
+   * the same 6 s Undo toast (server-issued undo token).
+   */
+  markIdsRead(ids: string[]): void;
+  /** Same, as one server-side range (no id cap; one undo token). */
+  markRangeRead(range: MarkRange): void;
 }
 
 const MARK_VIEW_READ_KEY = ["mark-view-read"] as const;
+const STORY_TOAST_ID = "story-cascade";
+
+type BulkReadRequest = { kind: "scope"; scope: MarkViewScope } | { kind: "ids"; ids: string[] } | { kind: "range"; range: MarkRange };
 const FULL_TEXT_KEY = ["fetch-full-text"] as const;
 const FAILURE_TOAST_ID = "article-state-failed";
 const OFFLINE_TOAST_ID = "article-state-offline";
@@ -78,20 +109,83 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
   const t = useTranslations("articleState");
   const tSidebar = useTranslations("sidebar");
   const tReader = useTranslations("articleReader");
-  const tRef = useRef({ t, tSidebar, tReader });
+  const tList = useTranslations("articleList");
+  const tRef = useRef({ t, tSidebar, tReader, tList });
   useEffect(() => {
-    tRef.current = { t, tSidebar, tReader };
-  }, [t, tSidebar, tReader]);
+    tRef.current = { t, tSidebar, tReader, tList };
+  }, [t, tSidebar, tReader, tList]);
+
+  /**
+   * Story cascades per originating article (the lead, or the source a story
+   * card stood for): the ids the server marked read with it (Undo / the story
+   * marked unread again).
+   */
+  const cascades = useRef(new Map<string, string[]>());
+
+  /**
+   * Marks the sources the story cascade marked read with `origin` unread again
+   * (explicit ops through the batcher; rows no cache holds are sent as is).
+   */
+  const restoreCascade = useCallback((target: StateBatcher, origin: string) => {
+    const members = cascades.current.get(origin);
+    if (!members?.length) return;
+    cascades.current.delete(origin);
+    let unknown = false;
+    for (const id of members) {
+      const result = applyArticlePatch(qc, id, { isRead: false });
+      if (result) target.enqueue({ id, field: "isRead", value: false }, result.before.isRead);
+      else {
+        // Not patched: unknown to the cache, or the cache already shows it unread
+        // (cascade result skipped for a pending toggle) — the server has it read.
+        if (!findCachedArticle(qc, id)) unknown = true;
+        if (target.latestValue(id, "isRead") === undefined) target.enqueue({ id, field: "isRead", value: false }, true);
+      }
+    }
+    if (unknown) invalidateCounts(qc);
+  }, [qc]);
 
   const batcher = useMemo(() => {
-    const onSettled = ({ failed }: SettledFlush) => {
-      if (failed.length === 0) return;
-      rollbackFailedOps(qc, failed, (id, field) => instance.hasPending(id, field));
-      toast.error(tRef.current.t("toggleFailed"), { id: FAILURE_TOAST_ID });
+    /**
+     * The server marked stories' other sources read (story cascade). Per
+     * story: patch its ids in every cache — except ids the user toggled since
+     * (queued or in flight: that newer write wins and is not overwritten) —
+     * remember them under the story's origin (marking it unread again
+     * restores them) and offer one Undo for every story of this flush.
+     */
+    const applyStoryCascades = (groups: StoryCascade[]) => {
+      const plan = planStoryCascade(
+        groups,
+        (id) => instance.latestValue(id, "isRead"),
+        (origin) => instance.latestValue(origin, "isRead") ?? findCachedArticle(qc, origin)?.isRead,
+      );
+      for (const { origin, ids } of plan.groups) {
+        const known = cachedArticles(qc, new Set(ids));
+        applyBulkRead(qc, ids, true);
+        if (known.size < ids.length) invalidateCounts(qc);
+        cascades.current.set(origin, [...(cascades.current.get(origin) ?? []), ...ids]);
+      }
+      // The story was taken back while this call was in flight: undo its cascade right away.
+      for (const origin of plan.restore) restoreCascade(instance, origin);
+      if (plan.undo.length === 0) return;
+      const { t: tr, tSidebar: ts } = tRef.current;
+      toast(tr("storyMarkedRead", { count: plan.total }), {
+        id: STORY_TOAST_ID,
+        duration: 6000,
+        action: { label: ts("undo"), onClick: () => plan.undo.forEach((origin) => restoreCascade(instance, origin)) },
+      });
     };
-    const instance = new StateBatcher({ send: (ops) => applyArticleStateOps(ops), onSettled });
+
+    const instance = new StateBatcher({
+      send: (ops) => applyArticleStateOps(ops),
+      onSettled: ({ failed, cascades: groups }) => {
+        if (groups.length > 0) applyStoryCascades(groups);
+        if (failed.length === 0) return;
+        rollbackFailedOps(qc, failed, (id, field) => instance.hasPending(id, field));
+        toast.error(tRef.current.t("toggleFailed"), { id: FAILURE_TOAST_ID });
+      },
+    });
     return instance;
-  }, [qc]);
+  }, [qc, restoreCascade]);
 
   useEffect(() => {
     registerStateBatcher(qc, batcher);
@@ -130,12 +224,20 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
 
   const { mutate: markAllMutate } = useMutation({
     mutationKey: MARK_VIEW_READ_KEY,
-    mutationFn: async (scope: MarkViewScope) => {
+    mutationFn: async (request: BulkReadRequest) => {
       batcher.flush();
       await batcher.whenIdle();
-      return markAllAsRead(scope);
+      if (request.kind === "ids") return markArticleIdsRead(request.ids);
+      if (request.kind === "range") return markListRangeRead(request.range);
+      return markAllAsRead(request.scope);
     },
     onSuccess: (result) => {
+      const tooLarge = (result as { tooLarge?: { limit: number } } | undefined)?.tooLarge;
+      if (tooLarge) {
+        // Nothing changed: the range is above the server bound.
+        toast.error(tRef.current.tList("markUpToHereTooMany", { count: tooLarge.limit }));
+        return;
+      }
       const ids = result?.ids ?? [];
       if (ids.length === 0) return;
       applyBulkRead(qc, ids, true);
@@ -185,11 +287,13 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
       toast.error(tRef.current.t("offlineReadOnly"), { id: OFFLINE_TOAST_ID });
       return true;
     };
-    const set = (id: string, field: StateField, value: boolean) => {
+    const set = (id: string, field: StateField, value: boolean, story = false) => {
       if (guardOffline()) return;
       const result = applyArticlePatch(qc, id, { [field]: value });
       if (!result) return;
-      batcher.enqueue({ id, field, value }, result.before[field]);
+      batcher.enqueue({ id, field, value, ...(story && field === "isRead" && value ? { story: true } : {}) }, result.before[field]);
+      // A story lead marked unread again brings back the sources its cascade marked read.
+      if (field === "isRead" && !value && cascades.current.has(id)) restoreCascade(batcher, id);
     };
     const toggle = (id: string, field: StateField) => {
       const current = findCachedArticle(qc, id);
@@ -197,7 +301,7 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
     };
 
     return {
-      setRead: (id, read) => set(id, "isRead", read),
+      setRead: (id, read, _src, opts) => set(id, "isRead", read, !!opts?.story),
       toggleRead: (id) => toggle(id, "isRead"),
       toggleStar: (id) => toggle(id, "isStarred"),
       toggleLater: (id) => toggle(id, "isReadLater"),
@@ -236,10 +340,21 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
 
       markViewRead: (scope) => {
         if (guardOffline()) return;
-        markAllMutate(scope);
+        markAllMutate({ kind: "scope", scope });
+      },
+
+      markIdsRead: (ids) => {
+        if (guardOffline()) return;
+        const unread = ids.filter((id) => findCachedArticle(qc, id)?.isRead === false);
+        if (unread.length) markAllMutate({ kind: "ids", ids: unread });
+      },
+
+      markRangeRead: (range) => {
+        if (guardOffline()) return;
+        markAllMutate({ kind: "range", range });
       },
     };
-  }, [qc, batcher, markAllMutate, fullTextMutate]);
+  }, [qc, batcher, markAllMutate, fullTextMutate, restoreCascade]);
 
   return createElement(ArticleActionsContext.Provider, { value: actions }, children);
 }

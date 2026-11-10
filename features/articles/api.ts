@@ -1,4 +1,4 @@
-import type { ArticleDetail, ArticlePage } from "./types";
+import type { ArticleDetail, ArticlePage, ClusterDetail } from "./types";
 import type { ListKey } from "./scope";
 
 export class ApiError extends Error {
@@ -54,4 +54,9 @@ export function fetchViewCount(key: ListKey, signal?: AbortSignal): Promise<{ un
   const params = new URLSearchParams(key.id.startsWith("/?") ? key.id.slice(2) : "");
   params.delete("show");
   return getJson<{ unread: number }>(`/api/app/articles/count?${params.toString()}`, signal);
+}
+
+/** `GET /api/app/clusters/:id` — every visible source of one story (slim rows, oldest first). */
+export function fetchCluster(id: string, signal?: AbortSignal): Promise<ClusterDetail> {
+  return getJson<ClusterDetail>(`/api/app/clusters/${encodeURIComponent(id)}`, signal);
 }

@@ -18,20 +18,36 @@ export interface StateOp {
   id: string;
   field: StateField;
   value: boolean;
+  /** `isRead: true` for a whole story (the story card): the server cascades to its cluster. */
+  story?: boolean;
 }
 
 /** Wire shape of one article's ops (`applyArticleStateOps`). */
-export type WireStateOp = { id: string } & Partial<Record<StateField, boolean>>;
+export type WireStateOp = { id: string; story?: boolean } & Partial<Record<StateField, boolean>>;
+
+/** One originating story of a server-side story cascade and the ids it marked read. */
+export interface StoryCascade {
+  origin: string;
+  clusterId?: string;
+  ids: string[];
+}
 
 export interface SettledFlush {
   ops: StateOp[];
   failed: StateOp[];
+  /**
+   * Extra article ids the server marked read on its own (story cascade,
+   * `clusterReadMode = "story"`): the caller patches them into the cache.
+   */
+  affected: string[];
+  /** The same ids grouped by the story (op id) that caused them. */
+  cascades: StoryCascade[];
   /** Set when the whole call was rejected (network, server error). */
   error?: unknown;
 }
 
 export interface StateBatcherOptions {
-  send(ops: WireStateOp[]): Promise<{ failed: string[] }>;
+  send(ops: WireStateOp[]): Promise<{ failed: string[]; affected?: string[]; cascades?: StoryCascade[] }>;
   onSettled?(result: SettledFlush): void;
   trailingMs?: number;
   maxMs?: number;
@@ -62,6 +78,10 @@ export function toWireOps(ops: StateOp[]): WireStateOp[] {
   for (const op of ops) {
     const wire = byId.get(op.id) ?? { id: op.id };
     wire[op.field] = op.value;
+    if (op.field === "isRead") {
+      if (op.value && op.story) wire.story = true;
+      else delete wire.story;
+    }
     byId.set(op.id, wire);
   }
   return [...byId.values()];
@@ -164,10 +184,12 @@ export class StateBatcher {
       .then(
         (result) => {
           const failedIds = new Set(result?.failed ?? []);
-          settled = { ops, failed: ops.filter((op) => failedIds.has(op.id)) };
+          const cascades = Array.isArray(result?.cascades) ? result.cascades : [];
+          const affected = Array.isArray(result?.affected) ? result.affected : cascades.flatMap((c) => c.ids);
+          settled = { ops, failed: ops.filter((op) => failedIds.has(op.id)), affected, cascades };
         },
         (error: unknown) => {
-          settled = { ops, failed: ops, error };
+          settled = { ops, failed: ops, affected: [], cascades: [], error };
         },
       )
       .then(() => {
