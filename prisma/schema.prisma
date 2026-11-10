@@ -23,6 +23,7 @@ model User {
   categories    Category[]
   feeds         Feed[]
   articles      Article[]
+  storyClusters StoryCluster[]
   labels        Label[]
   savedSearches SavedSearch[]
   autoReadRules AutoReadRule[]
@@ -74,6 +75,10 @@ model User {
   ntfyUrl                 String?
   ntfyToken               String?
   hideDuplicates          Boolean   @default(true)
+  // K1 story clustering (lib/story-clustering). storyClustering = background job on/off for this user;
+  // clusterReadMode: "story" = marking a story's lead read marks its sources read, "article" = only that row.
+  storyClustering         Boolean   @default(true)
+  clusterReadMode         String    @default("story")  // "story" | "article"
   markReadOnScroll        Boolean   @default(false)
   markReadOnAdvance       Boolean   @default(false)     // end-of-list "Weiter zu …" also marks the current view read
   layoutDirection         String    @default("ltr")     // "ltr" | "rtl"
@@ -393,6 +398,12 @@ model Article {
   mediaType         String?
   mediaDurationSecs Int?
   readMinutes       Int?
+  // K1 story clustering (lib/story-clustering). All nullable: null storySig = not computed yet,
+  // null clusteredAt = pending, set once processed (also for singletons, which get no cluster).
+  clusterId   String?
+  cluster     StoryCluster? @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+  storySig    String?    // JSON StorySig, <= 600 chars
+  clusteredAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, feedId, dedupeKey])
@@ -412,6 +423,27 @@ model Article {
   @@index([userId, isRead, isSpoiler, feedId])
   // Perf: the list's per-row `_count.duplicates` and ON DELETE SET NULL of a canonical article
   @@index([duplicateOf])
+  // K1: cluster member lookups and the pending / 48h window scans of the clustering job
+  @@index([userId, clusterId])
+  @@index([userId, clusteredAt, publishedAt])
+}
+
+// K1: a group of >= 2 articles (of different feeds) covering the same story. Per user; singletons get no row.
+model StoryCluster {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadArticleId String   // representative article (re-picked when a better member joins)
+  size          Int      @default(2)
+  feedCount     Int      @default(2)
+  firstSeenAt   DateTime // min(publishedAt) of members
+  lastSeenAt    DateTime // max(publishedAt) of members - window anchor
+  sig           String   // JSON ClusterSig, <= 2 KB
+  algoVersion   Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  articles      Article[]
+  @@index([userId, lastSeenAt])
 }
 
 model Label {

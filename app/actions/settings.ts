@@ -75,6 +75,8 @@ export async function getReadingPreferences() {
       hideDuplicates: true,
       markReadOnScroll: true,
       markReadOnAdvance: true,
+      storyClustering: true,
+      clusterReadMode: true,
       layoutDirection: true,
       hideEmptyFeeds: true,
       hideEmptyLabels: true,
@@ -95,6 +97,8 @@ export async function getReadingPreferences() {
     hideDuplicates: user?.hideDuplicates ?? true,
     markReadOnScroll: user?.markReadOnScroll ?? false,
     markReadOnAdvance: user?.markReadOnAdvance ?? false,
+    storyClustering: user?.storyClustering ?? true,
+    clusterReadMode: (user?.clusterReadMode === "article" ? "article" : "story") as "story" | "article",
     layoutDirection: (user?.layoutDirection === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl",
     hideEmptyFeeds: user?.hideEmptyFeeds ?? false,
     hideEmptyLabels: user?.hideEmptyLabels ?? false,
@@ -118,6 +122,8 @@ export async function updateGlobalSettings(data: {
   hideDuplicates?: boolean;
   markReadOnScroll?: boolean;
   markReadOnAdvance?: boolean;
+  storyClustering?: boolean;
+  clusterReadMode?: "story" | "article";
   layoutDirection?: "ltr" | "rtl";
   hideEmptyFeeds?: boolean;
   hideEmptyLabels?: boolean;
@@ -130,6 +136,10 @@ export async function updateGlobalSettings(data: {
     // 0 = disabled/opt-out; otherwise clamp to a sane range.
     updateData.autoMuteFailingFeedsAfter =
       data.autoMuteFailingFeedsAfter <= 0 ? 0 : Math.min(1000, Math.round(data.autoMuteFailingFeedsAfter));
+  }
+
+  if (data.clusterReadMode !== undefined && data.clusterReadMode !== "story" && data.clusterReadMode !== "article") {
+    throw new Error("Invalid clusterReadMode");
   }
 
   await db.user.update({

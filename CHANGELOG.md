@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — story clustering engine (no-AI tier, server side)
+
+- Articles of different feeds that cover the same story are grouped per user over a 48 h window (`lib/story-clustering/`, see `docs/story-clustering.md`): normalization (de/en), entity/link heuristics, idf-weighted scoring, drift guard, incremental background job (≤ 400 ms per tick, idempotent) with first-run backfill. Off with `DISABLE_STORY_CLUSTERING=true` or per user (`storyClustering`).
+- API for the upcoming cluster card: optional `clusterId` / `clusterSize` / `clusterLeadId` on `GET /api/app/articles` items, `GET /api/app/clusters/:id`, and `affected` ids from the batched read action.
+- New setting `clusterReadMode` (default `story`): reading a story's lead marks its other sources read; `article` keeps rows independent.
+
 ### Added — lossless FreshRSS migration
 
 - **Manage feeds → Import/Export → "Von FreshRSS umziehen"**: upload the FreshRSS export ZIP (or an OPML / article JSON file), review a dry-run summary, confirm, get a result report. Imports subscriptions, folders (incl. empty ones), XPath/JSON/HTML+JSON scraping feeds, `ttl`/mute, priority, full-content CSS selector (now **enabled**), cookies/headers/user agent, plus starred/read state, labels, bodies, dates and enclosures of exported articles. Re-importing is idempotent; see `docs/freshrss-migration.md` for the full mapping.

@@ -105,7 +105,7 @@ describe("applyArticleStateOps (server action)", () => {
   });
   it("is scoped to the signed-in user", async () => {
     h.store.user = "bob";
-    expect(await action([{ id: "a1", isStarred: true }])).toEqual({ failed: ["a1"] });
+    expect(await action([{ id: "a1", isStarred: true }])).toEqual({ failed: ["a1"], affected: [] });
     expect(row("a1").isStarred).toBe(false);
   });
 });

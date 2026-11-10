@@ -15,6 +15,9 @@ export interface ArticleStateOp {
   isReadLater?: boolean;
 }
 
+/** Upper bound of members one batch may mark read through story cascading (clusters are capped at 50 sources). */
+export const MAX_CASCADE_MEMBERS = 500;
+
 /** Upper bound of ops per call. The batcher flushes at least every second, so a real client stays far below. */
 export const MAX_STATE_OPS = 200;
 const MAX_ID_LENGTH = 128;
@@ -76,20 +79,60 @@ function dataFor(field: StateField, value: boolean, now: Date) {
 }
 
 /**
+ * Story cascade (K1, `User.clusterReadMode === "story"`): marking the lead of a
+ * cluster read also marks its other unread sources read. Returns the member
+ * ids to add — user-scoped, bounded, never an id the batch already touches
+ * (an explicit op for a member wins). Costs nothing for unclustered articles.
+ */
+async function storyCascadeIds(
+  userId: string,
+  ops: ArticleStateOp[],
+  owned: Array<{ id: string; clusterId?: string | null; cluster?: { leadArticleId: string } | null }>,
+): Promise<string[]> {
+  const readOps = new Set(ops.filter((op) => op.isRead === true).map((op) => op.id));
+  // Last op per id decides: a later isRead:false cancels an earlier isRead:true.
+  for (const op of ops) if (op.isRead === false) readOps.delete(op.id);
+  const clusterIds = new Set<string>();
+  for (const row of owned) {
+    if (readOps.has(row.id) && row.clusterId && row.cluster?.leadArticleId === row.id) clusterIds.add(row.clusterId);
+  }
+  if (clusterIds.size === 0) return [];
+  const user = await db.user.findUnique({ where: { id: userId }, select: { clusterReadMode: true } });
+  if (user?.clusterReadMode !== "story") return [];
+  const touched = new Set(ops.map((op) => op.id));
+  const members = await db.article.findMany({
+    where: { userId, clusterId: { in: [...clusterIds] }, isRead: false },
+    select: { id: true },
+    orderBy: { id: "asc" },
+    take: MAX_CASCADE_MEMBERS + touched.size,
+  });
+  return members.map((m) => m.id).filter((id) => !touched.has(id)).slice(0, MAX_CASCADE_MEMBERS);
+}
+
+/**
  * Applies validated ops for `userId`. Ids that do not exist or belong to
  * another user are returned in `failed` (and nothing is written for them).
  * Every update is conditional on the field not already holding the value, so
  * repeating an op keeps `readAt` / `readLaterSavedAt` stable. All updates run
  * in one transaction.
+ *
+ * With `User.clusterReadMode = "story"`, marking a story's lead read cascades
+ * to the cluster's other unread sources; their ids come back in `affected` so
+ * the client can patch its cache (and undo them with explicit ops).
  */
-export async function applyArticleStateOps(userId: string, ops: ArticleStateOp[]): Promise<{ failed: string[] }> {
+export async function applyArticleStateOps(userId: string, ops: ArticleStateOp[]): Promise<{ failed: string[]; affected: string[] }> {
   const ids = [...new Set(ops.map((op) => op.id))];
-  const owned = await db.article.findMany({ where: { userId, id: { in: ids } }, select: { id: true } });
+  const owned = await db.article.findMany({
+    where: { userId, id: { in: ids } },
+    select: { id: true, clusterId: true, cluster: { select: { leadArticleId: true } } },
+  });
   const ownedIds = new Set(owned.map((a) => a.id));
   const failed = ids.filter((id) => !ownedIds.has(id));
 
-  const groups = groupStateOps(ops.filter((op) => ownedIds.has(op.id)));
-  if (groups.size === 0) return { failed };
+  const ownedOps = ops.filter((op) => ownedIds.has(op.id));
+  const affected = ownedOps.some((op) => op.isRead === true) ? await storyCascadeIds(userId, ownedOps, owned) : [];
+  const groups = groupStateOps([...ownedOps, ...affected.map((id) => ({ id, isRead: true }))]);
+  if (groups.size === 0) return { failed, affected };
 
   const now = new Date();
   await db.$transaction(
@@ -102,5 +145,5 @@ export async function applyArticleStateOps(userId: string, ops: ArticleStateOp[]
       });
     }),
   );
-  return { failed };
+  return { failed, affected };
 }

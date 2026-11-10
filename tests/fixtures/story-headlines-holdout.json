@@ -1,0 +1,161 @@
+{
+ "_comment": "Holdout set written after weight tuning; NOT used to tune. Same format as story-headlines.json (feeds + filler come from the main fixture).",
+ "groups": [
+  {
+   "id": "boeing-cap",
+   "lang": "en",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "reuters",
+     "title": "Boeing 737 MAX production capped at 38 jets a month, FAA says",
+     "hoursAgo": 14
+    },
+    {
+     "feed": "bbc",
+     "title": "FAA keeps cap on Boeing 737 MAX output at 38 per month",
+     "hoursAgo": 13
+    }
+   ]
+  },
+  {
+   "id": "glasfaser",
+   "lang": "de",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "heise",
+     "title": "Telekom und Vodafone einigen sich auf gemeinsamen Glasfaserausbau",
+     "hoursAgo": 30
+    },
+    {
+     "feed": "golem",
+     "title": "Glasfaser: Telekom und Vodafone kooperieren beim Netzausbau",
+     "hoursAgo": 29
+    }
+   ]
+  },
+  {
+   "id": "nvidia-cap",
+   "lang": "en",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "verge",
+     "title": "Nvidia becomes first company to hit $6 trillion market value",
+     "hoursAgo": 5
+    },
+    {
+     "feed": "reuters",
+     "title": "Nvidia market cap tops $6 trillion, a record for any company",
+     "hoursAgo": 4.5
+    }
+   ]
+  },
+  {
+   "id": "kiew",
+   "lang": "de",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "tagesschau",
+     "title": "Kanzler besucht Kiew und sagt weitere Militärhilfe zu",
+     "hoursAgo": 16
+    },
+    {
+     "feed": "zeit",
+     "title": "Besuch in Kiew: Kanzler verspricht zusätzliche Militärhilfe",
+     "hoursAgo": 15.5
+    },
+    {
+     "feed": "spiegel",
+     "title": "Überraschungsbesuch: Kanzler sichert Ukraine weitere Militärhilfe zu",
+     "hoursAgo": 15
+    }
+   ]
+  },
+  {
+   "id": "mozilla",
+   "lang": "en",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "techcrunch",
+     "title": "Mozilla lays off 10% of staff as Firefox revenue declines",
+     "hoursAgo": 20
+    },
+    {
+     "feed": "ars",
+     "title": "Firefox maker Mozilla cuts 10% of workforce amid falling revenue",
+     "hoursAgo": 19
+    }
+   ]
+  },
+  {
+   "id": "bayer",
+   "lang": "de",
+   "expect": "same",
+   "items": [
+    {
+     "feed": "faz",
+     "title": "Pharmakonzern Bayer streicht 3.000 Stellen in Deutschland",
+     "hoursAgo": 9
+    },
+    {
+     "feed": "spiegel",
+     "title": "Bayer baut in Deutschland 3.000 Arbeitsplätze ab",
+     "hoursAgo": 8
+    }
+   ]
+  },
+  {
+   "id": "h-neg-1",
+   "lang": "en",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "bbc",
+     "title": "Boeing wins $4 billion defense contract",
+     "hoursAgo": 12
+    },
+    {
+     "feed": "guardian",
+     "title": "Nvidia unveils new robotics platform at developer event",
+     "hoursAgo": 3
+    },
+    {
+     "feed": "techcrunch",
+     "title": "Mozilla releases Firefox 141 with new privacy settings",
+     "hoursAgo": 18
+    }
+   ]
+  },
+  {
+   "id": "h-neg-2",
+   "lang": "de",
+   "expect": "distinct",
+   "items": [
+    {
+     "feed": "zeit",
+     "title": "Kanzler besucht Flutgebiet in Sachsen",
+     "hoursAgo": 14
+    },
+    {
+     "feed": "faz",
+     "title": "Bayer verliert Glyphosat-Prozess in den USA",
+     "hoursAgo": 7
+    },
+    {
+     "feed": "heise",
+     "title": "Telekom erhöht Preise für Mobilfunktarife",
+     "hoursAgo": 28
+    },
+    {
+     "feed": "kicker",
+     "title": "Ukraine meldet Drohnenangriffe auf Charkiw",
+     "hoursAgo": 15
+    }
+   ]
+  }
+ ]
+}

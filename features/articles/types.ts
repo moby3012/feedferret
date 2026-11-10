@@ -32,6 +32,22 @@ export interface ArticleListItem {
   duplicateCount: number;
   canonicalFeedName: string | null;
   labelIds: string[];
+  /**
+   * Story cluster (K1, lib/story-clustering). Present only on rows that belong
+   * to a cluster of >= 2 sources; absent otherwise. Additive: no existing field
+   * changes. `clusterLeadId` is the cluster's representative article.
+   */
+  clusterId?: string;
+  clusterSize?: number;
+  clusterLeadId?: string;
+}
+
+/** GET /api/app/clusters/:id — all sources of one story (slim list rows, oldest first). */
+export interface ClusterDetail {
+  id: string;
+  size: number;
+  leadId: string;
+  members: ArticleListItem[];
 }
 
 export interface ArticleDetail extends ArticleListItem {
