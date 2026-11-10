@@ -1679,6 +1679,7 @@ export async function summarizeArticle(articleId: string): Promise<{ summary: st
         model: user.aiModel,
         ollamaBaseUrl: user.aiOllamaBaseUrl,
         language: user.aiSummaryLanguage,
+        usage: { userId: session.user.id, feature: "summary" },
     });
 
     await db.article.update({

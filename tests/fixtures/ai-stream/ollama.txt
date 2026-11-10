@@ -1,0 +1,3 @@
+{"model":"llama3.1:8b","created_at":"2026-11-10T07:00:00Z","message":{"role":"assistant","content":"## WHAT\n- EZB senkt"},"done":false}
+{"model":"llama3.1:8b","created_at":"2026-11-10T07:00:00Z","message":{"role":"assistant","content":" Zins [[s1]]\n"},"done":false}
+{"model":"llama3.1:8b","created_at":"2026-11-10T07:00:01Z","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop","prompt_eval_count":701,"eval_count":17}

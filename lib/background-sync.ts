@@ -83,7 +83,10 @@ async function tick() {
                 )
                 .catch((e) => logger.error("[retention] run failed:", e))
                 .then(() => cleanupStoryClusters())
-                .catch((e) => logger.error("[story-clustering] cleanup failed:", e));
+                .catch((e) => logger.error("[story-clustering] cleanup failed:", e))
+                // K2: briefings > 14 d, AI usage rows > 90 d.
+                .then(() => import("./briefing/generate").then((m) => m.cleanupBriefingData()))
+                .catch((e) => logger.error("[briefing] cleanup failed:", e));
         }
     } catch (error) {
         state.lastError = String(error);

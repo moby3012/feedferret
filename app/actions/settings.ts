@@ -585,8 +585,12 @@ export async function getAiSettings() {
       aiSummaryLanguage: true,
       aiAutoTag: true,
       aiCleanTitles: true,
+      briefingAuto: true,
     },
   });
+  const { usageSummary } = await import("@/lib/ai/usage");
+  const { isFakeAiEnabled } = await import("@/lib/ai/fake");
+  const usage = await usageSummary(session.user.id);
   return {
     provider: user?.aiProvider ?? null,
     hasApiKey: !!user?.aiApiKey,
@@ -596,6 +600,13 @@ export async function getAiSettings() {
     language: user?.aiSummaryLanguage ?? "same",
     autoTag: user?.aiAutoTag ?? false,
     cleanTitles: user?.aiCleanTitles ?? false,
+    // K2: briefing auto-generation + daily token cap (null = server default).
+    briefingAuto: user?.briefingAuto ?? true,
+    dailyCap: usage.userCap,
+    defaultDailyCap: usage.defaultCap,
+    usedToday: usage.usedToday,
+    /** The deterministic CI provider is offered only behind its test gate. */
+    fakeProviderAvailable: isFakeAiEnabled(),
   };
 }
 
@@ -609,10 +620,24 @@ export async function updateAiSettings(data: {
   language?: string;
   autoTag?: boolean;
   cleanTitles?: boolean;
+  briefingAuto?: boolean;
+  /** Daily token cap: null/"" = server default, 0 = AI off. */
+  dailyCap?: number | string | null;
 }) {
   const session = await requireUser();
   const updateData: Record<string, unknown> = {};
-  if ("provider" in data) updateData.aiProvider = data.provider;
+  if ("provider" in data) {
+    const { isSelectableAiProvider } = await import("@/lib/ai-summary");
+    if (data.provider !== null && data.provider !== undefined && !isSelectableAiProvider(data.provider)) {
+      throw new Error("Unknown AI provider");
+    }
+    updateData.aiProvider = data.provider ?? null;
+  }
+  if ("briefingAuto" in data) updateData.briefingAuto = data.briefingAuto === true;
+  if ("dailyCap" in data) {
+    const { normalizeCapInput } = await import("@/lib/ai/usage");
+    updateData.aiDailyTokenCap = normalizeCapInput(data.dailyCap);
+  }
   if (data.clearApiKey) {
     updateData.aiApiKey = null;
   } else if (data.apiKey) {

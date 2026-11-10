@@ -89,6 +89,8 @@ async function buildAiExtras(
         model: user.aiModel,
         ollamaBaseUrl: user.aiOllamaBaseUrl,
         language: user.aiSummaryLanguage,
+        // K2: daily token cap + usage accounting.
+        usage: { userId: user.id, feature: "digest" as const },
     };
 
     let overall: string | null = null;

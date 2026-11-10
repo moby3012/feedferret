@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArticleList } from "@/components/article-list";
 import { EndOfListCard } from "@/components/end-of-list-card";
+import { BriefingCard } from "@/components/briefing/briefing-card";
 import { RssHeader } from "@/components/rss-header";
 import { SearchResultsView } from "@/components/search-results-view";
 import { OfflineChip } from "@/components/shell/offline-chip";
@@ -273,6 +274,7 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
             />
           }
           hasFeeds={data.feeds.length > 0}
+          header={p.tab === "new" && scope.kind === "all" && loc.show === "unread" ? <BriefingCard scopeKey="new" active={active} /> : undefined}
         />
       )}
     </>

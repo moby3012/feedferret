@@ -31,6 +31,8 @@ model User {
   feeds         Feed[]
   articles      Article[]
   storyClusters StoryCluster[]
+  briefings     Briefing[]
+  aiUsage       AiUsage[]
   labels        Label[]
   savedSearches SavedSearch[]
   autoReadRules AutoReadRule[]
@@ -106,6 +108,10 @@ model User {
   aiSummaryLanguage       String    @default("same")   // "same" | BCP-47 tag e.g. "de"
   aiAutoTag               Boolean   @default(false)     // F8: auto-tag new articles via Label/ArticleLabel on sync
   aiCleanTitles           Boolean   @default(false)     // K3: show the neutral AI title (Article.cleanTitle) for clickbait headlines in the app list
+  // K2 catch-me-up briefing + AI cost cap (lib/ai/usage.ts). aiDailyTokenCap: null = server default
+  // (env AI_DAILY_TOKEN_CAP, default 150000), 0 = AI off; Ollama is never capped (local, $0).
+  aiDailyTokenCap         Int?
+  briefingAuto            Boolean   @default(true)      // generate when Neu opens and nothing is cached (local providers only)
   // BYOK hosted-fetch connector (M7-T3): per-user, opt-in, own API key.
   // The last-resort tier for pages that beat even the browser-render sidecar
   // (M7-T2) — an active anti-bot challenge. Unlike every earlier tier, the
@@ -462,6 +468,42 @@ model StoryCluster {
   updatedAt     DateTime @updatedAt
   articles      Article[]
   @@index([userId, lastSeenAt])
+}
+
+// K2: one generated "catch me up" briefing per (user, scope, input, model, prompt version).
+// Fallback (headline) briefings are computed on the fly and never stored.
+model Briefing {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopeKey      String   // "new" | "cat:<id>" | "label:<id>"
+  windowStart   DateTime
+  windowEnd     DateTime
+  inputHash     String   // sha256-32 of the BriefingInput (ids + lang + prompt version)
+  provider      String
+  model         String
+  promptVersion Int
+  status        String   // "ok" | "partial"
+  content       String   // JSON BriefingContent (validated)
+  storyCount    Int
+  tokensIn      Int      @default(0)
+  tokensOut     Int      @default(0)
+  seenAt        DateTime?
+  createdAt     DateTime @default(now())
+  @@unique([userId, scopeKey, inputHash, model, promptVersion])
+  @@index([userId, scopeKey, createdAt])
+}
+
+// K2: per-user, per-day (UTC), per-feature AI token usage — the server-side daily cap reads it.
+model AiUsage {
+  userId    String
+  day       String   // "YYYY-MM-DD" UTC
+  feature   String   // "briefing" | "tagging" | "summary" | "digest" | "extraction"
+  tokensIn  Int      @default(0)
+  tokensOut Int      @default(0)
+  calls     Int      @default(0)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, day, feature])
 }
 
 model Label {

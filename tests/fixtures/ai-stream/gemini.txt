@@ -1,0 +1,4 @@
+data: {"candidates": [{"content": {"parts": [{"text": "## WHAT\n- EZB senkt"}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 640,"totalTokenCount": 640}}
+
+data: {"candidates": [{"content": {"parts": [{"text": " Zins [[s1]]\n"}],"role": "model"},"finishReason": "STOP","index": 0}],"usageMetadata": {"promptTokenCount": 640,"candidatesTokenCount": 15,"totalTokenCount": 655}}
+

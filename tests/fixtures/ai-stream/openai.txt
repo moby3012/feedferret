@@ -1,0 +1,16 @@
+data: {"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}
+
+data: {"id":"c1","choices":[{"index":0,"delta":{"content":"## WHAT\n- EZB senkt"}}]}
+
+: keep-alive
+
+data: {"id":"c1","choices":[{"index":0,"delta":{"content":" Zins [[s"}}]}
+
+data: {"id":"c1","choices":[{"index":0,"delta":{"content":"1]]\n"}}]}
+
+data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"c1","choices":[],"usage":{"prompt_tokens":812,"completion_tokens":21,"total_tokens":833}}
+
+data: [DONE]
+

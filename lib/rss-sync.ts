@@ -761,6 +761,7 @@ async function autoSummarizeNewArticles(userId: string, articleIds: string[]) {
                 model: user.aiModel,
                 ollamaBaseUrl: user.aiOllamaBaseUrl,
                 language: user.aiSummaryLanguage,
+                usage: { userId, feature: "summary" },
             });
 
             await db.article.update({
@@ -822,6 +823,7 @@ export async function autoTagNewArticles(
         apiKey: decryptIfValue(user.aiApiKey),
         model: user.aiModel,
         ollamaBaseUrl: user.aiOllamaBaseUrl,
+        usage: { userId, feature: "tagging" },
     };
 
     // Articles that received AI enrichment: auto-read rules (`is:sponsored`,

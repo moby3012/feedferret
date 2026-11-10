@@ -9,6 +9,8 @@ export interface UiPrefs {
   /** Article list column width in px on expanded layouts (clamped 320–480). */
   listW?: number;
   sidebarCollapsed?: boolean;
+  /** K2 briefing card: 1 = collapsed, 0 = expanded (absent = expanded). */
+  bc?: 0 | 1;
 }
 
 export function clampListW(px: number): number {
@@ -22,6 +24,7 @@ export function parseUiCookie(raw: string | undefined | null): UiPrefs {
     const out: UiPrefs = {};
     if (typeof value.listW === "number" && Number.isFinite(value.listW)) out.listW = clampListW(value.listW);
     if (typeof value.sidebarCollapsed === "boolean") out.sidebarCollapsed = value.sidebarCollapsed;
+    if (value.bc === 0 || value.bc === 1) out.bc = value.bc;
     return out;
   } catch {
     return {};

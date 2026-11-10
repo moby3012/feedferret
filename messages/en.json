@@ -336,7 +336,13 @@
       "spanish": "Spanish",
       "japanese": "Japanese",
       "chinese": "Chinese"
-    }
+    },
+    "briefingAuto": "Create briefing automatically",
+    "briefingAutoDescription": "Local model (Ollama) only: creates the briefing when you open “New”. With cloud providers you tap “Create briefing”.",
+    "dailyCap": "Daily limit (tokens)",
+    "dailyCapDescription": "Applies to every AI feature with cloud providers. Empty = server default ({default}), 0 = AI off. Ollama runs locally and is not capped.",
+    "usageToday": "Used today: {count} tokens",
+    "briefingPrivacy": "For the briefing only titles, excerpts (max. 350 characters) and feed names are sent to the provider."
   },
   "contentFetch": {
     "title": "Full-Text Fetch Fallback (BYOK)",
@@ -1789,5 +1795,45 @@
   },
   "shell": {
     "chooseFeed": "Choose a feed or category from the sidebar."
+  },
+  "briefing": {
+    "title": "Your briefing",
+    "titleHeadlines": "Headline overview",
+    "meta": "{count, plural, one {# story} other {# stories}} since {time}",
+    "tooFew": "Only {count, plural, one {# new story} other {# new stories}}",
+    "what": "What happened",
+    "why": "Why it matters",
+    "brief": "In brief",
+    "headlines": "Headlines",
+    "seen": "Seen ✓",
+    "refresh": "Refresh",
+    "generate": "Create briefing",
+    "retry": "Try again",
+    "listen": "Listen",
+    "stop": "Stop",
+    "generating": "Creating your briefing…",
+    "done": "Briefing ready, {count, plural, one {# point} other {# points}}",
+    "showMore": "Show more",
+    "empty": "All read since {time}",
+    "source": "Source {index}: {title} — {feed}",
+    "privacyNote": "AI · {model} · only titles & excerpts sent",
+    "headlinesNote": "Without AI: headlines grouped by story",
+    "staleNote": "{count, plural, one {# new story} other {# new stories}} since this briefing",
+    "error": {
+      "rate_limited": "Too many briefings in a short time – try again later.",
+      "provider_auth": "The AI provider rejected the API key. Check your AI settings.",
+      "provider_down": "The AI provider is not reachable right now.",
+      "timeout": "The AI provider took too long.",
+      "invalid_output": "The AI answer was unusable – here are the headlines.",
+      "budget": "Your daily AI limit is reached."
+    },
+    "fallback": {
+      "no_ai": "No AI set up – headlines grouped by story.",
+      "budget": "Daily limit reached – headlines instead of an AI briefing.",
+      "invalid_output": "The AI answer was unusable – headlines instead of an AI briefing.",
+      "provider_error": "AI unavailable – headlines instead of an AI briefing.",
+      "too_few": "Too few new stories for a briefing.",
+      "rate_limited": "Too many requests right now – headlines instead of an AI briefing."
+    }
   }
 }

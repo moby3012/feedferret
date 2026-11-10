@@ -93,6 +93,9 @@ export default defineConfig({
         NEXTAUTH_URL: BASE_URL,
         AUTH_TRUST_HOST: "true",
         DISABLE_BACKGROUND_SYNC: "true",
+        // K2: the deterministic fake AI provider (lib/ai/fake.ts). Only honoured
+        // with this flag AND the disposable .e2e SQLite DB — never in production.
+        FEEDFERRET_FAKE_AI: "1",
         NEXT_TELEMETRY_DISABLED: "1",
         NODE_ENV: "production",
       },
