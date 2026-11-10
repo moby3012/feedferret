@@ -8,7 +8,7 @@ import {
   parseIntLike,
   parseJsonObject,
 } from "./feed-extraction";
-import { fetchWithSsrfProtection, isTrustedFeedFetchingAllowed, type ConditionalFetchResult } from "./ssrf";
+import { assertSafeProxyUrl, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed, type ConditionalFetchResult } from "./ssrf";
 import { isTrustedConnectorUrl } from "./connector-hosts";
 import { logger } from "./logger";
 import { stripStyleBlocks } from "./html-utils";
@@ -302,7 +302,18 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
     headers,
   };
 
+  // Internal fetch targets are allowed when: the caller forced it (trusted
+  // connector validation), OR the instance-wide switch is on, OR the URL's
+  // host is a configured optional-connector host (RSSHub / changedetection.io
+  // on the private Docker network) — see lib/connector-hosts.ts.
+  const trustedInstance = feed.allowInternal === true || (await isTrustedFeedFetchingAllowed());
+  const allowInternal = trustedInstance || (await isTrustedConnectorUrl(feed.url));
+
   if (http.CURLOPT_PROXY) {
+    // The proxy host is a connection target of its own: apply the same SSRF rules as to the
+    // feed URL, and fail the fetch (never fall back to a direct request) when it is unsafe.
+    // Connector-host trust covers the feed URL only; it must not unlock an internal proxy.
+    await assertSafeProxyUrl(String(http.CURLOPT_PROXY), { allowInternal: trustedInstance });
     try {
       const { ProxyAgent } = await import("undici");
       (init as any).dispatcher = new ProxyAgent(String(http.CURLOPT_PROXY));
@@ -317,15 +328,6 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
       logger.warn("[feed-fetcher] sslVerify=false requested but undici Agent failed", error);
     }
   }
-
-  // Internal fetch targets are allowed when: the caller forced it (trusted
-  // connector validation), OR the instance-wide switch is on, OR the URL's
-  // host is a configured optional-connector host (RSSHub / changedetection.io
-  // on the private Docker network) — see lib/connector-hosts.ts.
-  const allowInternal =
-    feed.allowInternal === true ||
-    (await isTrustedFeedFetchingAllowed()) ||
-    (await isTrustedConnectorUrl(feed.url));
 
   return fetchWithSsrfProtection(feed.url, init, {
     allowInternal,

@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+import { assertSafeHttpOptionsProxy } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { apiError, clampInt, parseBool, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
@@ -8,9 +9,10 @@ import { checkRateLimit, getClientIdentifier, rateLimitHeaders, rateLimitRespons
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
-import { generateOpml, parseOpml, scraperConfigFromOutline, httpOptionsFromOutline, type OpmlOutline } from "@/lib/opml";
-import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
-import { validateFeedUrl, validateOpml } from "@/lib/validation";
+import { generateOpml, OpmlParseError } from "@/lib/opml";
+import { handleFreshRssUpload } from "@/lib/import/freshrss-upload";
+import { importOpmlXml, OpmlImportInputError } from "@/lib/import/opml-import";
+import { validateFeedUrl } from "@/lib/validation";
 import { logger } from "@/lib/logger";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
@@ -456,6 +458,13 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
   ] as const) {
     if (body[key] !== undefined) data[key] = body[key];
   }
+  if (data.httpOptions) {
+    try {
+      await assertSafeHttpOptionsProxy(data.httpOptions);
+    } catch (error) {
+      return apiError(error instanceof Error ? error.message : "Invalid proxy", 422);
+    }
+  }
   const result = await db.feed.updateMany({ where: { id: feedId, userId: user.id }, data });
   if (!result.count) return apiError("Feed not found", 404);
   const feed = await db.feed.findFirst({ where: { id: feedId, userId: user.id }, include: { category: true } });
@@ -621,48 +630,15 @@ async function importOpml(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
   const xml = typeof body?.xml === "string" ? body.xml : null;
   if (!xml) return apiError("xml is required", 400);
-  const opmlError = validateOpml(xml);
-  if (opmlError) return apiError(opmlError, 400);
-  const outlines = await parseOpml(xml);
-  const report = { feedsAdded: 0, feedsUpdated: 0, categoriesAdded: 0, categoriesUpdated: 0, errors: [] as string[] };
-
-  const getOrCreateCategory = async (name: string, parentId?: string | null, opmlUrl?: string | null) => {
-    const existing = await db.category.findUnique({ where: { userId_name_parentId: { userId: user.id, name, parentId: (parentId || null) as any } } });
-    const category = await db.category.upsert({
-      where: { userId_name_parentId: { userId: user.id, name, parentId: (parentId || null) as any } },
-      update: opmlUrl !== undefined ? { opmlUrl } : {},
-      create: { userId: user.id, name, parentId: parentId || undefined, opmlUrl: opmlUrl || undefined },
-    });
-    if (existing) report.categoriesUpdated += 1;
-    else report.categoriesAdded += 1;
-    return category;
-  };
-
-  const processOutline = async (outline: OpmlOutline, categoryId?: string) => {
-    if (outline.xmlUrl) {
-      let targetCategoryId = categoryId;
-      if (!targetCategoryId && outline.category) targetCategoryId = (await getOrCreateCategory(outline.category)).id;
-      const scraperConfig = scraperConfigFromOutline(outline);
-      const httpOptions = httpOptionsFromOutline(outline);
-      const extensions = outline.extensions ?? {};
-      const existing = await db.feed.findUnique({ where: { userId_url: { userId: user.id, url: outline.xmlUrl } } });
-      await db.feed.upsert({
-        where: { userId_url: { userId: user.id, url: outline.xmlUrl } },
-        update: { name: outline.text, categoryId: targetCategoryId, sourceType: normalizeSourceType(outline.type), htmlUrl: outline.htmlUrl || null, description: outline.description || null, priority: extensions.priority || "main", unicityCriteria: extensions.unicityCriteria || "id", unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1", scraperConfig: stringifyNonEmpty(scraperConfig), httpOptions: stringifyNonEmpty(httpOptions) },
-        create: { userId: user.id, url: outline.xmlUrl, name: outline.text, categoryId: targetCategoryId, sourceType: normalizeSourceType(outline.type), htmlUrl: outline.htmlUrl || null, description: outline.description || null, priority: extensions.priority || "main", unicityCriteria: extensions.unicityCriteria || "id", unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1", scraperConfig: stringifyNonEmpty(scraperConfig), httpOptions: stringifyNonEmpty(httpOptions) },
-      });
-      if (existing) report.feedsUpdated += 1;
-      else report.feedsAdded += 1;
-    } else if (outline.children) {
-      const category = await getOrCreateCategory(outline.text, categoryId, outline.extensions?.opmlUrl ?? null);
-      for (const child of outline.children) await processOutline(child, category.id);
-    }
-  };
-
-  for (const outline of outlines) {
-    try { await processOutline(outline); } catch (error) { report.errors.push(`${outline.text}: ${String(error)}`); }
+  const limited = checkRateLimit(`user:${user.id}`, RATE_LIMITS.opmlImport);
+  if (!limited.success) return rateLimitResponse(limited);
+  try {
+    // Same core as the settings UI and MCP: lib/import/opml-import. `dryRun: true` only reports.
+    return NextResponse.json(await importOpmlXml(user.id, xml, { dryRun: body?.dryRun === true }));
+  } catch (error) {
+    if (error instanceof OpmlImportInputError || error instanceof OpmlParseError) return apiError(error.message, 400);
+    throw error;
   }
-  return NextResponse.json(report);
 }
 
 // ─── Keyword Alerts ───────────────────────────────────────────────────────────
@@ -1006,6 +982,9 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
       if (method === "GET") res = await exportOpml(user);
       else if (method === "POST") { const se = scopeError(user, "write"); if (se) res = se; else res = await importOpml(user, request); }
       else res = apiError("Not found", 404);
+    } else if (path[0] === "import" && path[1] === "freshrss" && path.length === 2 && method === "POST") {
+      // Raw FreshRSS export (ZIP / OPML / article JSON) as the request body; ?dryRun=1 previews.
+      const se = scopeError(user, "write"); if (se) res = se; else res = await handleFreshRssUpload(request, user.id) as NextResponse;
     } else if (path[0] === "sync" && path.length === 1 && method === "POST") {
       const se = scopeError(user, "write"); if (se) res = se;
       else { const results = await syncUserFeeds(user.id); res = NextResponse.json({ success: true, synced: results.filter((r) => r.success && !r.skipped).length, total: results.length, results }); }

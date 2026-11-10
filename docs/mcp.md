@@ -22,6 +22,7 @@ FeedFerret exposes an MCP-compatible HTTP JSON-RPC endpoint so language models a
 | `feedferret.mark_all_read` | write | Bulk mark-as-read (use with care) |
 | `feedferret.delete_feed` | write | Delete a feed and all its articles |
 | `feedferret.update_feed` | write | Update full per-feed config (fetch, full-text, display, mute) |
+| `feedferret.import_opml` | write | Import OPML (FreshRSS `frss:*` aware); `dryRun` previews; returns counts and `issues` |
 | `feedferret.create_category` | write | Create a feed category/folder |
 | `feedferret.update_category` | write | Update a category name, parent or order |
 | `feedferret.delete_category` | write | Delete a feed category |

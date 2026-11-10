@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useTranslations, useFormatter } from "next-intl";
+import { FreshRssMigration } from "@/components/freshrss-migration";
 import {
   useFeeds,
   useDeleteFeed,
@@ -1544,6 +1545,8 @@ export function FeedManagement({
               <ScrollArea className="h-full px-6 sm:px-8">
               <div className="space-y-6 py-4 pb-8">
                 <MigrationWizard onUpload={handleImport} isImporting={importOpml.isPending} />
+
+                <FreshRssMigration />
 
                 <div className="space-y-4 rounded-2xl border border-border/60 bg-card p-7 shadow-sm">
                   <div className="flex items-center gap-3 text-xl font-semibold tracking-title text-primary">

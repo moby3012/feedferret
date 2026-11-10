@@ -1,0 +1,70 @@
+{
+	"id": "user/alice/state/org.freshrss/starred",
+	"title": "Starred articles",
+	"author": "alice",
+	"items": [
+{
+	"frss:id": "1731139200123456",
+	"id": "tag:google.com,2005:reader/item/0006278a5e1c9f40",
+	"crawlTimeMsec": "1731139200123",
+	"timestampUsec": "1731139200123456",
+	"published": 1731135600,
+	"title": "Rust 2.0 überrascht alle 🦀",
+	"canonical": [{"href": "https://example.org/rust-2-0"}],
+	"alternate": [{"href": "https://example.org/rust-2-0", "type": "text/html"}],
+	"categories": [
+		"user/-/state/com.google/reading-list",
+		"user/-/state/org.freshrss/main",
+		"user/-/state/org.freshrss/important",
+		"user/-/state/com.google/read",
+		"user/-/state/com.google/starred",
+		"user/-/label/Rust",
+		"user/-/label/Später lesen"
+	],
+	"origin": {"streamId": "feed/12", "htmlUrl": "https://news.ycombinator.com/", "title": "Hacker News", "feedUrl": "https://news.ycombinator.com/rss"},
+	"guid": "https://example.org/rust-2-0#guid",
+	"content": {"content": "<p>Die <strong>lang erwartete</strong> Version ist da.</p><img src=\"https://example.org/img/rust.png\" onerror=\"alert(1)\"><script>alert('xss')</script>"},
+	"enclosure": [{"href": "https://example.org/img/rust.png", "type": "image/png", "length": 20480}],
+	"author": "Ferris Krab"
+},
+{
+	"frss:id": "1731139300000001",
+	"id": "tag:google.com,2005:reader/item/0006278a5e1caaa1",
+	"crawlTimeMsec": "1731139300000",
+	"timestampUsec": "1731139300000001",
+	"published": 1700000000,
+	"title": "Omas Apfelkuchen",
+	"canonical": [{"href": "https://old-blog.example.net/apfelkuchen"}],
+	"alternate": [{"href": "https://old-blog.example.net/apfelkuchen", "type": "text/html"}],
+	"categories": [
+		"user/-/state/com.google/reading-list",
+		"user/-/state/org.freshrss/main",
+		"user/-/state/com.google/unread",
+		"user/-/label/Rezepte"
+	],
+	"origin": {"streamId": "feed/77", "htmlUrl": "https://old-blog.example.net/", "title": "Old Blog (abgemeldet)", "feedUrl": "https://old-blog.example.net/feed.xml"},
+	"guid": "old-blog-apfelkuchen-2023",
+	"content": {"content": "<p>Zutaten: Äpfel, Mehl, Zucker.</p>"},
+	"author": "Oma"
+},
+{
+	"frss:id": "1731139400000002",
+	"id": "tag:google.com,2005:reader/item/0006278a5e1cabb2",
+	"crawlTimeMsec": "1731139400000",
+	"timestampUsec": "1731139400000002",
+	"published": 1731000000,
+	"title": "Ohne Feed-URL",
+	"canonical": [{"href": "https://gone.example.com/post/9"}],
+	"alternate": [{"href": "https://gone.example.com/post/9", "type": "text/html"}],
+	"categories": [
+		"user/-/state/com.google/reading-list",
+		"user/-/state/com.google/unread",
+		"user/-/state/com.google/starred"
+	],
+	"origin": {"streamId": "feed/42", "htmlUrl": "https://gone.example.com/", "title": "Gone Feed"},
+	"guid": "gone-post-9",
+	"content": {"content": "<p>Der Feed existiert nicht mehr.</p>"}
+},
+"this is not an item"
+	]
+}

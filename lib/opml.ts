@@ -12,6 +12,38 @@ import {
     parseJsonObject,
 } from "./feed-extraction";
 
+/** Hard limits for untrusted OPML documents (UI upload, REST, MCP, ZIP, remote dynamic OPML). */
+export const OPML_PARSE_LIMITS = {
+    maxOutlines: 20_000,
+    maxDepth: 16,
+} as const;
+
+export class OpmlParseError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "OpmlParseError";
+    }
+}
+
+/**
+ * Rejects documents that declare entities or an internal DTD subset. That is the
+ * only vector for XXE (external entities) and "billion laughs" (nested entity
+ * expansion); OPML never needs either, so refusing outright is safer than
+ * relying on a parser's entity handling. JSDOM never fetches external DTDs.
+ */
+export function assertSafeOpmlXml(xml: string): void {
+    if (/<!ENTITY/i.test(xml) || /<!DOCTYPE[^>]*\[/i.test(xml)) {
+        throw new OpmlParseError("OPML documents with entity declarations or an internal DTD subset are not accepted");
+    }
+    // Cheap pre-check so an outline flood is refused before the (slow) DOM parse.
+    let outlines = 0;
+    for (const _ of xml.matchAll(/<outline[\s/>]/g)) {
+        if (++outlines > OPML_PARSE_LIMITS.maxOutlines) {
+            throw new OpmlParseError(`OPML contains more than ${OPML_PARSE_LIMITS.maxOutlines} outlines`);
+        }
+    }
+}
+
 export interface OpmlOutline {
     text: string;
     title?: string;
@@ -24,46 +56,40 @@ export interface OpmlOutline {
     children?: OpmlOutline[];
 }
 
-function getExtensionAttr(element: Element, name: string): string | undefined {
-    return (
-        element.getAttribute(`${OPML_EXTENSION_PREFIX}:${name}`) ||
-        element.getAttributeNS(OPML_EXTENSION_NAMESPACE, name) ||
-        undefined
-    );
-}
-
 /**
  * Parses an OPML string into a hierarchical list of outlines, preserving Scout Studio
  * extended attributes under `outline.extensions`.
  */
 export async function parseOpml(xml: string): Promise<OpmlOutline[]> {
+    const source = xml.charCodeAt(0) === 0xfeff ? xml.slice(1) : xml;
+    assertSafeOpmlXml(source);
     const { JSDOM } = await import("jsdom");
-    const dom = new JSDOM(xml, { contentType: "text/xml" });
-    const document = dom.window.document;
+    let document: Document;
+    try {
+        document = new JSDOM(source, { contentType: "text/xml" }).window.document;
+    } catch (error) {
+        throw new OpmlParseError(`Invalid OPML/XML document: ${error instanceof Error ? error.message : String(error)}`);
+    }
     const body = document.querySelector("body");
 
     if (!body) return [];
 
-    const parseOutline = (element: Element): OpmlOutline => {
+    let outlineCount = 0;
+
+    const parseOutline = (element: Element, depth: number): OpmlOutline => {
+        if (depth > OPML_PARSE_LIMITS.maxDepth) throw new OpmlParseError(`OPML nesting deeper than ${OPML_PARSE_LIMITS.maxDepth} levels`);
+        if (++outlineCount > OPML_PARSE_LIMITS.maxOutlines) throw new OpmlParseError(`OPML contains more than ${OPML_PARSE_LIMITS.maxOutlines} outlines`);
+
+        // Every attribute in the FreshRSS extension namespace is kept (the prefix is
+        // not significant, the namespace is). Unknown names are preserved verbatim so
+        // the importer can report/preserve them instead of silently dropping them.
         const extensions: Record<string, string> = {};
-        const extensionNames = [
-            "opmlUrl",
-            "priority",
-            "unicityCriteria",
-            "unicityCriteriaForced",
-            "xPathToJson",
-            "filtersActionRead",
-            "cssFullContent",
-            "cssFullContentConditions",
-            "cssContentFilter",
-            "cssFullContentFilter",
-            ...XPATH_ATTRS,
-            ...JSON_ATTRS,
-            ...HTTP_ATTRS,
-        ];
-        for (const name of extensionNames) {
-            const value = getExtensionAttr(element, name);
-            if (value !== undefined && value !== "") extensions[name] = value;
+        for (const attribute of Array.from(element.attributes)) {
+            const inNamespace = attribute.namespaceURI === OPML_EXTENSION_NAMESPACE;
+            const legacyPrefix = !attribute.namespaceURI && attribute.name.startsWith(`${OPML_EXTENSION_PREFIX}:`);
+            if (!inNamespace && !legacyPrefix) continue;
+            const name = inNamespace ? attribute.localName : attribute.name.slice(OPML_EXTENSION_PREFIX.length + 1);
+            if (attribute.value !== "") extensions[name] = attribute.value;
         }
 
         const outline: OpmlOutline = {
@@ -79,7 +105,7 @@ export async function parseOpml(xml: string): Promise<OpmlOutline[]> {
 
         const children = Array.from(element.children).filter(el => el.tagName.toLowerCase() === "outline");
         if (children.length > 0) {
-            outline.children = children.map(parseOutline);
+            outline.children = children.map((child) => parseOutline(child, depth + 1));
         }
 
         return outline;
@@ -87,7 +113,7 @@ export async function parseOpml(xml: string): Promise<OpmlOutline[]> {
 
     return Array.from<Element>(body.children)
         .filter((el: Element) => el.tagName.toLowerCase() === "outline")
-        .map(parseOutline);
+        .map((el) => parseOutline(el, 1));
 }
 
 function attr(name: string, value: unknown) {
@@ -118,6 +144,14 @@ function feedExtensionAttributes(feed: any) {
     out += extensionsAttr("cssContentFilter", feed.fullTextRemoveSelectors);
 
     for (const name of HTTP_ATTRS) out += extensionsAttr(name, httpOptions[name]);
+
+    // Refresh interval in seconds; negative = muted (FreshRSS convention).
+    if (feed.updateFrequency) out += extensionsAttr("ttl", feed.updateFrequency * 60 * (feed.autoMuted ? -1 : 1));
+
+    // Extension attributes this version does not understand are kept verbatim.
+    for (const [name, value] of Object.entries(scraper.extensions ?? {})) {
+        if (/^[A-Za-z_][\w.-]*$/.test(name)) out += extensionsAttr(name, value);
+    }
 
     return out;
 }
@@ -190,6 +224,34 @@ export function generateOpml(feeds: any[], categories: any[] = []): string {
     return header + "\n" + lines.join("\n") + footer;
 }
 
+/** Extension attribute names this version maps to a FeedFerret field (everything else is "unknown"). */
+let knownExtensionNames: ReadonlySet<string> | null = null;
+export function getKnownExtensionNames(): ReadonlySet<string> {
+    // Built lazily: some test suites replace ./feed-extraction with an empty mock.
+    knownExtensionNames ??= new Set([
+        "opmlUrl",
+        "priority",
+        "unicityCriteria",
+        "unicityCriteriaForced",
+        "xPathToJson",
+        "filtersActionRead",
+        "cssFullContent",
+        "cssFullContentConditions",
+        "cssContentFilter",
+        "cssFullContentFilter",
+        "ttl",
+        ...XPATH_ATTRS,
+        ...JSON_ATTRS,
+        ...HTTP_ATTRS,
+    ]);
+    return knownExtensionNames;
+}
+
+export function unknownExtensions(extensions: Record<string, string>): string[] {
+    const known = getKnownExtensionNames();
+    return Object.keys(extensions).filter((name) => !known.has(name));
+}
+
 export function scraperConfigFromOutline(outline: OpmlOutline) {
     const extensions = outline.extensions ?? {};
     const xpath: Record<string, string> = {};
@@ -200,6 +262,9 @@ export function scraperConfigFromOutline(outline: OpmlOutline) {
         ...(Object.keys(xpath).length ? { xpath } : {}),
         ...(Object.keys(json).length ? { json } : {}),
         ...(extensions.xPathToJson ? { xPathToJson: extensions.xPathToJson } : {}),
+        ...(unknownExtensions(extensions).length
+            ? { extensions: Object.fromEntries(unknownExtensions(extensions).map((name) => [name, extensions[name]])) }
+            : {}),
     } satisfies FeedExtractionConfig;
 }
 

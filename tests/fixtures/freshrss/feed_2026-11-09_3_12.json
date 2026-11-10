@@ -1,0 +1,51 @@
+{
+	"id": "user/alice/state/org.freshrss/feed/12",
+	"title": "Articles of Hacker News",
+	"author": "alice",
+	"items": [
+{
+	"frss:id": "1731139200123456",
+	"id": "tag:google.com,2005:reader/item/0006278a5e1c9f40",
+	"crawlTimeMsec": "1731139200123",
+	"timestampUsec": "1731139200123456",
+	"published": 1731135600,
+	"title": "Rust 2.0 überrascht alle 🦀",
+	"canonical": [{"href": "https://example.org/rust-2-0"}],
+	"alternate": [{"href": "https://example.org/rust-2-0", "type": "text/html"}],
+	"categories": ["user/-/state/com.google/reading-list", "user/-/state/org.freshrss/main", "user/-/state/org.freshrss/important", "user/-/state/com.google/unread"],
+	"origin": {"streamId": "feed/12", "htmlUrl": "https://news.ycombinator.com/", "title": "Hacker News", "feedUrl": "https://news.ycombinator.com/rss"},
+	"guid": "https://example.org/rust-2-0#guid",
+	"content": {"content": "<p>Die <strong>lang erwartete</strong> Version ist da.</p>"},
+	"author": "Ferris Krab"
+},
+{
+	"frss:id": "1731140000000003",
+	"id": "tag:google.com,2005:reader/item/0006278a5e1cacc3",
+	"crawlTimeMsec": "1731140000000",
+	"timestampUsec": "1731140000000003",
+	"published": 1731139000,
+	"title": "Show HN: Mein neuer Feedreader",
+	"canonical": [{"href": "https://github.com/example/feedreader"}],
+	"alternate": [{"href": "https://github.com/example/feedreader", "type": "text/html"}],
+	"categories": ["user/-/state/com.google/reading-list", "user/-/state/org.freshrss/main", "user/-/state/org.freshrss/important", "user/-/state/com.google/unread"],
+	"origin": {"streamId": "feed/12", "htmlUrl": "https://news.ycombinator.com/", "title": "Hacker News", "feedUrl": "https://news.ycombinator.com/rss"},
+	"guid": "hn-item-48000001",
+	"content": {"content": "<p>Ein Open-Source-Reader.</p>"}
+},
+{
+	"frss:id": "1731140100000004",
+	"id": "tag:google.com,2005:reader/item/0006278a5e1cadd4",
+	"crawlTimeMsec": "1731140100000",
+	"timestampUsec": "1731140100000004",
+	"published": 1731139900,
+	"title": "Folge 42: Datenbanken",
+	"canonical": [{"href": "https://podcasts.example.com/42"}],
+	"alternate": [{"href": "https://podcasts.example.com/42", "type": "text/html"}],
+	"categories": ["user/-/state/com.google/reading-list", "user/-/state/org.freshrss/main", "user/-/state/org.freshrss/important", "user/-/state/com.google/read"],
+	"origin": {"streamId": "feed/12", "htmlUrl": "https://news.ycombinator.com/", "title": "Hacker News", "feedUrl": "https://news.ycombinator.com/rss"},
+	"guid": "podcast-42",
+	"content": {"content": "<p>Wir sprechen über Datenbanken.</p>"},
+	"enclosure": [{"href": "https://podcasts.example.com/42.mp3", "type": "audio/mpeg", "length": 123456}]
+}
+	]
+}

@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — lossless FreshRSS migration
+
+- **Manage feeds → Import/Export → "Von FreshRSS umziehen"**: upload the FreshRSS export ZIP (or an OPML / article JSON file), review a dry-run summary, confirm, get a result report. Imports subscriptions, folders (incl. empty ones), XPath/JSON/HTML+JSON scraping feeds, `ttl`/mute, priority, full-content CSS selector (now **enabled**), cookies/headers/user agent, plus starred/read state, labels, bodies, dates and enclosures of exported articles. Re-importing is idempotent; see `docs/freshrss-migration.md` for the full mapping.
+- **Shared OPML import core** (`lib/import/opml-import.ts`) behind the settings UI, REST `POST /api/v1/opml`, new MCP tool `import_opml` and remote dynamic OPML: same field mapping everywhere, unknown `frss:*` attributes preserved, every adapted/unsupported option reported as an `issues` list, `dryRun`. REST v1 now also persists full-content selectors and read filters it used to drop.
+- FreshRSS read filters are translated instead of imported as literal words: `intitle:` / `author:` / `inurl:` / `-negation` / quotes / `OR` become a feed-scoped auto-read rule; regex, `#tag`, parentheses, `date:` etc. are reported and not imported.
+- New endpoints `POST /api/import/freshrss` (session) and `POST /api/v1/import/freshrss` (API token): bounded streaming upload, dependency-free ZIP reader (entry/size/ratio limits, zip-slip safe), rate limited.
+
+### Security — OPML
+
+- OPML with entity declarations or an internal DTD (XXE / billion laughs) is rejected; outline count and nesting are capped. Remote (dynamic) OPML no longer applies cookies, headers, proxy or POST options, nested dynamic categories or auto-read rules.
+
 ### Added — smart source → feed resolution
 
 - **Paste anything into "Add feed"** (and the share-target / bookmarklet): a deterministic resolver (`lib/smart-url-resolver.ts`) maps URLs, `@handles`, `r/sub` and topics to the right feed *before* HTML scraping or AI — YouTube (`@handle`, `/channel`, `/c`, `/user`, playlist, video → channel), Reddit (subreddit, user, multireddit, search, thread), Mastodon/fediverse (`@user@host`, profile, `/tags/x`), Bluesky, GitHub (releases/commits/tags/user activity), GitLab, arXiv (category + search), Substack, Medium, Hacker News (hnrss variants), Lobsters, Apple Podcasts (iTunes lookup → publisher feed), Steam news, Letterboxd.

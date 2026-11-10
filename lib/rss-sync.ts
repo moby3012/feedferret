@@ -7,6 +7,7 @@ import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { computeContentHash } from "./content-hash";
+import { buildDedupeKey } from "./dedupe-key";
 import { decryptIfValue } from "./crypto";
 import type { AiConfig } from "./ai-summary";
 import { logger } from "./logger";
@@ -998,26 +999,3 @@ function computeEffectiveUpdateFrequency(
     return 60;
 }
 
-function buildDedupeKey(
-    feed: { unicityCriteria?: string | null },
-    item: FetchedFeedArticle,
-    externalId: string | null,
-) {
-    const parts = (feed.unicityCriteria || "id")
-        .split(":")
-        .map((part) => part.trim())
-        .filter(Boolean);
-
-    const valueFor = (part: string) => {
-        if (part === "id" || part === "guid" || part === "uid") return externalId;
-        if (part === "link" || part === "uri" || part === "url") return item.link;
-        if (part === "title") return item.title;
-        if (part === "author") return item.author;
-        if (part === "date" || part === "timestamp") return item.publishedAt?.toISOString();
-        return null;
-    };
-
-    const values = parts.map(valueFor).filter(Boolean);
-    if (values.length > 0) return values.join(":");
-    return externalId || item.link || item.title;
-}

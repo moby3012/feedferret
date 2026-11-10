@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0" xmlns:frss="https://freshrss.org/opml">
+  <head>
+    <title>FreshRSS</title>
+    <dateCreated>Mon, 09 Nov 2026 08:15:42 +0000</dateCreated>
+  </head>
+  <body>
+    <outline text="Tech">
+      <outline text="Hacker News" type="rss" xmlUrl="https://news.ycombinator.com/rss" htmlUrl="https://news.ycombinator.com/" description="Links for the intellectually curious" frss:priority="important" frss:ttl="1800" frss:filtersActionRead="sponsored&#10;intitle:hiring&#10;author:bot -intitle:rust&#10;intitle:&quot;Show HN&quot;&#10;/^\[dead\]/&#10;#spam&#10;(a OR b) c&#10;date:P1D/"/>
+      <outline text="Ars Technica" type="rss" xmlUrl="https://feeds.arstechnica.com/arstechnica/index" htmlUrl="https://arstechnica.com/" frss:unicityCriteria="link" frss:unicityCriteriaForced="true" frss:ttl="-3600" frss:cssFullContent="article .article-content" frss:cssFullContentConditions="title=Review&#10;url~/gadgets/" frss:cssContentFilter=".ad, .related"/>
+    </outline>
+    <outline text="News &amp; Politik">
+      <outline text="Tagesschau" type="rss" xmlUrl="https://www.tagesschau.de/index~rss2.xml" htmlUrl="https://www.tagesschau.de/" description="Nachrichten rund um die Uhr" frss:priority="category"/>
+      <outline text="Legacy Dot Path" type="JSON+DotPath" xmlUrl="https://legacy.example.org/api/news.json" frss:jsonItem="items" frss:jsonItemTitle="headline" frss:jsonItemUri="url"/>
+    </outline>
+    <outline text="Scraped">
+      <outline text="Example Blog" type="HTML+XPath" xmlUrl="https://blog.example.com/archive" htmlUrl="https://blog.example.com/" frss:xPathItem="//article[contains(@class,'post')]" frss:xPathItemTitle=".//h2" frss:xPathItemContent=".//div[@class='summary']" frss:xPathItemUri=".//h2/a/@href" frss:xPathItemAuthor=".//span[@class='by']" frss:xPathItemTimestamp=".//time/@datetime" frss:xPathItemTimeFormat="d.m.Y H:i" frss:xPathItemThumbnail=".//img/@src" frss:xPathItemCategories=".//a[@rel='tag']" frss:xPathItemUid="./@id" frss:CURLOPT_COOKIE="session=abc123" frss:CURLOPT_COOKIEFILE="/var/www/FreshRSS/data/cookies.txt" frss:CURLOPT_FOLLOWLOCATION="1" frss:CURLOPT_MAXREDIRS="5" frss:CURLOPT_PROXY="http://proxy.internal:3128" frss:CURLOPT_PROXYTYPE="0" frss:CURLOPT_USERAGENT="Mozilla/5.0 (X11; Linux x86_64) FreshRSS" frss:CURLOPT_HTTPHEADER="X-Test: 1&#10;Accept: text/html" frss:futureFlag="yes" frss:cssFullContent="div.post-body"/>
+      <outline text="Shop API" type="JSON+DotNotation" xmlUrl="https://shop.example.com/api/v2/products" frss:jsonItem="data.products" frss:jsonItemTitle="name" frss:jsonItemContent="description" frss:jsonItemUri="links.self" frss:jsonItemAuthor="vendor.name" frss:jsonItemTimestamp="created_at" frss:jsonItemTimeFormat="c" frss:jsonItemThumbnail="image.url" frss:jsonItemCategories="tags" frss:jsonItemUid="sku"/>
+      <outline text="Sitemap XML" type="XML+XPath" xmlUrl="https://docs.example.com/sitemap.xml" frss:xPathItem="//url" frss:xPathItemTitle="loc" frss:xPathItemUri="loc" frss:xPathItemTimestamp="lastmod"/>
+      <outline text="Hybrid" type="HTML+XPath+JSON+DotNotation" xmlUrl="https://spa.example.com/" frss:xPathToJson="//script[@id='__DATA__']" frss:jsonItem="props.posts" frss:jsonItemTitle="title" frss:jsonItemUri="slug"/>
+      <outline text="Podcast Hub" type="JSONFeed" xmlUrl="https://podcasts.example.com/feed.json"/>
+    </outline>
+    <outline text="Leer"/>
+    <outline text="Shared Packs" frss:opmlUrl="https://packs.example.net/starter.opml">
+      <outline text="Pack Feed" type="rss" xmlUrl="https://packs.example.net/feeds/one.xml"/>
+    </outline>
+    <outline text="Lone Feed" type="rss" xmlUrl="https://lone.example.com/atom.xml" frss:priority="hidden" frss:ttl="86400000"/>
+    <outline text="Broken Local" type="rss" xmlUrl="file:///etc/passwd"/>
+  </body>
+</opml>

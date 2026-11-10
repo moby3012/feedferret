@@ -126,6 +126,42 @@ export async function assertSafeFetchUrl(rawUrl: string, options: SsrfCheckOptio
   return url;
 }
 
+/**
+ * A per-feed proxy (`CURLOPT_PROXY`) is a network target the server connects to on the
+ * user's behalf, so it follows the same rules as a feed URL: http/https only and no
+ * private/loopback/link-local address (including hostnames that resolve to one) unless
+ * internal fetching is explicitly allowed.
+ */
+export async function assertSafeProxyUrl(rawUrl: string, options: { allowInternal?: boolean } = {}) {
+  return assertSafeFetchUrl(rawUrl, { allowInternal: options.allowInternal, context: "Proxy" });
+}
+
+/**
+ * Save-time check for a feed's `httpOptions` JSON: rejects it (throws a clear error) when
+ * it carries a proxy that fails {@link assertSafeProxyUrl}. Absent/empty options pass.
+ * `allowInternal` defaults to the instance-wide trusted-fetching switch.
+ */
+export async function assertSafeHttpOptionsProxy(httpOptions: unknown, options: { allowInternal?: boolean } = {}) {
+  const proxy = proxyFromHttpOptions(httpOptions);
+  if (!proxy) return;
+  await assertSafeProxyUrl(proxy, { allowInternal: options.allowInternal ?? (await isTrustedFeedFetchingAllowed()) });
+}
+
+export function proxyFromHttpOptions(httpOptions: unknown): string | null {
+  let parsed: unknown = httpOptions;
+  if (typeof httpOptions === "string") {
+    if (!httpOptions.trim()) return null;
+    try {
+      parsed = JSON.parse(httpOptions);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const proxy = (parsed as Record<string, unknown>).CURLOPT_PROXY;
+  return proxy === undefined || proxy === null || String(proxy).trim() === "" ? null : String(proxy).trim();
+}
+
 async function readTextWithLimit(response: FetchResponseLike, maxBytes?: number) {
   if (!maxBytes || !response.body) return response.text();
   const reader = response.body.getReader();

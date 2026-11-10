@@ -5,23 +5,16 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { syncUserFeeds, syncFeed } from "@/lib/rss-sync";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
-import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
-import {
-    parseOpml,
-    generateOpml,
-    OpmlOutline,
-    scraperConfigFromOutline,
-    httpOptionsFromOutline,
-} from "@/lib/opml";
+import { assertSafeHttpOptionsProxy, fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { generateOpml } from "@/lib/opml";
+import { importOpmlXml } from "@/lib/import/opml-import";
 import {
     validateFeedUrl,
-    validateOpml,
     MAX_LABEL_NAME,
     MAX_SEARCH_QUERY,
     MAX_SAVED_SEARCH_NAME,
     CreateFeedSchema,
 } from "@/lib/validation";
-import { normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
 import { fetchAndSuggestFeedCandidates, type SuggestedFieldConfig } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser } from "@/lib/page-feed-create";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs } from "@/lib/webhooks";
@@ -725,6 +718,8 @@ export async function updateFeed(feedId: string, data: {
         if (!category) throw new Error("Invalid category");
     }
 
+    if (data.httpOptions) await assertSafeHttpOptionsProxy(data.httpOptions);
+
     const READER_FONT_SIZES = new Set(["small", "medium", "large", "xl"]);
     const READER_WIDTHS = new Set(["normal", "wide", "full"]);
     const FULL_TEXT_MODES = new Set(["off", "auto", "selector"]);
@@ -992,144 +987,16 @@ export async function exportUserData() {
     );
 }
 
-export async function importOpml(xml: string) {
+export async function importOpml(xml: string, options?: { dryRun?: boolean }) {
     const session = await auth();
     const userId = session?.user?.id;
     if (!userId) throw new Error("Unauthorized");
 
-    const opmlError = validateOpml(xml);
-    if (opmlError) throw new Error(opmlError);
-
-    const outlines = await parseOpml(xml);
-    const report = {
-        feedsAdded: 0,
-        feedsUpdated: 0,
-        categoriesAdded: 0,
-        categoriesUpdated: 0,
-        errors: [] as string[],
-    };
-
-    const getOrCreateCategory = async (name: string, parentId?: string | null, opmlUrl?: string | null) => {
-        const normalizedParentId = parentId || null;
-        const existingCategory = await db.category.findFirst({
-            where: {
-                userId,
-                name,
-                parentId: normalizedParentId,
-            },
-        });
-        const category = existingCategory
-            ? await db.category.update({
-                where: { id: existingCategory.id },
-                data: opmlUrl !== undefined ? { opmlUrl } : {},
-            })
-            : await db.category.create({
-                data: {
-                userId,
-                name,
-                parentId: normalizedParentId,
-                opmlUrl: opmlUrl || undefined,
-                },
-            });
-        if (existingCategory) report.categoriesUpdated += 1;
-        else report.categoriesAdded += 1;
-        return category;
-    };
-
-    const feedDataFromOutline = (outline: OpmlOutline, categoryId?: string | null) => {
-        const scraperConfig = scraperConfigFromOutline(outline);
-        const httpOptions = httpOptionsFromOutline(outline);
-        const extensions = outline.extensions ?? {};
-        const sourceType = normalizeSourceType(outline.type);
-        return {
-            url: outline.xmlUrl!,
-            name: outline.text,
-            categoryId,
-            sourceType,
-            htmlUrl: outline.htmlUrl || null,
-            description: outline.description || null,
-            priority: extensions.priority || "main",
-            unicityCriteria: extensions.unicityCriteria || "id",
-            unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1",
-            scraperConfig: stringifyNonEmpty(scraperConfig),
-            httpOptions: stringifyNonEmpty(httpOptions),
-            fullTextSelector: extensions.cssFullContent || null,
-            fullTextConditions: extensions.cssFullContentConditions || null,
-            fullTextRemoveSelectors: extensions.cssContentFilter || extensions.cssFullContentFilter || null,
-            filtersActionRead: extensions.filtersActionRead || null,
-            customUserAgent: typeof httpOptions.CURLOPT_USERAGENT === "string" ? httpOptions.CURLOPT_USERAGENT : undefined,
-        };
-    };
-
-    const processOutline = async (outline: OpmlOutline, categoryId?: string) => {
-        if (outline.xmlUrl) {
-            let targetCategoryId = categoryId;
-            if (!targetCategoryId && outline.category) {
-                const category = await getOrCreateCategory(outline.category);
-                targetCategoryId = category.id;
-            }
-            const feedData = feedDataFromOutline(outline, targetCategoryId);
-            const existing = await db.feed.findUnique({
-                where: {
-                    userId_url: {
-                        userId: userId,
-                        url: outline.xmlUrl,
-                    },
-                },
-            });
-            await db.feed.upsert({
-                where: {
-                    userId_url: {
-                        userId: userId,
-                        url: outline.xmlUrl,
-                    },
-                },
-                update: {
-                    name: feedData.name,
-                    categoryId: feedData.categoryId,
-                    sourceType: feedData.sourceType,
-                    htmlUrl: feedData.htmlUrl,
-                    description: feedData.description,
-                    priority: feedData.priority,
-                    unicityCriteria: feedData.unicityCriteria,
-                    unicityCriteriaForced: feedData.unicityCriteriaForced,
-                    scraperConfig: feedData.scraperConfig,
-                    httpOptions: feedData.httpOptions,
-                    fullTextSelector: feedData.fullTextSelector,
-                    fullTextConditions: feedData.fullTextConditions,
-                    fullTextRemoveSelectors: feedData.fullTextRemoveSelectors,
-                    filtersActionRead: feedData.filtersActionRead,
-                    ...(feedData.customUserAgent ? { customUserAgent: feedData.customUserAgent } : {}),
-                },
-                create: {
-                    userId: userId,
-                    ...feedData,
-                },
-            });
-            if (existing) report.feedsUpdated += 1;
-            else report.feedsAdded += 1;
-        } else if (outline.children) {
-            const category = await getOrCreateCategory(outline.text, categoryId, outline.extensions?.opmlUrl ?? null);
-
-            for (const child of outline.children) {
-                try {
-                    await processOutline(child, category.id);
-                } catch (error) {
-                    report.errors.push(`${outline.text}: ${String(error)}`);
-                }
-            }
-        }
-    };
-
-    for (const outline of outlines) {
-        try {
-            await processOutline(outline);
-        } catch (error) {
-            report.errors.push(`${outline.text}: ${String(error)}`);
-        }
-    }
-
-    revalidatePath("/");
+    if (!checkRateLimit(`user:${userId}`, RATE_LIMITS.opmlImport).success) throw new Error("Too many imports, try again in a minute");
+    // Shared with REST v1 (`POST /api/v1/opml`), MCP (`import_opml`) and the FreshRSS
+    // migration flow: lib/import/opml-import maps every OPML field once.
+    const report = await importOpmlXml(userId, xml, { dryRun: options?.dryRun === true });
+    if (!report.dryRun) revalidatePath("/");
     return report;
 }
 
