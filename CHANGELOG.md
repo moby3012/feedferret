@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Changed — server performance at scale (SQLite statistics, search, boot, sync tick)
+
+- **SQLite planner statistics.** Prisma never runs `ANALYZE`, so on a default install SQLite picked the wrong index for the per-feed unread list, the starred / read-later counts, cluster detail and the SSR bootstrap. The server now builds statistics in the background after boot (bounded `analysis_limit`, one index at a time with event-loop yields), refreshes them with `PRAGMA optimize` after each sync tick and does a full pass once a day. PostgreSQL is untouched (autovacuum).
+- **Search never fails with HTTP 500.** A term matching more than 32 766 articles used to overflow Prisma's bind-variable limit. The FTS lookup is now scoped to the user in SQL and bounded per term; a term with more hits than the bound uses the (complete) LIKE path instead.
+- **Non-blocking FTS backfill (SQLite).** The one-time full-text backfill no longer delays the first HTTP response (11 s at 50 k articles). It runs in small time-boxed chunks after a short grace period and resumes after a restart; search uses the LIKE path until the index is complete. A stale "index complete" marker left behind after `prisma db push` dropped `article_fts` is detected and the index is rebuilt.
+- **Calmer background sync.** Feed syncs run in a worker pool (still 4 at a time, `FEEDFERRET_SYNC_CONCURRENCY` 1–8) that yields to the event loop between feeds and inside the per-row DB loops; story clustering reads its rows by primary key (a `userId` predicate sent SQLite to a 35–40 ms index scan per call).
+- **GReader** `stream/contents` is capped at 250 items per request (was 1000, up to 9 MB); clients page with the continuation token. ID lists are unchanged.
+
 ### Added — list gestures, row v2 per content type, story cluster card
 
 - One shared gesture module (`lib/gestures/`) on Pointer Events: row swipes write transforms from one rAF loop (no React render per move), 10 px slop, axis lock `|dx| > 1.5·|dy|` (a vertical scroll with ≤ 30° drift never arms a swipe), commit at 35 % of the row width or a flick (≥ 0.5 px/ms), rubber band past the commit point, spring release; swipes that start in the 24 px screen edges are left to the OS back gesture; no swipe starts during momentum scroll; mouse never swipes. Pull-to-refresh uses the same arbitration.

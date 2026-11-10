@@ -123,6 +123,37 @@ function foldByDedupeKey(articles: ArticleSyncInput[]): ArticleSyncInput[] {
     return order.map((key) => byKey.get(key)!);
 }
 
+// better-sqlite3 resolves every query synchronously, so a chain of awaited DB calls only ever
+// yields microtasks: a sync tick that parses/inserts feed after feed would hold the event loop
+// (and with it every HTTP request) until the next real network wait. These macrotask yields give
+// pending requests a turn between feeds and inside the per-row DB loops (audit R5).
+const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/** Concurrent feed syncs in flight (network-bound); capped so a big library can't flood the loop. */
+function getSyncConcurrency() {
+    const n = Number(process.env.FEEDFERRET_SYNC_CONCURRENCY);
+    return Number.isFinite(n) && n >= 1 ? Math.min(Math.trunc(n), 8) : 4;
+}
+
+/**
+ * Runs `fn` over `items` with at most `limit` in flight (a worker pool, so one slow feed no
+ * longer stalls the other three like the old fixed batches did), yielding to the event loop
+ * before each task. Results keep the input order.
+ */
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let next = 0;
+    const worker = async () => {
+        while (next < items.length) {
+            const index = next++;
+            await yieldToLoop();
+            results[index] = await fn(items[index]);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
+}
+
 /**
  * Batches what used to be a per-article `findUnique` -> `upsert` -> cross-feed
  * `findFirst` -> conditional `update` loop (P-1) into a small, fixed number of
@@ -145,6 +176,7 @@ function foldByDedupeKey(articles: ArticleSyncInput[]): ArticleSyncInput[] {
 export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promise<ArticleSyncResult> {
     if (rawArticles.length === 0) return { upsertedIds: [], createdArticleIds: [] };
 
+    await yieldToLoop();
     const articles = foldByDedupeKey(rawArticles);
     const { userId, feedId } = articles[0];
     const dedupeKeys = articles.map((a) => a.dedupeKey);
@@ -197,6 +229,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
 
         if (changed) {
             await db.article.update({ where: { id: existing.id }, data: next });
+            if (upsertedIds.length % 25 === 0) await yieldToLoop();
         }
     }
 
@@ -318,6 +351,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
                     where: { id: createdId },
                     data: { isDuplicate: true, duplicateOf: canonicalId },
                 });
+                await yieldToLoop();
             }
         }
     }
@@ -923,39 +957,30 @@ export async function syncUserFeeds(userId: string) {
         },
     });
 
-    const results = [];
-    const concurrency = 4;
+    const results = await mapWithConcurrency(feeds, getSyncConcurrency(), async (feed) => {
+        // F6: an auto-muted feed is deliberately not actively re-fetched
+        // by background sync (stop wasting cycles hitting a dead URL) —
+        // a manual "Refresh now" (syncFeed called directly) still works
+        // and gives it a chance to self-recover.
+        if (feed.autoMuted) {
+            return { feed: feed.url, success: true, skipped: true, count: 0 };
+        }
 
-    for (let i = 0; i < feeds.length; i += concurrency) {
-        const batch = feeds.slice(i, i + concurrency);
-        const batchResults = await Promise.all(
-            batch.map(async (feed) => {
-                // F6: an auto-muted feed is deliberately not actively re-fetched
-                // by background sync (stop wasting cycles hitting a dead URL) —
-                // a manual "Refresh now" (syncFeed called directly) still works
-                // and gives it a chance to self-recover.
-                if (feed.autoMuted) {
-                    return { feed: feed.url, success: true, skipped: true, count: 0 };
-                }
-
-                const effectiveUpdateFrequency = computeEffectiveUpdateFrequency(
-                    feed,
-                    userDefaultUpdateFrequency,
-                );
-                const now = new Date();
-                const lastSync = feed.lastFetchedAt || new Date(0);
-                const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
-
-                if (diffMinutes < effectiveUpdateFrequency) {
-                    return { feed: feed.url, success: true, skipped: true, count: 0 };
-                }
-
-                const res = await syncFeed(feed.userId, feed.id, { deferAutoReadRules: true });
-                return { feed: feed.url, ...res };
-            }),
+        const effectiveUpdateFrequency = computeEffectiveUpdateFrequency(
+            feed,
+            userDefaultUpdateFrequency,
         );
-        results.push(...batchResults);
-    }
+        const now = new Date();
+        const lastSync = feed.lastFetchedAt || new Date(0);
+        const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
+
+        if (diffMinutes < effectiveUpdateFrequency) {
+            return { feed: feed.url, success: true, skipped: true, count: 0 };
+        }
+
+        const res = await syncFeed(feed.userId, feed.id, { deferAutoReadRules: true });
+        return { feed: feed.url, ...res };
+    });
 
     const hasSynced = results.some((r: any) => r.success && !r.skipped);
     if (hasSynced) {
@@ -991,37 +1016,28 @@ export async function syncAllFeeds() {
         },
     });
 
-    const results = [];
-    const concurrency = 4;
+    const results = await mapWithConcurrency(feeds, getSyncConcurrency(), async (feed) => {
+        // F6: skip auto-muted feeds — see the equivalent comment in
+        // syncUserFeeds.
+        if (feed.autoMuted) {
+            return { feed: feed.url, success: true, skipped: true, count: 0 };
+        }
 
-    for (let i = 0; i < feeds.length; i += concurrency) {
-        const batch = feeds.slice(i, i + concurrency);
-        const batchResults = await Promise.all(
-            batch.map(async (feed) => {
-                // F6: skip auto-muted feeds — see the equivalent comment in
-                // syncUserFeeds.
-                if (feed.autoMuted) {
-                    return { feed: feed.url, success: true, skipped: true, count: 0 };
-                }
-
-                const effectiveUpdateFrequency = computeEffectiveUpdateFrequency(
-                    feed,
-                    feed.user.defaultUpdateFrequency,
-                );
-                const now = new Date();
-                const lastSync = feed.lastFetchedAt || new Date(0);
-                const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
-
-                if (diffMinutes < effectiveUpdateFrequency) {
-                    return { feed: feed.url, success: true, skipped: true, count: 0 };
-                }
-
-                const res = await syncFeed(feed.userId, feed.id);
-                return { feed: feed.url, ...res };
-            }),
+        const effectiveUpdateFrequency = computeEffectiveUpdateFrequency(
+            feed,
+            feed.user.defaultUpdateFrequency,
         );
-        results.push(...batchResults);
-    }
+        const now = new Date();
+        const lastSync = feed.lastFetchedAt || new Date(0);
+        const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
+
+        if (diffMinutes < effectiveUpdateFrequency) {
+            return { feed: feed.url, success: true, skipped: true, count: 0 };
+        }
+
+        const res = await syncFeed(feed.userId, feed.id);
+        return { feed: feed.url, ...res };
+    });
 
     return results;
 }

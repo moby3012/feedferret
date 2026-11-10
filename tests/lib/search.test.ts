@@ -10,6 +10,13 @@ vi.mock("../../lib/db", () => ({
   getDatabaseProvider: () => "sqlite",
 }));
 
+// The readiness probe is mocked so these tests stay about query routing; its real behaviour
+// (marker table + background backfill) is covered in tests/lib/search-fts-backfill.test.ts.
+vi.mock("../../lib/search-indexes", () => ({
+  isSqliteFtsReady: vi.fn(async () => true),
+}));
+import { isSqliteFtsReady } from "../../lib/search-indexes";
+
 const USER = "user-1";
 
 // Default every test to "article_fts unavailable" so pre-existing tests that
@@ -18,6 +25,7 @@ const USER = "user-1";
 // Individual tests below override this with mockResolvedValue(Once) to
 // exercise the FTS-hit path instead.
 beforeEach(() => {
+  (isSqliteFtsReady as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(true);
   (db.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>).mockReset();
   (db.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
     new Error("article_fts not available in this test")
@@ -179,7 +187,9 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
 
     expect(queryRawUnsafeMock).toHaveBeenCalledWith(
       expect.stringContaining("article_fts"),
-      '"openclaw"'
+      USER,
+      '"openclaw"',
+      5001
     );
     expect(result.AND).toHaveLength(1);
     const [condition] = result.AND;
@@ -189,6 +199,42 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
       { feed: { name: { contains: "openclaw" } } },
       { labels: { some: { label: { name: { contains: "openclaw" }, userId: USER } } } },
     ]);
+  });
+
+  it("scopes the FTS lookup to the user in SQL and bounds it", async () => {
+    queryRawUnsafeMock.mockResolvedValue([]);
+    await buildAdvancedSearchWhere(USER, "openclaw");
+    const [sql] = queryRawUnsafeMock.mock.calls[0];
+    expect(sql).toMatch(/a\.userId = \?/);
+    expect(sql).toMatch(/LIMIT \?/);
+  });
+
+  it("falls back to LIKE (complete results, no 32 766-variable IN list) when a term has more FTS hits than the cap", async () => {
+    // cap + 1 rows signal "too many"
+    queryRawUnsafeMock.mockResolvedValue(Array.from({ length: 5001 }, (_, i) => ({ id: `a${i}` })));
+
+    const result = await buildAdvancedSearchWhere(USER, "database") as any;
+
+    const [condition] = result.AND;
+    expect(condition.OR[0]).toEqual({ title: { contains: "database" } });
+    expect(JSON.stringify(result)).not.toContain('"in"');
+  });
+
+  it("shares the bind-variable budget between free-text terms", async () => {
+    queryRawUnsafeMock.mockResolvedValue([]);
+    await buildAdvancedSearchWhere(USER, "aaa bbb cccc dddd");
+    // 20 000 / 4 tokens = 5 000 (still the per-term max); with 8 tokens it halves to 2 500.
+    await buildAdvancedSearchWhere(USER, "aaa bbb cccc dddd eeee ffff gggg hhhh");
+    const limits = queryRawUnsafeMock.mock.calls.map((c: unknown[]) => c[3]);
+    expect(limits.slice(0, 4)).toEqual([5001, 5001, 5001, 5001]);
+    expect(limits.slice(4)).toEqual(Array(8).fill(2501));
+  });
+
+  it("uses the LIKE path while the FTS index is still being backfilled", async () => {
+    (isSqliteFtsReady as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    const result = await buildAdvancedSearchWhere(USER, "openclaw") as any;
+    expect(queryRawUnsafeMock).not.toHaveBeenCalled();
+    expect(result.AND[0].OR[0]).toEqual({ title: { contains: "openclaw" } });
   });
 
   it("falls back to the full LIKE-based OR list when the FTS query throws (e.g. article_fts missing)", async () => {

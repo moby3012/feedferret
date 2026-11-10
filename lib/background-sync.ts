@@ -5,6 +5,7 @@ import { runDigestScheduler } from "./digest-scheduler";
 import { flushDueNotifications } from "./notifications";
 import { applyRetentionPoliciesForAllUsers } from "./retention";
 import { logger } from "./logger";
+import { optimizeSqlitePlannerStatsIfDue } from "./db-maintenance";
 import { cleanupStoryClusters, drainStoryClustering, runStoryClustering } from "./story-clustering/job";
 
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000; // run at most once/day
@@ -70,6 +71,11 @@ async function tick() {
                 if (r.morePending) drainStoryClustering(STORY_CLUSTERING_BUDGET_MS);
             })
             .catch((e) => logger.error("[story-clustering] tick failed:", e));
+
+        // SQLite planner statistics (audit R1): cheap `PRAGMA optimize` after every tick (it
+        // only re-analyses what changed a lot, e.g. the first sync of a fresh install), the
+        // full all-tables pass at most once a day. No-op on Postgres.
+        void optimizeSqlitePlannerStatsIfDue().catch((e) => logger.error("[db-maintenance] optimize failed:", e));
 
         // Retention cleanup is expensive relative to a sync tick, so only run it
         // once/day rather than on every ~5-min tick.
