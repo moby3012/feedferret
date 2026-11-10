@@ -154,17 +154,28 @@ export function decodeCursor(cursor: string, keyset: KeysetField[]): CursorValue
   return values as CursorValue[];
 }
 
-/** `(f1, f2, …) < (v1, v2, …)` (or `>` ascending) as a Prisma OR-of-ANDs. */
+/**
+ * `(f1, f2, …) < (v1, v2, …)` (or `>` ascending) as a Prisma OR-of-ANDs,
+ * AND-ed with the redundant `f1 <= v1` (`>=`). The OR alone has no sargable
+ * bound, so Postgres walks the `(userId, publishedAt, …)` index from the top
+ * and filters every row before the cursor; the extra range turns that into an
+ * Index Cond and deep pages start at the cursor.
+ */
 export function keysetWhere(keyset: KeysetField[], values: CursorValue[], direction: "desc" | "asc") {
   const op = direction === "desc" ? "lt" : "gt";
   const val = (i: number) => (keyset[i] === "id" ? values[i] : new Date(values[i] as number));
   return {
-    OR: keyset.map((field, i) => {
-      const clause: Record<string, unknown> = {};
-      for (let j = 0; j < i; j++) clause[keyset[j]] = val(j);
-      clause[field] = { [op]: val(i) };
-      return clause;
-    }),
+    AND: [
+      { [keyset[0]]: { [direction === "desc" ? "lte" : "gte"]: val(0) } },
+      {
+        OR: keyset.map((field, i) => {
+          const clause: Record<string, unknown> = {};
+          for (let j = 0; j < i; j++) clause[keyset[j]] = val(j);
+          clause[field] = { [op]: val(i) };
+          return clause;
+        }),
+      },
+    ],
   };
 }
 

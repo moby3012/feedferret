@@ -410,6 +410,8 @@ model Article {
   @@index([userId, publishedAt(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
   // Perf: serves per-feed unread counts (groupBy feedId WHERE userId, isRead=false, isSpoiler=false)
   @@index([userId, isRead, isSpoiler, feedId])
+  // Perf: the list's per-row `_count.duplicates` and ON DELETE SET NULL of a canonical article
+  @@index([duplicateOf])
 }
 
 model Label {
