@@ -317,6 +317,9 @@ export async function checkSqliteFtsAndRepair(
              SELECT 1, COALESCE(MAX(rowid), 0), 0 FROM "Article"`
         ),
     ]);
+    // Clear again after the commit: a search that ran during the reset may have re-cached
+    // "ready" from the old meta row.
+    delete (globalThis as unknown as Record<string, unknown>)[FTS_READY_KEY];
     if (options.backfill === "await") {
         await runSqliteFtsBackfill({ yieldMs: 0 });
     } else if (options.backfill === "background") {
