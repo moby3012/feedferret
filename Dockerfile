@@ -57,7 +57,9 @@ RUN mkdir -p /app/data && touch /app/data/dev.db && chown -R nextjs:nodejs /app/
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-# Next's standalone file tracing can pick up prisma.config.ts from the project root.
+# Defense in depth: Next's standalone file tracing can pick up prisma.config.ts from the
+# project root when some server code does a dynamic fs access (see lib/ai/fake.ts and
+# scripts/docker-smoke.sh, which fails CI if this file or any source tree ships).
 # The globally installed Prisma CLI would then auto-load it at startup and fail to
 # resolve "prisma/config" (not in the standalone node_modules), so `db push` in
 # start.sh aborts and the container never starts. start.sh passes the URL via --url,
