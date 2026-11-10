@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import bcrypt from "bcryptjs";
-const state = vi.hoisted(() => ({ url: "", session: "u" }));
+const state = vi.hoisted(() => ({ url: "", session: "u", authenticatedAt: undefined as number | undefined }));
 vi.mock("@/lib/db", async () => {
   const { PrismaClient } = await import("@prisma/client");
   const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
@@ -14,7 +14,7 @@ vi.mock("@/lib/db", async () => {
 });
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next-intl/server", () => ({ getTranslations: async () => (key: string) => key }));
-vi.mock("@/auth", () => ({ auth: async () => state.session ? { user: { id: state.session } } : null }));
+vi.mock("@/auth", () => ({ auth: async () => state.session ? { user: { id: state.session }, authenticatedAt: state.authenticatedAt } : null }));
 vi.mock("@/lib/rss-sync", () => ({ syncFeed: vi.fn() }));
 vi.mock("@/lib/feed-fetcher", () => ({ fetchFeedArticles: vi.fn(async () => ({ title: "Discovered" })) }));
 vi.mock("@/lib/feed-discovery", () => ({ discoverFeeds: vi.fn(async () => ({ feeds: [{ url: "https://example.org/rss" }] })) }));
@@ -47,6 +47,7 @@ beforeEach(async () => {
   vi.spyOn(Date, "now").mockReturnValue(clock);
   await db.user.deleteMany();
   state.session = "u";
+  state.authenticatedAt = undefined;
   await db.user.create({ data: { id: "u", email: "u@example.org", password: await bcrypt.hash("login-password", 4) } });
   await db.user.create({ data: { id: "other" } });
   const response = await loginRequest("login-password");
@@ -254,4 +255,60 @@ it("allows an enabled TOTP for step-up and clears Fever keys when email changes"
   expect((await db.user.findUniqueOrThrow({ where: { id: "u" } })).apiFeverKey).toBeNull();
   expect((await db.apiToken.findFirstOrThrow({ where: { userId: "u" } })).feverKey).toBeNull();
   expect((await (await feverAuth(password)).json()).auth).toBe(0);
+});
+
+
+it.each(["token", "password"])("migrates a legacy plaintext %s Fever key without consuming failure budget", async (kind) => {
+  const key = generateFeverKey("u@example.org", password);
+  if (kind === "token") await db.apiToken.create({ data: { userId: "u", name: "legacy", tokenHash: "legacy", feverKey: key } });
+  else await db.user.update({ where: { id: "u" }, data: { apiPasswordHash: "hash", apiFeverKey: key } });
+  for (let i = 0; i < 12; i++) expect((await (await feverAuth(password, "legacy-ip")).json()).auth).toBe(1);
+  const stored = kind === "token" ? (await db.apiToken.findFirstOrThrow()).feverKey : (await db.user.findUniqueOrThrow({ where: { id: "u" } })).apiFeverKey;
+  expect(stored).toBe(hashApiToken(key));
+  const lookup = vi.spyOn(kind === "token" ? db.apiToken : db.user, kind === "token" ? "findFirst" : "findUnique");
+  expect((await (await feverAuth(password, "legacy-ip")).json()).auth).toBe(1);
+  expect(lookup.mock.calls.some(([args]) => JSON.stringify(args).includes(`"${key}"`))).toBe(false);
+  lookup.mockRestore();
+});
+it("backfills plaintext Fever keys idempotently and preserves hashes and cleared keys", async () => {
+  const { backfillFeverKeys } = await import("@/lib/fever-keys");
+  const key = generateFeverKey("u@example.org", password);
+  await db.user.update({ where: { id: "u" }, data: { apiFeverKey: key } });
+  await db.apiToken.create({ data: { userId: "u", name: "legacy", tokenHash: "legacy", feverKey: key } });
+  await db.apiToken.create({ data: { userId: "u", name: "cleared", tokenHash: "cleared", feverKey: null } });
+  await backfillFeverKeys();
+  expect((await db.user.findUniqueOrThrow({ where: { id: "u" } })).apiFeverKey).toBe(hashApiToken(key));
+  expect((await db.apiToken.findFirstOrThrow({ where: { tokenHash: "legacy" } })).feverKey).toBe(hashApiToken(key));
+  const userWrites = vi.spyOn(db.user, "updateMany");
+  const tokenWrites = vi.spyOn(db.apiToken, "updateMany");
+  await backfillFeverKeys();
+  expect(userWrites).not.toHaveBeenCalled(); expect(tokenWrites).not.toHaveBeenCalled();
+  expect((await db.apiToken.findFirstOrThrow({ where: { tokenHash: "cleared" } })).feverKey).toBeNull();
+  userWrites.mockRestore(); tokenWrites.mockRestore();
+});
+it.each([undefined, -1, 601, 600, 0])("passwordless step-up checks actual sign-in age %s", async (age) => {
+  await db.user.update({ where: { id: "u" }, data: { password: null } });
+  state.authenticatedAt = age === undefined ? undefined : Date.now() / 1000 - age;
+  const response = await configure({ currentPassword: "" });
+  expect(response.status).toBe(age !== undefined && age >= 0 && age <= 600 ? 200 : 403);
+  if (response.status === 403) expect(await response.json()).toMatchObject({ code: "reloginRequired" });
+});
+it("fresh sessions cannot bypass step-up for password or 2FA accounts", async () => {
+  state.authenticatedAt = Date.now() / 1000;
+  expect((await configure({ currentPassword: "" })).status).toBe(403);
+  await db.user.update({ where: { id: "u" }, data: { password: null, twoFactorEnabled: true } });
+  expect((await configure({ currentPassword: "" })).status).toBe(403);
+});
+it("rejects concurrent TOTP reuse across login and API-password step-up", async () => {
+  const { consumeTotpToken } = await import("@/lib/totp-consume");
+  const { generateTotpToken } = await import("@/lib/totp");
+  const secret = "JBSWY3DPEHPK3PXP";
+  await db.user.update({ where: { id: "u" }, data: { twoFactorEnabled: true, twoFactorSecret: secret } });
+  const code = generateTotpToken(secret);
+  const claims = await Promise.all([consumeTotpToken("u", secret, code), consumeTotpToken("u", secret, code)]);
+  expect(claims.filter(Boolean)).toHaveLength(1);
+  expect((await configure({ currentPassword: "", totp: code })).status).toBe(403);
+  const next = generateTotpToken(secret, Date.now() + 30_000);
+  expect((await configure({ currentPassword: "", totp: next })).status).toBe(200);
+  expect(await consumeTotpToken("u", secret, next)).toBe(false);
 });

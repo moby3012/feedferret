@@ -102,3 +102,7 @@ and unknown extensions and remove URL userinfo. Settings backup exports retain
 the full configuration. GReader imports allow 5 attempts/hour/user and at most
 2000 feeds/document before any write. No existing per-user total-feed cap exists.
 Tag edits accept at most 10 add/remove tags and 100 streams per request.
+
+## Credential upgrades
+
+Existing plaintext Fever keys migrate automatically to SHA-256 on first use and in a non-blocking startup backfill; no client credential rotation is needed for this upgrade. Operators should apply the additive Prisma schema update before starting the new server. If you change your email, all Fever keys are cleared: rotate the API password and recreate tokens used with Fever, then reconnect clients. Passwordless accounts without 2FA can manage API passwords within ten minutes of a new sign-in; older sessions must sign out and sign in again. TOTP codes accepted for API-password step-up or login cannot be reused within the acceptance window.

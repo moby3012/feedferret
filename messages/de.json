@@ -1776,6 +1776,10 @@
     "saved": "API-Zugangsdaten aktualisiert",
     "failed": "API-Zugangsdaten konnten nicht aktualisiert werden",
     "stepUp": "Aktuelles Anmeldepasswort oder TOTP-Code",
-    "shownOnce": "API-Passwort jetzt kopieren. Es wird nur einmal angezeigt."
+    "shownOnce": "API-Passwort jetzt kopieren. Es wird nur einmal angezeigt.",
+    "reloginRequired": "Melde dich ab und mit deinem Anbieter oder E-Mail-Link erneut an. Versuche es dann innerhalb von 10 Minuten noch einmal.",
+    "stepUpRequired": "Gib dein aktuelles Anmeldepasswort oder einen neuen, noch nicht verwendeten TOTP-Code ein.",
+    "passwordlessHint": "Wenn du dich ohne Passwort und ohne Zwei-Faktor-Authentifizierung anmeldest, melde dich erneut an und speichere innerhalb von 10 Minuten. Lass das Feld für das Anmeldepasswort leer.",
+    "emailChangeWarning": "Wenn du deine E-Mail-Adresse änderst, werden Google-Reader-Clients getrennt und alle Fever-Schlüssel gelöscht. Erneuere dein API-Passwort und erstelle die für Fever verwendeten API-Token neu. Verbinde deine Clients danach erneut."
   }
 }

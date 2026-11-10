@@ -1776,6 +1776,10 @@
     "saved": "API credentials updated",
     "failed": "Could not update API credentials",
     "stepUp": "Current login password or TOTP code",
-    "shownOnce": "Copy this API password now. It is shown only once."
+    "shownOnce": "Copy this API password now. It is shown only once.",
+    "reloginRequired": "Sign out and sign in again with your provider or email link, then retry within 10 minutes.",
+    "stepUpRequired": "Enter your current login password or a new, unused TOTP code.",
+    "passwordlessHint": "If you sign in without a password and have no two-factor authentication, sign in again and save within 10 minutes. Leave the login password field blank.",
+    "emailChangeWarning": "Changing your email disconnects Google Reader clients and clears all Fever keys. Rotate your API password and recreate API tokens used for Fever, then reconnect your clients."
   }
 }

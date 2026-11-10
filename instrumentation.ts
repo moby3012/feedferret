@@ -6,6 +6,17 @@ export async function register() {
     if (process.env.NEXT_PHASE !== "phase-production-build") validateAuthSecret();
     validateEnvironment();
 
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+        void (async () => {
+            try {
+                const { backfillFeverKeys } = await import("./lib/fever-keys");
+                await backfillFeverKeys();
+            } catch (error) {
+                console.error("[fever-keys] startup backfill failed; legacy keys migrate on use", error);
+            }
+        })();
+    }
+
     // Provisions pg_trgm / FTS5 search acceleration (audit finding P-11).
     // Idempotent and self-contained: it never throws, so a broken index
     // setup degrades to unaccelerated search instead of blocking startup.

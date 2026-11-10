@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { resolveSessionUser } from "@/lib/api-auth";
 import { isSameOriginRequest } from "@/lib/same-origin";
 import { randomBytes } from "crypto";
-import { verifyTotpToken } from "@/lib/totp";
+import { consumeTotpToken } from "@/lib/totp-consume";
+import { getTranslations } from "next-intl/server";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { hashApiToken, generateFeverKey } from "@/lib/token";
 
@@ -30,8 +31,14 @@ export async function POST(request: Request) {
   if (!limit.success) return rateLimitResponse(limit);
   const account = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { password: true, twoFactorEnabled: true, twoFactorSecret: true } });
   const passwordMatches = typeof body.currentPassword === "string" && Buffer.byteLength(body.currentPassword) <= 72 && account.password && await bcrypt.compare(body.currentPassword, account.password);
-  const totpMatches = typeof body.totp === "string" && account.twoFactorEnabled && account.twoFactorSecret && verifyTotpToken(account.twoFactorSecret, body.totp);
-  if (!passwordMatches && !totpMatches) return new Response("Current login password or TOTP required", { status: 403 });
+  const totpMatches = !passwordMatches && typeof body.totp === "string" && account.twoFactorEnabled && account.twoFactorSecret && await consumeTotpToken(user.id, account.twoFactorSecret, body.totp);
+  const age = typeof user.authenticatedAt === "number" ? Date.now() / 1000 - user.authenticatedAt : Infinity;
+  const freshPasswordlessSession = !account.password && !account.twoFactorEnabled && age >= 0 && age <= 600;
+  if (!passwordMatches && !totpMatches && !freshPasswordlessSession) {
+    const t = await getTranslations("apiPassword");
+    const code = !account.password && !account.twoFactorEnabled ? "reloginRequired" : "stepUpRequired";
+    return NextResponse.json({ code, error: t(code) }, { status: 403 });
+  }
   const { required, revoke, policyOnly } = body;
   const password = (body.password === undefined || body.password === "") ? randomBytes(32).toString("base64url") : body.password;
   if (typeof required !== "boolean" || (revoke !== true && policyOnly !== true && (typeof password !== "string" || password.length < 24 || Buffer.byteLength(password) > 72))) {

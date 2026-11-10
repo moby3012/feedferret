@@ -5,7 +5,7 @@ import authConfig from "./auth.config";
 import Credentials from "next-auth/providers/credentials";
 import Nodemailer from "next-auth/providers/nodemailer";
 import bcrypt from "bcryptjs";
-import { verifyTotpToken } from "@/lib/totp";
+import { consumeTotpToken } from "@/lib/totp-consume";
 import { sendSignInEmail } from "@/lib/mail";
 
 import { validateAuthSecret } from "@/lib/auth-secret";
@@ -68,7 +68,7 @@ const config = {
 
         if (user.twoFactorEnabled) {
           const otp = String(credentials.otp || "");
-          if (!user.twoFactorSecret || !verifyTotpToken(user.twoFactorSecret, otp)) {
+          if (!user.twoFactorSecret || !await consumeTotpToken(user.id, user.twoFactorSecret, otp)) {
             await logAttempt(false, user.id, "otp");
             return null;
           }
@@ -120,9 +120,12 @@ const config = {
         session.user.id = token.sub;
         session.user.role = token.role as string;
       }
+      session.authenticatedAt = token.authenticatedAt;
       return session;
     },
-    async jwt({ token }: { token: any }) {
+    async jwt({ token, trigger }: { token: any; trigger?: string }) {
+      // JWT iat is refreshed when cookies rotate; retain the actual sign-in time.
+      if (trigger === "signIn" || trigger === "signUp") token.authenticatedAt = Math.floor(Date.now() / 1000);
       if (!token.sub) return token;
 
       const user = (await db.user.findUnique({

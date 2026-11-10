@@ -21,7 +21,7 @@ async function requireUser() {
 export async function updateProfile(data: { name?: string; email?: string }) {
   const session = await requireUser();
 
-  await db.$transaction(async (tx) => {
+  const emailChanged = await db.$transaction(async (tx) => {
     const previous = await tx.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { email: true } });
     const emailChanged = data.email !== undefined && data.email !== previous.email;
     await tx.user.update({ where: { id: session.user.id }, data: {
@@ -29,9 +29,11 @@ export async function updateProfile(data: { name?: string; email?: string }) {
     } });
     // Hashes cannot be recomputed without the original secret. Rotate after email changes.
     if (emailChanged) await tx.apiToken.updateMany({ where: { userId: session.user.id }, data: { feverKey: null } });
+    return emailChanged;
   });
 
   revalidatePath("/");
+  return { emailChanged, feverRotationRequired: emailChanged };
 }
 
 export async function changePassword(data: {
@@ -193,6 +195,7 @@ export async function beginTwoFactorSetup() {
     data: {
       twoFactorEnabled: false,
       twoFactorSecret: secret,
+      twoFactorLastAcceptedStep: null,
     },
   });
 

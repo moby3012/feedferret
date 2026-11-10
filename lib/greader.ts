@@ -41,7 +41,7 @@ export function verifyGReaderToken(token: string) {
   return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)) ? userId : null;
 }
 
-const passwordCache = new Map<string, number>();
+const passwordCache = new Map<string, { key: string; expires: number }>();
 
 /** Conditional update avoids a write on every poll, including across instances. */
 export async function touchApiPassword(userId: string, lastUsed: Date | null) {
@@ -68,16 +68,17 @@ export async function authenticateGReaderPassword(request: Request, email: strin
     else if (!user.isActive) failReason = "inactive";
     else {
       const hash = user.apiPasswordHash || (!user.twoFactorEnabled && !user.apiPasswordRequired ? user.password : null);
-      const prefix = `${user.id}:`;
-      const key = `${prefix}${user.apiTokenVersion}:${hashApiToken(password)}`;
+      const key = `${user.apiTokenVersion}:${hashApiToken(password)}`;
       // Always reload user/policy/version before consulting cached verification.
-      for (const [cached, expiry] of passwordCache) {
-        if (expiry <= Date.now() || (cached.startsWith(prefix) && !cached.startsWith(`${prefix}${user.apiTokenVersion}:`))) passwordCache.delete(cached);
-      }
-      if (!hash || (!(passwordCache.get(key)! > Date.now()) && !(await bcrypt.compare(password, hash)))) failReason = "password";
+      const cached = passwordCache.get(user.id);
+      const verified = cached?.key === key && cached.expires > Date.now();
+      if (!verified) passwordCache.delete(user.id);
+      if (!hash || (!verified && !(await bcrypt.compare(password, hash)))) failReason = "password";
       else {
-        if (passwordCache.size >= 5000) passwordCache.delete(passwordCache.keys().next().value!);
-        if (!passwordCache.has(key)) passwordCache.set(key, Date.now() + 60_000);
+        if (!passwordCache.has(user.id)) {
+          if (passwordCache.size >= 5000) passwordCache.delete(passwordCache.keys().next().value!);
+          passwordCache.set(user.id, { key, expires: Date.now() + 60_000 });
+        }
         if (user.apiPasswordHash) await touchApiPassword(user.id, user.apiPasswordLastUsedAt);
       }
     }
