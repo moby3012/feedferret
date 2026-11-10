@@ -9,7 +9,8 @@ import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
-import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
+import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute, applyRsshubKey } from "@/lib/rsshub";
+import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
@@ -196,6 +197,7 @@ const tools = [
   { name: "feedferret.list_notifications", description: "List user notifications ordered by newest first.", inputSchema: { type: "object", properties: { isRead: { type: "boolean" }, limit: { type: "number", minimum: 1, maximum: 100 } } } },
   { name: "feedferret.get_stats", description: "Get aggregate stats for the current user.", inputSchema: { type: "object", properties: {} } },
   // Connectors
+  { name: "feedferret.discover_feeds", description: "Resolve a URL, @handle, subreddit/channel shorthand (r/rust, @user@mastodon.social) or a plain topic phrase into subscribable feed candidates [{url,title,kind,platform,confidence,source}]. Uses deterministic platform rules first (YouTube, Reddit, GitHub, Mastodon, Bluesky, arXiv, Hacker News, Apple Podcasts, …), then HTML feed discovery and RSSHub Radar rules; a plain phrase returns Google News/Bing News/Hacker News/arXiv search feeds. Pass a candidate's url to add_feed.", inputSchema: { type: "object", properties: { query: { type: "string", description: "URL, handle or topic phrase." }, locale: { type: "string", description: "Optional locale (e.g. 'de') for localized news feeds." } }, required: ["query"] } },
   { name: "feedferret.list_connectors", description: "List server-configured connectors (RSSHub, changedetection.io) and whether each is available. Useful to discover what connector-backed feeds can be created on this server.", inputSchema: { type: "object", properties: {} } },
   { name: "feedferret.create_rsshub_feed", description: "Create a feed from an RSSHub route path (e.g. '/github/trending/daily/any'). The route is validated against the server's configured RSSHub instance before the feed is created. Requires the RSSHub connector to be configured.", inputSchema: { type: "object", properties: { routePath: { type: "string", description: "RSSHub route path, e.g. '/github/issue/DIYgod/RSSHub'." }, name: { type: "string" }, categoryId: { type: "string" }, sync: { type: "boolean" } }, required: ["routePath"] } },
   { name: "feedferret.create_changedetection_feed", description: "Create a changedetection.io watch for a web page URL and add it as a feed. The feed stays empty until changedetection has checked the page at least twice. Requires the changedetection.io connector to be configured.", inputSchema: { type: "object", properties: { url: { type: "string" }, name: { type: "string" }, categoryId: { type: "string" }, sync: { type: "boolean" } }, required: ["url"] } },
@@ -237,6 +239,7 @@ async function createFeedForUser(
   url: string,
   opts: { name?: unknown; categoryId?: unknown; icon?: unknown; fallbackName?: string; sync?: boolean },
 ) {
+  url = await applyRsshubKey(url);
   const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
   const order = await db.feed.count({ where: { userId } });
   const name = (typeof opts.name === "string" && opts.name.trim()) || remoteFeed?.title || opts.fallbackName || url;
@@ -260,7 +263,7 @@ async function createFeedForUser(
 }
 
 async function callTool(user: ApiUser, name: string, args: any) {
-  const readTools = new Set(["search_articles", "get_article", "list_feeds", "get_feed", "list_categories", "list_labels", "list_saved_searches", "list_keyword_alerts", "list_auto_read_rules", "list_notifications", "list_connectors", "get_stats", "suggest_page_feed"]);
+  const readTools = new Set(["search_articles", "get_article", "list_feeds", "get_feed", "list_categories", "list_labels", "list_saved_searches", "list_keyword_alerts", "list_auto_read_rules", "list_notifications", "list_connectors", "get_stats", "suggest_page_feed", "discover_feeds"]);
   if (scopeError(user, readTools.has(name.replace(/^feedferret\./, "")) ? "read" : "write")) {
     throw new Error("Insufficient token scope");
   }
@@ -510,6 +513,14 @@ async function callTool(user: ApiUser, name: string, args: any) {
       if (typeof args.isRead === "boolean") where.isRead = args.isRead;
       const limit = Math.min(100, Math.max(1, clampInt(args.limit, 50, 1, 100)));
       return db.notification.findMany({ where, orderBy: { createdAt: "desc" }, take: limit });
+    }
+    case "feedferret.discover_feeds": {
+      const query = typeof args.query === "string" ? args.query.trim().slice(0, 2000) : "";
+      if (!query) throw new Error("query is required");
+      const locale = typeof args.locale === "string" ? args.locale.slice(0, 10) : null;
+      if (!checkRateLimit(`user:${user.id}`, RATE_LIMITS.urlDiscover).success) throw new Error("Rate limit exceeded for feed discovery");
+      const { mode, feeds } = await discoverFeeds(query, { locale });
+      return { mode, feeds };
     }
     case "feedferret.list_connectors": {
       const [rsshub, changedetection] = await Promise.all([isRsshubConfigured(), isChangedetectionConfigured()]);

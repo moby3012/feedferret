@@ -366,6 +366,8 @@ export async function addFeed(url: string, categoryId?: string) {
     }
 
     try {
+        const { applyRsshubKey } = await import("@/lib/rsshub");
+        url = await applyRsshubKey(url);
         const remoteFeed = await fetchFeedArticles({ url });
 
         const feed = await db.feed.create({
@@ -1916,7 +1918,12 @@ export async function previewRsshubFeed(input: { routePath?: string; sourceDescr
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    const { getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute, proposeAndValidateRoute } = await import("@/lib/rsshub");
+    // Every branch below can hit the admin's RSSHub instance; bound it per user
+    // before any of them (the AI branch additionally has its own stricter limit).
+    if (!checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.urlDiscover).success) {
+        return { success: false as const, error: "Too many requests. Please wait a moment." };
+    }
+    const { getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute, proposeAndValidateRoute, resolveRadarRoute } = await import("@/lib/rsshub");
     const rsshubConfig = await getRsshubConfig();
     if (!rsshubConfig) {
         return { success: false as const, error: "RSSHub is not configured on this server." };
@@ -1939,6 +1946,23 @@ export async function previewRsshubFeed(input: { routePath?: string; sourceDescr
     const sourceDescription = input.sourceDescription?.trim();
     if (!sourceDescription) {
         return { success: false as const, error: "Enter a platform URL/description, or an RSSHub route path." };
+    }
+
+    // Deterministic stage first: bundled RSSHub Radar rules need no AI key,
+    // no rate limit and cost nothing — the LLM is only asked on a miss.
+    const radar = await resolveRadarRoute(sourceDescription, rsshubConfig);
+    if (radar) {
+        if (!radar.validation.ok) {
+            return { success: false as const, error: `Route "${radar.route}" didn't work: ${radar.validation.reason}` };
+        }
+        return {
+            success: true as const,
+            route: radar.route,
+            url: buildRsshubRouteUrl(rsshubConfig, radar.route),
+            title: radar.validation.title,
+            itemCount: radar.validation.itemCount,
+            sampleTitles: radar.validation.sampleTitles,
+        };
     }
 
     const rateLimit = checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.rsshubRoute);

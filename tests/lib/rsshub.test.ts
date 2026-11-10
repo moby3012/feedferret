@@ -15,6 +15,8 @@ import {
   buildRoutePrompt,
   parseRouteProposal,
   proposeAndValidateRoute,
+  radarRoutesFor,
+  resolveRadarRoute,
   type RsshubConfig,
 } from "../../lib/rsshub";
 import { fetchFeedArticles } from "../../lib/feed-fetcher";
@@ -138,5 +140,65 @@ describe("proposeAndValidateRoute", () => {
 
     const result = await proposeAndValidateRoute("a vague description of nothing in particular", aiConfig, rsshubConfig);
     expect(result).toBeNull();
+  });
+});
+
+describe("bundled radar rules run before the LLM", () => {
+  const aiConfig: AiConfig = { provider: "openai", apiKey: "test-key" };
+  const rsshubConfig: RsshubConfig = { baseUrl: "http://rsshub.internal:1200", apiKey: null };
+  const originalFetch = global.fetch;
+  const feedOk = { title: "Issues", articles: [{ title: "Issue 1", link: "https://x", content: "" }] } as any;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.mocked(fetchFeedArticles).mockReset();
+  });
+
+  it("radarRoutesFor only considers pasted URLs", () => {
+    expect(radarRoutesFor("https://github.com/vercel/next.js").map((m) => m.route)[0]).toBe("/github/issue/vercel/next.js");
+    expect(radarRoutesFor("issues of next.js please")).toEqual([]);
+    expect(radarRoutesFor("https://example.com/unknown")).toEqual([]);
+  });
+
+  it("resolves a known platform URL without calling the AI", async () => {
+    const aiFetch = vi.fn();
+    global.fetch = aiFetch as unknown as typeof fetch;
+    vi.mocked(fetchFeedArticles).mockResolvedValue(feedOk);
+
+    const result = await proposeAndValidateRoute("https://github.com/vercel/next.js", aiConfig, rsshubConfig);
+    expect(result?.route).toBe("/github/issue/vercel/next.js");
+    expect(result?.validation.ok).toBe(true);
+    expect(aiFetch).not.toHaveBeenCalled();
+  });
+
+  it("returns the first route that validates when earlier rules fail", async () => {
+    vi.mocked(fetchFeedArticles)
+      .mockRejectedValueOnce(new Error("Fetch failed: 503 — nope")) // issues
+      .mockResolvedValueOnce(feedOk); // pulls
+    const result = await resolveRadarRoute("https://github.com/vercel/next.js", rsshubConfig);
+    expect(result?.route).toBe("/github/pull/vercel/next.js");
+  });
+
+  it("when rules matched but none validate, surfaces the failure instead of asking the AI to guess", async () => {
+    const aiFetch = vi.fn();
+    global.fetch = aiFetch as unknown as typeof fetch;
+    vi.mocked(fetchFeedArticles).mockRejectedValue(new Error("Fetch failed: 503 — Twitter API is not configured"));
+
+    const result = await proposeAndValidateRoute("https://x.com/jack", aiConfig, rsshubConfig);
+    expect(result?.route).toBe("/twitter/user/jack");
+    expect(result?.validation).toMatchObject({ ok: false });
+    expect(aiFetch).not.toHaveBeenCalled();
+  });
+
+  it("falls through to the AI only on a radar miss", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '{"route":"/some/route"}' } }] }),
+    })) as unknown as typeof fetch;
+    vi.mocked(fetchFeedArticles).mockResolvedValue(feedOk);
+
+    const result = await proposeAndValidateRoute("https://obscure.example.net/page", aiConfig, rsshubConfig);
+    expect(result?.route).toBe("/some/route");
+    expect(global.fetch).toHaveBeenCalled();
   });
 });

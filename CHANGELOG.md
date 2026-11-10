@@ -7,6 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — smart source → feed resolution
+
+- **Paste anything into "Add feed"** (and the share-target / bookmarklet): a deterministic resolver (`lib/smart-url-resolver.ts`) maps URLs, `@handles`, `r/sub` and topics to the right feed *before* HTML scraping or AI — YouTube (`@handle`, `/channel`, `/c`, `/user`, playlist, video → channel), Reddit (subreddit, user, multireddit, search, thread), Mastodon/fediverse (`@user@host`, profile, `/tags/x`), Bluesky, GitHub (releases/commits/tags/user activity), GitLab, arXiv (category + search), Substack, Medium, Hacker News (hnrss variants), Lobsters, Apple Podcasts (iTunes lookup → publisher feed), Steam news, Letterboxd.
+- **Topic → feed**: a plain phrase offers locale-aware Google News, Bing News, Hacker News (hnrss) and arXiv search feeds to pick from.
+- **Bundled RSSHub Radar rules** (`lib/rsshub-radar-rules.ts`, 96 curated rules from RSSHub, MIT): matched in-process before any LLM call, only when an RSSHub instance is configured; routes are validated before use.
+- Feed discovery probes more common paths (`/index.xml`, `/feed.json`, `/rss/`, `/?feed=rss2`), verifies in parallel, and still probes them when the page itself is unreachable.
+- **Desktop bookmarklet** ("Subscribe in FeedFerret") in Add feed and Settings → Account, reusing the PWA `share_target` deep link. Share-target links now land on *By URL* and resolve immediately.
+- REST `GET /api/v1/discover` and MCP `feedferret.discover_feeds`; `GET /api/discover` gained `mode` and topic support.
+- Not included: YouTube `UULF…` "no Shorts" playlists (undocumented by YouTube; `playlist_id=` feeds returned 404 when probed).
+
 ### Changed — numeric sync identities
 
 - Google Reader and Fever now use persistent numeric IDs. Operators must perform a **one-time full re-sync of GReader/Fever clients after upgrade** (remove and re-add the account if the client has no full re-sync option).

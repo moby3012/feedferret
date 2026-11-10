@@ -458,6 +458,14 @@
     "accountDeleted": "Konto gelöscht. Auf Wiedersehen!",
     "deletionFailed": "Kontolöschung fehlgeschlagen. Bitte erneut versuchen."
   },
+  "bookmarklet": {
+    "label": "In FeedFerret abonnieren",
+    "dragHint": "Zieh diese Schaltfläche in deine Lesezeichenleiste. Ein Klick auf einer beliebigen Seite öffnet sie hier zum Abonnieren."
+  },
+  "settingsBookmarklet": {
+    "title": "Browser-Lesezeichen",
+    "description": "Abonniere die Seite, auf der du gerade bist, mit einem Klick – FeedFerret sucht den passenden Feed für dich."
+  },
   "pwa": {
     "close": "Schließen",
     "title": "Zum Startbildschirm hinzufügen",
@@ -626,9 +634,32 @@
     "byUrl": "Per URL",
     "discover": "Entdecken",
     "moreSources": "Weitere Quellen",
-    "feedOrSiteUrl": "Feed- oder Website-URL",
+    "feedOrSiteUrl": "Feed-/Website-URL, @Handle oder Thema",
     "findFeedsAtUrl": "Feeds an dieser URL suchen",
     "foundFeeds": "Gefundene Feeds",
+    "topicFeeds": "News- und Suchfeeds zu diesem Thema – such dir einen aus",
+    "resolverNoResult": "Dazu wurde nichts gefunden. Probier die Adresse der Seite oder eine Feed-URL.",
+    "kinds": {
+      "videos": "Videos",
+      "playlist": "Playlist",
+      "posts": "Beiträge",
+      "hot": "Beliebt",
+      "new": "Neu",
+      "top": "Top",
+      "comments": "Kommentare",
+      "search": "Suche",
+      "releases": "Releases",
+      "commits": "Commits",
+      "tags": "Tags",
+      "activity": "Aktivität",
+      "tag": "Hashtag",
+      "stories": "Stories",
+      "podcast": "Podcast",
+      "news": "News",
+      "diary": "Tagebuch & Kritiken",
+      "topic": "Thema",
+      "rsshub": "über RSSHub"
+    },
     "starterPacks": "Starter-Pakete",
     "deleteConfirmTitle": "Feed löschen?",
     "deleteConfirmDescription": "Der Feed und alle seine Artikel werden dauerhaft entfernt.",

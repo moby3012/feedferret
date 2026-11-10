@@ -12,7 +12,7 @@ function request(name: string) {
 }
 describe("MCP read token", () => {
   it("rejects every advertised tool outside the read allowlist", async () => {
-    const read = new Set(["search_articles", "get_article", "list_feeds", "get_feed", "list_categories", "list_labels", "list_saved_searches", "list_keyword_alerts", "list_auto_read_rules", "list_notifications", "list_connectors", "get_stats", "suggest_page_feed"]);
+    const read = new Set(["search_articles", "get_article", "list_feeds", "get_feed", "list_categories", "list_labels", "list_saved_searches", "list_keyword_alerts", "list_auto_read_rules", "list_notifications", "list_connectors", "get_stats", "suggest_page_feed", "discover_feeds"]);
     const response = await POST(new Request("https://example.test/api/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }));
     const { result: { tools } } = await response.json();
     expect(tools.length).toBeGreaterThan(0);

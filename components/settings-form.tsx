@@ -26,6 +26,7 @@ import {
   Send,
   Settings,
   Smartphone,
+  Bookmark,
   Sun,
   Trash2,
   User,
@@ -81,6 +82,7 @@ import { ResponsiveTabsNav } from "@/components/responsive-tabs-nav";
 import { MobileFloatingBackButton } from "@/components/mobile-floating-back-button";
 import { toast } from "sonner";
 import { SHOW_PWA_INSTALL_PROMPT_EVENT } from "@/components/pwa-install-prompt";
+import { SubscribeBookmarklet } from "@/components/subscribe-bookmarklet";
 
 function makeThemeOptions(t: ReturnType<typeof useTranslations>) {
   return [
@@ -621,6 +623,15 @@ export function SettingsForm() {
               >
                 {t("pwa.showInstructions")}
               </Button>
+            </PrefRow>
+
+            {/* Desktop bookmarklet → reuses the PWA share-target deep link */}
+            <PrefRow
+              icon={Bookmark}
+              title={t("settingsBookmarklet.title")}
+              description={t("settingsBookmarklet.description")}
+            >
+              <SubscribeBookmarklet />
             </PrefRow>
 
             {/* Keyboard shortcuts */}
