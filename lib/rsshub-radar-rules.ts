@@ -1,15 +1,15 @@
 // Curated, declarative subset of RSSHub Radar rules.
 //
 // Source: https://github.com/DIYgod/RSSHub — the radar rules published at
-// https://rsshub.js.org/build/radar-rules.json. RSSHub is MIT licensed:
+// https://rsshub.js.org/build/radar-rules.json.
 //
-//   MIT License — Copyright (c) 2018-present DIYgod and RSSHub contributors.
-//   Permission is hereby granted, free of charge, to any person obtaining a
-//   copy of this software and associated documentation files, to deal in the
-//   Software without restriction, subject to the above copyright notice and
-//   this permission notice being included in all copies or substantial
-//   portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT
-//   WARRANTY OF ANY KIND.
+//   RSSHub — Copyright (C) DIYgod and RSSHub contributors.
+//   Licensed under the GNU Affero General Public License v3.0
+//   (https://github.com/DIYgod/RSSHub/blob/master/LICENSE). FeedFerret is
+//   also AGPL-3.0, so this derived data is distributed under the same terms.
+//
+// Local deviations from upstream rules: Mixcloud `/:username` (upstream
+// `/:username/:type`), Twitch `/:login` and t.me `/:username` sources.
 //
 // Only high-value rules with a plain-string `target` are bundled (generated
 // from the upstream JSON and checked against it at generation time; titles,

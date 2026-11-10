@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { discoverFeeds } from "@/lib/feed-discovery";
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 
 // GET /api/discover?url=<url | @handle | r/sub | topic phrase>[&locale=de]
 // `url` is kept for compatibility; plain phrases come back as `mode: "topic"`
@@ -10,6 +11,9 @@ export async function GET(req: NextRequest) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const rl = checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.urlDiscover);
+  if (!rl.success) return rateLimitResponse(rl);
 
   const url = (req.nextUrl.searchParams.get("url") ?? req.nextUrl.searchParams.get("q") ?? "").trim();
   if (!url) {

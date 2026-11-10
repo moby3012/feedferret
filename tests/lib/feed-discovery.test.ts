@@ -13,7 +13,9 @@ vi.mock("../../lib/rsshub", async () => {
     radarRoutesFor: (s: string) => (/^https?:\/\/\S+$/i.test(s.trim()) ? matchRadarRules(s.trim()) : []),
     getRsshubConfig: mocks.getRsshubConfig,
     validateRsshubRoute: mocks.validateRsshubRoute,
-    buildRsshubRouteUrl: (c: { baseUrl: string }, route: string) => `${c.baseUrl.replace(/\/+$/, "")}${route}`,
+    buildRsshubRouteUrl: (c: { baseUrl: string; apiKey?: string | null }, route: string) =>
+      `${c.baseUrl.replace(/\/+$/, "")}${route}${c.apiKey ? `?key=${c.apiKey}` : ""}`,
+    buildRsshubPublicRouteUrl: (c: { baseUrl: string }, route: string) => `${c.baseUrl.replace(/\/+$/, "")}${route}`,
   };
 });
 
@@ -168,6 +170,15 @@ describe("discoverFeeds — RSSHub radar stage", () => {
       expect.objectContaining({ url: "http://rsshub.internal:1200/github/issue/vercel/next.js", platform: "rsshub", kind: "rsshub" }),
     ]);
     expect(r.feeds.slice(0, 3).map((f) => f.source)).toEqual(["resolver", "resolver", "resolver"]);
+  });
+
+  it("never returns the RSSHub access key in discovery results", async () => {
+    mocks.getRsshubConfig.mockResolvedValue({ ...config, apiKey: "s3cret-admin-key" });
+    mocks.validateRsshubRoute.mockResolvedValue({ ok: true, title: "Issues", itemCount: 3, sampleTitles: [] });
+    const r = await discoverFeeds("https://github.com/vercel/next.js");
+    const radar = r.feeds.filter((f) => f.source === "radar");
+    expect(radar.length).toBeGreaterThan(0);
+    expect(JSON.stringify(r)).not.toContain("s3cret-admin-key");
   });
 
   it("is skipped (and free) without an RSSHub instance", async () => {

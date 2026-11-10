@@ -68,6 +68,41 @@ export function buildRsshubRouteUrl(config: RsshubConfig, routePath: string): st
   return url.toString();
 }
 
+/**
+ * Route URL WITHOUT the access key — safe to hand to clients (discovery
+ * results, previews). The key is added server-side only when a feed is
+ * created, via `applyRsshubKey`.
+ */
+export function buildRsshubPublicRouteUrl(config: RsshubConfig, routePath: string): string {
+  const base = config.baseUrl.replace(/\/+$/, "");
+  const path = routePath.startsWith("/") ? routePath : `/${routePath}`;
+  return new URL(base + path).toString();
+}
+
+/**
+ * Adds the configured RSSHub `?key=` to a feed URL that points at the
+ * configured instance and has no key yet. Any other URL is returned unchanged.
+ */
+export async function applyRsshubKey(feedUrl: string): Promise<string> {
+  return applyRsshubKeyWith(await getRsshubConfig(), feedUrl);
+}
+
+/** Pure part of `applyRsshubKey` (exported for tests). */
+export function applyRsshubKeyWith(config: RsshubConfig | null, feedUrl: string): string {
+  if (!config?.apiKey) return feedUrl;
+  try {
+    const url = new URL(feedUrl);
+    const base = new URL(config.baseUrl);
+    const basePath = base.pathname.replace(/\/+$/, "");
+    if (url.origin !== base.origin || !url.pathname.startsWith(basePath)) return feedUrl;
+    if (url.searchParams.has("key")) return feedUrl;
+    url.searchParams.set("key", config.apiKey);
+    return url.toString();
+  } catch {
+    return feedUrl;
+  }
+}
+
 export type RsshubValidation =
   | { ok: true; title: string | null; itemCount: number; sampleTitles: string[] }
   | { ok: false; reason: string };

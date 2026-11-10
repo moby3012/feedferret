@@ -43,9 +43,12 @@ test("a GitHub repo URL resolves to releases / commits / tags without scraping",
   await expect(dialog.getByTitle("https://github.com/vercel/next.js/releases.atom")).toBeVisible();
 });
 
-test("share-target / bookmarklet link lands on By URL and resolves immediately", async ({ app, page }) => {
+test("share-target / bookmarklet link lands on By URL pre-filled; discovery runs on user action", async ({ app, page }) => {
   const dialog = await openAddFeed(app, `sharedUrl=${encodeURIComponent("https://github.com/rust-lang/rust")}`);
-  await expect(dialog.getByPlaceholder(INPUT)).toHaveValue("https://github.com/rust-lang/rust");
+  const input = dialog.getByPlaceholder(INPUT);
+  await expect(input).toHaveValue("https://github.com/rust-lang/rust");
+  await expect(dialog.getByText("Found feeds")).toHaveCount(0); // no auto-probe from a link
+  await input.press("Enter");
   await expect(dialog.getByText("Found feeds")).toBeVisible();
   await expect(dialog.getByTitle("https://github.com/rust-lang/rust/releases.atom")).toBeVisible();
 });

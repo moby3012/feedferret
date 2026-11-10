@@ -1,4 +1,14 @@
 // Smart source → feed resolver.
+
+/** decodeURIComponent that never throws (malformed `%` sequences stay as-is). */
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 //
 // Turns "whatever the user pasted" (a platform URL, an @handle, `r/rust`, a
 // plain topic phrase) into concrete feed candidates deterministically — before
@@ -226,7 +236,7 @@ const YOUTUBE: PlatformResolver = {
         lookup: {
           type: "youtube-page",
           url: `https://www.youtube.com/${c.path.startsWith("/c/") ? "c" : "user"}/${c.m[1]}`,
-          fallbackTitle: decodeURIComponent(c.m[1]),
+          fallbackTitle: safeDecode(c.m[1]),
         },
       }),
     },
@@ -387,7 +397,7 @@ const MASTODON: PlatformResolver = {
       path: /^\/tags\/([^/\s]{1,100})\/?$/,
       build: (c) => ({
         feeds: [
-          feed("mastodon", "tag", `https://${c.url.host}/tags/${c.m[1]}.rss`, `#${decodeURIComponent(c.m[1])}`, 0.6, {
+          feed("mastodon", "tag", `https://${c.url.host}/tags/${c.m[1]}.rss`, `#${safeDecode(c.m[1])}`, 0.6, {
             format: "rss",
             verify: true,
           }),
@@ -404,7 +414,7 @@ const BLUESKY: PlatformResolver = {
     {
       path: /^\/profile\/([^/\s]{1,253})(?:\/post\/[\w]+)?\/?$/,
       build: (c) => ({
-        feeds: [feed("bluesky", "posts", `https://bsky.app/profile/${c.m[1]}/rss`, `@${decodeURIComponent(c.m[1])}`, 0.95, { format: "rss" })],
+        feeds: [feed("bluesky", "posts", `https://bsky.app/profile/${c.m[1]}/rss`, `@${safeDecode(c.m[1])}`, 0.95, { format: "rss" })],
       }),
     },
   ],

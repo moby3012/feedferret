@@ -169,19 +169,6 @@ const resolverFetchText = (url: string, init?: { headers?: Record<string, string
     { maxBytes: 4 * 1024 * 1024, timeoutMs: 12_000 },
   );
 
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
-  return out;
-}
-
 /**
  * Stage 1 — deterministic platform resolution (YouTube, Reddit, GitHub, …).
  * Candidates flagged `verify` are plausible guesses (e.g. any `/@user` on an
@@ -207,18 +194,21 @@ async function resolveWithPlatformRules(input: string): Promise<{ matched: boole
  */
 async function resolveWithRadarRules(pageUrl: string): Promise<DiscoveredFeed[]> {
   try {
-    const { radarRoutesFor, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute } = await import("./rsshub");
+    const { radarRoutesFor, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } = await import("./rsshub");
     const matches = radarRoutesFor(pageUrl).slice(0, 4);
     if (!matches.length) return [];
     const config = await getRsshubConfig();
     if (!config) return [];
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 15_000));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 15_000); });
     const results = await Promise.all(
       matches.map(async (m): Promise<DiscoveredFeed | null> => {
         const validation = await Promise.race([validateRsshubRoute(config, m.route), timeout]);
         if (!validation || !validation.ok) return null;
         return {
-          url: buildRsshubRouteUrl(config, m.route),
+          // Never the keyed URL: discovery results reach any session user and
+          // read-scope API/MCP tokens. The key is added when the feed is created.
+          url: buildRsshubPublicRouteUrl(config, m.route),
           title: `RSSHub · ${m.title}${validation.title ? ` (${validation.title})` : ""}`,
           type: "unknown",
           source: "radar",
@@ -227,7 +217,7 @@ async function resolveWithRadarRules(pageUrl: string): Promise<DiscoveredFeed[]>
           confidence: 0.7,
         };
       }),
-    );
+    ).finally(() => clearTimeout(timer));
     return results.filter((f): f is DiscoveredFeed => f !== null);
   } catch {
     return [];
@@ -287,7 +277,11 @@ async function discoverFeedsInHtml(pageUrl: string): Promise<DiscoveredFeed[]> {
 
   // Verify in small parallel batches (each probe can take up to the timeout);
   // advertised feeds come first in insertion order, so they win the 10 slots.
-  const entries = [...candidateLinks.entries()];
+  // Bounded fan-out: at most 25 advertised/anchor candidates, and the common
+  // paths always keep their slots (a page full of feed-looking anchors must not
+  // turn one request into hundreds of probes).
+  const all = [...candidateLinks.entries()];
+  const entries = [...all.filter(([, c]) => !c.commonPath).slice(0, 25), ...all.filter(([, c]) => c.commonPath)];
   const BATCH = 5;
   for (let i = 0; i < entries.length && discovered.size < 10; i += BATCH) {
     const batch = entries.slice(i, i + BATCH);

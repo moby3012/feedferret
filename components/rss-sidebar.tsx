@@ -276,13 +276,12 @@ export function RssSidebar({
     if (defaultOpenAddFeed) {
       setIsAddFeedOpen(true);
       if (initialWebpageUrl) {
-        // Share-target / bookmarklet: land on "By URL" and resolve the page
-        // right away (platform rules → feed discovery → RSSHub radar). The
-        // "From web page" builder under "More sources" is still pre-filled.
+        // Share-target / bookmarklet: land on "By URL" pre-filled. Discovery
+        // runs only when the user presses it — a crafted `/?sharedUrl=` link
+        // must not make the victim's session probe an attacker URL.
         setAddFeedTab("url");
         setMoreSource("webpage");
         setNewFeedUrl(initialWebpageUrl);
-        setAutoDiscoverUrl(initialWebpageUrl);
       }
     }
   }, [defaultOpenAddFeed, initialWebpageUrl]);

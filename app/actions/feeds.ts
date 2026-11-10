@@ -366,6 +366,8 @@ export async function addFeed(url: string, categoryId?: string) {
     }
 
     try {
+        const { applyRsshubKey } = await import("@/lib/rsshub");
+        url = await applyRsshubKey(url);
         const remoteFeed = await fetchFeedArticles({ url });
 
         const feed = await db.feed.create({
@@ -2058,6 +2060,11 @@ export async function previewRsshubFeed(input: { routePath?: string; sourceDescr
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
+    // Every branch below can hit the admin's RSSHub instance; bound it per user
+    // before any of them (the AI branch additionally has its own stricter limit).
+    if (!checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.urlDiscover).success) {
+        return { success: false as const, error: "Too many requests. Please wait a moment." };
+    }
     const { getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute, proposeAndValidateRoute, resolveRadarRoute } = await import("@/lib/rsshub");
     const rsshubConfig = await getRsshubConfig();
     if (!rsshubConfig) {

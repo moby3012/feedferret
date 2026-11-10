@@ -14,7 +14,7 @@ import { validateFeedUrl, validateOpml } from "@/lib/validation";
 import { logger } from "@/lib/logger";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
-import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
+import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute, applyRsshubKey } from "@/lib/rsshub";
 import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
@@ -302,6 +302,7 @@ async function createFeedFromUrl(
   url: string,
   opts: { name?: string; categoryId?: string; icon?: string; sync?: boolean; fallbackName?: string },
 ) {
+  url = await applyRsshubKey(url);
   const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
   const order = await db.feed.count({ where: { userId: user.id } });
   const feed = await db.feed.create({
@@ -478,7 +479,11 @@ async function syncOneFeed(user: ApiUser, feedId: string) {
 // Resolves whatever was pasted into feed candidates: platform rules (YouTube,
 // Reddit, GitHub, …), HTML feed discovery, RSSHub Radar rules (if RSSHub is
 // configured), or — for a plain phrase — news/search feeds to pick from.
-async function discoverFeedCandidates(_user: ApiUser, request: Request) {
+async function discoverFeedCandidates(user: ApiUser, request: Request) {
+  // Each call can fan out into a page fetch, common-path probes, RSSHub
+  // validations and lookups — bound it per user, not only by the global API limit.
+  const rl = checkRateLimit(`user:${user.id}`, RATE_LIMITS.urlDiscover);
+  if (!rl.success) return rateLimitResponse(rl);
   const params = new URL(request.url).searchParams;
   const query = (params.get("q") ?? params.get("url") ?? "").trim();
   if (!query) return apiError("q (or url) is required", 400);

@@ -9,7 +9,7 @@ import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
-import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
+import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute, applyRsshubKey } from "@/lib/rsshub";
 import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
@@ -239,6 +239,7 @@ async function createFeedForUser(
   url: string,
   opts: { name?: unknown; categoryId?: unknown; icon?: unknown; fallbackName?: string; sync?: boolean },
 ) {
+  url = await applyRsshubKey(url);
   const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
   const order = await db.feed.count({ where: { userId } });
   const name = (typeof opts.name === "string" && opts.name.trim()) || remoteFeed?.title || opts.fallbackName || url;
@@ -517,6 +518,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       const query = typeof args.query === "string" ? args.query.trim().slice(0, 2000) : "";
       if (!query) throw new Error("query is required");
       const locale = typeof args.locale === "string" ? args.locale.slice(0, 10) : null;
+      if (!checkRateLimit(`user:${user.id}`, RATE_LIMITS.urlDiscover).success) throw new Error("Rate limit exceeded for feed discovery");
       const { mode, feeds } = await discoverFeeds(query, { locale });
       return { mode, feeds };
     }
