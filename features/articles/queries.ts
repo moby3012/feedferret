@@ -30,6 +30,8 @@ export interface ArticleListResult {
   refresh(): Promise<void>;
   /** Cursor-ish id of the newest row (head probe, PR 9). */
   newestCursor: string | null;
+  /** Server time of the first page (`ArticlePage.snapshotAt`); renewed only when the list is refetched. */
+  snapshotAt: number | null;
   retry(): void;
 }
 
@@ -108,6 +110,7 @@ export function useArticleList(key: ListKey | null, o: { active: boolean }): Art
     fetchMore,
     refresh,
     newestCursor: items[0]?.id ?? null,
+    snapshotAt: data?.pages[0]?.snapshotAt ?? null,
     retry,
   };
 }

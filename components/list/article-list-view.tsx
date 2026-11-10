@@ -21,6 +21,18 @@ import { cn } from "@/lib/utils";
 import { ArticleRow, type Density, type RowCluster, type RowHandlers, type RowSwipeMap } from "./article-row";
 import { ArticleListSkeleton } from "./article-skeleton";
 import { ClusterMembers, groupStories, type DisplayRow } from "./story-cluster";
+import { planMarkUpToHere } from "./mark-up-to-here";
+
+/**
+ * The bound list for "Alles bis hier": canonical key + sort, and the server
+ * time its first page was loaded (`snapshotAt`, fixed until the list is
+ * refreshed): the range never reaches rows that arrived after it.
+ */
+export interface MarkRangeBinding {
+  listKey: string;
+  sort: "new" | "old";
+  snapshotAt: number | null;
+}
 
 // The list scroller (spec §3 `ArticleListView`): native scroller, paging
 // sentinel, read-on-scroll (one shared observer), scroll memory, pull-to-
@@ -74,7 +86,7 @@ export interface ArticleListViewProps {
    * The bound list (canonical key + sort): "Alles bis hier" then runs as one
    * server-side range instead of an id list (no id cap, one undo token).
    */
-  markRange?: { listKey: string; sort: "new" | "old" } | null;
+  markRange?: MarkRangeBinding | null;
   /**
    * Keyboard order of the rows (j/k/n/p): story members folded under a
    * collapsed card are skipped; an expanded card's loaded members follow it.
@@ -82,8 +94,6 @@ export interface ArticleListViewProps {
   onNavOrderChange?: (articles: LegacyArticle[]) => void;
 }
 
-/** Upper bound of ids one "Alles bis hier" id call may send (server `MAX_MARK_IDS`). */
-const MAX_MARK_IDS = 1000;
 const MENU_OVERLAY = "article-menu";
 
 const EMPTY_CONTEXT: LegacyContext = { feedsById: new Map(), labelsById: new Map(), labelsReady: true };
@@ -297,35 +307,29 @@ export function ArticleListView(props: ArticleListViewProps) {
     const a = menuArticle;
     const displayIndex = rows.findIndex((r) => r.article.id === a.id || r.story?.siblings.some((s) => s.id === a.id));
     const story = displayIndex >= 0 ? rows[displayIndex].story : null;
-    const upToHere = displayIndex >= 0 ? rows.slice(0, displayIndex + 1).flatMap((r) => [r.article, ...(r.story?.siblings ?? [])]) : [a];
-    const unreadUpToHere = upToHere.filter((x) => !x.isRead).map((x) => x.id);
+    const range = props.markRange ?? null;
+    const plan = () =>
+      planMarkUpToHere({
+        rows,
+        flat: articles,
+        expandedMembers: (clusterId) => (expanded.has(clusterId) ? cachedClusterMembers(qc, clusterId, legacyContextOf(props.legacyContext)) : null),
+        targetId: a.id,
+        cutoff: range?.snapshotAt ?? null,
+      });
+    const initialPlan = plan();
     const markUpToHere = () => {
-      const range = props.markRange;
-      if (range && displayIndex >= 0 && articles.length > 0) {
-        // Server-side range over the list's own order: from the first loaded row
-        // down to the row this card sits at (a story card sits at its first
-        // member in list order, which is not necessarily the lead it shows).
-        // Members folded under a card here that sort below that row go along
-        // as explicit ids.
-        const flatIndex = new Map(articles.map((x, i) => [x.id, i]));
-        const row = rows[displayIndex];
-        const anchor = Math.min(...[row.article, ...(row.story?.siblings ?? [])].map((x) => flatIndex.get(x.id) ?? Infinity));
-        if (Number.isFinite(anchor)) {
-          const extraIds = upToHere.filter((x) => !x.isRead && (flatIndex.get(x.id) ?? Infinity) > anchor).map((x) => x.id);
-          articleActions.markRangeRead({
-            listKey: range.listKey,
-            sort: range.sort,
-            fromId: articles[0].id,
-            toId: articles[anchor].id,
-            maxCreatedAt: Math.max(...articles.map((x) => x.createdAtRaw).filter(Number.isFinite)),
-            extraIds: extraIds.slice(0, MAX_MARK_IDS),
-          });
-          return;
-        }
+      // Re-planned at select time: the expanded members may have loaded meanwhile.
+      const p = plan();
+      if (p.kind === "none") return;
+      if (p.kind === "too-many") {
+        toast.error(t("markUpToHereTooMany", { count: p.limit }));
+        return;
       }
-      // No bound list (e.g. a member row of an expanded card): explicit ids, capped.
-      if (unreadUpToHere.length > MAX_MARK_IDS) toast.info(t("markUpToHereClamped", { count: MAX_MARK_IDS }));
-      articleActions.markIdsRead(unreadUpToHere.slice(0, MAX_MARK_IDS));
+      if (p.kind === "ids") {
+        articleActions.markIdsRead(p.ids);
+        return;
+      }
+      articleActions.markRangeRead({ listKey: range!.listKey, sort: range!.sort, fromId: p.fromId, toId: p.toId, maxCreatedAt: range!.snapshotAt!, extraIds: p.extraIds });
     };
     const items: OverlayMenuItem[] = [
       { id: "read", label: a.isRead ? t("markAsUnread") : t("markAsRead"), icon: a.isRead ? Circle : CheckCircle2, onSelect: () => toggleRead(a.id) },
@@ -361,13 +365,13 @@ export function ArticleListView(props: ArticleListViewProps) {
       label: t("markUpToHere"),
       icon: CheckCheck,
       separated: true,
-      disabled: unreadUpToHere.length === 0,
+      disabled: initialPlan.kind === "none",
       onSelect: markUpToHere,
     });
     return items;
     // `props` callbacks are stable shell actions.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menu, menuArticle, rows, articles, expanded, t, toggleRead, handlers, articleActions]);
+  }, [menu, menuArticle, rows, articles, expanded, t, toggleRead, handlers, articleActions, qc]);
 
   // ---------------------------------------------------- keyboard order
   const onNavOrderChange = props.onNavOrderChange;
@@ -484,6 +488,14 @@ export function ArticleListView(props: ArticleListViewProps) {
       )}
     </div>
   );
+}
+
+const legacyContextOf = (ctx: LegacyContext | undefined) => ctx ?? EMPTY_CONTEXT;
+
+/** The fetched sources of a story (expanded card rows; the card itself is deduped by the display order). */
+function cachedClusterMembers(qc: ReturnType<typeof useQueryClient>, clusterId: string, ctx: LegacyContext): LegacyArticle[] {
+  const data = qc.getQueryData<{ pages: ArticlePage[] }>(qk.cluster(clusterId));
+  return (data?.pages ?? []).flatMap((page) => page.items.map((item) => toLegacyArticle(item, ctx)));
 }
 
 /** A cluster member row (expanded card) the flat list does not hold. */

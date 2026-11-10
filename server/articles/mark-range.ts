@@ -9,13 +9,19 @@ import { buildViewScope } from "./view-scope";
 // the bound list instead of an explicit id list: no 1000-id cap, one undo token.
 
 /**
- * Upper bound of rows one "mark up to here" range may change. The range only
- * spans rows the client has loaded (keyset paging, 50 per page), so a real
- * list stays far below; above it the call fails whole (nothing changes).
+ * Upper bound of rows one "mark up to here" range may change, `extraIds`
+ * included. The range only spans rows the client has loaded (keyset paging,
+ * 50 per page), so a real list stays far below; above it the call fails whole
+ * (nothing changes) — never a silent partial.
  */
 export const MAX_RANGE_IDS = 20_000;
 
-export class RangeTooLargeError extends Error {}
+/** Thrown before anything changes; `limit` is the bound the call went over. */
+export class RangeTooLargeError extends Error {
+  constructor(readonly limit: number) {
+    super("Range too large");
+  }
+}
 
 export interface MarkRangeInput {
   scope: Scope;
@@ -25,12 +31,17 @@ export interface MarkRangeInput {
   /** Last row of the range in list order (inclusive). */
   toId: string;
   /**
-   * Newest `createdAt` (ms) among the loaded rows. Rows inserted after the
-   * list was loaded are newer than every loaded row, so this keeps articles
-   * the user never saw out of the range (server timestamps: no clock skew).
+   * Snapshot cutoff (ms): the server time the list's first page was loaded
+   * (`ArticlePage.snapshotAt`), fixed for the list's lifetime. Only rows with
+   * `createdAt <= maxCreatedAt` are in the range, so articles that arrived
+   * later — also backdated ones inside an already loaded span — stay out.
    */
   maxCreatedAt: number;
-  /** Loaded rows outside the keyset range that belong to it (story members folded under a card above `toId`). */
+  /**
+   * Displayed rows the keyset range does not cover (story members fetched
+   * for an expanded card, siblings folded under a card above `toId`, rows
+   * newer than the snapshot the list shows). Counted against MAX_RANGE_IDS.
+   */
   extraIds: string[];
 }
 
@@ -41,7 +52,7 @@ const MarkRangeSchema = z
     fromId: z.string().min(1).max(MAX_ID_LENGTH),
     toId: z.string().min(1).max(MAX_ID_LENGTH),
     maxCreatedAt: z.number().finite(),
-    extraIds: z.array(z.string().min(1).max(MAX_ID_LENGTH)).max(MAX_MARK_IDS),
+    extraIds: z.array(z.string().min(1).max(MAX_ID_LENGTH)).max(MAX_RANGE_IDS),
   })
   .strict();
 
@@ -77,7 +88,10 @@ export async function markRangeRead(userId: string, range: MarkRangeInput): Prom
   };
   const from = valuesOf(range.fromId);
   const to = valuesOf(range.toId);
-  if (!from || !to) return range.extraIds.length ? markIdsRead(userId, range.extraIds.slice(0, MAX_MARK_IDS)) : [];
+  if (!from || !to) {
+    if (range.extraIds.length > MAX_MARK_IDS) throw new RangeTooLargeError(MAX_MARK_IDS);
+    return range.extraIds.length ? markIdsRead(userId, range.extraIds) : [];
+  }
 
   where.isRead = false;
   where.AND = [
@@ -94,11 +108,13 @@ export async function markRangeRead(userId: string, range: MarkRangeInput): Prom
   return db.$transaction(
     async (tx) => {
       const inRange = await tx.article.findMany({ where, select: { id: true }, take: MAX_RANGE_IDS + 1 });
-      if (inRange.length > MAX_RANGE_IDS) throw new RangeTooLargeError("Range too large");
-      const extra = range.extraIds.length
-        ? await tx.article.findMany({ where: { userId, id: { in: range.extraIds }, isRead: false }, select: { id: true } })
-        : [];
+      if (inRange.length > MAX_RANGE_IDS) throw new RangeTooLargeError(MAX_RANGE_IDS);
+      const extra: Array<{ id: string }> = [];
+      for (let i = 0; i < range.extraIds.length; i += 500) {
+        extra.push(...(await tx.article.findMany({ where: { userId, id: { in: range.extraIds.slice(i, i + 500) }, isRead: false }, select: { id: true } })));
+      }
       const candidates = [...new Set([...inRange, ...extra].map((a) => a.id))];
+      if (candidates.length > MAX_RANGE_IDS) throw new RangeTooLargeError(MAX_RANGE_IDS);
       const changed: string[] = [];
       for (let i = 0; i < candidates.length; i += 500) {
         const chunk = candidates.slice(i, i + 500);

@@ -80,4 +80,9 @@ export interface ArticleDetail extends ArticleListItem {
 export interface ArticlePage {
   items: ArticleListItem[];
   nextCursor: string | null;
+  /**
+   * First page only: server time (ms) taken before the page was read — the
+   * list's snapshot. "Alles bis hier" never reaches rows created after it.
+   */
+  snapshotAt?: number;
 }

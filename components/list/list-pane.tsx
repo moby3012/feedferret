@@ -213,7 +213,7 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
     );
   }
 
-  const markRange = listKey ? { listKey: listKey.id, sort: listKey.sort } : null;
+  const markRange = listKey ? { listKey: listKey.id, sort: listKey.sort, snapshotAt: list.snapshotAt } : null;
   const listProps = {
     articles: filtered,
     selectedArticle,

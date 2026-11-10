@@ -28,8 +28,8 @@ export type MarkViewScope = { feedId?: string | null; category?: string | null; 
 /**
  * "Alles bis hier" as a server-side range of the bound list (`listKey`, its
  * `sort`): from the first loaded row `fromId` down to `toId`, plus folded story
- * members `extraIds`; `maxCreatedAt` = newest loaded row (keeps rows that
- * arrived later out). See `markRangeRead` on the server.
+ * members `extraIds`; `maxCreatedAt` = the list's snapshot time (keeps rows
+ * that arrived later out). See `markRangeRead` on the server.
  */
 export interface MarkRange {
   listKey: string;
@@ -109,10 +109,11 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
   const t = useTranslations("articleState");
   const tSidebar = useTranslations("sidebar");
   const tReader = useTranslations("articleReader");
-  const tRef = useRef({ t, tSidebar, tReader });
+  const tList = useTranslations("articleList");
+  const tRef = useRef({ t, tSidebar, tReader, tList });
   useEffect(() => {
-    tRef.current = { t, tSidebar, tReader };
-  }, [t, tSidebar, tReader]);
+    tRef.current = { t, tSidebar, tReader, tList };
+  }, [t, tSidebar, tReader, tList]);
 
   /**
    * Story cascades per originating article (the lead, or the source a story
@@ -231,6 +232,12 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
       return markAllAsRead(request.scope);
     },
     onSuccess: (result) => {
+      const tooLarge = (result as { tooLarge?: { limit: number } } | undefined)?.tooLarge;
+      if (tooLarge) {
+        // Nothing changed: the range is above the server bound.
+        toast.error(tRef.current.tList("markUpToHereTooMany", { count: tooLarge.limit }));
+        return;
+      }
       const ids = result?.ids ?? [];
       if (ids.length === 0) return;
       applyBulkRead(qc, ids, true);

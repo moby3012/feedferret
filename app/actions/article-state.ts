@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { applyArticleStateOps as applyOps, markIdsRead, parseMarkIds, parseStateOps, type StateOpsResult } from "@/server/articles/state";
-import { markRangeRead, parseMarkRange } from "@/server/articles/mark-range";
+import { RangeTooLargeError, markRangeRead, parseMarkRange } from "@/server/articles/mark-range";
 import { createUndoToken } from "@/lib/undo-tokens";
 
 /**
@@ -44,11 +44,18 @@ export async function markArticleIdsRead(ids: unknown): Promise<{ ids: string[];
  * from the canonical list key with the list endpoint's own parser; user-scoped,
  * bounded; one undo token for everything it changed.
  */
-export async function markListRangeRead(input: unknown): Promise<{ ids: string[]; undoToken: string | null }> {
+export async function markListRangeRead(input: unknown): Promise<{ ids: string[]; undoToken: string | null; tooLarge?: { limit: number } }> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   const parsed = parseMarkRange(input);
   if (!parsed.ok) throw new Error(`Invalid range: ${parsed.error}`);
-  const changed = await markRangeRead(session.user.id, parsed.range);
+  let changed: string[];
+  try {
+    changed = await markRangeRead(session.user.id, parsed.range);
+  } catch (error) {
+    // Above the bound nothing changed; tell the client (production masks thrown messages).
+    if (error instanceof RangeTooLargeError) return { ids: [], undoToken: null, tooLarge: { limit: error.limit } };
+    throw error;
+  }
   return { ids: changed, undoToken: changed.length ? createUndoToken(session.user.id, changed) : null };
 }

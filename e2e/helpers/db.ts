@@ -328,3 +328,31 @@ export function readFlags(articleIds: string[]): Map<string, boolean> {
     db.close();
   }
 }
+
+/**
+ * A NEW unread article (createdAt = now) placed in list order right below
+ * `belowId` (publishedAt 30 s older, same feed): a backdated arrival that
+ * lands inside an already loaded span. Removed by the returned function.
+ */
+export function insertArrivalBelow(belowId: string, id: string): () => void {
+  const db = open();
+  try {
+    const iso = (d: Date) => d.toISOString().replace("Z", "+00:00");
+    const ref = db.prepare(`SELECT feedId, userId, publishedAt FROM "Article" WHERE id = ?`).get(belowId) as { feedId: string; userId: string; publishedAt: string };
+    const publishedAt = new Date(new Date(ref.publishedAt).getTime() - 30_000);
+    const now = iso(new Date());
+    db.prepare(
+      `INSERT INTO "Article" (id, feedId, userId, title, link, content, excerpt, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?)`,
+    ).run(id, ref.feedId, ref.userId, `Arrival ${id}`, `https://arrival.e2e.test/${id}`, iso(publishedAt), now, now);
+  } finally {
+    db.close();
+  }
+  return () => {
+    const c = open();
+    try {
+      c.prepare(`DELETE FROM "Article" WHERE id = ?`).run(id);
+    } finally {
+      c.close();
+    }
+  };
+}

@@ -25,6 +25,7 @@ import { clusterUser, cleanupStoryClusters, reconcileCluster, runStoryClustering
 import { applyArticleStateOps } from "../../server/articles/state";
 import { getReadingPreferences, updateGlobalSettings } from "../../app/actions/settings";
 import { markArticleIdsRead, markListRangeRead } from "../../app/actions/article-state";
+import { MAX_RANGE_IDS } from "../../server/articles/mark-range";
 import { markArticlesAsUnread } from "../../app/actions/feeds";
 import type { ArticlePage, ClusterDetail } from "../../features/articles/types";
 
@@ -675,6 +676,48 @@ describe("markListRangeRead (\"Alles bis hier\" as a server-side range)", () => 
     expect(await isRead("r-late")).toBe(false);
   });
 
+  it("the first list page carries a server snapshot time; a cutoff at it keeps later (also backdated) arrivals out", async () => {
+    const page = async (cursor?: string) => {
+      const q = `feed=${ids.aF[0]}&show=all&limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+      return (await (await listGET(new Request(`https://ff.test/api/app/articles?${q}`))).json()) as ArticlePage;
+    };
+    const before = Date.now();
+    const first = await page();
+    expect(first.snapshotAt).toBeGreaterThanOrEqual(before);
+    expect(first.snapshotAt).toBeLessThanOrEqual(Date.now());
+    // Paging never renews the snapshot (only a refetch of the first page does).
+    expect((await page(first.nextCursor!)).snapshotAt).toBeUndefined();
+    // A backdated arrival INSIDE the loaded span, created after the snapshot.
+    await addArticle(ids.alice, ids.aF[0], "r-backdated", "Backdated", (NOW - (NOW - 10.5 * 60_000)) / H, { createdAt: new Date(first.snapshotAt! + 1_000) });
+    const result = await markListRangeRead({ listKey: feedKey(), sort: "new", fromId: rows[0], toId: rows[49], maxCreatedAt: first.snapshotAt!, extraIds: [] });
+    expect(result.ids).toHaveLength(50);
+    expect(await isRead("r-backdated")).toBe(false);
+  });
+
+  it("extra ids beyond 1000 (e.g. a big expanded story) are marked whole, counted against the range bound", async () => {
+    const result = await markListRangeRead({ listKey: feedKey(), sort: "new", fromId: rows[0], toId: rows[9], maxCreatedAt, extraIds: rows.slice(10, 1200) });
+    expect(result.ids).toHaveLength(1200);
+    expect(result.undoToken).toEqual(expect.any(String));
+    expect(await isRead(rows[1199])).toBe(true);
+  });
+
+  it("above the bound (range + extras) nothing changes and the client is told (no silent partial)", async () => {
+    const extra = Array.from({ length: MAX_RANGE_IDS - 1200 + 1 }, (_, i) => `rx-${String(i).padStart(5, "0")}`);
+    for (let i = 0; i < extra.length; i += 2000) {
+      await state.db.article.createMany({
+        data: extra.slice(i, i + 2000).map((id) => ({ id, userId: ids.alice, feedId: ids.aF[1], title: id, link: `https://example.test/${id}`, content: "", excerpt: "", publishedAt: new Date(NOW), createdAt: new Date(maxCreatedAt) })),
+      });
+    }
+    const result = await markListRangeRead({ listKey: feedKey(), sort: "new", fromId: rows[0], toId: rows[1199], maxCreatedAt, extraIds: extra });
+    expect(result).toEqual({ ids: [], undoToken: null, tooLarge: { limit: MAX_RANGE_IDS } });
+    expect(await isRead(rows[0])).toBe(false);
+    expect(await isRead(extra[0])).toBe(false);
+    // Without a resolvable range the explicit-id fallback refuses above its own bound too.
+    const fallback = await markListRangeRead({ listKey: feedKey(), sort: "new", fromId: "gone-a", toId: "gone-b", maxCreatedAt, extraIds: extra.slice(0, 1001) });
+    expect(fallback).toEqual({ ids: [], undoToken: null, tooLarge: { limit: 1000 } });
+    expect(await isRead(extra[0])).toBe(false);
+  }, 60_000);
+
   it("is user-scoped and validated", async () => {
     state.session = { user: { id: ids.bob } };
     const foreign = await markListRangeRead({ listKey: feedKey(), sort: "new", fromId: rows[0], toId: rows[10], maxCreatedAt, extraIds: [rows[20]] });
@@ -684,7 +727,7 @@ describe("markListRangeRead (\"Alles bis hier\" as a server-side range)", () => 
     state.session = { user: { id: ids.alice } };
     await expect(markListRangeRead({ listKey: "https://evil.test/?feed=x", sort: "new", fromId: "a", toId: "b", maxCreatedAt, extraIds: [] })).rejects.toThrow(/Invalid range/);
     await expect(markListRangeRead({ listKey: "/?feed=a&cat=b", sort: "new", fromId: "a", toId: "b", maxCreatedAt, extraIds: [] })).rejects.toThrow(/Invalid range/);
-    await expect(markListRangeRead({ listKey: feedKey(), sort: "new", fromId: "a", toId: "b", maxCreatedAt, extraIds: Array(1001).fill("x") })).rejects.toThrow(/Invalid range/);
+    await expect(markListRangeRead({ listKey: feedKey(), sort: "new", fromId: "a", toId: "b", maxCreatedAt, extraIds: Array(MAX_RANGE_IDS + 1).fill("x") })).rejects.toThrow(/Invalid range/);
     state.session = null;
     await expect(markListRangeRead({ listKey: feedKey(), sort: "new", fromId: rows[0], toId: rows[1], maxCreatedAt, extraIds: [] })).rejects.toThrow(/Unauthorized/);
   });

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect, ACTIVE_LIST } from "../helpers/test";
-import { articleFlags, insertBulkFeed, makeStoryCluster, patchArticles, readFlags, setUserFlags } from "../helpers/db";
+import { articleFlags, insertArrivalBelow, insertBulkFeed, makeStoryCluster, patchArticles, readFlags, setUserFlags } from "../helpers/db";
 import { touchDrag, touchHoldOn, touchSwipeOn } from "../helpers/gestures";
 
 /**
@@ -487,6 +487,75 @@ test("'Alles bis hier' beyond 1000 loaded rows: one server-side range, one Undo"
     await toast.getByRole("button", { name: "Undo" }).click();
     await expect.poll(() => [...readFlags(bulk.ids).values()].filter(Boolean).length, { timeout: 20_000 }).toBe(0);
   } finally {
+    bulk.cleanup();
+  }
+});
+
+/** Opens the row menu (long-press on touch, right-click with a mouse) and picks "Mark all up to here". */
+async function markUpToHere(app: import("../helpers/test").App, row: import("@playwright/test").Locator) {
+  const page = app.page;
+  if (app.isMobile) await touchHoldOn(page, row);
+  else {
+    await row.scrollIntoViewIfNeeded();
+    await row.click({ button: "right", position: { x: 200, y: 20 } });
+  }
+  const menu = page.getByTestId("article-context-menu");
+  await expect(menu).toBeVisible();
+  await app.activate(menu.getByRole("menuitem", { name: "Mark all up to here as read" }));
+  await expect(menu).toBeHidden();
+}
+
+test("'Alles bis hier' below an expanded story includes its sources fetched outside the list", async ({ app, page }) => {
+  // #120 is not in the first page: it is only on screen through the expanded card.
+  const cleanup = makeStoryCluster(app.userKey, [3, 5, 120].map((n) => app.articleId(n)));
+  try {
+    await openSettled(app);
+    await app.activate(app.row(3).getByTestId("cluster-toggle"));
+    const group = page.locator(`${ACTIVE_LIST} [data-testid="cluster-members"]`);
+    await expect(group.locator(`[data-article-id="${app.articleId(120)}"]`)).toBeVisible();
+    await markUpToHere(app, app.row(4));
+    for (const n of [1, 2, 3, 4, 5, 120]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(true);
+    expect(articleFlags(app.articleId(6)).isRead).toBe(false);
+    const toast = page.locator("[data-sonner-toast]").filter({ hasText: /Marked 6 articles as read/ });
+    await expect(toast).toBeVisible();
+    await app.activate(toast.getByRole("button", { name: "Undo" }));
+    for (const n of [1, 2, 3, 4, 5, 120]) await expect.poll(() => articleFlags(app.articleId(n)).isRead).toBe(false);
+  } finally {
+    cleanup();
+  }
+});
+
+test("'Alles bis hier' after paging: arrivals after the list snapshot stay unread unless the list shows them", async ({ app, page }) => {
+  test.setTimeout(90_000);
+  const bulk = insertBulkFeed(app.userKey, 120);
+  const cleanups: Array<() => void> = [];
+  try {
+    await page.goto(`/?feed=${bulk.feedId}`);
+    await app.navReady();
+    const byId = (id: string) => page.locator(`${ACTIVE_LIST} [data-article-id="${id}"]`);
+    await expect(byId(bulk.ids[0])).toBeVisible({ timeout: 30_000 });
+    // Two backdated arrivals AFTER the first page was loaded: one inside its
+    // span (never shown), one inside page 2's span (shown once page 2 loads).
+    cleanups.push(insertArrivalBelow(bulk.ids[9], "e2e-arrival-unseen"));
+    cleanups.push(insertArrivalBelow(bulk.ids[59], "e2e-arrival-shown"));
+    const scroller = app.listScroller();
+    for (let i = 0; i < 60 && (await byId(bulk.ids[69]).count()) === 0; i++) {
+      await scroller.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+      await page.waitForTimeout(100);
+    }
+    await expect(byId("e2e-arrival-shown")).toHaveCount(1);
+    await expect(byId("e2e-arrival-unseen")).toHaveCount(0);
+
+    await markUpToHere(app, byId(bulk.ids[69]).locator('[role="button"]').first());
+    const toast = page.locator("[data-sonner-toast]").filter({ hasText: "Marked 71 articles as read" });
+    await expect(toast).toBeVisible({ timeout: 20_000 });
+    const flags = readFlags([...bulk.ids, "e2e-arrival-unseen", "e2e-arrival-shown"]);
+    expect(bulk.ids.slice(0, 70).every((id) => flags.get(id))).toBe(true);
+    expect(flags.get(bulk.ids[70])).toBe(false);
+    expect(flags.get("e2e-arrival-shown")).toBe(true);
+    expect(flags.get("e2e-arrival-unseen")).toBe(false);
+  } finally {
+    for (const c of cleanups) c();
     bulk.cleanup();
   }
 });

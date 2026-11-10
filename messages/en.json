@@ -851,7 +851,7 @@
     "copyLink": "Copy link",
     "linkCopied": "Link copied",
     "markUpToHere": "Mark all up to here as read",
-    "markUpToHereClamped": "Only the first {count} articles were marked as read",
+    "markUpToHereTooMany": "Too many articles at once (max {count}) – nothing was marked. Start from an article further up.",
     "kindVideo": "Video",
     "kindAudio": "Audio",
     "kindImage": "Image",
