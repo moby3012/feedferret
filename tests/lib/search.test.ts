@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { tokenizeSearch, parseDateToken, buildAdvancedSearchWhere, buildFtsMatchQuery } from "../../lib/search";
+import { tokenizeSearch, parseDateToken, buildAdvancedSearchWhere, buildFtsMatchQuery, MAX_SEARCH_QUERY_LENGTH, MAX_SEARCH_TOKENS } from "../../lib/search";
 import { db } from "../../lib/db";
 
 // Mock the db module so search.ts can be imported without a real DB connection.
@@ -189,7 +189,7 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
       expect.stringContaining("article_fts"),
       USER,
       '"openclaw"',
-      5001
+      501
     );
     expect(result.AND).toHaveLength(1);
     const [condition] = result.AND;
@@ -209,9 +209,9 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
     expect(sql).toMatch(/LIMIT \?/);
   });
 
-  it("falls back to LIKE (complete results, no 32 766-variable IN list) when a term has more FTS hits than the cap", async () => {
+  it("falls back to LIKE (complete results, no oversized IN list) when a term has more FTS hits than the cap", async () => {
     // cap + 1 rows signal "too many"
-    queryRawUnsafeMock.mockResolvedValue(Array.from({ length: 5001 }, (_, i) => ({ id: `a${i}` })));
+    queryRawUnsafeMock.mockResolvedValue(Array.from({ length: 501 }, (_, i) => ({ id: `a${i}` })));
 
     const result = await buildAdvancedSearchWhere(USER, "database") as any;
 
@@ -223,11 +223,25 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
   it("shares the bind-variable budget between free-text terms", async () => {
     queryRawUnsafeMock.mockResolvedValue([]);
     await buildAdvancedSearchWhere(USER, "aaa bbb cccc dddd");
-    // 20 000 / 4 tokens = 5 000 (still the per-term max); with 8 tokens it halves to 2 500.
+    // 500 / 4 tokens = 125 ids per term; with 8 tokens it halves to 62.
     await buildAdvancedSearchWhere(USER, "aaa bbb cccc dddd eeee ffff gggg hhhh");
     const limits = queryRawUnsafeMock.mock.calls.map((c: unknown[]) => c[3]);
-    expect(limits.slice(0, 4)).toEqual([5001, 5001, 5001, 5001]);
-    expect(limits.slice(4)).toEqual(Array(8).fill(2501));
+    expect(limits.slice(0, 4)).toEqual([126, 126, 126, 126]);
+    expect(limits.slice(4)).toEqual(Array(8).fill(63));
+  });
+
+  it("ignores tokens beyond MAX_SEARCH_TOKENS and characters beyond MAX_SEARCH_QUERY_LENGTH", async () => {
+    queryRawUnsafeMock.mockResolvedValue([]);
+    const terms = Array.from({ length: MAX_SEARCH_TOKENS + 16 }, (_, i) => `term${i}`);
+    const result = await buildAdvancedSearchWhere(USER, terms.join(" ")) as any;
+    expect(result.AND).toHaveLength(MAX_SEARCH_TOKENS);
+    expect(queryRawUnsafeMock.mock.calls).toHaveLength(MAX_SEARCH_TOKENS);
+    expect(JSON.stringify(result)).not.toContain(`term${MAX_SEARCH_TOKENS}"`);
+
+    queryRawUnsafeMock.mockClear();
+    const huge = JSON.stringify(await buildAdvancedSearchWhere(USER, "x".repeat(100_000)));
+    expect(huge).toContain(`"${"x".repeat(MAX_SEARCH_QUERY_LENGTH)}"`);
+    expect(huge).not.toContain("x".repeat(MAX_SEARCH_QUERY_LENGTH + 1));
   });
 
   it("uses the LIKE path while the FTS index is still being backfilled", async () => {

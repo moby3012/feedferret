@@ -44,16 +44,29 @@ export function buildFtsMatchQuery(term: string): string {
     return `"${term.replace(/"/g, '""')}"`;
 }
 
-// Prisma refuses queries with more than 32 766 bind variables (P2029 → HTTP 500).
-// The FTS hit list is passed to Prisma as `id IN (…)`, so it has to stay far below
-// that, for ALL free-text terms of one query together. Per term we therefore accept at
-// most MAX_FTS_IDS_PER_TERM hits (and at most FTS_ID_BUDGET / terms when a query has
-// several terms). A term with more matches than that is not "refined" or truncated:
-// it simply takes the LIKE path below, which has no list to bind, so results stay
-// complete for any term. Broad terms hit on page one quickly via the publishedAt index;
-// only their exact total (count) costs a scan.
-const MAX_FTS_IDS_PER_TERM = 5000;
-const FTS_ID_BUDGET = 20_000;
+// Prisma refuses a query with more bind variables than the driver allows (P2029 → HTTP 500).
+// For SQLite that limit is 999 in Prisma 7: the client falls back to SQLite's historical
+// default because @prisma/adapter-better-sqlite3 does not report its own (higher) limit.
+// The FTS hit list is passed to Prisma as `id IN (…)`, so ALL free-text terms of one query
+// together must stay well below that, next to the LIKE/filter parameters of the rest of the
+// query. Per term we therefore accept at most MAX_FTS_IDS_PER_TERM hits (and at most
+// FTS_ID_BUDGET / tokens when a query has several). A term with more matches than that is not
+// "refined" or truncated: it simply takes the LIKE path below, which has no list to bind, so
+// results stay complete for any term. Broad terms hit on page one quickly via the publishedAt
+// index; only their exact total (count) costs a scan. (Before this was sized to 32 766, so a
+// term with ~1 000–5 000 hits failed with P2029.)
+const MAX_FTS_IDS_PER_TERM = 500;
+const FTS_ID_BUDGET = 500;
+
+// Upper bounds for one search query (follow-up to #243). Every token can become a free-text
+// term with its own `id IN (…)` share and ~8 LIKE parameters, so an unbounded query (a pasted
+// article, an API client) could push the statement past the bind-variable limit and SQLite's
+// expression depth, or a single huge term past SQLITE_MAX_LIKE_PATTERN_LENGTH (50 000 bytes)
+// → HTTP 500. Worst case with these caps: 500 ids + 24 × 8 LIKE params ≈ 700 binds, leaving
+// room for the caller's own filters. Tokens beyond the cap are ignored (the query only gets
+// broader, never wrong or failing).
+export const MAX_SEARCH_QUERY_LENGTH = 1000;
+export const MAX_SEARCH_TOKENS = 24;
 
 /**
  * Ids of the user's articles matching `term` in the SQLite FTS index, or null when the
@@ -274,9 +287,9 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
 export async function buildAdvancedSearchWhere(userId: string, query?: string) {
     if (!query?.trim()) return {};
 
-    const allTokens = tokenizeSearch(query.trim());
+    const allTokens = tokenizeSearch(query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH)).slice(0, MAX_SEARCH_TOKENS);
     // Every token may become a free-text term; share the bind-variable budget between them.
-    const ftsCap = Math.max(100, Math.min(MAX_FTS_IDS_PER_TERM, Math.floor(FTS_ID_BUDGET / Math.max(1, allTokens.length))));
+    const ftsCap = Math.min(MAX_FTS_IDS_PER_TERM, Math.floor(FTS_ID_BUDGET / Math.max(1, allTokens.length)));
 
     // Split token list by "OR" (case-insensitive, exact token match) into groups
     const groups: string[][] = [];
