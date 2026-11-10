@@ -6,7 +6,7 @@ import { flushDueNotifications } from "./notifications";
 import { applyRetentionPoliciesForAllUsers } from "./retention";
 import { logger } from "./logger";
 import { optimizeSqlitePlannerStatsIfDue } from "./db-maintenance";
-import { cleanupStoryClusters, drainStoryClustering, invalidateStoryWindowCache, runStoryClustering } from "./story-clustering/job";
+import { cleanupStoryClusters, drainStoryClustering, runStoryClustering } from "./story-clustering/job";
 
 const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000; // run at most once/day
@@ -77,7 +77,6 @@ async function runPostTickJobs(state: SchedulerState) {
                 .catch((e) => logger.error("[retention] run failed:", e));
             await yieldToLoop();
             await cleanupStoryClusters().catch((e) => logger.error("[story-clustering] cleanup failed:", e));
-            invalidateStoryWindowCache(); // retention deleted articles: the cached clustering window is stale
             await yieldToLoop();
             // K2: briefings > 14 d, AI usage rows > 90 d.
             await import("./briefing/generate").then((m) => m.cleanupBriefingData()).catch((e) => logger.error("[briefing] cleanup failed:", e));

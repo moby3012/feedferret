@@ -44,65 +44,6 @@ function getState(): JobState {
   return (g[GLOBAL_KEY] ??= { running: false, rotate: 0 });
 }
 
-// ------------------------------------------------------------------ window cache
-//
-// Every bounded pass used to re-read the user's whole 48 h window (up to WINDOW_LIMIT signature rows
-// plus every cluster with a member relation) and JSON-parse it, although the drain loop runs a pass
-// every ~1.5 s and the only writer is this job. The parsed window is kept per user between passes
-// and updated with each pass's own decisions. It is only reused while a cheap fingerprint of the
-// database still matches the cache, so anything else that touches the window (retention or a feed
-// delete removing articles, daily cleanup repairing clusters, another instance claiming rows) makes the
-// next pass reload from the database:
-//   * number and newest claim time of the processed window rows (aged-out rows are pruned first),
-//   * number of window clusters and their newest `updatedAt`,
-//   * TTL as a hard bound for anything the fingerprint cannot see.
-// A pass that lost a claim, threw, or whose post-write fingerprint disagrees with the cache drops it.
-export const WINDOW_CACHE_TTL_MS = 10 * 60_000;
-const WINDOW_CACHE_MAX_USERS = 8;
-
-interface WindowFingerprint {
-  items: number;
-  /** Newest claim timestamp among the processed window rows. */
-  itemStamp: number;
-  clusters: number;
-  clusterStamp: number;
-}
-interface WindowCacheEntry {
-  items: WindowItem[];
-  clusters: Map<string, ClusterState>;
-  fingerprint: WindowFingerprint;
-  loadedAt: number;
-}
-const WINDOW_CACHE_KEY = "__feedferret_story_window_cache__";
-function windowCache(): Map<string, WindowCacheEntry> {
-  const g = globalThis as unknown as Record<string, Map<string, WindowCacheEntry>>;
-  return (g[WINDOW_CACHE_KEY] ??= new Map());
-}
-/** Drops the cached window of one user (or all). Safe to call at any time; the next pass reloads. */
-export function invalidateStoryWindowCache(userId?: string): void {
-  if (userId) windowCache().delete(userId);
-  else windowCache().clear();
-}
-
-/** Size of a user's cached window (diagnostics and tests); null when nothing is cached. */
-export function getStoryWindowCacheInfo(userId: string): { items: number; clusters: number; loadedAt: number } | null {
-  const entry = windowCache().get(userId);
-  return entry ? { items: entry.items.length, clusters: entry.clusters.size, loadedAt: entry.loadedAt } : null;
-}
-
-async function windowFingerprint(userId: string, windowStart: Date): Promise<WindowFingerprint> {
-  const [items, clusters] = await Promise.all([
-    db.article.aggregate({ where: { userId, publishedAt: { gte: windowStart }, clusteredAt: { not: null }, storySig: { not: null } }, _count: { _all: true }, _max: { clusteredAt: true } }),
-    db.storyCluster.aggregate({ where: { userId, lastSeenAt: { gte: windowStart } }, _count: { _all: true }, _max: { updatedAt: true } }),
-  ]);
-  return {
-    items: items._count._all,
-    itemStamp: items._max.clusteredAt?.getTime() ?? 0,
-    clusters: clusters._count._all,
-    clusterStamp: clusters._max.updatedAt?.getTime() ?? 0,
-  };
-}
-
 export function isStoryClusteringDisabled(): boolean {
   return process.env.DISABLE_STORY_CLUSTERING === "true";
 }
@@ -297,137 +238,69 @@ export async function clusterUser(userId: string, opts: ClusterRunOptions & { de
   }
 
   // Window = processed articles of the last 48 h (clustered members and singletons).
-  const cache = windowCache();
-  let entry = cache.get(userId);
-  let windowItems: WindowItem[];
-  let clusters: ClusterState[];
-  const fingerprint = await windowFingerprint(userId, windowStart);
-  const startMs = windowStart.getTime();
-  if (entry && now - entry.loadedAt < WINDOW_CACHE_TTL_MS && now >= entry.loadedAt) {
-    entry.items = entry.items.filter((w) => w.publishedAt >= startMs);
-    for (const [id, c] of entry.clusters) if (c.lastSeenAt < startMs) entry.clusters.delete(id);
-    const stale =
-      entry.items.length !== fingerprint.items ||
-      entry.clusters.size !== fingerprint.clusters ||
-      entry.fingerprint.itemStamp !== fingerprint.itemStamp ||
-      entry.fingerprint.clusterStamp !== fingerprint.clusterStamp;
-    if (stale) entry = undefined;
-  } else {
-    entry = undefined;
-  }
-  if (entry) {
-    windowItems = entry.items;
-    clusters = [...entry.clusters.values()];
-  } else {
-    cache.delete(userId);
-    const [windowRows, clusterRows] = await Promise.all([
-      db.article.findMany({
-        where: { userId, publishedAt: { gte: windowStart }, clusteredAt: { not: null }, storySig: { not: null } },
-        orderBy: { publishedAt: "desc" },
-        take: WINDOW_LIMIT,
-        select: { id: true, feedId: true, publishedAt: true, clusterId: true, storySig: true },
-      }),
-      db.storyCluster.findMany({
-        where: { userId, lastSeenAt: { gte: windowStart } },
-        select: { id: true, leadArticleId: true, size: true, firstSeenAt: true, lastSeenAt: true, sig: true, articles: { select: { feedId: true } } },
-      }),
-    ]);
-    windowItems = [];
-    for (const r of windowRows) {
-      const sig = parseSig(r.storySig);
-      if (sig) windowItems.push({ id: r.id, feedId: r.feedId, publishedAt: r.publishedAt.getTime(), clusterId: r.clusterId, sig });
-    }
-    clusters = [];
-    for (const c of clusterRows) {
-      let sig: ClusterSig;
-      try {
-        sig = JSON.parse(c.sig) as ClusterSig;
-      } catch {
-        continue;
-      }
-      clusters.push({
-        id: c.id,
-        leadArticleId: c.leadArticleId,
-        size: c.size,
-        feedIds: [...new Set(c.articles.map((a) => a.feedId))],
-        firstSeenAt: c.firstSeenAt.getTime(),
-        lastSeenAt: c.lastSeenAt.getTime(),
-        sig,
-      });
-    }
-    // Only a complete, fully parsed window is cacheable (a capped or partly unparsable one would
-    // never match the fingerprint anyway).
-    if (windowRows.length < WINDOW_LIMIT && windowItems.length === windowRows.length && clusters.length === clusterRows.length) {
-      entry = { items: windowItems, clusters: new Map(clusters.map((c) => [c.id, c])), fingerprint, loadedAt: now };
-    }
-  }
+  const [windowRows, clusterRows] = await Promise.all([
+    db.article.findMany({
+      where: { userId, publishedAt: { gte: windowStart }, clusteredAt: { not: null }, storySig: { not: null } },
+      orderBy: { publishedAt: "desc" },
+      take: WINDOW_LIMIT,
+      select: { id: true, feedId: true, publishedAt: true, clusterId: true, storySig: true },
+    }),
+    db.storyCluster.findMany({
+      where: { userId, lastSeenAt: { gte: windowStart } },
+      select: { id: true, leadArticleId: true, size: true, firstSeenAt: true, lastSeenAt: true, sig: true, articles: { select: { feedId: true } } },
+    }),
+  ]);
   if (!mustProgress && performance.now() >= deadline) {
     result.morePending = true;
     result.ms = performance.now() - started;
     return result;
   }
+  const windowItems: WindowItem[] = [];
+  for (const r of windowRows) {
+    const sig = parseSig(r.storySig);
+    if (sig) windowItems.push({ id: r.id, feedId: r.feedId, publishedAt: r.publishedAt.getTime(), clusterId: r.clusterId, sig });
+  }
+  const clusters: ClusterState[] = [];
+  for (const c of clusterRows) {
+    let sig: ClusterSig;
+    try {
+      sig = JSON.parse(c.sig) as ClusterSig;
+    } catch {
+      continue;
+    }
+    clusters.push({
+      id: c.id,
+      leadArticleId: c.leadArticleId,
+      size: c.size,
+      feedIds: [...new Set(c.articles.map((a) => a.feedId))],
+      firstSeenAt: c.firstSeenAt.getTime(),
+      lastSeenAt: c.lastSeenAt.getTime(),
+      sig,
+    });
+  }
 
   const engine = new ClusterEngine(pending, windowItems, clusters, { newClusterId });
   const pendingById = new Map(pending.map((p) => [p.id, p]));
 
-  let consistent = true;
-  try {
-    while (engine.remaining > 0) {
-      const decisions = engine.step(STEP_SIZE);
-      const touched = engine.drainTouched();
-      const ok = await writeStep(userId, decisions, touched, pendingById, freshSigs, now);
-      if (entry) {
-        if (ok) applyToWindowCache(entry, decisions, touched, pendingById);
-        else consistent = false;
-      }
-      for (const d of decisions) {
-        result.processed++;
-        if (d.action === "join") result.joined++;
-        else if (d.action === "create") result.created++;
-        else if (d.action === "single") result.singles++;
-        else result.skipped++;
-      }
-      await yieldToLoop();
-      if (engine.remaining > 0 && performance.now() >= deadline) {
-        result.morePending = true;
-        break;
-      }
+  while (engine.remaining > 0) {
+    const decisions = engine.step(STEP_SIZE);
+    const touched = engine.drainTouched();
+    await writeStep(userId, decisions, touched, pendingById, freshSigs, now);
+    for (const d of decisions) {
+      result.processed++;
+      if (d.action === "join") result.joined++;
+      else if (d.action === "create") result.created++;
+      else if (d.action === "single") result.singles++;
+      else result.skipped++;
     }
-  } catch (error) {
-    cache.delete(userId);
-    throw error;
-  }
-  if (entry) {
-    // Re-fingerprint after our own writes; a cache that disagrees with the database is dropped.
-    const after = consistent && entry.items.length <= WINDOW_LIMIT ? await windowFingerprint(userId, windowStart).catch(() => null) : null;
-    if (after && after.items === entry.items.length && after.clusters === entry.clusters.size) {
-      entry.fingerprint = after;
-      cache.delete(userId); // re-insert: most recently used last
-      cache.set(userId, entry);
-      while (cache.size > WINDOW_CACHE_MAX_USERS) cache.delete(cache.keys().next().value as string);
-    } else {
-      cache.delete(userId);
+    await yieldToLoop();
+    if (engine.remaining > 0 && performance.now() >= deadline) {
+      result.morePending = true;
+      break;
     }
   }
   result.ms = performance.now() - started;
   return result;
-}
-
-/** Mirrors one written step into the cached window (what the next database load would return). */
-function applyToWindowCache(entry: WindowCacheEntry, decisions: ClusterDecision[], touched: ClusterState[], pendingById: Map<string, PendingItem>): void {
-  const byId = new Map(entry.items.map((w) => [w.id, w]));
-  for (const d of decisions) {
-    const item = pendingById.get(d.articleId);
-    if (!item) continue;
-    const added: WindowItem = { id: item.id, feedId: item.feedId, publishedAt: item.publishedAt, clusterId: d.clusterId ?? null, sig: item.sig };
-    entry.items.push(added);
-    byId.set(added.id, added);
-    if (d.action === "create" && d.partnerId) {
-      const partner = byId.get(d.partnerId);
-      if (partner) partner.clusterId = d.clusterId ?? null;
-    }
-  }
-  for (const c of touched) entry.clusters.set(c.id, c);
 }
 
 async function writeStep(
@@ -437,7 +310,7 @@ async function writeStep(
   pendingById: Map<string, PendingItem>,
   freshSigs: Map<string, string>,
   now: number,
-): Promise<boolean> {
+): Promise<void> {
   const claimedAt = new Date(now);
   const sigData = (id: string) => {
     const fresh = freshSigs.get(id) ?? (pendingById.has(id) ? serializeSig(pendingById.get(id)!.sig) : undefined);
@@ -485,8 +358,6 @@ async function writeStep(
   for (const [id, clusterId] of clusterOfClaim) if (!claimed.has(id)) failedClusters.add(clusterId);
   for (const [id, clusterId] of clusterOfPartner) if (!partnered.has(id)) failedClusters.add(clusterId);
   for (const clusterId of failedClusters) await reconcileCluster(userId, clusterId);
-  // false = another writer interfered (lost claim / partner): the caller must not trust its in-memory window.
-  return failedClusters.size === 0 && claimed.size === claims.length && partnered.size === partners.length;
 }
 
 /** JSON for `StoryCluster.sig`, kept ≤ 2 KB: anchor entities, then the anchor itself, are dropped first. */

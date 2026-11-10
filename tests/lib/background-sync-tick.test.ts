@@ -38,7 +38,6 @@ vi.mock("@/lib/story-clustering/job", () => ({
   runStoryClustering: (mocks.clustering = job("clustering")),
   drainStoryClustering: vi.fn(),
   cleanupStoryClusters: (mocks.cleanup = job("cleanup")),
-  invalidateStoryWindowCache: vi.fn(),
 }));
 
 import { runBackgroundSyncTick } from "@/lib/background-sync";

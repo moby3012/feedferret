@@ -1,4 +1,4 @@
-// Opt-in benchmark (PERF_WAVE2_BENCH=1): server behaviour at scale on a disposable SQLite DB.
+// Opt-in benchmark (PERF_WAVE2_BENCH=1): server behaviour at scale on a disposable SQLite DB (or Postgres, see PERF_BENCH_DATABASE_URL).
 //
 //   PERF_WAVE2_BENCH=1 [PERF_BENCH_RESULT=/tmp/out.json] npx vitest run tests/perf-wave2-benchmark.test.ts
 //
@@ -19,8 +19,10 @@ import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 const ENABLED = process.env.PERF_WAVE2_BENCH === "1";
 const dir = ENABLED ? mkdtempSync(join(tmpdir(), "perf-wave2-")) : "";
 if (ENABLED) {
-  process.env.DATABASE_PROVIDER = "sqlite";
-  process.env.DATABASE_URL = `file:${join(dir, "bench.db")}`;
+  // PERF_BENCH_DATABASE_URL=postgresql://… runs the same benchmark on a disposable Postgres
+  // (the schema is force-reset!); default is a temp SQLite file.
+  process.env.DATABASE_PROVIDER = process.env.PERF_BENCH_DATABASE_URL ? "postgresql" : "sqlite";
+  process.env.DATABASE_URL = process.env.PERF_BENCH_DATABASE_URL ?? `file:${join(dir, "bench.db")}`;
   process.env.TRUSTED_FEED_FETCHING = "true";
   process.env.DISABLE_BACKGROUND_SYNC = "true";
 }
@@ -49,8 +51,8 @@ describe.skipIf(!ENABLED)("wave-2 performance benchmark (50 k articles)", () => 
   const feedIds: string[] = [];
 
   beforeAll(async () => {
-    execFileSync("node", ["scripts/prepare-prisma-schema.mjs"], { env: { ...process.env, DATABASE_PROVIDER: "sqlite" }, stdio: "pipe" });
-    execFileSync("npx", ["prisma", "db", "push", "--schema", "prisma/schema.generated.prisma", "--accept-data-loss"], { env: process.env, stdio: "pipe" });
+    execFileSync("node", ["scripts/prepare-prisma-schema.mjs"], { env: process.env, stdio: "pipe" });
+    execFileSync("npx", ["prisma", "db", "push", "--schema", "prisma/schema.generated.prisma", "--accept-data-loss", ...(process.env.PERF_BENCH_DATABASE_URL ? ["--force-reset"] : [])], { env: process.env, stdio: "pipe" });
     const { db } = await import("@/lib/db");
     // Boot does this once in instrumentation.ts (first JSDOM window = ~300 ms stall otherwise).
     await (await import("@/lib/sanitize-html")).warmSanitizer();

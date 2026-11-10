@@ -21,7 +21,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { GET as listGET } from "../../app/api/app/articles/route";
 import { GET as clusterGET } from "../../app/api/app/clusters/[id]/route";
-import { clusterUser, cleanupStoryClusters, reconcileCluster, runStoryClustering, getStoryWindowCacheInfo, invalidateStoryWindowCache, WINDOW_CACHE_TTL_MS, PENDING_BATCH, STEP_SIZE } from "../../lib/story-clustering/job";
+import { clusterUser, cleanupStoryClusters, reconcileCluster, runStoryClustering, PENDING_BATCH, STEP_SIZE } from "../../lib/story-clustering/job";
 import { applyArticleStateOps } from "../../server/articles/state";
 import { getReadingPreferences, updateGlobalSettings } from "../../app/actions/settings";
 import { markArticleIdsRead, markListRangeRead } from "../../app/actions/article-state";
@@ -204,103 +204,6 @@ describe("clusterUser", () => {
     const r = await clusterUser(ids.alice, { budgetMs: 10_000, now: NOW });
     expect(r.processed).toBe(PENDING_BATCH);
     expect(r.morePending).toBe(true);
-  });
-});
-
-describe("window cache (parsed 48 h window kept between passes)", () => {
-  const run = (userId: string, now = NOW) => clusterUser(userId, { budgetMs: 5_000, now });
-  const partition = async (userId: string) => {
-    const rows = await state.db.article.findMany({ where: { userId }, select: { id: true, clusterId: true } });
-    const groups = new Map<string, string[]>();
-    for (const r of rows) if (r.clusterId) groups.set(r.clusterId, [...(groups.get(r.clusterId) ?? []), r.id]);
-    return [...groups.values()].map((g) => g.sort().join(",")).sort();
-  };
-  beforeEach(async () => {
-    invalidateStoryWindowCache();
-    await resetUser(ids.alice);
-    await resetUser(ids.bob);
-  });
-
-  it("stays populated after a pass and a later source joins through it", async () => {
-    await addArticle(ids.alice, ids.aF[0], "w-0", EZB[0], 5);
-    await addArticle(ids.alice, ids.aF[1], "w-1", EZB[1], 4);
-    await run(ids.alice);
-    expect(getStoryWindowCacheInfo(ids.alice)).toMatchObject({ items: 2, clusters: 1 });
-    await addArticle(ids.alice, ids.aF[2], "w-2", EZB[2], 3);
-    const r = await run(ids.alice);
-    expect(r).toMatchObject({ processed: 1, joined: 1 });
-    expect(getStoryWindowCacheInfo(ids.alice)).toMatchObject({ items: 3, clusters: 1 });
-    expect((await state.db.storyCluster.findFirstOrThrow({ where: { userId: ids.alice } })).size).toBe(3);
-  });
-
-  it("decides exactly like a cold load: staged batches with and without the cache give the same clusters", async () => {
-    const stages: Array<Array<[number, string, number]>> = [
-      [[0, EZB[0], 8], [3, "Bayern München gewinnt 3:1 gegen Dortmund", 7]],
-      [[1, EZB[1], 6], [2, "Dortmund unterliegt Bayern München klar mit 1:3", 5]],
-      [[2, EZB[2], 4], [0, "Bundesliga: Bayern gewinnt Spitzenspiel gegen Dortmund 3:1", 3]],
-    ];
-    for (const [userId, feeds, cold] of [[ids.alice, ids.aF, false], [ids.bob, ids.bF, true]] as const) {
-      let n = 0;
-      for (const stage of stages) {
-        for (const [feed, title, hoursAgo] of stage) await addArticle(userId, feeds[feed], `${userId}-s${n++}`, title, hoursAgo);
-        if (cold) invalidateStoryWindowCache(userId);
-        await run(userId);
-      }
-    }
-    const shape = async (userId: string) => (await partition(userId)).map((g) => g.split(",").map((id) => id.split("-").pop()).join(","));
-    const cached = await shape(ids.alice);
-    expect(cached.length).toBeGreaterThan(0);
-    expect(cached).toEqual(await shape(ids.bob));
-  });
-
-  it("reloads when something else changed the window (articles deleted behind its back)", async () => {
-    await addArticle(ids.alice, ids.aF[0], "x-0", EZB[0], 5);
-    await addArticle(ids.alice, ids.aF[1], "x-1", EZB[1], 4);
-    await addArticle(ids.alice, ids.aF[3], "x-other", "Bayern München gewinnt 3:1 gegen Dortmund", 3);
-    await run(ids.alice);
-    expect(getStoryWindowCacheInfo(ids.alice)?.items).toBe(3);
-    await state.db.article.delete({ where: { id: "x-other" } }); // retention / feed delete / another instance
-    await addArticle(ids.alice, ids.aF[2], "x-2", EZB[2], 2);
-    await run(ids.alice);
-    // The stale entry was dropped and rebuilt from the database: 3 processed rows, not 4.
-    expect(getStoryWindowCacheInfo(ids.alice)).toMatchObject({ items: 3, clusters: 1 });
-    expect(await state.db.article.count({ where: { userId: ids.alice, clusterId: { not: null } } })).toBe(3);
-  });
-
-  it("reloads when clusters were repaired or removed elsewhere", async () => {
-    await addArticle(ids.alice, ids.aF[0], "y-0", EZB[0], 5);
-    await addArticle(ids.alice, ids.aF[1], "y-1", EZB[1], 4);
-    await run(ids.alice);
-    const cluster = await state.db.storyCluster.findFirstOrThrow({ where: { userId: ids.alice } });
-    await reconcileCluster(ids.alice, cluster.id);
-    await state.db.article.delete({ where: { id: "y-1" } });
-    await cleanupStoryClusters(NOW); // dissolves the 1-member cluster
-    await addArticle(ids.alice, ids.aF[2], "y-2", EZB[2], 3);
-    await run(ids.alice);
-    const info = getStoryWindowCacheInfo(ids.alice);
-    expect(info?.clusters).toBe(await state.db.storyCluster.count({ where: { userId: ids.alice } }));
-    expect(info?.items).toBe(await state.db.article.count({ where: { userId: ids.alice, clusteredAt: { not: null }, storySig: { not: null } } }));
-  });
-
-  it("expires after the TTL and can be dropped explicitly", async () => {
-    await addArticle(ids.alice, ids.aF[0], "z-0", EZB[0], 5);
-    await run(ids.alice);
-    const first = getStoryWindowCacheInfo(ids.alice)!;
-    await addArticle(ids.alice, ids.aF[1], "z-1", EZB[1], 4);
-    await run(ids.alice, NOW + WINDOW_CACHE_TTL_MS + 1);
-    expect(getStoryWindowCacheInfo(ids.alice)!.loadedAt).toBeGreaterThan(first.loadedAt);
-    invalidateStoryWindowCache(ids.alice);
-    expect(getStoryWindowCacheInfo(ids.alice)).toBeNull();
-  });
-
-  it("is per user: another user's passes never touch or reuse the entry", async () => {
-    await addArticle(ids.alice, ids.aF[0], "u1-0", EZB[0], 5);
-    await addArticle(ids.bob, ids.bF[0], "u2-0", EZB[0], 5);
-    await run(ids.alice);
-    const aliceInfo = getStoryWindowCacheInfo(ids.alice);
-    await run(ids.bob);
-    expect(getStoryWindowCacheInfo(ids.alice)).toEqual(aliceInfo);
-    expect(getStoryWindowCacheInfo(ids.bob)).not.toBeNull();
   });
 });
 
