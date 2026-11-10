@@ -52,3 +52,6 @@ next-env.d.ts
 /.e2e/
 /perf-results/
 /e2e/.auth/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

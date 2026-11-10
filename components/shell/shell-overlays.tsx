@@ -26,11 +26,10 @@ function useOverlay(id: OverlayId): [boolean, (open: boolean) => Promise<void>] 
 
 // Rarely opened overlays are their own chunks, loaded (and mounted) on first use.
 const AddFeedDialog = dynamic(() => import("@/components/add-feed-dialog").then((m) => m.AddFeedDialog), { ssr: false });
-const CommandPalette = dynamic(() => import("@/components/command-palette").then((m) => m.CommandPalette), { ssr: false });
-const KeyboardShortcutsDialog = dynamic(
-  () => import("@/components/keyboard-shortcuts-dialog").then((m) => m.KeyboardShortcutsDialog),
-  { ssr: false },
-);
+export const loadCommandPalette = () => import("@/components/command-palette");
+export const loadShortcutsDialog = () => import("@/components/keyboard-shortcuts-dialog");
+const CommandPalette = dynamic(() => loadCommandPalette().then((m) => m.CommandPalette), { ssr: false });
+const KeyboardShortcutsDialog = dynamic(() => loadShortcutsDialog().then((m) => m.KeyboardShortcutsDialog), { ssr: false });
 
 const togglePalette = () => void nav.toggleOverlay("palette");
 

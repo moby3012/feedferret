@@ -19,6 +19,7 @@ import {
   watchOfflineSession,
 } from "./session";
 import { requestPersistentStorage } from "./storage";
+import { warmShellChunks } from "./warm-chunks";
 import { claimSession, clearIfSessionCurrent, getUsage, markVerified, readSession, type OfflineScope } from "./store";
 import { networkDeps, reconcileReadLater } from "./sync";
 import { checkServerSession, type ServerSession } from "./verify";
@@ -50,6 +51,7 @@ export function OfflineSync({ userId }: { userId: string }) {
   const running = useRef(false);
   const rerun = useRef(false);
   const alive = useRef(true);
+  const chunksWarmed = useRef(false);
   const left = useRef(false);
   const lastRun = useRef(0);
   const continueTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -106,6 +108,11 @@ export function OfflineSync({ userId }: { userId: string }) {
     const stopped = () => controller.signal.aborted || !alive.current || !isOnline() || getOfflineScope()?.gen !== scope.gen;
     try {
       if ((await verify.current(scope)) !== "ok") return;
+      // Lazy shell chunks must be in the SW cache before the connection drops (they are not needed to read, only to navigate).
+      if (!chunksWarmed.current) {
+        chunksWarmed.current = true;
+        await warmShellChunks();
+      }
       const result = await reconcileReadLater(scope, networkDeps(stopped, controller.signal));
       const usage = await getUsage(userId);
       if (!result.failed && usage.count > 0) requestPersistentStorage();
