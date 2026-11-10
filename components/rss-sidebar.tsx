@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { SubscribeBookmarklet } from "@/components/subscribe-bookmarklet";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { FeedSource } from "@/lib/rss-data";
@@ -212,13 +213,17 @@ export function RssSidebar({
   initialWebpageUrl,
 }: RssSidebarProps) {
   const t = useTranslations();
+  const locale = useLocale();
   const router = useRouter();
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [newFeedCategoryId, setNewFeedCategoryId] = useState<string>("none");
   const [isAddingFeed, setIsAddingFeed] = useState(false);
-  const [discoveredFeeds, setDiscoveredFeeds] = useState<{ url: string; title: string; type: string }[]>([]);
+  const [discoveredFeeds, setDiscoveredFeeds] = useState<{ url: string; title: string; type: string; kind?: string }[]>([]);
+  // "topic" = the input was a plain phrase; the list holds news/search feeds to pick from.
+  const [discoveryMode, setDiscoveryMode] = useState<"url" | "topic">("url");
+  const [autoDiscoverUrl, setAutoDiscoverUrl] = useState<string | null>(null);
   const [discoveryMessage, setDiscoveryMessage] = useState<string | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [importingPack, setImportingPack] = useState<string | null>(null);
@@ -271,8 +276,13 @@ export function RssSidebar({
     if (defaultOpenAddFeed) {
       setIsAddFeedOpen(true);
       if (initialWebpageUrl) {
-        setAddFeedTab("more");
+        // Share-target / bookmarklet: land on "By URL" and resolve the page
+        // right away (platform rules → feed discovery → RSSHub radar). The
+        // "From web page" builder under "More sources" is still pre-filled.
+        setAddFeedTab("url");
         setMoreSource("webpage");
+        setNewFeedUrl(initialWebpageUrl);
+        setAutoDiscoverUrl(initialWebpageUrl);
       }
     }
   }, [defaultOpenAddFeed, initialWebpageUrl]);
@@ -300,19 +310,20 @@ export function RssSidebar({
     loadStarterPacks();
   }, []);
 
-  const handleDiscover = async () => {
-    if (!newFeedUrl) return;
+  const handleDiscover = async (value: string = newFeedUrl) => {
+    if (!value.trim()) return;
     setIsDiscovering(true);
     setDiscoveredFeeds([]);
     setDiscoveryMessage(null);
     try {
-      const params = new URLSearchParams({ url: newFeedUrl });
+      const params = new URLSearchParams({ url: value.trim(), locale });
       const res = await fetch(`/api/discover?${params}`);
       const data = await res.json();
       const feeds = data.feeds || [];
+      setDiscoveryMode(data.mode === "topic" ? "topic" : "url");
       setDiscoveredFeeds(feeds);
       if (feeds.length === 0) {
-        const message = "No RSS/Atom feed found at that site.";
+        const message = t("sidebar.resolverNoResult");
         setDiscoveryMessage(message);
         toast.info(message);
       }
@@ -323,6 +334,13 @@ export function RssSidebar({
       setIsDiscovering(false);
     }
   };
+
+  useEffect(() => {
+    if (!autoDiscoverUrl) return;
+    setAutoDiscoverUrl(null);
+    void handleDiscover(autoDiscoverUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDiscoverUrl]);
 
   const handleAddFeed = async (url: string, title?: string) => {
     setIsAddingFeed(true);
@@ -1004,7 +1022,7 @@ export function RssSidebar({
                   variant="ghost"
                   className="h-9 px-2 shrink-0"
                   disabled={!newFeedUrl || isDiscovering}
-                  onClick={handleDiscover}
+                  onClick={() => handleDiscover()}
                   title={t("sidebar.findFeedsAtUrl")}
                 >
                   <Compass className={`w-4 h-4 ${isDiscovering ? "animate-spin" : ""}`} />
@@ -1013,11 +1031,18 @@ export function RssSidebar({
 
               {discoveredFeeds.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground font-medium px-0.5">{t("sidebar.foundFeeds")}</p>
+                  <p className="text-xs text-muted-foreground font-medium px-0.5">
+                    {discoveryMode === "topic" ? t("sidebar.topicFeeds") : t("sidebar.foundFeeds")}
+                  </p>
                   {discoveredFeeds.map((f) => (
                     <div key={f.url} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
                       <Rss className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       <span className="text-xs truncate flex-1 text-foreground" title={f.url}>{f.title}</span>
+                      {f.kind && (
+                        <span className="shrink-0 rounded-chip bg-background px-1.5 py-0.5 text-caption text-muted-foreground">
+                          {t.has(`sidebar.kinds.${f.kind}`) ? t(`sidebar.kinds.${f.kind}`) : f.kind}
+                        </span>
+                      )}
                       <Button
                         size="sm"
                         className="h-6 px-2 text-xs shrink-0"
@@ -1075,6 +1100,9 @@ export function RssSidebar({
                 >
                   {t("common.cancel")}
                 </Button>
+              </div>
+              <div className="border-t border-border/40 pt-3">
+                <SubscribeBookmarklet />
               </div>
             </TabsContent>
 

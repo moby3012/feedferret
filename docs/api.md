@@ -591,6 +591,39 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ---
 
+## Feed discovery
+
+### `GET /api/v1/discover?q=<input>[&locale=de]`
+
+Resolves whatever a user would paste into "Add feed" into subscribable feed
+candidates (`read` scope). `q` may be a page URL, an `@handle`
+(`@user@mastodon.social`, `@channel` for YouTube), `r/subreddit`, or a plain
+topic phrase. `url=` is accepted as an alias.
+
+Resolution order: deterministic platform rules (YouTube, Reddit, Mastodon,
+Bluesky, GitHub, GitLab, arXiv, Substack, Medium, Hacker News, Lobsters, Apple
+Podcasts, Steam, Letterboxd — no scraping, no AI) → HTML feed discovery + common
+feed paths (`/feed`, `/index.xml`, `/feed.json`, `/rss/`, `/?feed=rss2`, …) →
+bundled RSSHub Radar rules (only when an RSSHub instance is configured; each
+route is validated first). A plain phrase returns Google News (localized via
+`locale`), Bing News, Hacker News and arXiv search feeds instead.
+
+```json
+{
+  "mode": "url",
+  "feeds": [
+    { "url": "https://github.com/vercel/next.js/releases.atom", "title": "GitHub · vercel/next.js",
+      "type": "atom", "source": "resolver", "kind": "releases", "platform": "github", "confidence": 0.95 }
+  ]
+}
+```
+
+`mode` is `"url"` or `"topic"`. Pass a candidate's `url` to `POST /api/v1/feeds`.
+The MCP tool `feedferret.discover_feeds` (`query`, optional `locale`) returns the
+same payload.
+
+---
+
 ## Connectors
 
 ### `GET /api/v1/connectors`

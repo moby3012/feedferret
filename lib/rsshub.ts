@@ -13,6 +13,7 @@ import { decryptIfValue } from "@/lib/crypto";
 import { assertSafeFetchUrl } from "@/lib/ssrf";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { type AiConfig, runAiPrompt } from "@/lib/ai-summary";
+import { matchRadarRules, type RadarMatch } from "@/lib/rsshub-radar-rules";
 
 export type RsshubConfig = { baseUrl: string; apiKey: string | null };
 
@@ -153,13 +154,43 @@ export function parseRouteProposal(rawText: string): string | null {
 
 export type RouteProposalResult = { route: string; validation: RsshubValidation };
 
+/** Radar matches for a pasted URL (empty for non-URL descriptions). Pure, <1 ms. */
+export function radarRoutesFor(sourceDescription: string): RadarMatch[] {
+  const trimmed = sourceDescription.trim();
+  if (!/^https?:\/\/\S+$/i.test(trimmed)) return [];
+  return matchRadarRules(trimmed);
+}
+
 /**
- * Orchestrator: asks the AI to propose an RSSHub route for `sourceDescription`
- * (typically a pasted platform URL, e.g. a YouTube channel page), then
- * validates that proposal through a real RSSHub round-trip before it would
- * ever be trusted — mirrors M4's "AI proposes, engine validates" pattern.
- * Returns `null` if the AI can't confidently propose a route at all; a
- * proposal that fails validation is still returned (with the reason) so the
+ * Deterministic stage that runs BEFORE any LLM call: matches the pasted URL
+ * against the bundled RSSHub Radar rules and validates the resulting routes
+ * against the configured instance (at most `maxCandidates`, in parallel).
+ * Returns the first route that validates; if rules matched but none validated,
+ * returns the first failure (so the caller can show why, instead of an LLM
+ * guessing a route RSSHub will reject for the same reason). `null` = no rule
+ * matched, fall through to the AI proposal.
+ */
+export async function resolveRadarRoute(
+  sourceDescription: string,
+  rsshubConfig: RsshubConfig,
+  maxCandidates = 4,
+): Promise<RouteProposalResult | null> {
+  const matches = radarRoutesFor(sourceDescription).slice(0, maxCandidates);
+  if (!matches.length) return null;
+  const results = await Promise.all(
+    matches.map(async (m) => ({ route: m.route, validation: await validateRsshubRoute(rsshubConfig, m.route) })),
+  );
+  return results.find((r) => r.validation.ok) ?? results[0];
+}
+
+/**
+ * Orchestrator: resolves an RSSHub route for `sourceDescription` (typically a
+ * pasted platform URL, e.g. a YouTube channel page). Bundled Radar rules are
+ * tried first (deterministic, free, no hallucinated routes); only on a miss
+ * does the AI propose one, which is then validated through a real RSSHub
+ * round-trip before it would ever be trusted — mirrors M4's "AI proposes,
+ * engine validates" pattern. Returns `null` if neither can determine a route;
+ * a proposal that fails validation is still returned (with the reason) so the
  * caller can show it rather than a silent failure.
  */
 export async function proposeAndValidateRoute(
@@ -167,6 +198,9 @@ export async function proposeAndValidateRoute(
   aiConfig: AiConfig,
   rsshubConfig: RsshubConfig,
 ): Promise<RouteProposalResult | null> {
+  const fromRules = await resolveRadarRoute(sourceDescription, rsshubConfig);
+  if (fromRules) return fromRules;
+
   const prompt = buildRoutePrompt(sourceDescription);
   const raw = await runAiPrompt(prompt, aiConfig, 200);
   const route = parseRouteProposal(raw);

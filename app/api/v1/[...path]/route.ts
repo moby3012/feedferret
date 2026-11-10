@@ -15,6 +15,7 @@ import { logger } from "@/lib/logger";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
 import { isRsshubConfigured, getRsshubConfig, buildRsshubRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
+import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
@@ -473,6 +474,20 @@ async function syncOneFeed(user: ApiUser, feedId: string) {
   return NextResponse.json(result);
 }
 
+// GET /api/v1/discover?q=<url | @handle | r/sub | topic phrase>[&locale=de]
+// Resolves whatever was pasted into feed candidates: platform rules (YouTube,
+// Reddit, GitHub, …), HTML feed discovery, RSSHub Radar rules (if RSSHub is
+// configured), or — for a plain phrase — news/search feeds to pick from.
+async function discoverFeedCandidates(_user: ApiUser, request: Request) {
+  const params = new URL(request.url).searchParams;
+  const query = (params.get("q") ?? params.get("url") ?? "").trim();
+  if (!query) return apiError("q (or url) is required", 400);
+  if (query.length > 2000) return apiError("q is too long", 400);
+  const locale = params.get("locale")?.slice(0, 10) || null;
+  const result = await discoverFeeds(query, { locale });
+  return NextResponse.json({ mode: result.mode, feeds: result.feeds });
+}
+
 async function listConnectors(_user: ApiUser) {
   // Server-level integrations an admin may have configured. These gate the
   // platform/monitor add-feed paths; exposing them lets an automation or LLM
@@ -890,6 +905,7 @@ function openApiSpec(request: Request) {
       "/api/v1/saved-searches/{id}": { patch: { summary: "Update saved search" }, delete: { summary: "Delete saved search" } },
       "/api/v1/saved-searches/{id}/share": { post: { summary: "Enable/disable public saved-search sharing" } },
       "/api/v1/opml": { get: { summary: "Export OPML" }, post: { summary: "Import OPML" } },
+      "/api/v1/discover": { get: { summary: "Resolve a URL, @handle, subreddit/channel shorthand or plain topic phrase into feed candidates (q=…, optional locale=de)" } },
       "/api/v1/connectors": { get: { summary: "List server-configured connectors (RSSHub, changedetection.io) and whether each is available" } },
       "/api/v1/connectors/rsshub/feeds": { post: { summary: "Create a feed from an RSSHub route path (validated against the configured RSSHub instance)" } },
       "/api/v1/connectors/changedetection/feeds": { post: { summary: "Create a changedetection.io watch for a URL and add it as a feed (empty until the watch has run twice)" } },
@@ -1009,6 +1025,8 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
       else res = apiError("Not found", 404);
     } else if (path[0] === "stats" && path.length === 1 && method === "GET") {
       res = await getStats(user);
+    } else if (path[0] === "discover" && path.length === 1 && method === "GET") {
+      res = await discoverFeedCandidates(user, request);
     } else if (path[0] === "connectors") {
       if (method === "GET" && path.length === 1) res = await listConnectors(user);
       else if (method === "POST" && path.length === 3 && path[1] === "rsshub" && path[2] === "feeds") { const se = scopeError(user, "write"); if (se) res = se; else res = await createRsshubFeed(user, request); }
