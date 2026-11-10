@@ -22,6 +22,8 @@ import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, bui
 import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactWebhookConfigs } from "@/lib/webhooks";
+import { AI_OPERATOR_DELETE_ERROR, ruleHasAiDeleteConflict } from "@/lib/rule-ai-operators";
+import { parseRuleActions } from "@/lib/auto-read-rules";
 
 const ARTICLE_INCLUDE = {
   feed: { select: { id: true, name: true, url: true, icon: true, category: { select: { id: true, name: true } } } },
@@ -714,6 +716,7 @@ async function createRule(user: ApiUser, request: Request) {
   const query = allowedString(body?.query);
   if (!name || !query) return apiError("name and query are required", 400);
   const actions = Array.isArray(body?.actions) ? body.actions.filter((a: unknown) => typeof a === "string") : null;
+  if (ruleHasAiDeleteConflict(query, actions ?? ["mark_read"])) return apiError(AI_OPERATOR_DELETE_ERROR, 422);
 
   let webhookConfigsJson: string | null = null;
   if (body?.webhookConfigs !== undefined) {
@@ -758,6 +761,13 @@ async function patchRule(user: ApiUser, ruleId: string, request: Request) {
   if (body.enabled !== undefined) data.enabled = Boolean(body.enabled);
   const nextActions = Array.isArray(body.actions) ? body.actions.filter((a: unknown) => typeof a === "string") : null;
   if (nextActions) data.actions = JSON.stringify(nextActions);
+  if (data.query !== undefined || nextActions) {
+    const current = await db.autoReadRule.findFirst({ where: { id: ruleId, userId: user.id } });
+    if (!current) return apiError("Rule not found", 404);
+    if (ruleHasAiDeleteConflict(data.query ?? current.query, nextActions ?? parseRuleActions(current))) {
+      return apiError(AI_OPERATOR_DELETE_ERROR, 422);
+    }
+  }
   if (body.webhookConfigs !== undefined) {
     const { configs, valid } = sanitizeWebhookConfigs(body.webhookConfigs);
     if (!valid) return apiError("Each webhook needs a valid http(s) URL", 400);

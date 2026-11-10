@@ -1030,7 +1030,8 @@
       "migrating": "Migrating…",
       "legacyAlertsFound": "{count, plural, one {# legacy keyword alert found} other {# legacy keyword alerts found}}",
       "alertsAndRulesMerged": "Alerts and rules have been merged. Convert your alerts into rules to manage them here.",
-      "removeSpoilerOnDeleteLabel": "Remove spoiler flag from all flagged articles when this rule is deleted"
+      "removeSpoilerOnDeleteLabel": "Remove spoiler flag from all flagged articles when this rule is deleted",
+      "aiOperatorDeleteBlocked": "Rules that use is:sponsored, is:clickbait or entity: rely on AI detection and can be wrong, so they cannot delete articles. Pick a different action or remove that operator."
     },
     "alerts": {
       "keywordAlerts": "Keyword alerts",

@@ -129,6 +129,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { cn } from "@/lib/utils";
+import { ruleHasAiDeleteConflict } from "@/lib/rule-ai-operators";
 
 type ActionCatalogItem = { value: string; label: string; group: "article" | "labels" | "notify" | "webhook"; };
 
@@ -1915,6 +1916,9 @@ export function FeedManagement({
                             catalog={catalogForTrigger(buildActionCatalog(labels, t, notificationChannels), newRuleTrigger)}
                             labels={labels}
                           />
+                          {newRuleTrigger === "article" && ruleHasAiDeleteConflict(newRuleQuery, newRuleActions) && (
+                            <p role="alert" className="text-xs text-destructive mt-1">{t("rules.aiOperatorDeleteBlocked")}</p>
+                          )}
                           {newRuleActions.includes("mark_spoiler") && (
                             <label htmlFor="new-rule-remove-spoiler-checkbox" className="flex items-center gap-2 cursor-pointer select-none mt-1">
                               <Checkbox
@@ -1976,6 +1980,7 @@ export function FeedManagement({
                             !newRuleName.trim() ||
                             (newRuleTrigger === "article" && !newRuleQuery.trim()) ||
                             newRuleActions.length === 0 ||
+                            (newRuleTrigger === "article" && ruleHasAiDeleteConflict(newRuleQuery, newRuleActions)) ||
                             createAutoReadRule.isPending
                           }
                           onClick={() =>
@@ -2264,6 +2269,9 @@ export function FeedManagement({
                                     catalog={catalogForTrigger(catalog, editRuleTrigger)}
                                     labels={labels}
                                   />
+                                  {editRuleTrigger === "article" && ruleHasAiDeleteConflict(editRuleQuery, editRuleActions) && (
+                                    <p role="alert" className="text-xs text-destructive mt-1">{t("rules.aiOperatorDeleteBlocked")}</p>
+                                  )}
                                   {editRuleActions.includes("mark_spoiler") && (
                                     <label htmlFor="edit-rule-remove-spoiler-checkbox" className="flex items-center gap-2 cursor-pointer select-none mt-1">
                                       <Checkbox
@@ -2291,6 +2299,7 @@ export function FeedManagement({
                                       !editRuleName.trim() ||
                                       (editRuleTrigger === "article" && !editRuleQuery.trim()) ||
                                       editRuleActions.length === 0 ||
+                                      (editRuleTrigger === "article" && ruleHasAiDeleteConflict(editRuleQuery, editRuleActions)) ||
                                       updateAutoReadRule.isPending
                                     }
                                     onClick={() =>

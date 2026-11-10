@@ -28,6 +28,8 @@ import { decryptIfValue } from "@/lib/crypto";
 import type { AiProvider } from "@/lib/ai-summary";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
+import { AI_OPERATOR_DELETE_ERROR, ruleHasAiDeleteConflict } from "@/lib/rule-ai-operators";
+import { parseRuleActions } from "@/lib/auto-read-rules";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-fetch";
 
@@ -1177,6 +1179,7 @@ export async function createAutoReadRule(data: {
     const rawList = data.actions && data.actions.length > 0 ? data.actions : (data.action ? [data.action] : []);
     const list = filterActionsForTrigger(trigger, rawList);
     if (list.length === 0) throw new Error("At least one supported action is required");
+    if (ruleHasAiDeleteConflict(data.query, list)) throw new Error(AI_OPERATOR_DELETE_ERROR);
     const { primary, serialized } = normalizeRuleActions(list);
 
     const { configs, valid } = sanitizeWebhookConfigs(data.webhookConfigs);
@@ -1222,7 +1225,7 @@ export async function updateAutoReadRule(
 
     const existing = await db.autoReadRule.findFirst({
         where: { id: ruleId, userId: session.user.id },
-        select: { trigger: true },
+        select: { trigger: true, query: true, action: true, actions: true },
     });
     if (!existing) throw new Error("Rule not found");
 
@@ -1262,6 +1265,14 @@ export async function updateAutoReadRule(
     if (data.removeSpoilerOnDelete !== undefined) {
         patch.removeSpoilerOnDelete = !!data.removeSpoilerOnDelete;
     }
+
+    // Validate the rule as it will be stored (patched fields over the existing row).
+    const effectiveQuery = typeof patch.query === "string" ? patch.query : existing.query;
+    const effectiveActions =
+        typeof patch.action === "string" || nextActions
+            ? nextActions ?? [String(patch.action)]
+            : parseRuleActions(existing);
+    if (ruleHasAiDeleteConflict(effectiveQuery, effectiveActions)) throw new Error(AI_OPERATOR_DELETE_ERROR);
 
     const rule = await db.autoReadRule.update({
         where: { id: ruleId, userId: session.user.id },

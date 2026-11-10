@@ -104,6 +104,8 @@ const enrichmentSchema = z.object({
   cleanTitle: z.string().nullable().catch(null).optional(),
 });
 
+const ENRICHMENT_KEYS = ["tags", "entities", "sponsored", "clickbait", "cleanTitle"] as const;
+
 export interface Enrichment {
   tags: string[];
   entities: string[];
@@ -178,6 +180,9 @@ export function parseAiEnrichment(rawText: string): Enrichment {
   }
   if (!parsed || typeof parsed !== "object") return { ...EMPTY_ENRICHMENT };
 
+  // A JSON object is only the v2 answer if it carries at least one known key —
+  // `{}` or `{"foo":1}` is garbage, not "the model found nothing".
+  if (!ENRICHMENT_KEYS.some((key) => Object.prototype.hasOwnProperty.call(parsed, key))) return { ...EMPTY_ENRICHMENT };
   const result = enrichmentSchema.safeParse(parsed);
   if (!result.success) return { ...EMPTY_ENRICHMENT };
   const data = result.data;
@@ -198,21 +203,56 @@ export function parseAiEnrichment(rawText: string): Enrichment {
   };
 }
 
+/** How much of the body the clean title may be grounded in (the model saw ≤ 4000 chars; the lede is what matters). */
+const GROUNDING_BODY_CHARS = 1_000;
+/** ≥ this share of the clean title's content words must occur in the title or body lede. */
+const MIN_GROUNDED_SHARE = 0.5;
+/** The clean title may not be longer than this multiple of the original title. */
+const MAX_CLEAN_TITLE_LENGTH_FACTOR = 1.5;
+
+const URL_LIKE = /(?:https?:\/\/|www\.)\S+|\b[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.(?:com|org|net|de|io|info|biz|ru|cn|tk|xyz|top|shop|link|click)\b/iu;
+const EMAIL_LIKE = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+const NUMBER_LIKE = /\d+(?:[.,/-]\d+)*/g;
+
+/** Digit runs of a text with separators dropped ("1,5" → "15", "030-123" → "030123"). */
+function numberKeys(text: string): string[] {
+  return (text.match(NUMBER_LIKE) ?? []).map((n) => n.replace(/\D/g, ""));
+}
+
 /**
- * Hallucination guard for `cleanTitle`, which needs the real title: dropped when
- * identical to it (nothing was cleaned) or when it shares no content word with it
- * (the model made something up). Returns the title to store, or null.
+ * Hallucination / injection guard for `cleanTitle`. The model's neutral title is
+ * shown instead of the publisher's, so it is only accepted when it demonstrably
+ * restates the article:
+ *  - not identical to the real title (nothing was cleaned);
+ *  - at most ~1.5× the real title's length;
+ *  - no URL, e-mail or phone-like/numeric string that the source (title + first
+ *    ~1000 chars of body) does not itself contain — blocks injected scam text
+ *    such as "Konto gesperrt – Passwort hier bestätigen";
+ *  - ≥ 50 % of its content words occur in the real title or the body lede.
+ * `body` is plain text or HTML of the article. Returns the title to store, or null.
  */
-export function acceptCleanTitle(cleanTitle: string | null, title: string): string | null {
+export function acceptCleanTitle(cleanTitle: string | null, title: string, body = ""): string | null {
   if (!cleanTitle) return null;
   const candidate = cleanTitle.trim();
   if (!candidate) return null;
-  if (candidate.toLowerCase() === (title ?? "").trim().toLowerCase()) return null;
-  const original = contentTokens(title ?? "");
-  for (const token of contentTokens(candidate)) {
-    if (original.has(token)) return candidate;
+  const original = (title ?? "").trim();
+  if (candidate.toLowerCase() === original.toLowerCase()) return null;
+  if (!original || candidate.length > Math.ceil(original.length * MAX_CLEAN_TITLE_LENGTH_FACTOR)) return null;
+
+  const lede = stripHtml(body ?? "").slice(0, GROUNDING_BODY_CHARS);
+  const source = `${original} ${lede}`;
+  if (URL_LIKE.test(candidate) && !URL_LIKE.test(source)) return null;
+  if (EMAIL_LIKE.test(candidate) && !EMAIL_LIKE.test(source)) return null;
+  const sourceNumbers = numberKeys(source);
+  for (const key of numberKeys(candidate)) {
+    if (!sourceNumbers.some((known) => known.includes(key))) return null;
   }
-  return null;
+
+  const grounding = contentTokens(source);
+  const candidateTokens = [...contentTokens(candidate)];
+  if (candidateTokens.length === 0) return null;
+  const grounded = candidateTokens.filter((token) => grounding.has(token)).length;
+  return grounded / candidateTokens.length >= MIN_GROUNDED_SHARE ? candidate : null;
 }
 
 /**
@@ -227,7 +267,7 @@ export function parseAiTags(rawText: string): string[] {
 /**
  * One AI call → tags + entities + sponsored/clickbait/cleanTitle. Never throws on
  * malformed output (callers decide how to handle a rejected AI call).
- * `cleanTitle` is already checked against `title`.
+ * `cleanTitle` is already checked against `title` and the article lede.
  */
 export async function generateEnrichment(
   title: string,
@@ -238,7 +278,7 @@ export async function generateEnrichment(
   const prompt = buildTaggingPrompt(title, content, existingLabels);
   const raw = await runAiPrompt(prompt, config, TAGGING_MAX_TOKENS);
   const enrichment = parseAiEnrichment(raw);
-  return { ...enrichment, cleanTitle: acceptCleanTitle(enrichment.cleanTitle, title) };
+  return { ...enrichment, cleanTitle: acceptCleanTitle(enrichment.cleanTitle, title, content) };
 }
 
 /** Proposes up to `MAX_TAGS` tag names for an article. Never throws on malformed output — callers decide how to handle a rejected AI call. */

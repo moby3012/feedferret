@@ -13,15 +13,28 @@
 
 const MAX_TEXT_CHARS = 300;
 
-// Words that only mean "this is an ad" when used as a label.
-const LABEL_WORDS =
-  "anzeige|werbung|sponsored|gesponsert(?:er (?:beitrag|inhalt))?|promoted|bezahlte[rn]? (?:beitrag|inhalt|partnerschaft)|in kooperation mit|mit freundlicher unterst[üu]tzung";
+// Words that only mean "this is an ad" when used as a label. Split by how
+// ambiguous they are in news headlines:
+//  - AMBIGUOUS: "Anzeige" (also: criminal complaint) / "Werbung" (ordinary noun) /
+//    "in Kooperation mit …" (ordinary phrase). Only count as [bracketed], as a
+//    trailing "– Anzeige" label, or as a leading label followed by a `|`
+//    separator ("Anzeige | …") or standing alone. The leading `Anzeige: …` and
+//    `Werbung – …` forms are deliberately NOT matched: "Anzeige: Polizei ermittelt"
+//    and "Werbung – Neue Regeln für Influencer" are ordinary headlines.
+//  - CLEAR: unambiguous ad words; may also lead with a colon ("Sponsored: …").
+const AMBIGUOUS_LABELS = "anzeige|werbung|in kooperation mit|mit freundlicher unterst[üu]tzung";
+const CLEAR_LABELS =
+  "sponsored|gesponsert(?:er (?:beitrag|inhalt))?|promoted|bezahlte[rn]? (?:beitrag|inhalt|partnerschaft)";
+const LABEL_WORDS = `${AMBIGUOUS_LABELS}|${CLEAR_LABELS}`;
 const SEP_CHARS = "[|–—\\-/·•]";
 
 // [Anzeige] / (Werbung) anywhere
 const BRACKETED = new RegExp(`[\\[(]\\s*(?:${LABEL_WORDS})\\s*[\\])]`, "i");
-// "Anzeige: …", "Werbung | …" at the very start
-const LEADING = new RegExp(`^\\W{0,3}(?:${LABEL_WORDS})(?::|\\s+${SEP_CHARS}|\\s*$)`, "i");
+// "Anzeige | …" / lone "Werbung" at the very start; "Sponsored: …" / "Sponsored | …" for clear words
+const LEADING = new RegExp(
+  `^\\W{0,3}(?:(?:${AMBIGUOUS_LABELS})(?:\\s+\\|(?:\\s|$)|\\s*$)|(?:${CLEAR_LABELS})(?::|\\s+${SEP_CHARS}|\\s*$))`,
+  "i",
+);
 // "… | Anzeige", "… – Sponsored" at the very end
 const TRAILING = new RegExp(`\\s${SEP_CHARS}\\s*(?:${LABEL_WORDS})\\W{0,3}$`, "i");
 
@@ -45,7 +58,35 @@ const STRONG_MARKERS = new RegExp(
 );
 
 const SPONSORED_REL = /\brel\s*=\s*["'][^"']*\bsponsored\b[^"']*["']/i;
-const SPONSORED_UTM = /[?&]utm_medium=(?:sponsored|affiliate|paid|advertorial|native|partner)(?:[&#"'\s]|$)/i;
+// Only mediums that actually say "paid". `native`/`partner`/`advertorial` are
+// too common in organic campaign tagging to flag on.
+const SPONSORED_UTM = /[?&]utm_medium=(?:sponsored|affiliate|paid)(?:[&#"'\s]|$)/i;
+const ANCHOR_TAG = /<a\b[^>]*>/gi;
+const MAX_HTML_SCAN_CHARS = 60_000;
+
+/** A rel="sponsored" link within this many leading HTML chars counts on its own (an intro-level disclosure). */
+const LEAD_HTML_CHARS = 600;
+/** Beyond the lead, this many sponsored links are needed ("a link roundup of affiliate deals"). */
+const MIN_SPONSORED_LINKS = 2;
+
+/**
+ * Body-link rule (documented so it can be tuned in one place): an article is NOT
+ * flagged for a single affiliate link buried in a long text — that is normal for
+ * ordinary journalism. It is flagged when a sponsored link (rel="sponsored" or
+ * utm_medium=sponsored|affiliate|paid) sits in the first {@link LEAD_HTML_CHARS}
+ * characters of the body, or when there are ≥ {@link MIN_SPONSORED_LINKS} of them.
+ */
+function hasSponsoredLinks(html: string): boolean {
+  const scanned = html.slice(0, MAX_HTML_SCAN_CHARS);
+  let count = 0;
+  for (const match of scanned.matchAll(ANCHOR_TAG)) {
+    if (!SPONSORED_REL.test(match[0]) && !SPONSORED_UTM.test(match[0])) continue;
+    if ((match.index ?? 0) < LEAD_HTML_CHARS) return true;
+    count += 1;
+    if (count >= MIN_SPONSORED_LINKS) return true;
+  }
+  return false;
+}
 
 function hasLabel(text: string): boolean {
   return LEADING.test(text) || BRACKETED.test(text) || TRAILING.test(text) || STRONG_MARKERS.test(text);
@@ -57,7 +98,7 @@ export interface HeuristicInput {
   text?: string | null;
   /** Article link (checked for utm_medium=sponsored|affiliate|paid). */
   link?: string | null;
-  /** Sanitized or raw HTML; checked for rel="sponsored" and utm_medium links. */
+  /** Sanitized or raw HTML; sponsored links are checked per {@link hasSponsoredLinks}. */
   html?: string | null;
 }
 
@@ -66,7 +107,7 @@ export function detectSponsored(input: HeuristicInput): boolean {
   const text = (input.text ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_TEXT_CHARS);
   if (hasLabel(title) || (text && hasLabel(text))) return true;
   if (input.link && SPONSORED_UTM.test(input.link)) return true;
-  if (input.html && (SPONSORED_REL.test(input.html) || SPONSORED_UTM.test(input.html))) return true;
+  if (input.html && hasSponsoredLinks(input.html)) return true;
   return false;
 }
 

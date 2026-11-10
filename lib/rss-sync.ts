@@ -323,10 +323,19 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
     return { upsertedIds, createdArticleIds };
 }
 
+export interface SyncFeedOptions {
+    /**
+     * The caller runs a full `applyAutoReadRules` pass after syncing (see
+     * syncUserFeeds), so the extra per-feed pass over freshly AI-enriched
+     * articles would only evaluate (and fire) the same rules twice.
+     */
+    deferAutoReadRules?: boolean;
+}
+
 /**
  * Syncs a single feed for a specific user.
  */
-export async function syncFeed(userId: string, feedId: string) {
+export async function syncFeed(userId: string, feedId: string, options: SyncFeedOptions = {}) {
     const feed = await db.feed.findUnique({
         where: { id: feedId, userId },
         include: { user: { select: { autoMuteFailingFeedsAfter: true } } },
@@ -464,7 +473,9 @@ export async function syncFeed(userId: string, feedId: string) {
 
         if (newArticleIds.length > 0) {
             await autoSummarizeNewArticles(userId, newArticleIds);
-            await autoTagNewArticles(userId, newArticleIds);
+            await autoTagNewArticles(userId, newArticleIds, {
+                applyRules: !options.deferAutoReadRules,
+            });
         }
 
         if (newArticleIds.length > 0) {
@@ -762,7 +773,12 @@ async function autoSummarizeNewArticles(userId: string, articleIds: string[]) {
     }
 }
 
-export async function autoTagNewArticles(userId: string, articleIds: string[]) {
+export async function autoTagNewArticles(
+    userId: string,
+    articleIds: string[],
+    options: { applyRules?: boolean } = {},
+) {
+    const applyRules = options.applyRules ?? true;
     const user = await db.user.findUnique({
         where: { id: userId },
         select: {
@@ -820,6 +836,7 @@ export async function autoTagNewArticles(userId: string, articleIds: string[]) {
             // ONE AI call per article: tags + entities + sponsored/clickbait/cleanTitle.
             const enrichment = await generateEnrichment(article.title, content, aiConfig, existingLabelNames);
             const tagNames = enrichment.tags;
+            let labelsAdded = false;
 
             for (const name of tagNames) {
                 let label = await db.label.findFirst({ where: { userId, name } });
@@ -834,12 +851,17 @@ export async function autoTagNewArticles(userId: string, articleIds: string[]) {
                     await db.articleLabel.create({
                         data: { articleId: article.id, labelId: label.id, userId },
                     });
+                    labelsAdded = true;
                 }
             }
 
-            // aiTaggedAt + enrichment in one write that keeps Article.updatedAt
-            // (GReader ot/nt clock) — see lib/article-enrichment.ts.
-            const result = await persistEnrichment(article.id, userId, enrichment);
+            // aiTaggedAt + enrichment in one write. Keeps Article.updatedAt (GReader
+            // ot/nt clock) unless NEW label assignments were created: those are
+            // visible to GReader clients as category tags and must be picked up
+            // by incremental syncs — see lib/article-enrichment.ts.
+            const result = await persistEnrichment(article.id, userId, enrichment, {
+                bumpUpdatedAt: labelsAdded,
+            });
             if (!result.written) {
                 logger.warn("[rss-sync] enrichment write skipped (article changed concurrently):", article.id);
             } else if (enrichment.structured) {
@@ -850,7 +872,7 @@ export async function autoTagNewArticles(userId: string, articleIds: string[]) {
         }
     }
 
-    if (enrichedIds.length > 0) {
+    if (applyRules && enrichedIds.length > 0) {
         await applyAutoReadRules(userId, { onlyArticleIds: enrichedIds }).catch((e) =>
             logger.error("[rss-sync] applyAutoReadRules after enrichment failed:", e),
         );
@@ -914,7 +936,7 @@ export async function syncUserFeeds(userId: string) {
                     return { feed: feed.url, success: true, skipped: true, count: 0 };
                 }
 
-                const res = await syncFeed(feed.userId, feed.id);
+                const res = await syncFeed(feed.userId, feed.id, { deferAutoReadRules: true });
                 return { feed: feed.url, ...res };
             }),
         );

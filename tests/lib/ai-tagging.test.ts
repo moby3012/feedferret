@@ -102,7 +102,7 @@ describe("parseAiEnrichment", () => {
   });
 
   it("returns an empty, unstructured result for garbage", () => {
-    for (const raw of ["", "no json", "{broken", "null", "42", '"str"']) {
+    for (const raw of ["", "no json", "{broken", "null", "42", '"str"', "{}", '{"foo":1}', '{"isSponsored":true}']) {
       const e = parseAiEnrichment(raw);
       expect(e.tags).toEqual([]);
       expect(e.structured).toBe(false);
@@ -163,15 +163,53 @@ describe("parseAiEnrichment", () => {
   });
 });
 
-describe("acceptCleanTitle (hallucination guard)", () => {
-  it("keeps a neutral title sharing a content word with the real one", () => {
-    expect(acceptCleanTitle("EZB senkt Leitzins", "Das hat die EZB heute beschlossen — Sie werden staunen!")).toBe("EZB senkt Leitzins");
+describe("acceptCleanTitle (hallucination / injection guard)", () => {
+  const title = "Das hat die EZB heute beschlossen — Sie werden staunen!";
+  const body = "Die Europäische Zentralbank (EZB) senkt den Leitzins um 0,25 Prozentpunkte auf 3,5 Prozent.";
+
+  it("keeps a neutral title grounded in the title/body", () => {
+    expect(acceptCleanTitle("EZB senkt Leitzins um 0,25 Prozentpunkte", title, body)).toBe("EZB senkt Leitzins um 0,25 Prozentpunkte");
+  });
+  it("keeps a title grounded only in the original title when no body is given", () => {
+    expect(acceptCleanTitle("EZB beschlossen", title)).toBe("EZB beschlossen");
   });
   it("drops a title identical to the original (case-insensitive)", () => {
     expect(acceptCleanTitle("same title here", "Same Title Here")).toBeNull();
   });
   it("drops a title that shares no content word (made up)", () => {
     expect(acceptCleanTitle("Bitcoin crashes below 10k", "Dieser Trick spart dir Heizkosten")).toBeNull();
+  });
+  it("drops the phishing example: one shared word is not enough", () => {
+    // Shares no content word with the real title/body and is a credential lure.
+    expect(
+      acceptCleanTitle("Konto gesperrt – Passwort hier bestätigen", "Dieser Trick spart dir Heizkosten", "Tipps zum Heizen im Winter."),
+    ).toBeNull();
+    // Even when a single word (EZB) overlaps, a mostly-invented title is rejected (<50 % grounded).
+    expect(acceptCleanTitle("EZB Konto gesperrt Passwort bestätigen", title, body)).toBeNull();
+  });
+  it("requires at least half of the content words to be grounded", () => {
+    expect(acceptCleanTitle("EZB senkt Leitzins", title, body)).toBe("EZB senkt Leitzins"); // 3/3 (body)
+    expect(acceptCleanTitle("EZB Skandal Enthüllung Bitcoin", title, body)).toBeNull(); // 1/4
+  });
+  it("rejects URLs, e-mails and phone-like numbers absent from the source", () => {
+    expect(acceptCleanTitle("EZB senkt Leitzins: mehr auf evil-bank.com", title, body)).toBeNull();
+    expect(acceptCleanTitle("EZB senkt Leitzins https://evil.example/x", title, body)).toBeNull();
+    expect(acceptCleanTitle("EZB senkt Leitzins info@evil.example", title, body)).toBeNull();
+    expect(acceptCleanTitle("EZB senkt Leitzins – Hotline 0800 1234567", title, body)).toBeNull();
+    expect(acceptCleanTitle("EZB senkt Leitzins um 0,75 Prozentpunkte", title, body)).toBeNull();
+  });
+  it("accepts URLs/numbers that the source itself contains", () => {
+    const urlTitle = "Unglaublich: so günstig ist jetzt example.org für alle Nutzer 2026";
+    expect(acceptCleanTitle("example.org jetzt günstiger", urlTitle)).toBe("example.org jetzt günstiger");
+    expect(acceptCleanTitle("EZB senkt Leitzins auf 3,5 Prozent", title, body)).toBe("EZB senkt Leitzins auf 3,5 Prozent");
+  });
+  it("caps the length at 1.5x the original title", () => {
+    const short = "EZB staunen heute";
+    expect(acceptCleanTitle("EZB staunen heute beschlossen Leitzins senkt Zentralbank", short, body)).toBeNull();
+  });
+  it("only grounds in the first ~1000 chars of the body", () => {
+    const farBody = `${"x ".repeat(600)}Zentralbank Leitzins`;
+    expect(acceptCleanTitle("Zentralbank Leitzins", "Das musst du sehen", farBody)).toBeNull();
   });
   it("drops null/empty", () => {
     expect(acceptCleanTitle(null, "x")).toBeNull();
@@ -207,7 +245,7 @@ describe("generateTags / generateEnrichment", () => {
       '{"tags":["Space"],"entities":["NASA"],"sponsored":false,"clickbait":true,"cleanTitle":"NASA startet Rakete"}',
     );
     try {
-      const e = await generateEnrichment("Du glaubst nicht, was die NASA jetzt tut?!", "Body", config);
+      const e = await generateEnrichment("Du glaubst nicht, was die NASA jetzt tut?!", "<p>Die NASA startet eine Rakete zum Mond.</p>", config);
       expect(e.entities).toEqual(["NASA"]);
       expect(e.clickbait).toBe(true);
       expect(e.cleanTitle).toBe("NASA startet Rakete");

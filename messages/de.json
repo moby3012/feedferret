@@ -1030,7 +1030,8 @@
       "migrating": "Migration läuft…",
       "legacyAlertsFound": "{count, plural, one {# veralteter Stichwort-Alarm gefunden} other {# veraltete Stichwort-Alarme gefunden}}",
       "alertsAndRulesMerged": "Alarme und Regeln wurden zusammengeführt. Wandle deine Alarme in Regeln um, um sie hier zu verwalten.",
-      "removeSpoilerOnDeleteLabel": "Spoiler-Markierung von allen markierten Artikeln entfernen, wenn diese Regel gelöscht wird"
+      "removeSpoilerOnDeleteLabel": "Spoiler-Markierung von allen markierten Artikeln entfernen, wenn diese Regel gelöscht wird",
+      "aiOperatorDeleteBlocked": "Regeln mit is:sponsored, is:clickbait oder entity: stützen sich auf KI-Erkennung und können danebenliegen – deshalb können sie keine Artikel löschen. Wähle eine andere Aktion oder entferne den Operator."
     },
     "alerts": {
       "keywordAlerts": "Keyword-Alerts",

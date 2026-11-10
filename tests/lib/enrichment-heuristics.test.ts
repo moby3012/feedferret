@@ -4,21 +4,29 @@ import { computeHeuristicEnrichment, detectClickbait, detectSponsored } from "..
 describe("detectSponsored", () => {
   const positives: Array<[string, Parameters<typeof detectSponsored>[0]]> = [
     ["[Anzeige] prefix", { title: "[Anzeige] Die besten Laptops 2026" }],
-    ["Anzeige: prefix", { title: "Anzeige: Neue Matratzen im Test" }],
+    ["Anzeige | prefix", { title: "Anzeige | Neue Matratzen im Test" }],
     ["(Werbung) bracket", { title: "Neue Kopfhörer (Werbung)" }],
     ["trailing | Anzeige", { title: "Sommerurlaub günstig buchen | Anzeige" }],
     ["trailing – Sponsored", { title: "Best VPNs for travel – Sponsored" }],
+    ["trailing – Anzeige", { title: "Sommerurlaub günstig buchen – Anzeige" }],
     ["Sponsored: prefix", { title: "Sponsored: Why your team needs this tool" }],
     ["Sponsored Post", { title: "Sponsored post: Cloud backup that just works" }],
     ["advertorial", { title: "Advertorial: Wie Solardächer sich rechnen" }],
     ["Partnerinhalt", { title: "Partnerinhalt: Strom sparen leicht gemacht" }],
     ["unbezahlte Werbung", { title: "Mein Lieblingsrezept – unbezahlte Werbung" }],
-    ["body starts with Anzeige", { title: "Neue Schuhe", text: "Anzeige: Dieser Beitrag entstand in Zusammenarbeit" }],
+    ["body starts with Anzeige", { title: "Neue Schuhe", text: "Anzeige | Dieser Beitrag entstand in Zusammenarbeit" }],
     ["body bracket label", { title: "Gadgets", text: "Mehr dazu hier [Sponsored] und hier" }],
     ["affiliate links disclosure", { title: "Test", text: "Dieser Beitrag enthält Affiliate-Links." }],
-    ["rel=sponsored link", { title: "Review", html: '<p><a href="https://shop.example/x" rel="nofollow sponsored">kaufen</a></p>' }],
+    ["rel=sponsored link in the intro", { title: "Review", html: '<p><a href="https://shop.example/x" rel="nofollow sponsored">kaufen</a></p>' }],
+    [
+      "two rel=sponsored links in a long body",
+      {
+        title: "Roundup",
+        html: `<p>${"Text. ".repeat(300)}<a href="https://a.example" rel="sponsored">a</a> <a href="https://b.example" rel="sponsored">b</a></p>`,
+      },
+    ],
     ["utm_medium=affiliate link", { title: "Deals", link: "https://shop.example/a?utm_source=x&utm_medium=affiliate" }],
-    ["utm_medium=sponsored in body", { title: "Deals", html: '<a href="https://x.example/?utm_medium=sponsored&amp;a=1">x</a>' }],
+    ["utm_medium=paid link in the intro", { title: "Deals", html: '<a href="https://x.example/?utm_medium=paid&amp;a=1">x</a>' }],
   ];
   it.each(positives)("flags %s", (_name, input) => {
     expect(detectSponsored(input)).toBe(true);
@@ -38,6 +46,15 @@ describe("detectSponsored", () => {
     ["English headline", { title: "Apple unveils new MacBook with faster chip" }],
     ["utm_medium=email link", { title: "Newsletter", link: "https://x.example/?utm_medium=email" }],
     ["utm_medium=social link", { title: "Post", html: '<a href="https://x.example/?utm_medium=social">x</a>' }],
+    ["Anzeige: criminal complaint headline", { title: "Anzeige: Polizei ermittelt" }],
+    ["Werbung – news headline", { title: "Werbung – Neue Regeln für Influencer" }],
+    ["Anzeige: leading colon in body", { title: "Polizei", text: "Anzeige: Der Mann wurde gestern gefasst" }],
+    [
+      "single affiliate link buried in a long article",
+      { title: "Long read", html: `<p>${"Text. ".repeat(300)}<a href="https://shop.example" rel="sponsored">buy</a></p>` },
+    ],
+    ["utm_medium=native link", { title: "Post", html: '<a href="https://x.example/?utm_medium=native">x</a>' }],
+    ["utm_medium=partner link", { title: "Post", link: "https://x.example/?utm_medium=partner" }],
     ["rel=nofollow only", { title: "Link", html: '<a href="https://x.example" rel="nofollow noopener">x</a>' }],
     ["label word beyond 300 chars", { title: "Story", text: `${"Lorem ipsum dolor sit amet. ".repeat(14)}[Anzeige]` }],
     ["empty", { title: "" }],
