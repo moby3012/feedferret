@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from "crypto";
-import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { safeFetch, assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { urlForLog } from "@/lib/logger";
 
 export type WebhookConfig = {
@@ -232,13 +232,13 @@ export async function executeWebhookCall(
     const allowInternal = await isTrustedFeedFetchingAllowed();
     await assertSafeFetchUrl(url, { context: "Webhook", allowInternal });
 
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       redirect: "manual",
       method,
       headers,
       body,
       signal: AbortSignal.timeout(10_000),
-    });
+    }, { allowInternal: await isTrustedFeedFetchingAllowed() });
     return {
       ok: res.ok,
       status: res.status,

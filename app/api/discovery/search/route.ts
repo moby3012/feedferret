@@ -1,3 +1,4 @@
+import { safeFetch } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
@@ -120,7 +121,7 @@ export async function GET(request: Request) {
     const feedsearchUrl = `https://feedsearch.dev/api/v1/search?url=${encodeURIComponent(searchUrl)}`;
     logger.log("[discovery/search] querying feedsearch.dev:", feedsearchUrl);
 
-    const response = await fetch(feedsearchUrl, {
+    const response = await safeFetch(feedsearchUrl, {
       headers: {
         Accept: "application/json",
         "User-Agent": "FeedFerret/1.0 (RSS Reader; +https://github.com/feedferret)",

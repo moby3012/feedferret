@@ -349,25 +349,13 @@ async function fetchText(feed: FeedFetchConfig, accept: string): Promise<Conditi
     // feed URL, and fail the fetch (never fall back to a direct request) when it is unsafe.
     // Connector-host trust covers the feed URL only; it must not unlock an internal proxy.
     await assertSafeProxyUrl(String(http.CURLOPT_PROXY), { allowInternal: trustedInstance });
-    try {
-      const { ProxyAgent } = await import("undici");
-      (init as any).dispatcher = new ProxyAgent(String(http.CURLOPT_PROXY));
-    } catch (error) {
-      logger.warn("[feed-fetcher] proxy requested but undici ProxyAgent failed", error);
-    }
-  } else if (feed.sslVerify === false && !connector.trusted) {
-    // Never send the connector secret over unverified TLS: sslVerify=false is ignored
-    // for trusted connector requests.
-    try {
-      const { Agent } = await import("undici");
-      (init as any).dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
-    } catch (error) {
-      logger.warn("[feed-fetcher] sslVerify=false requested but undici Agent failed", error);
-    }
   }
 
   return fetchWithSsrfProtection(connector.url, init, {
     allowInternal,
+    proxy: http.CURLOPT_PROXY ? String(http.CURLOPT_PROXY) : undefined,
+    proxyAllowInternal: trustedInstance,
+    insecureTls: feed.sslVerify === false && !connector.trusted,
     redirectGuard,
     includeErrorBody: feed.includeErrorBody,
     context: "Feed fetch",

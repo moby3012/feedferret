@@ -1,7 +1,11 @@
 import dns from "dns/promises";
+import { fetch as undiciFetch } from "undici";
+import { isPrivateIp } from "./private-ip";
+export { isPrivateIp } from "./private-ip";
+import { dispatcherFor } from "./safe-dispatcher";
 import net from "net";
 import { db } from "@/lib/db";
-import { getImpitFetch, type FetchResponseLike } from "./impit-fetch";
+import { getPinnedImpitFetch, getImpitFetch, type FetchResponseLike } from "./impit-fetch";
 
 export type SsrfCheckOptions = {
   allowInternal?: boolean;
@@ -9,6 +13,9 @@ export type SsrfCheckOptions = {
 };
 
 export type SafeFetchTextOptions = SsrfCheckOptions & {
+  proxy?: string;
+  proxyAllowInternal?: boolean;
+  insecureTls?: boolean;
   maxBytes?: number;
   maxRedirects?: number;
   timeoutMs?: number;
@@ -42,61 +49,6 @@ export async function isTrustedFeedFetchingAllowed() {
     select: { allowInternalFeedUrls: true },
   });
   return settings?.allowInternalFeedUrls === true;
-}
-
-function isPrivateIpv4(ip: string) {
-  const parts = ip.split(".").map(Number);
-  const [a, b, c] = parts;
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    // TEST-NET-1 (RFC 5737) — reserved for documentation, never publicly
-    // routed. NOTE: this is 192.0.2.0/24, not all of 192.0.0.0/16 — the rest
-    // of that /16 (e.g. 192.0.78.0/23, allocated to Automattic/WordPress.com)
-    // is ordinary public space and must not be blocked here.
-    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
-    (a === 192 && b === 88 && c === 99) ||
-    (a === 198 && b === 51 && c === 100) ||
-    (a === 203 && b === 0 && c === 113) ||
-    (a === 198 && (b === 18 || b === 19)) ||
-    a >= 224
-  );
-}
-
-function isPrivateIpv6(ip: string) {
-  // URL canonicalization handles compressed and dotted IPv4-mapped literals.
-  let canonical: string;
-  try {
-    canonical = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
-  } catch {
-    // Zone IDs and unsupported literals must fail closed, never escape guards.
-    return true;
-  }
-  const halves = canonical.split("::");
-  const left = halves[0] ? halves[0].split(":") : [];
-  const right = halves[1] ? halves[1].split(":") : [];
-  const words = [...left, ...Array(8 - left.length - right.length).fill("0"), ...right].map(v => parseInt(v, 16));
-  if (words.slice(0, 5).every(v => v === 0) && words[5] === 0xffff) {
-    return isPrivateIpv4(`${words[6] >> 8}.${words[6] & 255}.${words[7] >> 8}.${words[7] & 255}`);
-  }
-  // Only global unicast 2000::/3, excluding special-purpose assignments.
-  // This also rejects NAT64 (64:ff9b::/96), ULA, site/link-local and multicast.
-  return (words[0] & 0xe000) !== 0x2000 ||
-    (words[0] === 0x2001 && (words[1] < 0x200 || words[1] === 0xdb8)) ||
-    words[0] === 0x2002 || (words[0] === 0x3fff && words[1] < 0x1000);
-}
-
-export function isPrivateIp(ip: string) {
-  const normalized = ip.replace(/^\[|\]$/g, "");
-  const version = net.isIP(normalized);
-  if (version === 4) return isPrivateIpv4(normalized);
-  if (version === 6) return isPrivateIpv6(normalized);
-  return true;
 }
 
 export async function assertSafeFetchUrl(rawUrl: string, options: SsrfCheckOptions = {}) {
@@ -221,26 +173,24 @@ export async function fetchWithSsrfProtection(
 ): Promise<ConditionalFetchResult> {
   const maxRedirects = options.maxRedirects ?? 10;
   const timeoutMs = options.timeoutMs ?? 30_000;
-  // Browser-fingerprint transport for "convert a web page" callers; plain
-  // fetch (unchanged behaviour) otherwise. Either way we drive redirects
-  // manually and re-validate every hop below, so SSRF protection is identical.
-  const doFetch: (url: string, init: RequestInit) => Promise<FetchResponseLike> =
-    options.impersonate ? getImpitFetch() ?? fetch : fetch;
-  let current = (await assertSafeFetchUrl(rawUrl, options)).toString();
+  let current = rawUrl;
 
   const headers = new Headers(init.headers);
+  let method = init.method;
+  let body = init.body;
 
   for (let redirect = 0; redirect <= maxRedirects; redirect++) {
-    await assertSafeFetchUrl(current, options);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await doFetch(current, {
+      const response = await safeFetch(current, {
         ...init,
         headers,
+        method,
+        body,
         redirect: "manual",
-        signal: controller.signal,
-      });
+        signal: init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal,
+      }, options);
 
       if (response.status >= 300 && response.status < 400 && response.headers.get("location")) {
         let next = (await assertSafeFetchUrl(new URL(response.headers.get("location")!, current).toString(), options)).toString();
@@ -250,10 +200,18 @@ export async function fetchWithSsrfProtection(
           next = (await assertSafeFetchUrl(allowed, options)).toString();
         }
         if (new URL(next).origin !== new URL(current).origin) {
-          headers.delete("authorization");
-          headers.delete("cookie");
-          headers.delete("proxy-authorization");
+          for (const name of [...headers.keys()]) {
+            if (!/^(accept.*|user-agent|if-.*)$/i.test(name)) headers.delete(name);
+          }
+          body = undefined;
         }
+        if (response.status === 303 || ([301, 302].includes(response.status) && method?.toUpperCase() === "POST")) {
+          method = "GET";
+          body = undefined;
+          headers.delete("content-type");
+          headers.delete("content-length");
+        }
+        await response.body?.cancel();
         current = next;
         continue;
       }
@@ -297,5 +255,27 @@ function urlWithoutQuery(rawUrl: string): string {
     return `${url.origin}${url.pathname}`;
   } catch {
     return "URL";
+  }
+}
+
+/** One hop only: callers must explicitly validate and authorize redirects. */
+export async function safeFetch(rawUrl: string, init: RequestInit = {}, options: SafeFetchTextOptions = {}): Promise<Response> {
+  const url = await assertSafeFetchUrl(rawUrl, options);
+  if (options.proxy) await assertSafeProxyUrl(options.proxy, { allowInternal: options.proxyAllowInternal ?? options.allowInternal });
+  // Never accept a caller-supplied dispatcher: it could bypass the socket lookup.
+  const { dispatcher: _ignored, ...request } = init as RequestInit & { dispatcher?: unknown };
+  void _ignored;
+  if (options.impersonate && url.protocol === "https:" && !options.proxy && !options.insecureTls) {
+    const impit = options.allowInternal ? getImpitFetch() : await getPinnedImpitFetch();
+    if (impit) return await impit(url.toString(), { ...request, redirect: "manual" }) as Response;
+  }
+  try {
+    return await undiciFetch(url, { ...request, redirect: "manual", dispatcher: dispatcherFor(options) } as Parameters<typeof undiciFetch>[1]) as unknown as Response;
+  } catch (error) {
+    const cause = (error as { cause?: { code?: string } })?.cause;
+    if (cause?.code === "ERR_SSRF_PRIVATE_IP") {
+      throw new Error(`${options.context || "Fetch"} hostname resolves to a private IP`, { cause });
+    }
+    throw error;
   }
 }

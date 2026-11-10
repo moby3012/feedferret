@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 vi.mock("@/lib/ssrf", () => ({
+  safeFetch: (url: string, init: RequestInit) => globalThis.fetch(url, init),
   assertSafeFetchUrl: vi.fn(async () => undefined),
   isTrustedFeedFetchingAllowed: vi.fn(async () => true),
 }));

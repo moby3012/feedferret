@@ -6,6 +6,16 @@ const config = [
   { ignores: [".claude/**", ".next/**"] },
   ...coreWebVitals,
   {
+    files: ["lib/**/*.{ts,tsx}", "app/api/**/*.{ts,tsx}"],
+    ignores: ["lib/ssrf.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", {
+        selector: "CallExpression[callee.name='fetch']",
+        message: "Outbound requests must use safeFetch/fetchWithSsrfProtection from lib/ssrf (socket DNS pinning).",
+      }],
+    },
+  },
+  {
     rules: {
       // react-hooks v5 (shipped with eslint-config-next 16) introduces stricter rules.
       // These patterns are used throughout the codebase for data-driven state initialization

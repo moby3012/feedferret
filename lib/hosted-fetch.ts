@@ -1,3 +1,4 @@
+import { safeFetch } from "@/lib/ssrf";
 // BYOK hosted-API connector (M7-T3, the last "heavy fetch" tier).
 //
 // For pages an active anti-bot challenge blocks even a real headless browser
@@ -73,7 +74,7 @@ async function fetchViaJinaDetailed(targetUrl: string, apiKey: string, timeoutMs
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`https://r.jina.ai/${targetUrl}`, {
+    const response = await safeFetch(`https://r.jina.ai/${targetUrl}`, {
       headers: {
         authorization: `Bearer ${apiKey}`,
         accept: "application/json",
@@ -118,7 +119,7 @@ async function fetchViaFirecrawlDetailed(
   try {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (apiKey) headers.authorization = `Bearer ${apiKey}`;
-    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+    const response = await safeFetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers,
       body: JSON.stringify({ url: targetUrl, formats: ["markdown"] }),

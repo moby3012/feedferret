@@ -8,7 +8,7 @@
 // An error before the first chunk falls back to the non-streaming
 // `runAiPrompt` once (some proxies / older Ollama builds refuse streaming);
 // auth errors do not (they would fail the same way).
-import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { safeFetch, assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { runAiPrompt, type AiConfig } from "@/lib/ai-summary";
 import { AiProviderError, codeForStatus } from "./errors";
 import { fakeStream, isFakeAiEnabled, type StreamPart } from "./fake";
@@ -123,7 +123,7 @@ export function anthropicParser() {
 // ─── Requests ───────────────────────────────────────────────────────────────
 
 async function postStream(provider: string, url: string, init: RequestInit): Promise<ReadableStream<Uint8Array>> {
-  const res = await fetch(url, { ...init, method: "POST" });
+  const res = await safeFetch(url, { ...init, method: "POST" }, { allowInternal: await isTrustedFeedFetchingAllowed() });
   if (!res.ok || !res.body) {
     await res.body?.cancel().catch(() => {});
     throw new AiProviderError(codeForStatus(res.status), res.status, `${provider} ${res.status}`);
