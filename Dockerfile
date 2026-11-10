@@ -57,6 +57,12 @@ RUN mkdir -p /app/data && touch /app/data/dev.db && chown -R nextjs:nodejs /app/
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Next's standalone file tracing can pick up prisma.config.ts from the project root.
+# The globally installed Prisma CLI would then auto-load it at startup and fail to
+# resolve "prisma/config" (not in the standalone node_modules), so `db push` in
+# start.sh aborts and the container never starts. start.sh passes the URL via --url,
+# so the runner must not contain this file.
+RUN rm -f ./prisma.config.ts ./prisma.config.js ./prisma.config.mjs
 # Copy Prisma schema and startup script
 # Note: prisma.config.ts is NOT copied here — the CLI receives the URL via --url flag in start.sh
 COPY --chown=nextjs:nodejs prisma ./prisma
