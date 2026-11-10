@@ -145,6 +145,15 @@ export const RATE_LIMITS = {
     prefix: "auth-signin",
   } satisfies RateLimitConfig,
 
+  // Auth: sign-out. Not a credential guess, so it must NEVER draw from the sign-in budget: a refused
+  // sign-out leaves the session cookie valid while the client has already wiped the device's offline
+  // data and told its other tabs it is gone. A loose cap only stops a request flood.
+  authSignOut: {
+    limit: 60,
+    windowSecs: 15 * 60,
+    prefix: "auth-signout",
+  } satisfies RateLimitConfig,
+
   // Auth: magic link / email verification requests — 3 per 10 minutes per IP
   authMagicLink: {
     limit: 3,
@@ -250,6 +259,14 @@ export function getClientIdentifier(
 
   // Fallback to unknown (still rate-limited globally)
   return "ip:unknown";
+}
+
+/** Which limiter guards a POST to the Auth.js route (`/api/auth/<action>/…`). */
+export function authRateLimitFor(pathname: string): RateLimitConfig {
+  const path = pathname.toLowerCase();
+  if (path.includes("sendverificationrequest") || path.includes("email")) return RATE_LIMITS.authMagicLink;
+  if (path.split("/").filter(Boolean)[2] === "signout") return RATE_LIMITS.authSignOut;
+  return RATE_LIMITS.authSignIn;
 }
 
 /**

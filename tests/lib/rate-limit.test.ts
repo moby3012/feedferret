@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { checkRateLimit, type RateLimitConfig } from "../../lib/rate-limit";
+import { authRateLimitFor, checkRateLimit, RATE_LIMITS, type RateLimitConfig } from "../../lib/rate-limit";
 
 const config: RateLimitConfig = { limit: 3, windowSecs: 60, prefix: "test" };
 
@@ -59,5 +59,30 @@ describe("checkRateLimit", () => {
     const resetSec = Math.floor(result.resetAt / 1000);
     expect(resetSec).toBeGreaterThanOrEqual(before + config.windowSecs - 1);
     expect(result.remaining).toBe(config.limit - 1);
+  });
+});
+
+describe("auth route limiters", () => {
+  it("routes sign-out to its own budget, sign-in and magic links keep theirs", () => {
+    expect(authRateLimitFor("/api/auth/signout")).toBe(RATE_LIMITS.authSignOut);
+    expect(authRateLimitFor("/api/auth/signout/")).toBe(RATE_LIMITS.authSignOut);
+    expect(authRateLimitFor("/api/auth/callback/credentials")).toBe(RATE_LIMITS.authSignIn);
+    expect(authRateLimitFor("/api/auth/signin/credentials")).toBe(RATE_LIMITS.authSignIn);
+    expect(authRateLimitFor("/api/auth/signin/email")).toBe(RATE_LIMITS.authMagicLink);
+    expect(authRateLimitFor("/api/auth/signin/sendverificationrequest")).toBe(RATE_LIMITS.authMagicLink);
+  });
+
+  it("an exhausted sign-in budget never refuses a sign-out (regression: a refused sign-out left the session alive)", () => {
+    const id = uid();
+    const signIn = authRateLimitFor("/api/auth/callback/credentials");
+    for (let i = 0; i < signIn.limit; i++) expect(checkRateLimit(id, signIn).success).toBe(true);
+    expect(checkRateLimit(id, signIn).success).toBe(false);
+    const signOut = authRateLimitFor("/api/auth/signout");
+    expect(signOut.prefix).not.toBe(signIn.prefix);
+    expect(checkRateLimit(id, signOut).success).toBe(true);
+    // …and sign-outs do not eat the sign-in budget either.
+    const other = uid();
+    for (let i = 0; i < signIn.limit; i++) checkRateLimit(other, signOut);
+    expect(checkRateLimit(other, signIn).remaining).toBe(signIn.limit - 1);
   });
 });
