@@ -45,15 +45,15 @@ orchestration `lib/import/freshrss-migration.ts`.
 | `frss:cssContentFilter` | `fullTextRemoveSelectors` | supported |
 | `frss:cssFullContentConditions` | `fullTextConditions` | stored, **not evaluated** — reported |
 | `frss:filtersActionRead`: plain word / `"phrase"` | literal keyword in `filtersActionRead` | supported (same title+body substring semantics) |
-| …: `intitle:` `intext:` `author:` `inurl:`, `-x`/`!x`, `OR`, quoted phrases | feed-scoped auto-read rule (mark read) | supported |
-| …: regex, `#tag`, parentheses, `date:`/`pubdate:`, `f:` `c:` `e:` `L:` `S:`, multi-word field values, negated phrases | — | **not imported, reported** (never translated partially) |
+| …: `intitle:` `intext:` `author:` `inurl:`, negated words `-x`/`!x`, `OR` between those terms | feed-scoped auto-read rule (mark read) | supported (exact, never looser) |
+| …: regex, `#tag`, parentheses, `date:`/`pubdate:`, `f:` `c:` `e:` `L:` `S:`, multi-word field values, negated phrases, plain words next to other terms (FeedFerret free text also matches author/link/feed name), any value containing `:` `"` `'` outside a single quoted phrase | — | **not imported, reported** (never translated partially or approximately) |
 | `frss:CURLOPT_COOKIE/HTTPHEADER/PROXY/POST/POSTFIELDS/USERAGENT/FOLLOWLOCATION/MAXREDIRS` | `httpOptions`, `customUserAgent` | supported for your own file; dropped for remote OPML |
 | `frss:CURLOPT_COOKIEFILE` | — | **not imported, reported** (path on the FreshRSS server) |
 | `frss:CURLOPT_PROXYTYPE` | `httpOptions` | stored; scheme comes from the proxy URL — reported |
 | `frss:opmlUrl` (dynamic category) | `Category.opmlUrl` | supported for your own file; not followed from remote OPML |
 | empty categories | categories | supported |
 | unknown `frss:*` attributes | `scraperConfig.extensions` | preserved, written back on export, reported |
-| article `guid`, link, title, author, body, `published`, `crawlTimeMsec` | `externalId`, link, title, author, sanitized `content`, `publishedAt`, `createdAt` | supported |
+| article `guid`, link, title, author, body, `published`, `crawlTimeMsec` | `externalId`, link, title, author, sanitized `content`, `publishedAt`, `createdAt` | supported. `createdAt` keeps the FreshRSS crawl time for **read and starred** articles; **unread** articles get the import time instead, so incremental sync clients (Google-Reader/Fever apps) that only ask for recently added items still receive them. Over-long guids (> 2 KB) are stored as a SHA-256 hash, titles are cut at 1 000 characters |
 | `…/state/com.google/read`, `…/starred` | `isRead`, `isStarred` | supported |
 | `user/-/label/<name>` | labels (created on demand) | supported |
 | `enclosure[]` | `enclosures`, media metadata | supported |
@@ -66,9 +66,17 @@ the most recent 50 entries; for full history use FreshRSS's CLI/DB export.
 
 ## Security
 
-- Uploads are read as a bounded stream (64 MB); ZIPs are read in memory only: ≤ 5 000
-  entries, ≤ 64 MB per entry, ≤ 256 MB total (enforced on real inflated output), ratio
-  cap, CRC checked, no encryption/ZIP64, traversal/absolute paths reject the archive.
+- Uploads are read as a bounded stream (64 MB); ZIPs are read in memory only, one entry
+  at a time (inflated, imported, released): ≤ 5 000 entries, ≤ 32 MB per entry, ≤ 256 MB
+  total (enforced on real inflated output), per-entry and whole-archive ratio cap
+  (declared total ÷ upload size ≤ 100), entries must not overlap, CRC checked, no
+  encryption/ZIP64, traversal/absolute paths reject the archive. At most 500 000 articles
+  per run; a file that would exceed it is reported and skipped.
+- Re-importing OPML only overwrites what the outline carries; names, descriptions,
+  priority, scraper config and HTTP options set locally are kept, and remote (dynamic
+  OPML) syncs never touch HTTP options of existing feeds.
+- The session endpoint (`POST /api/import/freshrss`) refuses cross-site requests
+  (`Sec-Fetch-Site` / `Origin`).
 - OPML: documents with `<!ENTITY>` or an internal DTD subset are rejected (XXE, billion
   laughs); ≤ 20 000 outlines, nesting ≤ 16, text ≤ 5 MB.
 - All writes are scoped to the signed-in user; article HTML is sanitized like synced content.

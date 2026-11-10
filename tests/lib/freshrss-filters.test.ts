@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translateFreshRssReadFilters } from "../../lib/import/frss-filters";
+import { tokenizeSearch } from "../../lib/search";
 import { articleMatchesContentFilter, parseContentFilterTerms } from "../../lib/feed-content-filter";
 
 const t = (raw: string) => translateFreshRssReadFilters(raw);
@@ -25,17 +26,49 @@ describe("translateFreshRssReadFilters", () => {
   });
 
   it("expresses a negated plain word as not-in-title AND not-in-content", () => {
-    expect(t("promo -crypto").ruleQueries).toEqual(["promo -intitle:crypto -intext:crypto"]);
+    expect(t("-crypto").ruleQueries).toEqual(["-intitle:crypto -intext:crypto"]);
+    expect(t("intitle:promo -crypto").ruleQueries).toEqual(["intitle:promo -intitle:crypto -intext:crypto"]);
   });
 
-  it("keeps OR and quoted phrases inside multi-term filters", () => {
-    expect(t('intitle:a OR author:b "two words"').ruleQueries).toEqual(['intitle:a OR author:b "two words"']);
+  it("keeps OR between field terms", () => {
+    expect(t("intitle:a OR author:b -spam").ruleQueries).toEqual(["intitle:a OR author:b -intitle:spam -intext:spam"]);
   });
 
-  it("flags multi-term plain words as slightly broader instead of silently importing them", () => {
+  it("does not translate plain words in a multi-term filter (FeedFerret free text also matches author/link/feed)", () => {
     const r = t("foo bar");
-    expect(r.ruleQueries).toEqual(["foo bar"]);
-    expect(r.adapted).toHaveLength(1);
+    expect(r.ruleQueries).toEqual([]);
+    expect(r.unsupported).toHaveLength(1);
+    expect(r.unsupported[0].reason).toMatch(/author, link and feed name/);
+    expect(t("intitle:a OR foo").ruleQueries).toEqual([]);
+  });
+
+  it.each([
+    ['"BBC News: live" sport', /author, link|':'/],
+    ["10:30 deal", /':'|author, link/],
+    ["'say \"hi\" now' x", /quote|author, link/],
+    ["-'say \"hi\"' x", /quote/],
+    ["-10:30 intitle:x", /':'/],
+    ["intitle:it's", /quote/],
+  ])("never emits a value FeedFerret's tokenizer would re-read: %s", (line, reason) => {
+    const r = t(line);
+    expect(r.keywordLines).toEqual([]);
+    expect(r.ruleQueries).toEqual([]);
+    expect(r.unsupported).toHaveLength(1);
+    expect(r.unsupported[0].reason).toMatch(reason);
+  });
+
+  it("every emitted rule query round-trips through the real search tokenizer term for term", () => {
+    for (const line of ["intitle:hiring", "author:bot -intitle:rust", "intitle:promo -crypto", "-spam -ads", "inurl:/jobs/2024 author:x OR intext:y"]) {
+      const q = t(line).ruleQueries[0];
+      expect(q, line).toBeTruthy();
+      for (const term of q.split(/\s+/).filter((x) => x !== "OR")) {
+        expect(tokenizeSearch(term)).toEqual([term]);
+      }
+    }
+  });
+
+  it("keeps a single quoted phrase with special characters as a literal keyword", () => {
+    expect(t('"BBC News: live"').keywordLines).toEqual(["BBC News: live"]);
   });
 
   it.each([

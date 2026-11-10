@@ -46,6 +46,8 @@ export interface FeedWriteData {
   htmlUrl: string | null;
   description: string | null;
   priority: string;
+  /** True when the outline carried a valid priority (otherwise `priority` is just the default). */
+  priorityGiven?: boolean;
   unicityCriteria: string;
   unicityCriteriaForced: boolean;
   scraperConfig: string | null;
@@ -77,6 +79,8 @@ export interface PlannedCategory {
 }
 
 export interface OpmlImportPlan {
+  /** Who produced the outlines; remote plans never touch HTTP options of existing feeds. */
+  trust?: ImportTrust;
   categories: PlannedCategory[];
   /** Feeds that sit outside any category. */
   feeds: PlannedFeed[];
@@ -192,6 +196,7 @@ export function mapOutlineToFeed(
     htmlUrl: outline.htmlUrl || null,
     description: outline.description || null,
     priority,
+    priorityGiven: priority !== "main" || extensions.priority === "main",
     unicityCriteria: extensions.unicityCriteria || "id",
     unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1",
     scraperConfig: stringifyNonEmpty(scraper),
@@ -233,9 +238,6 @@ export function mapOutlineToFeed(
     for (const { line, reason } of translation.unsupported) {
       issue("unsupported", "filter-untranslatable", "filtersActionRead", `${line} — ${reason}`);
     }
-    for (const { line, note } of translation.adapted) {
-      issue("adapted", "filter-broader-match", "filtersActionRead", `${line} — ${note}`);
-    }
     if (translation.ruleQueries.length) {
       const query = translation.ruleQueries.join(" OR ");
       if (query.length > MAX_SEARCH_QUERY) {
@@ -254,7 +256,7 @@ export function mapOutlineToFeed(
 
 export function planOpmlImport(outlines: OpmlOutline[], options: { trust?: ImportTrust } = {}): OpmlImportPlan {
   const trust = options.trust ?? "local";
-  const plan: OpmlImportPlan = { categories: [], feeds: [], issues: [], errors: [] };
+  const plan: OpmlImportPlan = { trust, categories: [], feeds: [], issues: [], errors: [] };
   const categoryByName = new Map<string, PlannedCategory>();
 
   const categoryNode = (name: string, opmlUrl: string | null, container: PlannedCategory[], key: string) => {
@@ -339,16 +341,22 @@ export async function applyOpmlImportPlan(
     else report.feedsAdded += 1;
 
     const d = feed.data;
+    // Creating a feed writes every field. Updating an existing feed writes only what the
+    // outline actually carries: a bare outline (or a remote dynamic-OPML sync) must not
+    // blank the name, description, priority, scraper config or HTTP options set locally.
+    // Remote syncs never touch httpOptions of an existing feed at all (cookies/proxy/headers
+    // are user-owned; a third-party list may not rewrite them).
+    const keep = existing !== null;
     const common = {
-      name: d.name,
+      ...(!keep || d.name ? { name: d.name } : {}),
       sourceType: d.sourceType,
-      htmlUrl: d.htmlUrl,
-      description: d.description,
-      priority: d.priority,
+      ...(!keep || d.htmlUrl ? { htmlUrl: d.htmlUrl } : {}),
+      ...(!keep || d.description ? { description: d.description } : {}),
+      ...(!keep || d.priorityGiven ? { priority: d.priority } : {}),
       unicityCriteria: d.unicityCriteria,
       unicityCriteriaForced: d.unicityCriteriaForced,
-      scraperConfig: d.scraperConfig,
-      httpOptions: d.httpOptions,
+      ...(!keep || d.scraperConfig !== null ? { scraperConfig: d.scraperConfig } : {}),
+      ...(!keep || (d.httpOptions !== null && plan.trust !== "remote") ? { httpOptions: d.httpOptions } : {}),
       ...(categoryId !== null || !existing ? { categoryId } : {}),
       ...(d.filtersActionRead !== undefined ? { filtersActionRead: d.filtersActionRead } : {}),
       ...(d.fullTextSelector !== undefined ? { fullTextSelector: d.fullTextSelector } : {}),
@@ -372,7 +380,7 @@ export async function applyOpmlImportPlan(
       await db.feed.update({ where: { id: existing.id }, data: { ...common, ...modeOnUpdate } });
       feedId = existing.id;
     } else {
-      const created = await db.feed.create({ data: { userId, url: feed.url, order, ...common, ...modeOnCreate } });
+      const created = await db.feed.create({ data: { userId, url: feed.url, order, ...common, name: d.name, ...modeOnCreate } });
       feedId = created.id;
     }
 

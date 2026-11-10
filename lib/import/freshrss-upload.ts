@@ -24,7 +24,7 @@ async function readBounded(request: Request, maxBytes: number): Promise<Buffer |
   if (!request.body) return fail("Empty upload", 400);
 
   const reader = request.body.getReader();
-  const chunks: Buffer[] = [];
+  const chunks: Uint8Array[] = [];
   let total = 0;
   for (;;) {
     const { done, value } = await reader.read();
@@ -34,7 +34,7 @@ async function readBounded(request: Request, maxBytes: number): Promise<Buffer |
       await reader.cancel().catch(() => undefined);
       return fail(`Upload too large (max ${Math.round(maxBytes / 1024 / 1024)} MB)`, 413);
     }
-    chunks.push(Buffer.from(value));
+    chunks.push(value);
   }
   if (total === 0) return fail("Empty upload", 400);
   return Buffer.concat(chunks, total);

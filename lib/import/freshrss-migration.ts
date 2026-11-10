@@ -20,6 +20,7 @@ import {
   FreshRssJsonError,
   type DryRunRow,
   importFreshRssArticles,
+  MAX_IMPORT_ITEMS_PER_RUN,
   mergeArticleReports,
   parseFreshRssArticleJson,
   type ArticleImportReport,
@@ -66,7 +67,14 @@ export class MigrationInputError extends Error {
   }
 }
 
-interface InputFile { name: string; data: Buffer }
+/**
+ * A not-yet-read input file. For a ZIP only the entry reference is kept; the bytes are
+ * inflated (and released again) one file at a time so peak memory is one entry, not the
+ * whole archive.
+ */
+interface InputFile { name: string; load: () => Buffer }
+
+const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 function looksLikeOpml(text: string): boolean {
   return /<opml[\s>]/i.test(text.slice(0, 4096)) || /<opml[\s>]/i.test(text);
@@ -100,7 +108,7 @@ function describeZipError(error: ZipError): string {
 export async function runFreshRssMigration(
   userId: string,
   upload: Buffer,
-  options: { dryRun?: boolean; limits?: ZipLimits; chunkSize?: number; onProgress?: (progress: MigrationProgress) => void } = {},
+  options: { dryRun?: boolean; limits?: ZipLimits; chunkSize?: number; maxItems?: number; onProgress?: (progress: MigrationProgress) => void } = {},
 ): Promise<FreshRssMigrationReport> {
   const dryRun = options.dryRun === true;
   const progress = new Map<string, MigrationProgress>();
@@ -120,7 +128,7 @@ export async function runFreshRssMigration(
     progress: [],
   };
 
-  // 1. Read the upload into named files (bounded).
+  // 1. Name the upload's files (bounded). ZIP entries stay compressed until processed.
   const opmlFiles: InputFile[] = [];
   const jsonFiles: InputFile[] = [];
 
@@ -132,42 +140,22 @@ export async function runFreshRssMigration(
       if (error instanceof ZipError) throw new MigrationInputError(describeZipError(error));
       throw error;
     }
-    const files = archive.entries.filter((entry) => !entry.isDirectory);
-    let index = 0;
-    for (const entry of files) {
-      emit({ phase: "read", file: entry.name, done: ++index, total: files.length });
+    for (const entry of archive.entries.filter((e) => !e.isDirectory)) {
       const kind = classify(entry.name);
       if (!kind) {
         report.files.push({ name: entry.name, kind: "skipped", status: "skipped", detail: "not an OPML or JSON file" });
         continue;
       }
-      try {
-        const data = archive.read(entry);
-        if (kind === "opml") {
-          if (!looksLikeOpml(data.toString("utf8"))) {
-            report.files.push({ name: entry.name, kind: "skipped", status: "skipped", detail: "XML file without an <opml> root" });
-            continue;
-          }
-          opmlFiles.push({ name: entry.name, data });
-        } else {
-          jsonFiles.push({ name: entry.name, data });
-        }
-      } catch (error) {
-        if (!(error instanceof ZipError)) throw error;
-        // Archive-wide limits abort the run; a single damaged entry is reported.
-        if (["archive-too-large", "entry-too-large", "ratio-exceeded"].includes(error.code)) throw new MigrationInputError(describeZipError(error));
-        report.files.push({ name: entry.name, kind: kind === "opml" ? "opml" : "articles", status: "error", detail: describeZipError(error) });
-        report.errors.push(`${entry.name}: ${describeZipError(error)}`);
-      }
+      (kind === "opml" ? opmlFiles : jsonFiles).push({ name: entry.name, load: () => archive.read(entry) });
     }
   } else {
-    const text = upload.toString("utf8").replace(/^﻿/, "").trimStart();
+    const text = upload.toString("utf8").replace(/^\ufeff/, "").trimStart();
     if (text.startsWith("<")) {
       report.source = "opml";
-      opmlFiles.push({ name: "feeds.opml", data: upload });
+      opmlFiles.push({ name: "feeds.opml", load: () => upload });
     } else if (text.startsWith("{")) {
       report.source = "json";
-      jsonFiles.push({ name: "articles.json", data: upload });
+      jsonFiles.push({ name: "articles.json", load: () => upload });
     } else {
       throw new MigrationInputError("Unrecognised file: expected the FreshRSS export ZIP, an OPML file or an article JSON file");
     }
@@ -181,10 +169,20 @@ export async function runFreshRssMigration(
   const plannedFeeds = new Map<string, { unicityCriteria: string }>();
   const dryRunLedger = new Map<string, DryRunRow>();
   opmlFiles.sort((a, b) => a.name.localeCompare(b.name));
+  let readIndex = 0;
+  const totalFiles = opmlFiles.length + jsonFiles.length;
   for (const file of opmlFiles) {
+    emit({ phase: "read", file: file.name, done: ++readIndex, total: totalFiles });
+    await yieldToEventLoop();
     try {
-      if (file.data.length > MAX_OPML_BYTES) throw new OpmlParseError(`OPML file too large (max ${MAX_OPML_BYTES / 1024 / 1024} MB)`);
-      const plan = planOpmlImport(await parseOpml(file.data.toString("utf8")), { trust: "local" });
+      const data = file.load();
+      if (data.length > MAX_OPML_BYTES) throw new OpmlParseError(`OPML file too large (max ${MAX_OPML_BYTES / 1024 / 1024} MB)`);
+      const text = data.toString("utf8");
+      if (!looksLikeOpml(text)) {
+        report.files.push({ name: file.name, kind: "skipped", status: "skipped", detail: "XML file without an <opml> root" });
+        continue;
+      }
+      const plan = planOpmlImport(await parseOpml(text), { trust: "local" });
       collectPlannedFeeds(plan, plannedFeeds);
       const opml = await applyOpmlImportPlan(userId, plan, {
         dryRun,
@@ -193,6 +191,11 @@ export async function runFreshRssMigration(
       report.opml = report.opml ? mergeOpmlReports(report.opml, opml) : opml;
       report.files.push({ name: file.name, kind: "opml", status: "ok", items: opml.feedsAdded + opml.feedsUpdated });
     } catch (error) {
+      if (error instanceof ZipError) {
+        report.files.push({ name: file.name, kind: "opml", status: "error", detail: describeZipError(error) });
+        report.errors.push(`${file.name}: ${describeZipError(error)}`);
+        continue;
+      }
       const message = error instanceof Error ? error.message : String(error);
       report.files.push({ name: file.name, kind: "opml", status: "error", detail: message });
       report.errors.push(`${file.name}: ${message}`);
@@ -202,9 +205,20 @@ export async function runFreshRssMigration(
   // 3. Articles: starred first, then per-feed files, each chunked + transactional.
   const rank = (name: string) => ((name.split("/").pop() ?? name).startsWith("starred_") ? 0 : 1);
   jsonFiles.sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
+  let totalItems = 0;
+  const maxItems = options.maxItems ?? MAX_IMPORT_ITEMS_PER_RUN;
   for (const file of jsonFiles) {
+    emit({ phase: "read", file: file.name, done: ++readIndex, total: totalFiles });
+    await yieldToEventLoop();
     try {
-      const { items } = parseFreshRssArticleJson(file.data.toString("utf8"));
+      // Inflate, parse and import this one file; nothing of it is kept afterwards.
+      const { items } = parseFreshRssArticleJson(file.load().toString("utf8"));
+      if (totalItems + items.length > maxItems) {
+        throw new FreshRssJsonError(
+          `Import limit reached: more than ${maxItems.toLocaleString("en-US")} articles in one run. This file (${items.length.toLocaleString("en-US")} items) was not imported; split the export and import it in several runs.`,
+        );
+      }
+      totalItems += items.length;
       const result = await importFreshRssArticles(userId, items, {
         dryRun,
         chunkSize: options.chunkSize,
@@ -216,10 +230,15 @@ export async function runFreshRssMigration(
       report.articles = report.articles ? mergeArticleReports(report.articles, result) : result;
       report.files.push({ name: file.name, kind: "articles", status: "ok", items: items.length });
     } catch (error) {
-      if (!(error instanceof FreshRssJsonError)) throw error;
-      report.files.push({ name: file.name, kind: "articles", status: "error", detail: error.message });
-      report.errors.push(`${file.name}: ${error.message}`);
+      if (!(error instanceof FreshRssJsonError) && !(error instanceof ZipError)) throw error;
+      const message = error instanceof ZipError ? describeZipError(error) : error.message;
+      report.files.push({ name: file.name, kind: "articles", status: "error", detail: message });
+      report.errors.push(`${file.name}: ${message}`);
     }
+  }
+
+  if (!report.files.some((f) => f.status !== "skipped")) {
+    throw new MigrationInputError("The archive contains no OPML or article JSON files");
   }
 
   report.issues = [...(report.opml?.issues ?? []), ...(report.articles?.issues ?? [])];

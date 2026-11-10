@@ -10,9 +10,15 @@
  *  - a line that is a single plain keyword or quoted phrase stays a literal
  *    keyword (identical semantics: title + body substring, case-insensitive);
  *  - a line made only of constructs FeedFerret's search can express exactly is
- *    emitted as a query for a feed-scoped auto-read rule;
+ *    emitted as a query for a feed-scoped auto-read rule. That means field terms
+ *    (`intitle:`, `intext:`, `author:`, `inurl:`) and negated words; the result is
+ *    never looser than the original, and every emitted value is checked to survive
+ *    FeedFerret's query tokenizer unchanged (no `:`, `"` or `'` in free text/quotes);
  *  - everything else is reported and NOT imported. A filter is never translated
- *    partially: a looser filter would mark articles read that FreshRSS kept.
+ *    partially or approximately: a looser filter would mark articles read that
+ *    FreshRSS kept. In particular plain words inside a multi-term filter are NOT
+ *    translated, because FeedFerret's free-text search also matches author, link,
+ *    feed name and labels whereas FreshRSS matches title and content only.
  */
 
 export interface FilterTranslation {
@@ -22,8 +28,15 @@ export interface FilterTranslation {
   ruleQueries: string[];
   /** Source lines that cannot be expressed; never imported. */
   unsupported: { line: string; reason: string }[];
-  /** Lines imported with a documented, slightly different semantic. */
-  adapted: { line: string; note: string }[];
+}
+
+/**
+ * FeedFerret's query tokenizer (lib/search.ts) treats `"…"`/`'…'` as phrase delimiters and
+ * the first `:` of a token as a field separator, so a value containing them is re-read as
+ * something broader or different. Such values are never emitted.
+ */
+function assertTokenizerSafe(value: string) {
+  if (/["']/.test(value)) throw new Unsupported("value contains a quote character that FeedFerret search would re-interpret");
 }
 
 type Term = { negated: boolean; field: string | null; value: string; quoted: boolean; regex: boolean };
@@ -92,7 +105,7 @@ function tokenize(line: string): Array<Term | "OR"> {
   return out;
 }
 
-function emitTerm(term: Term): { tokens: string[]; broadFreeText: boolean } {
+function emitTerm(term: Term): { tokens: string[] } {
   if (term.regex) throw new Unsupported("regular expressions are not supported");
   if (term.field && !SUPPORTED_FIELDS.has(term.field)) {
     throw new Unsupported(`'${term.field}:' filters have no FeedFerret equivalent`);
@@ -103,7 +116,8 @@ function emitTerm(term: Term): { tokens: string[]; broadFreeText: boolean } {
     if (/\s/.test(term.value)) {
       throw new Unsupported(`multi-word value for '${term.field}:' cannot be expressed in FeedFerret search`);
     }
-    return { tokens: [`${term.negated ? "-" : ""}${term.field}:${term.value}`], broadFreeText: false };
+    assertTokenizerSafe(term.value);
+    return { tokens: [`${term.negated ? "-" : ""}${term.field}:${term.value}`] };
   }
 
   // FeedFerret would read these as operators / field filters, not as plain text.
@@ -111,18 +125,22 @@ function emitTerm(term: Term): { tokens: string[]; broadFreeText: boolean } {
     throw new Unsupported("plain term would be read as a FeedFerret search operator");
   }
 
-  // Free text. FreshRSS matches title + content. A negated term is expressed as
-  // "not in title AND not in content"; a plain positive term is passed through.
-  if (term.negated) {
-    if (/\s/.test(term.value)) throw new Unsupported("negated phrases cannot be expressed in FeedFerret search");
-    return { tokens: [`-intitle:${term.value}`, `-intext:${term.value}`], broadFreeText: false };
+  // Free text. FreshRSS matches title + content. FeedFerret's free-text search additionally
+  // matches author, link, feed name and labels, so a positive word can only be translated
+  // when it is the line's single term (then it is a literal keyword, handled by the caller).
+  // A value with `:` would be read as `field:value`, quotes would be re-tokenised.
+  if (term.value.includes(":")) throw new Unsupported("value contains ':' which FeedFerret search would read as a field filter");
+  assertTokenizerSafe(term.value);
+  if (!term.negated) {
+    throw new Unsupported("plain words in a multi-term filter would also match author, link and feed name in FeedFerret");
   }
-  if (/\s/.test(term.value)) return { tokens: [`"${term.value}"`], broadFreeText: true };
-  return { tokens: [term.value], broadFreeText: true };
+  if (/\s/.test(term.value)) throw new Unsupported("negated phrases cannot be expressed in FeedFerret search");
+  // "not in title AND not in content" is exactly FreshRSS' negation.
+  return { tokens: [`-intitle:${term.value}`, `-intext:${term.value}`] };
 }
 
 export function translateFreshRssReadFilters(raw: string | null | undefined): FilterTranslation {
-  const result: FilterTranslation = { keywordLines: [], ruleQueries: [], unsupported: [], adapted: [] };
+  const result: FilterTranslation = { keywordLines: [], ruleQueries: [], unsupported: [] };
   if (!raw) return result;
 
   const seen = new Set<string>();
@@ -147,25 +165,17 @@ export function translateFreshRssReadFilters(raw: string | null | undefined): Fi
       if (tokens[0] === "OR" || tokens[tokens.length - 1] === "OR") throw new Unsupported("dangling OR");
 
       const groups: string[][] = [[]];
-      let broad = false;
       for (const token of tokens) {
         if (token === "OR") {
           groups.push([]);
           continue;
         }
         const emitted = emitTerm(token);
-        broad ||= emitted.broadFreeText;
         groups[groups.length - 1].push(...emitted.tokens);
       }
       if (groups.some((group) => group.length === 0)) throw new Unsupported("empty OR branch");
 
       result.ruleQueries.push(groups.map((group) => group.join(" ")).join(" OR "));
-      if (broad) {
-        result.adapted.push({
-          line,
-          note: "plain words in a multi-term filter also match author, link and feed name in FeedFerret",
-        });
-      }
     } catch (error) {
       if (!(error instanceof Unsupported)) throw error;
       result.unsupported.push({ line, reason: error.message });

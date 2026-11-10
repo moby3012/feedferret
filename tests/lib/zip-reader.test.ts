@@ -122,6 +122,31 @@ describe("ZipArchive — hostile archives", () => {
     expect(codeOf(() => archive.read(archive.entries[0]))).toMatch(/corrupt|size-mismatch/);
   });
 
+  it("rejects entries that share bytes (one deflate stream referenced by many entries)", () => {
+    const zip = buildZip([{ name: "a.json", data: "x".repeat(2000) }, { name: "b.json", data: "y" }]);
+    // Point b.json's central record at a.json's local header.
+    const second = zip.indexOf(Buffer.from("b.json"), zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02])) + 46) - 46;
+    expect(zip.readUInt32LE(second)).toBe(0x02014b50);
+    zip.writeUInt32LE(0, second + 42);
+    expect(codeOf(() => new ZipArchive(zip))).toBe("overlapping-entries");
+  });
+
+  it("rejects a data range that runs into the next entry", () => {
+    const zip = buildZip([{ name: "a.json", data: "x".repeat(2000) }, { name: "b.json", data: "y" }]);
+    const a = zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    zip.writeUInt32LE(zip.readUInt32LE(a + 20) + 20, a + 20);
+    expect(codeOf(() => new ZipArchive(zip))).toBe("overlapping-entries");
+  });
+
+  it("caps the declared total against the real upload size even when every entry is below the ratio floor", () => {
+    // 300 entries x 1 MB declared, all pointing at one tiny deflate stream would be caught by the
+    // overlap rule; here distinct tiny entries still claim far more than the archive could hold.
+    const zeros = Buffer.alloc(1024 * 1024);
+    const entries = Array.from({ length: 30 }, (_, i) => ({ name: `f${i}.json`, data: zeros }));
+    const limits: ZipLimits = { ...small, maxEntries: 100, maxEntryBytes: 2 * 1024 * 1024, maxTotalBytes: 512 * 1024 * 1024, ratioFloorBytes: 2 * 1024 * 1024 };
+    expect(codeOf(() => new ZipArchive(buildZip(entries), limits))).toBe("ratio-exceeded");
+  });
+
   it("ships sane defaults", () => {
     expect(DEFAULT_ZIP_LIMITS.maxEntries).toBeGreaterThanOrEqual(1000);
     expect(DEFAULT_ZIP_LIMITS.maxTotalBytes).toBeLessThanOrEqual(512 * 1024 * 1024);

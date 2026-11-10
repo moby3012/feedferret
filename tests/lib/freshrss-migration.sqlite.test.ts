@@ -444,11 +444,26 @@ describe("upload endpoint: hostile input", () => {
     const liar = await post(buildZip([{ name: "starred.json", data: Buffer.alloc(2 * 1024 * 1024, 0x20), declaredSize: 50 }, okFile]));
     const liarBody = await liar.json();
     expect(liar.status).toBe(200);
-    expect(liarBody.files[0]).toMatchObject({ status: "error" });
-    expect(liarBody.files[0].detail).toMatch(/size-mismatch/);
+    const liarFile = liarBody.files.find((f: { name: string }) => f.name === "starred.json");
+    expect(liarFile).toMatchObject({ status: "error" });
+    expect(liarFile.detail).toMatch(/size-mismatch/);
 
     const crc = await post(buildZip([{ name: "starred.json", data: STARRED, crc: 7 }, okFile]));
-    expect((await crc.json()).files[0].detail).toMatch(/crc-mismatch/);
+    expect((await crc.json()).files.find((f: { name: string }) => f.name === "starred.json").detail).toMatch(/crc-mismatch/);
+  });
+
+  it("refuses cross-site session uploads (CSRF) but accepts same-origin and header-less clients", async () => {
+    const userId = await newUser();
+    const send = (headers: Record<string, string>) =>
+      uploadRoute(new Request("https://example.test/api/import/freshrss?dryRun=1", { method: "POST", body: asBody(OPML), headers }));
+    expect((await send({ "sec-fetch-site": "cross-site" })).status).toBe(403);
+    expect((await send({ "sec-fetch-site": "same-site" })).status).toBe(403);
+    expect((await send({ origin: "https://evil.example" })).status).toBe(403);
+    expect((await send({ origin: "not a url" })).status).toBe(403);
+    expect((await send({ "sec-fetch-site": "same-origin" })).status).toBe(200);
+    expect((await send({ origin: "https://example.test" })).status).toBe(200);
+    expect((await send({})).status).toBe(200);
+    expect(await state.db.feed.count({ where: { userId } })).toBe(0);
   });
 
   it("returns 400 for garbage, empty bodies and archives without importable files", async () => {
@@ -495,5 +510,114 @@ describe("upload endpoint: hostile input", () => {
     const second = await post(small, other);
     expect(second.status).toBe(409);
     expect((await first).status).toBe(200);
+  });
+});
+
+// ── Review hardening ─────────────────────────────────────────────────────────
+
+const frssItem = (over: Record<string, unknown> = {}) => ({
+  id: "tag:google.com,2005:reader/item/0001",
+  guid: "g-1",
+  crawlTimeMsec: "1577836800000", // 2020-01-01
+  published: 1577836800,
+  title: "Hello",
+  canonical: [{ href: "https://rh.example.com/a" }],
+  categories: ["user/-/state/com.google/unread"],
+  origin: { streamId: "feed/1", title: "RH", feedUrl: "https://rh.example.com/feed.xml" },
+  content: { content: "<p>x</p>" },
+  ...over,
+});
+const itemsJson = (...items: unknown[]) => JSON.stringify({ id: "user/x/state/org.freshrss/starred", items });
+const withFeed = async (userId: string, data: Record<string, unknown> = {}) =>
+  state.db.feed.create({ data: { userId, url: "https://rh.example.com/feed.xml", name: "RH", ...data } as never });
+
+describe("review hardening: limits, update semantics, identity", () => {
+  it("caps the number of items per run and reports a clear error for the file that exceeds it", async () => {
+    const userId = await newUser();
+    const three = itemsJson(frssItem({ guid: "a1" }), frssItem({ guid: "a2" }), frssItem({ guid: "a3" }));
+    const more = itemsJson(frssItem({ guid: "b1" }), frssItem({ guid: "b2" }));
+    const report = await runFreshRssMigration(userId, buildZip([{ name: "feed_a.json", data: three }, { name: "feed_b.json", data: more }]), { maxItems: 4 });
+    expect(report.files.map((f) => [f.name, f.status])).toEqual([["feed_a.json", "ok"], ["feed_b.json", "error"]]);
+    expect(report.errors.join("\n")).toMatch(/Import limit reached: more than 4 articles/);
+    expect(await state.db.article.count({ where: { userId } })).toBe(3);
+  });
+
+  it("an update from an OPML outline never blanks locally set name/description/priority/scraper/http options", async () => {
+    const userId = await newUser();
+    const feed = await withFeed(userId, { name: "Mine", description: "my notes", priority: "important", scraperConfig: '{"a":1}', httpOptions: '{"CURLOPT_COOKIE":"s=1"}' });
+    const bare = '<?xml version="1.0"?><opml version="2.0"><head/><body><outline text="Mine" type="rss" xmlUrl="https://rh.example.com/feed.xml"/></body></opml>';
+    await runFreshRssMigration(userId, Buffer.from(bare));
+    expect(await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).toMatchObject({
+      name: "Mine", description: "my notes", priority: "important", scraperConfig: '{"a":1}', httpOptions: '{"CURLOPT_COOKIE":"s=1"}',
+    });
+
+    const carrying = '<?xml version="1.0"?><opml version="2.0" xmlns:frss="https://freshrss.org/opml"><head/><body><outline text="Mine2" type="rss" xmlUrl="https://rh.example.com/feed.xml" description="new" frss:priority="category" frss:CURLOPT_MAXREDIRS="3"/></body></opml>';
+    await runFreshRssMigration(userId, Buffer.from(carrying));
+    expect(await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).toMatchObject({ name: "Mine2", description: "new", priority: "category" });
+    expect((await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).httpOptions).toContain("CURLOPT_MAXREDIRS");
+  });
+
+  it("a remote (dynamic OPML) sync never touches httpOptions of an existing feed", async () => {
+    const userId = await newUser();
+    const feed = await withFeed(userId, { httpOptions: '{"CURLOPT_COOKIE":"s=1"}' });
+    const remote = '<?xml version="1.0"?><opml version="2.0" xmlns:frss="https://freshrss.org/opml"><head/><body><outline text="RH" type="rss" xmlUrl="https://rh.example.com/feed.xml" frss:CURLOPT_MAXREDIRS="3"/></body></opml>';
+    const { parseOpml } = await import("../../lib/opml");
+    const { planOpmlImport, applyOpmlImportPlan } = await import("../../lib/import/opml-import");
+    await applyOpmlImportPlan(userId, planOpmlImport(await parseOpml(remote), { trust: "remote" }));
+    expect((await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).httpOptions).toBe('{"CURLOPT_COOKIE":"s=1"}');
+  });
+
+  it("two guids sharing one link stay two articles; a guid-less item still merges into a row that never had an external id", async () => {
+    const userId = await newUser();
+    const feed = await withFeed(userId);
+    const report = await runFreshRssMigration(userId, Buffer.from(itemsJson(frssItem({ guid: "g-A" }), frssItem({ guid: "g-B" }))));
+    expect(report.articles!.counts.created).toBe(2);
+    expect(await state.db.article.count({ where: { feedId: feed.id } })).toBe(2);
+
+    // A row without external id (older sync) for a different link; a guid-less item with that link merges.
+    const legacy = await state.db.article.create({ data: { userId, feedId: feed.id, title: "Legacy", link: "https://rh.example.com/legacy", dedupeKey: "legacy-key", contentHash: "h", content: "", excerpt: "", publishedAt: new Date(1577836800000) } as never });
+    const merged = await runFreshRssMigration(userId, Buffer.from(itemsJson(frssItem({ guid: undefined, id: undefined, canonical: [{ href: "https://rh.example.com/legacy" }], categories: ["user/-/state/com.google/starred"] }))));
+    expect(merged.articles!.counts).toMatchObject({ created: 0, updated: 1 });
+    expect((await state.db.article.findUniqueOrThrow({ where: { id: legacy.id } })).isStarred).toBe(true);
+  });
+
+  it("several items resolving to one existing article produce one update and no duplicate label links", async () => {
+    const userId = await newUser();
+    const feed = await withFeed(userId, { unicityCriteria: "link" });
+    const existing = await state.db.article.create({ data: { userId, feedId: feed.id, title: "E", link: "https://rh.example.com/a", externalId: "G", dedupeKey: buildDedupeKey({ unicityCriteria: "link" }, { link: "https://rh.example.com/a" }, "G"), contentHash: "h", content: "", excerpt: "", publishedAt: new Date(1577836800000) } as never });
+    const labelled = ["user/-/label/X", "user/-/state/com.google/read"];
+    const report = await runFreshRssMigration(userId, Buffer.from(itemsJson(
+      frssItem({ guid: "G", canonical: [{ href: "https://rh.example.com/a" }], categories: labelled }),
+      frssItem({ guid: "G", canonical: [{ href: "https://rh.example.com/other" }], categories: labelled }),
+    )));
+    expect(report.errors).toEqual([]);
+    expect(report.articles!.counts).toMatchObject({ created: 0, updated: 1, labelAssignments: 1 });
+    expect(await state.db.articleLabel.count({ where: { articleId: existing.id } })).toBe(1);
+  });
+
+  it("hashes over-long guids and truncates titles", async () => {
+    const userId = await newUser();
+    await withFeed(userId);
+    const report = await runFreshRssMigration(userId, Buffer.from(itemsJson(frssItem({ guid: "g".repeat(5000), title: "T".repeat(5000) }))));
+    expect(report.errors).toEqual([]);
+    const row = await state.db.article.findFirstOrThrow({ where: { userId } });
+    expect(row.externalId).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(row.title.length).toBe(1000);
+    expect(row.dedupeKey.length).toBeLessThan(200);
+  });
+
+  it("stamps imported UNREAD items with the import time but keeps crawl time for read/starred ones", async () => {
+    const userId = await newUser();
+    await withFeed(userId);
+    const before = Date.now() - 1000;
+    await runFreshRssMigration(userId, Buffer.from(itemsJson(
+      frssItem({ guid: "u1" }),
+      frssItem({ guid: "r1", categories: ["user/-/state/com.google/read"] }),
+      frssItem({ guid: "s1", categories: ["user/-/state/com.google/unread", "user/-/state/com.google/starred"] }),
+    )));
+    const at = async (externalId: string) => (await state.db.article.findFirstOrThrow({ where: { userId, externalId } })).createdAt.getTime();
+    expect(await at("u1")).toBeGreaterThan(before);
+    expect(await at("r1")).toBe(1577836800000);
+    expect(await at("s1")).toBe(1577836800000);
   });
 });

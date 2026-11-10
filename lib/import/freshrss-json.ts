@@ -24,6 +24,7 @@
  * there too); stars come from the `…/starred` category only.
  */
 
+import { createHash } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import { allocateExternalIds } from "@/lib/external-id-store";
@@ -35,7 +36,11 @@ import { MAX_FEED_URL_LENGTH, MAX_LABEL_NAME, validateFeedUrl } from "@/lib/vali
 import type { ImportIssue } from "./opml-import";
 
 export const ARTICLE_IMPORT_CHUNK_SIZE = 200;
+/** Hard ceiling on article items accepted in one migration run (all files together). */
+export const MAX_IMPORT_ITEMS_PER_RUN = 500_000;
 const MAX_REPORTED_ERRORS = 50;
+const MAX_GUID_LENGTH = 2048;
+const MAX_TITLE_LENGTH = 1000;
 const MAX_CONTENT_CHARS = 2_000_000;
 
 export interface FrssEnclosure { href: string; type: string; length?: number }
@@ -120,6 +125,12 @@ export function parseFreshRssArticleJson(text: string): { header: { id?: string;
   return { header: { id: str(envelope.id), title: str(envelope.title), author: str(envelope.author) }, items: envelope.items };
 }
 
+/** Over-long identifiers are replaced by a stable hash so they stay usable as dedupe/external ids. */
+function capGuid(guid: string | null): string | null {
+  if (guid === null || guid.length <= MAX_GUID_LENGTH) return guid;
+  return `sha256:${createHash("sha256").update(guid).digest("hex")}`;
+}
+
 const asString = (value: unknown): string | null => (typeof value === "string" && value.trim() ? value.trim() : null);
 
 function firstHref(value: unknown): string | null {
@@ -150,9 +161,9 @@ export function normalizeFreshRssItem(raw: unknown): NormalizedFrssItem {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new FreshRssJsonError("item is not an object");
   const item = raw as Record<string, unknown>;
 
-  const guid = asString(item.guid) ?? asString(item.id);
+  const guid = capGuid(asString(item.guid) ?? asString(item.id));
   const link = httpOrNull(firstHref(item.canonical)) ?? httpOrNull(firstHref(item.alternate)) ?? httpOrNull(guid) ?? "";
-  const title = asString(item.title) ?? "";
+  const title = (asString(item.title) ?? "").slice(0, MAX_TITLE_LENGTH);
   if (!guid && !link && !title) throw new FreshRssJsonError("item has neither guid, link nor title");
 
   const categories = Array.isArray(item.categories) ? item.categories.filter((c): c is string => typeof c === "string") : [];
@@ -377,11 +388,14 @@ export async function importFreshRssArticles(
     const findExisting = (item: (typeof folded)[number]) =>
       existingRows.find((row) => row.feedId === item.feedId && row.dedupeKey === item.dedupeKey) ??
       (item.guid ? existingRows.find((row) => row.feedId === item.feedId && row.externalId === item.guid) : undefined) ??
-      (item.link ? existingRows.find((row) => row.feedId === item.feedId && row.link === item.link) : undefined);
+      // Link is only a fallback identity for guid-less items vs. rows that never had an external id:
+      // two distinct guids may legitimately share one link (and must stay two articles).
+      (item.link && !item.guid ? existingRows.find((row) => row.feedId === item.feedId && row.link === item.link && !row.externalId) : undefined);
 
     type Create = { item: (typeof folded)[number]; row: Record<string, unknown> };
     const creates: Create[] = [];
-    const updates: { id: string; data: Record<string, unknown>; labelIds: string[] }[] = [];
+    // One pending update per existing article, however many folded items resolved to it.
+    const updatesById = new Map<string, { id: string; data: Record<string, unknown>; labelIds: Set<string>; names: Set<string> }>();
     const labelId = (name: string) => labelCache.get(name);
 
     for (const item of folded) {
@@ -429,7 +443,10 @@ export async function importFreshRssArticles(
             excerpt: sanitizer.sanitize(content, { ALLOWED_TAGS: [] }).substring(0, 200),
             author: item.author,
             publishedAt: item.publishedAt,
-            ...(item.discoveredAt ? { createdAt: item.discoveredAt } : {}),
+            // Read/starred items keep FreshRSS' crawl time. Unread ones are stamped "now" (column
+            // default) so incremental sync clients (GReader/Fever) that only look at recently
+            // created articles still receive them.
+            ...(item.discoveredAt && (item.isRead || item.isStarred) ? { createdAt: item.discoveredAt } : {}),
             imageUrl,
             enclosures: item.enclosures.length ? JSON.stringify(item.enclosures) : null,
             isRead: item.isRead,
@@ -442,24 +459,35 @@ export async function importFreshRssArticles(
       }
 
       // Merge into the existing article: states only ever turn on, labels only get added.
+      const pending = updatesById.get(existing.id);
       const data: Record<string, unknown> = {};
-      if (item.isRead && !existing.isRead) { data.isRead = true; data.readAt = new Date(); }
-      if (item.isStarred && !existing.isStarred) data.isStarred = true;
-      if (!existing.enclosures && item.enclosures.length) data.enclosures = JSON.stringify(item.enclosures);
+      const alreadyRead = existing.isRead || pending?.data.isRead === true;
+      const alreadyStarred = existing.isStarred || pending?.data.isStarred === true;
+      if (item.isRead && !alreadyRead) { data.isRead = true; data.readAt = new Date(); }
+      if (item.isStarred && !alreadyStarred) data.isStarred = true;
+      if (!existing.enclosures && !pending?.data.enclosures && item.enclosures.length) data.enclosures = JSON.stringify(item.enclosures);
       const have = new Set(existing.labels.map((l) => l.labelId));
       const missingLabelNames = item.labels.filter((name) => {
         const id = labelId(name);
-        return id === undefined || !have.has(id);
+        return !pending?.names.has(name) && (id === undefined || !have.has(id));
       });
       if (Object.keys(data).length || missingLabelNames.length) {
-        counts.updated += 1;
+        if (!pending) counts.updated += 1;
         counts.labelAssignments += missingLabelNames.length;
-        if (!dryRun) updates.push({ id: existing.id, data, labelIds: missingLabelNames.map((n) => labelId(n)).filter((id): id is string => !!id) });
-      } else {
+        const target = pending ?? { id: existing.id, data: {}, labelIds: new Set<string>(), names: new Set<string>() };
+        Object.assign(target.data, data);
+        for (const name of missingLabelNames) {
+          target.names.add(name);
+          const id = labelId(name);
+          if (id) target.labelIds.add(id);
+        }
+        updatesById.set(existing.id, target);
+      } else if (!pending) {
         counts.unchanged += 1;
       }
     }
 
+    const updates = [...updatesById.values()];
     if (dryRun || (!creates.length && !updates.length)) return;
 
     const extIds = await allocateExternalIds(db as unknown as PrismaClient, creates.length);
@@ -486,8 +514,8 @@ export async function importFreshRssArticles(
         }
         for (const update of updates) {
           if (Object.keys(update.data).length) await tx.article.updateMany({ where: { id: update.id, userId }, data: update.data });
-          if (update.labelIds.length) {
-            await tx.articleLabel.createMany({ data: update.labelIds.map((id) => ({ articleId: update.id, labelId: id, userId })) });
+          if (update.labelIds.size) {
+            await tx.articleLabel.createMany({ data: [...update.labelIds].map((id) => ({ articleId: update.id, labelId: id, userId })) });
           }
         }
       },
@@ -509,6 +537,7 @@ export async function importFreshRssArticles(
       addError(`${options.fileName ?? "articles"} (items ${offset + 1}–${offset + chunk.length}): ${error instanceof Error ? error.message : String(error)}`);
     }
     done += chunk.length;
+    await new Promise<void>((resolve) => setImmediate(resolve));
     options.onProgress?.({ phase: "articles", file: options.fileName, done, total: rawItems.length });
   }
   return report;

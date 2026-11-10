@@ -8,7 +8,9 @@
  *
  * Guards: entry count, per-entry and total uncompressed size (enforced on the
  * ACTUAL inflated output via `maxOutputLength`, never trusting declared sizes),
- * compression-ratio ceiling, CRC32, no encryption, no ZIP64, only stored/deflate.
+ * per-entry and whole-archive compression-ratio ceiling, entries must not overlap
+ * (one deflate stream cannot be referenced by many entries), CRC32, no encryption,
+ * no ZIP64, only stored/deflate.
  */
 
 import { inflateRawSync } from "node:zlib";
@@ -17,14 +19,17 @@ export interface ZipLimits {
   maxEntries: number;
   maxEntryBytes: number;
   maxTotalBytes: number;
-  /** Largest allowed uncompressed/compressed ratio for entries above `ratioFloorBytes`. */
+  /**
+   * Largest allowed uncompressed/compressed ratio: per entry above `ratioFloorBytes`,
+   * and always for the declared total against the size of the whole upload.
+   */
   maxRatio: number;
   ratioFloorBytes: number;
 }
 
 export const DEFAULT_ZIP_LIMITS: ZipLimits = {
   maxEntries: 5_000,
-  maxEntryBytes: 64 * 1024 * 1024,
+  maxEntryBytes: 32 * 1024 * 1024,
   maxTotalBytes: 256 * 1024 * 1024,
   maxRatio: 100,
   ratioFloorBytes: 1024 * 1024,
@@ -40,6 +45,7 @@ export type ZipErrorCode =
   | "entry-too-large"
   | "archive-too-large"
   | "ratio-exceeded"
+  | "overlapping-entries"
   | "unsafe-path"
   | "duplicate-entry"
   | "size-mismatch"
@@ -61,6 +67,8 @@ export interface ZipEntry {
   size: number;
   crc32: number;
   localOffset: number;
+  /** Length of the file name as stored in the central directory (minimum local header size). */
+  nameLength: number;
 }
 
 const SIG_EOCD = 0x06054b50;
@@ -102,6 +110,8 @@ function assertSafeName(name: string) {
 export class ZipArchive {
   readonly entries: ZipEntry[] = [];
   private totalRead = 0;
+  /** Exclusive upper bound of each entry's byte range (start of the next record). */
+  private readonly rangeEnd = new Map<ZipEntry, number>();
 
   constructor(private readonly buffer: Buffer, private readonly limits: ZipLimits = DEFAULT_ZIP_LIMITS) {
     this.parseCentralDirectory();
@@ -164,13 +174,29 @@ export class ZipArchive {
           throw new ZipError("ratio-exceeded", `Entry '${name}' has a suspicious compression ratio`);
         }
       }
-      this.entries.push({ name, isDirectory, method, compressedSize, size, crc32: crc, localOffset });
+      this.entries.push({ name, isDirectory, method, compressedSize, size, crc32: crc, localOffset, nameLength });
       pos = nameEnd + extraLength + commentLength;
     }
 
     const declaredTotal = this.entries.reduce((sum, entry) => sum + entry.size, 0);
     if (declaredTotal > this.limits.maxTotalBytes) {
       throw new ZipError("archive-too-large", `Archive would expand to more than ${this.limits.maxTotalBytes} bytes`);
+    }
+    // Per-entry ratios skip small entries; the total does not. Together with the overlap
+    // check below this bounds the work by the real upload size, not by the entry count.
+    if (declaredTotal / Math.max(1, buf.length) > this.limits.maxRatio) {
+      throw new ZipError("ratio-exceeded", "Archive has a suspicious overall compression ratio");
+    }
+
+    // Every entry owns its own [local header + data) byte range. Entries pointing at the
+    // same bytes would multiply one tiny deflate stream into many large files.
+    const ordered = [...this.entries].sort((a, b) => a.localOffset - b.localOffset);
+    for (let i = 0; i < ordered.length; i++) {
+      const entry = ordered[i];
+      const end = entry.localOffset + 30 + entry.nameLength + entry.compressedSize;
+      const limit = i + 1 < ordered.length ? ordered[i + 1].localOffset : cdOffset;
+      if (end > limit) throw new ZipError("overlapping-entries", `Entry '${entry.name}' overlaps another entry or the central directory`);
+      this.rangeEnd.set(entry, limit);
     }
   }
 
@@ -183,6 +209,7 @@ export class ZipArchive {
     const start = at + 30 + buf.readUInt16LE(at + 26) + buf.readUInt16LE(at + 28);
     const end = start + entry.compressedSize;
     if (end > buf.length) throw new ZipError("truncated", `Entry '${entry.name}' is truncated`);
+    if (end > (this.rangeEnd.get(entry) ?? buf.length)) throw new ZipError("overlapping-entries", `Entry '${entry.name}' overlaps another entry`);
 
     if (this.totalRead + entry.size > this.limits.maxTotalBytes) {
       throw new ZipError("archive-too-large", `Archive would expand to more than ${this.limits.maxTotalBytes} bytes`);
