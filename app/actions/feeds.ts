@@ -33,6 +33,7 @@ import { AI_OPERATOR_DELETE_ERROR, ruleHasAiDeleteConflict } from "@/lib/rule-ai
 import { parseRuleActions } from "@/lib/auto-read-rules";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-fetch";
+import { pickFields } from "@/lib/pick-fields";
 
 export async function refreshAllFeeds() {
     const session = await auth();
@@ -616,6 +617,41 @@ export async function deleteFeed(feedId: string) {
     revalidatePath("/");
 }
 
+const UPDATE_FEED_FIELDS = [
+    "name",
+    "categoryId",
+    "updateFrequency",
+    "retentionDays",
+    "keepMinArticles",
+    "authType",
+    "authUsername",
+    "authPassword",
+    "customUserAgent",
+    "fetchTimeoutSecs",
+    "sslVerify",
+    "maxSizeKb",
+    "fullTextSelector",
+    "fullTextRemoveSelectors",
+    "autoFetchFullText",
+    "fullTextMode",
+    "defaultContentFormat",
+    "fullTextConditions",
+    "fullTextAutoSuggestDismissed",
+    "filtersActionRead",
+    "sourceType",
+    "priority",
+    "unicityCriteria",
+    "unicityCriteriaForced",
+    "scraperConfig",
+    "httpOptions",
+    "hideFromAllFeeds",
+    "hideArticleImage",
+    "readerFontSizeOverride",
+    "readerWidthOverride",
+    "openOriginalOverride",
+    "autoMuted",
+] as const;
+
 export async function updateFeed(feedId: string, data: {
     name?: string;
     categoryId?: string | null;
@@ -675,10 +711,13 @@ export async function updateFeed(feedId: string, data: {
     const FULL_TEXT_MODES = new Set(["off", "auto", "selector"]);
     const CONTENT_FORMATS = new Set(["html", "markdown"]);
 
+    // Allowlist: server-action input is untrusted at runtime; spreading it let a
+    // caller set userId (re-assign the feed to another account) or internal fields.
+    const allowed = pickFields(data, UPDATE_FEED_FIELDS);
     await db.feed.update({
         where: { id: feedId, userId: session.user.id },
         data: {
-            ...data,
+            ...allowed,
             ...(data.readerFontSizeOverride !== undefined ? {
                 readerFontSizeOverride: data.readerFontSizeOverride && READER_FONT_SIZES.has(data.readerFontSizeOverride)
                     ? data.readerFontSizeOverride
