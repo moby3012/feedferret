@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import React from "react";
 import type { Metadata, Viewport } from "next";
 import { fontVariables } from "./fonts";
@@ -78,6 +79,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   const [locale, t, messages, session] = await Promise.all([
     getLocale(),
     getTranslations("accessibility"),
@@ -104,6 +106,7 @@ export default async function RootLayout({
           <SessionProvider session={session} refetchOnWindowFocus={false}>
             <Providers>
               <ThemeProvider
+                nonce={nonce}
                 attribute="class"
                 defaultTheme="system"
                 enableSystem

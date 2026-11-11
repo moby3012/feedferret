@@ -5,7 +5,7 @@
   "private": true,
   "packageManager": "pnpm@9.14.2",
   "scripts": {
-    "build": "pnpm run prisma:generate && next build",
+    "build": "pnpm run prisma:generate && next build && node scripts/check-csp-build.mjs",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "(mkdir -p /app/data 2>/dev/null || true) && NEXT_TELEMETRY_DISABLED=1 DATABASE_URL=${DATABASE_URL:-file:/app/data/dev.db} DATABASE_PROVIDER=${DATABASE_PROVIDER:-sqlite} pnpm run prisma:push && if [ -f server.js ]; then node server.js; else next start; fi",
