@@ -453,4 +453,8 @@ Key rotation (effective once the next release writes v2):
 
 Signed tokens use domain-separated HMAC keys derived from the master key (`greader-token`, `telegram-callback`). This release verifies both the derived and the legacy `AUTH_SECRET` MAC and still issues the legacy one; GReader logins and Telegram buttons keep working across the switch.
 
-Settings payloads never contain stored secrets: notification channels report `hasTelegramBotToken` / `hasGotifyToken` / `hasNtfyToken` (an empty field keeps the token, "Remove" clears it), and webhook configs report `hasSecret` plus a `secretRef` that keeps the stored secret on save.
+Read surfaces never return stored secrets:
+- Notification channels report `hasTelegramBotToken` / `hasGotifyToken` / `hasNtfyToken` (an empty field keeps the token, "Remove" / `null` clears it). A token that is stored but cannot be decrypted skips the channel instead of sending without it.
+- Webhook configs (settings UI, REST, MCP) report `hasSecret`, a `secretRef`, and header names whose values are masked as `"__keep__"`. Sending an entry back with its `secretRef` keeps the stored secret (omitted, `""` or `"__keep__"`; `null` removes it) and every header sent as `"__keep__"` (`null` or leaving the header out removes it).
+- The feed dialog's fetch options (`httpOptions`) show only non-sensitive cURL options; cookies, headers, POST bodies, proxy URLs and any other option appear as `"__keep__"`. Saving keeps those values, a removed key clears it.
+- Values starting with the reserved `ff2.` prefix that are not valid v2 are rejected as malformed (never read as plaintext); `secrets:status` lists them as `malformed`.
