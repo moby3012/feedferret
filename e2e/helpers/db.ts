@@ -490,3 +490,46 @@ export function plantFeedSecrets(userKey: string): { secrets: string[]; restore:
     },
   };
 }
+
+/**
+ * M8: a copy of the seeded user (same password) with TOTP enabled and the
+ * given stored secret (plaintext or v2-sealed). Cleanup deletes it.
+ */
+export function createTotpUser(userKey: string, tag: string, storedSecret: string): { email: string; cleanup: () => void } {
+  const created = createEmptyUser(userKey, tag);
+  const db = open();
+  try {
+    db.prepare(`UPDATE "User" SET twoFactorEnabled = 1, twoFactorSecret = ?, twoFactorLastAcceptedStep = NULL WHERE email = ?`).run(storedSecret, created.email);
+  } finally {
+    db.close();
+  }
+  return created;
+}
+
+/** Raw stored User columns (as the DB holds them — plaintext or ciphertext). */
+export function userColumns<K extends string>(where: { email: string } | { userKey: string }, columns: K[]): Record<K, string | number | null> {
+  const db = open();
+  try {
+    const [col, value] = "email" in where ? ["email", where.email] : ["id", manifest().users[where.userKey].userId];
+    return db.prepare(`SELECT ${columns.map((c) => `"${c}"`).join(", ")} FROM "User" WHERE ${col} = ?`).get(value) as Record<K, string | number | null>;
+  } finally {
+    db.close();
+  }
+}
+
+/** Set raw User columns of a seeded user; returns a restore function. */
+export function setUserColumns(userKey: string, values: Record<string, string | number | null>): () => void {
+  const { userId } = manifest().users[userKey];
+  const columns = Object.keys(values);
+  const before = userColumns({ userKey }, columns);
+  const write = (v: Record<string, string | number | null>) => {
+    const db = open();
+    try {
+      db.prepare(`UPDATE "User" SET ${columns.map((c) => `"${c}" = ?`).join(", ")} WHERE id = ?`).run(...columns.map((c) => v[c]), userId);
+    } finally {
+      db.close();
+    }
+  };
+  write(values);
+  return () => write(before);
+}

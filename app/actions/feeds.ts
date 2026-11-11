@@ -18,7 +18,7 @@ import {
 } from "@/lib/validation";
 import { fetchAndSuggestFeedCandidatesDetailed, type SuggestedFieldConfig } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser } from "@/lib/page-feed-create";
-import { sanitizeWebhookConfigs, actionsReferenceConfigs } from "@/lib/webhooks";
+import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactRuleForClient } from "@/lib/webhooks";
 import { buildXPathArticles } from "@/lib/feed-fetcher";
 import { createUndoToken, claimUndoToken, releaseUndoToken } from "@/lib/undo-tokens";
 import { isMarkAllAllowed } from "@/lib/view-scope";
@@ -38,7 +38,8 @@ import { pickFields } from "@/lib/pick-fields";
 import { clampFeedLimits } from "@/lib/feed-limits";
 import { assertOwnedCategories, MAX_REORDER_ITEMS } from "@/lib/owned-categories";
 import { connectorFeedUrlError, redactArticleForClient, redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
-import { FEED_CLIENT_SELECT, stripFeedSecrets } from "@/lib/feed-secrets";
+import { FEED_CLIENT_SELECT, HTTP_OPTION_KEEP, mergeHttpOptions, readFeedCredentials, redactHttpOptions, stripFeedSecrets } from "@/lib/feed-secrets";
+import { readPlainColumn } from "@/lib/secret-box";
 import { parseGoogleNewsFeedUrl } from "@/lib/google-news";
 import { googleNewsFeedName } from "@/lib/google-news-url";
 
@@ -427,7 +428,7 @@ export async function proposeAiFeedConfig(url: string) {
             url,
             {
                 provider: user.aiProvider as AiProvider,
-                apiKey: decryptIfValue(user.aiApiKey),
+                apiKey: decryptIfValue(user.aiApiKey, "user.aiApiKey"),
                 model: user.aiModel,
                 ollamaBaseUrl: user.aiOllamaBaseUrl,
                 usage: { userId: session.user.id, feature: "feed-config" },
@@ -560,7 +561,7 @@ export async function proposeAiFullTextSelector(feedId: string) {
             article.link,
             {
                 provider: user.aiProvider as AiProvider,
-                apiKey: decryptIfValue(user.aiApiKey),
+                apiKey: decryptIfValue(user.aiApiKey, "user.aiApiKey"),
                 model: user.aiModel,
                 ollamaBaseUrl: user.aiOllamaBaseUrl,
                 usage: { userId: session.user.id, feature: "feed-config" },
@@ -727,6 +728,12 @@ export async function updateFeed(feedId: string, data: {
         if (!category) throw new Error("Invalid category");
     }
 
+    if (typeof data.httpOptions === "string" && data.httpOptions.includes(HTTP_OPTION_KEEP)) {
+        // The dialog sends masked secrets back as "__keep__": resolve them against the stored value.
+        const stored = await db.feed.findFirst({ where: { id: feedId, userId: session.user.id }, select: { httpOptions: true } });
+        if (!stored) throw new Error("Feed not found");
+        data = { ...data, httpOptions: mergeHttpOptions(data.httpOptions, readPlainColumn("feed.httpOptions", stored.httpOptions)) };
+    }
     if (data.httpOptions) await assertSafeHttpOptionsProxy(data.httpOptions);
 
     const READER_FONT_SIZES = new Set(["small", "medium", "large", "xl"]);
@@ -843,11 +850,17 @@ export async function getFeedEditConfig(feedId: string) {
         select: { authUsername: true, authPassword: true, scraperConfig: true, httpOptions: true },
     });
     if (!feed) throw new Error("Feed not found");
+    // Owner-only: decrypts v2-sealed values (M8). An undecryptable value throws,
+    // so the dialog keeps the stored value instead of saving an empty one.
+    const opened = readFeedCredentials({ authUsername: feed.authUsername, httpOptions: feed.httpOptions });
+    // Cookies, headers, POST bodies, proxy credentials … are write-only: masked as "__keep__".
+    const { httpOptions, masked } = redactHttpOptions(opened.httpOptions);
     return {
-        authUsername: feed.authUsername ?? null,
+        authUsername: opened.authUsername ?? null,
         hasAuthPassword: Boolean(feed.authPassword),
         scraperConfig: feed.scraperConfig ?? null,
-        httpOptions: feed.httpOptions ?? null,
+        httpOptions,
+        maskedHttpOptions: masked,
     };
 }
 
@@ -1182,10 +1195,12 @@ function chunkIds(ids: string[], size = 500): string[][] {
 export async function getAutoReadRules() {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
-    return db.autoReadRule.findMany({
+    const rules = await db.autoReadRule.findMany({
         where: { userId: session.user.id },
         orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     });
+    // Webhook signing secrets are write-only: the client gets `hasSecret` + `secretRef`.
+    return rules.map(redactRuleForClient);
 }
 
 function normalizeRuleActions(actions?: string[] | null): { primary: string; serialized: string | null } {
@@ -1252,7 +1267,7 @@ export async function createAutoReadRule(data: {
         },
     });
     revalidatePath("/");
-    return rule;
+    return redactRuleForClient(rule);
 }
 
 export async function updateAutoReadRule(
@@ -1275,7 +1290,7 @@ export async function updateAutoReadRule(
 
     const existing = await db.autoReadRule.findFirst({
         where: { id: ruleId, userId: session.user.id },
-        select: { trigger: true, query: true, action: true, actions: true },
+        select: { trigger: true, query: true, action: true, actions: true, webhookConfigs: true },
     });
     if (!existing) throw new Error("Rule not found");
 
@@ -1300,7 +1315,7 @@ export async function updateAutoReadRule(
     }
 
     if (data.webhookConfigs !== undefined) {
-        const { configs, valid } = sanitizeWebhookConfigs(data.webhookConfigs);
+        const { configs, valid } = sanitizeWebhookConfigs(data.webhookConfigs, { existing: existing.webhookConfigs });
         if (!valid) throw new Error("Each webhook action needs a valid http(s) URL");
         const actionsForCheck = nextActions ?? (() => {
             // Compare against existing actions if caller didn't send a new list.
@@ -1329,7 +1344,7 @@ export async function updateAutoReadRule(
         data: patch,
     });
     revalidatePath("/");
-    return rule;
+    return redactRuleForClient(rule);
 }
 
 export async function deleteAutoReadRule(ruleId: string) {
@@ -1718,7 +1733,7 @@ export async function summarizeArticle(articleId: string): Promise<{ summary: st
     try {
         summary = await generateSummary(article.content, {
             provider: user.aiProvider as AiProvider,
-            apiKey: decryptIfValue(user.aiApiKey),
+            apiKey: decryptIfValue(user.aiApiKey, "user.aiApiKey"),
             model: user.aiModel,
             ollamaBaseUrl: user.aiOllamaBaseUrl,
             language: user.aiSummaryLanguage,
@@ -1827,7 +1842,7 @@ export async function previewRsshubFeed(input: { routePath?: string; sourceDescr
         sourceDescription,
         {
             provider: user.aiProvider as AiProvider,
-            apiKey: decryptIfValue(user.aiApiKey),
+            apiKey: decryptIfValue(user.aiApiKey, "user.aiApiKey"),
             model: user.aiModel,
             ollamaBaseUrl: user.aiOllamaBaseUrl,
             usage: { userId: session.user.id, feature: "rsshub" },
@@ -1907,7 +1922,7 @@ export async function createChangedetectionFeed(input: { url: string; useAiSelec
                 const { proposeFeedConfig } = await import("@/lib/ai-feed-config");
                 const { proposal, validation } = await proposeFeedConfig(input.url, {
                     provider: user.aiProvider as AiProvider,
-                    apiKey: decryptIfValue(user.aiApiKey),
+                    apiKey: decryptIfValue(user.aiApiKey, "user.aiApiKey"),
                     model: user.aiModel,
                     ollamaBaseUrl: user.aiOllamaBaseUrl,
                     usage: { userId: session.user.id, feature: "feed-config" },

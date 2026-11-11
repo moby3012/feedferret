@@ -8,6 +8,9 @@ import bcrypt from "bcryptjs";
 import { sendDigestEmail, getDigestArticles, markArticlesAsDigested } from "@/lib/digest-email";
 import { buildOtpAuthUri, generateTotpSecret, verifyTotpToken } from "@/lib/totp";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
+import { readTotpSecret } from "@/lib/totp-consume";
+import { readPlainColumnOrNull } from "@/lib/secret-box";
+import { readChannelTokens } from "@/lib/user-secrets";
 import { ChangePasswordSchema } from "@/lib/validation";
 import type { AiProvider } from "@/lib/ai-summary";
 import { fetchViaHostedApiDetailed, type HostedFetchProvider } from "@/lib/hosted-fetch";
@@ -292,6 +295,8 @@ export async function beginTwoFactorSetup() {
   return { secret, uri, issuer, accountName: user.email };
 }
 
+const TOTP_UNREADABLE = "The two-factor secret cannot be read with the configured encryption key. Ask your administrator to check FEEDFERRET_ENCRYPTION_KEY.";
+
 export async function confirmTwoFactorSetup(code: string) {
   const session = await requireUser();
   const user = await db.user.findUnique({
@@ -302,8 +307,10 @@ export async function confirmTwoFactorSetup(code: string) {
   if (!user?.twoFactorSecret) {
     throw new Error("Start setup first");
   }
+  const secret = readTotpSecret(user.twoFactorSecret);
+  if (!secret) throw new Error(TOTP_UNREADABLE);
 
-  if (!verifyTotpToken(user.twoFactorSecret, code)) {
+  if (!verifyTotpToken(secret, code)) {
     throw new Error("Invalid one-time code");
   }
 
@@ -326,8 +333,10 @@ export async function disableTwoFactor(code: string) {
   if (!user?.twoFactorEnabled || !user.twoFactorSecret) {
     throw new Error("Two-factor authentication is not enabled");
   }
+  const secret = readTotpSecret(user.twoFactorSecret);
+  if (!secret) throw new Error(TOTP_UNREADABLE);
 
-  if (!verifyTotpToken(user.twoFactorSecret, code)) {
+  if (!verifyTotpToken(secret, code)) {
     throw new Error("Invalid one-time code");
   }
 
@@ -547,7 +556,7 @@ async function buildAiSummariesForTest(
   articles: Awaited<ReturnType<typeof getDigestArticles>>,
 ): Promise<{ overallSummary: string | null; feedSummaries: Record<string, string>; aiSubject: string | null }> {
   const provider = user.aiProvider as AiProvider | null;
-  const decryptedKey = decryptIfValue(user.aiApiKey);
+  const decryptedKey = decryptIfValue(user.aiApiKey, "user.aiApiKey");
   const aiUsable = !!provider && (provider === "ollama" || !!decryptedKey);
 
   if (!aiUsable || user.digestAiSummary === "none" || articles.length === 0) {
@@ -812,7 +821,7 @@ export async function testAiConnection(overrides?: {
   // persisted — otherwise "Test connection" silently tests stale settings
   // until the user separately clicks "Save" first.
   const provider = overrides && "provider" in overrides ? overrides.provider : user?.aiProvider;
-  const apiKey = overrides?.apiKey || decryptIfValue(user?.aiApiKey);
+  const apiKey = overrides?.apiKey || decryptIfValue(user?.aiApiKey, "user.aiApiKey");
   const model = overrides && "model" in overrides ? overrides.model : user?.aiModel;
   const ollamaBaseUrl = overrides && "ollamaBaseUrl" in overrides ? overrides.ollamaBaseUrl : user?.aiOllamaBaseUrl;
 
@@ -895,7 +904,7 @@ export async function testContentFetchConnection(overrides?: {
   // persisted — otherwise "Test connection" silently tests stale settings
   // until the user separately clicks "Save" first.
   const provider = overrides && "provider" in overrides ? overrides.provider : user?.contentFetchProvider;
-  const apiKey = overrides?.apiKey || decryptIfValue(user?.contentFetchApiKey);
+  const apiKey = overrides?.apiKey || decryptIfValue(user?.contentFetchApiKey, "user.contentFetchApiKey");
 
   if (!provider) return { success: false, error: t("testErrorNoProvider") };
   const isKeylessFirecrawl = !apiKey && provider === "firecrawl";
@@ -919,6 +928,10 @@ export async function testContentFetchConnection(overrides?: {
 
 // ─── Notification Channels ──────────────────────────────────────────────────
 
+/**
+ * Channel settings for the settings UI. Tokens are write-only: the client gets
+ * `has…Token` presence flags, never the stored values (security audit #2, M8).
+ */
 export async function getNotificationChannels() {
   const session = await requireUser();
   const user = await db.user.findUnique({
@@ -937,40 +950,60 @@ export async function getNotificationChannels() {
   });
   return {
     telegramEnabled: user?.telegramEnabled ?? false,
-    telegramBotToken: user?.telegramBotToken ?? "",
+    hasTelegramBotToken: Boolean(user?.telegramBotToken),
     telegramChatId: user?.telegramChatId ?? "",
     gotifyEnabled: user?.gotifyEnabled ?? false,
     gotifyUrl: user?.gotifyUrl ?? "",
-    gotifyToken: user?.gotifyToken ?? "",
+    hasGotifyToken: Boolean(user?.gotifyToken),
     ntfyEnabled: user?.ntfyEnabled ?? false,
     ntfyUrl: user?.ntfyUrl ?? "",
-    ntfyToken: user?.ntfyToken ?? "",
+    hasNtfyToken: Boolean(user?.ntfyToken),
   };
+}
+
+/** Token field semantics: omitted, "" or "__keep__" keeps the stored token; `null` removes it. */
+const KEEP_TOKEN = "__keep__";
+function tokenPatch(value: unknown): { set: true; value: string | null } | { set: false } {
+  if (value === null) return { set: true, value: null };
+  if (typeof value !== "string") return { set: false };
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === KEEP_TOKEN) return { set: false };
+  return { set: true, value: trimmed };
+}
+
+function textPatch(value: unknown): { set: true; value: string | null } | { set: false } {
+  if (typeof value !== "string") return { set: false };
+  return { set: true, value: value.trim() || null };
 }
 
 export async function updateNotificationChannels(data: {
   telegramEnabled?: boolean;
-  telegramBotToken?: string;
+  telegramBotToken?: string | null;
   telegramChatId?: string;
   gotifyEnabled?: boolean;
   gotifyUrl?: string;
-  gotifyToken?: string;
+  gotifyToken?: string | null;
   ntfyEnabled?: boolean;
   ntfyUrl?: string;
-  ntfyToken?: string;
+  ntfyToken?: string | null;
 }) {
   const session = await requireUser();
+  const input = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
   const sanitized: Record<string, unknown> = {};
 
-  if (data.telegramEnabled !== undefined) sanitized.telegramEnabled = data.telegramEnabled;
-  if (data.telegramBotToken !== undefined) sanitized.telegramBotToken = data.telegramBotToken.trim() || null;
-  if (data.telegramChatId !== undefined) sanitized.telegramChatId = data.telegramChatId.trim() || null;
-  if (data.gotifyEnabled !== undefined) sanitized.gotifyEnabled = data.gotifyEnabled;
-  if (data.gotifyUrl !== undefined) sanitized.gotifyUrl = data.gotifyUrl.trim() || null;
-  if (data.gotifyToken !== undefined) sanitized.gotifyToken = data.gotifyToken.trim() || null;
-  if (data.ntfyEnabled !== undefined) sanitized.ntfyEnabled = data.ntfyEnabled;
-  if (data.ntfyUrl !== undefined) sanitized.ntfyUrl = data.ntfyUrl.trim() || null;
-  if (data.ntfyToken !== undefined) sanitized.ntfyToken = data.ntfyToken.trim() || null;
+  for (const key of ["telegramEnabled", "gotifyEnabled", "ntfyEnabled"] as const) {
+    if (typeof input[key] === "boolean") sanitized[key] = input[key];
+  }
+  for (const key of ["telegramChatId", "gotifyUrl", "ntfyUrl"] as const) {
+    const patch = textPatch(input[key]);
+    if (patch.set) sanitized[key] = patch.value;
+  }
+  // Tokens are still stored in the legacy (plaintext) format in this release;
+  // M8 PR 5 seals them on write.
+  for (const key of ["telegramBotToken", "gotifyToken", "ntfyToken"] as const) {
+    const patch = tokenPatch(input[key]);
+    if (patch.set) sanitized[key] = patch.value;
+  }
 
   await db.user.update({ where: { id: session.user.id }, data: sanitized });
   revalidatePath("/settings");
@@ -1006,24 +1039,29 @@ export async function testNotificationChannel(
   try {
     let result: { ok: boolean; error?: string };
     if (channel === "telegram") {
-      if (!user?.telegramBotToken || !user.telegramChatId)
+      const botToken = readPlainColumnOrNull("user.telegramBotToken", user?.telegramBotToken);
+      if (!botToken || !user?.telegramChatId)
         return { success: false, error: "Bot token and Chat ID are required" };
       result = await sendTelegramNotification(
-        { botToken: user.telegramBotToken, chatId: user.telegramChatId },
+        { botToken, chatId: user.telegramChatId },
         testPayload,
       );
     } else if (channel === "gotify") {
-      if (!user?.gotifyUrl || !user.gotifyToken)
+      const token = readPlainColumnOrNull("user.gotifyToken", user?.gotifyToken);
+      if (!user?.gotifyUrl || !token)
         return { success: false, error: "Server URL and token are required" };
       result = await sendGotifyNotification(
-        { url: user.gotifyUrl, token: user.gotifyToken },
+        { url: user.gotifyUrl, token },
         testPayload,
       );
     } else if (channel === "ntfy") {
       if (!user?.ntfyUrl)
         return { success: false, error: "Topic URL is required" };
+      const ntfyToken = readChannelTokens(user);
+      if (ntfyToken.unreadable.ntfy)
+        return { success: false, error: "The saved ntfy token cannot be decrypted with the configured key" };
       result = await sendNtfyNotification(
-        { url: user.ntfyUrl, token: user.ntfyToken ?? undefined },
+        { url: user.ntfyUrl, token: ntfyToken.ntfyToken ?? undefined },
         testPayload,
       );
     } else {

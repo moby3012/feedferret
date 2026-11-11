@@ -198,7 +198,12 @@ export type WebhookConfigUi = {
   method: "POST" | "GET" | "PUT" | "PATCH" | "DELETE";
   headers?: Record<string, string>;
   bodyTemplate?: string;
-  secret?: string;
+  /** A new secret typed by the user (the stored one is never sent to the client); `null` removes it. */
+  secret?: string | null;
+  /** A secret is stored for this webhook (write-only; shown as "saved"). */
+  hasSecret?: boolean;
+  /** Index of the stored config; the server keeps its secret / masked header values. */
+  secretRef?: number;
 };
 
 /**
@@ -554,14 +559,28 @@ function WebhookActionConfig({
             <label htmlFor="webhook-hmac-secret" className="text-footnote font-semibold uppercase tracking-wider text-muted-foreground">
               {t("webhooks.hmacSecret")}
             </label>
-            <Input
-              id="webhook-hmac-secret"
-              type="password"
-              placeholder={t("webhooks.secretUsage")}
-              value={value.secret ?? ""}
-              onChange={(e) => onChange({ secret: e.target.value })}
-              className="rounded-panel h-9 text-footnote"
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                id="webhook-hmac-secret"
+                type="password"
+                autoComplete="off"
+                placeholder={value.hasSecret && value.secret !== null && !value.secret ? t("webhooks.secretSavedPlaceholder") : t("webhooks.secretUsage")}
+                value={value.secret ?? ""}
+                onChange={(e) => onChange({ secret: e.target.value })}
+                className="rounded-panel h-9 text-footnote"
+              />
+              {value.hasSecret && value.secret !== null && !value.secret && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onChange({ secret: null })}
+                  className="h-9 shrink-0 rounded-panel text-footnote"
+                >
+                  {t("webhooks.removeSecret")}
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="ui-control-surface rounded-panel border p-2 text-footnote leading-relaxed">
@@ -2167,7 +2186,9 @@ export function FeedManagement({
                                             method: ["POST", "GET", "PUT", "PATCH", "DELETE"].includes(c.method) ? c.method : "POST",
                                             headers: c.headers ?? undefined,
                                             bodyTemplate: typeof c.bodyTemplate === "string" ? c.bodyTemplate : undefined,
-                                            secret: typeof c.secret === "string" ? c.secret : undefined,
+                                            // Secrets are write-only: keep the stored one by reference.
+                                            hasSecret: c.hasSecret === true,
+                                            secretRef: Number.isInteger(c.secretRef) ? c.secretRef : undefined,
                                           }));
                                       }
                                     } catch {}

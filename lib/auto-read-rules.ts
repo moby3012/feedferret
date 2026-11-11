@@ -1,3 +1,4 @@
+import { readChannelTokens } from "@/lib/user-secrets";
 import { db } from "./db";
 import { buildAdvancedSearchWhere } from "./search";
 import { executeWebhookCall, getWebhookConfig, redactWebhookUrl } from "./webhooks";
@@ -67,10 +68,11 @@ async function loadChannelConfig(userId: string, cache: ChannelCache) {
             ntfyEnabled: true, ntfyUrl: true, ntfyToken: true,
         },
     });
+    const tokens = readChannelTokens(u);
     cache.channels = {
-        telegram: { enabled: u?.telegramEnabled ?? false, botToken: u?.telegramBotToken ?? null, chatId: u?.telegramChatId ?? null },
-        gotify: { enabled: u?.gotifyEnabled ?? false, url: u?.gotifyUrl ?? null, token: u?.gotifyToken ?? null },
-        ntfy: { enabled: u?.ntfyEnabled ?? false, url: u?.ntfyUrl ?? null, token: u?.ntfyToken ?? null },
+        telegram: { enabled: (u?.telegramEnabled ?? false) && !tokens.unreadable.telegram, botToken: tokens.telegramBotToken, chatId: u?.telegramChatId ?? null },
+        gotify: { enabled: (u?.gotifyEnabled ?? false) && !tokens.unreadable.gotify, url: u?.gotifyUrl ?? null, token: tokens.gotifyToken },
+        ntfy: { enabled: (u?.ntfyEnabled ?? false) && !tokens.unreadable.ntfy, url: u?.ntfyUrl ?? null, token: tokens.ntfyToken },
     };
     return cache.channels;
 }

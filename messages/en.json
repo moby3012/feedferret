@@ -507,7 +507,10 @@
     "saveChannels": "Save channels",
     "saving": "Saving…",
     "successTitle": "Test notification sent successfully",
-    "errorTitle": "Failed to send test notification"
+    "errorTitle": "Failed to send test notification",
+    "tokenSavedPlaceholder": "Saved — leave empty to keep it",
+    "removeToken": "Remove",
+    "tokenRemovedOnSave": "The saved token will be removed when you save."
   },
   "syncReaders": {
     "title": "Sync with external readers",
@@ -1292,6 +1295,8 @@
       "defaultJsonPayload": "Leave empty for the default JSON payload.",
       "hmacSecret": "HMAC secret (optional)",
       "secretUsage": "Used to sign the body via X-FeedFerret-Signature",
+      "secretSavedPlaceholder": "Secret saved — leave empty to keep it",
+      "removeSecret": "Remove",
       "variables": "Variables",
       "event": "rule_match or feed_error",
       "ruleName": "rule name",
@@ -1552,6 +1557,7 @@
       "forced": "Forced",
       "scraperConfig": "Scraper config JSON",
       "httpOptions": "HTTP / cURL options JSON",
+      "httpOptionsMaskedHint": "Saved secrets ({names}) are shown as \"__keep__\": leave them to keep the stored value, replace to change it, remove the key to delete it.",
       "fullContentConditions": "Full-content conditions",
       "autoReadFilters": "Auto-read filters",
       "autoReadFiltersDescription": "One keyword per line. New articles that contain any of these words (in the title, summary, or body) are marked read automatically — they won't count as unread or trigger notifications.",

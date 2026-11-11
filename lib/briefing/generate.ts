@@ -62,7 +62,7 @@ async function loadAiContext(userId: string): Promise<AiContext> {
   const provider = user?.aiProvider;
   const capOff = user?.aiDailyTokenCap === 0;
   if (!user || !provider || !isSelectableAiProvider(provider)) return { config: null, model: null, auto: false, capOff };
-  const apiKey = decryptIfValue(user.aiApiKey);
+  const apiKey = decryptIfValue(user.aiApiKey, "user.aiApiKey");
   if (provider !== "ollama" && provider !== "fake" && !apiKey) return { config: null, model: null, auto: false, capOff };
   const model = user.aiModel?.trim() || DEFAULT_MODELS[provider];
   return {

@@ -1,7 +1,7 @@
 import { decimalExternalId, storedExternalId } from "./external-ids";
 import { hashApiToken } from "@/lib/token";
 import { Prisma, type User } from "@prisma/client";
-import crypto from "crypto";
+import { hmacHex, legacyMacSecret, verifyMac } from "@/lib/secret-box";
 import { checkRateLimit, peekRateLimit, releaseRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
@@ -19,18 +19,14 @@ export const GREADER_BROADCAST = "user/-/state/com.google/broadcast";
 export const GREADER_LIKE = "user/-/state/com.google/like";
 export const GREADER_LABEL_PREFIX = "user/-/label/";
 
-function secret() {
-  const value = process.env.AUTH_SECRET;
-  if (value) return value;
-  if (process.env.NEXT_PHASE === "phase-production-build") {
-    return "build-time-secret-only";
-  }
-  throw new Error("AUTH_SECRET must be set for Google Reader API tokens.");
-}
+// HMAC keys (security audit #2, M8): tokens are still issued with the raw
+// AUTH_SECRET so a rollback keeps them valid; verification also accepts the
+// domain-separated HKDF key "greader-token" that the next release issues.
+const GREADER_MAC_PURPOSE = "greader-token";
 
 export function createGReaderToken(userId: string, version = 0) {
   const payload = `${userId}:${version}`;
-  const sig = crypto.createHmac("sha256", secret()).update(payload).digest("hex");
+  const sig = hmacHex(legacyMacSecret(), payload);
   return `${userId}.${version}.${sig}`;
 }
 
@@ -38,8 +34,7 @@ export function verifyGReaderToken(token: string) {
   const parts = token.split(".");
   const [userId, version, sig] = parts;
   if (parts.length !== 3 || !userId || !/^\d+$/.test(version) || !/^[a-f0-9]{64}$/.test(sig)) return null;
-  const expected = crypto.createHmac("sha256", secret()).update(`${userId}:${version}`).digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)) ? userId : null;
+  return verifyMac(GREADER_MAC_PURPOSE, sig, (key) => hmacHex(key, `${userId}:${version}`)) ? userId : null;
 }
 
 const passwordCache = new Map<string, { key: string; expires: number }>();

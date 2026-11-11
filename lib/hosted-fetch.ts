@@ -209,7 +209,7 @@ export async function getHostedFetchConfigForUser(userId: string): Promise<Hoste
     });
     if (!user?.contentFetchProvider) return null;
     if (user.contentFetchProvider !== "jina" && user.contentFetchProvider !== "firecrawl") return null;
-    const apiKey = decryptIfValue(user.contentFetchApiKey) || null;
+    const apiKey = decryptIfValue(user.contentFetchApiKey, "user.contentFetchApiKey") || null;
     if (!apiKey && user.contentFetchProvider !== "firecrawl") return null;
     return { provider: user.contentFetchProvider, apiKey };
   } catch {

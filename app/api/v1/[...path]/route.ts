@@ -4,6 +4,8 @@ export const runtime = "nodejs";
 import { assertSafeHttpOptionsProxy } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { readPlainColumn, readPlainColumnOrNull } from "@/lib/secret-box";
+import { HTTP_OPTION_KEEP, mergeHttpOptions } from "@/lib/feed-secrets";
 import { apiError, clampInt, parseBool, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
 import { checkRateLimit, getClientIdentifier, rateLimitHeaders, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildAdvancedSearchWhere } from "@/lib/search";
@@ -94,7 +96,7 @@ function feedPayload(rawFeed: any, rules: Awaited<ReturnType<typeof getConnector
     maxSizeKb: feed.maxSizeKb,
     // Per-feed auth: type/username are exposed; the password never is.
     authType: feed.authType,
-    authUsername: feed.authUsername,
+    authUsername: readPlainColumnOrNull("feed.authUsername", feed.authUsername),
     // Full-text / Feed Intelligence
     fullTextMode: feed.fullTextMode,
     fullTextSelector: feed.fullTextSelector,
@@ -487,6 +489,11 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
     if (!owned) return apiError("Invalid category", 422);
   }
   clampFeedLimits(data);
+  if (typeof data.httpOptions === "string" && data.httpOptions.includes(HTTP_OPTION_KEEP)) {
+    const stored = await db.feed.findFirst({ where: { id: feedId, userId: user.id }, select: { httpOptions: true } });
+    if (!stored) return apiError("Feed not found", 404);
+    data.httpOptions = mergeHttpOptions(data.httpOptions, readPlainColumn("feed.httpOptions", stored.httpOptions));
+  }
   if (data.httpOptions) {
     try {
       await assertSafeHttpOptionsProxy(data.httpOptions);
@@ -808,7 +815,10 @@ async function patchRule(user: ApiUser, ruleId: string, request: Request) {
     }
   }
   if (body.webhookConfigs !== undefined) {
-    const { configs, valid } = sanitizeWebhookConfigs(body.webhookConfigs);
+    // Keep-if-unchanged: entries sent back with their `secretRef` keep the stored secret / masked headers.
+    const stored = await db.autoReadRule.findFirst({ where: { id: ruleId, userId: user.id }, select: { webhookConfigs: true } });
+    if (!stored) return apiError("Rule not found", 404);
+    const { configs, valid } = sanitizeWebhookConfigs(body.webhookConfigs, { existing: stored.webhookConfigs });
     if (!valid) return apiError("Each webhook needs a valid http(s) URL", 400);
     if (nextActions && !actionsReferenceConfigs(nextActions, configs.length)) return apiError("A webhook_call action references a missing webhook config", 400);
     data.webhookConfigs = configs.length ? JSON.stringify(configs) : null;

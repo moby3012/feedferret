@@ -82,7 +82,7 @@ async function buildAiExtras(
     const mode = user.digestAiSummary;
     const provider = user.aiProvider as AiProvider | null;
     if (!provider) return { overall: null, perFeed: {}, subject: null };
-    const decryptedKey = decryptIfValue(user.aiApiKey);
+    const decryptedKey = decryptIfValue(user.aiApiKey, "user.aiApiKey");
     if (provider !== "ollama" && !decryptedKey) return { overall: null, perFeed: {}, subject: null };
 
     const aiConfig = {

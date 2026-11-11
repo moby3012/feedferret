@@ -507,7 +507,10 @@
     "saveChannels": "Kanäle speichern",
     "saving": "Wird gespeichert…",
     "successTitle": "Testbenachrichtigung erfolgreich gesendet",
-    "errorTitle": "Testbenachrichtigung konnte nicht gesendet werden"
+    "errorTitle": "Testbenachrichtigung konnte nicht gesendet werden",
+    "tokenSavedPlaceholder": "Gespeichert – leer lassen, um ihn zu behalten",
+    "removeToken": "Entfernen",
+    "tokenRemovedOnSave": "Der gespeicherte Token wird beim Speichern entfernt."
   },
   "syncReaders": {
     "title": "Mit externen Readern synchronisieren",
@@ -1292,6 +1295,8 @@
       "defaultJsonPayload": "Leer lassen für den Standard-JSON-Payload.",
       "hmacSecret": "HMAC-Secret (optional)",
       "secretUsage": "Wird zum Signieren des Bodys via X-FeedFerret-Signature verwendet",
+      "secretSavedPlaceholder": "Secret gespeichert – leer lassen, um es zu behalten",
+      "removeSecret": "Entfernen",
       "variables": "Variablen",
       "event": "rule_match oder feed_error",
       "ruleName": "Regelname",
@@ -1552,6 +1557,7 @@
       "forced": "Erzwungen",
       "scraperConfig": "Scraper-Konfigurations-JSON",
       "httpOptions": "HTTP / cURL-Optionen JSON",
+      "httpOptionsMaskedHint": "Gespeicherte Geheimnisse ({names}) erscheinen als „__keep__“: so lassen, um den gespeicherten Wert zu behalten, ersetzen zum Ändern, Schlüssel entfernen zum Löschen.",
       "fullContentConditions": "Vollinhalt-Bedingungen",
       "autoReadFilters": "Auto-Lesen-Filter",
       "autoReadFiltersDescription": "Ein Stichwort pro Zeile. Neue Artikel, die eines dieser Wörter enthalten (in Titel, Zusammenfassung oder Text), werden automatisch als gelesen markiert – sie zählen nicht als ungelesen und lösen keine Benachrichtigungen aus.",

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
+import { E2E_AUTH_SECRET } from "./e2e/helpers/secrets";
 
 /**
  * E2E harness.
@@ -94,7 +95,7 @@ export default defineConfig({
       env: {
         DATABASE_PROVIDER: "sqlite",
         DATABASE_URL: `file:${DB_PATH}`,
-        AUTH_SECRET: "e2e-0123456789abcdef0123456789abcd-k",
+        AUTH_SECRET: E2E_AUTH_SECRET,
         AUTH_URL: BASE_URL,
         NEXTAUTH_URL: BASE_URL,
         AUTH_TRUST_HOST: "true",

@@ -60,7 +60,7 @@ export async function getRenderSidecarConfig(): Promise<RenderSidecarConfig | nu
 
     return {
       url: settings.renderSidecarUrl.trim(),
-      token: decryptIfValue(settings.renderSidecarToken) || null,
+      token: decryptIfValue(settings.renderSidecarToken, "globalSettings.renderSidecarToken") || null,
     };
   } catch {
     return null;

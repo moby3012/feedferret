@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ fetchWith: vi.fn(), trusted: vi.fn() }));
 vi.mock("dns/promises", () => ({ default: { lookup: async () => [{ address: "93.184.216.34", family: 4 }] } }));
@@ -72,5 +72,46 @@ describe("assertSafeHttpOptionsProxy / proxyFromHttpOptions", () => {
 
   it("uses the instance-wide switch by default", async () => {
     await expect(assertSafeHttpOptionsProxy({ CURLOPT_PROXY: "http://127.0.0.1:1" })).rejects.toThrow(/Proxy/);
+  });
+});
+
+describe("feed fetch: v2-sealed credentials (M8 read-only release)", () => {
+  const RSS = "<rss version='2.0'><channel><title>t</title></channel></rss>";
+  const savedAuth = process.env.AUTH_SECRET;
+  beforeEach(() => {
+    process.env.AUTH_SECRET = "feed-fetcher-test-auth-secret-with-enough-chars";
+    mocks.fetchWith.mockReset().mockResolvedValue({ notModified: false, text: RSS, contentType: "application/rss+xml", etag: null, lastModified: null });
+    mocks.trusted.mockReset().mockResolvedValue(false);
+  });
+  afterAll(() => {
+    if (savedAuth === undefined) delete process.env.AUTH_SECRET;
+    else process.env.AUTH_SECRET = savedAuth;
+  });
+
+  it.each(["plaintext", "sealed"] as const)("sends Basic auth and cookie from %s columns", async (format) => {
+    const { sealSecret } = await import("../../lib/secret-box");
+    const httpOptions = JSON.stringify({ CURLOPT_COOKIE: "sid=cookie-value" });
+    const seal = (purpose: string, value: string) => (format === "sealed" ? sealSecret(purpose, value) : value);
+    await fetchFeedArticles({
+      url: "https://news.example.com/feed.xml",
+      authType: "basic",
+      authUsername: seal("feed.authUsername", "user"),
+      authPassword: seal("feed.authPassword", "pass:word"),
+      httpOptions: seal("feed.httpOptions", httpOptions),
+    } as never);
+    expect(mocks.fetchWith).toHaveBeenCalledTimes(1);
+    const sent = JSON.stringify(mocks.fetchWith.mock.calls[0]);
+    expect(sent).toContain(`Basic ${Buffer.from("user:pass:word").toString("base64")}`);
+    expect(sent).toContain("sid=cookie-value");
+    expect(sent).not.toContain("ff2.");
+  });
+
+  it("an undecryptable credential fails the fetch (error status), it is never sent without it", async () => {
+    const { sealSecret } = await import("../../lib/secret-box");
+    const sealed = sealSecret("feed.authPassword", "pw");
+    process.env.AUTH_SECRET = "another-auth-secret-with-enough-characters-000";
+    await expect(fetchFeedArticles({ url: "https://news.example.com/feed.xml", authType: "basic", authUsername: "u", authPassword: sealed } as never))
+      .rejects.toThrow(/feed\.authPassword/);
+    expect(mocks.fetchWith).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,8 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
+// v1 secret format (sha256(AUTH_SECRET), `iv:tag:ct`). Writers still use it in
+// this release; reads go through lib/secret-box.ts, which also understands
+// the v2 `ff2.` format (security audit #2, M8 PR 4: read new, write old).
+import { createCipheriv, createHash, randomBytes } from "crypto";
+import { openSecret, warnSecretOnce } from "@/lib/secret-box";
 
 const ALGORITHM = "aes-256-gcm";
 
@@ -23,29 +27,22 @@ export function encrypt(plaintext: string): string {
   return [iv.toString("base64"), authTag.toString("base64"), encrypted.toString("base64")].join(":");
 }
 
-export function decrypt(ciphertext: string): string {
-  const key = getKey();
-  const parts = ciphertext.split(":");
-  if (parts.length !== 3) throw new Error("Invalid ciphertext format");
-  const [ivB64, authTagB64, encryptedB64] = parts;
-  const iv = Buffer.from(ivB64, "base64");
-  const authTag = Buffer.from(authTagB64, "base64");
-  const encrypted = Buffer.from(encryptedB64, "base64");
-  const decipher = createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
-  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
-}
-
 export function encryptIfValue(value: string | null | undefined): string | null {
   if (!value) return null;
   return encrypt(value);
 }
 
-export function decryptIfValue(value: string | null | undefined): string | null {
+/**
+ * Decrypt a column that is stored v1 (or v2). `purpose` is the column's
+ * registry purpose (`lib/secret-box-core.mjs` SECRET_COLUMNS), e.g. "user.aiApiKey".
+ * Returns null when empty or undecryptable; the latter is logged once per column.
+ */
+export function decryptIfValue(value: string | null | undefined, purpose: string): string | null {
   if (!value) return null;
   try {
-    return decrypt(value);
-  } catch {
+    return openSecret(purpose, value, "v1").value;
+  } catch (error) {
+    warnSecretOnce(error, purpose);
     return null;
   }
 }

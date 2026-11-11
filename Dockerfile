@@ -72,6 +72,9 @@ COPY --chown=nextjs:nodejs prisma ./prisma
 COPY --chown=nextjs:nodejs scripts/prepare-prisma-schema.mjs ./scripts/prepare-prisma-schema.mjs
 COPY --chown=nextjs:nodejs scripts/db-sync.sh ./scripts/db-sync.sh
 COPY --chown=nextjs:nodejs start.sh ./start.sh
+# Stored-secret status CLI (M8): `node scripts/secrets-cli.mjs status`. Plain ESM, read-only.
+COPY --chown=nextjs:nodejs scripts/secrets-cli.mjs ./scripts/secrets-cli.mjs
+COPY --chown=nextjs:nodejs lib/secret-box-core.mjs ./lib/secret-box-core.mjs
 RUN chmod +x ./start.sh
 
 RUN npm install -g prisma@7.8.0

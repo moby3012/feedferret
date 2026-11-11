@@ -10,12 +10,22 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
+type TokenKey = "telegramBotToken" | "gotifyToken" | "ntfyToken";
+const HAS_TOKEN = {
+  telegramBotToken: "hasTelegramBotToken",
+  gotifyToken: "hasGotifyToken",
+  ntfyToken: "hasNtfyToken",
+} as const;
+const NO_REMOVALS: Record<TokenKey, boolean> = { telegramBotToken: false, gotifyToken: false, ntfyToken: false };
+
 export function NotificationChannelsSection() {
   const t = useTranslations();
   const { data, isLoading } = useNotificationChannels();
   const update = useUpdateNotificationChannels();
   const testChannel = useTestNotificationChannel();
 
+  // Tokens are write-only: the server only reports whether one is saved
+  // (`has…Token`). An empty field keeps the saved token; "Remove" clears it.
   const [form, setForm] = useState({
     telegramEnabled: false,
     telegramBotToken: "",
@@ -27,9 +37,22 @@ export function NotificationChannelsSection() {
     ntfyUrl: "",
     ntfyToken: "",
   });
+  const [removed, setRemoved] = useState<Record<TokenKey, boolean>>(NO_REMOVALS);
 
   useEffect(() => {
-    if (data) setForm({ ...data });
+    if (!data) return;
+    setForm({
+      telegramEnabled: data.telegramEnabled,
+      telegramBotToken: "",
+      telegramChatId: data.telegramChatId,
+      gotifyEnabled: data.gotifyEnabled,
+      gotifyUrl: data.gotifyUrl,
+      gotifyToken: "",
+      ntfyEnabled: data.ntfyEnabled,
+      ntfyUrl: data.ntfyUrl,
+      ntfyToken: "",
+    });
+    setRemoved(NO_REMOVALS);
   }, [data]);
 
   function field(key: keyof typeof form) {
@@ -44,13 +67,72 @@ export function NotificationChannelsSection() {
     return (checked: boolean) => setForm((prev) => ({ ...prev, [key]: checked }));
   }
 
+  function isSaved(key: TokenKey) {
+    return Boolean(data?.[HAS_TOKEN[key]]) && !removed[key];
+  }
+
+  function hasToken(key: TokenKey) {
+    return form[key].trim().length > 0 || isSaved(key);
+  }
+
+  function tokenValue(key: TokenKey): string | null | undefined {
+    if (form[key].trim()) return form[key];
+    return removed[key] ? null : undefined;
+  }
+
+  function payload() {
+    return {
+      telegramEnabled: form.telegramEnabled,
+      telegramBotToken: tokenValue("telegramBotToken"),
+      telegramChatId: form.telegramChatId,
+      gotifyEnabled: form.gotifyEnabled,
+      gotifyUrl: form.gotifyUrl,
+      gotifyToken: tokenValue("gotifyToken"),
+      ntfyEnabled: form.ntfyEnabled,
+      ntfyUrl: form.ntfyUrl,
+      ntfyToken: tokenValue("ntfyToken"),
+    };
+  }
+
+  function tokenInput(key: TokenKey, id: string, placeholder: string) {
+    const saved = isSaved(key) && !form[key];
+    return (
+      <>
+        <div className="flex items-center gap-2">
+          <Input
+            id={id}
+            type="password"
+            autoComplete="off"
+            placeholder={saved ? t("notifications.tokenSavedPlaceholder") : placeholder}
+            {...field(key)}
+            className="h-9 font-mono text-footnote"
+          />
+          {saved && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setRemoved((prev) => ({ ...prev, [key]: true }))}
+              className="h-9 shrink-0 rounded-panel text-footnote"
+            >
+              {t("notifications.removeToken")}
+            </Button>
+          )}
+        </div>
+        {removed[key] && !form[key] && (
+          <p className="text-footnote text-muted-foreground">{t("notifications.tokenRemovedOnSave")}</p>
+        )}
+      </>
+    );
+  }
+
   async function save() {
-    update.mutate(form);
+    update.mutate(payload());
   }
 
   async function test(channel: "telegram" | "gotify" | "ntfy") {
     // Save first so credentials are persisted before testing
-    await update.mutateAsync(form);
+    await update.mutateAsync(payload());
     const result = await testChannel.mutateAsync(channel);
     if (result.success) {
       toast.success(t("notifications.successTitle"));
@@ -92,12 +174,7 @@ export function NotificationChannelsSection() {
             <div className="mt-3 space-y-2">
               <div className="space-y-1">
                 <Label htmlFor="telegram-bot-token" className="text-body-sm font-medium">{t("notifications.botTokenPlaceholder")}</Label>
-                <Input
-                  id="telegram-bot-token"
-                  placeholder={t("notifications.botTokenPlaceholder")}
-                  {...field("telegramBotToken")}
-                  className="h-9 font-mono text-footnote"
-                />
+                {tokenInput("telegramBotToken", "telegram-bot-token", t("notifications.botTokenPlaceholder"))}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="telegram-chat-id" className="text-body-sm font-medium">{t("notifications.chatIdPlaceholder")}</Label>
@@ -116,7 +193,7 @@ export function NotificationChannelsSection() {
                 size="sm"
                 variant="outline"
                 onClick={() => test("telegram")}
-                disabled={testChannel.isPending || update.isPending || !form.telegramBotToken || !form.telegramChatId}
+                disabled={testChannel.isPending || update.isPending || !hasToken("telegramBotToken") || !form.telegramChatId}
                 className="h-8 rounded-panel text-footnote"
               >
                 {t("notifications.sendTestMessage")}
@@ -150,19 +227,14 @@ export function NotificationChannelsSection() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="gotify-app-token" className="text-body-sm font-medium">{t("notifications.appToken")}</Label>
-                <Input
-                  id="gotify-app-token"
-                  placeholder={t("notifications.appToken")}
-                  {...field("gotifyToken")}
-                  className="h-9 font-mono text-footnote"
-                />
+                {tokenInput("gotifyToken", "gotify-app-token", t("notifications.appToken"))}
               </div>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => test("gotify")}
-                disabled={testChannel.isPending || update.isPending || !form.gotifyUrl || !form.gotifyToken}
+                disabled={testChannel.isPending || update.isPending || !form.gotifyUrl || !hasToken("gotifyToken")}
                 className="h-8 rounded-panel text-footnote"
               >
                 {t("notifications.sendTestNotification")}
@@ -196,12 +268,7 @@ export function NotificationChannelsSection() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="ntfy-token" className="text-body-sm font-medium">{t("notifications.tokenOptionalPlaceholder")}</Label>
-                <Input
-                  id="ntfy-token"
-                  placeholder={t("notifications.tokenOptionalPlaceholder")}
-                  {...field("ntfyToken")}
-                  className="h-9 font-mono text-footnote"
-                />
+                {tokenInput("ntfyToken", "ntfy-token", t("notifications.tokenOptionalPlaceholder"))}
               </div>
               <p className="text-footnote text-muted-foreground">
                 {t("notifications.ntfyHint")}

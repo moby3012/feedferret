@@ -387,7 +387,7 @@ export async function testRenderSidecar(config: { url?: string; token?: string; 
       where: { id: "global" },
       select: { renderSidecarToken: true },
     });
-    token = decryptIfValue(current?.renderSidecarToken) || null;
+    token = decryptIfValue(current?.renderSidecarToken, "globalSettings.renderSidecarToken") || null;
   }
 
   const testUrl = String(config.testUrl || "").trim() || "https://example.com/";
@@ -432,7 +432,7 @@ export async function testRsshubConnection(config: { baseUrl?: string; apiKey?: 
       where: { id: "global" },
       select: { rsshubApiKey: true },
     });
-    apiKey = decryptIfValue(current?.rsshubApiKey) || null;
+    apiKey = decryptIfValue(current?.rsshubApiKey, "globalSettings.rsshubApiKey") || null;
   }
 
   const testRoute = String(config.testRoute || "").trim() || RSSHUB_TEST_ROUTE;
@@ -459,8 +459,8 @@ export async function testChangedetectionConnection(config: { baseUrl?: string; 
       where: { id: "global" },
       select: { changedetectionApiKey: true, changedetectionRssToken: true },
     });
-    if (apiKey === "__encrypted__") apiKey = decryptIfValue(current?.changedetectionApiKey) || "";
-    if (rssToken === "__encrypted__") rssToken = decryptIfValue(current?.changedetectionRssToken) || "";
+    if (apiKey === "__encrypted__") apiKey = decryptIfValue(current?.changedetectionApiKey, "globalSettings.changedetectionApiKey") || "";
+    if (rssToken === "__encrypted__") rssToken = decryptIfValue(current?.changedetectionRssToken, "globalSettings.changedetectionRssToken") || "";
   }
   if (!apiKey) {
     return { success: false as const, error: "An API key is required (Settings → API in your changedetection.io instance)." };
