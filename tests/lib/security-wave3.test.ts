@@ -293,6 +293,14 @@ describe("N5: webhook bodies are built, not concatenated", () => {
     });
     afterEach(() => vi.unstubAllGlobals());
 
+    it("keeps the redirect status and tells webhook users to configure the final URL", async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(null, { status: 301, headers: { location: "https://8.8.8.8/final" } }));
+      const result = await executeWebhookCall({ url: "https://93.184.216.34/hook" }, vars);
+      expect(result).toMatchObject({ ok: false, status: 301 });
+      expect(result.error).toContain("Ziel leitet weiter – bitte die endgültige https-URL eintragen");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
     it("sends a signed body whose parsed keys cannot be overridden by the title", async () => {
       const result = await executeWebhookCall({ url: "https://93.184.216.34/hook", secret: "s" }, vars);
       expect(result.ok).toBe(true);

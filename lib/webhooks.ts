@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from "crypto";
-import { safeFetch, assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { FetchRedirectError, safeFetch, assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { urlForLog } from "@/lib/logger";
 
 export type WebhookConfig = {
@@ -247,7 +247,7 @@ export async function executeWebhookCall(
   } catch (err) {
     return {
       ok: false,
-      status: null,
+      status: err instanceof FetchRedirectError ? err.status : null,
       error: String(err).slice(0, 500),
     };
   }

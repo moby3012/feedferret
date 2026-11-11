@@ -1,5 +1,6 @@
+import { Blob as NodeBlob } from "node:buffer";
 import dns from "dns/promises";
-import { fetch as undiciFetch } from "undici";
+import { fetch as undiciFetch, FormData as UndiciFormData } from "undici";
 import { isPrivateIp } from "./private-ip";
 export { isPrivateIp } from "./private-ip";
 import { dispatcherFor } from "./safe-dispatcher";
@@ -183,7 +184,7 @@ export async function fetchWithSsrfProtection(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await safeFetch(current, {
+      const response = await fetchOneHop(current, {
         ...init,
         headers,
         method,
@@ -259,16 +260,35 @@ function urlWithoutQuery(rawUrl: string): string {
 }
 
 /** One hop only: callers must explicitly validate and authorize redirects. */
-export async function safeFetch(rawUrl: string, init: RequestInit = {}, options: SafeFetchTextOptions = {}): Promise<Response> {
+async function fetchOneHop(rawUrl: string, init: RequestInit = {}, options: SafeFetchTextOptions = {}): Promise<Response> {
   const url = await assertSafeFetchUrl(rawUrl, options);
   if (options.proxy) await assertSafeProxyUrl(options.proxy, { allowInternal: options.proxyAllowInternal ?? options.allowInternal });
   // Never accept a caller-supplied dispatcher: it could bypass the socket lookup.
   const { dispatcher: _ignored, ...request } = init as RequestInit & { dispatcher?: unknown };
   void _ignored;
+  // impit uses the global body brands; only normalize for npm undici below.
   if (options.impersonate && url.protocol === "https:" && !options.proxy && !options.insecureTls) {
     const impit = options.allowInternal ? getImpitFetch() : await getPinnedImpitFetch();
     if (impit) return await impit(url.toString(), { ...request, redirect: "manual" }) as Response;
   }
+  // Node's global FormData and npm undici have different WebIDL brands.
+  // Rebuild multipart entries instead of silently stringifying the body.
+  const body = request.body;
+  if (Object.prototype.toString.call(body) === "[object FormData]") {
+    const form = new UndiciFormData();
+    for (const [name, value] of (body as FormData).entries()) {
+      if (typeof value === "string") form.append(name, value);
+      else form.append(name, new NodeBlob([await value.arrayBuffer()], { type: value.type }), value.name);
+    }
+    request.body = form as unknown as BodyInit;
+  } else if (body && ["[object Blob]", "[object File]"].includes(Object.prototype.toString.call(body))) {
+    const blob = body as Blob;
+    request.body = new Uint8Array(await blob.arrayBuffer());
+    const headers = new Headers(request.headers);
+    if (blob.type && !headers.has("content-type")) headers.set("content-type", blob.type);
+    request.headers = headers;
+  }
+
   try {
     return await undiciFetch(url, { ...request, redirect: "manual", dispatcher: dispatcherFor(options) } as Parameters<typeof undiciFetch>[1]) as unknown as Response;
   } catch (error) {
@@ -278,4 +298,21 @@ export async function safeFetch(rawUrl: string, init: RequestInit = {}, options:
     }
     throw error;
   }
+}
+
+export class FetchRedirectError extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP ${status}: Ziel leitet weiter – bitte die endgültige https-URL eintragen (use the final destination URL).`);
+    this.name = "FetchRedirectError";
+  }
+}
+
+/** API clients are one hop only. Feed/page callers use the guarded redirect loop. */
+export async function safeFetch(rawUrl: string, init: RequestInit = {}, options: SafeFetchTextOptions = {}): Promise<Response> {
+  const response = await fetchOneHop(rawUrl, init, options);
+  if (response.status >= 300 && response.status < 400 && response.status !== 304) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new FetchRedirectError(response.status);
+  }
+  return response;
 }

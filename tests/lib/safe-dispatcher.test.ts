@@ -162,3 +162,45 @@ describe("impit CONNECT bridge", () => {
 it("fails closed for unsupported admin upstreams before starting a listener", async () => {
   await expect(startEgressProxy("test", undefined, "socks5://localhost:1080")).rejects.toThrow("requires HTTP(S)");
 });
+
+it("serializes global FormData with strings, duplicate fields and file bytes as multipart", async () => {
+  let contentType = "";
+  let payload = "";
+  const server = http.createServer((req, res) => {
+    contentType = req.headers["content-type"] || "";
+    req.on("data", chunk => { payload += chunk.toString("latin1"); });
+    req.on("end", () => res.end("ok"));
+  });
+  const port = await listen(server);
+  cleanup.push(() => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }));
+  const body = new FormData();
+  body.append("field", "first"); body.append("field", "second");
+  body.append("file", new Blob([new Uint8Array([0, 255, 65])], { type: "application/octet-stream" }), "sample.bin");
+  const response = await safeFetch(`http://127.0.0.1:${port}/`, { method: "POST", body }, { allowInternal: true });
+  await response.text();
+  expect(contentType).toMatch(/^multipart\/form-data; boundary=/);
+  expect(payload).toContain('name="field"\r\n\r\nfirst');
+  expect(payload).toContain('name="field"\r\n\r\nsecond');
+  expect(payload).toContain('filename="sample.bin"');
+  expect(payload).toContain("\x00\xffA");
+  expect(payload).not.toContain("[object FormData]");
+});
+it("sends global Blob bytes and preserves its content type", async () => {
+  let contentType = "";
+  const chunks: Buffer[] = [];
+  const server = http.createServer((req, res) => {
+    contentType = req.headers["content-type"] || "";
+    req.on("data", chunk => chunks.push(chunk)); req.on("end", () => res.end("ok"));
+  });
+  const port = await listen(server);
+  cleanup.push(() => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }));
+  await (await safeFetch(`http://127.0.0.1:${port}/`, { method: "POST", body: new Blob([new Uint8Array([0, 255, 65])], { type: "application/octet-stream" }) }, { allowInternal: true })).text();
+  expect(contentType).toBe("application/octet-stream");
+  expect(Buffer.concat(chunks)).toEqual(Buffer.from([0, 255, 65]));
+});
+it("refuses one-hop API redirects with actionable advice and no follow-up", async () => {
+  const fetch = vi.fn(async () => new Response(null, { status: 301, headers: { location: "https://8.8.4.4/final" } }));
+  vi.stubGlobal("fetch", fetch);
+  await expect(safeFetch("https://8.8.8.8/")).rejects.toThrow("HTTP 301: Ziel leitet weiter – bitte die endgültige https-URL eintragen");
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
