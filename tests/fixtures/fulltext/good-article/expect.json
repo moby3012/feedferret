@@ -1,0 +1,9 @@
+{
+  "url": "https://tech.example/2026/11/heat-pumps",
+  "verdict": "good",
+  "accept": true,
+  "mustContain": [
+    "Kritiker bemängeln, dass die Finanzierung noch nicht gesichert sei und",
+    "Fachleute der örtlichen Hochschule begleiten das Projekt wissenschaftl"
+  ]
+}

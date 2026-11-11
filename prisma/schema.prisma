@@ -456,6 +456,16 @@ model Article {
   newsletterAddressId     String?   // NewsletterAddress that delivered it (N1 PR D "Adresse sperren"); plain id, no FK
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Full-text pipeline (lib/full-text-store.ts). `content` always holds the BEST
+  // content to serve (reader, REST, GReader, Fever). When it holds extracted full
+  // text, `feedContent` keeps the feed-provided (sanitized HTML) version so a
+  // later sync compares upstream changes against it instead of against the full
+  // text (no teaser<->full-text ping-pong). null = `content` IS the feed content.
+  feedContent       String?
+  fullTextStatus    String?   // null = never attempted | "ok" | "rejected" (not better than feed) | "failed" | "deferred" (host backoff)
+  fullTextReason    String?   // short machine reason, e.g. "wall", "teaser", "thin", "http_403"
+  fullTextFetchedAt DateTime? // last extraction attempt (any outcome)
+  fullTextAttempts  Int?      // failed attempts since the last upstream change (null = 0)
   @@unique([userId, feedId, dedupeKey])
   @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([userId, contentHash])

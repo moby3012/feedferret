@@ -1,0 +1,15 @@
+{
+  "url": "https://magazin.example/2026/11/waermeplan",
+  "verdict": "good",
+  "accept": true,
+  "mustContain": [
+    "Die Stadtwerke haben am Montag ein neues Konzept für die Wärmeversorgu",
+    "Der Stadtrat will im Frühjahr über die erste Ausbaustufe entscheiden, ",
+    "Erste Pilotgebäude am Marktplatz sollen bereits im kommenden Winter an"
+  ],
+  "mustNotContain": [
+    "showPaywall",
+    "Mehr zum Thema Energie und Wärme Teil 7",
+    "Abonnieren Sie unseren Newsletter"
+  ]
+}

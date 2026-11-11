@@ -1,0 +1,16 @@
+{
+  "url": "https://news.example/bilder/baustelle",
+  "verdict": "good",
+  "accept": true,
+  "mustContain": [
+    "https://cdn.news.example/img/baustelle-1.jpg",
+    "https://news.example/img/rohr-1200.jpg",
+    "https://cdn.news.example/img/plan.png",
+    "https://cdn.news.example/img/team.jpg"
+  ],
+  "mustNotContain": [
+    "data:image/svg+xml",
+    "blank.gif"
+  ],
+  "minImages": 4
+}

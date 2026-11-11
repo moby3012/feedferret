@@ -1,0 +1,6 @@
+{
+  "url": "https://news.example/artikel/waermeplan-123.html",
+  "verdict": "wall",
+  "accept": false,
+  "mustNotContain": []
+}

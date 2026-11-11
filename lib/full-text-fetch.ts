@@ -1,7 +1,8 @@
 import { FEED_CLIENT_SELECT } from "@/lib/feed-secrets";
 import { db } from "@/lib/db";
-import { getSanitizer } from "@/lib/sanitize-html";
-import { estimateReadMinutes } from "@/lib/article-kind";
+import { decideFullText } from "@/lib/extraction-quality";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { FULL_TEXT_STATE_SELECT, storeFullText } from "@/lib/full-text-store";
 import { fetchAndExtractReadable } from "@/lib/readability-extract";
 import { HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
 import { looksLikeTruncatedFeed } from "@/lib/full-text-mode";
@@ -63,15 +64,24 @@ export function describePageFetchError(error: unknown): string {
 export async function refetchArticleFullText(userId: string, articleId: string) {
     const article = await db.article.findFirst({
         where: { id: articleId, userId },
-        include: { feed: true },
+        select: FULL_TEXT_STATE_SELECT,
     });
 
     if (!article) throw new Error("Article not found");
+
+    // One limit for every surface (action, REST v1, MCP): a manual fetch can
+    // escalate to the render sidecar / hosted API.
+    const limit = checkRateLimit(`user:${userId}`, RATE_LIMITS.fullTextFetch);
+    if (!limit.success) {
+        throw new Error(`Too many full-text requests. Try again in ${limit.retryAfterSecs ?? 60} seconds.`);
+    }
     if (!article.link) throw new Error("Article has no source link");
 
     let result: Awaited<ReturnType<typeof fetchAndExtractReadable>>;
     try {
-        result = await fetchAndExtractReadable(article.link, { userId });
+        // Escalate (other transport → render sidecar → hosted) until the result
+        // beats what the reader shows now.
+        result = await fetchAndExtractReadable(article.link, { userId, baselineHtml: article.content, gate: "manual" });
     } catch (error) {
         if (error instanceof HostedFetchRateLimitedError) {
             throw new Error(
@@ -82,22 +92,27 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
     }
     if (!result.html) throw new Error("Could not extract article content");
 
-    const DOMPurify = await getSanitizer();
-    const plain = DOMPurify.sanitize(result.html, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
     const existingPlainLength = (article.content || "").replace(/<[^>]*>?/gm, "").length;
-
-    if (plain.length < 400 || plain.length <= existingPlainLength) {
+    const decision = decideFullText(result.quality, article.content, "manual");
+    if (!decision.accept) {
+        if (result.quality?.verdict === "wall") {
+            throw new Error("The page only showed a cookie consent, subscription or bot-check screen instead of the article.");
+        }
         throw new Error("Full text could not improve this article");
     }
+    const plainLength = result.quality?.textLength ?? 0;
 
-    const updated = await db.article.update({
+    const stored = await storeFullText(article, { content: result.html, format: "html", excerpt: result.excerpt });
+    if (!stored) {
+        // The article changed while the page was being fetched (a sync recorded
+        // an upstream update, or another fetch stored full text first): this
+        // result belongs to an outdated version and is discarded.
+        throw new Error("This article was updated while its full text was loading. Try again.");
+    }
+    const updated = await db.article.findFirstOrThrow({
         where: { id: article.id, userId },
-        data: {
-            content: result.html,
-            contentFormat: "html",
-            excerpt: result.excerpt?.trim() || plain.slice(0, 240),
-            readMinutes: estimateReadMinutes(plain),
-        },
+        // feedContent is internal (the feed version kept for sync comparisons).
+        omit: { feedContent: true },
         include: {
             // Explicit allowlist: this article is returned to clients (N4).
             feed: { select: FEED_CLIENT_SELECT },
@@ -106,7 +121,7 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
     });
 
     const suggestAutoFullText =
-        looksLikeTruncatedFeed(existingPlainLength, plain.length) &&
+        looksLikeTruncatedFeed(existingPlainLength, plainLength) &&
         updated.feed.fullTextMode === "off" &&
         !updated.feed.fullTextAutoSuggestDismissed
             ? { feedId: updated.feed.id, feedName: updated.feed.name }

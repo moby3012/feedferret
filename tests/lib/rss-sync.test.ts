@@ -332,7 +332,7 @@ describe("upsertArticleBatch", () => {
 
     const result = await upsertArticleBatch([]);
 
-    expect(result).toEqual({ upsertedIds: [], createdArticleIds: [] });
+    expect(result).toEqual({ upsertedIds: [], createdArticleIds: [], fullTextCandidateIds: [] });
     expect(db.article.findMany).not.toHaveBeenCalled();
   });
 });

@@ -173,6 +173,8 @@ export async function setArticleLabels(articleId: string, labelIds: string[]) {
 
     return await db.article.findUnique({
         where: { id: articleId, userId: session.user.id },
+        // feedContent is internal (feed version kept for sync comparisons).
+        omit: { feedContent: true },
         include: {
             feed: { select: { id: true, name: true, icon: true, htmlUrl: true } },
             labels: { include: { label: true } },
