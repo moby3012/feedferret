@@ -1,5 +1,6 @@
 "use server";
 
+import { redact } from "@/lib/redact";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { getConfiguredMailProviders, sendTestSystemEmail, type MailProviderId } from "@/lib/mail";
@@ -530,11 +531,12 @@ export async function getLoginAttempts(limit = 100) {
 
 export async function getSystemLogs(limit = 200, category?: string) {
   await checkAdmin();
-  return db.systemLog.findMany({
+  const logs = await db.systemLog.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,
     where: category ? { category } : undefined,
   });
+  return logs.map(log => ({ ...log, message: redact(String(log.message)), metadata: log.metadata ? redact(log.metadata) : log.metadata }));
 }
 
 export async function getStorageStats() {

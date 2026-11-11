@@ -1,3 +1,4 @@
+import { redact, redactValue } from "./redact";
 import { db } from "@/lib/db"
 
 export async function writeSystemLog(
@@ -11,8 +12,8 @@ export async function writeSystemLog(
       data: {
         level,
         category,
-        message,
-        metadata: metadata ? JSON.stringify(metadata) : null,
+        message: redact(String(message)),
+        metadata: metadata ? JSON.stringify(redactValue(metadata)) : null,
       },
     })
   } catch {

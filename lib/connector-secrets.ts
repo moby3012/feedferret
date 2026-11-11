@@ -27,6 +27,7 @@
 // - A user-chosen proxy never sees the secret: with CURLOPT_PROXY set the
 //   fetcher requests the keyless URL as an ordinary external fetch.
 
+import { redact } from "./redact";
 import { logger } from "@/lib/logger";
 import { changedetectionRouteError, rsshubRouteError } from "@/lib/rsshub-route";
 
@@ -207,7 +208,7 @@ export function applyConnectorSecretsWith(rules: ConnectorSecretRule[], rawUrl: 
 
 /** Replaces every configured secret value occurring in free text (errors, logs) with "***". */
 export function redactConnectorTextWith(rules: ConnectorSecretRule[], text: string): string {
-  let out = text;
+  let out = redact(text);
   for (const rule of rules) {
     if (!rule.value || rule.value.length < 4) continue;
     out = out.split(rule.value).join("***");
@@ -229,14 +230,12 @@ export async function stripConnectorSecrets(rawUrl: string): Promise<string> {
  */
 export async function redactFeedsForClient<T extends { url?: string | null; lastError?: string | null }>(feeds: T[]): Promise<T[]> {
   const rules = await getConnectorSecretRules();
-  if (!rules.length) return feeds;
   return feeds.map((feed) => redactFeedWith(rules, feed));
 }
 
 export async function redactFeedForClient<T extends { url?: string | null; lastError?: string | null }>(feed: T): Promise<T> {
   if (!feed) return feed;
   const rules = await getConnectorSecretRules();
-  if (!rules.length) return feed;
   return redactFeedWith(rules, feed);
 }
 
