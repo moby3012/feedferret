@@ -6,7 +6,9 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { applyArticleStateOps, markArticleIdsRead, markListRangeRead } from "@/app/actions/article-state";
 import { fetchFullText as fetchFullTextAction, markAllAsRead, markArticlesAsUnread, setArticleLabels, updateFeed } from "@/app/actions/feeds";
-import { adjustCounts, adjustLabelCounts, applyArticlePatch, findCachedArticle, invalidateCounts, isHiddenFromAll, patchCachedArticle, patchCachedArticles, rollbackFailedOps } from "./cache";
+import { adjustCounts, adjustLabelCounts, applyArticlePatch, cachedRowsOfScope, findCachedArticle, invalidateCounts, isHiddenFromAll, markListsStale, patchCachedArticle, patchCachedArticles, rollbackFailedOps } from "./cache";
+import type { Scope } from "./scope";
+import { markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
 import { MARK_VIEW_READ_KEY, qk } from "./keys";
 import { registerStateBatcher, unregisterStateBatcher } from "./batcher-registry";
 import { StateBatcher, type StateField, type StoryCascade } from "./state-batcher";
@@ -22,8 +24,16 @@ import { isOnline } from "@/features/bootstrap/online";
 
 export type ToggleSource = "tap" | "swipe" | "key" | "auto" | "scroll";
 
-/** `categoryId`: the category a by-name selection resolved to (names are not unique). */
-export type MarkViewScope = { feedId?: string | null; category?: string | null; categoryId?: string | null; search?: string | null };
+/**
+ * `categoryId`: the category a by-name selection resolved to (names are not unique).
+ * `cutoff`: arrival cutoff (epoch ms, server time) — the list snapshot; rows that arrived later stay unread.
+ */
+export type MarkViewScope = { feedId?: string | null; category?: string | null; categoryId?: string | null; search?: string | null; cutoff?: number | null };
+
+export interface MarkViewOptions {
+  /** Server time the bound list's first page was loaded (`ArticlePage.snapshotAt`); omitted = the server's request time. */
+  cutoff?: number | null;
+}
 
 /**
  * "Alles bis hier" as a server-side range of the bound list (`listKey`, its
@@ -52,8 +62,12 @@ export interface ArticleActions {
   toggleLater(id: string): void;
   setLabels(id: string, labelIds: string[]): void;
   fetchFullText(id: string): void;
-  /** Bulk mark-read of a whole view with the 6 s Undo toast (server-issued undo token). */
-  markViewRead(scope: MarkViewScope): void;
+  /**
+   * Bulk mark-read of a whole view with the 6 s Undo toast (server-issued undo
+   * token). Cached rows of the view flip to read at once (optimistic, by
+   * scope); the server marks the rest set-based.
+   */
+  markViewRead(scope: Scope, opts?: MarkViewOptions): void;
   /**
    * Bulk mark-read of explicit loaded rows ("Alles bis hier als gelesen") with
    * the same 6 s Undo toast (server-issued undo token).
@@ -65,7 +79,11 @@ export interface ArticleActions {
 
 const STORY_TOAST_ID = "story-cascade";
 
-type BulkReadRequest = { kind: "scope"; scope: MarkViewScope } | { kind: "ids"; ids: string[] } | { kind: "range"; range: MarkRange };
+/** `patched`: the cached rows `markViewRead` already flipped to read (rolled back on failure, restored on Undo). */
+type BulkReadRequest = { kind: "scope"; scope: MarkViewScope; patched: string[] } | { kind: "ids"; ids: string[] } | { kind: "range"; range: MarkRange };
+
+/** Bulk results: the view mark returns `count` and omits large id lists (`idsTruncated`); ids / range return `ids` only. */
+type BulkReadResponse = { ids: string[]; count?: number; idsTruncated?: true; undoToken: string | null; incomplete?: true; tooLarge?: { limit: number }; rateLimited?: true };
 const FULL_TEXT_KEY = ["fetch-full-text"] as const;
 const FAILURE_TOAST_ID = "article-state-failed";
 const OFFLINE_TOAST_ID = "article-state-offline";
@@ -204,15 +222,17 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
   }, [qc, batcher]);
 
   const { mutate: undoMutate } = useMutation({
-    mutationFn: async (undoToken: string) => {
+    mutationFn: async ({ undoToken }: { undoToken: string; patched: string[] }) => {
       // Queued single toggles must reach the server first, or they would land
       // after the bulk write and leave server and cache disagreeing.
       batcher.flush();
       await batcher.whenIdle();
       return markArticlesAsUnread(undoToken);
     },
-    onSuccess: (result) => {
-      applyBulkRead(qc, result.ids, false);
+    onSuccess: (result, { patched }) => {
+      // Large results come back without ids: restore the rows this client flipped, refetch the rest lazily.
+      applyBulkRead(qc, result.idsTruncated ? patched : result.ids, false);
+      if (result.idsTruncated) markListsStale(qc);
       invalidateCounts(qc);
     },
     onError: () => {
@@ -226,11 +246,11 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
     mutationFn: async (request: BulkReadRequest) => {
       batcher.flush();
       await batcher.whenIdle();
-      if (request.kind === "ids") return markArticleIdsRead(request.ids);
-      if (request.kind === "range") return markListRangeRead(request.range);
-      return markAllAsRead(request.scope);
+      if (request.kind === "ids") return markArticleIdsRead(request.ids) as Promise<BulkReadResponse>;
+      if (request.kind === "range") return markListRangeRead(request.range) as Promise<BulkReadResponse>;
+      return markAllAsRead(request.scope) as Promise<BulkReadResponse>;
     },
-    onSuccess: (result) => {
+    onSuccess: (result, request) => {
       if ((result as { rateLimited?: true } | undefined)?.rateLimited) {
         // Nothing changed: too many range marks in a short time (server limit).
         toast.error(tRef.current.tList("markUpToHereRateLimited"));
@@ -243,18 +263,33 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
         return;
       }
       const ids = result?.ids ?? [];
-      if (ids.length === 0) return;
+      const count = result?.count ?? ids.length;
+      const patched = request.kind === "scope" ? request.patched : [];
+      if (count === 0) {
+        // Nothing changed on the server (already read there): let the counts catch up if we patched rows.
+        if (patched.length) invalidateCounts(qc);
+        return;
+      }
       applyBulkRead(qc, ids, true);
+      // Too many to ship: other lists may hold changed rows the scope patch missed — refetch them lazily.
+      if (result.idsTruncated) markListsStale(qc);
+      // A chunk failed server-side after others were written: the bound list must show the truth.
+      if (result.incomplete) void qc.invalidateQueries({ queryKey: qk.lists });
       // Rows the cache does not hold moved counts too: one reconcile request.
       invalidateCounts(qc);
       const undoToken = result.undoToken;
-      toast(tRef.current.tSidebar("undoMarkAllReadMessage", { count: ids.length }), {
+      toast(tRef.current.tSidebar("undoMarkAllReadMessage", { count }), {
         duration: 6000,
-        action: undoToken ? { label: tRef.current.tSidebar("undo"), onClick: () => undoMutate(undoToken) } : undefined,
+        action: undoToken ? { label: tRef.current.tSidebar("undo"), onClick: () => undoMutate({ undoToken, patched: [...new Set([...patched, ...ids])] }) } : undefined,
       });
     },
-    onError: () => {
-      // Nothing was changed (the server update is atomic).
+    onError: (_error, request) => {
+      // Take back the optimistic scope patch; the server may have written some chunks, so reconcile.
+      if (request.kind === "scope" && request.patched.length) {
+        applyBulkRead(qc, request.patched, false);
+        markListsStale(qc);
+      }
+      invalidateCounts(qc);
       toast.error(tRef.current.tSidebar("markAllReadFailed"));
     },
   });
@@ -342,9 +377,13 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
 
       fetchFullText: (id) => fullTextMutate(id),
 
-      markViewRead: (scope) => {
+      markViewRead: (scope, opts) => {
         if (guardOffline()) return;
-        markAllMutate({ kind: "scope", scope });
+        const cutoff = typeof opts?.cutoff === "number" && Number.isFinite(opts.cutoff) ? opts.cutoff : null;
+        // Optimistic: the rows the user sees flip now; the server call (seconds for huge views) runs behind.
+        const patched = cachedRowsOfScope(qc, scope, cutoff);
+        applyBulkRead(qc, patched, true);
+        markAllMutate({ kind: "scope", scope: { ...markViewScopeOf(scope), ...(cutoff !== null ? { cutoff } : {}) }, patched });
       },
 
       markIdsRead: (ids) => {

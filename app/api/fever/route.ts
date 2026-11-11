@@ -3,7 +3,9 @@ export const runtime = "nodejs";
 
 import { decimalExternalId, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { markWhereRead } from "@/server/articles/bulk-read";
 import { isLegacyFeverKey } from "@/lib/fever-keys";
 import { hashApiToken } from "@/lib/token";
 import { touchApiPassword } from "@/lib/greader";
@@ -219,34 +221,17 @@ async function handleMark(
     if (Object.keys(data).length) {
       await db.article.updateMany({ where: { extId: { in: numericIds(withIds || id!).slice(0, FEVER_MAX_WITH_IDS) }, userId, ...(before ? { createdAt: { lte: beforeDate } } : {}) }, data });
     }
-  } else if (mark === "feed" && as_ === "read") {
-    await db.article.updateMany({
-      where: {
-        feed: { userId, extId: { in: numericIds(id || "") } },
-        userId,
-        isRead: false,
-        createdAt: { lte: beforeDate },
-      },
-      data: { isRead: true, readAt: new Date() },
-    });
-  } else if (mark === "group" && as_ === "read") {
-    if (id?.trim() === "0") {
-      // Special group ID 0 = all feeds
-      await db.article.updateMany({
-        where: { userId, isRead: false, createdAt: { lte: beforeDate } },
-        data: { isRead: true, readAt: new Date() },
-      });
-    } else {
-      await db.article.updateMany({
-        where: {
-          userId,
-          isRead: false,
-          createdAt: { lte: beforeDate },
-          feed: { userId, category: { userId, extId: { in: numericIds(id || "") } } },
-        },
-        data: { isRead: true, readAt: new Date() },
-      });
-    }
+  } else if ((mark === "feed" || mark === "group") && as_ === "read") {
+    // Chunked, set-based, `updatedAt` untouched (server/articles/bulk-read.ts); `before` = arrival cutoff.
+    const now = new Date();
+    const cutoff = beforeDate.getTime() > now.getTime() ? now : beforeDate;
+    const scope: Prisma.ArticleWhereInput =
+      mark === "feed"
+        ? { feed: { userId, extId: { in: numericIds(id || "") } } }
+        : id?.trim() === "0"
+          ? {} // Special group ID 0 = all feeds
+          : { feed: { userId, category: { userId, extId: { in: numericIds(id || "") } } } };
+    await markWhereRead(userId, scope, { cutoff, now });
   }
 }
 

@@ -19,7 +19,7 @@ import { groupsStories, showApplies, type ListKey } from "@/features/articles/sc
 import { useCounts, useScopeUnread } from "@/features/bootstrap/queries";
 import { formatLoc, listKeyOfLoc, type Loc, type TabId } from "@/features/reader/nav/location";
 import { useLayoutClass, useReaderStacked } from "@/features/reader/layout/layout-class";
-import { canMarkAll, markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
+import { canMarkAll } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
 import { useOnline } from "@/features/bootstrap/online";
 import { useReleaseArticleSpoiler } from "@/hooks/use-rss-data";
@@ -190,7 +190,8 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
   const online = useOnline();
   const unreadCount = p.scopeUnread ?? filtered.filter((a) => !a.isRead).length;
   const selectedArticle = p.selectedId ? (filtered.find((a) => a.id === p.selectedId) ?? null) : null;
-  const markAll = scope && canMarkAll(scope) ? () => markViewRead(markViewScopeOf(scope)) : undefined;
+  // The list snapshot is the cutoff: rows that arrived after it (behind the "↑ N neu" pill) stay unread.
+  const markAll = scope && canMarkAll(scope) ? () => markViewRead(scope, { cutoff: list.snapshotAt }) : undefined;
   const onMarkRead = useCallback(
     (id: string) => {
       const article = displayArticles.find((a) => a.id === id);
@@ -209,7 +210,7 @@ const ListPaneView = memo(function ListPaneView(p: ViewProps) {
   }, [data.feeds, feedId, p.byFeed]);
   const continueToNext = () => {
     if (!nextFeed) return;
-    if (data.prefs?.markReadOnAdvance && unreadCount > 0 && feedId) markViewRead({ feedId, category: null });
+    if (data.prefs?.markReadOnAdvance && unreadCount > 0 && feedId) markViewRead({ kind: "feed", id: feedId }, { cutoff: list.snapshotAt });
     void nav.goScope({ kind: "feed", id: nextFeed.id });
   };
 

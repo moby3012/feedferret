@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useArticleActions } from "@/features/articles/mutations";
 import { getLayoutClass } from "@/features/reader/layout/layout-class";
-import { canMarkAll, markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
+import { canMarkAll } from "@/features/reader/nav/sidebar-keys";
 import { getNavState, nav } from "@/features/reader/nav/store";
 import { clearSearch } from "./search-draft";
 import type { ShellActions } from "./shell-context";
@@ -82,7 +82,7 @@ export function useShellKeys(shell: ShellActions) {
       }
       if (e.key === "A" && e.shiftKey) {
         e.preventDefault();
-        if (loc.scope && canMarkAll(loc.scope)) markViewRead(markViewScopeOf(loc.scope));
+        if (loc.scope && canMarkAll(loc.scope)) markViewRead(loc.scope);
         return;
       }
       if (e.key === "S" && e.shiftKey) {

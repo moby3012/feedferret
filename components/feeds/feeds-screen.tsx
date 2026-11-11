@@ -54,7 +54,6 @@ import { useCountsQuery } from "@/features/bootstrap/queries";
 import { EMPTY_COUNTS } from "@/features/bootstrap/types";
 import type { Scope } from "@/features/articles/scope";
 import { isCoarsePointer } from "@/features/reader/layout/layout-class";
-import { markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
 import { getNavState, nav, useNav } from "@/features/reader/nav/store";
 import { useOwnedOverlay } from "@/features/reader/nav/use-owned-overlay";
 import { useArticleActions } from "@/features/articles/mutations";
@@ -452,7 +451,7 @@ export function FeedsScreen() {
             <AlertDialogCancel>{tCommon("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (markAll) markViewRead(markViewScopeOf(markAll.scope));
+                if (markAll) markViewRead(markAll.scope);
                 setMarkAll(null);
               }}
             >

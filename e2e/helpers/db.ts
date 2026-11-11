@@ -363,13 +363,13 @@ export function insertArrivalBelow(belowId: string, id: string): () => void {
  * feed of the user's first seeded article: what a background sync would add
  * on top of the Neu list. Titles "Arrival <tag> <i>". Removed by the returned function.
  */
-export function insertArrivals(userKey: string, n: number, tag = "x"): { ids: string[]; cleanup: () => void } {
+export function insertArrivals(userKey: string, n: number, tag = "x", feedId?: string): { ids: string[]; cleanup: () => void } {
   const user = manifest().users[userKey];
   const db = open();
   const ids = Array.from({ length: n }, (_, i) => `e2e-arrival-${userKey}-${tag}-${i}`);
   try {
     const iso = (d: Date) => d.toISOString().replace("Z", "+00:00");
-    const ref = db.prepare(`SELECT feedId FROM "Article" WHERE id = ?`).get(user.firstArticleId) as { feedId: string };
+    const ref = feedId ? { feedId } : (db.prepare(`SELECT feedId FROM "Article" WHERE id = ?`).get(user.firstArticleId) as { feedId: string });
     const now = Date.now();
     const insert = db.prepare(
       `INSERT INTO "Article" (id, feedId, userId, title, link, content, excerpt, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?)`,

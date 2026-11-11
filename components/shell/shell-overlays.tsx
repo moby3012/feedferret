@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useArticleActions } from "@/features/articles/mutations";
-import { canMarkAll, categoryKey, markViewScopeOf, scopeFromSidebarKey } from "@/features/reader/nav/sidebar-keys";
+import { canMarkAll, categoryKey, scopeFromSidebarKey } from "@/features/reader/nav/sidebar-keys";
 import type { OverlayId } from "@/features/reader/nav/overlays";
 import { nav, useNav } from "@/features/reader/nav/store";
 import { useShellActions, useShellData } from "./shell-context";
@@ -89,7 +89,7 @@ export const ShellOverlays = memo(function ShellOverlays() {
           categories={categories}
           labels={labels}
           onRefresh={shell.refresh}
-          onMarkAllRead={scope && canMarkAll(scope) ? () => markViewRead(markViewScopeOf(scope)) : undefined}
+          onMarkAllRead={scope && canMarkAll(scope) ? () => markViewRead(scope) : undefined}
           onFocusSearch={shell.openSearch}
           onAddFeed={() => shell.requestAddFeed()}
           onOpenSettings={shell.openSettings}

@@ -875,7 +875,7 @@ export function RssSidebar({
           <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => {
-              if (markAllFeed) markViewRead({ feedId: markAllFeed.id, category: null });
+              if (markAllFeed) markViewRead({ kind: "feed", id: markAllFeed.id });
               setMarkAllFeed(null);
             }}
           >

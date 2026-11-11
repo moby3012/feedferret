@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { assertSafeHttpOptionsProxy } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { markWhereRead, parseCutoffMs, setReadStateByIds } from "@/server/articles/bulk-read";
 import { readPlainColumn, readPlainColumnOrNull } from "@/lib/secret-box";
 import { HTTP_OPTION_KEEP, mergeHttpOptions } from "@/lib/feed-secrets";
 import { apiError, clampInt, parseBool, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
@@ -283,6 +284,11 @@ async function batchArticles(user: ApiUser, request: Request) {
   else if (action === "read_later") { data = { isReadLater: true, readLaterSavedAt: new Date() }; }
   else if (action === "remove_read_later") { data = { isReadLater: false, readLaterSavedAt: null }; }
 
+  if (action === "read" || action === "unread") {
+    // Read state: no `updatedAt` bump, `readAt` kept for rows already read (server/articles/bulk-read.ts).
+    const result = await setReadStateByIds(user.id, ownedIds, action === "read");
+    return NextResponse.json({ updated: result.ids.length });
+  }
   const result = await db.article.updateMany({ where: { id: { in: ownedIds } }, data });
   return NextResponse.json({ updated: result.count });
 }
@@ -300,8 +306,13 @@ async function markAllRead(user: ApiUser, request: Request) {
     const advancedWhere = await buildAdvancedSearchWhere(user.id, body.query);
     if (Object.keys(advancedWhere).length) where.AND = [...(where.AND || []), advancedWhere];
   }
-  const result = await db.article.updateMany({ where, data: { isRead: true, readAt: new Date() } });
-  return NextResponse.json({ updated: result.count });
+  // `before` (optional, epoch ms or ISO): arrival cutoff, like GReader `ts` / Fever `before`.
+  const now = new Date();
+  const before = typeof body.before === "number" ? body.before : typeof body.before === "string" ? Date.parse(body.before) : undefined;
+  const cutoff = parseCutoffMs(before, now.getTime());
+  if (cutoff === undefined) return apiError("Invalid before", 400);
+  const result = await markWhereRead(user.id, where, { cutoff: cutoff ?? now, now });
+  return NextResponse.json({ updated: result.ids.length });
 }
 
 async function listFeeds(user: ApiUser) {

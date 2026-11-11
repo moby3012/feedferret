@@ -9,6 +9,7 @@ import { importOpmlXml } from "@/lib/import/opml-import";
 import { decimalExternalId, externalItemWhere, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { markWhereRead } from "@/server/articles/bulk-read";
 import { syncFeed } from "@/lib/rss-sync";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { checkRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
@@ -369,15 +370,12 @@ async function handleMarkAllAsRead(userId: string, form: FormData) {
     ? new Date(olderThanMs)
     : null;
 
-  const where = buildStreamWhere(userId, streamId, [], []);
-  const readWhere: any = { ...where, isRead: false };
   if (tsParam && (Number(tsParam) !== 0) && (!cutoff || !Number.isFinite(cutoff.getTime()))) return textResponse("Invalid ts", 400);
-  if (cutoff) readWhere.createdAt = { lte: cutoff };
 
-  await db.article.updateMany({
-    where: readWhere,
-    data: { isRead: true, readAt: new Date() },
-  });
+  // Chunked, set-based, `updatedAt` untouched (server/articles/bulk-read.ts). Without `ts` the
+  // request time is the cutoff, so items a concurrent sync inserts stay unread.
+  const now = new Date();
+  await markWhereRead(userId, buildStreamWhere(userId, streamId, [], []), { cutoff: cutoff ?? now, now });
   return okResponse();
 }
 

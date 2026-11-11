@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { InfiniteQueryObserver, QueryClient, type InfiniteData } from "@tanstack/react-query";
-import { applyArticlePatch, markListsStale, patchCachedArticle, removeLabelFromCachedArticles, rollbackFailedOps } from "../../features/articles/cache";
+import { applyArticlePatch, cachedRowsOfScope, markListsStale, patchCachedArticle, removeLabelFromCachedArticles, rollbackFailedOps } from "../../features/articles/cache";
 import type { ArticleListItem, ArticlePage } from "../../features/articles/types";
 
 const row = (id: string, extra: Partial<ArticleListItem> = {}) => ({ id, isRead: false, labelIds: [], ...extra }) as unknown as ArticleListItem;
@@ -116,5 +116,34 @@ describe("list cache helpers", () => {
     const reverted = rollbackFailedOps(qc, [{ id: "c", field: "isRead", value: false } as never], () => false);
     expect(reverted).toHaveLength(1);
     expect(await settle()).toBe(true);
+  });
+});
+
+describe("cachedRowsOfScope (optimistic mark-all set)", () => {
+  const page = (...items: ArticleListItem[]) => ({ pages: [{ items, nextCursor: null }], pageParams: [null] });
+  const r = (id: string, extra: Partial<ArticleListItem> = {}) => row(id, { feedId: "f1", createdAt: "2026-01-01T00:00:00.000Z", isStarred: false, isReadLater: false, ...extra });
+
+  it("takes the scope's own lists plus provable rows of other lists, unread only, up to the cutoff", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(["list", "feed:f1", "unread", "new"], page(r("a"), r("b", { isRead: true }), r("late", { createdAt: "2026-01-02T00:00:00.000Z" })));
+    qc.setQueryData(["list", "all", "unread", "new"], page(r("a"), r("c"), r("other", { feedId: "f2" })));
+    expect(cachedRowsOfScope(qc, { kind: "feed", id: "f1" }, Date.parse("2026-01-01T12:00:00Z")).sort()).toEqual(["a", "c"]);
+    expect(cachedRowsOfScope(qc, { kind: "feed", id: "f1" }, null).sort()).toEqual(["a", "c", "late"]);
+  });
+
+  it("only patches its own lists for scopes the client cannot evaluate (search, category)", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(["list", "q:cats", "all", "new"], page(r("hit")));
+    qc.setQueryData(["list", "all", "unread", "new"], page(r("hit"), r("miss")));
+    expect(cachedRowsOfScope(qc, { kind: "query", q: "cats" }, null)).toEqual(["hit"]);
+    expect(cachedRowsOfScope(qc, { kind: "category", id: "c1" }, null)).toEqual([]);
+  });
+
+  it("'All' skips feeds hidden from All articles", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(["feeds"], [{ id: "hidden", hideFromAllFeeds: true }, { id: "f1" }]);
+    qc.setQueryData(["list", "feed:hidden", "unread", "new"], page(r("h", { feedId: "hidden" })));
+    qc.setQueryData(["list", "feed:f1", "unread", "new"], page(r("v")));
+    expect(cachedRowsOfScope(qc, { kind: "all" }, null)).toEqual(["v"]);
   });
 });

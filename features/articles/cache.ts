@@ -1,7 +1,7 @@
 import { hashKey, type InfiniteData, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { MARK_VIEW_READ_KEY, qk } from "./keys";
 import type { ArticleDetail, ArticleListItem, ArticlePage } from "./types";
-import type { ListKey } from "./scope";
+import { scopeKey, type ListKey, type Scope } from "./scope";
 import type { Counts } from "@/features/bootstrap/types";
 import type { StateField, StateOp } from "./state-batcher";
 import { getStateBatcher } from "./batcher-registry";
@@ -407,4 +407,36 @@ export function overlayPendingState<T extends Partial<Record<StateField, boolean
     if (v !== undefined && out[field] !== v) out = { ...out, [field]: v };
   }
   return out;
+}
+
+/**
+ * Unread cached rows the server will mark for `scope` (optimistic set): every
+ * row of the scope's own lists, plus rows of other lists the scope provably
+ * covers (same feed / label / star / read-later / not hidden from "All").
+ * Category, search and saved-search views only patch their own lists — the
+ * client cannot evaluate them; counts are reconciled from the server after.
+ * Rows that arrived after `cutoff` stay unread, like on the server.
+ */
+export function cachedRowsOfScope(qc: QueryClient, scope: Scope, cutoff: number | null): string[] {
+  const own = scopeKey(scope);
+  let matches: ((item: ArticleListItem) => boolean) | null = null;
+  if (scope.kind === "feed") matches = (item) => item.feedId === scope.id;
+  else if (scope.kind === "label") matches = (item) => item.labelIds.includes(scope.id);
+  else if (scope.kind === "starred") matches = (item) => item.isStarred;
+  else if (scope.kind === "later") matches = (item) => item.isReadLater;
+  else if (scope.kind === "all") matches = (item) => !isHiddenFromAll(qc, item.feedId);
+  const ids = new Set<string>();
+  for (const [key, data] of qc.getQueriesData<ListData>({ queryKey: qk.lists })) {
+    if (!data || !Array.isArray(data.pages)) continue;
+    const ownList = key[1] === own;
+    if (!ownList && !matches) continue;
+    for (const page of data.pages) {
+      for (const item of page.items) {
+        if (item.isRead || ids.has(item.id)) continue;
+        if (cutoff !== null && !(Date.parse(item.createdAt) <= cutoff)) continue;
+        if (ownList || matches!(item)) ids.add(item.id);
+      }
+    }
+  }
+  return [...ids];
 }
