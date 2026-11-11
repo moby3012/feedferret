@@ -164,20 +164,16 @@
   }
 }
 
-/* Scrollable segmented (settings tab navigation): content-width items in one
-   row that scrolls horizontally on narrow screens. */
+/* Wrapping segmented (settings / dialog tab navigation): content-width items
+   that wrap onto further rows and share each row's width, so every tab is
+   always visible (a scrolling track clipped the last tabs with no affordance). */
 @layer components {
-  .ff-seg[data-scroll] {
+  .ff-seg[data-wrap] {
     display: flex;
-    overflow-x: auto;
-    scrollbar-width: none;
-    overscroll-behavior-x: contain;
+    flex-wrap: wrap;
   }
-  .ff-seg[data-scroll]::-webkit-scrollbar {
-    display: none;
-  }
-  .ff-seg[data-scroll] .ff-seg-item {
-    flex: 0 0 auto;
+  .ff-seg[data-wrap] .ff-seg-item {
+    flex: 1 1 auto;
     padding-inline: 14px;
   }
 }
