@@ -49,6 +49,15 @@ export function createKeyboardState(minPx = KEYBOARD_MIN_PX) {
       shrinkSeen = textEntry && shrunk();
       return isOpen();
     },
+    /**
+     * The deferred re-check after a `focusout` (focus lands a frame later). Only
+     * a CHANGE of the focus state counts: when the frame arrives late, after the
+     * keyboard was dismissed with focus staying in the field, re-applying
+     * `focus(true)` would wipe `dismissed` and hide the tab bar again.
+     */
+    settle(textEntry: boolean): boolean {
+      return textEntry === focused ? isOpen() : this.focus(textEntry);
+    },
     viewport(h: number, w: number): boolean {
       height = h;
       if (w !== width) {
@@ -91,7 +100,7 @@ function install() {
   const vv = window.visualViewport;
   const onFocusIn = (e: FocusEvent) => set(state.focus(coarse() && isTextEntry(e.target as Element)));
   // focusout fires before the next focusin: check where focus landed a frame later.
-  const onFocusOut = () => requestAnimationFrame(() => set(state.focus(coarse() && isTextEntry(document.activeElement))));
+  const onFocusOut = () => requestAnimationFrame(() => set(state.settle(coarse() && isTextEntry(document.activeElement))));
   const onViewport = () => {
     // Layout pixels: pinch-zoom divides vv.height by the scale; undo that.
     const h = vv ? vv.height * vv.scale : window.innerHeight;

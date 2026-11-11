@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { suggestFeedCandidatesDetailed, type FeedCandidate } from "../../lib/page-feed-suggest";
+import { HARD_BUDGET_FACTOR, SUGGEST_TIME_BUDGET_MS, suggestFeedCandidatesDetailed, type FeedCandidate } from "../../lib/page-feed-suggest";
 import {
   assessPreviewQuality,
   classifyItem,
@@ -20,11 +20,15 @@ const SITES: Array<{ id: string; url: string }> = JSON.parse(
   readFileSync(path.resolve(__dirname, "../../scripts/bench/feed-everything.sites.json"), "utf8"),
 );
 
+// Fixture results must not depend on how fast the machine is: no time budget here. The budget itself
+// (soft until a first candidate exists, hard cap, best-so-far) is tested below with an injected clock.
+const UNLIMITED = { timeBudgetMs: Infinity };
+
 function suggest(id: string) {
   const site = SITES.find((s) => s.id === id);
   if (!site) throw new Error(`unknown bench site ${id}`);
   const html = readFileSync(path.join(FIXTURES, `${id}.html`), "utf8");
-  return { url: site.url, ...suggestFeedCandidatesDetailed(html, site.url) };
+  return { url: site.url, ...suggestFeedCandidatesDetailed(html, site.url, UNLIMITED) };
 }
 
 const top = (candidates: FeedCandidate[]) => candidates[0];
@@ -279,4 +283,50 @@ describe("quality helpers", () => {
     );
     expect(assessPreviewQuality(nav, { pageUrl: "https://example.com/", insideChrome: true })).toMatchObject({ verdict: "reject", rejectReason: "navigationChrome" });
   });
+});
+
+describe("time budget on a large real page (Spiegel, injected clock)", () => {
+  const SPIEGEL = () => {
+    const site = SITES.find((s) => s.id === "news-de-2")!;
+    return { html: readFileSync(path.join(FIXTURES, "news-de-2.html"), "utf8"), url: site.url };
+  };
+  /** A clock that advances `step` ms per read (one read per evaluated group + the start). */
+  const clock = (step: number) => {
+    let t = -step;
+    return () => (t += step);
+  };
+  // Parsing and validating this page takes seconds: compute the unlimited reference once.
+  let full: ReturnType<typeof suggestFeedCandidatesDetailed> | undefined;
+  const reference = () => {
+    const { html, url } = SPIEGEL();
+    return (full ??= suggestFeedCandidatesDetailed(html, url, UNLIMITED));
+  };
+
+  it("the largest groups of this page are chrome the gate rejects: the first real list is only reached after several groups", () => {
+    const { html, url } = SPIEGEL();
+    expect(reference().work!.budgetExhausted).toBe(false); // an unlimited budget never reports exhaustion
+    expect(reference().candidates.length).toBeGreaterThan(0);
+    // With a budget that is spent after 2 groups, the old behaviour ("stop at the deadline") offered nothing.
+    const hurried = suggestFeedCandidatesDetailed(html, url, { now: clock(SUGGEST_TIME_BUDGET_MS / 2 + 1) });
+    expect(hurried.work!.groupsEvaluated).toBeGreaterThan(2);
+  }, SLOW);
+
+  it("budget spent before any candidate exists: keeps validating until one survives, then stops with budgetExhausted", () => {
+    const { html, url } = SPIEGEL();
+    const r = suggestFeedCandidatesDetailed(html, url, { now: clock(SUGGEST_TIME_BUDGET_MS / 2 + 1) });
+    expect(r.candidates.length).toBeGreaterThan(0);
+    expect(r.work!.budgetExhausted).toBe(true);
+    // Stopped early: the best of what was evaluated, not the whole page.
+    expect(r.work!.groupsEvaluated).toBeLessThan(reference().work!.groupsEvaluated);
+    expect(r.candidates.length).toBeLessThanOrEqual(reference().candidates.length);
+  }, SLOW);
+
+  it("the hard limit still bounds the work when nothing survives", () => {
+    const { html, url } = SPIEGEL();
+    // Every read costs 2 s: the soft budget (1.5 s) is gone at once, the hard limit (4 × 1.5 s) after 3 groups.
+    const r = suggestFeedCandidatesDetailed(html, url, { now: clock(2000) });
+    expect(HARD_BUDGET_FACTOR * SUGGEST_TIME_BUDGET_MS).toBe(6000);
+    expect(r.work).toMatchObject({ groupsEvaluated: 3, budgetExhausted: true });
+    expect(r.candidates).toEqual([]);
+  }, SLOW);
 });

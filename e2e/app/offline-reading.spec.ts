@@ -329,6 +329,25 @@ test("sign-out in another tab: a prefetch still in flight in this tab leaves not
   await second.close();
 });
 
+test("sign-out while offline: refused with a toast, nothing is wiped, the user stays signed in", async ({ app, page, context }) => {
+  await openAndWaitForStore(app, page);
+  const rowsBefore = (await storedRows(page)).length;
+  expect(rowsBefore).toBeGreaterThan(0);
+  await context.setOffline(true);
+  const dialog = await app.startSignOut();
+  await app.activate(dialog.getByRole("button", { name: "Sign out" }));
+  await expect(page.getByText("Signing out needs a connection")).toBeVisible();
+  // Still here, still signed in, offline articles and the session record intact.
+  expect(new URL(page.url()).pathname).not.toBe("/login");
+  expect((await readMeta<{ userId: string }>(page, "session"))?.userId).toBe(app.user.userId);
+  expect((await storedRows(page)).length).toBeGreaterThanOrEqual(rowsBefore);
+  // Back online the very same sign-out works.
+  await context.setOffline(false);
+  const again = await app.startSignOut();
+  await app.activate(again.getByRole("button", { name: "Sign out" }));
+  await page.waitForURL(/\/login/, { timeout: 30_000 });
+});
+
 test("expiry: data not confirmed by the server for over 30 days is neither shown nor kept (direct offline page)", async ({ app, page, context }) => {
   await openAndWaitForStore(app, page);
   await setVerifiedAt(page, Date.now() - 31 * DAY);

@@ -3,7 +3,7 @@
 import { ApiPasswordSettings } from "@/components/api-password-settings";
 import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
-import { signOut } from "@/lib/logout";
+import { useSignOut } from "@/components/shell/use-sign-out";
 import { LogOut, Smartphone, Bookmark, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SHOW_PWA_INSTALL_PROMPT_EVENT } from "@/components/pwa-install-prompt";
@@ -17,6 +17,7 @@ import { ApiTokenSection } from "@/components/settings/sections/api-tokens";
 
 export function AccountSettings() {
   const t = useTranslations();
+  const signOut = useSignOut();
   const { data: session } = useSession();
 
   return (

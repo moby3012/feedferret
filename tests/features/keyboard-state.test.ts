@@ -56,6 +56,24 @@ describe("keyboard state", () => {
     expect(kb.viewport(800, W)).toBe(false);
   });
 
+  it("a late post-focusout re-check does not re-open a keyboard dismissed without a blur", () => {
+    const kb = booted();
+    kb.focus(true); // focusin on the field
+    kb.viewport(460, W);
+    kb.viewport(800, W); // Android Back: dismissed, focus stays
+    expect(kb.isOpen()).toBe(false);
+    // the rAF queued by the previous element's focusout finally runs; the field still has focus
+    expect(kb.settle(true)).toBe(false);
+    expect(kb.isOpen()).toBe(false);
+  });
+
+  it("the post-focusout re-check still applies real focus changes", () => {
+    const kb = booted();
+    kb.focus(true);
+    expect(kb.settle(false)).toBe(false); // focus left to a non-text element
+    expect(kb.settle(true)).toBe(true); // …or landed in a field we had not seen
+  });
+
   it("ignores URL-bar sized changes", () => {
     const kb = booted();
     kb.focus(true);

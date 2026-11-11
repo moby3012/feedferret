@@ -1073,6 +1073,8 @@
     "feedsInCategory": "{count} feeds"
   },
   "common": {
+    "signOutNeedsConnection": "Signing out needs a connection",
+    "signOutFailed": "Sign-out failed – please try again",
     "save": "Save",
     "cancel": "Cancel",
     "close": "Close",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { suggestFeedCandidatesDetailed } from "../../lib/page-feed-suggest";
+import { MAX_GROUPS, SUGGEST_TIME_BUDGET_MS, suggestFeedCandidatesDetailed } from "../../lib/page-feed-suggest";
 
 // Synthetic pages (not the T1 fixtures), so the gate's thresholds are checked
 // against shapes they were not tuned on: short slugs, short/CJK titles,
@@ -146,16 +146,51 @@ describe("synthetic probes: junk lists are still dropped", () => {
   });
 });
 
+// The 200-block page takes seconds to validate on a busy machine; only a hang should time out.
+const SLOW = 60_000;
+
 describe("work bounds", () => {
-  it("a page with 200 repeating lists finishes well under 2 s", () => {
+  const pathological = () => {
     const blocks = Array.from({ length: 200 }, (_, b) =>
       `<ul class="block-${b}">${Array.from({ length: 5 }, (_, i) => `<li class="row-${b}"><a href="/b${b}/entry-number-${i}-long-slug">Entry ${i} of block ${b} with a title</a><p>Some teaser text for this entry in block ${b}.</p></li>`).join("")}</ul>`,
     ).join("");
-    const html = `<!doctype html><html><body><main>${blocks}</main></body></html>`;
+    return `<!doctype html><html><body><main>${blocks}</main></body></html>`;
+  };
+
+  // The bound is asserted structurally (work done), not by wall-clock time: a
+  // shared CI runner can be arbitrarily slow, the amount of work cannot change.
+  it("a page with 200 repeating lists validates at most MAX_GROUPS groups", () => {
     const started = Date.now();
-    const r = suggestFeedCandidatesDetailed(html, "https://example.com/");
-    expect(Date.now() - started).toBeLessThan(2000);
+    const r = suggestFeedCandidatesDetailed(pathological(), "https://example.com/", { timeBudgetMs: Infinity });
+    const elapsed = Date.now() - started;
+    expect(r.work).toBeDefined();
+    expect(r.work!.groupsFound).toBeGreaterThan(MAX_GROUPS); // the page really is pathological
+    expect(r.work!.groupsEvaluated).toBeGreaterThan(0);
+    expect(r.work!.groupsEvaluated).toBeLessThanOrEqual(MAX_GROUPS);
     expect(r.candidates.length).toBeGreaterThan(0);
-    expect(r.candidates.length).toBeLessThanOrEqual(40);
-  });
+    expect(r.candidates.length).toBeLessThanOrEqual(MAX_GROUPS);
+    // Generous safety net only (runaway work, not a perf SLO).
+    expect(elapsed).toBeLessThan(10_000);
+  }, SLOW);
+
+  it("stops validating once the time budget is spent (injected clock)", () => {
+    // Every clock read advances 1 s: deadline = 0 + 1.5 s, the first group is checked at 1 s (ok), the second at 2 s (over).
+    let t = -1000;
+    const now = () => (t += 1000);
+    const r = suggestFeedCandidatesDetailed(pathological(), "https://example.com/", { now });
+    expect(SUGGEST_TIME_BUDGET_MS).toBe(1_500);
+    expect(r.work).toMatchObject({ groupsEvaluated: 1, budgetExhausted: true });
+    expect(r.candidates.length).toBeLessThanOrEqual(1);
+  }, SLOW);
+
+  it("an unlimited budget evaluates every capped group", () => {
+    const r = suggestFeedCandidatesDetailed(pathological(), "https://example.com/", { timeBudgetMs: Infinity });
+    expect(r.work!.budgetExhausted).toBe(false);
+  }, SLOW);
+
+  it("an idle clock never trips the budget", () => {
+    const r = suggestFeedCandidatesDetailed(pathological(), "https://example.com/", { now: () => 0 });
+    expect(r.work!.budgetExhausted).toBe(false);
+    expect(r.work!.groupsEvaluated).toBeGreaterThan(1);
+  }, SLOW);
 });
