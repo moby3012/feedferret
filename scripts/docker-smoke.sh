@@ -74,7 +74,7 @@ findings=$(docker run --rm --user 0 --entrypoint sh "$IMAGE" -c '
   find . \( -path ./node_modules -o -path ./.next/node_modules \) -prune -o -type f \
       \( -name "*.ts" -o -name "*.tsx" \) ! -name "*.d.ts" -print | head -n 20
   # startup migration files (scripts/db-migrate.sh) must ship
-  for f in scripts/db-migrate.sh scripts/db-common.sh scripts/db-sync.sh scripts/db-state.mjs scripts/migration-utils.mjs \
+  for f in scripts/db-migrate.sh scripts/db-migrate.mjs scripts/db-common.sh scripts/db-sync.sh scripts/db-state.mjs scripts/migration-utils.mjs \
       prisma/baseline.schema.prisma prisma/migrations/sqlite/migration_lock.toml prisma/migrations/postgresql/migration_lock.toml \
       prisma/migrations/sqlite/00000000000000_init/migration.sql prisma/migrations/postgresql/00000000000000_init/migration.sql; do
     [ -f "$f" ] || echo "missing: $f"

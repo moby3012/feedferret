@@ -87,7 +87,7 @@ Every start (`start.sh` in the Docker image, `pnpm start`) runs
 
 | `FEEDFERRET_DB_SYNC` | Behaviour |
 |---|---|
-| `migrate` (default, unset) | `prisma migrate deploy` with `prisma/migrations/<provider>`. Adopts an older `db push` database once (see below). |
+| `migrate` (default, unset) | `prisma migrate deploy` with `prisma/migrations/<provider>` (`scripts/db-migrate.mjs`). Adopts an older `db push` database once (see below). |
 | `push` | Fallback/rollback: `prisma db push` **without** `--accept-data-loss` (`scripts/db-sync.sh`). Prisma refuses changes that would lose data. |
 | `push-unsafe` | Pre-migrations behaviour: `db push --accept-data-loss`. Logged as a WARNING. One-off use only, after a verified backup. |
 | `skip` | Do not touch the schema (for example when migrations run as a separate job). |
@@ -108,6 +108,8 @@ the log-only drift check that runs after `migrate deploy` and takes about a seco
   1. It matches the **current** schema: every migration is marked as applied
      (`migrate resolve --applied`, oldest first), so nothing is pending. This also covers
      installs that are already *ahead* of the baseline, because a later schema was pushed.
+     Migrations after the baseline are only marked as applied without running them if they
+     are **pure DDL** (see the allowlist below). Otherwise the start stops.
   2. It matches the **baseline**: only `00000000000000_init` is marked as applied.
      `migrate deploy` then runs the newer migrations normally.
   3. It is behind the baseline, and the gap is only additive (for example, an old install
@@ -116,11 +118,10 @@ the log-only drift check that runs after `migrate deploy` and takes about a seco
      handled as in step 2.
   4. It is between the baseline and the current schema. The newer objects are already
      pushed, so reaching the baseline would mean dropping them. The baseline is never
-     pushed in this case. If the gap to the *current* schema is additive, and every
-     migration after the baseline is plain additive SQL with no `ff:allow-destructive`,
-     the current schema is pushed (without `--accept-data-loss`). Running those additive
-     migrations would give the same result. The database is compared again, then handled
-     as in step 1.
+     pushed in this case. If the gap to the *current* schema is pure DDL, and every
+     migration after the baseline is pure DDL, the current schema is pushed (without
+     `--accept-data-loss`). Running those migrations would give the same result. The database
+     is compared again, then handled as in step 1.
   5. Anything else (destructive SQL in every direction: `DROP`, type changes, SQLite
      `RedefineTables`, …): the start stops and nothing is changed. Take a backup, start once
      with `FEEDFERRET_DB_SYNC=push`, then unset it. Use `push-unsafe` only if you accept the
@@ -128,11 +129,36 @@ the log-only drift check that runs after `migrate deploy` and takes about a seco
 
   Then `migrate deploy` runs as usual.
 
-On Postgres, `migrate deploy` takes an advisory lock, so parallel replicas are safe. The
-`pg_trgm` handling is unchanged: the extension is created before migrating. If the
-role is not allowed to create it, startup logs a warning, sets `PRISMA_PG_TRGM=0` and
-continues without trigram indexes. `PRISMA_SCHEMA_OVERRIDE` (dev/CI only) is always
-ignored by startup.
+  **Pure-DDL allowlist.** A migration (or a gap that is closed with `db push`) counts as
+  plain DDL only if every statement is one of the following: `CREATE TABLE`,
+  `CREATE [UNIQUE] INDEX`, `CREATE TYPE … AS ENUM`, `ALTER TABLE … ADD COLUMN` /
+  `ADD CONSTRAINT … FOREIGN KEY|UNIQUE`, the generated pg_trgm guard blocks, or comments.
+  Anything else stops the adoption, *even with* `-- ff:allow-destructive`. That covers
+  `INSERT`/`UPDATE`/`DELETE` backfills, other `DO` blocks, functions, drops, renames,
+  type changes and SQLite `RedefineTables`, because marking such a migration as applied
+  would silently skip its data changes. The log names each blocked migration and its
+  statements. Take a backup, then apply the non-DDL part by hand, or confirm that this
+  database does not need it. After that, start **once** with
+  `FEEDFERRET_DB_ADOPT_CONFIRM=<migration_name>[,<migration_name>…]` and unset it again.
+  A database that only matches the baseline never needs this, because `migrate deploy`
+  runs the newer migrations normally.
+
+**Concurrency.** On Postgres, the whole step runs while holding a session advisory lock on a
+dedicated connection: inspecting the state, adopting the history and running `migrate deploy`.
+The state is read *after* the lock is acquired. A second instance starting at the same time waits
+(`⏳ Another instance is updating the schema…`, up to `FEEDFERRET_DB_LOCK_TIMEOUT_MS`, which
+defaults to 10 min). It then sees the adopted database and finds nothing pending (CI checks this).
+SQLite is single-process, with one container per database file, so there is no lock.
+
+**pg_trgm.** Startup waits for Postgres (`FEEDFERRET_DB_WAIT_ATTEMPTS` × 2 s, default 30). If the
+extension is already installed, the trigram indexes are always kept. Otherwise startup runs
+`CREATE EXTENSION`. Only a confirmed privilege or availability error
+(`42501`/permission denied, must be owner, must have CREATE privilege, not available, or a missing
+control file), with the extension still missing, makes startup continue without trigram
+indexes (`PRISMA_PG_TRGM=0`). Any other error, such as a connection loss, is retried and
+then **fails the start**, so a transient problem can never cause the indexes to be dropped.
+
+`PRISMA_SCHEMA_OVERRIDE` (dev/CI only) is always ignored by startup.
 
 SQLite: relative `file:` URLs are resolved by the Prisma CLI against `prisma/` (the
 config file directory), while the app resolves them against the working directory.

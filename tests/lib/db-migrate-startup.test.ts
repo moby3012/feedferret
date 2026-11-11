@@ -33,7 +33,7 @@ beforeAll(() => {
   work = mkdtempSync(join(tmpdir(), "ff-db-migrate-"));
   mkdirSync(join(work, "scripts"));
   mkdirSync(join(work, "prisma"));
-  for (const f of ["db-migrate.sh", "db-common.sh", "db-sync.sh", "db-state.mjs", "migration-utils.mjs", "prepare-prisma-schema.mjs"]) {
+  for (const f of ["db-migrate.sh", "db-migrate.mjs", "db-common.sh", "db-sync.sh", "db-state.mjs", "migration-utils.mjs", "prepare-prisma-schema.mjs"]) {
     cpSync(join(repo, "scripts", f), join(work, "scripts", f));
   }
   for (const f of ["schema.prisma", "baseline.schema.prisma"]) cpSync(join(repo, "prisma", f), join(work, "prisma", f));
@@ -90,6 +90,8 @@ describe("db-state", () => {
     expect(check('ALTER TABLE "User" DROP COLUMN "x";')).toBe(1);
     expect(check('-- RedefineTables\nCREATE TABLE "new_User" (id TEXT);')).toBe(1);
     expect(check('DROP INDEX "User_email_key";')).toBe(1);
+    expect(check('INSERT INTO "User" (id) VALUES (\'x\');')).toBe(1);
+    expect(check('-- ff:allow-destructive marked\nUPDATE "User" SET "x" = 1;')).toBe(1);
   });
 });
 
@@ -295,15 +297,50 @@ exit 0
       });
     });
 
-    it("refuses when a newer migration is not plain additive SQL (pushing would skip it)", () => {
-      withMigration('-- ff:allow-destructive backfill\nUPDATE "User" SET "id" = "id";', () => {
+    const backfill = 'ALTER TABLE "User" ADD COLUMN "plan" TEXT;\n-- ff:allow-destructive backfill\nUPDATE "User" SET "plan" = \'free\';';
+    const seed = 'CREATE TABLE "Newsletter" ("id" TEXT NOT NULL PRIMARY KEY);\nINSERT INTO "Newsletter" ("id") VALUES (\'default\');';
+
+    it("ahead with an UPDATE backfill migration: refuses to push/resolve (it would skip the backfill)", () => {
+      withMigration(backfill, () => {
         const r = runStartup(sqliteDb("ahead-data.db", 'CREATE TABLE "User"(id TEXT)'), {
           FAKE_DIFF_RCS: "2 2", FAKE_SQL_BASELINE: toBaseline, FAKE_SQL: toCurrent,
         });
         expect(r.status).toBe(1);
-        expect(r.out).toMatch(/needs destructive changes/);
+        expect(r.out).toMatch(/more than plain DDL/);
+        expect(r.out).toMatch(/UPDATE "User" SET/);
+        expect(r.out).toMatch(/FEEDFERRET_DB_ADOPT_CONFIRM=20991231000000_newsletter/);
         expect(has(r.calls, "db push")).toBe(false);
         expect(has(r.calls, "migrate resolve")).toBe(false);
+      });
+    });
+
+    it("at the current schema with an INSERT migration: refuses unless the operator confirms it", () => {
+      withMigration(seed, () => {
+        const db = sqliteDb("ahead-insert.db", 'CREATE TABLE "User"(id TEXT)');
+        const refused = runStartup(db, { FAKE_DIFF_RCS: "0 0" });
+        expect(refused.status).toBe(1);
+        expect(refused.out).toMatch(/INSERT INTO "Newsletter"/);
+        expect(has(refused.calls, "migrate resolve")).toBe(false);
+        expect(has(refused.calls, "migrate deploy")).toBe(false);
+
+        const wrongName = runStartup(db, { FAKE_DIFF_RCS: "0 0", FEEDFERRET_DB_ADOPT_CONFIRM: "20991231000000_other" });
+        expect(wrongName.status).toBe(1);
+
+        const ok = runStartup(db, { FAKE_DIFF_RCS: "0 0", FEEDFERRET_DB_ADOPT_CONFIRM: "20991231000000_newsletter" });
+        expect(ok.status).toBe(0);
+        expect(norm(ok.calls).filter((c) => c.includes("resolve"))).toEqual([
+          "override= args=migrate resolve --applied 00000000000000_init",
+          "override= args=migrate resolve --applied 20991231000000_newsletter",
+        ]);
+      });
+    });
+
+    it("behind the baseline with a data migration later: adopts only the baseline, deploy runs the rest", () => {
+      withMigration(seed, () => {
+        const r = runStartup(sqliteDb("baseline-insert.db", 'CREATE TABLE "User"(id TEXT)'), { FAKE_DIFF_RCS: "2 0 0" });
+        expect(r.status).toBe(0);
+        expect(norm(r.calls).filter((c) => c.includes("resolve"))).toEqual(["override= args=migrate resolve --applied 00000000000000_init"]);
+        expect(has(r.calls, "migrate deploy")).toBe(true);
       });
     });
 

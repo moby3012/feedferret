@@ -1,6 +1,6 @@
 // Integration gate. SQLite uses temporary files; Postgres creates/drops uniquely
 // named databases via MIGRATION_TEST_ADMIN_URL. Never point this at production.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
@@ -95,6 +95,21 @@ function startup(url, extra = {}) {
   console.log(output);
   return { status: result.status, output };
 }
+function startupAsync(url, extra = {}) {
+  return new Promise((done) => {
+    const child = spawn('sh', ['scripts/db-migrate.sh'], {
+      env: {
+        ...env, ...extra, DATABASE_URL: url, SHADOW_DATABASE_URL: '',
+        PRISMA_SCHEMA_OVERRIDE: '/nonexistent/override.prisma',
+        PATH: `${resolve('node_modules/.bin')}${delimiter}${process.env.PATH}`,
+      },
+    });
+    let output = '';
+    child.stdout.on('data', (d) => { output += d; });
+    child.stderr.on('data', (d) => { output += d; });
+    child.on('close', (status) => { console.log(output); done({ status, output }); });
+  });
+}
 function expect(condition, message) { if (!condition) throw new Error(`startup: ${message}`); }
 async function legacyDatabase(label, legacySchema) {
   const url = await database(label);
@@ -178,7 +193,30 @@ async function startupUpgradeChecks(legacySchema) {
   expect(/No pending migrations to apply/.test(r.output), 'current-schema legacy: migrations still pending');
   expect(currentBefore === await fingerprint(current), 'current-schema legacy changed data');
 
-  // 7. Empty database: migrate deploy creates everything.
+  if (provider === 'postgresql') {
+    // 7a. Two instances starting at the same time on one legacy database: the advisory
+    //     lock serializes adoption; both succeed, the history is recorded exactly once.
+    const racy = await legacyDatabase('startup_concurrent', legacySchema);
+    const racyBefore = await fingerprint(racy);
+    const [one, two] = await Promise.all([startupAsync(racy), startupAsync(racy)]);
+    expect(one.status === 0 && two.status === 0, `concurrent starts exited ${one.status}/${two.status}`);
+    for (const out of [one.output, two.output]) expect(!/❌|Error:|P3008/.test(out), 'concurrent start logged an error');
+    const states = [one.output, two.output].map((out) => out.match(/Database state: (\w+)/)[1]).sort();
+    expect(JSON.stringify(states) === JSON.stringify(['legacy', 'migrated']), `concurrent states ${states}: the second start must see the adopted DB`);
+    const rows = await query(racy, 'SELECT migration_name FROM _prisma_migrations');
+    expect(rows.length === expected.length, `concurrent starts recorded ${rows.length} history rows`);
+    expect(racyBefore === await fingerprint(racy), 'concurrent starts changed data');
+
+    // 7b. Unreachable database: the pg_trgm check must fail the start, never silently
+    //     continue without trigram indexes.
+    const dead = new URL(await database('startup_unreachable'));
+    dead.port = '1';
+    r = startup(dead.toString(), { FEEDFERRET_DB_WAIT_ATTEMPTS: '1' });
+    expect(r.status !== 0 && /Could not verify the pg_trgm extension/.test(r.output), 'unreachable DB must fail closed');
+    expect(!/starting without trigram/.test(r.output), 'unreachable DB must not disable trgm');
+  }
+
+  // 8. Empty database: migrate deploy creates everything.
   const fresh = await database('startup_empty');
   r = startup(fresh);
   expect(r.status === 0 && /Database state: empty/.test(r.output) && /Database schema matches/.test(r.output), 'empty DB startup');
@@ -272,6 +310,15 @@ try {
     let r = startup(env.DATABASE_URL, { PRISMA_PG_TRGM: '' });
     expect(r.status === 0 && /starting without trigram search indexes/.test(r.output), 'restricted startup');
     expect(/No pending migrations to apply/.test(r.output) && /Database schema matches/.test(r.output), 'restricted startup drift');
+
+    // Extension installed by an admin, role without CREATE: trgm stays enabled.
+    const withExt = await database('restricted_ext', role);
+    privileged.pathname = new URL(withExt).pathname;
+    await execute(privileged.toString(), `CREATE EXTENSION pg_trgm; REVOKE CREATE ON DATABASE "${prefix}_restricted_ext" FROM PUBLIC, "${role}"`);
+    r = startup(withExt, { PRISMA_PG_TRGM: '' });
+    expect(r.status === 0 && /pg_trgm extension available/.test(r.output) && !/starting without trigram/.test(r.output), 'pre-installed pg_trgm must be used');
+    const trgmIdx = await query(withExt, "SELECT indexname FROM pg_indexes WHERE indexname LIKE 'Article_%_trgm_idx'");
+    expect(trgmIdx.length === 5 && /Database schema matches/.test(r.output), `pre-installed pg_trgm: ${trgmIdx.length} trigram indexes`);
 
     // Legacy db-push database of a restricted install (pushed without trgm indexes),
     // with the production-style `?schema=public` URL.

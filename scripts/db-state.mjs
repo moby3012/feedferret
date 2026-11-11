@@ -1,8 +1,8 @@
 // Startup helper for scripts/db-migrate.sh (M11). Plain ESM, runs inside the runner image.
 //
 //   node scripts/db-state.mjs                  prints  empty | legacy | migrated
-//   node scripts/db-state.mjs assert-additive  reads a SQL diff on stdin; exit 1 if destructive
-//   node scripts/db-state.mjs assert-migrations-additive <dir>  exit 1 if a post-baseline migration is not additive
+//   node scripts/db-state.mjs assert-additive  reads a SQL diff on stdin; exit 1 unless pure DDL
+//   node scripts/db-state.mjs ensure-trgm      prints 1 | 0 for PRISMA_PG_TRGM (Postgres)
 //
 // State (for DATABASE_PROVIDER / DATABASE_URL):
 //   migrated  `_prisma_migrations` exists          -> `prisma migrate deploy`
@@ -81,8 +81,8 @@ async function importPackage(name) {
   }
 }
 
-/** @param {{ provider?: string, url?: string, configDir?: string }} options */
-export async function listTables({ provider, url, configDir = join(here, "..", "prisma") }) {
+/** @param {{ provider?: string, url?: string, configDir?: string, client?: any }} options */
+export async function listTables({ provider, url, configDir = join(here, "..", "prisma"), client = undefined }) {
   const p = normalizeProvider(provider);
   if (p === "sqlite") {
     const file = sqliteFilePath(url || "file:./dev.db", configDir);
@@ -96,21 +96,90 @@ export async function listTables({ provider, url, configDir = join(here, "..", "
     }
   }
   if (!url) throw new Error("DATABASE_URL is required for PostgreSQL");
-  const pg = (await importPackage("pg")).default;
-  const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 15_000 });
-  await client.connect();
+  const db = client ?? (await pgClient(url));
   try {
-    const { rows } = await client.query(
+    const { rows } = await db.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = $1",
       [postgresSchema(url)],
     );
     return rows.map((row) => row.table_name);
   } finally {
-    await client.end();
+    if (!client) await db.end();
   }
 }
 
-/** @param {{ provider?: string, url?: string, configDir?: string }} options */
+/** @param {string} url */
+export async function pgClient(url) {
+  const pg = (await importPackage("pg")).default;
+  const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 15_000 });
+  await client.connect();
+  return client;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Connect, retrying while Postgres is starting/unreachable (default 30 x 2 s). @param {string} url */
+export async function waitForPostgres(url, { attempts = Number(process.env.FEEDFERRET_DB_WAIT_ATTEMPTS || 30), delayMs = 2000, log = () => {} } = {}) {
+  for (let i = 1; ; i++) {
+    try {
+      return await pgClient(url);
+    } catch (error) {
+      if (i >= attempts) throw new Error(`PostgreSQL not reachable after ${attempts} attempt(s): ${error?.message || error?.code || error}`);
+      log(`   ... PostgreSQL not ready (${error?.code || error?.message}); retrying in ${delayMs / 1000}s`);
+      await sleep(delayMs);
+    }
+  }
+}
+
+// Errors that mean "this role/server cannot have pg_trgm" (not transient).
+const TRGM_UNAVAILABLE_CODES = new Set(["42501", "58P01", "0A000"]);
+const TRGM_UNAVAILABLE_TEXT = /permission denied|must be owner|must have CREATE privilege|not available|could not open extension control file/i;
+/** @param {{ code?: string, message?: string }} error */
+export function isTrgmUnavailableError(error) {
+  return TRGM_UNAVAILABLE_CODES.has(error?.code ?? "") || TRGM_UNAVAILABLE_TEXT.test(error?.message ?? "");
+}
+
+/**
+ * Decide PRISMA_PG_TRGM ("1" | "0") for startup:
+ *   extension already installed                    -> "1" (never drop existing indexes)
+ *   CREATE EXTENSION succeeds                      -> "1"
+ *   confirmed privilege/availability error and the
+ *   extension is still not installed               -> "0"
+ *   anything else (connection loss, ...)           -> retried, then thrown (startup fails)
+ * @param {string} url
+ */
+export async function ensurePgTrgm(url, { attempts = 3, delayMs = 3000, log = () => {} } = {}) {
+  let lastError;
+  for (let i = 1; i <= attempts; i++) {
+    let client;
+    try {
+      client = await waitForPostgres(url, { log });
+      const installed = async () => (await client.query("SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'")).rowCount > 0;
+      if (await installed()) return "1";
+      try {
+        await client.query("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+        return "1";
+      } catch (error) {
+        if (isTrgmUnavailableError(error) && !(await installed())) {
+          log(`⚠️ Could not create the pg_trgm extension (${error.code ?? "?"}: ${error.message}); starting without trigram search indexes.`);
+          return "0";
+        }
+        throw error;
+      }
+    } catch (error) {
+      lastError = error;
+      if (i < attempts) {
+        log(`⚠️ Checking the pg_trgm extension failed (${error?.message || error?.code || error}); retrying.`);
+        await sleep(delayMs);
+      }
+    } finally {
+      await client?.end().catch(() => {});
+    }
+  }
+  throw new Error(`Could not verify the pg_trgm extension: ${lastError?.message || lastError?.code || lastError}`);
+}
+
+/** @param {{ provider?: string, url?: string, configDir?: string, client?: any }} options */
 export async function detectState(options) {
   return classifyTables(await listTables(options));
 }
@@ -127,28 +196,17 @@ async function main() {
     console.log(await detectState({ provider: process.env.DATABASE_PROVIDER, url: process.env.DATABASE_URL }));
     return;
   }
+  if (command === "ensure-trgm") {
+    // stdout: 1 | 0 (for PRISMA_PG_TRGM); logs go to stderr.
+    console.log(await ensurePgTrgm(process.env.DATABASE_URL, { log: (m) => console.error(m) }));
+    return;
+  }
   if (command === "assert-additive") {
-    const { assertSafeSql } = await import("./migration-utils.mjs");
-    const sql = (await readStdin()).replace(/^[ \t]*-- ff:allow-destructive.*$/gm, "");
-    assertSafeSql(sql, "legacy database -> schema diff");
+    const { assertPureDdl } = await import("./migration-utils.mjs");
+    assertPureDdl(await readStdin(), "legacy database -> schema diff");
     return;
   }
-  if (command === "assert-migrations-additive") {
-    // Every migration after the baseline must be plain additive SQL, so pushing the
-    // current schema is equivalent to running them (no skipped data statements).
-    const { assertSafeSql, baseline } = await import("./migration-utils.mjs");
-    const dir = process.argv[3];
-    if (!dir) throw new Error("Usage: assert-migrations-additive <migrations dir>");
-    for (const name of readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()) {
-      if (name === baseline) continue;
-      // A reviewed `-- ff:allow-destructive` migration is fine for `migrate deploy`, but not
-      // for adoption by push: its data statements/drops would be skipped or done differently.
-      const sql = readFileSync(join(dir, name, "migration.sql"), "utf8").replace(/^[ \t]*-- ff:allow-destructive.*$/gm, "");
-      assertSafeSql(sql, `${dir}/${name}`);
-    }
-    return;
-  }
-  throw new Error(`Unknown command "${command}" (use: state | assert-additive | assert-migrations-additive <dir>)`);
+  throw new Error(`Unknown command "${command}" (use: state | ensure-trgm | assert-additive)`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
