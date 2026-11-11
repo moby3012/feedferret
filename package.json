@@ -23,7 +23,9 @@
     "test:e2e:seed": "node scripts/e2e-seed.mjs",
     "perf:measure": "node scripts/perf-measure.mjs",
     "translations:check": "node scripts/check-translations.mjs",
-    "prepare": "husky"
+    "prepare": "husky",
+    "db:migration:new": "node scripts/new-migration.mjs",
+    "db:migrations:check": "node scripts/check-migration-policy.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",

@@ -13,6 +13,10 @@
 # works in the runner image, where only the globally installed Prisma CLI is available.
 set -e
 
+# Startup always pushes the repository schema: a dev/CI-only schema override must never
+# reach `db push --accept-data-loss` in production.
+unset PRISMA_SCHEMA_OVERRIDE
+
 PRISMA_CMD="${PRISMA_CMD:-prisma}"
 CONFIG="prisma/startup.config.mjs"
 

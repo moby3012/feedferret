@@ -51,3 +51,16 @@ describe("buildPrismaCliConfig", () => {
     );
   });
 });
+
+describe('migration CLI paths', () => {
+  it.each(['sqlite', 'file', 'postgres', 'postgresql'])('selects a history relative to each config for %s', (provider) => {
+    const selected = provider.startsWith('postgres') ? 'postgresql' : 'sqlite';
+    const env = { DATABASE_PROVIDER: provider, SHADOW_DATABASE_URL: 'postgresql://shadow', PRISMA_SCHEMA_OVERRIDE: 'frozen.prisma' };
+    for (const [schema, prefix] of [['prisma/schema.generated.prisma', 'prisma/'], ['schema.generated.prisma', '']]) {
+      expect(buildPrismaCliConfig({ schema, env })).toMatchObject({
+        schema: 'frozen.prisma', migrations: { path: `${prefix}migrations/${selected}` },
+        datasource: { shadowDatabaseUrl: 'postgresql://shadow' },
+      });
+    }
+  });
+});

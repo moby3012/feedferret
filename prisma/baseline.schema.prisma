@@ -1,0 +1,734 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  apiPasswordHash String?
+  apiPasswordCreatedAt DateTime?
+  apiPasswordLastUsedAt DateTime?
+  apiPasswordRequired Boolean @default(false)
+  apiTokenVersion Int @default(0)
+  apiFeverKey String? @unique
+  twoFactorEnabled Boolean @default(false)
+  twoFactorLastAcceptedStep Int?
+  twoFactorSecret  String?
+  sessionVersion   Int     @default(0)
+  accounts      Account[]
+  sessions      Session[]
+  loginAttempts LoginAttempt[]
+  adminAuditLogs AdminAuditLog[] @relation("AuditActor")
+  categories    Category[]
+  feeds         Feed[]
+  articles      Article[]
+  storyClusters StoryCluster[]
+  briefings     Briefing[]
+  aiUsage       AiUsage[]
+  aiBudgetDays  AiBudgetDay[]
+  labels        Label[]
+  savedSearches SavedSearch[]
+  autoReadRules AutoReadRule[]
+  keywordAlerts KeywordAlert[]
+  notifications Notification[]
+  gReaderPreferences GReaderPreference[]
+  pushSubscriptions PushSubscription[]
+  defaultUpdateFrequency Int @default(60)
+  defaultRetentionDays Int @default(90)
+  openOriginalByDefault Boolean @default(false)
+  markReadAfterDelaySecs Int?      // null=instant(1s), 0=disabled
+  defaultViewMode        String    @default("list")   // "list"|"grid"|"magazine"|"minimal"
+  readerWidth            String    @default("normal")  // "normal"|"wide"|"full"
+  readerFontSize         String    @default("medium")   // "small"|"medium"|"large"|"xl"
+  defaultArticleSort     String    @default("newest")  // "newest"|"oldest"
+  accentColor            String    @default("#5BA4CF")  // ice blue
+  secondaryColor         String    @default("#F0963C")  // soft orange
+  apiTokens     ApiToken[]
+  isActive      Boolean   @default(true)
+  digestEnabled           Boolean   @default(false)
+  digestFrequency         String    @default("daily")   // "daily" | "weekly" | "weekdays"
+  digestDayOfWeek         Int?                          // 0=Sun … 6=Sat, weekly only
+  digestHour              Int       @default(8)         // hour 0-23, interpreted in digestTimezone
+  digestTimezone          String    @default("UTC")     // IANA timezone, e.g. "Europe/Berlin"
+  digestScope             String    @default("unread")  // "unread" | "starred" | "readlater" | "all"
+  digestFeedIds           String?                       // JSON array of feed IDs, null = all
+  digestMaxArticles       Int       @default(20)        // upper limit of articles per digest
+  digestMinArticles       Int       @default(1)         // skip send if fewer than this
+  digestLookbackHours     Int?                          // null = since last sent; else fixed window in hours
+  digestGroupByFeed       Boolean   @default(false)     // group articles by feed in the email
+  digestAiSummary         String    @default("none")    // "none" | "per_feed" | "full"
+  digestSkipFeatured      Boolean   @default(false)     // skip articles already sent in a previous digest
+  digestLabelIds          String?                       // JSON array of label IDs, null = no label filter
+  digestPausedUntil       DateTime?                     // pause digest until this date
+  digestLastSentAt        DateTime?
+  digestUnsubscribeToken  String?   @unique
+  pushEnabled             Boolean   @default(false)
+  pushFrequency           String    @default("immediate") // "off" | "immediate" | "hourly" | "daily"
+  pushFeedIds             String?                       // JSON array of feed IDs, null = all
+  pushPrivatePayloads     Boolean   @default(true)      // include article titles in push payloads
+  pushLastSentAt          DateTime?
+  telegramEnabled         Boolean   @default(false)
+  telegramBotToken        String?
+  telegramChatId          String?
+  gotifyEnabled           Boolean   @default(false)
+  gotifyUrl               String?
+  gotifyToken             String?
+  ntfyEnabled             Boolean   @default(false)
+  ntfyUrl                 String?
+  ntfyToken               String?
+  hideDuplicates          Boolean   @default(true)
+  // K1 story clustering (lib/story-clustering). storyClustering = background job on/off for this user;
+  // clusterReadMode: "story" = marking a story's lead read marks its sources read, "article" = only that row.
+  storyClustering         Boolean   @default(true)
+  clusterReadMode         String    @default("story")    // "story" | "article" — "story" since the story card UI (PR 6)
+  markReadOnScroll        Boolean   @default(false)
+  markReadOnAdvance       Boolean   @default(false)     // end-of-list "Weiter zu …" also marks the current view read
+  layoutDirection         String    @default("ltr")     // "ltr" | "rtl"
+  hideEmptyFeeds          Boolean   @default(false)
+  hideEmptyLabels         Boolean   @default(false)
+  // PR 9 anti-anxiety (spec §4.9.3): where unread numbers show in the sources and the list top bar.
+  // "all" | "categories" (folders + smart views only, no per-feed numbers) | "off". null = "all".
+  countDisplay            String?   @default("all")
+  uiLanguage              String    @default("en")     // BCP-47 tag e.g. "en" | "de"
+  // Display timezone for every timestamp shown in the app (article dates,
+  // reader, etc. — distinct from digestTimezone, which only affects when the
+  // email digest is sent). null = auto-detect from the browser (see
+  // i18n/request.ts + the `timezone` cookie); an explicit IANA name here
+  // always wins.
+  displayTimezone         String?
+  aiProvider              String?                       // "openai" | "anthropic" | "ollama" | "gemini" | "openrouter"
+  aiApiKey                String?                       // encrypted at rest
+  aiModel                 String?
+  aiOllamaBaseUrl         String?
+  aiAutoSummarize         Boolean   @default(false)
+  aiSummaryLanguage       String    @default("same")   // "same" | BCP-47 tag e.g. "de"
+  aiAutoTag               Boolean   @default(false)     // F8: auto-tag new articles via Label/ArticleLabel on sync
+  aiCleanTitles           Boolean   @default(false)     // K3: show the neutral AI title (Article.cleanTitle) for clickbait headlines in the app list
+  // K2 catch-me-up briefing + AI cost cap (lib/ai/usage.ts). aiDailyTokenCap: null = server default
+  // (env AI_DAILY_TOKEN_CAP, default 150000), 0 = AI off; Ollama is never capped (local, $0).
+  aiDailyTokenCap         Int?
+  briefingAuto            Boolean   @default(true)      // generate when Neu opens and nothing is cached (local providers only)
+  // BYOK hosted-fetch connector (M7-T3): per-user, opt-in, own API key.
+  // The last-resort tier for pages that beat even the browser-render sidecar
+  // (M7-T2) — an active anti-bot challenge. Unlike every earlier tier, the
+  // target page's content is sent to a third party (labelled accordingly in
+  // the UI), so it never runs during background sync unless the user
+  // explicitly opts in via contentFetchAutoUse.
+  contentFetchProvider    String?                       // "jina" | "firecrawl"
+  contentFetchApiKey      String?                       // encrypted at rest
+  contentFetchAutoUse     Boolean   @default(false)
+  // F6: auto-mute a feed after this many *consecutive* sync failures (see
+  // Feed.consecutiveFailureCount / Feed.autoMuted below). 0 = disabled/opt-out.
+  autoMuteFailingFeedsAfter Int     @default(10)
+  // F5: export destinations ("send to") from the article reader. Obsidian has
+  // no API — it's a local vault app — so all it needs is a vault name to build
+  // an `obsidian://new` deep link; no credentials involved. Wallabag is a
+  // self-hosted read-later service (OAuth2 password grant).
+  exportObsidianVault        String?
+  exportWallabagUrl          String?
+  exportWallabagClientId     String?
+  exportWallabagClientSecret String?                    // encrypted at rest
+  exportWallabagUsername     String?
+  exportWallabagPassword     String?                    // encrypted at rest
+  role          String    @default("USER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([digestEnabled])
+  @@index([pushEnabled])
+}
+
+model PushSubscription {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  userAgent   String?
+  platform    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastUsedAt  DateTime?
+  disabledAt  DateTime?
+  @@index([userId, disabledAt])
+}
+
+model AutoReadRule {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  query           String
+  action          String   // legacy single-action: "mark_read" | "star" | "label:<labelId>"
+  // New multi-action list (JSON array of action ids). When present, takes
+  // precedence over `action`. Example: ["mark_read","label:abc","notify_inapp"]
+  actions         String?
+  // Optional scope: "all" | "feed:<id>" | "category:<id>"
+  scope           String?
+  // What fires this rule: "article" (default — query matches new/existing articles)
+  // or "feed_error" (a feed sync fails). Feed-error rules limit actions to
+  // notifications and webhooks.
+  trigger         String   @default("article")
+  // Inline webhook configurations referenced from actions list as
+  // "webhook_call:<index>". JSON array of WebhookConfig records.
+  webhookConfigs  String?
+  enabled         Boolean  @default(true)
+  order           Int      @default(0)
+  lastTriggeredAt DateTime?
+  // When true, deleting this rule clears the spoiler flag from all articles it flagged.
+  removeSpoilerOnDelete Boolean @default(false)
+  notifications   Notification[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@index([userId, enabled, order])
+  @@index([userId, trigger, enabled])
+}
+
+model KeywordAlert {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  query           String
+  scope           String   @default("all") // "all" | "feed:<id>" | "category:<id>"
+  actions         String   @default("[\"notify_inapp\"]") // JSON array
+  enabled         Boolean  @default(true)
+  lastTriggeredAt DateTime?
+  notifications   Notification[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId, enabled])
+  @@index([userId, scope])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // "keyword_alert" | "rule_match" | "feed_error" | "digest_sent" | "feed_auto_muted"
+  title     String
+  body      String
+  articleId String?
+  article   Article? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  feedId    String?
+  alertId   String?
+  alert     KeywordAlert? @relation(fields: [alertId], references: [id], onDelete: SetNull)
+  ruleId    String?
+  rule      AutoReadRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead, createdAt])
+  @@index([articleId])
+  @@index([alertId])
+  @@index([ruleId])
+  @@index([feedId])
+}
+
+model GReaderPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId  String
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, streamId, key])
+  @@index([userId, streamId])
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  @@unique([identifier, token])
+}
+
+model Category {
+  // Fixed-width decimal numeric identity; nullable only during startup backfill.
+  extId String? @unique
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  parentId  String?
+  order     Int      @default(0)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Category? @relation("Subcategories", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Category[] @relation("Subcategories")
+  feeds     Feed[]
+  opmlUrl   String?
+  updateFrequency Int?
+  hideFromAllFeeds Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([userId, name, parentId])
+  @@index([userId])
+  @@index([parentId])
+}
+
+model Feed {
+  // Fixed-width decimal numeric identity; nullable only during startup backfill.
+  extId String? @unique
+  id              String   @id @default(cuid())
+  url             String
+  name            String
+  icon            String?
+  sourceType      String   @default("rss") // rss | HTML+XPath | XML+XPath | JSON+DotNotation | JSONFeed | HTML+XPath+JSON+DotNotation
+  htmlUrl         String?
+  description     String?
+  priority        String   @default("main") // important | main | category | feed | hidden
+  unicityCriteria String   @default("id")
+  unicityCriteriaForced Boolean @default(false)
+  scraperConfig   String?  // JSON for XPath / JSON DotNotation / xPathToJson settings
+  httpOptions     String?  // JSON for Scout Studio cURL-like fetch options
+  userId          String
+  categoryId      String?
+  order           Int      @default(0)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  articles        Article[]
+  updateFrequency Int?
+  retentionDays   Int?
+  keepMinArticles Int?
+  lastFetchedAt   DateTime?
+  lastStatus       String?
+  lastError        String?
+  // F6: auto-mute after N consecutive failures (User.autoMuteFailingFeedsAfter).
+  // Resets to 0 on any successful sync or a manual unmute.
+  consecutiveFailureCount Int      @default(0)
+  autoMuted               Boolean  @default(false)
+  // Conditional GET (HTTP caching): sent as If-None-Match / If-Modified-Since on the next fetch.
+  etag              String?
+  lastModifiedHeader String?
+  // Auth & fetch options
+  authType          String?   // "basic"
+  authUsername      String?
+  authPassword      String?
+  customUserAgent   String?
+  fetchTimeoutSecs  Int?
+  sslVerify         Boolean   @default(true)
+  maxSizeKb         Int?
+  // Full-text extraction
+  fullTextSelector         String?
+  fullTextRemoveSelectors  String?
+  autoFetchFullText        Boolean   @default(false)
+  fullTextConditions       String?
+  fullTextMode             String    @default("off")  // "off" | "auto" | "selector" | "ai"
+  defaultContentFormat     String    @default("html")  // "html" | "markdown" — preferred stored format for auto full-text
+  // "Enable automatic full text for this feed?" suggestion (shown after a manual
+  // fetch reveals the feed is truncated) was declined — don't ask again.
+  fullTextAutoSuggestDismissed Boolean @default(false)
+  filtersActionRead        String?
+  hideFromAllFeeds         Boolean  @default(false)
+  hideArticleImage         Boolean  @default(false)
+  readerFontSizeOverride   String?  // null = inherit user.readerFontSize; else "small"|"medium"|"large"|"xl"
+  readerWidthOverride      String?  // null = inherit user.readerWidth; else "normal"|"wide"|"full"
+  openOriginalOverride     Boolean? // null = inherit user.openOriginalByDefault
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([userId, url])
+  @@index([userId])
+  @@index([categoryId])
+}
+
+model Article {
+  // Fixed-width decimal numeric identity; nullable only during startup backfill.
+  extId String? @unique
+  id          String   @id @default(cuid())
+  feedId      String
+  userId      String
+  title       String
+  link        String
+  externalId   String?
+  dedupeKey    String?
+  contentHash  String?
+  isDuplicate  Boolean  @default(false)
+  duplicateOf  String?
+  canonical    Article?  @relation("ArticleDuplicates", fields: [duplicateOf], references: [id], onDelete: SetNull)
+  duplicates   Article[] @relation("ArticleDuplicates")
+  content     String
+  contentFormat String @default("html")  // "html" | "markdown" — the format `content` is stored in
+  excerpt     String?
+  author      String?
+  publishedAt DateTime
+  enclosures  String? // JSON array of GReader enclosure {href,type,length} objects
+  imageUrl    String?
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  isStarred   Boolean  @default(false)
+  isReadLater Boolean  @default(false)
+  readLaterSavedAt DateTime?
+  isSpoiler     Boolean  @default(false)
+  spoilerAt     DateTime?
+  // Tracks which rule applied the spoiler flag so it can be cleared on rule deletion.
+  spoilerRuleId String?
+  notifications Notification[]
+  feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  labels      ArticleLabel[]
+  aiSummary      String?
+  aiSummarizedAt DateTime?
+  aiTaggedAt     DateTime?                              // F8: set once auto-tagging has run, whether or not it produced any tags — avoids re-asking every sync
+  // K3 enrichment (lib/enrichment-heuristics.ts at sync, lib/article-enrichment.ts from the tagging call).
+  // All nullable/additive; written WITHOUT touching updatedAt (GReader ot/nt clock).
+  entities       String?                                // JSON string[] (≤8, each ≤48 chars, original case)
+  isSponsored    Boolean?                               // null = unknown; heuristic only ever sets true, AI sets true/false
+  isClickbait    Boolean?
+  cleanTitle     String?                                // ≤140 chars, neutral title; only stored when isClickbait = true
+  enrichSource   String?                                // "heuristic" | "ai"
+  digestedAt     DateTime?                              // set when article is sent in a digest
+  // List metadata (lib/article-kind.ts), computed at sync. Nullable: rows from
+  // before these columns existed are filled by lib/article-meta-backfill.ts and
+  // derived on the fly by the list mapper until then.
+  kind              String?   // "article" | "video" | "audio" | "social" | "image"
+  mediaUrl          String?   // primary audio/video enclosure or media:content
+  mediaType         String?
+  mediaDurationSecs Int?
+  readMinutes       Int?
+  // K1 story clustering (lib/story-clustering). All nullable: null storySig = not computed yet,
+  // null clusteredAt = pending, set once processed (also for singletons, which get no cluster).
+  clusterId   String?
+  cluster     StoryCluster? @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+  storySig    String?    // JSON StorySig, <= 600 chars
+  clusteredAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([userId, feedId, dedupeKey])
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([userId, contentHash])
+  @@index([userId, isRead, publishedAt])
+  @@index([userId, isStarred, publishedAt])
+  @@index([userId, isReadLater, readLaterSavedAt])
+  @@index([userId, isSpoiler, publishedAt])
+  @@index([userId, readAt])
+  @@index([feedId, publishedAt(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
+  // Postgres only: pg_trgm GIN indexes behind the ILIKE '%term%' search (lib/search-indexes.ts).
+  // scripts/prepare-prisma-schema.mjs turns the `//@postgresql ` lines into real attributes for
+  // the Postgres schema, so `db push` keeps these indexes instead of dropping them on every deploy.
+  // SQLite has no GIN indexes; it uses the article_fts FTS5 table (external, see prisma/cli-config.mjs).
+  //@postgresql @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_title_trgm_idx")
+  //@postgresql @@index([content(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_content_trgm_idx")
+  //@postgresql @@index([excerpt(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_excerpt_trgm_idx")
+  //@postgresql @@index([author(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_author_trgm_idx")
+  //@postgresql @@index([entities(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_entities_trgm_idx")
+  @@index([spoilerRuleId])
+  @@index([userId, digestedAt])
+  @@index([userId, isSponsored])
+  // Perf: serves the default list ORDER BY publishedAt DESC, createdAt DESC, id DESC
+  @@index([userId, publishedAt(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
+  // Perf: serves per-feed unread counts (groupBy feedId WHERE userId, isRead=false, isSpoiler=false)
+  @@index([userId, isRead, isSpoiler, feedId])
+  // Perf: the list's per-row `_count.duplicates` and ON DELETE SET NULL of a canonical article
+  @@index([duplicateOf])
+  // K1: cluster member lookups and the pending / 48h window scans of the clustering job
+  @@index([userId, clusterId])
+  // K1: cluster-keyed lookups without userId (cleanup recount, ON DELETE SET NULL of a cluster)
+  @@index([clusterId])
+  @@index([userId, clusteredAt, publishedAt])
+  // Perf (GReader unread-count): newest article per feed (`groupBy feedId _max(createdAt)`) as a
+  // covering index-only scan instead of a walk over all of the user's articles. Additive.
+  @@index([userId, feedId, createdAt])
+}
+
+// K1: a group of >= 2 articles (of different feeds) covering the same story. Per user; singletons get no row.
+model StoryCluster {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadArticleId String   // representative article (re-picked when a better member joins)
+  size          Int      @default(2)
+  feedCount     Int      @default(2)
+  firstSeenAt   DateTime // min(publishedAt) of members
+  lastSeenAt    DateTime // max(publishedAt) of members - window anchor
+  sig           String   // JSON ClusterSig, <= 2 KB
+  algoVersion   Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  articles      Article[]
+  @@index([userId, lastSeenAt])
+}
+
+// K2: one generated "catch me up" briefing per (user, scope, input, model, prompt version).
+// Fallback (headline) briefings are computed on the fly and never stored.
+model Briefing {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopeKey      String   // "new" | "cat:<id>" | "label:<id>"
+  windowStart   DateTime
+  windowEnd     DateTime
+  inputHash     String   // sha256-32 of the BriefingInput (ids + lang + prompt version)
+  provider      String
+  model         String
+  promptVersion Int
+  status        String   // "ok" | "partial"
+  content       String   // JSON BriefingContent (validated)
+  storyCount    Int
+  tokensIn      Int      @default(0)
+  tokensOut     Int      @default(0)
+  seenAt        DateTime?
+  createdAt     DateTime @default(now())
+  @@unique([userId, scopeKey, inputHash, model, promptVersion])
+  @@index([userId, scopeKey, createdAt])
+}
+
+// K2: per-user, per-day (UTC), per-feature AI token usage (statistics; settings shows cloud vs local).
+model AiUsage {
+  userId    String
+  day       String   // "YYYY-MM-DD" UTC
+  feature   String   // "briefing" | "tagging" | "summary" | "digest" | "extraction"
+  kind      String   @default("cloud") // "cloud" (capped) | "local" (Ollama, never capped)
+  tokensIn  Int      @default(0)
+  tokensOut Int      @default(0)
+  calls     Int      @default(0)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, day, feature, kind])
+}
+
+// K2: the daily cap's single source of truth — cloud tokens of one user/day (UTC), including
+// in-flight reservations. A call reserves its estimate with ONE conditional increment
+// (`tokens <= cap - estimate`) before it runs and reconciles to the actual usage afterwards,
+// so concurrent calls can never overshoot the cap. exhaustedAt = a call was refused today
+// (automatic AI features paused; cleared when the cap changes).
+model AiBudgetDay {
+  userId      String
+  day         String    // "YYYY-MM-DD" UTC
+  tokens      Int       @default(0)
+  exhaustedAt DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([userId, day])
+}
+
+model Label {
+  // Fixed-width decimal numeric identity; nullable only during startup backfill.
+  extId String? @unique
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String   @default("#3b82f6")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  articles  ArticleLabel[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model ArticleLabel {
+  articleId String
+  labelId   String
+  userId    String
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  label     Label   @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  // "user" (any manual / API / import / rule assignment) | "ai" (auto-tagging). The K2
+  // briefing ranks only user labels as a signal, never the model's own tags.
+  source    String  @default("user")
+  createdAt DateTime @default(now())
+  @@id([articleId, labelId])
+  @@index([labelId])
+  @@index([userId])
+}
+
+model SavedSearch {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  query      String
+  order      Int       @default(0)
+  shareToken String?   @unique
+  sharedAt   DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  @@unique([userId, name])
+  @@index([userId, order])
+}
+
+model GlobalSettings {
+  id                  String   @id @default("global")
+  registrationsEnabled Boolean  @default(false)
+  mailServiceEnabled   Boolean  @default(false)
+  mailProvider        String   @default("smtp")
+  // SMTP config
+  smtpHost                 String?
+  smtpPort                 Int?
+  smtpUser                 String?
+  smtpPassword             String?
+  smtpFrom                 String?
+  smtpSecure               String?
+  smtpRejectUnauthorized   Boolean?
+  // API mail providers (values encrypted at rest)
+  resendApiKey        String?
+  resendFromEmail     String?
+  postmarkServerToken String?
+  postmarkFromEmail   String?
+  postmarkMessageStream String?
+  mailgunApiKey       String?
+  mailgunDomain       String?
+  mailgunFromEmail    String?
+  mailgunBaseUrl      String?
+  sendgridApiKey      String?
+  sendgridFromEmail   String?
+  // Instance settings
+  instanceName        String?
+  instanceUrl         String?
+  instanceIconDataUrl String?
+  starterPacksJson    String?
+  // Misc
+  totpIssuer          String?
+  backgroundSyncEnabled          Boolean @default(true)
+  backgroundSyncIntervalMinutes  Int     @default(5)
+  allowInternalFeedUrls          Boolean @default(false)
+  // Optional browser-render sidecar (M7-T2): an admin-configured external
+  // service that renders JS-heavy / client-only pages and returns HTML, used
+  // as a fallback when in-process fetch+extract comes up empty. Hidden in the
+  // UI until enabled. Token is encrypted at rest.
+  renderSidecarEnabled           Boolean @default(false)
+  renderSidecarUrl               String?
+  renderSidecarToken             String?
+  // Optional RSSHub connector (M5a): an admin-configured self-hosted RSSHub
+  // instance, used for "Add from platform" (turning a YouTube channel,
+  // subreddit, GitHub repo releases, etc. into a real feed via RSSHub's own
+  // route conventions). Hidden in the UI until enabled. API key (RSSHub's
+  // optional `?key=` access gate) is encrypted at rest.
+  rsshubEnabled                  Boolean @default(false)
+  rsshubBaseUrl                  String?
+  rsshubApiKey                   String?
+  // Optional changedetection.io connector (M5b): an admin-configured
+  // self-hosted changedetection.io instance, used for "Monitor this page"
+  // (any page, including JS-rendered ones since changedetection.io does its
+  // own browser rendering) → creates a watch → its own per-watch RSS output
+  // becomes a normal feed. Two DIFFERENT secrets, both encrypted at rest:
+  // `changedetectionApiKey` (its REST API's `x-api-key`, used to create/
+  // manage watches) and `changedetectionRssToken` (a separate "RSS access
+  // token" changedetection.io requires as a `?token=` query param on the
+  // per-watch RSS route — confirmed from its own source, the REST API key
+  // does NOT work for this). Hidden in the UI until enabled.
+  changedetectionEnabled         Boolean @default(false)
+  changedetectionBaseUrl         String?
+  changedetectionApiKey          String?
+  changedetectionRssToken        String?
+  // Onboarding
+  onboardingCompleted Boolean @default(false)
+  // Security
+  require2FAForAdmins Boolean @default(false)
+  disablePublicSharedSearches Boolean @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  feverKey   String?   @unique
+  name       String    @default("Default")
+  scope      String    @default("write")  // "read" | "write" | "admin"
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id         String   @id @default(cuid())
+  email      String
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  success    Boolean
+  failReason String?  // "password" | "otp" | "inactive"
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([createdAt])
+}
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  actorId     String
+  actor       User     @relation("AuditActor", fields: [actorId], references: [id], onDelete: Cascade)
+  action      String   // "user.role_change" | "user.suspend" | "user.unsuspend" | "user.delete" | "settings.update"
+  targetId    String?
+  targetEmail String?
+  metadata    String?  // JSON
+  createdAt   DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String   // "info" | "warn" | "error"
+  category  String   // "mail" | "digest" | "sync"
+  message   String
+  metadata  String?  // JSON string
+  createdAt DateTime @default(now())
+
+  @@index([category, createdAt])
+  @@index([createdAt])
+}
+
+model DiscoveryCatalogFeed {
+  id          String   @id @default(cuid())
+  url         String   @unique
+  title       String
+  description String?
+  category    String   // "tech", "news", "gaming", "science", "business", "entertainment", "sports", "lifestyle", "dev", "design"
+  language    String   @default("en") // "en", "de", "multi"
+  iconUrl     String?
+  popularity  Int      @default(0)
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([category, enabled, popularity])
+  @@index([language, enabled])
+}
+
+// Atomic, database-wide allocator, shared by every process and protocol.
+model ExternalIdSequence {
+  name String @id
+  value BigInt
+}

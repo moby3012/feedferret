@@ -54,3 +54,6 @@ yarn-error.log*
 .e2e/
 e2e/.auth/
 perf-results/
+
+# Historical SQL is never used by Prisma or shipped
+prisma/migrations-archive
