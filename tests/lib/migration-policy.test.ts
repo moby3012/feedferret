@@ -7,6 +7,9 @@ describe('migration policy', () => {
     'DROP TABLE "User";', 'ALTER TABLE "User" DROP COLUMN email;',
     'ALTER TABLE "User" ALTER COLUMN email TYPE TEXT;', '-- RedefineTables\nSELECT 1;',
     'ALTER TABLE "User" DROP CONSTRAINT something;',
+    'ALTER TABLE "User" ALTER COLUMN "email" SET DATA TYPE TEXT;', 'ALTER TYPE "Role" RENAME VALUE \'a\' TO \'b\';',
+    'TRUNCATE "Article";', 'DELETE FROM "Article";', 'UPDATE "Article" SET "title" = \'x\';',
+    'ALTER TABLE "User" RENAME COLUMN "a" TO "b";', 'ALTER TABLE "User" RENAME TO "Person";',
   ])('requires a reason for destructive SQL: %s', (sql) => {
     expect(() => assertSafeSql(sql, 'test')).toThrow(/allow-destructive/);
     expect(() => assertSafeSql(`-- ff:allow-destructive reviewed expand-contract cleanup\n${sql}`, 'test')).not.toThrow();
@@ -17,6 +20,10 @@ describe('migration policy', () => {
     expect(sql).toContain('DO $$ BEGIN');
     expect(sql).toContain('END $$;');
     expect(sql).not.toContain('CREATE SCHEMA IF NOT EXISTS');
+  });
+  it('does not flag additive SQL that merely contains keywords', () => {
+    expect(() => assertSafeSql('ALTER TABLE "Feed" ADD COLUMN "type" TEXT;', 'test')).not.toThrow();
+    expect(() => assertSafeSql('ALTER TABLE "A" ADD CONSTRAINT "f" FOREIGN KEY ("b") REFERENCES "B"("id") ON DELETE CASCADE ON UPDATE CASCADE;', 'test')).not.toThrow();
   });
   it('ignores SQL-looking comments', () => {
     expect(() => assertSafeSql('-- DROP TABLE x;\n/* DROP COLUMN x */\nCREATE TABLE x(id TEXT);', 'test')).not.toThrow();

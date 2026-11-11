@@ -49,7 +49,7 @@ export function assertParity(root = 'prisma/migrations') {
 export function assertSafeSql(sql, file) {
   // Strip comments before scanning SQL; keep Prisma's RedefineTables sentinel.
   const code = sql.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '');
-  const destructive = /\bDROP\s+(?:TABLE|COLUMN|INDEX|SCHEMA|TYPE|VIEW|TRIGGER|EXTENSION|CONSTRAINT|SEQUENCE|FUNCTION)\b|\bALTER\s+TABLE\b[^;]*\bDROP\b|\bALTER\s+(?:COLUMN\s+)?[^;]*\bTYPE\b/i.test(code)
+  const destructive = /\bDROP\s+(?:TABLE|COLUMN|INDEX|SCHEMA|TYPE|VIEW|TRIGGER|EXTENSION|CONSTRAINT|SEQUENCE|FUNCTION)\b|\bALTER\s+TABLE\b[^;]*\bDROP\b|\bALTER\s+COLUMN\s+"?\w+"?\s+(?:SET\s+DATA\s+)?TYPE\b|\bALTER\s+TYPE\b|\bTRUNCATE\b|\bDELETE\s+FROM\b|\bUPDATE\s+"?\w+"?\s+SET\b|\bRENAME\s+(?:COLUMN|TO)\b/i.test(code)
     || /RedefineTables/.test(sql);
   if (destructive && !/^[ \t]*-- ff:allow-destructive[ \t]+\S[^\n]*$/m.test(sql)) {
     throw new Error(`${file}: destructive SQL needs -- ff:allow-destructive <reason>`);
