@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { stripFragment, trimTrailingSlashes } from "@/lib/linear-text";
 
 const TRACKING_PARAMS = new Set([
   "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
@@ -12,7 +13,7 @@ export function normalizeArticleUrl(url: string): string {
     const u = new URL(url);
     u.protocol = "https:";
     u.hostname = u.hostname.replace(/^www\./, "").toLowerCase();
-    u.pathname = u.pathname.replace(/\/+$/, "") || "/";
+    u.pathname = trimTrailingSlashes(u.pathname) || "/";
     for (const key of [...u.searchParams.keys()]) {
       if (TRACKING_PARAMS.has(key.toLowerCase())) {
         u.searchParams.delete(key);
@@ -45,9 +46,9 @@ export function normalizeLinkForComparison(url: string): string {
     }
     u.searchParams.sort();
     const query = u.searchParams.toString();
-    return `${u.hostname}${u.port ? `:${u.port}` : ""}${u.pathname.replace(/\/+$/, "") || "/"}${query ? `?${query}` : ""}`;
+    return `${u.hostname}${u.port ? `:${u.port}` : ""}${trimTrailingSlashes(u.pathname) || "/"}${query ? `?${query}` : ""}`;
   } catch {
-    return url.trim().toLowerCase().replace(/#.*$/, "").replace(/\/+$/, "");
+    return trimTrailingSlashes(stripFragment(url.trim().toLowerCase()));
   }
 }
 

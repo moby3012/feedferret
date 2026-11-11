@@ -7,6 +7,7 @@
 //
 // No DOM, no DOMPurify, no I/O: cheap enough to run per row.
 
+import { replaceElements, replaceMarkdownLinks } from "@/lib/linear-text";
 export type ArticleKind = "article" | "video" | "audio" | "social" | "image";
 export const ARTICLE_KINDS: readonly ArticleKind[] = ["article", "video", "audio", "social", "image"];
 
@@ -108,8 +109,7 @@ const NAMED_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quo
 export function htmlToPlainText(html: string | null | undefined): string {
   if (!html) return "";
   return normalizeSpace(
-    html
-      .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    replaceElements(html, ["script", "style"], " ", { boundary: false })
       .replace(/<[^>]*>?/g, " ")
       .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, ent: string) => {
         if (ent[0] === "#") {
@@ -125,9 +125,7 @@ export function htmlToPlainText(html: string | null | undefined): string {
 export function markdownToPlainText(md: string | null | undefined): string {
   if (!md) return "";
   return normalizeSpace(
-    md
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    replaceMarkdownLinks(replaceMarkdownLinks(md, true, () => " "), false, (text) => text)
       .replace(/<[^>]*>?/g, " ")
       .replace(/[#>*_`~|-]+/g, " "),
   );

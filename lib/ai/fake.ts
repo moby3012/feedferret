@@ -131,12 +131,14 @@ function fakeTagging(prompt: string): string {
     entities: words.map((w) => w.replace(/[^\p{L}\p{N}-]/gu, "")).filter((w) => /^[A-Z]{2,6}$/.test(w) || /\d/.test(w)),
     sponsored: /\bAnzeige\b/.test(body),
     clickbait,
+    // eslint-disable-next-line regexp/no-super-linear-move -- CI-only fake AI provider (see the gate at the top of this file)
     cleanTitle: clickbait ? title.replace(/\s*\?!\s*$/, "") : null,
   });
 }
 
 function fakeSummary(prompt: string): string {
   const text = prompt.split(/\n\n(?:Article|Articles|Titles):\n/)[1] ?? prompt;
+  // eslint-disable-next-line regexp/no-super-linear-move -- CI-only fake AI provider (see the gate at the top of this file)
   return (text.match(/[^.!?]+[.!?]/g) ?? [text]).slice(0, 2).map((x) => x.trim()).join(" ");
 }
 

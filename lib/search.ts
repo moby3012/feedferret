@@ -126,6 +126,7 @@ export function tokenizeSearch(query: string) {
     const tokens: string[] = [];
     // `key:"two words"` / `-key:'two words'` stay ONE token (value unquoted), so
     // `entity:"Angela Merkel"` and `author:"Jane Doe"` work like their one-word forms.
+    // eslint-disable-next-line regexp/no-super-linear-move -- the `(\S+)` branch consumes any run the keyed branches reject; covered by tests/security/redos-regression.test.ts
     const re = /([-!]?[A-Za-z]+:)(?:"([^"]+)"|'([^']+)')|"([^"]+)"|'([^']+)'|(\S+)/g;
     let match: RegExpExecArray | null;
     while ((match = re.exec(query)) !== null) {

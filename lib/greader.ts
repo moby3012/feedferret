@@ -133,6 +133,7 @@ export async function authenticateGReaderPassword(request: Request, email: strin
 export async function authenticateGReaderRequest(request: Request): Promise<(User & { tokenScope?: string }) | null> {
   const header = request.headers.get("authorization") || "";
   const googleLogin = header.match(/GoogleLogin\s+auth=(.+)$/i);
+  // eslint-disable-next-line regexp/no-super-linear-backtracking -- HTTP header values cannot contain line terminators, so `.+$` never fails after the whitespace run
   const bearer = header.match(/^Bearer\s+(.+)$/i);
   const token = googleLogin?.[1] || bearer?.[1];
   if (token) {

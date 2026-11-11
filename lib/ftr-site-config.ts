@@ -19,6 +19,7 @@
 
 import { JSDOM } from "jsdom";
 import { FTR_SITE_CONFIGS } from "./ftr-site-configs";
+import { stripTags } from "@/lib/linear-text";
 
 export type FtrConfig = {
   title: string[];
@@ -37,6 +38,7 @@ export type FtrExtraction = {
 };
 
 // A single directive line: `key: value` (value may itself contain colons).
+// eslint-disable-next-line regexp/no-super-linear-backtracking -- applied to one trimmed config line (split on \r?\n above)
 const DIRECTIVE = /^([a-z_]+)\s*:\s*(.*)$/i;
 
 /**
@@ -173,8 +175,7 @@ function firstMatchText(document: Document, xpaths: string[]): string | null {
 }
 
 function textLength(html: string): number {
-  return html
-    .replace(/<[^>]*>/g, " ")
+  return stripTags(html)
     .replace(/\s+/g, " ")
     .trim().length;
 }

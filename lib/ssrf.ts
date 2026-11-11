@@ -8,6 +8,7 @@ import net from "net";
 import { db } from "@/lib/db";
 import { getPinnedImpitFetch, getImpitFetch, type FetchResponseLike } from "./impit-fetch";
 import { readHtmlPrefix } from "./html-prefix";
+import { stripTags } from "@/lib/linear-text";
 
 export type SsrfCheckOptions = {
   allowInternal?: boolean;
@@ -162,8 +163,7 @@ async function errorBodySuffix(response: FetchResponseLike, include?: boolean): 
   if (!include) return "";
   try {
     const raw = await readTextWithLimit(response, 8192).catch(() => "");
-    const snippet = raw
-      .replace(/<[^>]*>/g, " ") // drop HTML tags from error pages
+    const snippet = stripTags(raw) // drop HTML tags from error pages
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 200);

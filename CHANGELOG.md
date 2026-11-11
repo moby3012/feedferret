@@ -7,6 +7,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Security — ReDoS sweep (super-linear regexes on untrusted text)
+
+- A regex such as `/<[^>]*>/g` or `/\/+$/` re-scans the rest of the string from every candidate start, so one hostile feed item, page, mail header or log line of ~1 MiB (`"<<<<…"`, `"////…x"`, long whitespace runs) could block Node's single event loop for minutes. About 40 such sites on feed/page/mail/AI/user input now use linear scanners (new `lib/linear-text.ts`, each diffed against its legacy regex by randomized tests) or bounded patterns — notably `extractImageFromHtml` (runs in the background sync on attacker-controlled feeds), `stripStyleBlocks`, `htmlToPlainText`/`markdownToPlainText`, `synthesizeItemTitle`, recipient-address extraction, `redact`, the CSS-value guard and AI-output sanitising. Matching results are unchanged.
+- `tests/security/redos-regression.test.ts` feeds hostile 1 MiB inputs to those functions (budget 200 ms each); `eslint-plugin-regexp` (`no-super-linear-backtracking`, `no-super-linear-move`) now fails the lint on new super-linear patterns in runtime code.
+
 ### Added — "Defekte Feeds" overview
 
 - **One place to triage failing feeds** (Manage feeds → *Defekte Feeds*, `/manage-feeds?tab=broken`): every feed that is auto-muted or has failed syncs, muted first, then by failure streak. Each card shows the host, the reason in plain language (access denied / not found / server error / unreachable / not a valid feed / needs RSSHub), since when it fails and its last success; the redacted technical error stays one click away. Newsletter feeds are excluded.

@@ -15,6 +15,7 @@ import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { type MeteredAiConfig, runAiPrompt } from "@/lib/ai-summary";
 import { matchRadarRules, type RadarMatch } from "@/lib/rsshub-radar-rules";
 import { rsshubRouteError } from "@/lib/rsshub-route";
+import { trimTrailingSlashes } from "@/lib/linear-text";
 
 export type RsshubConfig = { baseUrl: string; apiKey: string | null };
 
@@ -70,7 +71,7 @@ export async function isRsshubConfigured(): Promise<boolean> {
 
 /** Builds the full route URL, appending RSSHub's optional `?key=` access gate. */
 export function buildRsshubRouteUrl(config: RsshubConfig, routePath: string): string {
-  const base = config.baseUrl.replace(/\/+$/, "");
+  const base = trimTrailingSlashes(config.baseUrl);
   const path = routePath.startsWith("/") ? routePath : `/${routePath}`;
   const url = new URL(base + path);
   if (config.apiKey) url.searchParams.set("key", config.apiKey);
@@ -83,7 +84,7 @@ export function buildRsshubRouteUrl(config: RsshubConfig, routePath: string): st
  * created, via `applyRsshubKey`.
  */
 export function buildRsshubPublicRouteUrl(config: RsshubConfig, routePath: string): string {
-  const base = config.baseUrl.replace(/\/+$/, "");
+  const base = trimTrailingSlashes(config.baseUrl);
   const path = routePath.startsWith("/") ? routePath : `/${routePath}`;
   return new URL(base + path).toString();
 }
@@ -102,7 +103,7 @@ export function applyRsshubKeyWith(config: RsshubConfig | null, feedUrl: string)
   try {
     const url = new URL(feedUrl);
     const base = new URL(config.baseUrl);
-    const basePath = base.pathname.replace(/\/+$/, "");
+    const basePath = trimTrailingSlashes(base.pathname);
     if (url.origin !== base.origin || !url.pathname.startsWith(basePath)) return feedUrl;
     if (url.searchParams.has("key")) return feedUrl;
     url.searchParams.set("key", config.apiKey);

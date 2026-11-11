@@ -41,6 +41,7 @@ export async function resolveApiUser(request: Request): Promise<ApiUser | null> 
   }
 
   const authHeader = request.headers.get("authorization");
+  // eslint-disable-next-line regexp/no-super-linear-backtracking -- HTTP header values cannot contain line terminators, so `.+$` never fails after the whitespace run
   const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   if (!token) return null;
 

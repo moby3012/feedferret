@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { redactArticlesForClient } from "@/lib/connector-secrets";
+import { stripTagsNonEmpty } from "@/lib/linear-text";
 
 export async function getSharedSavedSearch(token: string, limit = 100) {
   if (!token || token.length < 16) return null;
@@ -42,7 +43,7 @@ export function getPublicBaseUrl() {
 }
 
 export function stripHtml(input?: string | null) {
-  return (input || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return stripTagsNonEmpty(input || "").replace(/\s+/g, " ").trim();
 }
 
 export function escapeXml(input?: string | null) {
