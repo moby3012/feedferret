@@ -2,7 +2,7 @@ import { safeFetch, assertSafeFetchUrl, isTrustedFeedFetchingAllowed, readTextWi
 import { fakePrompt, isFakeAiEnabled } from "@/lib/ai/fake";
 import { classifyAiError } from "@/lib/ai/errors";
 import { estimateTokens, reserveBudget, settleUsage, type AiFeature } from "@/lib/ai/usage";
-import { escapeUntrusted, sanitizeOutputText } from "@/lib/ai/citations";
+import { escapeUntrusted, sanitizeDigestSubject, sanitizeDigestSummary } from "@/lib/ai/citations";
 
 /** "fake" is the deterministic CI provider (lib/ai/fake.ts); it only exists behind its test gate. */
 export type AiProvider = "openai" | "anthropic" | "ollama" | "gemini" | "openrouter" | "fake";
@@ -25,10 +25,12 @@ export type AiConfig = {
   ollamaBaseUrl?: string | null;
   language?: string | null;
   /**
-   * K2: when set, the call is checked against the user's daily token cap
-   * (throws AiBudgetError) and its (estimated) tokens are recorded in AiUsage.
+   * K2/N14: required. With a value, the call is checked against the user's
+   * daily token cap (throws AiBudgetError) and its (estimated) tokens are
+   * recorded in AiUsage. `null` only where the caller meters the call itself
+   * (briefing stream: reserve/settle around it) — never to skip metering.
    */
-  usage?: { userId: string; feature: AiFeature };
+  usage: { userId: string; feature: AiFeature } | null;
 };
 
 /** An AiConfig that must be metered (N14: every AI call counts against the user's daily budget). */
@@ -67,13 +69,15 @@ const DIGEST_UNTRUSTED_RULES =
 const DIGEST_TITLE_CHARS = 300;
 const DIGEST_FEED_CHARS = 120;
 const DIGEST_EXCERPT_CHARS = 400;
-/** Caps of the model output that reaches the digest mail. */
-export const DIGEST_SUMMARY_MAX_CHARS = 2_000;
-export const DIGEST_SUBJECT_MAX_CHARS = 120;
+// Output caps and the digest sanitisers live in lib/ai/citations (dependency-free, also used by
+// lib/digest-email for stored per-article summaries); re-exported here for existing imports.
+export { DIGEST_SUBJECT_MAX_CHARS, DIGEST_SUMMARY_MAX_CHARS, neutralizeLinks, sanitizeDigestSubject, sanitizeDigestSummary } from "@/lib/ai/citations";
 
 function digestBlock(a: DigestSummaryArticle, i: number, withExcerpt: boolean): string {
   const title = escapeUntrusted(stripHtml(a.title ?? "")).slice(0, DIGEST_TITLE_CHARS);
-  const feed = a.feedName ? escapeUntrusted(stripHtml(a.feedName)).slice(0, DIGEST_FEED_CHARS) : "";
+  // Attribute value: `escapeUntrusted` already maps `"` to `'`; strip any left explicitly so the
+  // value can never close the attribute, whatever that helper does in future.
+  const feed = a.feedName ? escapeUntrusted(stripHtml(a.feedName)).replace(/"/g, "'").slice(0, DIGEST_FEED_CHARS) : "";
   const excerpt = withExcerpt && a.excerpt ? escapeUntrusted(stripHtml(a.excerpt)).slice(0, DIGEST_EXCERPT_CHARS) : "";
   return `<article n="${i + 1}"${feed ? ` feed="${feed}"` : ""}>${title}${excerpt ? ` — ${excerpt}` : ""}</article>`;
 }
@@ -107,31 +111,6 @@ export function buildDigestSubjectPrompt(articles: DigestSummaryArticle[], langu
       ? "Write the subject in the same language as the article titles."
       : `Write the subject in ${escapeUntrusted(language).slice(0, 40)}.`;
   return `Generate a concise email subject line (maximum 70 characters) for a reading digest containing the following article titles. Capture the 1–2 most interesting themes. Do not use quotes. Do not include the word "digest". ${langInstruction}\n${DIGEST_UNTRUSTED_RULES}\n\nTitles:\n${blocks.join("\n")}`;
-}
-
-/**
- * Model output → digest-mail-safe plain text (N14): per paragraph through
- * `sanitizeOutputText` (no HTML/markdown, no URLs, no control/bidi chars;
- * bare e-mail addresses and `host/path` links removed too),
- * paragraphs kept (the mail renders `pre-wrap`), total capped.
- */
-/** Bare e-mail addresses and `host.tld/path` links (no scheme) that mail clients auto-link. */
-// Scheme URLs first, so the host part of `https://host/path` is not cut out alone.
-const BARE_LINKS = /\b[a-z][a-z0-9+.-]*:\/\/\S+|\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b|\b[\w-]+(?:\.[\w-]+)+\/\S*/gi;
-
-export function sanitizeDigestSummary(text: string): string {
-  const paragraphs = text
-    .replace(BARE_LINKS, " ")
-    .split(/\n\s*\n/)
-    .map((p) => sanitizeOutputText(p, DIGEST_SUMMARY_MAX_CHARS))
-    .filter(Boolean);
-  const out = paragraphs.join("\n\n");
-  return out.length > DIGEST_SUMMARY_MAX_CHARS ? `${out.slice(0, DIGEST_SUMMARY_MAX_CHARS - 1).trimEnd()}…` : out;
-}
-
-/** Model output → one-line subject: sanitised, quotes stripped, capped. */
-export function sanitizeDigestSubject(text: string): string {
-  return sanitizeOutputText(text.replace(BARE_LINKS, " ").replace(/["'«»“”„]/g, ""), DIGEST_SUBJECT_MAX_CHARS);
 }
 
 export async function generateDigestSummary(

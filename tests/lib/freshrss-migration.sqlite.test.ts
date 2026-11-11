@@ -30,7 +30,7 @@ import { POST as uploadRoute } from "../../app/api/import/freshrss/route";
 import { handleFreshRssUpload } from "../../lib/import/freshrss-upload";
 import { acquireImportSlot } from "../../lib/import/import-slots";
 import { importOpmlXml } from "../../lib/import/opml-import";
-import { consumeRateLimit, RATE_LIMITS } from "../../lib/rate-limit";
+import { consumeRateLimit, peekRateLimit, RATE_LIMITS } from "../../lib/rate-limit";
 import { runFreshRssMigration } from "../../lib/import/freshrss-migration";
 import { syncDynamicOpmlCategories } from "../../lib/dynamic-opml";
 import { buildDedupeKey } from "../../lib/dedupe-key";
@@ -537,9 +537,15 @@ describe("upload endpoint: hostile input", () => {
     );
     expect(second.status).toBe(429);
     expect(second.headers.get("Retry-After")).toBe("60");
+    // A refused (busy) attempt gives its per-user rate-limit token back.
+    expect(peekRateLimit(`user:${b}`, RATE_LIMITS.freshrssImport).remaining).toBe(RATE_LIMITS.freshrssImport.limit);
     expect((await second.json()).error.message).toMatch(/busy/);
     expect(pulled).toBeLessThanOrEqual(1); // at most the stream's initial pull; never read by the handler
     expect((await first).status).toBe(200);
+    // Retrying while busy never locks the user out: many refused attempts, then one that runs.
+    const blocker = await acquireImportSlot(a);
+    for (let i = 0; i < RATE_LIMITS.freshrssImport.limit + 3; i++) expect((await post(Buffer.from(OPML), b, { query: "?dryRun=1" })).status).toBe(429);
+    blocker();
     // The slot is free again afterwards.
     expect((await post(Buffer.from(OPML), b, { query: "?dryRun=1" })).status).toBe(200);
   });

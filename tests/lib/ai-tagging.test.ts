@@ -229,7 +229,7 @@ function stubFetch(content: string) {
 }
 
 describe("generateTags / generateEnrichment", () => {
-  const config: AiConfig = { provider: "openai", apiKey: "test-key" };
+  const config: AiConfig = { provider: "openai", apiKey: "test-key", usage: null };
 
   it("generateTags keeps its signature and returns parsed tags (legacy array answer)", async () => {
     const restore = stubFetch('["Science", "Space"]');

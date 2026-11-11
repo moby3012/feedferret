@@ -10,7 +10,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from "@/lib/rate-limit";
+import { checkRateLimit, RATE_LIMITS, rateLimitHeaders, releaseRateLimit } from "@/lib/rate-limit";
 import { FRESHRSS_UPLOAD_MAX_BYTES, MigrationInputError, runFreshRssMigration } from "./freshrss-migration";
 import { revalidatePath } from "next/cache";
 import { acquireImportSlot, ImportBusyError, importBusyResponse, type ReleaseImportSlot } from "./import-slots";
@@ -53,7 +53,9 @@ export async function handleFreshRssUpload(request: Request, userId: string, opt
     release = await acquireImportSlot(userId);
   } catch (error) {
     if (!(error instanceof ImportBusyError)) throw error;
-    // Nothing of the body was read; the client retries later.
+    // Nothing of the body was read; the client retries later. A refused attempt must not use
+    // up the per-user budget, or retrying while another import runs locks the user out.
+    releaseRateLimit(`user:${userId}`, RATE_LIMITS.freshrssImport);
     await request.body?.cancel().catch(() => undefined);
     return importBusyResponse(error);
   }

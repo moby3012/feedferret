@@ -64,7 +64,7 @@ describe("streamAiPrompt wire formats", () => {
     ["gemini", "gemini.txt", { in: 640, out: 15 }],
   ] as const)("%s: text deltas + usage", async (provider, file, usage) => {
     fetchMock.mockResolvedValueOnce(chunked(fixture(file)));
-    const out = await collect(streamAiPrompt("prompt", { provider, apiKey: "k", model: "m" }, { maxTokens: 700 }));
+    const out = await collect(streamAiPrompt("prompt", { provider, apiKey: "k", model: "m", usage: null }, { maxTokens: 700 }));
     expect(out.text).toBe(EXPECTED);
     expect(out.usage).toEqual(usage);
     const [url, init] = fetchMock.mock.calls[0];
@@ -84,14 +84,14 @@ describe("streamAiPrompt wire formats", () => {
   it("falls back to one non-streaming call when the stream fails before the first chunk", async () => {
     fetchMock.mockResolvedValueOnce(new Response("upstream", { status: 502 }));
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: EXPECTED } }] }), { status: 200 }));
-    const out = await collect(streamAiPrompt("prompt", { provider: "openai", apiKey: "k" }, { maxTokens: 700 }));
+    const out = await collect(streamAiPrompt("prompt", { provider: "openai", apiKey: "k", usage: null }, { maxTokens: 700 }));
     expect(out.text).toBe(EXPECTED.trim());
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not retry auth errors; they surface as provider_auth", async () => {
     fetchMock.mockResolvedValueOnce(new Response("bad key sk-123", { status: 401 }));
-    const err = await collect(streamAiPrompt("p", { provider: "anthropic", apiKey: "k" }, { maxTokens: 10 })).catch((e) => e);
+    const err = await collect(streamAiPrompt("p", { provider: "anthropic", apiKey: "k", usage: null }, { maxTokens: 10 })).catch((e) => e);
     expect(err).toBeInstanceOf(AiProviderError);
     expect(err.code).toBe("provider_auth");
     expect(err.message).not.toContain("sk-123"); // provider bodies never travel
@@ -154,8 +154,8 @@ describe("fake provider", () => {
 
   it("refuses to run when the gate is closed", async () => {
     vi.stubEnv("FEEDFERRET_FAKE_AI", "0");
-    await expect(runAiPrompt("x", { provider: "fake" })).rejects.toThrow("Unknown AI provider");
-    await expect(collect(streamAiPrompt("x", { provider: "fake" }, { maxTokens: 10 }))).rejects.toThrow("Unknown AI provider");
+    await expect(runAiPrompt("x", { provider: "fake", usage: null })).rejects.toThrow("Unknown AI provider");
+    await expect(collect(streamAiPrompt("x", { provider: "fake", usage: null }, { maxTokens: 10 }))).rejects.toThrow("Unknown AI provider");
   });
 
   it("briefing output: cites stories, adds a hallucinated id, an uncited line and (IGNORE) an injection line", () => {
