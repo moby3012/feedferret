@@ -240,7 +240,11 @@ export async function fetchWithSsrfProtection(
       }
 
       if (!response.ok) {
-        throw new Error(`Fetch failed: ${response.status}${await errorBodySuffix(response, options.includeErrorBody)}`);
+        throw new HttpStatusError(
+          response.status,
+          `Fetch failed: ${response.status}${await errorBodySuffix(response, options.includeErrorBody)}`,
+          parseRetryAfterMs(response.headers.get("retry-after")),
+        );
       }
       const text = options.untilHead || options.readPrefix
         ? await readHtmlPrefix(response, { maxBytes: options.maxBytes, contentType: response.headers.get("content-type"), stopAtHead: options.untilHead || false })
@@ -265,6 +269,30 @@ export async function fetchTextWithSsrfProtection(
   // would be unexpected; preserve the previous "non-2xx throws" behavior for them.
   if (result.notModified) throw new Error("Fetch failed: 304");
   return result.text;
+}
+
+/**
+ * A non-2xx final response. The message keeps the historic "Fetch failed: <status>"
+ * shape (callers and user-facing error mapping parse it); `status` and the parsed
+ * `Retry-After` let politeness/backoff logic react without string matching.
+ */
+export class HttpStatusError extends Error {
+  // Brand for duck-typed checks across module instances; `name` stays "Error" so
+  // String(error) (stored in feed.lastError, shown to users) is unchanged.
+  readonly httpStatusError = true;
+  constructor(readonly status: number, message: string, readonly retryAfterMs: number | null = null) {
+    super(message);
+  }
+}
+
+/** Retry-After as milliseconds from now (delta-seconds or HTTP-date); null when absent/invalid. */
+export function parseRetryAfterMs(value: string | null | undefined, now = Date.now()): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+  const date = Date.parse(trimmed);
+  if (Number.isNaN(date)) return null;
+  return Math.max(0, date - now);
 }
 
 /** Origin + path only: error messages end up in feed.lastError, which users see. */

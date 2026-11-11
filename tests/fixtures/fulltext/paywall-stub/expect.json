@@ -1,0 +1,12 @@
+{
+  "url": "https://blog.example/p/waermeplan-abc",
+  "accept": false,
+  "reasonIn": [
+    "paywall",
+    "teaser",
+    "thin"
+  ],
+  "mustContain": [
+    "Die Stadtwerke haben am Montag ein neues Konzept für die Wär"
+  ]
+}

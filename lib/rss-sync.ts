@@ -16,6 +16,18 @@ import { getConnectorSecretRules, redactConnectorTextWith, stripConnectorSecrets
 import { getSanitizer } from "./sanitize-html";
 import { resolveFullTextMode } from "./full-text-mode";
 import { fetchAndExtractReadable } from "./readability-extract";
+import { assessExtraction, decideFullText } from "./extraction-quality";
+import { classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
+import { normalizeLazyMedia } from "./lazy-media";
+import {
+    FULL_TEXT_STATE_SELECT,
+    MAX_FULL_TEXT_FETCHES_PER_SYNC,
+    feedBaseline,
+    needsFullTextAttempt,
+    recordFullTextMiss,
+    storeFullText,
+    type FullTextArticleState,
+} from "./full-text-store";
 import { applySyncFailure, applySyncSuccess } from "./feed-auto-mute";
 import { computeArticleMeta, estimateReadMinutes, htmlToPlainText, markdownToPlainText } from "./article-kind";
 import { computeHeuristicEnrichment } from "./enrichment-heuristics";
@@ -85,6 +97,24 @@ export interface ArticleSyncInput {
 export interface ArticleSyncResult {
     upsertedIds: string[];
     createdArticleIds: string[];
+    /**
+     * Rows that should get a full-text extraction attempt if the feed has a
+     * full-text mode: new rows first, then existing rows whose upstream content
+     * genuinely changed or whose previous attempt is retryable (never attempted,
+     * deferred by host backoff, or failed fewer than MAX_FULL_TEXT_ATTEMPTS
+     * times). Rows with stored full text and an unchanged feed item are NOT in
+     * here — re-syncing an unchanged feed causes zero page fetches.
+     */
+    fullTextCandidateIds: string[];
+}
+
+export interface UpsertArticleBatchOptions {
+    /**
+     * The feed has an active full-text mode. Enables the one-time recognition of
+     * legacy rows (from before Article.feedContent existed) whose `content` is
+     * previously extracted full text rather than the feed item.
+     */
+    fullTextActive?: boolean;
 }
 
 // The fields the original per-article `upsert.update` clause overwrote on an existing
@@ -202,8 +232,11 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
  * would also have seen (each iteration's insert was committed, and thus visible,
  * before the next iteration's duplicate check ran).
  */
-export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promise<ArticleSyncResult> {
-    if (rawArticles.length === 0) return { upsertedIds: [], createdArticleIds: [] };
+export async function upsertArticleBatch(
+    rawArticles: ArticleSyncInput[],
+    options: UpsertArticleBatchOptions = {},
+): Promise<ArticleSyncResult> {
+    if (rawArticles.length === 0) return { upsertedIds: [], createdArticleIds: [], fullTextCandidateIds: [] };
 
     await yieldToLoop();
     const articles = foldByDedupeKey(rawArticles);
@@ -225,6 +258,9 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
             imageUrl: true,
             enclosures: true,
             updatedAt: true,
+            feedContent: true,
+            fullTextStatus: true,
+            fullTextAttempts: true,
         },
     });
     const existingByDedupeKey = new Map(
@@ -234,6 +270,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
     );
 
     const upsertedIds: string[] = [];
+    const retryFullTextIds: string[] = [];
     const newArticles: ArticleSyncInput[] = [];
 
     for (let article of articles) {
@@ -261,32 +298,81 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
 
         const next = updatableFields(article);
         const linkChanged = existing.link !== next.link;
+
+        // Full text (lib/full-text-store.ts): when `content` holds extracted full
+        // text, the feed item lives in `feedContent` and upstream changes are
+        // detected against THAT — the stored full text must neither look like a
+        // change nor be overwritten by the feed teaser.
+        let hasFullText = existing.feedContent != null;
+        let legacyFullText = false;
+        if (
+            !hasFullText &&
+            options.fullTextActive &&
+            existing.fullTextStatus === null &&
+            existing.content !== next.content &&
+            htmlToPlainText(existing.content).length > htmlToPlainText(next.content).length * 1.2 + 100
+        ) {
+            // Row from before feedContent existed whose content was replaced by
+            // extracted full text: adopt it as stored full text (one-time, no fetch).
+            hasFullText = true;
+            legacyFullText = true;
+        }
+        const baseline = hasFullText && !legacyFullText ? existing.feedContent! : existing.content;
+        const contentChanged = !legacyFullText && baseline !== next.content;
+
         const otherChanged =
             existing.externalId !== next.externalId ||
-            existing.content !== next.content ||
-            existing.excerpt !== next.excerpt ||
+            contentChanged ||
+            // With stored full text the excerpt is derived from it, not the feed.
+            (!hasFullText && existing.excerpt !== next.excerpt) ||
             existing.author !== next.author ||
             existing.publishedAt.getTime() !== next.publishedAt.getTime() ||
             (existing.imageUrl ?? null) !== next.imageUrl ||
             (existing.enclosures ?? null) !== next.enclosures ||
             existing.title !== next.title;
 
+        // Fields an update writes: with stored full text the feed's content goes
+        // to feedContent and content/excerpt/readMinutes stay the full text's.
+        const writable: Record<string, unknown> = { ...next };
+        if (hasFullText) {
+            delete writable.content;
+            delete writable.excerpt;
+            delete writable.readMinutes;
+            if (contentChanged || legacyFullText) writable.feedContent = next.content;
+        }
+        // A genuine upstream content change invalidates the previous full-text
+        // attempt, so it is extracted again exactly once for the new version.
+        const fullTextReset = contentChanged ? { fullTextStatus: null, fullTextReason: null, fullTextAttempts: null } : {};
+        const legacyAdopt = legacyFullText ? { feedContent: next.content, fullTextStatus: "ok", fullTextReason: "legacy" } : {};
+
         const cosmeticLink = article.linkSynthetic || article.linkCosmetic;
         if (otherChanged || (linkChanged && !cosmeticLink)) {
-            await db.article.update({ where: { id: existing.id }, data: { ...next, ...(cosmeticTitle ? { title: cosmeticTitle } : {}) } });
+            await db.article.update({
+                where: { id: existing.id },
+                data: { ...writable, ...fullTextReset, ...legacyAdopt, ...(cosmeticTitle ? { title: cosmeticTitle } : {}) },
+            });
             if (upsertedIds.length % 25 === 0) await yieldToLoop();
-        } else if (linkChanged || cosmeticTitle) {
-            // Synthetic / resolved-redirect link rewrite and/or legacy
-            // placeholder title upgrade only: store it, keep updatedAt.
+        } else if (linkChanged || cosmeticTitle || legacyFullText) {
+            // Synthetic / resolved-redirect link rewrite, legacy placeholder
+            // title upgrade and/or adopting legacy full text only: store it,
+            // keep updatedAt.
             await db.article.update({
                 where: { id: existing.id },
                 data: {
                     ...(linkChanged ? { link: next.link } : {}),
                     ...(linkChanged && article.linkCosmetic && article.contentHash ? { contentHash: article.contentHash } : {}),
                     ...(cosmeticTitle ? { title: cosmeticTitle } : {}),
+                    ...legacyAdopt,
                     updatedAt: existing.updatedAt,
                 },
             });
+        }
+
+        if (
+            contentChanged ||
+            (!legacyFullText && needsFullTextAttempt({ fullTextStatus: existing.fullTextStatus, fullTextAttempts: existing.fullTextAttempts }))
+        ) {
+            retryFullTextIds.push(existing.id);
         }
     }
 
@@ -413,7 +499,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
         }
     }
 
-    return { upsertedIds, createdArticleIds };
+    return { upsertedIds, createdArticleIds, fullTextCandidateIds: [...createdArticleIds, ...retryFullTextIds] };
 }
 
 export interface SyncFeedOptions {
@@ -564,24 +650,28 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             };
         });
 
-        const { upsertedIds, createdArticleIds } = await upsertArticleBatch(articles);
+        const fullTextMode = resolveFullTextMode(feed);
+        const { createdArticleIds, fullTextCandidateIds } = await upsertArticleBatch(articles, {
+            fullTextActive: fullTextMode !== "off",
+        });
 
         await db.feed.update({
             where: { id: feed.id },
             data: feedPatch,
         });
 
-        // Auto full-text extraction for newly synced articles. `fullTextMode`
-        // defaults to "off" for every pre-existing row, so it can't be trusted
-        // alone — resolveFullTextMode() falls back to the legacy
-        // `autoFetchFullText` boolean so feeds that already relied on it keep
-        // working unchanged.
-        if (upsertedIds.length > 0) {
-            const mode = resolveFullTextMode(feed);
-            if (mode === "selector") {
-                await autoFetchFullTextForArticles(userId, upsertedIds, feed);
-            } else if (mode === "auto" || mode === "ai") {
-                await autoFetchFullTextViaEngine(userId, upsertedIds, feed, mode);
+        // Auto full-text extraction — only for new rows, rows whose upstream
+        // content genuinely changed, and retryable earlier attempts (see
+        // ArticleSyncResult.fullTextCandidateIds); never for every item of the
+        // payload. `fullTextMode` defaults to "off" for every pre-existing row,
+        // so it can't be trusted alone — resolveFullTextMode() falls back to the
+        // legacy `autoFetchFullText` boolean.
+        if (fullTextCandidateIds.length > 0 && fullTextMode !== "off") {
+            const candidates = fullTextCandidateIds.slice(0, MAX_FULL_TEXT_FETCHES_PER_SYNC);
+            if (fullTextMode === "selector") {
+                await autoFetchFullTextForArticles(userId, candidates, feed);
+            } else if (fullTextMode === "auto" || fullTextMode === "ai") {
+                await autoFetchFullTextViaEngine(userId, candidates, feed, fullTextMode);
             }
         }
 
@@ -670,6 +760,33 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
     }
 }
 
+/** Loads the full-text state of the candidate rows, keeping the candidates' priority order. */
+async function loadFullTextCandidates(userId: string, articleIds: string[]): Promise<FullTextArticleState[]> {
+    const rows = await db.article.findMany({
+        where: { id: { in: articleIds }, userId },
+        select: FULL_TEXT_STATE_SELECT,
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return articleIds.map((id) => byId.get(id)).filter((row): row is FullTextArticleState => !!row && needsFullTextAttempt(row));
+}
+
+/**
+ * Per-host politeness gate for unattended fetches: while a host is backing off
+ * (429/403/5xx/network failures, lib/host-backoff.ts) its articles are marked
+ * "deferred" and retried by a later sync instead of being fetched now.
+ */
+async function deferIfHostBackingOff(article: FullTextArticleState): Promise<boolean> {
+    if (!article.link || hostBackoffRemainingMs(article.link) === 0) return false;
+    await recordFullTextMiss(article, "deferred", "host_backoff");
+    return true;
+}
+
+async function recordFullTextFetchError(article: FullTextArticleState, error: unknown) {
+    const { kind, status } = classifyFetchFailure(error);
+    const reason = status ? `http_${status}` : kind;
+    await recordFullTextMiss(article, "failed", reason).catch((e) => logger.warn("[rss-sync] recording full-text failure failed:", e));
+}
+
 async function autoFetchFullTextForArticles(
     userId: string,
     articleIds: string[],
@@ -680,28 +797,36 @@ async function autoFetchFullTextForArticles(
 ) {
     const { JSDOM } = await import("jsdom");
     const DOMPurify = await getSanitizer();
+    const { recordHostFailure, recordHostSuccess } = await import("./host-backoff");
 
-    const articles = await db.article.findMany({
-        where: { id: { in: articleIds }, userId },
-        select: { id: true, link: true, content: true },
-    });
+    const articles = await loadFullTextCandidates(userId, articleIds);
 
     for (const article of articles) {
         if (!article.link) continue;
         try {
-            const html = await fetchTextWithSsrfProtection(
-                article.link,
-                { headers: { "User-Agent": "FeedFerret/1.0", Accept: "text/html" } },
-                {
-                    allowInternal: await isTrustedFeedFetchingAllowed(),
-                    context: "Full-text fetch",
-                    maxBytes: 2 * 1024 * 1024,
-                    maxRedirects: 5,
-                    timeoutMs: 12_000,
-                },
-            );
+            if (await deferIfHostBackingOff(article)) continue;
+            let html: string;
+            try {
+                html = await fetchTextWithSsrfProtection(
+                    article.link,
+                    { headers: { "User-Agent": "FeedFerret/1.0", Accept: "text/html" } },
+                    {
+                        allowInternal: await isTrustedFeedFetchingAllowed(),
+                        context: "Full-text fetch",
+                        maxBytes: 2 * 1024 * 1024,
+                        maxRedirects: 5,
+                        timeoutMs: 12_000,
+                    },
+                );
+                recordHostSuccess(article.link);
+            } catch (error) {
+                recordHostFailure(article.link, error);
+                await recordFullTextFetchError(article, error);
+                continue;
+            }
             const dom = new JSDOM(html, { url: article.link });
             const document = dom.window.document;
+            normalizeLazyMedia(document, article.link);
 
             // Remove unwanted elements
             const removeSelectors = [
@@ -717,7 +842,7 @@ async function autoFetchFullTextForArticles(
                 const attr = node instanceof dom.window.HTMLImageElement ? "src" : "href";
                 const value = node.getAttribute(attr);
                 if (!value) return;
-                try { node.setAttribute(attr, new URL(value, article.link).toString()); } catch { /* ignore */ }
+                try { node.setAttribute(attr, new URL(value, article.link!).toString()); } catch { /* ignore */ }
             });
 
             let best: Element | undefined;
@@ -736,35 +861,33 @@ async function autoFetchFullTextForArticles(
                     .sort((a, b) => b.score - a.score)[0]?.el;
             }
 
-            if (!best) continue;
+            if (!best) {
+                await recordFullTextMiss(article, "rejected", "empty");
+                continue;
+            }
 
             const sanitized = DOMPurify.sanitize(best.innerHTML, { ADD_ATTR: ["target", "rel"] }).trim();
-            const plain = DOMPurify.sanitize(sanitized, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
-
-            if (plain.length < 400) continue;
-
-            await db.article.update({
-                where: { id: article.id, userId },
-                data: { content: sanitized, contentFormat: "html", excerpt: plain.slice(0, 240), readMinutes: estimateReadMinutes(plain) },
-            });
+            // Same generic quality gate as the engine path: walls, link lists,
+            // thin pages and "no better than the feed" results are not stored.
+            const decision = decideFullText(assessExtraction(sanitized), feedBaseline(article), "auto");
+            if (!decision.accept) {
+                await recordFullTextMiss(article, "rejected", decision.reason);
+                continue;
+            }
+            await storeFullText(article, { content: sanitized, format: "html", excerpt: null });
         } catch (e) {
-            logger.warn(`[rss-sync] autoFetchFullText failed for ${article.link}:`, e);
+            logger.warn(`[rss-sync] autoFetchFullText failed for ${urlForLog(article.link)}:`, e);
         }
     }
 }
 
-// Minimum plain-text length a fetched-and-extracted article body must have to
-// be considered an improvement worth storing, mirroring the threshold the
-// selector-based path (autoFetchFullTextForArticles) uses.
-const MIN_ENGINE_EXTRACTED_TEXT_LENGTH = 400;
-
 /**
- * "auto" full-text mode: fetches each article's source page and runs it
- * through the readability extraction engine (Defuddle -> Readability
- * fallback), storing the result as either HTML or Markdown per the feed's
- * `defaultContentFormat`. Unlike the selector/heuristic path, this doesn't
- * use `feed.fullTextSelector` at all — extraction quality comes from the
- * engine's own content scoring.
+ * "auto" full-text mode: fetches each candidate article's source page and runs
+ * it through the readability extraction engine (ensemble + quality gate +
+ * escalation chain), storing the result as either HTML or Markdown per the
+ * feed's `defaultContentFormat` — but only when it is clearly better than the
+ * feed-provided content (`decideFullText`). Unlike the selector/heuristic path,
+ * this doesn't use `feed.fullTextSelector` at all.
  */
 async function autoFetchFullTextViaEngine(
     userId: string,
@@ -774,12 +897,8 @@ async function autoFetchFullTextViaEngine(
     },
     mode: "auto" | "ai" = "auto",
 ) {
-    const DOMPurify = await getSanitizer();
-
-    const articles = await db.article.findMany({
-        where: { id: { in: articleIds }, userId },
-        select: { id: true, link: true, content: true },
-    });
+    const articles = await loadFullTextCandidates(userId, articleIds);
+    if (articles.length === 0) return;
 
     // The hosted-API BYOK connector (M7-T3) sends article content to a third
     // party, so unlike the manual "Fetch full text" button it must never run
@@ -799,9 +918,8 @@ async function autoFetchFullTextViaEngine(
     // M6: per-feed opt-in AI-extraction, capped per sync CALL (not per
     // article) — a feed's initial backfill can land dozens of articles in one
     // batch, and this bounds how many of those spend the user's own AI tokens
-    // in a single tick. Articles beyond the cap still get the free
-    // deterministic tiers (just without this fallback) and aren't revisited
-    // later, since `articleIds` only ever contains newly-arrived/changed rows.
+    // in a single tick. `articleIds` only contains new, upstream-changed or
+    // retryable rows (ArticleSyncResult.fullTextCandidateIds).
     const aiConfig: MeteredAiConfig | null =
         mode === "ai" && user?.aiProvider
             ? {
@@ -817,39 +935,40 @@ async function autoFetchFullTextViaEngine(
     for (const article of articles) {
         if (!article.link) continue;
         try {
+            if (await deferIfHostBackingOff(article)) continue;
             const useAiForThisArticle = !!aiConfig && aiExtractionsUsed < MAX_AI_EXTRACTIONS_PER_SYNC_BATCH;
             if (useAiForThisArticle) aiExtractionsUsed++;
-            const extractOptions = useAiForThisArticle
-                ? { ...baseExtractOptions, aiExtraction: aiConfig! }
-                : baseExtractOptions;
+            const baselineHtml = feedBaseline(article);
+            const extractOptions = {
+                ...baseExtractOptions,
+                ...(useAiForThisArticle ? { aiExtraction: aiConfig! } : {}),
+                baselineHtml,
+                gate: "auto" as const,
+            };
 
-            const result = await fetchAndExtractReadable(article.link, extractOptions);
-            if (result.extractedBy === "none" || !result.html) {
-                // Extraction failed to find anything useful — leave the
-                // feed-provided content as-is.
+            let result: Awaited<ReturnType<typeof fetchAndExtractReadable>>;
+            try {
+                result = await fetchAndExtractReadable(article.link, extractOptions);
+            } catch (error) {
+                // Fetch failed on every tier: keep whatever content the article has.
+                await recordFullTextFetchError(article, error);
                 continue;
             }
 
-            const useMarkdown = feed.defaultContentFormat === "markdown";
-            const content = useMarkdown ? result.markdown : result.html;
-            if (!content) continue;
+            const decision = decideFullText(result.quality, baselineHtml, "auto");
+            if (!decision.accept || !result.html) {
+                await recordFullTextMiss(article, "rejected", decision.accept ? "empty" : decision.reason);
+                continue;
+            }
 
-            const plain = DOMPurify.sanitize(result.html, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
-            if (plain.length < MIN_ENGINE_EXTRACTED_TEXT_LENGTH) continue;
-
-            const excerpt = result.excerpt?.trim() || plain.slice(0, 240);
-
-            await db.article.update({
-                where: { id: article.id, userId },
-                data: {
-                    content,
-                    contentFormat: useMarkdown ? "markdown" : "html",
-                    excerpt,
-                    readMinutes: estimateReadMinutes(useMarkdown ? markdownToPlainText(content) : htmlToPlainText(content)),
-                },
+            const useMarkdown = feed.defaultContentFormat === "markdown" && !!result.markdown;
+            await storeFullText(article, {
+                content: useMarkdown ? result.markdown! : result.html,
+                format: useMarkdown ? "markdown" : "html",
+                excerpt: result.excerpt,
             });
         } catch (e) {
-            logger.warn(`[rss-sync] autoFetchFullTextViaEngine failed for ${article.link}:`, e);
+            logger.warn(`[rss-sync] autoFetchFullTextViaEngine failed for ${urlForLog(article.link)}:`, e);
         }
     }
 }

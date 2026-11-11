@@ -23,6 +23,7 @@ export async function getSharedSavedSearch(token: string, limit = 100) {
       AND: [searchWhere],
     },
     // Public page: only what it renders (never feed credentials / URLs).
+    omit: { feedContent: true },
     include: { feed: { select: { name: true, icon: true } }, labels: { include: { label: true } } },
     orderBy: { publishedAt: "desc" },
     take: limit,

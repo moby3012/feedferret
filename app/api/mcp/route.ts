@@ -298,7 +298,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
     case "feedferret.search_articles":
       return searchArticles(user, args);
     case "feedferret.get_article": {
-      const article = await db.article.findFirst({ where: { id: String(args.articleId), userId: user.id }, include: { feed: true, labels: { include: { label: true } } } });
+      const article = await db.article.findFirst({ where: { id: String(args.articleId), userId: user.id }, omit: { feedContent: true }, include: { feed: true, labels: { include: { label: true } } } });
       if (article && (article as any).feed) (article as any).feed = await clientFeed((article as any).feed);
       return article ? redactArticleWith(await getConnectorSecretRules(), article) : article;
     }

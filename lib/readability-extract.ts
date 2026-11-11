@@ -4,14 +4,15 @@
 // Markdown form, suitable for storage/display as an article's "readable"
 // full-text version.
 //
-// Strategy: try Defuddle first (more forgiving, richer metadata), and fall
-// back to Mozilla Readability if Defuddle's result is empty/too short. Both
-// extractors are wrapped in try/catch so a thrown error from either library
-// falls through to the next strategy rather than failing the whole request.
+// Strategy: an ensemble of extractors (bundled FTR site rule, Defuddle,
+// Readability, extractus, JSON-LD articleBody) whose candidates are all scored
+// by the generic quality gate in lib/extraction-quality.ts; the best one wins.
+// Each extractor is wrapped in try/catch so a thrown error from one library
+// only removes that candidate rather than failing the whole request.
 //
 // This module is intentionally split into a pure function
-// (`extractReadableContent`, takes HTML, no I/O — easy to unit test) and a
-// thin SSRF-safe fetch wrapper (`fetchAndExtractReadable`).
+// (`extractReadableContent`, takes HTML, no I/O — easy to unit test) and an
+// SSRF-safe fetch + escalation wrapper (`fetchAndExtractReadable`).
 
 import { JSDOM } from "jsdom";
 import Defuddle from "defuddle";
@@ -27,6 +28,16 @@ import { fetchViaHostedApiDetailed, getHostedFetchConfigForUser, HostedFetchRate
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import type { MeteredAiConfig } from "@/lib/ai-summary";
 import { extractArticleWithAi } from "@/lib/ai-extraction";
+import { normalizeLazyMedia } from "@/lib/lazy-media";
+import { htmlToPlainText } from "@/lib/article-kind";
+import {
+  assessExtraction,
+  decideFullText,
+  isBetterCandidate,
+  trimEdgeBoilerplate,
+  type ExtractionQuality,
+} from "@/lib/extraction-quality";
+import { classifyFetchFailure, recordHostFailure, recordHostSuccess } from "@/lib/host-backoff";
 
 export type ExtractionResult = {
   html: string | null; // sanitized, cleaned article HTML (null if extraction failed)
@@ -36,6 +47,8 @@ export type ExtractionResult = {
   excerpt: string | null;
   wordCount: number;
   extractedBy: "ftr" | "defuddle" | "readability" | "extractus" | "jsonld" | "ai" | "hosted" | "none";
+  // Generic quality assessment of `html` (lib/extraction-quality.ts); null when nothing was extracted.
+  quality: ExtractionQuality | null;
 };
 
 // Below this many characters of plain text, Defuddle's result is treated as
@@ -256,116 +269,165 @@ async function tryArticleExtractor(html: string, url: string): Promise<RawExtrac
   }
 }
 
+type Candidate = {
+  raw: RawExtraction;
+  extractedBy: ExtractionResult["extractedBy"];
+};
+
+/** Sanitizes, edge-trims and scores one raw candidate. Null when sanitizing fails. */
+function finalizeCandidate(
+  DOMPurify: Awaited<ReturnType<typeof getSanitizer>>,
+  candidate: Candidate,
+): { candidate: Candidate; html: string; quality: ExtractionQuality } | null {
+  const clean = sanitizeExtractedContent(DOMPurify, candidate.raw.content);
+  if (clean === null) return null;
+  const trimmed = trimEdgeBoilerplate(clean);
+  return { candidate, html: trimmed, quality: assessExtraction(trimmed) };
+}
+
+// A bundled FTR rule is hand-curated for its host, so when its result is about
+// as good as the best generic extractor's (within this factor) it wins the tie.
+const FTR_TIE_FACTOR = 0.85;
+
+function pickBest(
+  scored: { candidate: Candidate; html: string; quality: ExtractionQuality }[],
+): { candidate: Candidate; html: string; quality: ExtractionQuality } | null {
+  let best: (typeof scored)[number] | null = null;
+  for (const entry of scored) {
+    if (!best || isBetterCandidate(entry.quality, best.quality)) best = entry;
+  }
+  if (!best) return null;
+  const ftr = scored.find((entry) => entry.candidate.extractedBy === "ftr");
+  if (
+    ftr &&
+    ftr !== best &&
+    ftr.quality.verdict === best.quality.verdict &&
+    ftr.quality.score >= best.quality.score * FTR_TIE_FACTOR
+  ) {
+    return ftr;
+  }
+  return best;
+}
+
+function noneResult(title: string | null): ExtractionResult {
+  return {
+    html: null,
+    markdown: null,
+    title,
+    byline: null,
+    excerpt: null,
+    wordCount: 0,
+    extractedBy: "none",
+    quality: null,
+  };
+}
+
+/** Parses the page once, normalizes lazy images, and serializes it back for the extractors. */
+function normalizePageHtml(html: string, url: string): { html: string; document: Document } {
+  const dom = new JSDOM(html, { url });
+  normalizeLazyMedia(dom.window.document, url);
+  return { html: dom.serialize(), document: dom.window.document };
+}
+
 /**
  * Extracts readable article content from raw HTML. Pure/testable: takes HTML
  * directly and does not perform any network I/O.
+ *
+ * Runs the extractors as an ENSEMBLE rather than a first-hit chain: a bundled
+ * FTR site rule, Defuddle and Readability always run; extractus and the JSON-LD
+ * `articleBody` recovery join when those come up short. Every candidate is
+ * sanitized, edge-trimmed (`trimEdgeBoilerplate`) and scored by the generic
+ * quality gate (`assessExtraction`); the best one wins, so a matching FTR rule
+ * that yields a consent wall or nothing no longer short-circuits a good generic
+ * extraction. Lazy-loaded images are normalized before any extractor runs.
  */
 export async function extractReadableContent(rawHtml: string, url: string): Promise<ExtractionResult> {
-  const html = stripStyleBlocks(rawHtml);
-
-  // Tier 0: a bundled per-site ftr rule, when one matches this host — the most
-  // reliable extraction, so it runs ahead of the generic heuristics.
-  const ftrResult = tryFtr(html, url);
-
-  let raw: RawExtraction | null = ftrResult;
-  let extractedBy: ExtractionResult["extractedBy"] = ftrResult ? "ftr" : "none";
-
-  // Readability mutates the document it's given, so run Defuddle against its
-  // own fresh JSDOM and (if needed) parse a second fresh JSDOM for
-  // Readability, so one extractor's attempt can never corrupt the other's
-  // input.
-  if (!raw) {
-    const defuddleDom = new JSDOM(html, { url });
-    const defuddleResult = tryDefuddle(defuddleDom.window.document, url);
-    if (defuddleResult) {
-      raw = defuddleResult;
-      extractedBy = "defuddle";
-    }
+  const stripped = stripStyleBlocks(rawHtml);
+  let html = stripped;
+  let titleDocument: Document | null = null;
+  try {
+    const normalized = normalizePageHtml(stripped, url);
+    html = normalized.html;
+    titleDocument = normalized.document;
+  } catch {
+    // jsdom could not parse/serialize: extractors still get the stripped HTML.
   }
 
-  if (!raw) {
-    const readabilityDom = new JSDOM(html, { url });
-    const readabilityResult = tryReadability(readabilityDom.window.document);
-    if (readabilityResult) {
-      raw = readabilityResult;
-      extractedBy = "readability";
-    }
-  }
+  const DOMPurify = await getSanitizer();
+  const scored: { candidate: Candidate; html: string; quality: ExtractionQuality }[] = [];
+  const add = (raw: RawExtraction | null, extractedBy: ExtractionResult["extractedBy"]) => {
+    if (!raw) return;
+    const entry = finalizeCandidate(DOMPurify, { raw, extractedBy });
+    if (entry) scored.push(entry);
+  };
 
-  if (!raw) {
-    const extractusResult = await tryArticleExtractor(html, url);
-    if (extractusResult) {
-      raw = extractusResult;
-      extractedBy = "extractus";
-    }
+  // FTR is one candidate among several, never a short-circuit.
+  add(tryFtr(html, url), "ftr");
+  // Readability mutates the document it's given, so every extractor gets its
+  // own fresh JSDOM and one attempt can never corrupt another's input.
+  add(tryDefuddle(new JSDOM(html, { url }).window.document, url), "defuddle");
+  add(tryReadability(new JSDOM(html, { url }).window.document), "readability");
+
+  let best = pickBest(scored);
+  if (!best || best.quality.verdict !== "good") {
+    add(await tryArticleExtractor(html, url), "extractus");
+    best = pickBest(scored);
   }
 
   // JSON-LD full-text recovery: only when the DOM extraction is missing or
   // thin (paywalled/truncated bodies), since when the DOM has a real article
   // its structured HTML (headings, images, links) beats JSON-LD's plain text.
-  const domTextLen = raw ? textLength(raw.content) : 0;
-  if (domTextLen < 1200) {
+  const domTextLen = best ? best.quality.textLength : 0;
+  if (domTextLen < 1200 || (best && best.quality.verdict !== "good")) {
     const jsonLdDom = new JSDOM(html, { url });
     const jsonLdBody = extractJsonLdArticleBody(jsonLdDom.window.document);
     if (jsonLdBody && jsonLdBody.length >= MIN_CONTENT_TEXT_LENGTH && jsonLdBody.length > domTextLen * 1.5) {
-      raw = {
-        content: textToParagraphs(jsonLdBody),
-        title: raw?.title ?? fallbackTitle(jsonLdDom.window.document),
-        byline: raw?.byline ?? null,
-        excerpt: raw?.excerpt ?? null,
-      };
-      extractedBy = "jsonld";
+      add(
+        {
+          content: textToParagraphs(jsonLdBody),
+          title: best?.candidate.raw.title ?? fallbackTitle(jsonLdDom.window.document),
+          byline: best?.candidate.raw.byline ?? null,
+          excerpt: best?.candidate.raw.excerpt ?? null,
+        },
+        "jsonld",
+      );
+      best = pickBest(scored);
     }
   }
 
-  if (!raw) {
-    // All strategies failed — still surface whatever title we can find.
-    const titleDom = new JSDOM(html, { url });
-    return {
-      html: null,
-      markdown: null,
-      title: fallbackTitle(titleDom.window.document),
-      byline: null,
-      excerpt: null,
-      wordCount: 0,
-      extractedBy: "none",
-    };
+  if (!best) {
+    // All strategies failed (or every candidate's sanitize crashed) — still
+    // surface whatever title we can find.
+    let title: string | null = null;
+    try {
+      title = fallbackTitle(titleDocument ?? new JSDOM(html, { url }).window.document);
+    } catch {
+      title = null;
+    }
+    return noneResult(title);
   }
 
-  const DOMPurify = await getSanitizer();
-  const clean = sanitizeExtractedContent(DOMPurify, raw.content);
-  if (clean === null) {
-    // Sanitizing crashed even after the inline-style retry — surface a
-    // graceful "nothing extracted" result (with whatever title we found)
-    // rather than letting the crash propagate to the caller.
-    return {
-      html: null,
-      markdown: null,
-      title: raw.title ?? null,
-      byline: null,
-      excerpt: null,
-      wordCount: 0,
-      extractedBy: "none",
-    };
-  }
   // Markdown conversion is a secondary output (only consulted for feeds whose
   // configured content format is Markdown); a crash converting it must not
   // discard the html we already have.
   let markdown: string | null;
   try {
-    markdown = htmlToMarkdown(clean);
+    markdown = htmlToMarkdown(best.html);
   } catch {
     markdown = null;
   }
 
+  // Title/byline: prefer the winner's, fall back to any other candidate's.
+  const title = best.candidate.raw.title ?? scored.find((s) => s.candidate.raw.title)?.candidate.raw.title ?? null;
   return {
-    html: clean,
+    html: best.html,
     markdown,
-    title: raw.title,
-    byline: raw.byline,
-    excerpt: raw.excerpt,
-    wordCount: countWords(clean),
-    extractedBy,
+    title,
+    byline: best.candidate.raw.byline,
+    excerpt: best.candidate.raw.excerpt,
+    wordCount: countWords(best.html),
+    extractedBy: best.candidate.extractedBy,
+    quality: best.quality,
   };
 }
 
@@ -384,86 +446,184 @@ async function buildResultFromMarkdown(
     excerpt: null,
     wordCount: countWords(html),
     extractedBy,
+    quality: assessExtraction(html),
   };
 }
 
 export type FetchAndExtractReadableOptions = {
   // When set, a hosted BYOK connector (M7-T3, Jina Reader / Firecrawl Cloud)
   // is tried as the final fallback if configured for this user AND the
-  // in-process + sidecar tiers both come up empty. Omit to skip this tier
-  // entirely (e.g. unattended background sync, where sending a user's
+  // in-process + sidecar tiers didn't produce a good result. Omit to skip this
+  // tier entirely (e.g. unattended background sync, where sending a user's
   // articles to a third party without an explicit per-call opt-in would be
   // a silent cost/privacy surprise — see `contentFetchAutoUse`).
   userId?: string;
   // M6: per-feed opt-in AI-extraction fallback. When set, and the in-process
-  // deterministic tiers found nothing on the directly-fetched HTML, the same
+  // deterministic tiers found nothing good on the directly-fetched HTML, the same
   // HTML is sent to this BYOK model to extract the article before falling
   // through to the (slower, whole-page-re-fetching) render sidecar. Callers
   // must only set this for feeds with `fullTextMode === "ai"` — it spends the
   // user's own AI tokens per article.
   aiExtraction?: MeteredAiConfig;
+  // The content the article already has (the feed item, sanitized HTML). When
+  // given, a result that would not be accepted over it (`decideFullText`) is
+  // treated as "not good enough yet" and the escalation chain continues.
+  baselineHtml?: string | null;
+  // Gate mode used together with `baselineHtml` (see `decideFullText`).
+  gate?: "auto" | "manual";
 };
+
+// Feed items with at least this much plain text are "substantial" (see goodEnough).
+const SUBSTANTIAL_FEED_TEXT_LENGTH = 1000;
+
+type Transport = "impit" | "plain";
+
+// Which transport last worked for a host after the other one failed (TTL'd,
+// in-memory). Purely observed behaviour, never a hand-maintained host list.
+const TRANSPORT_MEMORY_TTL_MS = 6 * 60 * 60 * 1000;
+const preferredTransport = new Map<string, { transport: Transport; until: number }>();
+
+function hostKey(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function transportOrder(url: string): Transport[] {
+  const isHttps = url.toLowerCase().startsWith("https:");
+  if (!isHttps) return ["plain"]; // impit only ever applies to https
+  const host = hostKey(url);
+  const memo = host ? preferredTransport.get(host) : undefined;
+  if (memo && memo.until > Date.now() && memo.transport === "plain") return ["plain", "impit"];
+  return ["impit", "plain"];
+}
+
+function rememberTransport(url: string, transport: Transport) {
+  const host = hostKey(url);
+  if (!host) return;
+  if (preferredTransport.size > 2_000) preferredTransport.clear();
+  preferredTransport.set(host, { transport, until: Date.now() + TRANSPORT_MEMORY_TTL_MS });
+}
+
+/** Test helper. */
+export function resetTransportMemory() {
+  preferredTransport.clear();
+}
+
+async function fetchPage(url: string, transport: Transport): Promise<string> {
+  return fetchTextWithSsrfProtection(
+    url,
+    transport === "plain" ? { headers: { Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8" } } : {},
+    {
+      allowInternal: await isTrustedFeedFetchingAllowed(),
+      context: "Full-text",
+      impersonate: transport === "impit",
+      maxBytes: 2 * 1024 * 1024,
+      maxRedirects: 5,
+      timeoutMs: 12_000,
+    },
+  );
+}
 
 /**
  * SSRF-safe wrapper: fetches `url`'s HTML (subject to the app's SSRF
- * protections) and extracts readable content from it. Fetch errors
- * (including SSRF blocks) are propagated to the caller, not swallowed.
+ * protections) and extracts readable content from it, escalating along a
+ * generic chain until a GOOD result is found (not merely a non-empty one):
+ *
+ *   direct fetch (browser-fingerprint transport) → the other transport
+ *   (plain undici ↔ impit; on a block status/network error OR a bad result)
+ *   → AI extraction on the fetched HTML (feed opt-in) → render sidecar
+ *   (admin-configured) → hosted BYOK API (explicit opt-in).
+ *
+ * Every tier's result is scored by the same quality gate and the best one is
+ * returned. Fetch errors (incl. SSRF blocks) propagate only when no tier
+ * produced anything at all. Host failures/successes feed the per-host backoff.
  */
 export async function fetchAndExtractReadable(
   url: string,
   options: FetchAndExtractReadableOptions = {},
 ): Promise<ExtractionResult> {
   let directError: unknown = null;
-  let result: ExtractionResult | null = null;
-  let fetchedHtml: string | null = null;
-  try {
-    fetchedHtml = await fetchTextWithSsrfProtection(
-      url,
-      {},
-      {
-        allowInternal: await isTrustedFeedFetchingAllowed(),
-        context: "Full-text",
-        impersonate: true,
-        maxBytes: 2 * 1024 * 1024,
-        maxRedirects: 5,
-        timeoutMs: 12_000,
-      },
-    );
-    result = await extractReadableContent(fetchedHtml, url);
-    if (result.extractedBy !== "none") return result;
-  } catch (error) {
-    directError = error; // hard block (403/timeout) — the sidecar may still succeed.
+  let best: ExtractionResult | null = null;
+  let firstResult: ExtractionResult | null = null;
+  let bestFetchedHtml: string | null = null;
+  let lastFetchedHtml: string | null = null;
+
+  const consider = (result: ExtractionResult, fetchedHtml: string | null) => {
+    if (!firstResult) firstResult = result;
+    if (!result.quality || !result.html) return;
+    if (!best?.quality || isBetterCandidate(result.quality, best.quality)) {
+      best = result;
+      if (fetchedHtml) bestFetchedHtml = fetchedHtml;
+    }
+  };
+  // A good page that is no longer than the feed item only warrants escalation
+  // (render / hosted) when the feed item itself is a short teaser — then the
+  // page may be withholding the body. A substantial feed item that the page
+  // merely repeats will not get better by rendering it in a browser.
+  const baselineLength = options.baselineHtml == null ? 0 : htmlToPlainText(options.baselineHtml).length;
+  const goodEnough = () => {
+    const current = best as ExtractionResult | null;
+    if (!current?.quality || current.quality.verdict !== "good") return false;
+    if (options.baselineHtml === undefined || baselineLength >= SUBSTANTIAL_FEED_TEXT_LENGTH) return true;
+    return decideFullText(current.quality, options.baselineHtml, options.gate ?? "auto").accept;
+  };
+
+  const transports = transportOrder(url);
+  let anyFetchSucceeded = false;
+  for (const [index, transport] of transports.entries()) {
+    try {
+      const html = await fetchPage(url, transport);
+      anyFetchSucceeded = true;
+      lastFetchedHtml = html;
+      consider(await extractReadableContent(html, url), html);
+      if (goodEnough()) {
+        if (index > 0) rememberTransport(url, transport);
+        break;
+      }
+    } catch (error) {
+      directError ??= error;
+      // A permanent failure (404, SSRF refusal, oversized page) won't change
+      // with a different TLS fingerprint — don't retry it.
+      if (classifyFetchFailure(error).kind === "permanent") break;
+    }
+  }
+  if (anyFetchSucceeded) recordHostSuccess(url);
+  else if (directError) recordHostFailure(url, directError);
+
+  // M6: per-feed opt-in AI-extraction, on the already-fetched HTML — before
+  // falling to the (slower, whole-page-re-fetching) render sidecar.
+  const aiSource = (bestFetchedHtml as string | null) ?? lastFetchedHtml;
+  if (!goodEnough() && options.aiExtraction && aiSource) {
+    const aiResult = await extractArticleWithAi(aiSource, url, options.aiExtraction);
+    if (aiResult) consider(await buildResultFromMarkdown(aiResult.content, aiResult.title, "ai"), null);
   }
 
-  // M6: per-feed opt-in AI-extraction, on the same already-fetched HTML —
-  // before falling to the (slower, whole-page-re-fetching) render sidecar.
-  if (fetchedHtml && options.aiExtraction) {
-    const aiResult = await extractArticleWithAi(fetchedHtml, url, options.aiExtraction);
-    if (aiResult) return buildResultFromMarkdown(aiResult.content, aiResult.title, "ai");
-  }
-
-  // Fallback: if the in-process fetch found no readable content (client-only
-  // page) or was blocked outright, and an admin has configured a browser-render
-  // sidecar (M7-T2), render the page there and extract from the result.
-  const rendered = await renderViaSidecar(url, { context: "Full-text" });
-  if (rendered) {
-    const sidecarResult = await extractReadableContent(rendered, url);
-    if (sidecarResult.extractedBy !== "none") return sidecarResult;
+  // Render sidecar (M7-T2, admin-configured): client-only pages, consent/bot
+  // walls a real browser gets past, or a direct fetch that was blocked outright.
+  if (!goodEnough()) {
+    const rendered = await renderViaSidecar(url, { context: "Full-text" });
+    if (rendered) consider(await extractReadableContent(rendered, url), rendered);
   }
 
   // Last resort: the user's own hosted-API BYOK connector (M7-T3), for pages
   // that beat even a real rendered browser (active anti-bot challenges).
   let hostedRateLimited = false;
-  if (options.userId) {
+  if (!goodEnough() && options.userId) {
     const hostedConfig = await getHostedFetchConfigForUser(options.userId);
     if (hostedConfig) {
       const outcome = await fetchViaHostedApiDetailed(url, hostedConfig);
-      if (outcome.ok) return buildResultFromMarkdown(outcome.result.content, outcome.result.title, "hosted");
-      hostedRateLimited = outcome.rateLimited;
+      if (outcome.ok) consider(await buildResultFromMarkdown(outcome.result.content, outcome.result.title, "hosted"), null);
+      else hostedRateLimited = outcome.rateLimited;
     }
   }
 
-  if (result) return result; // the (empty) in-process result
+  const finalBest = best as ExtractionResult | null;
+  if (finalBest) return finalBest;
+  const empty = firstResult as ExtractionResult | null;
+  if (empty) return empty; // the (empty) in-process result
   // Rate-limiting on the last-resort tier is worth telling the caller apart
   // from an ordinary fetch failure (see fetchFullText in app/actions/feeds.ts),
   // since "try again later / add your own key" is actionable advice a plain
