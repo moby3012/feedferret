@@ -9,20 +9,52 @@
 // "undecryptable"). Exit code 2 when any value cannot be decrypted with the
 // configured FEEDFERRET_ENCRYPTION_KEY / AUTH_SECRET / FEEDFERRET_ENCRYPTION_KEYS_OLD.
 // `secrets:rotate` arrives with the next release (M8 PR 5), together with v2 writes.
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { SECRET_COLUMNS, classifySecret, classifyWebhookJson, loadKeyring } from "../lib/secret-box-core.mjs";
 
 const BATCH = 500;
+
+/**
+ * Import a package from a source checkout or from the Next standalone image,
+ * where some packages (the Prisma driver adapters) are not hoisted into
+ * node_modules but only present in node_modules/.pnpm/<name>@<version>/.
+ */
+async function importPackage(name) {
+  try {
+    return await import(name);
+  } catch (error) {
+    if (error?.code !== "ERR_MODULE_NOT_FOUND") throw error;
+    const store = join(dirname(fileURLToPath(import.meta.url)), "..", "node_modules", ".pnpm");
+    const prefix = `${name.replace("/", "+")}@`;
+    let entries = [];
+    try {
+      entries = readdirSync(store).filter((entry) => entry.startsWith(prefix)).sort();
+    } catch {
+      // no pnpm store next to the script
+    }
+    const found = entries.at(-1);
+    if (!found) throw error;
+    // Only the ESM entry is traced into the image: load it by file URL.
+    const dir = join(store, found, "node_modules", name);
+    const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+    const root = pkg.exports?.["."] ?? pkg.exports;
+    const entry = (typeof root?.import === "string" ? root.import : root?.import?.default) ?? pkg.module ?? pkg.main ?? "index.js";
+    return import(pathToFileURL(join(dir, entry)).href);
+  }
+}
 
 async function createPrisma() {
   const { PrismaClient } = await import("@prisma/client");
   const provider = (process.env.DATABASE_PROVIDER ?? "sqlite").toLowerCase();
   const url = process.env.DATABASE_URL || "file:./dev.db";
   if (provider === "postgres" || provider === "postgresql") {
-    const { PrismaPg } = await import("@prisma/adapter-pg");
+    const { PrismaPg } = await importPackage("@prisma/adapter-pg");
     const pg = (await import("pg")).default;
     return new PrismaClient({ adapter: new PrismaPg(new pg.Pool({ connectionString: url })) });
   }
-  const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
+  const { PrismaBetterSqlite3 } = await importPackage("@prisma/adapter-better-sqlite3");
   return new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: url.replace(/^file:/, "") }) });
 }
 

@@ -125,6 +125,18 @@ const server = http.createServer((req, res) => {
     );
     return;
   }
+  // M8: a feed behind HTTP Basic auth (credentials are stored encrypted in the app).
+  if (url.pathname === "/auth/feed.xml") {
+    const expected = `Basic ${Buffer.from("e2e-feed-user:e2e:feed-pass").toString("base64")}`;
+    if (req.headers.authorization !== expected) {
+      res.writeHead(401, { "www-authenticate": 'Basic realm="e2e"', "content-type": "text/plain" }).end("unauthorized");
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/rss+xml" }).end(
+      `<?xml version="1.0"?><rss version="2.0"><channel><title>Auth fixture</title><link>${baseUrl}</link><description>Basic auth fixture</description><item><title>Behind basic auth</title><guid>auth-article</guid><link>${baseUrl}/auth/article</link><description>Only with credentials.</description></item></channel></rss>`,
+    );
+    return;
+  }
   if (handleGoogleNews(req, res, url)) return;
   if (handleListingPages(res, url)) return;
   const m = /^\/feeds\/([a-z0-9-]+)\.xml$/.exec(url.pathname);
