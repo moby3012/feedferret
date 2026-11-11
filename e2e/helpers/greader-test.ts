@@ -16,7 +16,7 @@ export const test = base.extend<{ restoreGReaderState: void }>({
     ];
     try {
       const user = db.prepare(`SELECT ${userColumns.join(", ")} FROM "User" WHERE id = ?`).get(userId) as Record<string, string | number | null>;
-      const feeds = db.prepare('SELECT id, name, updatedAt FROM "Feed" WHERE userId = ?').all(userId) as { id: string; name: string; updatedAt: string | number }[];
+      const feeds = db.prepare('SELECT id, name, updatedAt FROM "Feed" WHERE userId = ? ORDER BY id').all(userId) as { id: string; name: string; updatedAt: string | number }[];
       try {
         await runTest();
       } finally {
@@ -32,7 +32,7 @@ export const test = base.extend<{ restoreGReaderState: void }>({
           throw error;
         }
         expect(db.prepare(`SELECT ${userColumns.join(", ")} FROM "User" WHERE id = ?`).get(userId)).toEqual(user);
-        expect(db.prepare('SELECT id, name, updatedAt FROM "Feed" WHERE userId = ?').all(userId)).toEqual(feeds);
+        expect(db.prepare('SELECT id, name, updatedAt FROM "Feed" WHERE userId = ? ORDER BY id').all(userId)).toEqual(feeds);
       }
     } finally {
       db.close();

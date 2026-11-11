@@ -1,10 +1,35 @@
 // fetchWithSsrfProtection `untilHead` through the REAL transport + redirect
-// loop against a local HTTP server (allowInternal: the server is loopback).
+// loop against a local HTTP server — both the internal (allowInternal) agent
+// and the IP-pinned dispatcher (#252): for the pinned case, `pinned.test`
+// resolves to the loopback server and loopback is treated as public, so the
+// request really goes through safeLookup at socket-connect time.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
+const net = vi.hoisted(() => ({ loopbackIsPublic: false, socketLookups: 0 }));
 vi.mock("@/lib/db", () => ({ db: { globalSettings: { findUnique: async () => null } } }));
+vi.mock("@/lib/private-ip", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/private-ip")>();
+  return { ...actual, isPrivateIp: (ip: string) => (net.loopbackIsPublic && ip === "127.0.0.1" ? false : actual.isPrivateIp(ip)) };
+});
+vi.mock("dns/promises", async (importOriginal) => {
+  const actual = await importOriginal<{ default: typeof import("dns/promises") }>();
+  return { default: { ...actual.default, lookup: async (host: string, opts: object) => (host === "pinned.test" ? [{ address: "127.0.0.1", family: 4 }] : actual.default.lookup(host, opts as never)) } };
+});
+vi.mock("node:dns", async (importOriginal) => {
+  const actual = await importOriginal<{ default: typeof import("node:dns") }>();
+  return {
+    default: {
+      ...actual.default,
+      lookup: (host: string, opts: object, cb: (...args: unknown[]) => void) => {
+        net.socketLookups++;
+        if (host === "pinned.test") return cb(null, [{ address: "127.0.0.1", family: 4 }]);
+        return (actual.default.lookup as Function)(host, opts, cb);
+      },
+    },
+  };
+});
 
 import { fetchWithSsrfProtection } from "../../lib/ssrf";
 
@@ -33,7 +58,6 @@ beforeAll(async () => {
         res.end();
       };
       pump();
-      res.on("close", () => undefined);
       return;
     }
     if (req.url === "/one-big-chunk") {
@@ -67,6 +91,25 @@ describe("fetchWithSsrfProtection untilHead", () => {
     const result = await fetchWithSsrfProtection(`${origin}/one-big-chunk`, {}, { allowInternal: true, untilHead: true, maxBytes: 1000 });
     if (result.notModified) throw new Error("unexpected 304");
     expect(Buffer.byteLength(result.text)).toBeLessThanOrEqual(1000);
+  });
+
+  it("works through the IP-pinned dispatcher (redirect, final URL, head stop)", async () => {
+    net.loopbackIsPublic = true;
+    net.socketLookups = 0;
+    try {
+      const pinnedOrigin = origin.replace("127.0.0.1", "pinned.test");
+      const result = await fetchWithSsrfProtection(`${pinnedOrigin}/start`, {}, { untilHead: true, maxBytes: 1024 * 1024 });
+      if (result.notModified) throw new Error("unexpected 304");
+      expect(result.url).toBe(`${pinnedOrigin}/final/page`);
+      expect(result.text.endsWith('href="rss.xml"></head>')).toBe(true);
+      expect(net.socketLookups).toBeGreaterThan(0); // connect went through safeLookup
+    } finally {
+      net.loopbackIsPublic = false;
+    }
+  });
+
+  it("the pinned dispatcher still refuses a private socket address", async () => {
+    await expect(fetchWithSsrfProtection(`${origin.replace("127.0.0.1", "pinned.test")}/start`, {}, { untilHead: true })).rejects.toThrow();
   });
 
   it("still enforces the SSRF guard (internal target refused without allowInternal)", async () => {
