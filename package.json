@@ -16,7 +16,7 @@
     "prisma:generate": "pnpm run prisma:prepare && prisma generate --schema prisma/schema.generated.prisma",
     "prisma:migrate": "sh scripts/db-migrate.sh",
     "prisma:push": "sh scripts/db-sync.sh",
-    "test": "vitest run",
+    "test": "vitest run --project unit && vitest run --project timing",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",

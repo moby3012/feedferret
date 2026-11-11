@@ -19,7 +19,7 @@
 
 import { JSDOM } from "jsdom";
 import { FTR_SITE_CONFIGS } from "./ftr-site-configs";
-import { stripTags } from "@/lib/linear-text";
+import { matchDirective, stripTags } from "@/lib/linear-text";
 
 export type FtrConfig = {
   title: string[];
@@ -38,8 +38,6 @@ export type FtrExtraction = {
 };
 
 // A single directive line: `key: value` (value may itself contain colons).
-// eslint-disable-next-line regexp/no-super-linear-backtracking -- applied to one trimmed config line (split on \r?\n above)
-const DIRECTIVE = /^([a-z_]+)\s*:\s*(.*)$/i;
 
 /**
  * Parses a ftr-site-config rule file into the directives we consume. Unknown
@@ -58,10 +56,10 @@ export function parseFtrConfig(text: string): FtrConfig {
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
-    const match = DIRECTIVE.exec(line);
+    const match = matchDirective(line);
     if (!match) continue;
-    const key = match[1].toLowerCase();
-    const value = match[2].trim();
+    const key = match[0].toLowerCase();
+    const value = match[1].trim();
     if (!value) continue;
     switch (key) {
       case "title":

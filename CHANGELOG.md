@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 ### Security — ReDoS sweep (super-linear regexes on untrusted text)
 
 - A regex such as `/<[^>]*>/g` or `/\/+$/` re-scans the rest of the string from every candidate start, so one hostile feed item, page, mail header or log line of ~1 MiB (`"<<<<…"`, `"////…x"`, long whitespace runs) could block Node's single event loop for minutes. About 40 such sites on feed/page/mail/AI/user input now use linear scanners (new `lib/linear-text.ts`, each diffed against its legacy regex by randomized tests) or bounded patterns — notably `extractImageFromHtml` (runs in the background sync on attacker-controlled feeds), `stripStyleBlocks`, `htmlToPlainText`/`markdownToPlainText`, `synthesizeItemTitle`, recipient-address extraction, `redact`, the CSS-value guard and AI-output sanitising. Matching results are unchanged.
-- `tests/security/redos-regression.test.ts` feeds hostile 1 MiB inputs to those functions (budget 200 ms each); `eslint-plugin-regexp` (`no-super-linear-backtracking`, `no-super-linear-move`) now fails the lint on new super-linear patterns in runtime code.
+- `tests/security/redos-regression.timing.test.ts` feeds hostile inputs (64 KiB → 256 KiB → 1 MiB) to those functions and fails on super-linear growth (it runs as its own sequential vitest project, `pnpm test` = unit, then timing); `tests/security/redos-security-equivalence.test.ts` pins the sanitizer CSS guard and `redact` against their original regex implementations; `eslint-plugin-regexp` (`no-super-linear-backtracking`, `no-super-linear-move`) now fails the lint on new super-linear patterns in runtime code.
 
 ### Added — "Defekte Feeds" overview
 

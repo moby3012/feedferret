@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { performance } from "node:perf_hooks";
 import { reduceHtmlForPrompt } from "@/lib/ai-feed-config";
 import { acceptCleanTitle } from "@/lib/ai-tagging";
-import { neutralizeLinks, sanitizeDigestSummary, sanitizeOutputText } from "@/lib/ai/citations";
+import { buildAliasMap, neutralizeLinks, sanitizeDigestSummary, sanitizeOutputText, validateLine } from "@/lib/ai/citations";
 import { htmlToPlainText, markdownToPlainText } from "@/lib/article-kind";
 import { buildWatchFeedUrl } from "@/lib/changedetection";
 import { computeContentHash, normalizeArticleUrl } from "@/lib/content-hash";
@@ -13,7 +13,7 @@ import { extractImageFromHtml } from "@/lib/feed-fetcher";
 import { parseFtrConfig } from "@/lib/ftr-site-config";
 import { stripStyleBlocks } from "@/lib/html-utils";
 import { extractRecipientTokens, normalizeMessageId } from "@/lib/inbound-email";
-import { findRoleMainTag, replaceTagsNamed, stripTags } from "@/lib/linear-text";
+import { findRoleMainTag, matchBearerToken, replaceTagsNamed, stripTags } from "@/lib/linear-text";
 import { normalizeTitle } from "@/lib/page-feed-quality";
 import { redact } from "@/lib/redact";
 import { stripHtml } from "@/lib/saved-search-sharing";
@@ -27,15 +27,28 @@ import { decodeBase32 } from "@/lib/totp";
 // super-linearly on attacker-controlled text (feed item HTML, fetched pages,
 // mail headers, AI output, search input, …) freezes the whole instance for
 // minutes. Each case feeds a function that used to contain such a regex with
-// hostile 1 MiB input — the shapes that triggered the old quadratic behaviour
-// (unterminated tags / comments / brackets, long whitespace and delimiter
-// runs) — and requires it to finish within a budget a linear scan meets with
-// a wide margin (the old code needed seconds to minutes).
+// hostile input — the shapes that triggered the old quadratic behaviour
+// (unterminated markup, long whitespace / delimiter runs, U+2028 tails, …).
+//
+// Shared CI runners are slow and noisy, so absolute millisecond budgets are
+// unreliable; the test checks GROWTH instead. Size ×4 costs ≈ ×4 time for a
+// linear scan and ≈ ×16 for a quadratic one, and a quadratic regex needs
+// minutes at 1 MiB where a linear one needs well under a second:
+//   1. 64 KiB and 256 KiB are timed first (cheap even for a quadratic regex,
+//      so a regression fails fast instead of hanging the run); growth above
+//      ×8 on a non-trivial time fails.
+//   2. then 1 MiB must stay under a generous absolute ceiling (CI-safe) and
+//      keep the same growth bound against 256 KiB.
+// This file runs in its own vitest project, strictly sequentially (see
+// vitest.config.ts), so it neither gets starved by nor starves other suites.
 
-const SIZE = 1024 * 1024;
-const BUDGET_MS = 200;
+const KIB = 1024;
+const SIZES = { small: 64 * KIB, mid: 256 * KIB, big: 1024 * KIB };
+const GROWTH_LIMIT = 8; // linear ≈ 4, quadratic ≈ 16
+const GROWTH_MIN_MS = 100; // below this the ratio is dominated by noise
+const ABSOLUTE_CEILING_MS = 2_000; // 1 MiB; a quadratic regex needs minutes
 
-const rep = (unit: string, bytes = SIZE, suffix = "") => unit.repeat(Math.ceil(bytes / unit.length)).slice(0, bytes) + suffix;
+const rep = (unit: string, bytes: number, suffix = "") => unit.repeat(Math.ceil(bytes / unit.length)).slice(0, bytes) + suffix;
 
 /** Unterminated-markup payloads for every function that scans HTML. */
 const HTML_UNITS = [
@@ -44,7 +57,7 @@ const HTML_UNITS = [
 ];
 const MD_UNITS = ["[", "![", "[a](", "[a](b", "[a]", "](", "<", " ", "(", "!"];
 const TEXT_UNITS = [" ", "a", "a.", "a-", ".0", "a@", "/", "=", "%23", "%3f", "&", "://", "a://", "http://", "x@y.", ">", "<", "\u2026 ", " - ", "!", "?", "(", "-"];
-const SEARCH_UNITS = ['"', "'", 'a:"', "a ", '"a ', "'a ", "-a:", "a:", " ", "\"'"];
+const SEARCH_UNITS = ['"', "'", 'a:"', "a ", '"a ', "'a ", "-a:", "a:", " ", "\"'", "a'", '"a\u2028', "\u2028", "\u2029", '-a:"b ', "!a:'"];
 
 interface Case {
   name: string;
@@ -88,37 +101,65 @@ const CASES: Case[] = [
   { name: "totp decodeBase32", units: ["=", "A", " "], suffix: "!", run: decodeBase32 },
   { name: "redact (diagnostic text)", units: TEXT_UNITS, run: redact },
   { name: "sanitize-html stripLayoutBreakingStyles (style attr)", units: ["(", "( ", "-", " ", "a(", "rgb(", ";", ":"], run: (s) => stripLayoutBreakingStyles(`width:${s}`) },
+  // `.`/`$` also end at U+2028/U+2029 and \r, which survive a "\n" split: "<marker> <spaces>x<terminator>y" was quadratic.
+  ...["\u2028", "\u2029", "\r", "\n"].flatMap((lt) => [
+    { name: `ai/citations validateLine (list item, tail after ${JSON.stringify(lt)})`, units: [" ", "\t", "\u00a0"], suffix: `x${lt}z`, run: (s: string) => validateLine(`- ${s}`, buildAliasMap<string>([])) },
+    { name: `ai/citations validateLine (numbered, tail after ${JSON.stringify(lt)})`, units: [" ", "\t"], suffix: `x${lt}z`, run: (s: string) => validateLine(`12. ${s}`, buildAliasMap<string>([])) },
+    { name: `linear-text matchBearerToken (tail after ${JSON.stringify(lt)})`, units: [" ", "\t"], suffix: `x${lt}z`, run: (s: string) => matchBearerToken(`Bearer ${s}`) },
+    { name: `ftr-site-config parseFtrConfig directive (tail after ${JSON.stringify(lt)})`, units: [" ", "\t"], suffix: `x${lt}z`, run: (s: string) => parseFtrConfig(`title:${s}`) },
+  ]),
   { name: "search tokenizeSearch (user query)", units: SEARCH_UNITS, run: tokenizeSearch },
 ];
 
-/**
- * Best of up to five runs with a short pause in between: the suite runs in parallel workers, so a slow
- * sample is scheduler/GC noise, not a regression (a quadratic regex needs seconds to minutes on every run).
- */
-function elapsed(fn: () => unknown): number {
-  let best = Infinity;
-  for (let i = 0; i < 5 && best > BUDGET_MS; i++) {
-    if (i > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+/** Best of `runs` timings (short pause between them): scheduler / GC noise must not look like growth. */
+function best(fn: () => unknown, runs: number): number {
+  let min = Infinity;
+  for (let i = 0; i < runs; i++) {
+    if (i > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
     const t0 = performance.now();
     fn();
-    best = Math.min(best, performance.now() - t0);
+    min = Math.min(min, performance.now() - t0);
   }
-  return best;
+  return min;
 }
 
-describe("ReDoS regression: hostile 1 MiB input finishes in linear time", () => {
+function evaluate(c: Case, unit: string, runs: number): string | null {
+  const suffix = c.suffix ?? "\u0001!";
+  const time = (bytes: number) => {
+    const input = rep(unit, bytes, suffix);
+    return best(() => c.run(input), runs);
+  };
+  const growth = (a: number, b: number) => b / Math.max(a, 2);
+  const small = time(SIZES.small);
+  const mid = time(SIZES.mid);
+  if (mid > GROWTH_MIN_MS && growth(small, mid) > GROWTH_LIMIT) {
+    return `${JSON.stringify(unit)}: 64 KiB ${small.toFixed(0)} ms → 256 KiB ${mid.toFixed(0)} ms (×${growth(small, mid).toFixed(1)}, quadratic?)`;
+  }
+  const big = time(SIZES.big);
+  if (big > ABSOLUTE_CEILING_MS) return `${JSON.stringify(unit)}: 1 MiB took ${big.toFixed(0)} ms (ceiling ${ABSOLUTE_CEILING_MS} ms)`;
+  if (big > GROWTH_MIN_MS * 2 && growth(mid, big) > GROWTH_LIMIT) {
+    return `${JSON.stringify(unit)}: 256 KiB ${mid.toFixed(0)} ms → 1 MiB ${big.toFixed(0)} ms (×${growth(mid, big).toFixed(1)}, quadratic?)`;
+  }
+  return null;
+}
+
+/** One quick pass; only a suspicious result is re-measured (best of 3, with pauses) before it counts as a failure. */
+function scalingProblem(c: Case, unit: string): string | null {
+  return evaluate(c, unit, 1) === null ? null : evaluate(c, unit, 3);
+}
+
+describe("ReDoS regression: hostile input scales linearly (64 KiB → 256 KiB → 1 MiB)", () => {
   for (const c of CASES) {
-    it(`${c.name} < ${BUDGET_MS} ms`, () => {
-      // Warm-up on a small input so JIT/regex compilation is not billed to the 1 MiB run.
+    it(c.name, () => {
+      // Warm-up on a small input so JIT/regex compilation is not billed to the measured runs.
       c.run(rep(c.units[0], 2048));
-      const slow: string[] = [];
+      const problems: string[] = [];
       for (const unit of c.units) {
-        const input = rep(unit, SIZE, c.suffix ?? "\u0001!");
-        const ms = elapsed(() => c.run(input));
-        if (ms > BUDGET_MS) slow.push(`${JSON.stringify(unit)}: ${Math.round(ms)} ms`);
+        const problem = scalingProblem(c, unit);
+        if (problem) problems.push(problem);
       }
-      expect(slow, `slower than ${BUDGET_MS} ms on 1 MiB`).toEqual([]);
-    }, 60_000);
+      expect(problems, "super-linear on hostile input").toEqual([]);
+    }, 120_000);
   }
 });
 
@@ -165,6 +206,31 @@ describe("ReDoS regression: normal inputs keep their behaviour", () => {
 
   it("stripSiteSuffix still splits ' - Site'", () => {
     expect(stripSiteSuffix("Big news today - SPIEGEL", { feedName: "SPIEGEL" })).toBe("Big news today");
+  });
+
+  it("acceptCleanTitle fails closed: a URL behind the scan window is not accepted", () => {
+    const words = Array.from({ length: 900 }, (_, i) => `word${i}`).join(" "); // ~6 KB original
+    const clean = `${words} visit http://evil.example/login`;
+    expect(clean.length).toBeLessThanOrEqual(Math.ceil(words.length * 1.5));
+    expect(clean.indexOf("http://")).toBeGreaterThan(4096);
+    expect(acceptCleanTitle(clean, words, "")).toBeNull();
+    // the same URL inside the window is caught by the regular guard
+    expect(acceptCleanTitle("word1 word2 http://evil.example/login", "word1 word2 word3 word4 word5", "")).toBeNull();
+    // and an oversized candidate without any URL is rejected too (real clean titles are ≤ 140 chars)
+    expect(acceptCleanTitle(words, `${words} extra`, "")).toBeNull();
+    // a normal, grounded title still passes
+    expect(acceptCleanTitle("Wasserstand Rhein steigt", "Wasserstand am Rhein steigt weiter – Experten warnen!", "")).toBe("Wasserstand Rhein steigt");
+  });
+
+  it("list items / bearer tokens / directives keep their results", () => {
+    const aliases = buildAliasMap<string>(["a", "b"]);
+    expect(validateLine("- Quelle eins [[s1]]", aliases)).toMatchObject({ text: expect.stringContaining("Quelle eins"), cited: ["a"] });
+    expect(validateLine("2) Zwei [[s2]]", aliases)).toMatchObject({ cited: ["b"] });
+    expect(validateLine("kein Listenpunkt", aliases)).toBeNull();
+    expect(matchBearerToken("Bearer abc.def")).toBe("abc.def");
+    expect(matchBearerToken("bearer   abc")).toBe("abc");
+    expect(matchBearerToken("Basic abc")).toBeNull();
+    expect(parseFtrConfig("title: //h1\nbody:   //article  \n# comment\nunknown: x").title).toEqual(["//h1"]);
   });
 
   it("detectClickbait still sees trailing ?!", () => {

@@ -12,6 +12,11 @@ import {
   iterElementInners,
   iterOpenTags,
   looksLikeEmail,
+  matchBearerToken,
+  matchDirective,
+  matchListItemBody,
+  restAfterOptionalWs,
+  restAfterRequiredWs,
   matchAddressRuns,
   matchAddressRunsLoose,
   matchOpenTags,
@@ -257,5 +262,30 @@ describe("text helpers match their legacy regexes", () => {
       expect(next.exec(s)?.slice(0, 2) ?? null).toEqual(a?.slice(0, 2) ?? null);
     }
     expect(hits).toBeGreaterThan(50);
+  });
+
+  it("`\\s+(.+)$` tails treat U+2028 / U+2029 / \\r / \\n as line terminators like the regexes do", () => {
+    const frags = ["-", "*", "•", "–", "1", "23", ".", ")", " ", "  ", "\t", "\n", "\r", "\u2028", "\u2029", "\u00a0", "\ufeff", "x", "yz", "Bearer", "bearer", "BEARER", ":", "title", "a_b"];
+    let item = 0;
+    let bearer = 0;
+    let directive = 0;
+    for (const s of gen(frags, 12_000, 9, 21)) {
+      const li = /^\s*(?:[-*•–]|\d+[.)])\s+(.+)$/.exec(s);
+      if (li) item++;
+      expect(matchListItemBody(s), JSON.stringify(s)).toBe(li ? li[1] : null);
+      const bt = /^Bearer\s+(.+)$/i.exec(s);
+      if (bt) bearer++;
+      expect(matchBearerToken(s), JSON.stringify(s)).toBe(bt ? bt[1] : null);
+      const dr = /^([a-z_]+)\s*:\s*(.*)$/i.exec(s);
+      if (dr) directive++;
+      expect(matchDirective(s), JSON.stringify(s)).toEqual(dr ? [dr[1], dr[2]] : null);
+      const req = /^\s+(.+)$/.exec(s);
+      expect(restAfterRequiredWs(s)).toBe(req ? req[1] : null);
+      const opt = /^\s*(.*)$/.exec(s);
+      expect(restAfterOptionalWs(s)).toBe(opt ? opt[1] : null);
+    }
+    expect(item).toBeGreaterThan(300);
+    expect(bearer).toBeGreaterThan(100);
+    expect(directive).toBeGreaterThan(100);
   });
 });

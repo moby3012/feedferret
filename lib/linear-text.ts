@@ -666,3 +666,71 @@ export function stripFragment(s: string): string {
   const hash = s.indexOf("#", lastBreak + 1);
   return hash === -1 ? s : s.slice(0, hash);
 }
+
+// ------------------------------------------------- `\s+(.+)$`-style tails
+//
+// `.` and `$`-after-`.+` treat \n, \r, U+2028 and U+2029 as line terminators,
+// and those are also `\s` — so `/\s+(.+)$/` is quadratic on "<spaces>x\u2028y"
+// (every backtracking step re-scans the run). Splitting on "\n" does NOT keep
+// them out. The helpers below give the regex's exact result in one pass.
+
+const LINE_TERMINATOR = /[\n\r\u2028\u2029]/;
+
+function leadingWsLength(s: string): number {
+  let w = 0;
+  while (w < s.length && isWs(s[w])) w++;
+  return w;
+}
+
+/** Linear `/^\s+(.+)$/.exec(rest)?.[1] ?? null`. */
+export function restAfterRequiredWs(rest: string): string | null {
+  const w = leadingWsLength(rest);
+  if (w === 0) return null;
+  const tail = rest.slice(w);
+  if (tail.length > 0) return LINE_TERMINATOR.test(tail) ? null : tail;
+  // Only whitespace: `\s+` gives back characters until `.+` has one that is no line terminator.
+  const last = rest[w - 1];
+  return w >= 2 && !LINE_TERMINATOR.test(last) ? last : null;
+}
+
+/** Linear `/^\s*(.*)$/.exec(rest)?.[1] ?? null`. */
+export function restAfterOptionalWs(rest: string): string | null {
+  const tail = rest.slice(leadingWsLength(rest));
+  return LINE_TERMINATOR.test(tail) ? null : tail;
+}
+
+/** Linear `/^\s*(?:[-*•–]|\d+[.)])\s+(.+)$/.exec(line)?.[1] ?? null` (a Markdown list item's text). */
+export function matchListItemBody(line: string): string | null {
+  let i = leadingWsLength(line);
+  const c = line.charCodeAt(i);
+  if (c === 0x2d || c === 0x2a || c === 0x2022 || c === 0x2013) {
+    i++;
+  } else {
+    const digitsStart = i;
+    while (line.charCodeAt(i) >= 48 && line.charCodeAt(i) <= 57) i++;
+    if (i === digitsStart || (line[i] !== "." && line[i] !== ")")) return null;
+    i++;
+  }
+  return restAfterRequiredWs(line.slice(i));
+}
+
+/** Linear `/^Bearer\s+(.+)$/i.exec(header)?.[1] ?? null`. */
+export function matchBearerToken(header: string): string | null {
+  return matchLowerAt(header, 0, "bearer") ? restAfterRequiredWs(header.slice(6)) : null;
+}
+
+/** Linear `/^([a-z_]+)\s*:\s*(.*)$/i.exec(line)` → `[key, value]` or null (one config line). */
+export function matchDirective(line: string): [string, string] | null {
+  let i = 0;
+  while (i < line.length) {
+    const c = line.charCodeAt(i);
+    if ((c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c === 95) i++;
+    else break;
+  }
+  if (i === 0) return null;
+  const key = line.slice(0, i);
+  const colon = i + leadingWsLength(line.slice(i));
+  if (line[colon] !== ":") return null;
+  const value = restAfterOptionalWs(line.slice(colon + 1));
+  return value === null ? null : [key, value];
+}

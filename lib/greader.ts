@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { getConnectorSecretRules, stripConnectorSecretsWith } from "@/lib/connector-secrets";
+import { matchBearerToken } from "@/lib/linear-text";
 
 export const GREADER_READING_LIST = "user/-/state/com.google/reading-list";
 export const GREADER_UNREAD = "user/-/state/com.google/unread";
@@ -133,9 +134,8 @@ export async function authenticateGReaderPassword(request: Request, email: strin
 export async function authenticateGReaderRequest(request: Request): Promise<(User & { tokenScope?: string }) | null> {
   const header = request.headers.get("authorization") || "";
   const googleLogin = header.match(/GoogleLogin\s+auth=(.+)$/i);
-  // eslint-disable-next-line regexp/no-super-linear-backtracking -- HTTP header values cannot contain line terminators, so `.+$` never fails after the whitespace run
-  const bearer = header.match(/^Bearer\s+(.+)$/i);
-  const token = googleLogin?.[1] || bearer?.[1];
+  const bearer = matchBearerToken(header);
+  const token = googleLogin?.[1] || bearer;
   if (token) {
     const userId = verifyGReaderToken(token.trim());
     if (userId) {
@@ -145,7 +145,7 @@ export async function authenticateGReaderRequest(request: Request): Promise<(Use
   }
 
   if (bearer && !googleLogin) {
-    const record = await db.apiToken.findUnique({ where: { tokenHash: hashApiToken(bearer[1].trim()) }, include: { user: true } });
+    const record = await db.apiToken.findUnique({ where: { tokenHash: hashApiToken(bearer.trim()) }, include: { user: true } });
     if (record?.user.isActive && (!record.expiresAt || record.expiresAt > new Date())) return { ...record.user, tokenScope: record.scope };
   }
   if (header.startsWith("Basic ")) {

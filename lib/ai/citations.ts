@@ -5,7 +5,7 @@
 // citations (hallucinated, or ids injected by article text) are removed and
 // counted; a line left without a valid citation is dropped.
 
-import { removeSpaceBeforePunctuation, replaceEmailAddresses, replaceSchemeUrls } from "@/lib/linear-text";
+import { matchListItemBody, removeSpaceBeforePunctuation, replaceEmailAddresses, replaceSchemeUrls } from "@/lib/linear-text";
 
 /** Removed from untrusted (feed) text before it enters a prompt. */
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
@@ -127,8 +127,6 @@ export const SECTION_CAPS: Record<Section, number> = { what: 5, why: 3, brief: 6
 
 const HEADER = /^\s*(?:#{1,6}\s*|\*\*\s*)?(what|why|brief|was|warum|kurz)\b\s*(?:\*\*\s*)?(?::\s*)?$/i;
 const SECTION_OF: Record<string, Section> = { what: "what", was: "what", why: "why", warum: "why", brief: "brief", kurz: "brief" };
-// eslint-disable-next-line regexp/no-super-linear-backtracking -- one model output line (the stream parser splits on \n), so `.+$` cannot fail after a long whitespace run
-const ITEM = /^\s*(?:[-*•–]|\d+[.)])\s+(.+)$/;
 /** `[[s3]]`, `[[ S3 ]]`, `[s3]`, `[[s1, s4]]` */
 const CITATION = /\[{1,2}\s*([sS]\d{1,3}(?:\s*,\s*[sS]\d{1,3})*)\s*\]{1,2}/g;
 /** Anything else in double brackets (forged ids, cuids, prose) is an unknown citation. */
@@ -143,9 +141,10 @@ export interface ValidatedLine<T> {
 
 /** One item line → validated text + resolved citations (deduped, in order). `null` = not an item line. */
 export function validateLine<T>(line: string, aliases: AliasMap<T>): ValidatedLine<T> | null {
-  const m = ITEM.exec(line);
-  if (!m) return null;
-  let body = m[1];
+  // Linear scanner: a regex here is quadratic on "- <spaces>x\u2028y" (U+2028/2029 end `.` but survive the "\n" split).
+  const itemBody = matchListItemBody(line);
+  if (itemBody === null) return null;
+  let body = itemBody;
   const cited: T[] = [];
   const seen = new Set<string>();
   let unknown = 0;
