@@ -15,6 +15,8 @@ import { validateFeedUrl } from "@/lib/validation";
 import { connectorFeedUrlError, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { redact } from "@/lib/redact";
+import { credentialResetForUrlChange, originOfUrl } from "@/lib/feed-secrets";
+import { readPlainColumn } from "@/lib/secret-box";
 import { logger } from "@/lib/logger";
 import { applyManualUnmute } from "@/lib/feed-auto-mute";
 import { NEWSLETTER_SOURCE_TYPE } from "@/lib/newsletter-constants";
@@ -258,8 +260,13 @@ export async function applyFeedRepair(feedId: string, newUrl: string): Promise<R
     const url = await stripConnectorSecrets(newUrl);
     const clash = await db.feed.findFirst({ where: { userId, url, NOT: { id: feedId } }, select: { id: true } });
     if (clash) return { success: false, error: "duplicate" };
+    // Credentials belong to one origin: the verification fetch uses the feed's own config only when the
+    // origin stays the same; for another host it is a bare, unauthenticated GET.
+    const stored = await db.feed.findFirst({ where: { id: feedId, userId } });
+    if (!stored) return { success: false, error: "unsupported" };
+    const sameOrigin = originOfUrl(stored.url) !== null && originOfUrl(stored.url) === originOfUrl(url);
     try {
-        await fetchFeedArticles({ url });
+        await fetchFeedArticles(sameOrigin ? { ...stored, url, etag: null, lastModifiedHeader: null } : { url });
     } catch (error) {
         logger.warn("Feed repair candidate is not a readable feed:", error);
         return { success: false, error: "not-a-feed" };
@@ -271,6 +278,8 @@ export async function applyFeedRepair(feedId: string, newUrl: string): Promise<R
                 url,
                 etag: null,
                 lastModifiedHeader: null,
+                // A different origin never inherits the old site's Basic auth, cookies or custom headers.
+                ...credentialResetForUrlChange(stored.url, url, readPlainColumn("feed.httpOptions", stored.httpOptions)),
                 ...applyManualUnmute(),
                 failingSince: null,
                 lastError: null,
@@ -288,23 +297,29 @@ export async function applyFeedRepair(feedId: string, newUrl: string): Promise<R
 }
 
 /**
- * "Alle entfernen, die seit > 30 Tagen fehlschlagen". The client sends the ids
- * it showed in the confirmation; each one is re-checked here (owned, still
- * failing, streak older than the cutoff) so a stale list can never delete a
- * feed that has recovered in the meantime.
+ * "Alle entfernen, die seit > 30 Tagen fehlschlagen". The client sends the ids it showed in the confirmation, but
+ * eligibility is part of the ONE atomic delete predicate (no read-then-delete): a feed that recovered, was unmuted
+ * or was repaired in the meantime no longer matches and survives. Mirrors `isStaleBroken` (lib/broken-feeds.ts).
  */
 export async function removeStaleBrokenFeeds(feedIds: string[]): Promise<{ removed: number; skipped: number }> {
     const userId = await requireUserId();
     if (!Array.isArray(feedIds)) throw new Error("Invalid input");
     const ids = [...new Set(feedIds.filter(validId))].slice(0, MAX_BULK_IDS);
     if (ids.length === 0) return { removed: 0, skipped: 0 };
-    const rows = await db.feed.findMany({
-        where: { id: { in: ids }, userId, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
-        select: BROKEN_SELECT,
+    const cutoff = new Date(Date.now() - STALE_BROKEN_FEED_DAYS * 86_400_000);
+    const { count } = await db.feed.deleteMany({
+        where: {
+            id: { in: ids },
+            userId,
+            sourceType: { not: NEWSLETTER_SOURCE_TYPE },
+            OR: [
+                // Known streak start: still muted / failing, and started more than N days ago.
+                { failingSince: { lt: cutoff }, OR: [{ autoMuted: true }, { consecutiveFailureCount: { gt: 0 } }] },
+                // Rows from before the column: their last attempt stands in (understates the streak).
+                { failingSince: null, consecutiveFailureCount: { gt: 0 }, lastFetchedAt: { lt: cutoff } },
+            ],
+        },
     });
-    const now = new Date();
-    const eligible = (rows as BrokenRow[]).filter((row) => isStaleBroken(row, now, STALE_BROKEN_FEED_DAYS)).map((row) => row.id);
-    if (eligible.length) await db.feed.deleteMany({ where: { id: { in: eligible }, userId } });
     revalidatePath("/");
-    return { removed: eligible.length, skipped: ids.length - eligible.length };
+    return { removed: count, skipped: ids.length - count };
 }

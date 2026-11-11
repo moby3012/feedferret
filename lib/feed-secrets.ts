@@ -159,3 +159,42 @@ export function mergeHttpOptions(incoming: string, storedPlain: string | null): 
   }
   return Object.keys(out).length ? JSON.stringify(out) : null;
 }
+
+// ─── Changing a feed's URL (repair, Google News query edit …) ────────────────
+// Stored credentials belong to ONE origin. Fetching a different origin with them would hand the old
+// site's Basic auth, cookies and custom headers (Authorization …) to a new, possibly unrelated, host.
+
+/** scheme + host + port ("https://a.example", default ports normalised), or null when unparsable. */
+export function originOfUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+/** Keeps only the options that never carry credentials (see PUBLIC_HTTP_OPTIONS); drops headers, cookies, bodies, proxy. */
+export function stripNonPublicHttpOptions(plain: string | null | undefined): string | null {
+  const options = parseOptionsObject(plain);
+  if (!options) return null;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(options)) if (PUBLIC_HTTP_OPTIONS.has(key)) out[key] = value;
+  return Object.keys(out).length ? JSON.stringify(out) : null;
+}
+
+/**
+ * Feed columns to write together with a new URL. Same origin → nothing changes (auth and options stay).
+ * Different (or unparsable) origin → stored auth and every non-public fetch option are cleared. `storedHttpOptions`
+ * is the DECRYPTED stored value (`readPlainColumn`); the db layer seals what is written back.
+ */
+export function credentialResetForUrlChange(
+  oldUrl: string | null | undefined,
+  newUrl: string,
+  storedHttpOptions: string | null | undefined,
+): { authType?: null; authUsername?: null; authPassword?: null; httpOptions?: string | null } {
+  const before = originOfUrl(oldUrl);
+  const after = originOfUrl(newUrl);
+  if (before !== null && before === after) return {};
+  return { authType: null, authUsername: null, authPassword: null, httpOptions: stripNonPublicHttpOptions(storedHttpOptions) };
+}

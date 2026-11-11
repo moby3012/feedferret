@@ -309,6 +309,36 @@ describe("removeStaleBrokenFeeds", () => {
     for (const keep of [recent, recovered, handMuted, newsletter, foreign]) expect(left).toContain(keep.id);
   });
 
+  it("eligibility is part of the atomic delete: a feed that recovers after the list was shown survives", async () => {
+    const stale = await makeFeed(alice, { name: "stale", autoMuted: true, consecutiveFailureCount: 10, failingSince: daysAgo(45) });
+    const recovers = await makeFeed(alice, { name: "recovers", autoMuted: true, consecutiveFailureCount: 10, failingSince: daysAgo(45) });
+    const ids = [stale.id, recovers.id];
+    // The user saw both in the confirmation. Right before the delete runs, a sync recovers one of them.
+    const findMany = vi.spyOn(h.db.feed, "findMany");
+    const realDelete = h.db.feed.deleteMany.bind(h.db.feed);
+    const deleteMany = vi.spyOn(h.db.feed, "deleteMany").mockImplementationOnce(((args: any) => {
+      return h.db.feed
+        .update({ where: { id: recovers.id }, data: { autoMuted: false, consecutiveFailureCount: 0, failingSince: null } })
+        .then(() => realDelete(args));
+    }) as any);
+    try {
+      expect(await removeStaleBrokenFeeds(ids)).toEqual({ removed: 1, skipped: 1 });
+      expect(findMany).not.toHaveBeenCalled(); // no read-then-delete-by-ids
+    } finally {
+      findMany.mockRestore();
+      deleteMany.mockRestore();
+    }
+    expect((await h.db.feed.findUnique({ where: { id: stale.id } }))).toBeNull();
+    expect(await reload(recovers.id)).toMatchObject({ autoMuted: false, consecutiveFailureCount: 0 });
+  });
+
+  it("reports the real deleted count, not the number of ids sent", async () => {
+    const a = await makeFeed(alice, { autoMuted: true, consecutiveFailureCount: 10, failingSince: daysAgo(40) });
+    const b = await makeFeed(alice, { autoMuted: true, consecutiveFailureCount: 10, failingSince: daysAgo(40) });
+    await h.db.feed.update({ where: { id: b.id }, data: { consecutiveFailureCount: 0, autoMuted: false, failingSince: null } });
+    expect(await removeStaleBrokenFeeds([a.id, b.id])).toEqual({ removed: 1, skipped: 1 });
+  });
+
   it("deletes the feed's articles with it and tolerates an empty list", async () => {
     const old = await makeFeed(alice, { autoMuted: true, consecutiveFailureCount: 10, failingSince: daysAgo(45) });
     await h.db.article.create({
