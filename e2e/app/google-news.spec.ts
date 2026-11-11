@@ -123,8 +123,11 @@ test.describe("Google News keyword feeds", () => {
     await tapOrClick(row.getByTitle("Settings"), app.isMobile);
     const settings = page.getByRole("dialog", { name: "Google News: Wasserstoff" });
     await expect(settings).toBeVisible();
-    if (app.isMobile) await pick(page, true, settings.getByRole("combobox").first(), "Fetch Options");
-    else await settings.getByRole("tab", { name: "Fetch Options" }).click();
+    // Same tab row on every width (it scrolls horizontally on phones).
+    const fetchTab = settings.getByRole("tab", { name: "Fetch Options" });
+    await fetchTab.scrollIntoViewIfNeeded();
+    await tapOrClick(fetchTab, app.isMobile);
+    await expect(fetchTab).toHaveAttribute("aria-selected", "true");
 
     const editor = settings.getByRole("region", { name: "Google News search" });
     const keywords = editor.getByLabel("Keywords");

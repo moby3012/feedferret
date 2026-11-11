@@ -262,7 +262,7 @@ test.describe("mobile tab bar", () => {
   });
 });
 
-test.describe("tablet 820x1180: rail + list + reader", () => {
+test.describe("tablet 820x1180 portrait: rail + list, reader pushed over the list", () => {
   test.skip(({ isMobile }) => isMobile, "desktop project drives the viewport");
   test.use({ viewport: { width: 820, height: 1180 } });
 
@@ -291,15 +291,25 @@ test.describe("tablet 820x1180: rail + list + reader", () => {
     await expect.poll(() => app.where()).toBe("/");
     expect(Math.abs((await scrollTopOf(app)) - neu)).toBeLessThanOrEqual(1);
 
-    // List and reader side by side, right of the rail.
+    // No article: rail + list, the list owns the whole content column.
+    const r = (await rail.boundingBox())!;
+    const l = (await app.row(2).boundingBox())!;
+    expect(r.x + r.width).toBeLessThanOrEqual(l.x + 1);
+    expect(l.x + l.width).toBeGreaterThan(780);
+    // Article open: the reader covers the list column (right of the rail), the list is inert.
     await app.activate(app.row(2));
     const article = page.locator('[data-pane="reader"] article');
     await expect(article).toBeVisible();
-    const r = (await rail.boundingBox())!;
-    const l = (await app.row(2).boundingBox())!;
     const a = (await article.boundingBox())!;
-    expect(r.x + r.width).toBeLessThanOrEqual(l.x + 1);
-    expect(l.x + l.width).toBeLessThanOrEqual(a.x + 1);
+    expect(a.x).toBeGreaterThanOrEqual(r.x + r.width - 1);
+    await expect(rail).toBeVisible();
+    await expect(page.locator("#ff-pane-new")).toHaveAttribute("inert", "");
+    // Back pops the reader; the list (and its scroll) is still there.
+    await page.goBack();
+    await expect.poll(() => app.where()).toBe("/");
+    await expect(article).toBeHidden();
+    await expect(page.locator("#ff-pane-new")).not.toHaveAttribute("inert", "");
+    await expect(app.row(2)).toBeVisible();
   });
 });
 
