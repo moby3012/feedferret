@@ -7,7 +7,8 @@ ADD COLUMN     "emailMessageId" TEXT,
 ADD COLUMN     "emailSender" TEXT,
 ADD COLUMN     "listUnsubscribeMailto" TEXT,
 ADD COLUMN     "listUnsubscribeOneClick" BOOLEAN,
-ADD COLUMN     "listUnsubscribeUrl" TEXT;
+ADD COLUMN     "listUnsubscribeUrl" TEXT,
+ADD COLUMN     "newsletterAuth" TEXT;
 
 -- CreateTable
 CREATE TABLE "InboundMailSource" (
@@ -45,6 +46,15 @@ CREATE TABLE "NewsletterAddress" (
     CONSTRAINT "NewsletterAddress_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "NewsletterQuota" (
+    "userId" TEXT NOT NULL,
+    "day" TEXT NOT NULL,
+    "count" INTEGER NOT NULL DEFAULT 0,
+
+    CONSTRAINT "NewsletterQuota_pkey" PRIMARY KEY ("userId")
+);
+
 -- CreateIndex
 CREATE INDEX "InboundMailSource_kind_idx" ON "InboundMailSource"("kind");
 
@@ -62,4 +72,7 @@ ALTER TABLE "NewsletterAddress" ADD CONSTRAINT "NewsletterAddress_userId_fkey" F
 
 -- AddForeignKey
 ALTER TABLE "NewsletterAddress" ADD CONSTRAINT "NewsletterAddress_feedId_fkey" FOREIGN KEY ("feedId") REFERENCES "Feed"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "NewsletterQuota" ADD CONSTRAINT "NewsletterQuota_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

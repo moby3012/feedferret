@@ -34,7 +34,7 @@ vi.mock("@/lib/feed-fetcher", async (original) => ({
 }));
 
 import { db } from "@/lib/db";
-import { ingestRawEmail, NEWSLETTER_SOURCE_TYPE } from "@/lib/inbound-email";
+import { ingestRawEmail, MAX_NEWSLETTER_MAILS_PER_DAY, NEWSLETTER_SOURCE_TYPE, reserveNewsletterQuota } from "@/lib/inbound-email";
 import { syncFeed } from "@/lib/rss-sync";
 import { hashApiToken } from "@/lib/token";
 import { POST as feverPOST } from "@/app/api/fever/route";
@@ -66,6 +66,7 @@ beforeEach(async () => {
   await db.newsletterAddress.deleteMany({});
   await db.feed.deleteMany({});
   await db.category.deleteMany({});
+  await db.newsletterQuota.deleteMany({});
   await db.newsletterAddress.create({ data: { userId: "u", token: TOKEN } });
 });
 
@@ -262,5 +263,80 @@ describe("sync and client APIs", () => {
     expect(entry.origin.title).toBe("The Weekly Byte");
     expect(entry.categories).toContain("user/-/label/Newsletter");
     expect(entry.summary.content).toContain("Rust in the kernel");
+  });
+});
+
+describe("review fixes (#263)", () => {
+  it("drops CSS url()/escape/position vectors in newsletter HTML, keeps typography", async () => {
+    const result = await ingestRawEmail(eml("css-tracking.eml"), { recipients: [RECIPIENT] });
+    const html = (await db.article.findUniqueOrThrow({ where: { id: result.articleId } })).content;
+    expect(html).not.toContain("attacker.example");
+    expect(html).not.toMatch(/position|z-index|important|url\(|image-set|\\75/i);
+    expect(html).toContain("font-weight:bold");
+    expect(html).toContain("text-align:center");
+    expect(html).toContain("line-height:1.6");
+    expect(html).toContain("border:1px solid rgb(200,200,200)");
+    expect(html).toContain("Overlay");
+  });
+
+  it("drops malformed percent-encoded cid images instead of throwing", async () => {
+    const result = await ingestRawEmail(eml("malformed-percent-cid.eml"), { recipients: [RECIPIENT] });
+    expect(result.status).toBe("created");
+    const html = (await db.article.findUniqueOrThrow({ where: { id: result.articleId } })).content;
+    expect(html).toContain("Text survives.");
+    expect(html).not.toContain("<img");
+  });
+
+  it("never throws for malformed mail", async () => {
+    const inputs = [
+      "",
+      "\u0000\u0001garbage",
+      `To: ${TOKEN}@nl.example.org\r\nContent-Type: multipart/mixed; boundary=\r\n\r\n--\r\n`,
+      `To: ${TOKEN}@nl.example.org\r\nContent-Type: text/html\r\n\r\n<img src="cid:%ZZ"><a href="%">x</a>`,
+      `To: ${TOKEN}@nl.example.org\r\nFrom: <<<>>>\r\nDate: not a date\r\nList-Unsubscribe: <https://[::>\r\nAuthentication-Results: ;;;=\r\n\r\nbody`,
+    ];
+    for (const raw of inputs) {
+      const result = await ingestRawEmail(raw, { recipients: [] });
+      expect(["created", "no-token", "parse-error", "duplicate"]).toContain(result.status);
+    }
+  });
+
+  it("records the receiver's verdict, ignoring forged lower Authentication-Results", async () => {
+    const spoof = await ingestRawEmail(eml("spoofed-auth.eml"), { recipients: [RECIPIENT] });
+    expect((await db.article.findUniqueOrThrow({ where: { id: spoof.articleId } })).newsletterAuth).toBe("fail");
+    const plain = await ingestRawEmail(eml("rfc8058-one-click-unsubscribe.eml"), { recipients: [RECIPIENT] });
+    expect((await db.article.findUniqueOrThrow({ where: { id: plain.articleId } })).newsletterAuth).toBe("none");
+  });
+
+  it("creates exactly one Newsletter folder on concurrent first deliveries", async () => {
+    const results = await Promise.all(
+      ["beehiiv-tracking-pixels.eml", "rfc8058-one-click-unsubscribe.eml", "substack-confirmation.eml", "css-tracking.eml", "multipart-attachment.eml"]
+        .map((name) => ingestRawEmail(eml(name), { recipients: [RECIPIENT] })),
+    );
+    expect(results.every((r) => r.status === "created")).toBe(true);
+    expect(await db.category.count({ where: { userId: "u", name: "Newsletter" } })).toBe(1);
+    const feeds = await db.feed.findMany({ where: { userId: "u" }, select: { categoryId: true } });
+    expect(new Set(feeds.map((f) => f.categoryId)).size).toBe(1);
+  });
+
+  it("reserves the quota atomically under concurrency", async () => {
+    const at = new Date("2026-11-11T12:00:00Z");
+    const granted = await Promise.all(Array.from({ length: 25 }, () => reserveNewsletterQuota("v", at, 7)));
+    expect(granted.filter(Boolean)).toHaveLength(7);
+    expect(await reserveNewsletterQuota("v", new Date("2026-11-12T00:00:01Z"), 7)).toBe(true);
+  });
+
+  it("counts mails to fixed web-feed targets and enforces 100/day", async () => {
+    expect(MAX_NEWSLETTER_MAILS_PER_DAY).toBe(100);
+    const web = await db.feed.create({ data: { userId: "u", url: "https://blog.example/feed", name: "Blog" } });
+    await db.newsletterAddress.update({ where: { token: TOKEN }, data: { feedId: web.id } });
+    const now = new Date();
+    await db.newsletterQuota.create({ data: { userId: "u", day: now.toISOString().slice(0, 10), count: 99 } });
+    expect((await ingestRawEmail(eml("substack-confirmation.eml"), { recipients: [RECIPIENT], receivedAt: now })).status).toBe("created");
+    expect((await ingestRawEmail(eml("rfc8058-one-click-unsubscribe.eml"), { recipients: [RECIPIENT], receivedAt: now })).status).toBe("rate-limited");
+    // A duplicate does not burn quota.
+    await db.newsletterQuota.update({ where: { userId: "u" }, data: { count: 99 } });
+    expect((await ingestRawEmail(eml("substack-confirmation.eml"), { recipients: [RECIPIENT], receivedAt: now })).status).toBe("duplicate");
+    expect((await db.newsletterQuota.findUniqueOrThrow({ where: { userId: "u" } })).count).toBe(99);
   });
 });

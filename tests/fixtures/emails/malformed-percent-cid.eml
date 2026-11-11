@@ -1,0 +1,9 @@
+From: Broken <news@broken.example>
+To: aaaaaaaaaaaaaaaaaaaaaaaaaa@nl.example.org
+Subject: Broken cid
+Date: Wed, 11 Nov 2026 09:30:00 +0000
+Message-ID: <broken-cid-1@broken.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Text survives.</p><img src="cid:%" alt="a"><img src="cid:%E0%A4%A" alt="b"><a href="https://broken.example/%%%">link</a></body></html>

@@ -1,0 +1,18 @@
+From: Style Tracker <news@styletracker.example>
+To: aaaaaaaaaaaaaaaaaaaaaaaaaa@nl.example.org
+Subject: Styled issue
+Date: Wed, 11 Nov 2026 08:30:00 +0000
+Message-ID: <css-1@styletracker.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<table background="https://attacker.example/table.gif"><tr>
+<td style="background-image:url(https://attacker.example/open?id=1);font-weight:bold;text-align:center">Bold centred</td>
+</tr></table>
+<ul style="list-style-image:url('https://attacker.example/bullet.gif');margin:0 0 8px 0"><li>Item</li></ul>
+<div style="margin:\75 rl(https://attacker.example/esc.gif)">Escaped</div>
+<div style="position:fixed !important;z-index:99999;top:0;left:0">Overlay</div>
+<p style="font-family:image-set('https://attacker.example/set.gif' 1x);line-height:1.6">Typography stays</p>
+<span style="border:1px solid rgb(200,200,200);padding:4px">Bordered</span>
+</body></html>

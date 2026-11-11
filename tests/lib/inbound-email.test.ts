@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   detectConfirmationUrl,
+  evaluateSenderAuth,
   extractRecipientTokens,
   generateNewsletterToken,
   isNewsletterToken,
@@ -101,5 +102,28 @@ describe("inbound mail source secrets", () => {
     expect(sealed.startsWith("ff2.")).toBe(true);
     expect(openSecret("inboundMailSource.credentials", sealed, "plaintext").value).toBe('{"user":"a","password":"b"}');
     expect(() => openSecret("inboundMailSource.webhookSecret", sealed, "plaintext")).toThrow();
+  });
+});
+
+describe("evaluateSenderAuth (trust model: topmost receiver header only)", () => {
+  const ar = (value: string) => ({ key: "authentication-results", value });
+  it("uses the topmost header and ignores forged ones below", () => {
+    expect(evaluateSenderAuth([ar("mx.r; dmarc=fail header.from=bank.example"), ar("mx.r; dmarc=pass")], "a@bank.example")).toBe("fail");
+    expect(evaluateSenderAuth([ar("mx.r; dmarc=pass (p=none) header.from=x.example")], "a@x.example")).toBe("pass");
+  });
+  it("requires DKIM/SPF alignment with From when there is no DMARC result", () => {
+    expect(evaluateSenderAuth([ar("mx.r; dkim=pass header.d=attacker.example; spf=pass smtp.mailfrom=b@attacker.example")], "a@bank.example")).toBe("none");
+    expect(evaluateSenderAuth([ar("mx.r; dkim=pass header.d=bank.example")], "news@mail.bank.example")).toBe("pass");
+    expect(evaluateSenderAuth([ar("mx.r; spf=softfail smtp.mailfrom=bank.example")], "a@bank.example")).toBe("fail");
+  });
+  it("pins the receiver's authserv-id when known", () => {
+    const headers = [ar("forged.example; dmarc=pass"), ar("mx.google.com; dmarc=fail")];
+    expect(evaluateSenderAuth(headers, "a@x.example", "mx.google.com")).toBe("fail");
+    expect(evaluateSenderAuth([ar("forged.example; dmarc=pass")], "a@x.example", "mx.google.com")).toBe("none");
+  });
+  it("falls back to the highest-i ARC-Authentication-Results, none without evidence", () => {
+    const arc = (value: string) => ({ key: "arc-authentication-results", value });
+    expect(evaluateSenderAuth([arc("i=1; mx.a; dmarc=fail"), arc("i=2; mx.b; dmarc=pass")], "a@x.example")).toBe("pass");
+    expect(evaluateSenderAuth([], "a@x.example")).toBe("none");
   });
 });

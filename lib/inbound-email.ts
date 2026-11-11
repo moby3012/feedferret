@@ -37,8 +37,8 @@ const MAX_TEXT_CHARS = 500_000;
 const MAX_INLINE_IMAGE_BYTES = 512 * 1024;
 const MAX_INLINE_TOTAL_BYTES = 2 * 1024 * 1024;
 const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"]);
-/** Spec §6.3: mailbombing guard per user and rolling day. */
-export const MAX_NEWSLETTER_MAILS_PER_DAY = 200;
+/** Spec §6.3: mailbombing guard, newsletter mails per user and UTC day (any target feed). */
+export const MAX_NEWSLETTER_MAILS_PER_DAY = 100;
 
 // ---------------------------------------------------------------------------
 // Tokens & addresses
@@ -290,7 +290,14 @@ export async function sanitizeNewsletterHtml(html: string, inlineImages: Map<str
     doc.querySelectorAll("img").forEach((img) => {
       const src = (img.getAttribute("src") ?? "").trim();
       if (/^cid:/i.test(src)) {
-        const image = inlineImages.get(decodeURIComponent(src.slice(4)).replace(/^<|>$/g, "").trim().toLowerCase());
+        let cid: string;
+        try {
+          cid = decodeURIComponent(src.slice(4));
+        } catch {
+          img.remove(); // malformed percent-encoding (`cid:%`)
+          return;
+        }
+        const image = inlineImages.get(cid.replace(/^<|>$/g, "").trim().toLowerCase());
         if (!image || image.bytes > MAX_INLINE_IMAGE_BYTES || image.bytes > inlineBudget) {
           img.remove();
           return;
@@ -411,6 +418,132 @@ function detectViewOnlineUrl(links: LinkInfo[]): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Sender authentication evidence (spoofing: flag, never block — PM decision)
+//
+// Trust model: SPF/DKIM/DMARC are evaluated by the RECEIVING provider (Gmail,
+// Fastmail, Cloudflare, …), which PREPENDS its Authentication-Results header
+// (RFC 8601) above everything the sender wrote. A sender can put any number of
+// forged Authentication-Results / ARC headers into the message, but they always
+// end up BELOW the receiver's. So only the topmost header is evaluated; when the
+// transport knows the receiver's authserv-id (e.g. "mx.google.com"), pass it as
+// `trustedAuthservId` and only a header carrying that id counts. Without an
+// Authentication-Results header the topmost ARC-Authentication-Results (highest
+// i=, added by the most recent hop) is used under the same rules — weaker,
+// because ARC seals are not verified here. The verdict is display metadata only
+// ("pass" | "fail" | "none"); mail is never dropped because of it.
+
+export type NewsletterAuth = "pass" | "fail" | "none";
+
+interface AuthResult {
+  method: string;
+  result: string;
+  props: Record<string, string>;
+}
+
+function parseAuthResultsValue(value: string): { authservId: string; results: AuthResult[] } {
+  let text = value;
+  // Strip RFC 5322 comments (non-nested is enough for a verdict).
+  for (let i = 0; i < 3; i++) text = text.replace(/\([^()]*\)/g, " ");
+  const parts = text.split(";").map((p) => p.trim()).filter(Boolean);
+  const authservId = (parts.shift() ?? "").split(/\s+/)[0].toLowerCase();
+  const results: AuthResult[] = [];
+  for (const part of parts) {
+    const m = /^([a-z0-9_-]+)\s*=\s*([a-z]+)/i.exec(part);
+    if (!m) continue;
+    const props: Record<string, string> = {};
+    for (const p of part.slice(m[0].length).matchAll(/([a-z0-9_.-]+)\s*=\s*("[^"]*"|[^\s]+)/gi)) {
+      props[p[1].toLowerCase()] = p[2].replace(/^"|"$/g, "").toLowerCase();
+    }
+    results.push({ method: m[1].toLowerCase(), result: m[2].toLowerCase(), props });
+  }
+  return { authservId, results };
+}
+
+function domainOf(value: string | undefined): string | null {
+  if (!value) return null;
+  const at = value.lastIndexOf("@");
+  const domain = (at >= 0 ? value.slice(at + 1) : value).replace(/[>.\s]+$/, "").toLowerCase();
+  return domain || null;
+}
+
+function aligned(domain: string | null, fromDomain: string | null): boolean {
+  if (!domain || !fromDomain) return false;
+  return domain === fromDomain || fromDomain.endsWith(`.${domain}`) || domain.endsWith(`.${fromDomain}`);
+}
+
+/**
+ * Verdict from the trusted Authentication-Results (see trust model above).
+ * `headers` must be in message order (topmost first), keys lowercase.
+ */
+export function evaluateSenderAuth(
+  headers: readonly { key: string; value: string }[],
+  fromAddress: string | null,
+  trustedAuthservId?: string | null,
+): NewsletterAuth {
+  const trusted = trustedAuthservId?.trim().toLowerCase() || null;
+  // Topmost header; with a known receiver id, the topmost header carrying it
+  // (RFC 8601 §5: receivers strip forged headers that claim their own id).
+  const choose = (values: string[]) => {
+    if (values.length === 0) return null;
+    if (!trusted) return parseAuthResultsValue(values[0]);
+    for (const value of values) {
+      const parsed = parseAuthResultsValue(value);
+      if (parsed.authservId === trusted) return parsed;
+    }
+    return null;
+  };
+  const ar = headers.filter((h) => h.key === "authentication-results").map((h) => h.value);
+  const arc = headers
+    .filter((h) => h.key === "arc-authentication-results")
+    .map((h) => /^\s*i\s*=\s*(\d+)\s*;([\s\S]*)$/.exec(h.value))
+    .filter((m): m is RegExpExecArray => !!m)
+    .sort((x, y) => Number(y[1]) - Number(x[1]))
+    .map((m) => m[2]);
+  const chosen = ar.length > 0 ? choose(ar) : choose(arc);
+  if (!chosen || chosen.results.length === 0) return "none";
+
+  const fromDomain = domainOf(fromAddress ?? undefined);
+  const dmarc = chosen.results.find((r) => r.method === "dmarc");
+  if (dmarc) {
+    if (dmarc.result === "pass") return "pass";
+    if (dmarc.result === "fail") return "fail";
+  }
+  const dkimPass = chosen.results.some((r) => r.method === "dkim" && r.result === "pass" && aligned(r.props["header.d"] ?? domainOf(r.props["header.i"]), fromDomain));
+  const spfPass = chosen.results.some((r) => r.method === "spf" && r.result === "pass" && aligned(domainOf(r.props["smtp.mailfrom"]) ?? r.props["smtp.helo"] ?? null, fromDomain));
+  if (dkimPass || spfPass) return "pass";
+  const failed = chosen.results.some((r) => (r.method === "dkim" || r.method === "spf") && (r.result === "fail" || r.result === "softfail"));
+  return failed ? "fail" : "none";
+}
+
+// ---------------------------------------------------------------------------
+// Quota (atomic per-user daily counter)
+
+function quotaDay(at: Date): string {
+  return at.toISOString().slice(0, 10);
+}
+
+/**
+ * Reserves one slot of today's quota. Each step is a single conditional
+ * UPDATE, so concurrent deliveries can never push the count past the limit.
+ */
+export async function reserveNewsletterQuota(userId: string, at: Date, limit = MAX_NEWSLETTER_MAILS_PER_DAY): Promise<boolean> {
+  const day = quotaDay(at);
+  try {
+    await db.newsletterQuota.create({ data: { userId, day, count: 0 } });
+  } catch {
+    // Row exists (or a concurrent first delivery created it).
+  }
+  const reset = await db.newsletterQuota.updateMany({ where: { userId, day: { not: day } }, data: { day, count: 1 } });
+  if (reset.count === 1) return limit >= 1;
+  const taken = await db.newsletterQuota.updateMany({ where: { userId, day, count: { lt: limit } }, data: { count: { increment: 1 } } });
+  return taken.count === 1;
+}
+
+async function releaseNewsletterQuota(userId: string, at: Date): Promise<void> {
+  await db.newsletterQuota.updateMany({ where: { userId, day: quotaDay(at), count: { gt: 0 } }, data: { count: { decrement: 1 } } });
+}
+
+// ---------------------------------------------------------------------------
 // Ingest
 
 export type IngestStatus =
@@ -436,6 +569,8 @@ export interface IngestOptions {
   recipients: readonly string[];
   /** When the transport received the mail; default now. */
   receivedAt?: Date;
+  /** authserv-id of the receiving provider, if known (see evaluateSenderAuth). */
+  trustedAuthservId?: string | null;
 }
 
 function rawSize(raw: Buffer | string): number {
@@ -451,15 +586,31 @@ function publishedAtFor(dateHeader: string | undefined, receivedAt: Date): Date 
   return parsed;
 }
 
+/**
+ * The root "Newsletter" folder. `@@unique([userId, name, parentId])` does not
+ * stop duplicates for a NULL parentId, so the auto-created folder gets a
+ * deterministic primary key: concurrent first deliveries collide on it and the
+ * loser re-reads the winner's row. A folder the user created by hand is reused.
+ */
+export function newsletterCategoryId(userId: string): string {
+  return `newsletter-folder-${userId}`;
+}
+
 async function ensureNewsletterCategory(userId: string): Promise<string> {
-  const where = { userId, name: NEWSLETTER_CATEGORY_NAME, parentId: null };
-  const existing = await db.category.findFirst({ where, select: { id: true } });
-  if (existing) return existing.id;
+  const id = newsletterCategoryId(userId);
+  const own = await db.category.findUnique({ where: { id }, select: { id: true, userId: true } });
+  if (own && own.userId === userId) return own.id;
+  const manual = await db.category.findFirst({
+    where: { userId, name: NEWSLETTER_CATEGORY_NAME, parentId: null },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+  if (manual) return manual.id;
   try {
     const order = await db.category.count({ where: { userId, parentId: null } });
-    return (await db.category.create({ data: { userId, name: NEWSLETTER_CATEGORY_NAME, order }, select: { id: true } })).id;
+    return (await db.category.create({ data: { id, userId, name: NEWSLETTER_CATEGORY_NAME, order }, select: { id: true } })).id;
   } catch (error) {
-    const raced = await db.category.findFirst({ where, select: { id: true } });
+    const raced = await db.category.findUnique({ where: { id }, select: { id: true } });
     if (raced) return raced.id;
     throw error;
   }
@@ -555,23 +706,54 @@ export async function ingestRawEmail(raw: Buffer | string, options: IngestOption
   }
   const userId = address.userId;
 
-  const recent = await db.article.count({
-    where: {
-      userId,
-      createdAt: { gte: new Date(receivedAt.getTime() - 24 * 60 * 60_000) },
-      feed: { sourceType: NEWSLETTER_SOURCE_TYPE },
-    },
-  });
-  if (recent >= MAX_NEWSLETTER_MAILS_PER_DAY) {
+  // Everything derived from untrusted mail content, before any write: a
+  // malformed mail yields a status, never an exception or a half-made feed.
+  let prepared: {
+    from: ReturnType<typeof mailbox>;
+    sender: SenderIdentity;
+    subject: string;
+    content: string;
+    plain: string;
+    confirmationUrl: string | null;
+    unsubscribe: ListUnsubscribe;
+    viewOnline: string | null;
+    publishedAt: Date;
+    auth: NewsletterAuth;
+  };
+  try {
+    const from = mailbox(email.from);
+    const sender = senderIdentity({ listId: header(email, "list-id"), fromName: from?.name ?? null, fromAddress: from?.address ?? null });
+    const subject = (email.subject ?? "").replace(/\s+/g, " ").trim();
+    const links = collectLinks(email.html, email.text);
+    const content = email.html
+      ? await sanitizeNewsletterHtml(email.html, inlineImageMap(email))
+      : await sanitizeNewsletterHtml(textToHtml(email.text ?? ""));
+    const plain = htmlToPlainText(content);
+    prepared = {
+      from,
+      sender,
+      subject,
+      content,
+      plain,
+      confirmationUrl: detectConfirmationUrl(subject, email.text ?? plain, links),
+      unsubscribe: parseListUnsubscribe(header(email, "list-unsubscribe"), header(email, "list-unsubscribe-post")),
+      viewOnline: detectViewOnlineUrl(links),
+      publishedAt: publishedAtFor(email.date, receivedAt),
+      auth: evaluateSenderAuth(email.headers, from?.address ?? null, options.trustedAuthservId),
+    };
+  } catch {
+    logger.warn("[inbound-email] malformed mail dropped", { userId, messageId });
+    return { status: "parse-error", userId, messageId };
+  }
+  const { from, sender, subject, content, plain, confirmationUrl, unsubscribe, viewOnline, publishedAt, auth } = prepared;
+
+  // Counted per user for every newsletter mail, whatever feed it lands in.
+  if (!(await reserveNewsletterQuota(userId, receivedAt))) {
     logger.warn("[inbound-email] daily limit reached", { userId, messageId });
     return { status: "rate-limited", userId, messageId };
   }
 
-  const from = mailbox(email.from);
-  const sender = senderIdentity({ listId: header(email, "list-id"), fromName: from?.name ?? null, fromAddress: from?.address ?? null });
   const feed = await resolveFeed(userId, address.feedId, sender);
-
-  const subject = (email.subject ?? "").replace(/\s+/g, " ").trim();
   const dedupeKey = messageId
     ? `email:${messageId}`
     : `email:sha256:${createHash("sha256").update([userId, feed.id, from?.address ?? "", subject, email.date ?? ""].join("\u0000")).digest("hex")}`;
@@ -581,21 +763,13 @@ export async function ingestRawEmail(raw: Buffer | string, options: IngestOption
     select: { id: true },
   });
   if (existing) {
+    await releaseNewsletterQuota(userId, receivedAt);
     logger.info("[inbound-email] duplicate mail ignored", { userId, feedId: feed.id, messageId });
     return { status: "duplicate", userId, feedId: feed.id, articleId: existing.id, messageId };
   }
 
-  const links = collectLinks(email.html, email.text);
-  const content = email.html
-    ? await sanitizeNewsletterHtml(email.html, inlineImageMap(email))
-    : await sanitizeNewsletterHtml(textToHtml(email.text ?? ""));
-  const plain = htmlToPlainText(content);
-  const confirmationUrl = detectConfirmationUrl(subject, email.text ?? plain, links);
-  const unsubscribe = parseListUnsubscribe(header(email, "list-unsubscribe"), header(email, "list-unsubscribe-post"));
-  const viewOnline = detectViewOnlineUrl(links);
   const link = viewOnline ?? `${feed.url}#${encodeURIComponent(dedupeKey)}`;
   const title = (subject || sender.title).slice(0, 500);
-  const publishedAt = publishedAtFor(email.date, receivedAt);
   const meta = computeArticleMeta({ content, contentFormat: "html", title, link });
 
   let articleId: string;
@@ -622,6 +796,7 @@ export async function ingestRawEmail(raw: Buffer | string, options: IngestOption
         listUnsubscribeUrl: unsubscribe.url,
         listUnsubscribeMailto: unsubscribe.mailto,
         listUnsubscribeOneClick: unsubscribe.url ? unsubscribe.oneClick : null,
+        newsletterAuth: auth,
       },
       select: { id: true },
     });
@@ -632,6 +807,7 @@ export async function ingestRawEmail(raw: Buffer | string, options: IngestOption
       where: { userId_feedId_dedupeKey: { userId, feedId: feed.id, dedupeKey } },
       select: { id: true },
     });
+    await releaseNewsletterQuota(userId, receivedAt);
     if (raced) return { status: "duplicate", userId, feedId: feed.id, articleId: raced.id, messageId };
     throw error;
   }
