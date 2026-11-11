@@ -4,6 +4,7 @@ import { useId } from "react";
 import { useTranslations } from "next-intl";
 import { Minus, Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Segmented } from "@/components/ui/segmented";
 import {
   READER_FONTS,
   READER_LEADINGS,
@@ -64,7 +65,7 @@ function ReaderTypographySheet({ resolved, effectiveSize }: SheetProps) {
         >
           {t("typographyPreview")}
         </p>
-        <Segmented
+        <AaSegmented
           label={t("fontStyle")}
           options={READER_FONTS.map((f) => ({ value: f, label: t(FONT_KEY[f]), font: f }))}
           value={resolved.font}
@@ -86,33 +87,39 @@ function ReaderTypographySheet({ resolved, effectiveSize }: SheetProps) {
             </ChromeButton>
           </div>
         </div>
-        <Segmented
+        <AaSegmented
           label={t("lineSpacing")}
           options={READER_LEADINGS.map((l) => ({ value: String(l), label: t(LEADING_KEY[l]) }))}
           value={String(resolved.leading ?? 1.6)}
           onChange={(v) => setReaderTypography({ leading: Number(v) })}
         />
-        <Segmented
+        <AaSegmented
           label={t("lineWidth")}
           options={READER_WIDTHS.map((w) => ({ value: w, label: t(WIDTH_KEY[w]) }))}
           value={resolved.width}
           onChange={(width) => setReaderTypography({ width })}
         />
-        <Segmented
+        <AaSegmented
           label={t("readerTheme")}
           options={READER_THEMES.map((th) => ({ value: th, label: t(THEME_KEY[th]), swatch: th }))}
           value={resolved.theme}
           onChange={(theme) => setReaderTypography({ theme: theme === "auto" ? undefined : theme })}
         />
-        <button type="button" className="ff-aa-reset" onClick={resetReaderTypography}>
-          {t("resetTypography")}
-        </button>
+        <div className="ff-aa-row-inline">
+          <p className="ff-aa-label" data-testid="typography-device-note">
+            {t("typographyDeviceNote")}
+          </p>
+          <button type="button" className="ff-aa-reset hit-slop" onClick={resetReaderTypography}>
+            {t("resetTypography")}
+          </button>
+        </div>
       </PopoverContent>
     </Popover>
   );
 }
 
-function Segmented<T extends string>({
+/** A labelled row around the shared segmented control. */
+function AaSegmented<T extends string>({
   label,
   options,
   value,
@@ -124,43 +131,22 @@ function Segmented<T extends string>({
   onChange: (v: T) => void;
 }) {
   const id = useId();
-  // Roving tab stop: the checked option; with none checked (a value the
-  // options do not represent), the first one — the group stays reachable.
-  const checked = options.findIndex((o) => o.value === value);
-  const tabStop = checked >= 0 ? checked : 0;
   return (
     <div className="ff-aa-row">
       <span className="ff-aa-label" id={id}>
         {label}
       </span>
-      <div className="ff-aa-segmented" role="radiogroup" aria-labelledby={id}>
-        {options.map((o, index) => (
-          <button
-            key={o.value}
-            type="button"
-            role="radio"
-            aria-checked={o.value === value}
-            data-reader-font={o.font}
-            data-swatch={o.swatch}
-            className={cn("ff-aa-seg", o.value === value && "is-on")}
-            onClick={() => onChange(o.value)}
-            onKeyDown={(e) => {
-              const i = checked >= 0 ? checked : index;
-              const dir = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
-              if (!dir) return;
-              e.preventDefault();
-              const rtl = getComputedStyle(e.currentTarget).direction === "rtl" && (e.key === "ArrowRight" || e.key === "ArrowLeft");
-              const next = options[(i + (rtl ? -dir : dir) + options.length) % options.length];
-              onChange(next.value);
-              (e.currentTarget.parentElement?.querySelector(`[data-value="${next.value}"]`) as HTMLElement | null)?.focus();
-            }}
-            data-value={o.value}
-            tabIndex={index === tabStop ? 0 : -1}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        labelledBy={id}
+        block
+        value={value}
+        onChange={onChange}
+        options={options.map((o) => ({
+          value: o.value,
+          label: o.label,
+          data: { "data-reader-font": o.font, "data-swatch": o.swatch },
+        }))}
+      />
     </div>
   );
 }

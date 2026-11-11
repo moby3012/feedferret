@@ -414,10 +414,10 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
       <DialogContent className="flex h-[min(92dvh,760px)] w-[calc(100vw-1rem)] max-w-2xl flex-col rounded-sheet border border-border/70 bg-background p-0 shadow-overlay">
         <DialogHeader className="border-b border-border/60 bg-card/95 px-5 py-5 backdrop-blur-bar sm:px-8 sm:py-6">
           {/* pe-10: long names never run under the close button. */}
-          <DialogTitle className="pe-10 text-xl font-semibold tracking-title break-words sm:text-2xl">
+          <DialogTitle className="pe-10 text-title font-semibold tracking-title break-words sm:text-headline">
             {feed.name}
           </DialogTitle>
-          <DialogDescription className="mt-1 pe-10 text-sm text-muted-foreground truncate">
+          <DialogDescription className="mt-1 pe-10 text-body-sm text-muted-foreground truncate">
             {feed.url}
           </DialogDescription>
         </DialogHeader>
@@ -435,7 +435,6 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 { value: "fulltext", label: t("fullTextTab") },
                 { value: "scout", label: t("scoutTab") },
               ]}
-              triggerClassName="px-5 py-2 text-sm"
             />
           </div>
 
@@ -443,12 +442,12 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           <div className="px-5 py-6 space-y-5 sm:px-8">
             <TabsContent value="auth" className="mt-0 space-y-5">
               <div className="space-y-2">
-                <Label className="text-sm font-medium">{t("auth.authType")}</Label>
+                <Label className="text-body-sm font-medium">{t("auth.authType")}</Label>
                 <Select value={authType} onValueChange={setAuthType}>
-                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                  <SelectTrigger className="rounded-panel border-border/70 bg-background/70 h-10">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="rounded-2xl">
+                  <SelectContent className="rounded-panel">
                     <SelectItem value="none">{t("auth.none")}</SelectItem>
                     <SelectItem value="basic">{t("auth.httpBasicAuth")}</SelectItem>
                   </SelectContent>
@@ -456,31 +455,31 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               </div>
 
               {authType === "basic" && (
-                <div className="space-y-3 rounded-2xl ui-control-surface border p-4">
+                <div className="space-y-3 rounded-panel ui-control-surface border p-4">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("auth.username")}</Label>
+                    <Label className="text-footnote font-medium text-muted-foreground uppercase tracking-wide">{t("auth.username")}</Label>
                     <Input
                       value={authUsername}
                       onChange={(e) => setAuthUsername(e.target.value)}
                       placeholder={t("auth.usernamePlaceholder")}
                       disabled={!editConfigLoaded}
-                      className="rounded-xl h-10 border-border/70 bg-background/70"
+                      className="rounded-panel h-10 border-border/70 bg-background/70"
                       autoComplete="off"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("auth.password")}</Label>
+                    <Label className="text-footnote font-medium text-muted-foreground uppercase tracking-wide">{t("auth.password")}</Label>
                     <Input
                       type="password"
                       value={authPassword}
                       onChange={(e) => setAuthPassword(e.target.value)}
                       placeholder={hasStoredPassword ? t("auth.passwordStoredPlaceholder") : t("auth.passwordPlaceholder")}
                       aria-describedby={hasStoredPassword ? "feed-auth-password-stored" : undefined}
-                      className="rounded-xl h-10 border-border/70 bg-background/70"
+                      className="rounded-panel h-10 border-border/70 bg-background/70"
                       autoComplete="new-password"
                     />
                     {hasStoredPassword && (
-                      <p id="feed-auth-password-stored" className="text-xs text-muted-foreground">
+                      <p id="feed-auth-password-stored" className="text-footnote text-muted-foreground">
                         {t("auth.passwordStoredHint")}
                       </p>
                     )}
@@ -488,16 +487,16 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 </div>
               )}
 
-              <p className="text-xs text-muted-foreground">
+              <p className="text-footnote text-muted-foreground">
                 {t("auth.credentialsUsage")}
               </p>
             </TabsContent>
 
             <TabsContent value="behavior" className="mt-0 space-y-5">
-              <div className="flex items-start justify-between gap-4 rounded-2xl ui-control-surface border p-4">
+              <div className="flex items-start justify-between gap-4 rounded-panel ui-control-surface border p-4">
                 <div className="space-y-1 min-w-0">
-                  <Label className="text-sm font-medium cursor-pointer" htmlFor="hide-from-all">{t("behavior.hideFromAllArticles")}</Label>
-                  <p className="text-xs text-muted-foreground">
+                  <Label className="text-body-sm font-medium cursor-pointer" htmlFor="hide-from-all">{t("behavior.hideFromAllArticles")}</Label>
+                  <p className="text-footnote text-muted-foreground">
                     {t("behavior.articlesWontAppear")}
                   </p>
                 </div>
@@ -508,10 +507,10 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   className="shrink-0 mt-0.5"
                 />
               </div>
-              <div className="flex items-start justify-between gap-4 rounded-2xl ui-control-surface border p-4">
+              <div className="flex items-start justify-between gap-4 rounded-panel ui-control-surface border p-4">
                 <div className="space-y-1 min-w-0">
-                  <Label className="text-sm font-medium cursor-pointer" htmlFor="hide-article-image">{t("behavior.hideArticleHeroImage")}</Label>
-                  <p className="text-xs text-muted-foreground">
+                  <Label className="text-body-sm font-medium cursor-pointer" htmlFor="hide-article-image">{t("behavior.hideArticleHeroImage")}</Label>
+                  <p className="text-footnote text-muted-foreground">
                     {t("behavior.suppressHeroImage")}
                   </p>
                 </div>
@@ -524,12 +523,12 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("reader.fontSizeLabel")}</Label>
+                <Label className="text-body-sm font-medium">{t("reader.fontSizeLabel")}</Label>
                 <Select value={readerFontSizeOverride} onValueChange={setReaderFontSizeOverride}>
-                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                  <SelectTrigger className="rounded-panel border-border/70 bg-background/70 h-10">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="rounded-2xl">
+                  <SelectContent className="rounded-panel">
                     <SelectItem value="inherit">{t("reader.inherit")}</SelectItem>
                     <SelectItem value="small">{t("reader.fontSizeSmall")}</SelectItem>
                     <SelectItem value="medium">{t("reader.fontSizeMedium")}</SelectItem>
@@ -537,67 +536,67 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                     <SelectItem value="xl">{t("reader.fontSizeXl")}</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{t("reader.fontSizeDescription")}</p>
+                <p className="text-footnote text-muted-foreground">{t("reader.fontSizeDescription")}</p>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("reader.widthLabel")}</Label>
+                <Label className="text-body-sm font-medium">{t("reader.widthLabel")}</Label>
                 <Select value={readerWidthOverride} onValueChange={setReaderWidthOverride}>
-                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                  <SelectTrigger className="rounded-panel border-border/70 bg-background/70 h-10">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="rounded-2xl">
+                  <SelectContent className="rounded-panel">
                     <SelectItem value="inherit">{t("reader.inherit")}</SelectItem>
                     <SelectItem value="normal">{t("reader.widthNormal")}</SelectItem>
                     <SelectItem value="wide">{t("reader.widthWide")}</SelectItem>
                     <SelectItem value="full">{t("reader.widthFull")}</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{t("reader.widthDescription")}</p>
+                <p className="text-footnote text-muted-foreground">{t("reader.widthDescription")}</p>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("reader.openOriginalLabel")}</Label>
+                <Label className="text-body-sm font-medium">{t("reader.openOriginalLabel")}</Label>
                 <Select value={openOriginalOverride} onValueChange={setOpenOriginalOverride}>
-                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                  <SelectTrigger className="rounded-panel border-border/70 bg-background/70 h-10">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="rounded-2xl">
+                  <SelectContent className="rounded-panel">
                     <SelectItem value="inherit">{t("reader.inherit")}</SelectItem>
                     <SelectItem value="on">{t("reader.on")}</SelectItem>
                     <SelectItem value="off">{t("reader.off")}</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{t("reader.openOriginalDescription")}</p>
+                <p className="text-footnote text-muted-foreground">{t("reader.openOriginalDescription")}</p>
               </div>
             </TabsContent>
 
             <TabsContent value="retention" className="mt-0 space-y-5">
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("retention.keepDays")}</Label>
+                <Label className="text-body-sm font-medium">{t("retention.keepDays")}</Label>
                 <Input
                   type="number"
                   min={0}
                   value={retentionDays}
                   onChange={(e) => setRetentionDays(e.target.value)}
                   placeholder={t("retention.useUserDefault")}
-                  className="rounded-xl h-10 border-border/70 bg-background/70"
+                  className="rounded-panel h-10 border-border/70 bg-background/70"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-footnote text-muted-foreground">
                   {t("retention.deleteOlderArticles")}
                 </p>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("retention.minimumArticles")}</Label>
+                <Label className="text-body-sm font-medium">{t("retention.minimumArticles")}</Label>
                 <Input
                   type="number"
                   min={0}
                   value={keepMinArticles}
                   onChange={(e) => setKeepMinArticles(e.target.value)}
                   placeholder={t("retention.useUserDefault")}
-                  className="rounded-xl h-10 border-border/70 bg-background/70"
+                  className="rounded-panel h-10 border-border/70 bg-background/70"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-footnote text-muted-foreground">
                   {t("retention.alwaysKeep")}
                 </p>
               </div>
@@ -606,15 +605,15 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             <TabsContent value="fetch" className="mt-0 space-y-5">
               {/* G1: a Google News keyword feed's search stays editable. */}
               {looksLikeGoogleNewsSearch(feed.url) && <GoogleNewsQueryEditor feedId={feed.id} />}
-              <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 space-y-3">
+              <div className="rounded-panel border border-border/70 bg-muted/30 p-4 space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold">{t("fetch.transparency.title")}</p>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <p className="text-body-sm font-semibold">{t("fetch.transparency.title")}</p>
+                  <span className="inline-flex items-center gap-1.5 text-footnote text-muted-foreground">
                     <span className={`h-2 w-2 rounded-full ${statusToneClass}`} aria-hidden="true" />
                     {statusLabel}
                   </span>
                 </div>
-                <dl className="space-y-2 text-sm">
+                <dl className="space-y-2 text-body-sm">
                   <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
                     <dt className="text-muted-foreground">{t("fetch.transparency.methodLabel")}</dt>
                     <dd className="font-medium sm:text-right">{fetchMethodLabel}</dd>
@@ -631,26 +630,26 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   </div>
                   <div className="flex flex-col gap-0.5 break-all sm:flex-row sm:justify-between sm:gap-4">
                     <dt className="text-muted-foreground">{t("fetch.transparency.sourceUrlLabel")}</dt>
-                    <dd className="font-mono text-xs text-muted-foreground sm:max-w-[60%] sm:text-right">{feed.url}</dd>
+                    <dd className="font-mono text-footnote text-muted-foreground sm:max-w-[60%] sm:text-right">{feed.url}</dd>
                   </div>
                 </dl>
                 {consecutiveFailures > 0 && (
-                  <p className="text-xs text-destructive">
+                  <p className="text-footnote text-destructive">
                     {t("fetch.transparency.consecutiveFailures", { count: consecutiveFailures })}
                   </p>
                 )}
                 {feed.lastError && lastStatus === "error" && (
-                  <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive break-words">
+                  <p className="rounded-row bg-destructive/10 px-3 py-2 text-footnote text-destructive break-words">
                     {feed.lastError}
                   </p>
                 )}
                 {feed.autoMuted && (
-                  <p className="text-xs text-muted-foreground">{t("fetch.transparency.mutedNote")}</p>
+                  <p className="text-footnote text-muted-foreground">{t("fetch.transparency.mutedNote")}</p>
                 )}
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("fetch.updateInterval")}</Label>
+                <Label className="text-body-sm font-medium">{t("fetch.updateInterval")}</Label>
                 <Input
                   type="number"
                   min={5}
@@ -658,24 +657,24 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   value={updateFrequency}
                   onChange={(e) => setUpdateFrequency(e.target.value)}
                   placeholder={t("fetch.globalDefault")}
-                  className="rounded-xl h-10 border-border/70 bg-background/70"
+                  className="rounded-panel h-10 border-border/70 bg-background/70"
                 />
-                <p className="text-xs text-muted-foreground">{t("fetch.overrideSync")}</p>
+                <p className="text-footnote text-muted-foreground">{t("fetch.overrideSync")}</p>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("fetch.customUserAgent")}</Label>
+                <Label className="text-body-sm font-medium">{t("fetch.customUserAgent")}</Label>
                 <Input
                   value={customUserAgent}
                   onChange={(e) => setCustomUserAgent(e.target.value)}
                   placeholder={t("fetch.userAgentDefault")}
-                  className="rounded-xl h-10 border-border/70 bg-background/70"
+                  className="rounded-panel h-10 border-border/70 bg-background/70"
                 />
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">{t("fetch.timeout")}</Label>
+                  <Label className="text-body-sm font-medium">{t("fetch.timeout")}</Label>
                   <Input
                     type="number"
                     min={5}
@@ -683,40 +682,40 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                     value={fetchTimeoutSecs}
                     onChange={(e) => setFetchTimeoutSecs(e.target.value)}
                     placeholder={t("fetch.timeoutDefault")}
-                    className="rounded-xl h-10 border-border/70 bg-background/70"
+                    className="rounded-panel h-10 border-border/70 bg-background/70"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">{t("fetch.maxSize")}</Label>
+                  <Label className="text-body-sm font-medium">{t("fetch.maxSize")}</Label>
                   <Input
                     type="number"
                     min={1}
                     value={maxSizeKb}
                     onChange={(e) => setMaxSizeKb(e.target.value)}
                     placeholder={t("fetch.unlimited")}
-                    className="rounded-xl h-10 border-border/70 bg-background/70"
+                    className="rounded-panel h-10 border-border/70 bg-background/70"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-2xl ui-control-surface border px-4 py-3">
+              <div className="flex items-center justify-between rounded-panel ui-control-surface border px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium">{t("fetch.verifySslCertificate")}</p>
-                  <p className="text-xs text-muted-foreground">{t("fetch.disableOnlyForSelfSigned")}</p>
+                  <p className="text-body-sm font-medium">{t("fetch.verifySslCertificate")}</p>
+                  <p className="text-footnote text-muted-foreground">{t("fetch.disableOnlyForSelfSigned")}</p>
                 </div>
                 <Switch checked={sslVerify} onCheckedChange={setSslVerify} />
               </div>
             </TabsContent>
 
             <TabsContent value="fulltext" className="mt-0 space-y-5">
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+              <div className="rounded-panel border border-primary/20 bg-primary/5 p-4">
                 <div className="flex items-start gap-3">
-                  <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                  <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-panel">
                     <Sparkles className="size-5" />
                   </div>
                   <div>
                     <h3 className="font-semibold tracking-title">{t("fulltext.scoutStudioTitle")}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-1 text-body-sm text-muted-foreground">
                       {t("fulltext.scoutStudioDescription")}
                     </p>
                   </div>
@@ -724,21 +723,21 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("fulltext.fullTextModeLabel")}</Label>
+                <Label className="text-body-sm font-medium">{t("fulltext.fullTextModeLabel")}</Label>
                 <Select value={fullTextMode} onValueChange={(value) => setFullTextMode(value as FullTextMode)}>
-                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                  <SelectTrigger className="rounded-panel border-border/70 bg-background/70 h-10">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="rounded-2xl">
+                  <SelectContent className="rounded-panel">
                     <SelectItem value="off">{t("fulltext.fullTextModeOff")}</SelectItem>
                     <SelectItem value="auto">{t("fulltext.fullTextModeAuto")}</SelectItem>
                     <SelectItem value="selector">{t("fulltext.fullTextModeSelector")}</SelectItem>
                     {aiConfigured && <SelectItem value="ai">{t("fulltext.fullTextModeAi")}</SelectItem>}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{t("fulltext.fullTextModeDescription")}</p>
+                <p className="text-footnote text-muted-foreground">{t("fulltext.fullTextModeDescription")}</p>
                 {fullTextMode === "ai" && (
-                  <div className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+                  <div className="rounded-panel border border-warning/30 bg-warning/10 px-4 py-3 text-body-sm text-warning">
                     {t("fulltext.fullTextModeAiWarning")}
                   </div>
                 )}
@@ -746,13 +745,13 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <Label className="text-sm font-medium">{t("fulltext.articleBodySelector")}</Label>
+                  <Label className="text-body-sm font-medium">{t("fulltext.articleBodySelector")}</Label>
                   {aiConfigured && feed && (
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 px-2 text-xs"
+                      className="h-7 px-2 text-footnote"
                       disabled={proposeAiSelector.isPending}
                       onClick={handleAiProposeSelector}
                     >
@@ -768,11 +767,11 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   value={fullTextSelector}
                   onChange={(e) => setFullTextSelector(e.target.value)}
                   placeholder={t("fulltext.selectorPlaceholder")}
-                  className="rounded-xl h-10 border-border/70 bg-background/70 font-mono text-sm"
+                  className="rounded-panel h-10 border-border/70 bg-background/70 font-mono text-body-sm"
                 />
-                <p className="text-xs text-muted-foreground">{t("fulltext.selectorAppliesHint")}</p>
+                <p className="text-footnote text-muted-foreground">{t("fulltext.selectorAppliesHint")}</p>
                 {aiSelectorInfo && (
-                  <div className="rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+                  <div className="rounded-panel border border-border/60 bg-muted/40 px-3 py-2 text-footnote text-muted-foreground space-y-1">
                     {aiSelectorInfo.notes && <p className="italic">{aiSelectorInfo.notes}</p>}
                     {aiSelectorInfo.excerpt && (
                       <p>
@@ -786,31 +785,31 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("fulltext.removeSelectors")}</Label>
+                <Label className="text-body-sm font-medium">{t("fulltext.removeSelectors")}</Label>
                 <Input
                   value={fullTextRemoveSelectors}
                   onChange={(e) => setFullTextRemoveSelectors(e.target.value)}
                   placeholder={t("fulltext.removePlaceholder")}
-                  className="rounded-xl h-10 border-border/70 bg-background/70 font-mono text-sm"
+                  className="rounded-panel h-10 border-border/70 bg-background/70 font-mono text-body-sm"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("fulltext.contentFormatLabel")}</Label>
+                <Label className="text-body-sm font-medium">{t("fulltext.contentFormatLabel")}</Label>
                 <Select value={defaultContentFormat} onValueChange={(value) => setDefaultContentFormat(value as "html" | "markdown")}>
-                  <SelectTrigger className="rounded-2xl border-border/70 bg-background/70 h-10">
+                  <SelectTrigger className="rounded-panel border-border/70 bg-background/70 h-10">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="rounded-2xl">
+                  <SelectContent className="rounded-panel">
                     <SelectItem value="html">{t("fulltext.contentFormatHtml")}</SelectItem>
                     <SelectItem value="markdown">{t("fulltext.contentFormatMarkdown")}</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{t("fulltext.contentFormatDescription")}</p>
+                <p className="text-footnote text-muted-foreground">{t("fulltext.contentFormatDescription")}</p>
               </div>
 
-              <div className="rounded-2xl ui-control-surface border p-4 space-y-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              <div className="rounded-panel ui-control-surface border p-4 space-y-3">
+                <p className="text-footnote font-medium text-muted-foreground uppercase tracking-wide">
                   {t("fulltext.testExtraction")}
                 </p>
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -818,12 +817,12 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                     value={previewUrl}
                     onChange={(e) => setPreviewUrl(e.target.value)}
                     placeholder={t("fulltext.articleUrlPlaceholder")}
-                    className="rounded-xl h-9 border-border/70 bg-background/70 text-sm flex-1"
+                    className="rounded-panel h-9 border-border/70 bg-background/70 text-body-sm flex-1"
                   />
                   <Button
                     size="sm"
                     variant="outline"
-                    className="rounded-xl gap-1.5 shrink-0"
+                    className="rounded-panel gap-1.5 shrink-0"
                     disabled={!previewUrl.trim() || previewExtraction.isPending}
                     onClick={handlePreview}
                   >
@@ -837,32 +836,32 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 </div>
                 {previewResult && (
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-footnote text-muted-foreground">
                       {previewResult.charCount.toLocaleString()} {t("fulltext.charsExtracted")} <code className="font-mono">{previewResult.selectorUsed}</code>
                     </p>
                     {previewResult.candidates && previewResult.candidates.length > 0 && (
                       <div className="grid gap-2">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        <p className="text-footnote font-medium text-muted-foreground uppercase tracking-wide">
                           {t("fulltext.scoutSelectorCandidates")}
                         </p>
                         {previewResult.candidates.map((candidate, index) => (
                           <button
                             key={`${candidate.selector}-${index}`}
                             type="button"
-                            className="rounded-xl border border-border/60 bg-background/70 p-3 text-start transition hover:border-primary/50 hover:bg-primary/5"
+                            className="rounded-panel border border-border/60 bg-background/70 p-3 text-start transition hover:border-primary/50 hover:bg-primary/5"
                             onClick={() => {
                               setFullTextSelector(candidate.selector);
                               toast.success(t("toasts.selectorApplied"));
                             }}
                           >
                             <div className="flex items-center justify-between gap-3">
-                              <code className="truncate font-mono text-xs">{candidate.selector}</code>
+                              <code className="truncate font-mono text-footnote">{candidate.selector}</code>
                               <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-caption font-medium text-muted-foreground">
                                 {candidate.charCount.toLocaleString()} {t("fulltext.chars")}
                               </span>
                             </div>
-                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{candidate.sample}</p>
-                            <div className="mt-2 flex gap-2 text-xs text-muted-foreground">
+                            <p className="mt-1 line-clamp-2 text-footnote text-muted-foreground">{candidate.sample}</p>
+                            <div className="mt-2 flex gap-2 text-footnote text-muted-foreground">
                               <span>{candidate.paragraphCount} {t("fulltext.paragraphs")}</span>
                               <span>{candidate.linkCount} {t("fulltext.links")}</span>
                               {index === 0 && (
@@ -876,7 +875,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                       </div>
                     )}
                     <div
-                      className="max-h-48 overflow-y-auto rounded-xl bg-background/80 p-3 text-sm prose prose-sm dark:prose-invert max-w-none"
+                      className="max-h-48 overflow-y-auto rounded-panel bg-background/80 p-3 text-body-sm prose prose-sm dark:prose-invert max-w-none"
                       dangerouslySetInnerHTML={{ __html: previewResult.html.slice(0, 10_000) }}
                     />
                   </div>
@@ -885,21 +884,21 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
             </TabsContent>
 
             <TabsContent value="scout" className="mt-0 space-y-5">
-              <div className="rounded-2xl ui-control-surface border p-4">
+              <div className="rounded-panel ui-control-surface border p-4">
                 <h3 className="font-semibold tracking-title">{t("scout.scoutAdvanced")}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 text-body-sm text-muted-foreground">
                   {t("scout.customHandling")}
                 </p>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">{t("scout.sourceType")}</Label>
+                  <Label className="text-body-sm font-medium">{t("scout.sourceType")}</Label>
                   <Select value={sourceType} onValueChange={setSourceType}>
-                    <SelectTrigger className="rounded-xl h-10 border-border/70 bg-background/70">
+                    <SelectTrigger className="rounded-panel h-10 border-border/70 bg-background/70">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="rounded-2xl">
+                    <SelectContent className="rounded-panel">
                       <SelectItem value="rss">{t("scout.rssAtom")}</SelectItem>
                       <SelectItem value="JSONFeed">{t("scout.jsonFeed")}</SelectItem>
                       <SelectItem value="JSON+DotNotation">{t("scout.jsonDotNotation")}</SelectItem>
@@ -910,12 +909,12 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">{t("scout.priority")}</Label>
+                  <Label className="text-body-sm font-medium">{t("scout.priority")}</Label>
                   <Select value={priority} onValueChange={setPriority}>
-                    <SelectTrigger className="rounded-xl h-10 border-border/70 bg-background/70">
+                    <SelectTrigger className="rounded-panel h-10 border-border/70 bg-background/70">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="rounded-2xl">
+                    <SelectContent className="rounded-panel">
                       <SelectItem value="important">{t("scout.important")}</SelectItem>
                       <SelectItem value="main">{t("scout.mainStream")}</SelectItem>
                       <SelectItem value="category">{t("scout.categoryOnly")}</SelectItem>
@@ -928,60 +927,60 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">{t("scout.unicityCriteria")}</Label>
+                  <Label className="text-body-sm font-medium">{t("scout.unicityCriteria")}</Label>
                   <Input
                     value={unicityCriteria}
                     onChange={(e) => setUnicityCriteria(e.target.value)}
                     placeholder={t("scout.unicityCriteriaPlaceholder")}
-                    className="rounded-xl h-10 border-border/70 bg-background/70 font-mono text-sm"
+                    className="rounded-panel h-10 border-border/70 bg-background/70 font-mono text-body-sm"
                   />
                 </div>
-                <div className="flex items-center gap-2 rounded-2xl ui-control-surface border px-4 py-3">
-                  <span className="text-sm">{t("scout.forced")}</span>
+                <div className="flex items-center gap-2 rounded-panel ui-control-surface border px-4 py-3">
+                  <span className="text-body-sm">{t("scout.forced")}</span>
                   <Switch checked={unicityCriteriaForced} onCheckedChange={setUnicityCriteriaForced} />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("scout.scraperConfig")}</Label>
+                <Label className="text-body-sm font-medium">{t("scout.scraperConfig")}</Label>
                 <Textarea
                   value={scraperConfig}
                   disabled={!editConfigLoaded}
                   onChange={(e) => setScraperConfig(e.target.value)}
                   placeholder='{\"xpath\":{\"xPathItem\":\"//article\",\"xPathItemTitle\":\".//h2\"}}'
-                  className="min-h-28 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
+                  className="min-h-28 rounded-panel border-border/70 bg-background/70 font-mono text-footnote"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("scout.httpOptions")}</Label>
+                <Label className="text-body-sm font-medium">{t("scout.httpOptions")}</Label>
                 <Textarea
                   value={httpOptions}
                   disabled={!editConfigLoaded}
                   onChange={(e) => setHttpOptions(e.target.value)}
                   placeholder='{\"CURLOPT_HTTPHEADER\":\"Accept: application/json\",\"CURLOPT_USERAGENT\":\"FeedFerret\"}'
-                  className="min-h-24 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
+                  className="min-h-24 rounded-panel border-border/70 bg-background/70 font-mono text-footnote"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("scout.fullContentConditions")}</Label>
+                <Label className="text-body-sm font-medium">{t("scout.fullContentConditions")}</Label>
                 <Textarea
                   value={fullTextConditions}
                   onChange={(e) => setFullTextConditions(e.target.value)}
                   placeholder="cssFullContentConditions, one per line"
-                  className="min-h-20 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
+                  className="min-h-20 rounded-panel border-border/70 bg-background/70 font-mono text-footnote"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">{t("scout.autoReadFilters")}</Label>
-                <p className="text-xs text-muted-foreground">{t("scout.autoReadFiltersDescription")}</p>
+                <Label className="text-body-sm font-medium">{t("scout.autoReadFilters")}</Label>
+                <p className="text-footnote text-muted-foreground">{t("scout.autoReadFiltersDescription")}</p>
                 <Textarea
                   value={filtersActionRead}
                   onChange={(e) => setFiltersActionRead(e.target.value)}
                   placeholder={t("scout.autoReadFiltersPlaceholder")}
-                  className="min-h-20 rounded-xl border-border/70 bg-background/70 font-mono text-xs"
+                  className="min-h-20 rounded-panel border-border/70 bg-background/70 font-mono text-footnote"
                 />
               </div>
             </TabsContent>
@@ -991,13 +990,13 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-background/95 px-5 py-4 sm:flex-row sm:justify-end sm:px-8">
             <Button
               variant="ghost"
-              className="rounded-xl"
+              className="rounded-panel"
               onClick={() => handleDialogOpenChange(false)}
             >
               {t("buttons.cancel")}
             </Button>
             <Button
-              className="rounded-xl"
+              className="rounded-panel"
               disabled={updateFeed.isPending}
               onClick={handleSave}
             >
@@ -1012,7 +1011,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     </Dialog>
 
     <AlertDialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
-      <AlertDialogContent className="rounded-3xl border-border/70 bg-background">
+      <AlertDialogContent className="rounded-sheet border-border/70 bg-background">
         <AlertDialogHeader>
           <AlertDialogTitle>{t("unsavedChanges.title")}</AlertDialogTitle>
           <AlertDialogDescription>
@@ -1020,11 +1019,11 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="rounded-2xl">
+          <AlertDialogCancel className="rounded-panel">
             {t("unsavedChanges.keepEditing")}
           </AlertDialogCancel>
           <AlertDialogAction
-            className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="rounded-panel bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={handleDiscardChanges}
           >
             {t("unsavedChanges.discardChanges")}

@@ -88,14 +88,14 @@ function SearchFields({ value, onChange, idPrefix }: { value: Search; onChange: 
   return (
     <div className="space-y-2.5">
       <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-query`} className="text-xs font-medium">{t("queryLabel")}</Label>
+        <Label htmlFor={`${idPrefix}-query`} className="text-footnote font-medium">{t("queryLabel")}</Label>
         <Input
           id={`${idPrefix}-query`}
           placeholder={t("queryPlaceholder")}
           value={value.query}
           maxLength={GOOGLE_NEWS_MAX_QUERY}
           onChange={(e) => onChange({ ...value, query: e.target.value })}
-          className="h-9 text-sm"
+          className="h-9 text-body-sm"
           enterKeyHint="search"
           autoComplete="off"
         />
@@ -103,9 +103,9 @@ function SearchFields({ value, onChange, idPrefix }: { value: Search; onChange: 
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div className="min-w-0 space-y-1">
-          <Label htmlFor={`${idPrefix}-edition`} className="text-xs font-medium">{t("editionLabel")}</Label>
+          <Label htmlFor={`${idPrefix}-edition`} className="text-footnote font-medium">{t("editionLabel")}</Label>
           <Select value={value.edition} onValueChange={(edition) => onChange({ ...value, edition })}>
-            <SelectTrigger id={`${idPrefix}-edition`} className="h-9 w-full text-sm" aria-label={t("editionLabel")}>
+            <SelectTrigger id={`${idPrefix}-edition`} className="h-9 w-full text-body-sm" aria-label={t("editionLabel")}>
               {/* Compact in the half-width trigger ("DE · Deutsch"); full names in the list. */}
               <SelectValue>{shortEditionLabel(value.edition)}</SelectValue>
             </SelectTrigger>
@@ -117,9 +117,9 @@ function SearchFields({ value, onChange, idPrefix }: { value: Search; onChange: 
           </Select>
         </div>
         <div className="min-w-0 space-y-1">
-          <Label htmlFor={`${idPrefix}-when`} className="text-xs font-medium">{t("windowLabel")}</Label>
+          <Label htmlFor={`${idPrefix}-when`} className="text-footnote font-medium">{t("windowLabel")}</Label>
           <Select value={value.when || "any"} onValueChange={(when) => onChange({ ...value, when: (when === "any" ? "" : when) as GoogleNewsWindow })}>
-            <SelectTrigger id={`${idPrefix}-when`} className="h-9 w-full text-sm" aria-label={t("windowLabel")}>
+            <SelectTrigger id={`${idPrefix}-when`} className="h-9 w-full text-body-sm" aria-label={t("windowLabel")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -172,7 +172,7 @@ function PreviewCard({ state, children }: { state: PreviewState; children?: Reac
   if (state.status === "idle") return null;
   if (state.status === "loading") {
     return (
-      <div className="flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2.5 text-xs text-muted-foreground" role="status">
+      <div className="flex items-center gap-2 rounded-panel bg-muted/60 px-3 py-2.5 text-footnote text-muted-foreground" role="status">
         <Loader2 className="size-3.5 animate-spin" />
         {t("previewLoading")}
       </div>
@@ -180,23 +180,23 @@ function PreviewCard({ state, children }: { state: PreviewState; children?: Reac
   }
   if (state.status === "error") {
     return (
-      <div className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning" role="alert">
+      <div className="rounded-panel border border-warning/20 bg-warning/10 px-3 py-2 text-footnote text-warning" role="alert">
         {t.has(`errors.${state.code}`) ? t(`errors.${state.code}`) : t("errors.fetchFailed")}
       </div>
     );
   }
   return (
-    <div className="ui-control-surface space-y-2 rounded-xl border px-3 py-2.5" data-testid="google-news-preview">
-      <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+    <div className="ui-control-surface space-y-2 rounded-panel border px-3 py-2.5" data-testid="google-news-preview">
+      <p className="flex items-center gap-1.5 text-footnote font-medium text-foreground">
         <Newspaper className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate">{state.name}</span>
       </p>
       <p className="text-caption text-muted-foreground">{t("itemsFound", { count: state.itemCount })}</p>
-      {state.itemCount === 0 && <p className="text-xs text-muted-foreground">{t("noResultsHint")}</p>}
+      {state.itemCount === 0 && <p className="text-footnote text-muted-foreground">{t("noResultsHint")}</p>}
       <ul className="space-y-1.5">
         {state.items.map((item, i) => (
           <li key={i} className="min-w-0">
-            <p className="line-clamp-2 text-xs text-foreground">{item.title}</p>
+            <p className="line-clamp-2 text-footnote text-foreground">{item.title}</p>
             <p className="truncate text-caption text-muted-foreground">
               {[item.source, item.publishedAt ? format.relativeTime(new Date(item.publishedAt)) : null].filter(Boolean).join(" · ")}
             </p>
@@ -243,7 +243,7 @@ export function GoogleNewsPanel({ categoryId, initialQuery, onCreated }: GoogleN
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground leading-relaxed">{t("intro")}</p>
+      <p className="text-footnote text-muted-foreground leading-relaxed">{t("intro")}</p>
       <SearchFields value={search} onChange={(next) => { setSearch(next); setAddError(null); }} idPrefix="gn-add" />
       <PreviewCard state={preview}>
         <Button size="sm" className="w-full" disabled={add.isPending} onClick={handleAdd}>
@@ -252,7 +252,7 @@ export function GoogleNewsPanel({ categoryId, initialQuery, onCreated }: GoogleN
         </Button>
       </PreviewCard>
       {addError && (
-        <div className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning" role="alert">
+        <div className="rounded-panel border border-warning/20 bg-warning/10 px-3 py-2 text-footnote text-warning" role="alert">
           {addError}
         </div>
       )}
@@ -294,21 +294,21 @@ export function GoogleNewsQueryEditor({ feedId, onSaved }: { feedId: string; onS
   };
 
   return (
-    <section className="space-y-3 rounded-2xl border border-border/70 p-4" aria-labelledby="gn-edit-title">
+    <section className="space-y-3 rounded-panel border border-border/70 p-4" aria-labelledby="gn-edit-title">
       <div>
-        <h3 id="gn-edit-title" className="text-sm font-semibold">{t("editTitle")}</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">{t("editDescription")}</p>
+        <h3 id="gn-edit-title" className="text-body-sm font-semibold">{t("editTitle")}</h3>
+        <p className="mt-0.5 text-footnote text-muted-foreground">{t("editDescription")}</p>
       </div>
       <SearchFields value={search} onChange={(next) => { setSearch(next); setMessage(null); }} idPrefix="gn-edit" />
       {dirty && <PreviewCard state={preview} />}
       <p className="text-caption text-muted-foreground">{t("editApplyHint")}</p>
       <div className="flex items-center justify-end gap-2">
         {message && (
-          <p className={message.tone === "ok" ? "me-auto text-xs text-success" : "me-auto text-xs text-warning"} role="status">
+          <p className={message.tone === "ok" ? "me-auto text-footnote text-success" : "me-auto text-footnote text-warning"} role="status">
             {message.text}
           </p>
         )}
-        <Button size="sm" className="rounded-xl" disabled={!dirty || normalizeGoogleNewsQuery(search.query).length === 0 || update.isPending} onClick={handleSave}>
+        <Button size="sm" className="rounded-panel" disabled={!dirty || normalizeGoogleNewsQuery(search.query).length === 0 || update.isPending} onClick={handleSave}>
           {update.isPending && <Loader2 className="me-1.5 size-4 animate-spin" />}
           {t("saveSearch")}
         </Button>

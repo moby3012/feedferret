@@ -309,7 +309,7 @@ function ActionListEditor({
   return (
     <div className="space-y-2">
       {value.length === 0 && (
-        <p className="text-xs text-muted-foreground italic">{t("rules.addFirstAction")}</p>
+        <p className="text-footnote text-muted-foreground italic">{t("rules.addFirstAction")}</p>
       )}
       {value.map((action, idx) => {
         const isWebhook = action.startsWith("webhook_call:");
@@ -319,11 +319,11 @@ function ActionListEditor({
         return (
           <div
             key={`${action}-${idx}`}
-            className="ui-control-surface rounded-xl border px-3 py-2 space-y-2"
+            className="ui-control-surface rounded-panel border px-3 py-2 space-y-2"
           >
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground tabular-nums shrink-0">{idx + 1}.</span>
-              <span className="flex-1 truncate text-sm font-medium">
+              <span className="text-footnote text-muted-foreground tabular-nums shrink-0">{idx + 1}.</span>
+              <span className="flex-1 truncate text-body-sm font-medium">
                 {isWebhook ? t("webhooks.triggerWebhook") : actionLabel(action, catalog, labels, t)}
               </span>
               <button
@@ -334,7 +334,7 @@ function ActionListEditor({
                   [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
                   return next;
                 })}
-                className="rounded-lg p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                className="rounded-row p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
                 aria-label={t("rules.moveUp")}
               >▲</button>
               <button
@@ -345,13 +345,13 @@ function ActionListEditor({
                   [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
                   return next;
                 })}
-                className="rounded-lg p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                className="rounded-row p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
                 aria-label={t("rules.moveDown")}
               >▼</button>
               <button
                 type="button"
                 onClick={() => removeAt(idx)}
-                className="rounded-lg p-1 text-destructive/70 hover:text-destructive"
+                className="rounded-row p-1 text-destructive/70 hover:text-destructive"
                 aria-label={t("rules.removeAction")}
               >×</button>
             </div>
@@ -373,7 +373,7 @@ function ActionListEditor({
             resolveLabelPick(val);
           }
         }}>
-          <SelectTrigger className="rounded-xl h-10 border-primary/50">
+          <SelectTrigger className="rounded-panel h-10 border-primary/50">
             <SelectValue placeholder={
               pendingLabelToken === PICK_LABEL_TOKEN
                 ? t("actions.attachLabel") + " — pick a label"
@@ -413,14 +413,14 @@ function ActionListEditor({
                 setPendingLabelToken(null);
               }
             }}
-            className="rounded-xl h-10 flex-1"
+            className="rounded-panel h-10 flex-1"
             autoFocus
           />
           <Button
             type="button"
             size="sm"
             variant="default"
-            className="rounded-xl shrink-0"
+            className="rounded-panel shrink-0"
             disabled={!newLabelNameInput.trim() || createLabelMutation.isPending}
             onClick={() => {
               createLabelMutation.mutateAsync({ name: newLabelNameInput.trim() }).then((lbl) => {
@@ -436,7 +436,7 @@ function ActionListEditor({
             type="button"
             size="sm"
             variant="ghost"
-            className="rounded-xl shrink-0"
+            className="rounded-panel shrink-0"
             onClick={() => {
               setCreatingLabel(false);
               setNewLabelNameInput("");
@@ -449,7 +449,7 @@ function ActionListEditor({
       )}
       {!pendingLabelToken && available.length > 0 && (
         <Select value="" onValueChange={addAction}>
-          <SelectTrigger className="rounded-xl h-10">
+          <SelectTrigger className="rounded-panel h-10">
             <SelectValue placeholder={value.length === 0 ? t("rules.addFirstActionPlaceholder") : t("rules.addAnotherAction")} />
           </SelectTrigger>
           <SelectContent>
@@ -504,7 +504,7 @@ function WebhookActionConfig({
           value={value.method}
           onValueChange={(method) => onChange({ method: method as WebhookConfigUi["method"] })}
         >
-          <SelectTrigger className="rounded-xl h-9 text-xs font-mono">
+          <SelectTrigger className="rounded-panel h-9 text-footnote font-mono">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -520,13 +520,13 @@ function WebhookActionConfig({
           placeholder="https://example.com/hook/{{feed_name}}"
           value={value.url}
           onChange={(e) => onChange({ url: e.target.value })}
-          className="rounded-xl h-9 text-xs font-mono"
+          className="rounded-panel h-9 text-footnote font-mono"
         />
       </div>
 
       <button
         type="button"
-        className="text-xs text-muted-foreground hover:text-foreground"
+        className="text-footnote text-muted-foreground hover:text-foreground"
         onClick={() => setShowAdvanced((v) => !v)}
       >
         {showAdvanced ? t("webhooks.hideAdvanced") : t("webhooks.advanced")}
@@ -535,23 +535,23 @@ function WebhookActionConfig({
       {showAdvanced && (
         <div className="space-y-2 pt-1">
           <div className="space-y-1">
-            <label htmlFor="webhook-body-template" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("webhooks.bodyTemplate")}</label>
+            <label htmlFor="webhook-body-template" className="text-footnote font-semibold uppercase tracking-wider text-muted-foreground">{t("webhooks.bodyTemplate")}</label>
             <textarea
               id="webhook-body-template"
               rows={4}
               placeholder={`{\n  "title": "{{article_title}}",\n  "link": "{{article_link}}"\n}`}
               value={value.bodyTemplate ?? ""}
               onChange={(e) => onChange({ bodyTemplate: e.target.value })}
-              className="w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-xs font-mono"
+              className="w-full rounded-panel border border-border/60 bg-background px-3 py-2 text-footnote font-mono"
               disabled={value.method === "GET"}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-footnote text-muted-foreground">
               {t("webhooks.defaultJsonPayload")}
             </p>
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="webhook-hmac-secret" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <label htmlFor="webhook-hmac-secret" className="text-footnote font-semibold uppercase tracking-wider text-muted-foreground">
               {t("webhooks.hmacSecret")}
             </label>
             <Input
@@ -560,16 +560,16 @@ function WebhookActionConfig({
               placeholder={t("webhooks.secretUsage")}
               value={value.secret ?? ""}
               onChange={(e) => onChange({ secret: e.target.value })}
-              className="rounded-xl h-9 text-xs"
+              className="rounded-panel h-9 text-footnote"
             />
           </div>
 
-          <div className="ui-control-surface rounded-xl border p-2 text-xs leading-relaxed">
+          <div className="ui-control-surface rounded-panel border p-2 text-footnote leading-relaxed">
             <p className="font-medium mb-1 uppercase tracking-wider text-muted-foreground">{t("webhooks.variables")}</p>
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-0.5">
               {WEBHOOK_VARIABLE_TOKENS.map((token, idx) => (
                 <li key={token}>
-                  <code className="bg-background/80 rounded px-1 font-mono">{token}</code>{" "}
+                  <code className="bg-background/80 rounded-chip px-1 font-mono">{token}</code>{" "}
                   <span className="text-muted-foreground">— {t(`webhooks.${WEBHOOK_VARIABLE_DESC_KEYS[idx]}`)}</span>
                 </li>
               ))}
@@ -618,7 +618,7 @@ function SortableCategoryItem({
     <div
       ref={setNodeRef}
       style={style}
-      className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm transition-all hover:border-border"
+      className="rounded-panel border border-border/60 bg-card p-4 transition-all hover:border-border"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div
@@ -634,12 +634,12 @@ function SortableCategoryItem({
               autoFocus
               value={editingCategoryName}
               onChange={(e) => setEditingCategoryName(e.target.value)}
-              className="h-9 rounded-2xl border-border/70 bg-background/70"
+              className="h-9 rounded-panel border-border/70 bg-background/70"
             />
             <Button
               size="icon"
               variant="ghost"
-              className="h-9 w-9 rounded-xl text-success hover:bg-success/10"
+              className="h-9 w-9 rounded-panel text-success hover:bg-success/10"
               onClick={() => {
                 updateCategory.mutate({
                   categoryId: cat.id,
@@ -653,7 +653,7 @@ function SortableCategoryItem({
             <Button
               size="icon"
               variant="ghost"
-              className="h-9 w-9 rounded-xl text-muted-foreground"
+              className="h-9 w-9 rounded-panel text-muted-foreground"
               onClick={() => setEditingCategoryId(null)}
             >
               <X className="w-4 h-4" />
@@ -663,7 +663,7 @@ function SortableCategoryItem({
           <>
             <div className="min-w-0 flex-1">
               <span className="block font-semibold tracking-subtitle">{cat.name}</span>
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <span className="text-footnote font-semibold text-muted-foreground uppercase tracking-wider">
                 {t("health.sync")} {cat.updateFrequency ? `${cat.updateFrequency} min` : t("health.default")}
               </span>
             </div>
@@ -672,7 +672,7 @@ function SortableCategoryItem({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground"
+                className="h-9 w-9 rounded-panel text-muted-foreground hover:text-foreground"
                 title={t("categories.categorySettingsTitle")}
                 onClick={() => { setSyncValue(cat.updateFrequency ? String(cat.updateFrequency) : ""); setSettingsOpen(true); }}
               >
@@ -681,7 +681,7 @@ function SortableCategoryItem({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-9 w-9 rounded-xl"
+                className="h-9 w-9 rounded-panel"
                 onClick={() => {
                   setEditingCategoryId(cat.id);
                   setEditingCategoryName(cat.name);
@@ -692,7 +692,7 @@ function SortableCategoryItem({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-9 w-9 rounded-xl text-muted-foreground hover:text-destructive"
+                className="h-9 w-9 rounded-panel text-muted-foreground hover:text-destructive"
                 onClick={() =>
                   requestDelete({
                     type: "category",
@@ -718,20 +718,20 @@ function SortableCategoryItem({
           </div>
         </DialogHeader>
         <div className="space-y-1.5">
-          <label htmlFor="cat-settings-sync-input" className="text-sm font-medium">{t("categories.syncIntervalLabel")}</label>
-          <p className="text-xs text-muted-foreground">{t("categories.leaveEmptyForGlobal")}</p>
+          <label htmlFor="cat-settings-sync-input" className="text-body-sm font-medium">{t("categories.syncIntervalLabel")}</label>
+          <p className="text-footnote text-muted-foreground">{t("categories.leaveEmptyForGlobal")}</p>
           <Input
             id="cat-settings-sync-input"
             type="number"
             placeholder={t("categories.example")}
             value={syncValue}
             onChange={(e) => setSyncValue(e.target.value)}
-            className="h-10 rounded-2xl border-border/70 bg-background/70"
+            className="h-10 rounded-panel border-border/70 bg-background/70"
           />
         </div>
         <DialogFooter className="pt-2">
-          <Button variant="ghost" className="rounded-2xl" onClick={() => setSettingsOpen(false)}>{t("categories.cancelButton")}</Button>
-          <Button className="rounded-2xl" onClick={() => {
+          <Button variant="ghost" className="rounded-panel" onClick={() => setSettingsOpen(false)}>{t("categories.cancelButton")}</Button>
+          <Button className="rounded-panel" onClick={() => {
             const val = parseInt(syncValue);
             updateCategory.mutate({ categoryId: cat.id, data: { updateFrequency: isNaN(val) ? null : val } });
             setSettingsOpen(false);
@@ -1068,7 +1068,7 @@ export function FeedManagement({
           <div className="flex-1 min-h-0">
             <TabsContent
               value="feeds"
-              className="h-full mt-0 focus-visible:outline-none"
+              className="h-full mt-0 focus-ring"
             >
               <ScrollArea className="h-full px-6 sm:px-8">
                 <div className="space-y-4 pb-8">
@@ -1089,12 +1089,12 @@ export function FeedManagement({
                         <button
                           type="button"
                           onClick={() => toggleCategory(groupId)}
-                          className="flex w-full items-center gap-2 py-1.5 text-start text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                          className="flex w-full items-center gap-2 py-1.5 text-start text-body-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
                         >
                           <ChevronRight className={cn("w-4 h-4 transition-transform duration-(--dur-base)", expanded && "rotate-90")} />
                           <Folder className="size-4 text-foreground" />
                           {groupName}
-                          <span className="text-xs font-normal text-muted-foreground/60">({groupFeeds.length})</span>
+                          <span className="text-footnote font-normal text-muted-foreground/60">({groupFeeds.length})</span>
                         </button>
                         {expanded && (
                           <div className="mt-1.5 space-y-2 ps-6 border-s-2 border-border/40">
@@ -1103,24 +1103,24 @@ export function FeedManagement({
                                 key={feed.id}
                                 id={`feed-row-${feed.id}`}
                                 className={cn(
-                                  "flex flex-col gap-3 rounded-2xl border bg-card p-3.5 shadow-sm transition-all sm:flex-row sm:items-center",
+                                  "flex flex-col gap-3 rounded-panel border bg-card p-3.5 transition-all sm:flex-row sm:items-center",
                                   highlightFeedId === feed.id
                                     ? "border-primary/50 ring-2 ring-primary/20"
                                     : "border-border/60 hover:border-border",
                                 )}
                               >
                                 <div className="flex min-w-0 items-start gap-3 sm:flex-1">
-                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-background text-xl shadow-sm">
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-panel bg-background text-title">
                                     {feed.icon || "📰"}
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <div className="truncate font-semibold tracking-subtitle text-foreground text-sm">
+                                    <div className="truncate font-semibold tracking-subtitle text-foreground text-body-sm">
                                       {feed.name}
                                     </div>
-                                    <div className="truncate text-xs text-muted-foreground">
+                                    <div className="truncate text-footnote text-muted-foreground">
                                       {feed.url}
                                     </div>
-                                    <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                    <div className="mt-0.5 flex flex-wrap gap-2 text-footnote text-muted-foreground">
                                       <span>
                                         {t("feeds.lastSync")}{" "}
                                         {feed.lastFetchedAt
@@ -1145,10 +1145,10 @@ export function FeedManagement({
                                       })
                                     }
                                   >
-                                    <SelectTrigger className="h-11 w-full rounded-xl border-border/70 bg-background/70 shadow-sm text-xs sm:h-9 sm:w-32">
+                                    <SelectTrigger className="h-11 w-full rounded-panel border-border/70 bg-background/70 text-footnote sm:h-9 sm:w-32">
                                       <SelectValue placeholder={t("feeds.categoryPlaceholder")} />
                                     </SelectTrigger>
-                                    <SelectContent className="rounded-2xl border-border/70 shadow-xl">
+                                    <SelectContent className="rounded-panel border-border/70 shadow-overlay">
                                       <SelectItem value="none">{t("feeds.noCategory")}</SelectItem>
                                       {categories.map((cat: any) => (
                                         <SelectItem key={cat.id} value={cat.id}>
@@ -1161,30 +1161,30 @@ export function FeedManagement({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-11 shrink-0 rounded-xl px-2.5 text-muted-foreground transition-all hover:bg-accent sm:h-9"
+                                      className="h-11 shrink-0 rounded-panel px-2.5 text-muted-foreground transition-all hover:bg-accent sm:h-9"
                                       title={t("feeds.settings")}
                                       onClick={() => setEditingFeed(feed)}
                                     >
                                       <Settings2 className="w-4 h-4" />
-                                      <span className="ms-1.5 hidden lg:inline text-xs">{t("feeds.settings")}</span>
+                                      <span className="ms-1.5 hidden lg:inline text-footnote">{t("feeds.settings")}</span>
                                     </Button>
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-11 shrink-0 rounded-xl px-2.5 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive sm:h-9"
+                                      className="h-11 shrink-0 rounded-panel px-2.5 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive sm:h-9"
                                       onClick={() =>
                                         setPendingDelete({ type: "feed", id: feed.id, name: feed.name })
                                       }
                                     >
                                       <Trash2 className="w-4 h-4" />
-                                      <span className="ms-1.5 hidden lg:inline text-xs">{t("feeds.delete")}</span>
+                                      <span className="ms-1.5 hidden lg:inline text-footnote">{t("feeds.delete")}</span>
                                     </Button>
                                   </div>
                                 </div>
                               </div>
                             ))}
                             {groupFeeds.length === 0 && (
-                              <p className="py-2 text-xs text-muted-foreground italic">{t("feeds.noFeedsInCategory")}</p>
+                              <p className="py-2 text-footnote text-muted-foreground italic">{t("feeds.noFeedsInCategory")}</p>
                             )}
                           </div>
                         )}
@@ -1206,7 +1206,7 @@ export function FeedManagement({
 
             <TabsContent
               value="categories"
-              className="h-full mt-0 focus-visible:outline-none"
+              className="h-full mt-0 focus-ring"
             >
               <div className="flex h-full flex-col px-6 sm:px-8">
                 <div className="flex gap-2 mb-6">
@@ -1214,11 +1214,11 @@ export function FeedManagement({
                     placeholder={t("categories.newCategoryPlaceholder")}
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
-                    className="h-11 rounded-2xl border-border/70 bg-card focus-visible:ring-primary"
+                    className="h-11 rounded-panel border-border/70 bg-card focus-ring"
                   />
                   <Button
                     onClick={handleAddCategory}
-                    className="h-11 rounded-2xl bg-primary px-6 transition-all hover:bg-primary/90 active:scale-95"
+                    className="h-11 rounded-panel bg-primary px-6 transition-all hover:bg-primary/90 active:scale-95"
                   >
                     <FolderPlus className="w-4 h-4 me-2" />
                     {t("categories.addButton")}
@@ -1266,15 +1266,15 @@ export function FeedManagement({
 
             <TabsContent
               value="labels"
-              className="h-full mt-0 focus-visible:outline-none"
+              className="h-full mt-0 focus-ring"
             >
               <div className="grid h-full gap-6 px-6 py-4 sm:px-8 lg:grid-cols-2">
-                <section className="min-h-0 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+                <section className="min-h-0 rounded-panel border border-border/60 bg-card p-5">
                   <div className="mb-5 flex items-center gap-3">
                     <Tag className="h-5 w-5 text-primary" />
                     <div>
                       <h3 className="font-semibold tracking-title">{t("labels.title")}</h3>
-                      <p className="text-sm text-muted-foreground">{t("labels.description")}</p>
+                      <p className="text-body-sm text-muted-foreground">{t("labels.description")}</p>
                     </div>
                   </div>
                   <div className="mb-5 flex gap-2">
@@ -1282,15 +1282,15 @@ export function FeedManagement({
                       placeholder={t("labels.newLabelPlaceholder")}
                       value={newLabelName}
                       onChange={(e) => setNewLabelName(e.target.value)}
-                      className="h-11 rounded-2xl border-border/70 bg-background/70"
+                      className="h-11 rounded-panel border-border/70 bg-background/70"
                     />
                     <Input
                       type="color"
                       value={newLabelColor}
                       onChange={(e) => setNewLabelColor(e.target.value)}
-                      className="h-11 w-14 rounded-2xl border-border/70 bg-background/70 p-1"
+                      className="h-11 w-14 rounded-panel border-border/70 bg-background/70 p-1"
                     />
-                    <Button onClick={handleAddLabel} className="h-11 rounded-2xl px-5">
+                    <Button onClick={handleAddLabel} className="h-11 rounded-panel px-5">
                       {t("labels.addLabel")}
                     </Button>
                   </div>
@@ -1299,15 +1299,15 @@ export function FeedManagement({
                       {labels.map((label: any) => (
                         <div
                           key={label.id}
-                          className="ui-control-surface flex items-center gap-3 rounded-2xl border p-3"
+                          className="ui-control-surface flex items-center gap-3 rounded-panel border p-3"
                         >
                           <span className="h-3 w-3 rounded-full" style={{ backgroundColor: label.color }} />
-                          <span className="flex-1 truncate text-sm font-medium">{label.name}</span>
-                          <span className="text-xs text-muted-foreground">{label._count?.articles || 0}</span>
+                          <span className="flex-1 truncate text-body-sm font-medium">{label.name}</span>
+                          <span className="text-footnote text-muted-foreground">{label._count?.articles || 0}</span>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-11 w-11 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-9 sm:w-9"
+                            className="h-11 w-11 rounded-panel text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-9 sm:w-9"
                             onClick={() => setPendingDelete({ type: "label", id: label.id, name: label.name })}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1327,12 +1327,12 @@ export function FeedManagement({
                   </ScrollArea>
                 </section>
 
-                <section className="min-h-0 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+                <section className="min-h-0 rounded-panel border border-border/60 bg-card p-5">
                   <div className="mb-5 flex items-center gap-3">
                     <Bookmark className="h-5 w-5 text-primary" />
                     <div>
                       <h3 className="font-semibold tracking-title">{t("savedSearches.title")}</h3>
-                      <p className="text-sm text-muted-foreground">{t("savedSearches.description")}</p>
+                      <p className="text-body-sm text-muted-foreground">{t("savedSearches.description")}</p>
                     </div>
                   </div>
                   <ScrollArea className="h-[56vh]">
@@ -1349,14 +1349,14 @@ export function FeedManagement({
                         return (
                         <div
                           key={search.id}
-                          className="ui-control-surface rounded-2xl border p-3"
+                          className="ui-control-surface rounded-panel border p-3"
                         >
                           <div className="flex items-center gap-3">
-                            <span className="flex-1 truncate text-sm font-medium">{search.name}</span>
+                            <span className="flex-1 truncate text-body-sm font-medium">{search.name}</span>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-11 w-11 rounded-xl text-muted-foreground hover:bg-accent/10 hover:text-accent sm:h-9 sm:w-9"
+                              className="h-11 w-11 rounded-panel text-muted-foreground hover:bg-accent/10 hover:text-accent sm:h-9 sm:w-9"
                               onClick={() => setSavedSearchSharing.mutate({ searchId: search.id, enabled: !search.shareToken })}
                               title={search.shareToken ? t("savedSearches.disableSharing") : t("savedSearches.enableSharing")}
                             >
@@ -1365,18 +1365,18 @@ export function FeedManagement({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-11 w-11 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-9 sm:w-9"
+                              className="h-11 w-11 rounded-panel text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-9 sm:w-9"
                               onClick={() => setPendingDelete({ type: "saved-search", id: search.id, name: search.name })}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                          <code className="mt-2 block truncate rounded-xl bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
+                          <code className="mt-2 block truncate rounded-panel bg-muted/50 px-2 py-1 text-footnote text-muted-foreground">
                             {search.query}
                           </code>
                           {search.shareToken && (
-                            <div className="mt-3 rounded-xl border border-border/50 bg-muted/25 p-2">
-                              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                            <div className="mt-3 rounded-panel border border-border/50 bg-muted/25 p-2">
+                              <div className="mb-2 flex items-center gap-2 text-footnote font-medium text-muted-foreground">
                                 <LinkIcon className="size-4" />
                                 {t("savedSearches.sharedReadOnlyLink")}
                               </div>
@@ -1384,19 +1384,19 @@ export function FeedManagement({
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="h-8 rounded-xl"
+                                  className="h-8 rounded-panel"
                                   onClick={() => { navigator.clipboard.writeText(shareUrl); toast.success(t("toasts.sharingEnabled")); }}
                                 >
                                   <Copy className="me-1.5 size-4" />
                                   {t("savedSearches.copy")}
                                 </Button>
-                                <Button asChild variant="outline" size="sm" className="h-8 rounded-xl">
+                                <Button asChild variant="outline" size="sm" className="h-8 rounded-panel">
                                   <a href={shareUrl} target="_blank" rel="noreferrer">
                                     <ExternalLink className="me-1.5 size-4" />
                                     {t("savedSearches.open")}
                                   </a>
                                 </Button>
-                                <Button asChild variant="outline" size="sm" className="h-8 rounded-xl">
+                                <Button asChild variant="outline" size="sm" className="h-8 rounded-panel">
                                   <a href={rssUrl} target="_blank" rel="noreferrer">
                                     <Rss className="me-1.5 size-4" />
                                     {t("savedSearches.rss")}
@@ -1424,15 +1424,15 @@ export function FeedManagement({
 
             <TabsContent
               value="health"
-              className="h-full mt-0 focus-visible:outline-none"
+              className="h-full mt-0 focus-ring"
             >
               <div className="flex h-full flex-col px-6 py-4 sm:px-8">
-                <div className="mb-5 flex flex-col gap-4 rounded-2xl border border-border/60 bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="mb-5 flex flex-col gap-4 rounded-panel border border-border/60 bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
                     <Activity className="h-5 w-5 text-primary" />
                     <div>
                       <h3 className="font-semibold tracking-title">{t("health.title")}</h3>
-                      <p className="text-sm text-muted-foreground">{t("health.description")}</p>
+                      <p className="text-body-sm text-muted-foreground">{t("health.description")}</p>
                     </div>
                   </div>
                   <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
@@ -1440,14 +1440,14 @@ export function FeedManagement({
                       variant="outline"
                       onClick={() => applyRetention.mutate(true)}
                       disabled={applyRetention.isPending}
-                      className="w-full rounded-2xl sm:w-auto"
+                      className="w-full rounded-panel sm:w-auto"
                     >
                       {t("health.dryRun")}
                     </Button>
                     <Button
                       onClick={() => applyRetention.mutate(false)}
                       disabled={applyRetention.isPending}
-                      className="w-full rounded-2xl sm:w-auto"
+                      className="w-full rounded-panel sm:w-auto"
                     >
                       <ShieldCheck className="me-2 h-4 w-4" />
                       {t("health.applyRetention")}
@@ -1456,12 +1456,12 @@ export function FeedManagement({
                 </div>
 
                 {/* F6: auto-mute threshold — 0 disables it entirely */}
-                <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="mb-5 flex flex-col gap-3 rounded-panel border border-border/60 bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
                     <BellOff className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <div>
-                      <p className="text-sm font-medium">{t("health.autoMuteThresholdLabel")}</p>
-                      <p className="text-xs text-muted-foreground">{t("health.autoMuteThresholdHint")}</p>
+                      <p className="text-body-sm font-medium">{t("health.autoMuteThresholdLabel")}</p>
+                      <p className="text-footnote text-muted-foreground">{t("health.autoMuteThresholdHint")}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1476,18 +1476,18 @@ export function FeedManagement({
                           autoMuteFailingFeedsAfter: Number.isFinite(parsed) ? Math.max(0, parsed) : 0,
                         });
                       }}
-                      className="h-9 w-24 rounded-xl"
+                      className="h-9 w-24 rounded-panel"
                     />
-                    <span className="text-xs text-muted-foreground">{t("health.autoMuteThresholdSuffix")}</span>
+                    <span className="text-footnote text-muted-foreground">{t("health.autoMuteThresholdSuffix")}</span>
                   </div>
                 </div>
 
                 <ScrollArea className="min-h-0 flex-1">
                   <div className="space-y-3 pb-8 pe-3">
                     {feedHealth.map((feed: any) => (
-                      <div key={feed.id} className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+                      <div key={feed.id} className="rounded-panel border border-border/60 bg-card p-4">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-background text-2xl shadow-sm">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-panel bg-background text-headline">
                             {feed.icon || "📰"}
                           </div>
                           <div className="min-w-0 flex-1">
@@ -1508,8 +1508,8 @@ export function FeedManagement({
                                 </span>
                               )}
                             </div>
-                            <p className="mt-1 truncate text-xs text-muted-foreground">{feed.url}</p>
-                            <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-5">
+                            <p className="mt-1 truncate text-footnote text-muted-foreground">{feed.url}</p>
+                            <div className="mt-3 grid grid-cols-1 gap-2 text-footnote text-muted-foreground sm:grid-cols-2 lg:grid-cols-5">
                               <span>{feed.articleCount} {t("health.articles")}</span>
                               <span>{feed.unreadCount} {t("health.unread")}</span>
                               <span>{feed.avgArticlesPerDay != null ? `${feed.avgArticlesPerDay}${t("health.perDay")}` : "—"}</span>
@@ -1517,12 +1517,12 @@ export function FeedManagement({
                               <span>{feed.retentionDays ? t("health.retentionDays", { count: feed.retentionDays }) : t("health.retentionDefault")}</span>
                             </div>
                             {feed.consecutiveFailureCount > 0 && (
-                              <p className="mt-2 text-xs text-muted-foreground">
+                              <p className="mt-2 text-footnote text-muted-foreground">
                                 {t("health.consecutiveFailures", { count: feed.consecutiveFailureCount })}
                               </p>
                             )}
                             {feed.lastError && (
-                              <p className="mt-3 rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                              <p className="mt-3 rounded-panel bg-destructive/10 px-3 py-2 text-footnote text-destructive">
                                 {feed.lastError}
                               </p>
                             )}
@@ -1530,7 +1530,7 @@ export function FeedManagement({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="rounded-xl"
+                                className="rounded-panel"
                                 onClick={() => updateFeed.mutate({ feedId: feed.id, data: { autoMuted: !feed.autoMuted } })}
                                 disabled={updateFeed.isPending}
                               >
@@ -1549,7 +1549,7 @@ export function FeedManagement({
 
             <TabsContent
               value="opml"
-              className="h-full mt-0 focus-visible:outline-none"
+              className="h-full mt-0 focus-ring"
             >
               <ScrollArea className="h-full px-6 sm:px-8">
               <div className="space-y-6 py-4 pb-8">
@@ -1557,8 +1557,8 @@ export function FeedManagement({
 
                 <FreshRssMigration />
 
-                <div className="space-y-4 rounded-2xl border border-border/60 bg-card p-7 shadow-sm">
-                  <div className="flex items-center gap-3 text-xl font-semibold tracking-title text-primary">
+                <div className="space-y-4 rounded-panel border border-border/60 bg-card p-7">
+                  <div className="flex items-center gap-3 text-title font-semibold tracking-title text-primary">
                     <Upload className="w-6 h-6" />
                     {t("importExport.genericOpmlImport")}
                   </div>
@@ -1566,9 +1566,9 @@ export function FeedManagement({
                     {t("importExport.alreadyHaveOpml")}
                   </p>
                   {lastImportReport && (
-                    <div className="rounded-2xl border border-border/60 bg-background/70 p-4 text-sm space-y-2">
+                    <div className="rounded-panel border border-border/60 bg-background/70 p-4 text-body-sm space-y-2">
                       <p className="font-medium">{t("importExport.importResult")}</p>
-                      <div className="flex flex-wrap gap-3 text-xs">
+                      <div className="flex flex-wrap gap-3 text-footnote">
                         <span className="rounded-full bg-success/10 text-success px-2.5 py-1 font-medium">
                           +{lastImportReport.feedsAdded} {t("importExport.new")}
                         </span>
@@ -1587,14 +1587,14 @@ export function FeedManagement({
                       {lastImportReport.errors.length > 0 && (
                         <ul className="mt-2 space-y-1">
                           {lastImportReport.errors.slice(0, 5).map((err: string, i: number) => (
-                            <li key={i} className="text-xs text-destructive truncate">{err}</li>
+                            <li key={i} className="text-footnote text-destructive truncate">{err}</li>
                           ))}
                         </ul>
                       )}
                     </div>
                   )}
                   <Label htmlFor="opml-upload" className="block">
-                    <div className="inline-flex h-12 cursor-pointer items-center justify-center rounded-2xl bg-primary px-8 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-95">
+                    <div className="inline-flex h-12 cursor-pointer items-center justify-center rounded-panel bg-primary px-8 text-body-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-95">
                       {t("importExport.selectOpmlFile")}
                     </div>
                     <Input
@@ -1607,13 +1607,13 @@ export function FeedManagement({
                   </Label>
                 </div>
 
-                <div className="space-y-4 rounded-2xl border border-border/60 bg-card p-7 shadow-sm">
+                <div className="space-y-4 rounded-panel border border-border/60 bg-card p-7">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3 text-xl font-semibold tracking-title">
+                    <div className="flex items-center gap-3 text-title font-semibold tracking-title">
                       <Download className="w-6 h-6 text-muted-foreground" />
                       {t("importExport.exportSubscriptions")}
                     </div>
-                    <div className="flex gap-2 text-xs">
+                    <div className="flex gap-2 text-footnote">
                       <button
                         className="text-link hover:underline"
                         onClick={() => setSelectedExportIds(new Set(feeds.map((f: any) => f.id)))}
@@ -1629,15 +1629,15 @@ export function FeedManagement({
                       </button>
                     </div>
                   </div>
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-muted-foreground text-body-sm">
                     {t("importExport.selectFeedsToExport")}
                   </p>
-                  <div className="max-h-48 overflow-y-auto rounded-2xl border border-border/60 bg-background/40 divide-y divide-border/40">
+                  <div className="max-h-48 overflow-y-auto rounded-panel border border-border/60 bg-background/40 divide-y divide-border/40">
                     {feeds.map((feed: any) => (
                       <label key={feed.id} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/30">
                         <input
                           type="checkbox"
-                          className="rounded"
+                          className="rounded-chip"
                           checked={selectedExportIds.has(feed.id)}
                           onChange={(e) => {
                             const next = new Set(selectedExportIds);
@@ -1646,9 +1646,9 @@ export function FeedManagement({
                             setSelectedExportIds(next);
                           }}
                         />
-                        <span className="text-sm truncate flex-1">{feed.name}</span>
+                        <span className="text-body-sm truncate flex-1">{feed.name}</span>
                         {feed.category && (
-                          <span className="text-xs text-muted-foreground shrink-0">{feed.category.name}</span>
+                          <span className="text-footnote text-muted-foreground shrink-0">{feed.category.name}</span>
                         )}
                       </label>
                     ))}
@@ -1658,15 +1658,15 @@ export function FeedManagement({
                       onClick={handleExport}
                       variant="outline"
                       disabled={exportOpml.isPending}
-                      className="h-12 rounded-2xl border-border/70 bg-background/70 px-8 shadow-sm transition-all hover:bg-background active:scale-95"
+                      className="h-12 rounded-panel border-border/70 bg-background/70 px-8 transition-all hover:bg-background active:scale-95"
                     >
                       {selectedExportIds.size > 0 ? t("importExport.exportFeedsCount", { count: selectedExportIds.size }) : t("importExport.exportAllFeeds")}
                     </Button>
                   </div>
                 </div>
 
-                <div className="space-y-4 rounded-2xl border border-border/60 bg-card p-7 shadow-sm">
-                  <div className="flex items-center gap-3 text-xl font-semibold tracking-title">
+                <div className="space-y-4 rounded-panel border border-border/60 bg-card p-7">
+                  <div className="flex items-center gap-3 text-title font-semibold tracking-title">
                     <Download className="w-6 h-6 text-muted-foreground" />
                     {t("importExport.exportAllDataJson")}
                   </div>
@@ -1675,7 +1675,7 @@ export function FeedManagement({
                   </p>
                   <Button
                     variant="outline"
-                    className="h-12 rounded-2xl border-border/70 bg-background/70 px-8 shadow-sm transition-all hover:bg-background active:scale-95"
+                    className="h-12 rounded-panel border-border/70 bg-background/70 px-8 transition-all hover:bg-background active:scale-95"
                     disabled={exportUserData.isPending}
                     onClick={() =>
                       exportUserData.mutate(undefined, {
@@ -1703,14 +1703,14 @@ export function FeedManagement({
 
             <TabsContent
               value="rules"
-              className="h-full mt-0 focus-visible:outline-none"
+              className="h-full mt-0 focus-ring"
             >
               <ScrollArea className="h-full px-6 sm:px-8">
                 <div className="space-y-6 py-4 pb-8">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="text-lg font-semibold tracking-tight">{t("rules.title")}</h3>
-                      <p className="text-sm text-muted-foreground mt-0.5">
+                      <h3 className="text-title-sm font-semibold tracking-tight">{t("rules.title")}</h3>
+                      <p className="text-body-sm text-muted-foreground mt-0.5">
                         {t("rules.description")}
                       </p>
                     </div>
@@ -1718,7 +1718,7 @@ export function FeedManagement({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="w-full rounded-xl gap-1.5 sm:w-auto"
+                        className="w-full rounded-panel gap-1.5 sm:w-auto"
                         onClick={() => applyAutoReadRulesNow.mutate()}
                         disabled={applyAutoReadRulesNow.isPending}
                       >
@@ -1727,7 +1727,7 @@ export function FeedManagement({
                       </Button>
                       <Button
                         size="sm"
-                        className="w-full rounded-xl gap-1.5 sm:w-auto"
+                        className="w-full rounded-panel gap-1.5 sm:w-auto"
                         onClick={() => setShowAddRule(true)}
                       >
                         <Plus className="size-4" />
@@ -1740,23 +1740,23 @@ export function FeedManagement({
                       the -400 shades alone read fine on a dark background but
                       have poor contrast against a light one — same fix as the
                       privacy-warning banners elsewhere in settings. */}
-                  <div className="rounded-2xl border border-info/20 bg-info/5 p-4 space-y-3">
+                  <div className="rounded-panel border border-info/20 bg-info/5 p-4 space-y-3">
                     <button
                       type="button"
                       onClick={() => setShowRuleTutorial((v) => !v)}
-                      className="flex w-full items-center justify-between gap-2 text-sm font-medium text-info active:scale-[0.99] transition-transform"
+                      className="flex w-full items-center justify-between gap-2 text-body-sm font-medium text-info active:scale-[0.99] transition-transform"
                       aria-expanded={showRuleTutorial}
                     >
                       <span className="flex items-center gap-2">
                         <Info className="w-4 h-4 shrink-0" />
                         {t("rules.howRulesWork")}
                       </span>
-                      <span className="text-xs text-info">
+                      <span className="text-footnote text-info">
                         {showRuleTutorial ? t("rules.hide") : t("rules.show")}
                       </span>
                     </button>
                     {showRuleTutorial && (
-                    <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
+                    <div className="space-y-3 text-footnote text-muted-foreground leading-relaxed">
                       <p>{t("rules.rulesExplanation")}</p>
 
                       <div>
@@ -1788,30 +1788,30 @@ export function FeedManagement({
                       <div>
                         <p className="font-medium text-foreground/80 mb-1.5">Available operators</p>
                         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 list-none">
-                          <li><code className="bg-background/60 px-1 rounded">intitle:</code> / <code className="bg-background/60 px-1 rounded">title:</code> — match in title</li>
-                          <li><code className="bg-background/60 px-1 rounded">intext:</code> / <code className="bg-background/60 px-1 rounded">content:</code> — body / excerpt</li>
-                          <li><code className="bg-background/60 px-1 rounded">author:</code> / <code className="bg-background/60 px-1 rounded">by:</code> — author</li>
-                          <li><code className="bg-background/60 px-1 rounded">inurl:</code> / <code className="bg-background/60 px-1 rounded">link:</code> — article URL</li>
-                          <li><code className="bg-background/60 px-1 rounded">feed:</code> / <code className="bg-background/60 px-1 rounded">f:</code> — feed name, id or url</li>
-                          <li><code className="bg-background/60 px-1 rounded">category:</code> / <code className="bg-background/60 px-1 rounded">cat:</code> — category</li>
-                          <li><code className="bg-background/60 px-1 rounded">label:</code> / <code className="bg-background/60 px-1 rounded">tag:</code> or <code className="bg-background/60 px-1 rounded">#name</code></li>
-                          <li><code className="bg-background/60 px-1 rounded">is:unread</code> · <code className="bg-background/60 px-1 rounded">is:read</code></li>
-                          <li><code className="bg-background/60 px-1 rounded">is:starred</code> · <code className="bg-background/60 px-1 rounded">is:unstarred</code></li>
-                          <li><code className="bg-background/60 px-1 rounded">is:readlater</code></li>
-                          <li><code className="bg-background/60 px-1 rounded">after:</code> / <code className="bg-background/60 px-1 rounded">since:</code></li>
-                          <li><code className="bg-background/60 px-1 rounded">before:</code> / <code className="bg-background/60 px-1 rounded">until:</code></li>
-                          <li><code className="bg-background/60 px-1 rounded">date:</code> / <code className="bg-background/60 px-1 rounded">pubdate:</code></li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">intitle:</code> / <code className="bg-background/60 px-1 rounded-chip">title:</code> — match in title</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">intext:</code> / <code className="bg-background/60 px-1 rounded-chip">content:</code> — body / excerpt</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">author:</code> / <code className="bg-background/60 px-1 rounded-chip">by:</code> — author</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">inurl:</code> / <code className="bg-background/60 px-1 rounded-chip">link:</code> — article URL</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">feed:</code> / <code className="bg-background/60 px-1 rounded-chip">f:</code> — feed name, id or url</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">category:</code> / <code className="bg-background/60 px-1 rounded-chip">cat:</code> — category</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">label:</code> / <code className="bg-background/60 px-1 rounded-chip">tag:</code> or <code className="bg-background/60 px-1 rounded-chip">#name</code></li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">is:unread</code> · <code className="bg-background/60 px-1 rounded-chip">is:read</code></li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">is:starred</code> · <code className="bg-background/60 px-1 rounded-chip">is:unstarred</code></li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">is:readlater</code></li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">after:</code> / <code className="bg-background/60 px-1 rounded-chip">since:</code></li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">before:</code> / <code className="bg-background/60 px-1 rounded-chip">until:</code></li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">date:</code> / <code className="bg-background/60 px-1 rounded-chip">pubdate:</code></li>
                         </ul>
                       </div>
 
                       <div className="space-y-1">
                         <p><strong className="text-foreground/70">Modifiers</strong></p>
                         <ul className="space-y-0.5">
-                          <li>– Multiple terms = AND. Use <code className="bg-background/60 px-1 rounded">OR</code> (uppercase) to allow either.</li>
-                          <li>– Prefix <code className="bg-background/60 px-1 rounded">-</code> or <code className="bg-background/60 px-1 rounded">!</code> to exclude — <code className="bg-background/60 px-1 rounded">-intitle:sponsored</code>.</li>
-                          <li>– Quote multi-word values: <code className="bg-background/60 px-1 rounded">feed:&quot;The Verge&quot;</code>.</li>
-                          <li>– Dates accept ISO (<code className="bg-background/60 px-1 rounded">2026-01-15</code>) or relative (<code className="bg-background/60 px-1 rounded">7d</code>, <code className="bg-background/60 px-1 rounded">2w</code>, <code className="bg-background/60 px-1 rounded">3m</code>, <code className="bg-background/60 px-1 rounded">1y</code>).</li>
-                          <li>– Plain words (no <code className="bg-background/60 px-1 rounded">key:</code>) search across title, content, author, url and labels.</li>
+                          <li>– Multiple terms = AND. Use <code className="bg-background/60 px-1 rounded-chip">OR</code> (uppercase) to allow either.</li>
+                          <li>– Prefix <code className="bg-background/60 px-1 rounded-chip">-</code> or <code className="bg-background/60 px-1 rounded-chip">!</code> to exclude — <code className="bg-background/60 px-1 rounded-chip">-intitle:sponsored</code>.</li>
+                          <li>– Quote multi-word values: <code className="bg-background/60 px-1 rounded-chip">feed:&quot;The Verge&quot;</code>.</li>
+                          <li>– Dates accept ISO (<code className="bg-background/60 px-1 rounded-chip">2026-01-15</code>) or relative (<code className="bg-background/60 px-1 rounded-chip">7d</code>, <code className="bg-background/60 px-1 rounded-chip">2w</code>, <code className="bg-background/60 px-1 rounded-chip">3m</code>, <code className="bg-background/60 px-1 rounded-chip">1y</code>).</li>
+                          <li>– Plain words (no <code className="bg-background/60 px-1 rounded-chip">key:</code>) search across title, content, author, url and labels.</li>
                         </ul>
                       </div>
                     </div>
@@ -1819,17 +1819,17 @@ export function FeedManagement({
                   </div>
 
                   {showAddRule && (
-                    <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
-                      <h4 className="font-medium text-sm">{t("rules.newRule")}</h4>
+                    <div className="rounded-panel border border-border/60 bg-card p-5 space-y-4">
+                      <h4 className="font-medium text-body-sm">{t("rules.newRule")}</h4>
                       <div className="grid gap-3">
                         <Input
                           placeholder={t("rules.ruleNamePlaceholder")}
                           value={newRuleName}
                           onChange={(e) => setNewRuleName(e.target.value)}
-                          className="rounded-xl h-10"
+                          className="rounded-panel h-10"
                         />
                         <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
-                          <label htmlFor="new-rule-trigger-select" className="text-xs font-medium text-muted-foreground self-center">{t("rules.trigger")}</label>
+                          <label htmlFor="new-rule-trigger-select" className="text-footnote font-medium text-muted-foreground self-center">{t("rules.trigger")}</label>
                           <Select
                             value={newRuleTrigger}
                             onValueChange={(value) => {
@@ -1852,7 +1852,7 @@ export function FeedManagement({
                               setNewRuleAction(packed.actions[0] || "mark_read");
                             }}
                           >
-                            <SelectTrigger id="new-rule-trigger-select" className="rounded-xl h-10">
+                            <SelectTrigger id="new-rule-trigger-select" className="rounded-panel h-10">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1870,12 +1870,12 @@ export function FeedManagement({
                                 setNewRuleQuery(e.target.value);
                                 setRulePreview(null);
                               }}
-                              className="rounded-xl h-10 flex-1"
+                              className="rounded-panel h-10 flex-1"
                             />
                             <Button
                               size="sm"
                               variant="outline"
-                              className="rounded-xl shrink-0 gap-1.5"
+                              className="rounded-panel shrink-0 gap-1.5"
                               disabled={!newRuleQuery.trim() || previewAutoReadRule.isPending}
                               onClick={() =>
                                 previewAutoReadRule.mutate(
@@ -1890,9 +1890,9 @@ export function FeedManagement({
                           </div>
                         )}
                         <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
-                          <label htmlFor="new-rule-scope-select" className="text-xs font-medium text-muted-foreground self-center">{t("rules.scope")}</label>
+                          <label htmlFor="new-rule-scope-select" className="text-footnote font-medium text-muted-foreground self-center">{t("rules.scope")}</label>
                           <Select value={newRuleScope} onValueChange={setNewRuleScope}>
-                            <SelectTrigger id="new-rule-scope-select" className="rounded-xl h-10">
+                            <SelectTrigger id="new-rule-scope-select" className="rounded-panel h-10">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1907,10 +1907,10 @@ export function FeedManagement({
                           </Select>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-muted-foreground">
+                          <label className="text-footnote font-medium text-muted-foreground">
                             {t("rules.actionsRunInOrder")}
                             {newRuleTrigger === "feed_error" && (
-                              <span className="ms-2 text-xs font-semibold uppercase tracking-wider text-warning">{t("rules.notifyWebhookOnly")}</span>
+                              <span className="ms-2 text-footnote font-semibold uppercase tracking-wider text-warning">{t("rules.notifyWebhookOnly")}</span>
                             )}
                           </label>
                           <ActionListEditor
@@ -1925,7 +1925,7 @@ export function FeedManagement({
                             labels={labels}
                           />
                           {newRuleTrigger === "article" && ruleHasAiDeleteConflict(newRuleQuery, newRuleActions) && (
-                            <p role="alert" className="text-xs text-destructive mt-1">{t("rules.aiOperatorDeleteBlocked")}</p>
+                            <p role="alert" className="text-footnote text-destructive mt-1">{t("rules.aiOperatorDeleteBlocked")}</p>
                           )}
                           {newRuleActions.includes("mark_spoiler") && (
                             <label htmlFor="new-rule-remove-spoiler-checkbox" className="flex items-center gap-2 cursor-pointer select-none mt-1">
@@ -1934,27 +1934,27 @@ export function FeedManagement({
                                 checked={newRuleRemoveSpoilerOnDelete}
                                 onCheckedChange={(v) => setNewRuleRemoveSpoilerOnDelete(!!v)}
                               />
-                              <span className="text-xs text-muted-foreground">{t("rules.removeSpoilerOnDeleteLabel")}</span>
+                              <span className="text-footnote text-muted-foreground">{t("rules.removeSpoilerOnDeleteLabel")}</span>
                             </label>
                           )}
                         </div>
                       </div>
 
                       {rulePreview !== null && (
-                        <div className="rounded-xl bg-muted/40 p-3 text-sm">
+                        <div className="rounded-panel bg-muted/40 p-3 text-body-sm">
                           {rulePreview.length === 0 ? (
                             <p className="text-muted-foreground italic">{t("rules.noMatchingArticles")}</p>
                           ) : (
                             <div className="space-y-1">
-                              <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                              <p className="font-medium text-footnote text-muted-foreground uppercase tracking-wide mb-2">
                                 {t("rules.matchingArticle", { count: rulePreview.length })}
                               </p>
                               {rulePreview.map((a: any) => (
                                 <div key={a.id} className="flex items-center gap-2">
-                                  <span className="text-xs text-muted-foreground shrink-0">
+                                  <span className="text-footnote text-muted-foreground shrink-0">
                                     {a.feedName}
                                   </span>
-                                  <span className="truncate text-sm">{a.title}</span>
+                                  <span className="truncate text-body-sm">{a.title}</span>
                                 </div>
                               ))}
                             </div>
@@ -1966,7 +1966,7 @@ export function FeedManagement({
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="rounded-xl"
+                          className="rounded-panel"
                           onClick={() => {
                             setShowAddRule(false);
                             setNewRuleName("");
@@ -1983,7 +1983,7 @@ export function FeedManagement({
                         </Button>
                         <Button
                           size="sm"
-                          className="rounded-xl"
+                          className="rounded-panel"
                           disabled={
                             !newRuleName.trim() ||
                             (newRuleTrigger === "article" && !newRuleQuery.trim()) ||
@@ -2026,18 +2026,18 @@ export function FeedManagement({
                   )}
 
                   {keywordAlerts.length > 0 && (
-                    <div className="rounded-2xl border border-warning/30 bg-warning/5 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="rounded-panel border border-warning/30 bg-warning/5 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <p className="text-sm font-medium text-warning">
+                        <p className="text-body-sm font-medium text-warning">
                           {t("rules.legacyAlertsFound", { count: keywordAlerts.length })}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                        <p className="text-footnote text-muted-foreground mt-0.5">
                           {t("rules.alertsAndRulesMerged")}
                         </p>
                       </div>
                       <Button
                         size="sm"
-                        className="rounded-xl shrink-0"
+                        className="rounded-panel shrink-0"
                         disabled={migrateAlertsToRules.isPending}
                         onClick={() => migrateAlertsToRules.mutate()}
                       >
@@ -2087,7 +2087,7 @@ export function FeedManagement({
                         return (
                           <div
                             key={rule.id}
-                            className="rounded-2xl border border-border/60 bg-card px-4 py-3 space-y-3"
+                            className="rounded-panel border border-border/60 bg-card px-4 py-3 space-y-3"
                           >
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                               <button
@@ -2098,7 +2098,7 @@ export function FeedManagement({
                                   })
                                 }
                                 className={cn(
-                                  "shrink-0 rounded-lg p-1.5 transition-colors",
+                                  "shrink-0 rounded-row p-1.5 transition-colors",
                                   rule.enabled
                                     ? "bg-primary text-primary-foreground"
                                     : "text-muted-foreground/50 bg-muted",
@@ -2108,8 +2108,8 @@ export function FeedManagement({
                                 <Power className="size-4" />
                               </button>
                               <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{rule.name}</p>
-                                <p className="text-xs text-muted-foreground font-mono truncate">{rule.query}</p>
+                                <p className="font-medium text-body-sm truncate">{rule.name}</p>
+                                <p className="text-footnote text-muted-foreground font-mono truncate">{rule.query}</p>
                                 <div className="mt-1.5 flex flex-wrap gap-1">
                                   <span
                                     className={cn(
@@ -2144,7 +2144,7 @@ export function FeedManagement({
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="w-7 h-7 rounded-lg text-muted-foreground hover:text-foreground"
+                                  className="w-7 h-7 rounded-row text-muted-foreground hover:text-foreground"
                                   onClick={() => {
                                     if (isEditing) {
                                       setEditingRuleId(null);
@@ -2181,7 +2181,7 @@ export function FeedManagement({
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="w-7 h-7 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                                  className="w-7 h-7 rounded-row text-destructive/70 hover:text-destructive hover:bg-destructive/10"
                                   onClick={() =>
                                     setPendingDelete({
                                       type: "auto-read-rule",
@@ -2201,10 +2201,10 @@ export function FeedManagement({
                                   placeholder={t("rules.ruleNamePlaceholder")}
                                   value={editRuleName}
                                   onChange={(e) => setEditRuleName(e.target.value)}
-                                  className="rounded-xl h-10"
+                                  className="rounded-panel h-10"
                                 />
                                 <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
-                                  <label htmlFor="edit-rule-trigger-select" className="text-xs font-medium text-muted-foreground self-center">{t("rules.trigger")}</label>
+                                  <label htmlFor="edit-rule-trigger-select" className="text-footnote font-medium text-muted-foreground self-center">{t("rules.trigger")}</label>
                                   <Select
                                     value={editRuleTrigger}
                                     onValueChange={(value) => {
@@ -2226,7 +2226,7 @@ export function FeedManagement({
                                       setEditRuleWebhooks(packed.webhookConfigs);
                                     }}
                                   >
-                                    <SelectTrigger id="edit-rule-trigger-select" className="rounded-xl h-10">
+                                    <SelectTrigger id="edit-rule-trigger-select" className="rounded-panel h-10">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2240,13 +2240,13 @@ export function FeedManagement({
                                     placeholder={t("rules.queryPlaceholder")}
                                     value={editRuleQuery}
                                     onChange={(e) => setEditRuleQuery(e.target.value)}
-                                    className="rounded-xl h-10"
+                                    className="rounded-panel h-10"
                                   />
                                 )}
                                 <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
-                                  <label htmlFor="edit-rule-scope-select" className="text-xs font-medium text-muted-foreground self-center">{t("rules.scope")}</label>
+                                  <label htmlFor="edit-rule-scope-select" className="text-footnote font-medium text-muted-foreground self-center">{t("rules.scope")}</label>
                                   <Select value={editRuleScope} onValueChange={setEditRuleScope}>
-                                    <SelectTrigger id="edit-rule-scope-select" className="rounded-xl h-10">
+                                    <SelectTrigger id="edit-rule-scope-select" className="rounded-panel h-10">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2261,10 +2261,10 @@ export function FeedManagement({
                                   </Select>
                                 </div>
                                 <div className="space-y-1.5">
-                                  <label className="text-xs font-medium text-muted-foreground">
+                                  <label className="text-footnote font-medium text-muted-foreground">
                                     {t("rules.actionsRunInOrder")}
                                     {editRuleTrigger === "feed_error" && (
-                                      <span className="ms-2 text-xs font-semibold uppercase tracking-wider text-warning">{t("rules.notifyWebhookOnly")}</span>
+                                      <span className="ms-2 text-footnote font-semibold uppercase tracking-wider text-warning">{t("rules.notifyWebhookOnly")}</span>
                                     )}
                                   </label>
                                   <ActionListEditor
@@ -2278,7 +2278,7 @@ export function FeedManagement({
                                     labels={labels}
                                   />
                                   {editRuleTrigger === "article" && ruleHasAiDeleteConflict(editRuleQuery, editRuleActions) && (
-                                    <p role="alert" className="text-xs text-destructive mt-1">{t("rules.aiOperatorDeleteBlocked")}</p>
+                                    <p role="alert" className="text-footnote text-destructive mt-1">{t("rules.aiOperatorDeleteBlocked")}</p>
                                   )}
                                   {editRuleActions.includes("mark_spoiler") && (
                                     <label htmlFor="edit-rule-remove-spoiler-checkbox" className="flex items-center gap-2 cursor-pointer select-none mt-1">
@@ -2287,7 +2287,7 @@ export function FeedManagement({
                                         checked={editRuleRemoveSpoilerOnDelete}
                                         onCheckedChange={(v) => setEditRuleRemoveSpoilerOnDelete(!!v)}
                                       />
-                                      <span className="text-xs text-muted-foreground">{t("rules.removeSpoilerOnDeleteLabel")}</span>
+                                      <span className="text-footnote text-muted-foreground">{t("rules.removeSpoilerOnDeleteLabel")}</span>
                                     </label>
                                   )}
                                 </div>
@@ -2295,14 +2295,14 @@ export function FeedManagement({
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="rounded-xl"
+                                    className="rounded-panel"
                                     onClick={() => setEditingRuleId(null)}
                                   >
                                     {t("rules.closeEditor")}
                                   </Button>
                                   <Button
                                     size="sm"
-                                    className="rounded-xl"
+                                    className="rounded-panel"
                                     disabled={
                                       !editRuleName.trim() ||
                                       (editRuleTrigger === "article" && !editRuleQuery.trim()) ||
@@ -2345,18 +2345,18 @@ export function FeedManagement({
 
             <TabsContent
               value="alerts"
-              className="h-full mt-0 focus-visible:outline-none"
+              className="h-full mt-0 focus-ring"
             >
               <ScrollArea className="h-full px-6 sm:px-8">
                 <div className="space-y-6 py-4 pb-8">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="text-lg font-semibold tracking-tight">{t("alerts.keywordAlerts")}</h3>
-                      <p className="text-sm text-muted-foreground mt-0.5">
+                      <h3 className="text-title-sm font-semibold tracking-tight">{t("alerts.keywordAlerts")}</h3>
+                      <p className="text-body-sm text-muted-foreground mt-0.5">
                         {t("alerts.createInAppNotifications")}
                       </p>
                     </div>
-                    <Button size="sm" className="w-full rounded-xl gap-1.5 sm:w-auto" onClick={() => setShowAddAlert(true)}>
+                    <Button size="sm" className="w-full rounded-panel gap-1.5 sm:w-auto" onClick={() => setShowAddAlert(true)}>
                       <Plus className="size-4" />
                       {t("alerts.addAlert")}
                     </Button>
@@ -2364,12 +2364,12 @@ export function FeedManagement({
 
                   {/* text-warning is a role token (darker in light mode, lighter in
                       dark mode), so it keeps contrast on both backgrounds. */}
-                  <div className="rounded-2xl border border-warning/20 bg-warning/5 p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-warning">
+                  <div className="rounded-panel border border-warning/20 bg-warning/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-body-sm font-medium text-warning">
                       <Info className="w-4 h-4 shrink-0" />
                       {t("alerts.howAlertsWork")}
                     </div>
-                    <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
+                    <div className="space-y-3 text-footnote text-muted-foreground leading-relaxed">
                       <p>{t("alerts.alertsExplanation")}</p>
 
                       <div>
@@ -2401,23 +2401,23 @@ export function FeedManagement({
                       <div>
                         <p className="font-medium text-foreground/80 mb-1.5">Available operators</p>
                         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 list-none">
-                          <li><code className="bg-background/60 px-1 rounded">intitle:</code> / <code className="bg-background/60 px-1 rounded">title:</code> — match in title</li>
-                          <li><code className="bg-background/60 px-1 rounded">intext:</code> / <code className="bg-background/60 px-1 rounded">content:</code> — body / excerpt</li>
-                          <li><code className="bg-background/60 px-1 rounded">author:</code> / <code className="bg-background/60 px-1 rounded">by:</code> — author</li>
-                          <li><code className="bg-background/60 px-1 rounded">inurl:</code> / <code className="bg-background/60 px-1 rounded">link:</code> — article URL</li>
-                          <li><code className="bg-background/60 px-1 rounded">feed:</code> / <code className="bg-background/60 px-1 rounded">f:</code> — feed</li>
-                          <li><code className="bg-background/60 px-1 rounded">category:</code> / <code className="bg-background/60 px-1 rounded">cat:</code> — category</li>
-                          <li><code className="bg-background/60 px-1 rounded">label:</code> / <code className="bg-background/60 px-1 rounded">#name</code> — label</li>
-                          <li><code className="bg-background/60 px-1 rounded">after:</code> / <code className="bg-background/60 px-1 rounded">before:</code> — date filters</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">intitle:</code> / <code className="bg-background/60 px-1 rounded-chip">title:</code> — match in title</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">intext:</code> / <code className="bg-background/60 px-1 rounded-chip">content:</code> — body / excerpt</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">author:</code> / <code className="bg-background/60 px-1 rounded-chip">by:</code> — author</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">inurl:</code> / <code className="bg-background/60 px-1 rounded-chip">link:</code> — article URL</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">feed:</code> / <code className="bg-background/60 px-1 rounded-chip">f:</code> — feed</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">category:</code> / <code className="bg-background/60 px-1 rounded-chip">cat:</code> — category</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">label:</code> / <code className="bg-background/60 px-1 rounded-chip">#name</code> — label</li>
+                          <li><code className="bg-background/60 px-1 rounded-chip">after:</code> / <code className="bg-background/60 px-1 rounded-chip">before:</code> — date filters</li>
                         </ul>
                       </div>
 
                       <div className="space-y-1">
                         <p><strong className="text-foreground/70">Modifiers</strong></p>
                         <ul className="space-y-0.5">
-                          <li>– Multiple terms = AND. Use <code className="bg-background/60 px-1 rounded">OR</code> (uppercase) to allow either match.</li>
-                          <li>– Prefix <code className="bg-background/60 px-1 rounded">-</code> or <code className="bg-background/60 px-1 rounded">!</code> to exclude: <code className="bg-background/60 px-1 rounded">-intitle:sponsored</code>.</li>
-                          <li>– Quote multi-word values: <code className="bg-background/60 px-1 rounded">intitle:&quot;data breach&quot;</code>.</li>
+                          <li>– Multiple terms = AND. Use <code className="bg-background/60 px-1 rounded-chip">OR</code> (uppercase) to allow either match.</li>
+                          <li>– Prefix <code className="bg-background/60 px-1 rounded-chip">-</code> or <code className="bg-background/60 px-1 rounded-chip">!</code> to exclude: <code className="bg-background/60 px-1 rounded-chip">-intitle:sponsored</code>.</li>
+                          <li>– Quote multi-word values: <code className="bg-background/60 px-1 rounded-chip">intitle:&quot;data breach&quot;</code>.</li>
                           <li>– Plain words search across title, content, author, url and labels.</li>
                           <li>– Tip: keep alert queries narrow — they fire on every new match.</li>
                         </ul>
@@ -2426,14 +2426,14 @@ export function FeedManagement({
                   </div>
 
                   {showAddAlert && (
-                    <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
-                      <h4 className="font-medium text-sm">{t("alerts.newAlert")}</h4>
+                    <div className="rounded-panel border border-border/60 bg-card p-5 space-y-4">
+                      <h4 className="font-medium text-body-sm">{t("alerts.newAlert")}</h4>
                       <div className="grid gap-3">
                         <Input
                           placeholder={t("alerts.alertNamePlaceholder")}
                           value={newAlertName}
                           onChange={(e) => setNewAlertName(e.target.value)}
-                          className="rounded-xl h-10"
+                          className="rounded-panel h-10"
                         />
                         <div className="flex flex-col gap-2 sm:flex-row">
                           <Input
@@ -2443,12 +2443,12 @@ export function FeedManagement({
                               setNewAlertQuery(e.target.value);
                               setAlertPreview(null);
                             }}
-                            className="rounded-xl h-10 flex-1"
+                            className="rounded-panel h-10 flex-1"
                           />
                           <Button
                             size="sm"
                             variant="outline"
-                            className="rounded-xl shrink-0 gap-1.5"
+                            className="rounded-panel shrink-0 gap-1.5"
                             disabled={!newAlertQuery.trim() || previewKeywordAlert.isPending}
                             onClick={() =>
                               previewKeywordAlert.mutate(
@@ -2462,7 +2462,7 @@ export function FeedManagement({
                           </Button>
                         </div>
                         <Select value={newAlertScope} onValueChange={setNewAlertScope}>
-                          <SelectTrigger className="rounded-xl h-10">
+                          <SelectTrigger className="rounded-panel h-10">
                             <SelectValue placeholder={t("rules.scope")} />
                           </SelectTrigger>
                           <SelectContent>
@@ -2475,7 +2475,7 @@ export function FeedManagement({
                             ))}
                           </SelectContent>
                         </Select>
-                        <label className="ui-control-surface flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
+                        <label className="ui-control-surface flex items-center gap-2 rounded-panel border px-3 py-2 text-body-sm">
                           <input
                             type="checkbox"
                             checked={newAlertPush}
@@ -2483,7 +2483,7 @@ export function FeedManagement({
                           />
                           {t("alerts.sendBrowserPush")}
                         </label>
-                        <label className="ui-control-surface flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
+                        <label className="ui-control-surface flex items-center gap-2 rounded-panel border px-3 py-2 text-body-sm">
                           <input
                             type="checkbox"
                             checked={newAlertEmail}
@@ -2494,18 +2494,18 @@ export function FeedManagement({
                       </div>
 
                       {alertPreview !== null && (
-                        <div className="rounded-xl bg-muted/40 p-3 text-sm">
+                        <div className="rounded-panel bg-muted/40 p-3 text-body-sm">
                           {alertPreview.length === 0 ? (
                             <p className="text-muted-foreground italic">{t("rules.noMatchingArticles")}</p>
                           ) : (
                             <div className="space-y-1">
-                              <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                              <p className="font-medium text-footnote text-muted-foreground uppercase tracking-wide mb-2">
                                 {t("rules.matchingArticle", { count: alertPreview.length })}
                               </p>
                               {alertPreview.map((a: any) => (
                                 <div key={a.id} className="flex items-center gap-2">
-                                  <span className="text-xs text-muted-foreground shrink-0">{a.feedName}</span>
-                                  <span className="truncate text-sm">{a.title}</span>
+                                  <span className="text-footnote text-muted-foreground shrink-0">{a.feedName}</span>
+                                  <span className="truncate text-body-sm">{a.title}</span>
                                 </div>
                               ))}
                             </div>
@@ -2517,7 +2517,7 @@ export function FeedManagement({
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="rounded-xl"
+                          className="rounded-panel"
                           onClick={() => {
                             setShowAddAlert(false);
                             setNewAlertName("");
@@ -2531,7 +2531,7 @@ export function FeedManagement({
                         </Button>
                         <Button
                           size="sm"
-                          className="rounded-xl"
+                          className="rounded-panel"
                           disabled={!newAlertName.trim() || !newAlertQuery.trim() || createKeywordAlert.isPending}
                           onClick={() =>
                             createKeywordAlert.mutate(
@@ -2583,34 +2583,34 @@ export function FeedManagement({
                         const isEditing = editingAlertId === alert.id;
                         const isHistoryOpen = expandedHistoryId === alert.id;
                         return (
-                          <div key={alert.id} className="rounded-2xl border border-border/60 bg-card overflow-hidden">
+                          <div key={alert.id} className="rounded-panel border border-border/60 bg-card overflow-hidden">
                             {isEditing ? (
                               <div className="flex flex-col gap-3 px-4 py-3">
                                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                   <div className="col-span-2">
-                                    <label htmlFor="edit-alert-name-input" className="text-xs text-muted-foreground mb-1 block">{t("alerts.alertNamePlaceholder")}</label>
+                                    <label htmlFor="edit-alert-name-input" className="text-footnote text-muted-foreground mb-1 block">{t("alerts.alertNamePlaceholder")}</label>
                                     <Input
                                       id="edit-alert-name-input"
                                       value={editAlertName}
                                       onChange={(e) => setEditAlertName(e.target.value)}
-                                      className="h-8 rounded-xl text-sm"
+                                      className="h-8 rounded-panel text-body-sm"
                                       placeholder={t("alerts.alertNamePlaceholder")}
                                     />
                                   </div>
                                   <div className="col-span-2">
-                                    <label htmlFor="edit-alert-query-input" className="text-xs text-muted-foreground mb-1 block">{t("rules.queryPlaceholder")}</label>
+                                    <label htmlFor="edit-alert-query-input" className="text-footnote text-muted-foreground mb-1 block">{t("rules.queryPlaceholder")}</label>
                                     <Input
                                       id="edit-alert-query-input"
                                       value={editAlertQuery}
                                       onChange={(e) => setEditAlertQuery(e.target.value)}
-                                      className="h-8 rounded-xl text-sm font-mono"
+                                      className="h-8 rounded-panel text-body-sm font-mono"
                                       placeholder={t("alerts.queryExamplePlaceholder")}
                                     />
                                   </div>
                                   <div>
-                                    <label htmlFor="edit-alert-scope-select" className="text-xs text-muted-foreground mb-1 block">{t("rules.scope")}</label>
+                                    <label htmlFor="edit-alert-scope-select" className="text-footnote text-muted-foreground mb-1 block">{t("rules.scope")}</label>
                                     <Select value={editAlertScope} onValueChange={setEditAlertScope}>
-                                      <SelectTrigger id="edit-alert-scope-select" className="h-8 rounded-xl text-sm">
+                                      <SelectTrigger id="edit-alert-scope-select" className="h-8 rounded-panel text-body-sm">
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
@@ -2625,21 +2625,21 @@ export function FeedManagement({
                                     </Select>
                                   </div>
                                   <div className="flex flex-col gap-1.5 justify-end">
-                                    <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                                    <label className="flex items-center gap-2 text-footnote text-muted-foreground cursor-pointer">
                                       <input
                                         type="checkbox"
                                         checked={editAlertPush}
                                         onChange={(e) => setEditAlertPush(e.target.checked)}
-                                        className="rounded"
+                                        className="rounded-chip"
                                       />
                                       {t("alerts.pushNotification")}
                                     </label>
-                                    <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                                    <label className="flex items-center gap-2 text-footnote text-muted-foreground cursor-pointer">
                                       <input
                                         type="checkbox"
                                         checked={editAlertEmail}
                                         onChange={(e) => setEditAlertEmail(e.target.checked)}
-                                        className="rounded"
+                                        className="rounded-chip"
                                       />
                                       {t("alerts.email")}
                                     </label>
@@ -2649,14 +2649,14 @@ export function FeedManagement({
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-7 rounded-xl text-xs"
+                                    className="h-7 rounded-panel text-footnote"
                                     onClick={() => setEditingAlertId(null)}
                                   >
                                     {t("rules.closeEditor")}
                                   </Button>
                                   <Button
                                     size="sm"
-                                    className="h-7 rounded-xl text-xs"
+                                    className="h-7 rounded-panel text-footnote"
                                     disabled={!editAlertName.trim() || !editAlertQuery.trim() || updateKeywordAlert.isPending}
                                     onClick={() =>
                                       updateKeywordAlert.mutate(
@@ -2692,7 +2692,7 @@ export function FeedManagement({
                                       })
                                     }
                                     className={cn(
-                                      "shrink-0 rounded-lg p-1.5 transition-colors",
+                                      "shrink-0 rounded-row p-1.5 transition-colors",
                                       alert.enabled ? "bg-primary text-primary-foreground" : "text-muted-foreground/50 bg-muted",
                                     )}
                                     title={alert.enabled ? t("alerts.disableAlert") : t("alerts.enableAlert")}
@@ -2702,15 +2702,15 @@ export function FeedManagement({
                                   <Bell className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
                                   <div className="min-w-0 flex-1">
                                   <div className="flex min-w-0 items-center gap-2">
-                                    <p className="font-medium text-sm truncate">{alert.name}</p>
+                                    <p className="font-medium text-body-sm truncate">{alert.name}</p>
                                     {matchCount > 0 && (
                                       <span className="shrink-0 rounded-full bg-primary/10 text-foreground text-caption font-medium px-1.5 py-0.5">
                                         {t("alerts.matchCount", { count: matchCount })}
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-xs text-muted-foreground font-mono truncate">{alert.query}</p>
-                                  <p className="text-xs text-muted-foreground truncate">
+                                  <p className="text-footnote text-muted-foreground font-mono truncate">{alert.query}</p>
+                                  <p className="text-footnote text-muted-foreground truncate">
                                     {t("alerts.scopeSummary", {
                                       scope: alert.scope === "all" ? t("alerts.allFeeds") : alert.scope,
                                       channels: [
@@ -2727,7 +2727,7 @@ export function FeedManagement({
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="w-7 h-7 rounded-lg text-muted-foreground hover:text-foreground"
+                                  className="w-7 h-7 rounded-row text-muted-foreground hover:text-foreground"
                                   title={t("alerts.recentMatches")}
                                   onClick={() => setExpandedHistoryId(isHistoryOpen ? null : alert.id)}
                                 >
@@ -2736,7 +2736,7 @@ export function FeedManagement({
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="w-7 h-7 rounded-lg text-muted-foreground hover:text-foreground"
+                                  className="w-7 h-7 rounded-row text-muted-foreground hover:text-foreground"
                                   title={t("alerts.editAlert")}
                                   onClick={() => {
                                     setEditingAlertId(alert.id);
@@ -2752,7 +2752,7 @@ export function FeedManagement({
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-8 rounded-xl"
+                                  className="h-8 rounded-panel"
                                   onClick={() => testKeywordAlert.mutate(alert.id)}
                                   disabled={testKeywordAlert.isPending}
                                 >
@@ -2761,7 +2761,7 @@ export function FeedManagement({
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="w-7 h-7 rounded-lg text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                                  className="w-7 h-7 rounded-row text-destructive/70 hover:text-destructive hover:bg-destructive/10"
                                   onClick={() => setPendingDelete({ type: "keyword-alert", id: alert.id, name: alert.name })}
                                 >
                                   <Trash2 className="size-4" />
@@ -2771,18 +2771,18 @@ export function FeedManagement({
                             )}
                             {isHistoryOpen && (
                               <div className="border-t border-border/60 px-4 py-3 bg-muted/30">
-                                <p className="text-xs font-medium text-muted-foreground mb-2">{t("alerts.recentMatches")}</p>
+                                <p className="text-footnote font-medium text-muted-foreground mb-2">{t("alerts.recentMatches")}</p>
                                 {historyLoading ? (
-                                  <p className="text-xs text-muted-foreground">{tc("loading")}…</p>
+                                  <p className="text-footnote text-muted-foreground">{tc("loading")}…</p>
                                 ) : alertHistory.length === 0 ? (
-                                  <p className="text-xs text-muted-foreground">{t("alerts.noMatches")}</p>
+                                  <p className="text-footnote text-muted-foreground">{t("alerts.noMatches")}</p>
                                 ) : (
                                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
                                     {alertHistory.map((n: any) => (
                                       <button
                                         key={n.id}
                                         className={cn(
-                                          "w-full text-start rounded-lg px-2.5 py-1.5 text-xs transition-colors",
+                                          "w-full text-start rounded-row px-2.5 py-1.5 text-footnote transition-colors",
                                           n.read ? "text-muted-foreground" : "text-foreground font-medium bg-primary/5",
                                         )}
                                         onClick={() => {
@@ -2790,7 +2790,7 @@ export function FeedManagement({
                                         }}
                                       >
                                         <span className="block truncate">{n.body}</span>
-                                        <span className="text-xs text-muted-foreground">
+                                        <span className="text-footnote text-muted-foreground">
                                           {format.dateTime(new Date(n.createdAt), { dateStyle: "medium", timeStyle: "short" })}
                                         </span>
                                       </button>
@@ -2820,7 +2820,7 @@ export function FeedManagement({
             if (!nextOpen) setPendingDelete(null);
           }}
         >
-          <AlertDialogContent className="rounded-3xl border-border/70 bg-background">
+          <AlertDialogContent className="rounded-sheet border-border/70 bg-background">
             <AlertDialogHeader>
               <AlertDialogTitle>
                 {pendingDelete?.type === "feed"
@@ -2840,9 +2840,9 @@ export function FeedManagement({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="rounded-2xl">{tc("cancel")}</AlertDialogCancel>
+              <AlertDialogCancel className="rounded-panel">{tc("cancel")}</AlertDialogCancel>
               <AlertDialogAction
-                className="rounded-2xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="rounded-panel bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={() => {
                   if (!pendingDelete) return;
                   if (pendingDelete.type === "feed") {
@@ -2989,13 +2989,13 @@ function MigrationWizard({
   const [selected, setSelected] = useState<MigrationSource | null>(null);
 
   return (
-    <div className="space-y-4 rounded-3xl border border-primary/20 bg-primary/[0.04] p-7 shadow-sm">
+    <div className="space-y-4 rounded-sheet border border-primary/20 bg-primary/[0.04] p-7">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3 text-xl font-semibold tracking-title text-primary">
+        <div className="flex items-center gap-3 text-title font-semibold tracking-title text-primary">
           <Compass className="w-6 h-6" />
           {t("migration.migrationWizard")}
         </div>
-        <ol className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <ol className="flex items-center gap-1 text-footnote font-semibold uppercase tracking-wider text-muted-foreground">
           {(["source", "instructions", "upload"] as const).map((s, i) => (
             <li key={s} className="flex items-center gap-1">
               <span
@@ -3019,7 +3019,7 @@ function MigrationWizard({
 
       {step === "source" && (
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body-sm text-muted-foreground">
             {t("migration.pickReader")}
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -3031,7 +3031,7 @@ function MigrationWizard({
                   setSelected(src);
                   setStep("instructions");
                 }}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/70 px-4 py-3 text-start text-sm font-medium hover:border-primary/40 hover:bg-primary/5 transition-colors active:scale-[0.99]"
+                className="flex items-center justify-between gap-3 rounded-panel border border-border/60 bg-background/70 px-4 py-3 text-start text-body-sm font-medium hover:border-primary/40 hover:bg-primary/5 transition-colors active:scale-[0.99]"
               >
                 <span>{src.name}</span>
                 <ChevronRight className="h-4 w-4 text-muted-foreground rtl:rotate-180" />
@@ -3044,22 +3044,22 @@ function MigrationWizard({
       {step === "instructions" && selected && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold">{selected.name} → FeedFerret</p>
+            <p className="text-body-sm font-semibold">{selected.name} → FeedFerret</p>
             <button
               type="button"
               onClick={() => setStep("source")}
-              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+              className="text-footnote text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
             >
               <ArrowUp className="h-3 w-3 rotate-[-90deg]" /> {t("migration.changeSource")}
             </button>
           </div>
-          <ol className="space-y-2 text-sm text-muted-foreground leading-relaxed list-decimal list-inside">
+          <ol className="space-y-2 text-body-sm text-muted-foreground leading-relaxed list-decimal list-inside">
             {selected.steps.map((s, i) => (
               <li key={i}>{s}</li>
             ))}
           </ol>
           {selected.endpointHint && (
-            <div className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2 text-xs font-mono break-all">
+            <div className="rounded-panel border border-border/60 bg-background/70 px-3 py-2 text-footnote font-mono break-all">
               {selected.endpointHint}
             </div>
           )}
@@ -3069,7 +3069,7 @@ function MigrationWizard({
                 href={selected.docsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="order-2 sm:order-1 inline-flex items-center justify-center gap-1.5 rounded-2xl border border-border/60 bg-background px-4 py-2 text-sm font-medium hover:bg-muted/60 transition-colors"
+                className="order-2 sm:order-1 inline-flex items-center justify-center gap-1.5 rounded-panel border border-border/60 bg-background px-4 py-2 text-body-sm font-medium hover:bg-muted/60 transition-colors"
               >
                 {t("migration.openSource")} <ChevronRight className="size-4" />
               </a>
@@ -3077,7 +3077,7 @@ function MigrationWizard({
             <button
               type="button"
               onClick={() => setStep("upload")}
-              className="order-1 sm:order-2 rounded-2xl bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 active:scale-[0.98] transition-all"
+              className="order-1 sm:order-2 rounded-panel bg-primary px-5 py-2 text-body-sm font-semibold text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
             >
               {t("migration.iHaveTheFile")} →
             </button>
@@ -3088,20 +3088,20 @@ function MigrationWizard({
       {step === "upload" && selected && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold">{t("migration.uploadYourOpml")} — {selected.name}</p>
+            <p className="text-body-sm font-semibold">{t("migration.uploadYourOpml")} — {selected.name}</p>
             <button
               type="button"
               onClick={() => setStep("instructions")}
-              className="text-xs text-muted-foreground hover:text-foreground"
+              className="text-footnote text-muted-foreground hover:text-foreground"
             >
               ← {t("migration.backToInstructions")}
             </button>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body-sm text-muted-foreground">
             {t("migration.standardOpml")}
           </p>
           <Label htmlFor="migration-opml-upload" className="block">
-            <div className="inline-flex h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-primary px-8 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-95">
+            <div className="inline-flex h-12 cursor-pointer items-center justify-center gap-2 rounded-panel bg-primary px-8 text-body-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-95">
               <Upload className="w-4 h-4" />
               {isImporting ? t("migration.importing") : t("migration.chooseOpmlFile")}
             </div>

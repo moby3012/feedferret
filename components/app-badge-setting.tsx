@@ -10,7 +10,7 @@ export function AppBadgeSetting() {
   const t = useTranslations("settings.appBadge");
   const enabled = useAppBadgeEnabled();
   return (
-    <section className="rounded-row border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6" data-testid="app-badge-setting">
+    <section className="rounded-row border border-border/65 bg-card/85 p-5 sm:p-6" data-testid="app-badge-setting">
       <div className="flex items-start gap-4">
         <div className="ui-brand-icon flex size-12 shrink-0 items-center justify-center rounded-row">
           <BellDot className="size-5" />

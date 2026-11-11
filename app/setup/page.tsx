@@ -229,10 +229,10 @@ export default function SetupPage() {
               no dark variant, so it needs a background that's never
               near-white — bg-card is near-white in light mode and made the
               logo effectively invisible there. */}
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-border bg-accent p-3 mb-5 shadow-overlay">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-panel border border-border bg-accent p-3 mb-5 shadow-overlay">
             <Image src="/logo.svg" alt="FeedFerret" width={44} height={44} className="w-full h-full opacity-90" />
           </div>
-          <h1 className="text-2xl font-bold tracking-title text-foreground">
+          <h1 className="text-headline font-bold tracking-title text-foreground">
             Feed<span className="text-muted-foreground">Ferret</span> Setup
           </h1>
         </div>
@@ -243,7 +243,7 @@ export default function SetupPage() {
             <div key={s} className="flex items-center gap-2">
               <div
                 className={cn(
-                  "flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold border transition-all",
+                  "flex items-center justify-center w-8 h-8 rounded-full text-footnote font-bold border transition-all",
                   stepIndex > i
                     ? "bg-foreground text-background border-foreground"
                     : stepIndex === i
@@ -261,9 +261,9 @@ export default function SetupPage() {
         </div>
 
         {/* Card */}
-        <div className="rounded-3xl border border-border bg-card p-5 shadow-overlay ring-1 ring-border backdrop-blur-bar sm:p-8">
+        <div className="rounded-sheet border border-border bg-card p-5 shadow-overlay ring-1 ring-border backdrop-blur-bar sm:p-8">
           {error && (
-            <div className="mb-5 p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-xs font-medium">
+            <div className="mb-5 p-3 rounded-panel bg-danger/10 border border-danger/20 text-danger text-footnote font-medium">
               {error}
             </div>
           )}
@@ -272,17 +272,17 @@ export default function SetupPage() {
           {step === "account" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
-                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-panel">
                   <UserPlus className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-title text-foreground">{t("adminAccount")}</h2>
-                  <p className="text-xs text-muted-foreground">{t("adminAccountDescription")}</p>
+                  <h2 className="text-title-sm font-semibold tracking-title text-foreground">{t("adminAccount")}</h2>
+                  <p className="text-footnote text-muted-foreground">{t("adminAccountDescription")}</p>
                 </div>
               </div>
               <Input
                 placeholder={t("yourName")}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-11 rounded-panel focus-ring"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -290,7 +290,7 @@ export default function SetupPage() {
               <Input
                 type="email"
                 placeholder={t("emailAddress")}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-11 rounded-panel focus-ring"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -298,7 +298,7 @@ export default function SetupPage() {
               <Input
                 type="password"
                 placeholder={t("password")}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-11 rounded-panel focus-ring"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -306,7 +306,7 @@ export default function SetupPage() {
               <Input
                 type="password"
                 placeholder={t("confirmPassword")}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-11 rounded-panel focus-ring"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
@@ -314,7 +314,7 @@ export default function SetupPage() {
               <Button
                 onClick={handleCreateAccount}
                 disabled={isLoading}
-                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl mt-2 active:scale-95"
+                className="w-full h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-panel mt-2 active:scale-95"
               >
                 {isLoading ? (
                   <span className="flex items-center gap-2">
@@ -334,39 +334,39 @@ export default function SetupPage() {
           {step === "instance" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
-                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-panel">
                   <Globe className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-title text-foreground">{t("instanceSettings")}</h2>
-                  <p className="text-xs text-muted-foreground">{t("instanceSettingsDescription")}</p>
+                  <h2 className="text-title-sm font-semibold tracking-title text-foreground">{t("instanceSettings")}</h2>
+                  <p className="text-footnote text-muted-foreground">{t("instanceSettingsDescription")}</p>
                 </div>
               </div>
               <div className="space-y-2">
-                <label htmlFor="setup-instance-name" className="text-xs text-muted-foreground font-medium">{t("instanceName")}</label>
+                <label htmlFor="setup-instance-name" className="text-footnote text-muted-foreground font-medium">{t("instanceName")}</label>
                 <Input
                   id="setup-instance-name"
                   placeholder="FeedFerret"
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-11 rounded-panel focus-ring"
                   value={instanceName}
                   onChange={(e) => setInstanceName(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <label htmlFor="setup-instance-url" className="text-xs text-muted-foreground font-medium">{t("publicUrl")}</label>
+                <label htmlFor="setup-instance-url" className="text-footnote text-muted-foreground font-medium">{t("publicUrl")}</label>
                 <Input
                   id="setup-instance-url"
                   placeholder="https://rss.example.com"
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground focus:border-ring h-11 rounded-2xl"
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-11 rounded-panel focus-ring"
                   value={instanceUrl}
                   onChange={(e) => setInstanceUrl(e.target.value)}
                 />
               </div>
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
-                <Button variant="ghost" onClick={() => setStep("account")} className="h-11 rounded-xl text-muted-foreground hover:text-foreground">
+                <Button variant="ghost" onClick={() => setStep("account")} className="h-11 rounded-panel text-muted-foreground hover:text-foreground">
                   <ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" /> {tCommon("back")}
                 </Button>
-                <Button onClick={handleSaveInstance} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl active:scale-95">
+                <Button onClick={handleSaveInstance} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-panel active:scale-95">
                   {isLoading ? <div className="w-3 h-3 border-2 border-muted border-t-primary rounded-full animate-spin" /> : <span className="flex items-center gap-2">{t("continue")} <ArrowRight className="w-4 h-4" /></span>}
                 </Button>
               </div>
@@ -377,17 +377,17 @@ export default function SetupPage() {
           {step === "email" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
-                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-panel">
                   <Mail className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-title text-foreground">{t("emailDelivery")}</h2>
-                  <p className="text-xs text-muted-foreground">{t("emailDeliveryDescription")}</p>
+                  <h2 className="text-title-sm font-semibold tracking-title text-foreground">{t("emailDelivery")}</h2>
+                  <p className="text-footnote text-muted-foreground">{t("emailDeliveryDescription")}</p>
                 </div>
               </div>
 
-              <div className="ui-control-surface flex items-center justify-between rounded-xl border p-4">
-                <Label htmlFor="setup-mail-service-toggle" className="text-sm font-medium text-foreground/80 cursor-pointer">
+              <div className="ui-control-surface flex items-center justify-between rounded-panel border p-4">
+                <Label htmlFor="setup-mail-service-toggle" className="text-body-sm font-medium text-foreground/80 cursor-pointer">
                   {t("enableMailService")}
                 </Label>
                 <Switch
@@ -405,7 +405,7 @@ export default function SetupPage() {
                         key={p}
                         onClick={() => setMailProvider(p)}
                         className={cn(
-                          "h-10 rounded-xl border text-sm font-medium transition-all",
+                          "h-10 rounded-panel border text-body-sm font-medium transition-all",
                           mailProvider === p
                             ? "bg-foreground text-background border-foreground"
                             : "bg-muted text-muted-foreground border-border hover:border-ring",
@@ -419,32 +419,32 @@ export default function SetupPage() {
                   {mailProvider === "smtp" && (
                     <>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <Input placeholder={t("smtpHost")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
-                        <Input placeholder={t("port")} type="number" className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} />
+                        <Input placeholder={t("smtpHost")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-panel text-body-sm" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
+                        <Input placeholder={t("port")} type="number" className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-panel text-body-sm" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} />
                       </div>
-                      <Input placeholder={t("smtpUsername")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} />
-                      <Input type="password" placeholder={t("smtpPassword")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} />
-                      <Input placeholder={t("smtpFrom")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} />
+                      <Input placeholder={t("smtpUsername")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-panel text-body-sm" value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} />
+                      <Input type="password" placeholder={t("smtpPassword")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-panel text-body-sm" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} />
+                      <Input placeholder={t("smtpFrom")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-panel text-body-sm" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} />
                     </>
                   )}
 
                   {mailProvider === "resend" && (
                     <>
-                      <Input type="password" placeholder={t("resendApiKey")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={resendApiKey} onChange={(e) => setResendApiKey(e.target.value)} />
-                      <Input placeholder={t("resendFromEmail")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-2xl text-sm" value={resendFromEmail} onChange={(e) => setResendFromEmail(e.target.value)} />
+                      <Input type="password" placeholder={t("resendApiKey")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-panel text-body-sm" value={resendApiKey} onChange={(e) => setResendApiKey(e.target.value)} />
+                      <Input placeholder={t("resendFromEmail")} className="bg-muted border-border text-foreground placeholder:text-muted-foreground h-10 rounded-panel text-body-sm" value={resendFromEmail} onChange={(e) => setResendFromEmail(e.target.value)} />
                     </>
                   )}
                 </>
               )}
 
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
-                <Button variant="ghost" onClick={() => setStep("instance")} className="h-11 rounded-xl text-muted-foreground hover:text-foreground">
+                <Button variant="ghost" onClick={() => setStep("instance")} className="h-11 rounded-panel text-muted-foreground hover:text-foreground">
                   <ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" /> {tCommon("back")}
                 </Button>
-                <Button variant="ghost" onClick={() => handleSaveEmail(true)} className="h-11 rounded-xl text-muted-foreground hover:text-foreground gap-1">
+                <Button variant="ghost" onClick={() => handleSaveEmail(true)} className="h-11 rounded-panel text-muted-foreground hover:text-foreground gap-1">
                   <SkipForward className="w-4 h-4" /> {t("skip")}
                 </Button>
-                <Button onClick={() => handleSaveEmail(false)} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl active:scale-95">
+                <Button onClick={() => handleSaveEmail(false)} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-panel active:scale-95">
                   {isLoading ? <div className="w-3 h-3 border-2 border-muted border-t-primary rounded-full animate-spin" /> : <span className="flex items-center gap-2">{t("continue")} <ArrowRight className="w-4 h-4" /></span>}
                 </Button>
               </div>
@@ -455,22 +455,22 @@ export default function SetupPage() {
           {step === "security" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
-                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-panel">
                   <Lock className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-title text-foreground">{t("accessControl")}</h2>
-                  <p className="text-xs text-muted-foreground">{t("accessControlDescription")}</p>
+                  <h2 className="text-title-sm font-semibold tracking-title text-foreground">{t("accessControl")}</h2>
+                  <p className="text-footnote text-muted-foreground">{t("accessControlDescription")}</p>
                 </div>
               </div>
 
-              <div className="ui-control-surface rounded-xl border p-5 space-y-3">
+              <div className="ui-control-surface rounded-panel border p-5 space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <Label htmlFor="setup-registrations-toggle" className="text-sm font-medium text-foreground cursor-pointer">
+                    <Label htmlFor="setup-registrations-toggle" className="text-body-sm font-medium text-foreground cursor-pointer">
                       {t("allowPublicRegistration")}
                     </Label>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-footnote text-muted-foreground mt-1">
                       {t("allowPublicRegistrationDescription")}
                     </p>
                   </div>
@@ -483,15 +483,15 @@ export default function SetupPage() {
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl border border-warning/20 bg-warning/5 text-warning text-xs leading-relaxed">
+              <div className="p-4 rounded-panel border border-warning/20 bg-warning/5 text-warning text-footnote leading-relaxed">
                 {t("twoFactorNote")}
               </div>
 
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
-                <Button variant="ghost" onClick={() => setStep("email")} className="h-11 rounded-xl text-muted-foreground hover:text-foreground">
+                <Button variant="ghost" onClick={() => setStep("email")} className="h-11 rounded-panel text-muted-foreground hover:text-foreground">
                   <ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" /> {tCommon("back")}
                 </Button>
-                <Button onClick={handleSaveSecurity} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl active:scale-95">
+                <Button onClick={handleSaveSecurity} disabled={isLoading} className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-panel active:scale-95">
                   {isLoading ? <div className="w-3 h-3 border-2 border-muted border-t-primary rounded-full animate-spin" /> : <span className="flex items-center gap-2">{t("continue")} <ArrowRight className="w-4 h-4" /></span>}
                 </Button>
               </div>
@@ -502,12 +502,12 @@ export default function SetupPage() {
           {step === "starters" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
-                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                <div className="ui-brand-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-panel">
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold tracking-title text-foreground">{t("quickStart")}</h2>
-                  <p className="text-xs text-muted-foreground">{t("quickStartDescription")}</p>
+                  <h2 className="text-title-sm font-semibold tracking-title text-foreground">{t("quickStart")}</h2>
+                  <p className="text-footnote text-muted-foreground">{t("quickStartDescription")}</p>
                 </div>
               </div>
 
@@ -519,17 +519,17 @@ export default function SetupPage() {
                       key={pack.id}
                       onClick={() => togglePack(pack.id)}
                       className={cn(
-                        "w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all text-start",
+                        "w-full flex items-center gap-3 px-4 py-3 rounded-panel border text-body-sm font-medium transition-all text-start",
                         selected
                           ? "bg-accent border-ring text-accent-foreground"
                           : "bg-muted border-border text-muted-foreground hover:border-ring hover:text-foreground",
                       )}
                     >
-                      <span className="text-base">{pack.emoji}</span>
+                      <span className="text-body">{pack.emoji}</span>
                       <span className="flex-1">{pack.name}</span>
                       <span
                         className={cn(
-                          "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-all",
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-chip border transition-all",
                           selected ? "bg-foreground border-foreground" : "border-border",
                         )}
                       >
@@ -540,27 +540,27 @@ export default function SetupPage() {
                 })}
               </div>
 
-              <p className="text-xs text-muted-foreground text-center">
+              <p className="text-footnote text-muted-foreground text-center">
                 {selectedPacks.length === 0
                   ? t("nothingSelected")
                   : t("packsSelected", { count: selectedPacks.length })}
               </p>
 
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
-                <Button variant="ghost" onClick={() => setStep("security")} className="h-11 rounded-xl text-muted-foreground hover:text-foreground">
+                <Button variant="ghost" onClick={() => setStep("security")} className="h-11 rounded-panel text-muted-foreground hover:text-foreground">
                   <ArrowLeft className="w-4 h-4 me-1 rtl:rotate-180" /> {tCommon("back")}
                 </Button>
                 <Button
                   variant="ghost"
                   onClick={() => { setSelectedPacks([]); router.push("/?addFeed=1"); }}
-                  className="h-11 rounded-xl text-muted-foreground hover:text-foreground gap-1"
+                  className="h-11 rounded-panel text-muted-foreground hover:text-foreground gap-1"
                 >
                   <SkipForward className="w-4 h-4" /> {t("skip")}
                 </Button>
                 <Button
                   onClick={handleImportStarters}
                   disabled={isLoading}
-                  className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl active:scale-95"
+                  className="flex-1 h-11 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-panel active:scale-95"
                 >
                   {isLoading ? (
                     <span className="flex items-center gap-2">
@@ -581,12 +581,12 @@ export default function SetupPage() {
           {step === "done" && (
             <div className="text-center space-y-6">
               <div className="flex flex-col items-center gap-4">
-                <div className="ui-brand-icon flex h-16 w-16 items-center justify-center rounded-2xl">
+                <div className="ui-brand-icon flex h-16 w-16 items-center justify-center rounded-panel">
                   <Check className="size-8" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-foreground">{t("allSetTitle")}</h2>
-                  <p className="text-muted-foreground text-sm mt-1">
+                  <h2 className="text-title font-bold text-foreground">{t("allSetTitle")}</h2>
+                  <p className="text-muted-foreground text-body-sm mt-1">
                     {importedCount > 0
                       ? `${importedCount} ${t("feedsImported")}`
                       : t("instanceReady")}
@@ -594,7 +594,7 @@ export default function SetupPage() {
                 </div>
               </div>
 
-              <div className="grid gap-2 text-start p-4 rounded-xl bg-muted border border-border text-sm text-muted-foreground">
+              <div className="grid gap-2 text-start p-4 rounded-panel bg-muted border border-border text-body-sm text-muted-foreground">
                 <p className="font-medium text-foreground/90">{t("nextSteps")}</p>
                 <p>→ {t("addFeeds")}</p>
                 <p>→ {t("enable2fa")}</p>
@@ -603,7 +603,7 @@ export default function SetupPage() {
 
               <Button
                 onClick={() => router.push(importedCount > 0 ? "/" : "/?addFeed=1")}
-                className="w-full h-12 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-xl text-base active:scale-95"
+                className="w-full h-12 bg-foreground hover:bg-foreground/90 text-background font-semibold rounded-panel text-body active:scale-95"
               >
                 <Rss className="w-5 h-5 me-2" />
                 {importedCount > 0 ? t("startReading") : t("addFirstFeed")}
@@ -612,7 +612,7 @@ export default function SetupPage() {
           )}
         </div>
 
-        <p className="text-center text-muted-foreground text-xs font-semibold uppercase tracking-wider mt-8">
+        <p className="text-center text-muted-foreground text-footnote font-semibold uppercase tracking-wider mt-8">
           {t("tagline")}
         </p>
       </div>

@@ -124,25 +124,25 @@ export function PwaInstallPrompt() {
             <X className="h-4 w-4" />
           </button>
 
-          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-3xl bg-accent text-accent-foreground">
+          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-sheet bg-accent text-accent-foreground">
             <Smartphone className="h-7 w-7" />
           </div>
 
           <DialogHeader className="pe-8 text-start">
-            <DialogTitle className="text-2xl tracking-title">
+            <DialogTitle className="text-headline tracking-title">
               {t("title")}
             </DialogTitle>
-            <DialogDescription className="text-sm leading-6">
+            <DialogDescription className="text-body-sm leading-6">
               {t("description")}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-5 grid gap-3 text-sm text-muted-foreground">
-            <div className="flex gap-3 rounded-2xl bg-muted/45 p-3">
+          <div className="mt-5 grid gap-3 text-body-sm text-muted-foreground">
+            <div className="flex gap-3 rounded-panel bg-muted/45 p-3">
               <Share className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
               <p>{t("iphoneInstructions")}</p>
             </div>
-            <div className="flex gap-3 rounded-2xl bg-muted/45 p-3">
+            <div className="flex gap-3 rounded-panel bg-muted/45 p-3">
               <Home className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />
               <p>{t("androidInstructions")}</p>
             </div>
@@ -153,14 +153,14 @@ export function PwaInstallPrompt() {
               type="button"
               variant="ghost"
               onClick={closeAndRemember}
-              className="h-12 rounded-2xl"
+              className="h-12 rounded-panel"
             >
               {t("notNow")}
             </Button>
             <Button
               type="button"
               onClick={installOrClose}
-              className="h-12 rounded-2xl"
+              className="h-12 rounded-panel"
             >
               <Download className="me-2 h-4 w-4" />
               {deferredPrompt.current ? t("install") : manualOpen ? t("done") : t("gotIt")}

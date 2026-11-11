@@ -1,7 +1,7 @@
 "use client";
 
 import { formatUnreadCount, parseCountDisplay, showsCount } from "@/lib/count-display";
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   AlignJustify,
@@ -20,7 +20,9 @@ import {
 import { SearchField } from "@/components/search/search-field";
 import { OfflineChip } from "@/components/shell/offline-chip";
 import { useShellActions, useShellData, type ViewMode } from "@/components/shell/shell-context";
+import { Chip } from "@/components/ui/chip";
 import { ResponsiveMenu, type OverlayMenuItem } from "@/components/ui/responsive-overlay";
+import { Segmented } from "@/components/ui/segmented";
 import { showApplies, type Scope } from "@/features/articles/scope";
 import { getLayoutClass, isCoarsePointer } from "@/features/reader/layout/layout-class";
 import type { Loc, TabId } from "@/features/reader/nav/location";
@@ -163,15 +165,13 @@ export const ListTopBar = memo(function ListTopBar(p: ListTopBarProps) {
         <div className="flex shrink-0 items-center gap-1">
           <OfflineChip />
           {scope && showApplies(scope) && !isQuery && (
-            <button
-              type="button"
+            <Chip
               aria-pressed={p.loc.show === "unread"}
               onClick={() => void nav.setShow(p.loc.show === "unread" ? "all" : "unread")}
-              className="ff-filter-chip hit-slop"
               data-testid="filter-chip"
             >
               {t("unreadFilter")}
-            </button>
+            </Chip>
           )}
           {scope && !search && (
           <button
@@ -238,29 +238,18 @@ export const ListTopBar = memo(function ListTopBar(p: ListTopBarProps) {
 /** Gemerkt: Später | Favoriten (replace at the same depth; spec §1.4 row 6). */
 function SavedSegments({ scope }: { scope: Scope }) {
   const t = useTranslations("listBar");
-  const segments: { kind: "later" | "starred"; label: string }[] = [
-    { kind: "later", label: t("segmentLater") },
-    { kind: "starred", label: t("segmentFavorites") },
-  ];
   return (
-    <div role="radiogroup" aria-label={t("savedViews")} className="ff-segmented" data-testid="saved-segments">
-      {segments.map(({ kind, label }) => {
-        const checked = scope.kind === kind;
-        return (
-          <button
-            key={kind}
-            type="button"
-            role="radio"
-            aria-checked={checked}
-            data-checked={checked ? "" : undefined}
-            className="ff-segment"
-            onClick={() => void nav.goScope({ kind })}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
+    <Segmented
+      size="sm"
+      label={t("savedViews")}
+      testId="saved-segments"
+      value={scope.kind}
+      onChange={(kind) => void nav.goScope({ kind })}
+      options={[
+        { value: "later" as const, label: t("segmentLater") },
+        { value: "starred" as const, label: t("segmentFavorites") },
+      ]}
+    />
   );
 }
 
@@ -274,20 +263,12 @@ function LabelChips({ scope }: { scope: Scope }) {
       {labels.map((label: { id: string; name: string; color?: string | null }) => {
         const selected = scope.kind === "label" && scope.id === label.id;
         return (
-          <Chip key={label.id} selected={selected} onClick={() => void nav.goScope({ kind: "label", id: label.id })}>
+          <Chip key={label.id} size="sm" aria-pressed={selected} onClick={() => void nav.goScope({ kind: "label", id: label.id })}>
             <span className="size-1.5 rounded-full" style={{ background: label.color ?? "var(--text-secondary)" }} aria-hidden />
             {label.name}
           </Chip>
         );
       })}
     </div>
-  );
-}
-
-function Chip({ selected, onClick, children }: { selected: boolean; onClick(): void; children: ReactNode }) {
-  return (
-    <button type="button" aria-pressed={selected} onClick={onClick} className="ff-chip hit-slop">
-      {children}
-    </button>
   );
 }

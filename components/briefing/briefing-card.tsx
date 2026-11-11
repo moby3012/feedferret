@@ -235,7 +235,7 @@ export function BriefingCard({ scopeKey = "new", active = true }: { scopeKey?: s
             aria-expanded={expanded}
             aria-controls={bodyId}
             onClick={() => setOpen(!expanded)}
-            className="flex h-full w-full items-center gap-2.5 rounded-row ps-4 pe-2 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-full w-full items-center gap-2.5 rounded-row ps-4 pe-2 text-start focus-ring"
           >
             <Sparkles className="size-4 shrink-0 text-primary" aria-hidden="true" />
             <span className="flex min-w-0 flex-1 flex-col">

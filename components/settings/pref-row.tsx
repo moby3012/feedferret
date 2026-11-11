@@ -33,15 +33,15 @@ export function PrefRow({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6">
+    <section className="rounded-panel border border-border/65 bg-card/85 p-5 sm:p-6">
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-4">
-          <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+          <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-panel">
             <Icon className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold tracking-title">{title}</h2>
-            <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
+            <h2 className="text-title-sm font-semibold tracking-title">{title}</h2>
+            <p className="mt-1 max-w-xl text-body-sm leading-6 text-muted-foreground">{description}</p>
           </div>
         </div>
         <div className="w-full shrink-0 sm:w-auto">{children}</div>

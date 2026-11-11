@@ -21,7 +21,7 @@ export function RowSkeleton({ density, nested = false }: { density: Density; nes
     return (
       <div className="ff-row animate-pulse" data-density="minimal" data-nested={nested ? "" : undefined} aria-hidden>
         <div className="ff-row-content flex min-h-11 items-center gap-2 px-(--gutter) fine:min-h-9">
-          <div className="size-3.5 shrink-0 rounded-xs bg-muted" />
+          <div className="size-3.5 shrink-0 rounded-chip bg-muted" />
           <div className="h-3.5 flex-1 rounded-chip bg-muted" />
           <div className="h-3 w-12 shrink-0 rounded-chip bg-muted" />
         </div>
@@ -33,7 +33,7 @@ export function RowSkeleton({ density, nested = false }: { density: Density; nes
       <div className={cn("ff-row-content flex gap-3 px-(--gutter) py-(--row-pad-y)")}>
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-center gap-2">
-            <div className="size-3.5 shrink-0 rounded-xs bg-muted" />
+            <div className="size-3.5 shrink-0 rounded-chip bg-muted" />
             <div className="h-3 w-24 rounded-chip bg-muted" />
           </div>
           <div className="h-4 w-full rounded-chip bg-muted" />

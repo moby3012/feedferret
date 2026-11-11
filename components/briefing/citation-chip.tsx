@@ -21,7 +21,7 @@ export function CitationChip({ citation, index, onOpen }: { citation: Citation; 
         e.stopPropagation();
         onOpen(citation.articleId);
       }}
-      className="relative ms-1 inline-flex h-5 min-w-5 items-center justify-center rounded-chip bg-accent-subtle px-1 align-[0.1em] text-caption tabular-nums text-foreground transition-colors duration-(--dur-fast) after:absolute after:-inset-3 after:content-[''] hover:bg-accent/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="relative ms-1 inline-flex h-5 min-w-5 items-center justify-center rounded-chip bg-accent-subtle px-1 align-[0.1em] text-caption tabular-nums text-foreground transition-colors duration-(--dur-fast) after:absolute after:-inset-3 after:content-[''] hover:bg-accent/25 focus-ring"
     >
       {index}
     </button>

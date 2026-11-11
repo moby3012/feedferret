@@ -54,15 +54,15 @@ export function SettingsModalShell({
         <DialogHeader className="border-b border-border/60 bg-card/95 p-5 pb-4 backdrop-blur-bar sm:p-8 sm:pb-5">
           <div className="flex flex-col gap-1 pe-10">
             {eyebrow ? (
-              <div className="text-sm font-medium text-muted-foreground">
+              <div className="text-body-sm font-medium text-muted-foreground">
                 {eyebrow}
               </div>
             ) : null}
-            <DialogTitle className="text-2xl font-semibold tracking-title sm:text-3xl">
+            <DialogTitle className="text-headline font-semibold tracking-title sm:text-display">
               {title}
             </DialogTitle>
             {description ? (
-              <DialogDescription className="mt-1 text-sm text-muted-foreground sm:text-base">
+              <DialogDescription className="mt-1 text-body-sm text-muted-foreground sm:text-body">
                 {description}
               </DialogDescription>
             ) : null}
@@ -79,7 +79,6 @@ export function SettingsModalShell({
               value={activeTab}
               onValueChange={onTabChange}
               options={tabs}
-              triggerClassName="gap-2 px-4 lg:px-5"
             />
           </div>
           {children}
@@ -121,16 +120,16 @@ export function SettingsPageShell({
             <Button
               variant="ghost"
               size="icon"
-              className="h-11 w-11 rounded-2xl bg-card/70 backdrop-blur-bar border border-border/60 shadow-sm shrink-0"
+              className="h-11 w-11 rounded-panel bg-card/70 backdrop-blur-bar border border-border/60 shrink-0"
               aria-label={t("common.back")}
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
           </Link>
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-title truncate sm:text-3xl">{title}</h1>
+            <h1 className="text-headline font-semibold tracking-title truncate sm:text-display">{title}</h1>
             {description && (
-              <p className="text-sm text-muted-foreground truncate">{description}</p>
+              <p className="text-body-sm text-muted-foreground truncate">{description}</p>
             )}
           </div>
         </div>
@@ -139,7 +138,6 @@ export function SettingsPageShell({
             value={activeTab}
             onValueChange={onTabChange}
             options={tabs}
-            triggerClassName="gap-2 px-4 lg:px-5"
             className="sm:w-auto"
           />
         </div>
@@ -168,20 +166,20 @@ export function SettingsSection({
   return (
     <section
       className={cn(
-        "rounded-sheet border border-border/65 bg-card/85 p-5 shadow-sm",
+        "rounded-sheet border border-border/65 bg-card/85 p-5",
         className,
       )}
     >
       <div className="mb-5 flex items-start gap-3">
         {icon ? (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-background text-foreground shadow-sm">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-panel bg-background text-foreground">
             {icon}
           </div>
         ) : null}
         <div>
-          <h3 className="text-lg font-semibold tracking-title">{title}</h3>
+          <h3 className="text-title-sm font-semibold tracking-title">{title}</h3>
           {description ? (
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            <p className="mt-1 text-body-sm leading-relaxed text-muted-foreground">
               {description}
             </p>
           ) : null}

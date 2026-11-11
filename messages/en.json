@@ -1003,6 +1003,7 @@
     "themeDark": "Dark",
     "themeSepia": "Sepia",
     "resetTypography": "Reset",
+    "typographyDeviceNote": "Applies to this device only.",
     "pullToNext": "Pull up for the next article",
     "releaseForNext": "Release for the next article",
     "bodyErrorTitle": "Couldn't load this article",

@@ -96,7 +96,7 @@ export default async function RootLayout({
       <body className={`${fontVariables} font-sans antialiased`}>
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:start-4 focus:z-(--z-skip) focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-lg focus:outline-none"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:start-4 focus:z-(--z-skip) focus:rounded-panel focus:bg-primary focus:px-4 focus:py-2 focus:text-body-sm focus:font-semibold focus:text-primary-foreground focus:shadow-overlay focus-ring"
         >
           {t("skipToContent")}
         </a>

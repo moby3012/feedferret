@@ -283,25 +283,80 @@ test("resizing 390 → 1280 without reload keeps the open article and the list",
   await expect(reader(page, 2)).toBeVisible();
 });
 
-test("medium 820x1180: rail + list + reader side by side, feeds in a drawer from the rail", async ({ app, page, isMobile }) => {
+test("portrait tablet 820x1180: the reader pushes over the list at a readable measure; rail stays, feeds in a drawer", async ({ app, page, isMobile }) => {
   test.skip(isMobile, "desktop project drives the viewport");
   await page.setViewportSize({ width: 820, height: 1180 });
   await app.open();
-  await app.activate(app.row(1));
-  await expect(reader(page, 1)).toBeVisible();
-  const list = await app.row(2).boundingBox();
-  const article = await reader(page, 1).boundingBox();
-  expect(list && article).toBeTruthy();
-  expect(list!.x + list!.width).toBeLessThanOrEqual(article!.x + 1);
-  // The rail is the navigation; its Feeds tab (no feed yet) opens the tree as a drawer.
   const rail = page.getByTestId("shell-rail");
   await expect(rail).toBeVisible();
   await expect(page.getByTestId("tab-bar")).toBeHidden();
-  expect((await rail.boundingBox())!.x + (await rail.boundingBox())!.width).toBeLessThanOrEqual(list!.x + 1);
+  const railBox = (await rail.boundingBox())!;
+  const listRow = (await app.row(2).boundingBox())!;
+  // No reader column while nothing is open: the list owns the content column.
+  expect(railBox.x + railBox.width).toBeLessThanOrEqual(listRow.x + 1);
+  expect(listRow.x + listRow.width).toBeGreaterThan(780);
+
+  await app.activate(app.row(1));
+  await expect(reader(page, 1)).toBeVisible();
+  // Reader layer covers the list column (not a cramped third pane), rail stays visible.
+  const article = (await reader(page, 1).boundingBox())!;
+  expect(article.x).toBeGreaterThanOrEqual(railBox.x + railBox.width - 1);
+  const body = (await page.locator('[data-pane="reader"] .article-content').first().boundingBox())!;
+  expect(body.width).toBeGreaterThanOrEqual(480);
+  await expect(rail).toBeVisible();
+  // The covered list leaves the a11y tree; Back pops the reader and keeps the list.
+  await expect(page.locator('[data-pane="list-new"]')).toHaveAttribute("inert", "");
+  await page.goBack();
+  await expect(app.row(1)).toBeVisible();
+  await expect(page.locator('[data-pane="list-new"]')).not.toHaveAttribute("inert", "");
+
+  // The rail is the navigation; its Feeds tab (no feed yet) opens the tree as a drawer.
   await rail.getByRole("tab", { name: "Feeds" }).click();
   await expect(page.getByRole("dialog", { name: /feed navigation/i })).toBeVisible();
   await page.getByRole("dialog", { name: /feed navigation/i }).getByRole("button", { name: /^Solo Blog\s*\d+$/ }).click();
   await expect(page.getByRole("dialog", { name: /feed navigation/i })).toBeHidden();
   await expect(page.getByRole("heading", { level: 2, name: "Solo Blog" })).toBeVisible();
   await expect(rail.getByRole("tab", { name: "Feeds" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("959/960 boundary: focus follows the reader when a resize makes it cover the list, and back", async ({ app, page, isMobile }) => {
+  test.skip(isMobile, "desktop project drives the viewport");
+  const inReader = () => page.evaluate(() => !!document.activeElement?.closest('[data-pane="reader"]'));
+  const onBody = () => page.evaluate(() => document.activeElement === document.body || document.activeElement === null);
+  await page.setViewportSize({ width: 960, height: 900 });
+  await app.open();
+  // Keyboard open at 960 px (two panes): focus stays on the row.
+  await app.row(1).focus();
+  await page.keyboard.press("Enter");
+  await expect(reader(page, 1)).toBeVisible();
+  await expect(page.locator('[data-pane="list-new"]')).not.toHaveAttribute("inert", "");
+
+  // 959 px: the reader now covers the inert list — focus must not fall to <body>.
+  await page.setViewportSize({ width: 959, height: 900 });
+  await expect(page.locator('[data-pane="list-new"]')).toHaveAttribute("inert", "");
+  await expect.poll(inReader).toBe(true);
+
+  // Back to 960 px: two panes, focus still somewhere real.
+  await page.setViewportSize({ width: 960, height: 900 });
+  await expect(page.locator('[data-pane="list-new"]')).not.toHaveAttribute("inert", "");
+  await expect.poll(onBody).toBe(false);
+
+  // Stacked again, then close: focus returns to the row it came from.
+  await page.setViewportSize({ width: 959, height: 900 });
+  await expect.poll(inReader).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-pane="list-new"]')).not.toHaveAttribute("inert", "");
+  await expect.poll(() => page.evaluate(() => document.activeElement?.closest("[aria-label]")?.getAttribute("aria-label") ?? "")).toContain("(#001)");
+});
+
+test("landscape tablet 1180x820: rail + list + reader side by side", async ({ app, page, isMobile }) => {
+  test.skip(isMobile, "desktop project drives the viewport");
+  await page.setViewportSize({ width: 1180, height: 820 });
+  await app.open();
+  await app.activate(app.row(1));
+  await expect(reader(page, 1)).toBeVisible();
+  const list = (await app.row(2).boundingBox())!;
+  const article = (await reader(page, 1).boundingBox())!;
+  expect(list.x + list.width).toBeLessThanOrEqual(article.x + 1);
+  await expect(page.locator('[data-pane="list-new"]')).not.toHaveAttribute("inert", "");
 });

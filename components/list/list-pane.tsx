@@ -18,7 +18,7 @@ import { useBriefing } from "@/features/briefing/queries";
 import { groupsStories, showApplies, type ListKey } from "@/features/articles/scope";
 import { useCounts, useScopeUnread } from "@/features/bootstrap/queries";
 import { formatLoc, listKeyOfLoc, type Loc, type TabId } from "@/features/reader/nav/location";
-import { useLayoutClass } from "@/features/reader/layout/layout-class";
+import { useLayoutClass, useReaderStacked } from "@/features/reader/layout/layout-class";
 import { canMarkAll, markViewScopeOf } from "@/features/reader/nav/sidebar-keys";
 import { nav, useNav } from "@/features/reader/nav/store";
 import { useOnline } from "@/features/bootstrap/online";
@@ -48,11 +48,13 @@ export const ListPane = memo(function ListPane({ tab }: { tab: TabId }) {
   }
   const [mounted, setMounted] = useState(active);
   if (active && !mounted) setMounted(true);
-  // Compact: the reader is a layer above the list — the covered list leaves
-  // the focus order and the a11y tree (focus moves into the reader).
+  // Compact and portrait tablets: the reader is a layer above the list — the
+  // covered list leaves the focus order and the a11y tree (focus moves into
+  // the reader).
   const layout = useLayoutClass();
+  const stacked = useReaderStacked();
   // (Inactive panes are inert anyway: only the active one subscribes to the reader.)
-  const covered = useNav((s) => s.loc.tab === tab && !!s.loc.articleId) && layout === "compact";
+  const covered = useNav((s) => s.loc.tab === tab && !!s.loc.articleId) && stacked === true;
   const inert = !active || covered;
   // Controlled by the tab bar / rail: a tabpanel named by its tab. Without a
   // visible tablist (expanded, full sidebar) a plain labelled region.

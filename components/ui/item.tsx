@@ -31,7 +31,7 @@ function ItemSeparator({
 }
 
 const itemVariants = cva(
-  'group/item flex items-center border border-transparent text-sm rounded-md transition-colors [a&]:hover:bg-accent/50 [a&]:transition-colors duration-(--dur-fast) flex-wrap outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+  'group/item flex items-center border border-transparent text-body-sm rounded-row transition-colors [a&]:hover:bg-accent/50 [a&]:transition-colors duration-(--dur-fast) flex-wrap focus-ring',
   {
     variants: {
       variant: {
@@ -77,9 +77,9 @@ const itemMediaVariants = cva(
     variants: {
       variant: {
         default: 'bg-transparent',
-        icon: "size-8 border rounded-sm bg-muted [&_svg:not([class*='size-'])]:size-4",
+        icon: "size-8 border rounded-control bg-muted [&_svg:not([class*='size-'])]:size-4",
         image:
-          'size-10 rounded-sm overflow-hidden [&_img]:size-full [&_img]:object-cover',
+          'size-10 rounded-control overflow-hidden [&_img]:size-full [&_img]:object-cover',
       },
     },
     defaultVariants: {
@@ -121,7 +121,7 @@ function ItemTitle({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot="item-title"
       className={cn(
-        'flex w-fit items-center gap-2 text-sm leading-snug font-medium',
+        'flex w-fit items-center gap-2 text-body-sm leading-snug font-medium',
         className,
       )}
       {...props}
@@ -134,7 +134,7 @@ function ItemDescription({ className, ...props }: React.ComponentProps<'p'>) {
     <p
       data-slot="item-description"
       className={cn(
-        'text-muted-foreground line-clamp-2 text-sm leading-normal font-normal text-balance',
+        'text-muted-foreground line-clamp-2 text-body-sm leading-normal font-normal text-balance',
         '[&>a:hover]:text-link [&>a]:underline [&>a]:underline-offset-4',
         className,
       )}

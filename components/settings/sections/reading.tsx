@@ -31,10 +31,10 @@ export function ReadingSettings() {
           value={prefs?.defaultArticleSort ?? "newest"}
           onValueChange={(v) => update({ defaultArticleSort: v })}
         >
-          <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+          <SelectTrigger className="h-10 w-full rounded-panel border-border/70 bg-background/70 sm:w-40">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="rounded-2xl">
+          <SelectContent className="rounded-panel">
             <SelectItem value="newest">{t("settings.sortOptions.newest")}</SelectItem>
             <SelectItem value="oldest">{t("settings.sortOptions.oldest")}</SelectItem>
           </SelectContent>
@@ -61,10 +61,10 @@ export function ReadingSettings() {
             })
           }
         >
-          <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+          <SelectTrigger className="h-10 w-full rounded-panel border-border/70 bg-background/70 sm:w-40">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="rounded-2xl">
+          <SelectContent className="rounded-panel">
             <SelectItem value="instant">{t("settings.markReadOptions.instant")}</SelectItem>
             <SelectItem value="5">{t("settings.markReadOptions.after5s")}</SelectItem>
             <SelectItem value="15">{t("settings.markReadOptions.after15s")}</SelectItem>
@@ -163,10 +163,10 @@ export function ReadingSettings() {
             });
           }}
         >
-          <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-40">
+          <SelectTrigger className="h-10 w-full rounded-panel border-border/70 bg-background/70 sm:w-40">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="rounded-2xl">
+          <SelectContent className="rounded-panel">
             <SelectItem value="en">English</SelectItem>
             <SelectItem value="de">Deutsch</SelectItem>
           </SelectContent>
@@ -199,10 +199,10 @@ export function ReadingSettings() {
             }
           }}
         >
-          <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-52">
+          <SelectTrigger className="h-10 w-full rounded-panel border-border/70 bg-background/70 sm:w-52">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="rounded-2xl max-h-72">
+          <SelectContent className="rounded-panel max-h-72">
             <SelectItem value="auto">{t("settings.displayTimezoneAuto")}</SelectItem>
             {getCommonTimezones().map((tz) => (
               <SelectItem key={tz} value={tz}>{tz}</SelectItem>
@@ -250,10 +250,10 @@ export function ReadingSettings() {
             if (isCountDisplay(v)) update({ countDisplay: v });
           }}
         >
-          <SelectTrigger className="h-10 w-full rounded-2xl border-border/70 bg-background/70 sm:w-44" aria-label={t("settings.countDisplay")} data-testid="count-display-select">
+          <SelectTrigger className="h-10 w-full rounded-panel border-border/70 bg-background/70 sm:w-44" aria-label={t("settings.countDisplay")} data-testid="count-display-select">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="rounded-2xl">
+          <SelectContent className="rounded-panel">
             <SelectItem value="all">{t("settings.countDisplayOptions.all")}</SelectItem>
             <SelectItem value="categories">{t("settings.countDisplayOptions.categories")}</SelectItem>
             <SelectItem value="off">{t("settings.countDisplayOptions.off")}</SelectItem>

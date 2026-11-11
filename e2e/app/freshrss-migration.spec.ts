@@ -16,12 +16,10 @@ const fixture = (name: string) => fs.readFileSync(path.resolve("tests", "fixture
 
 async function openImportTab(page: Page, isMobile: boolean) {
   await page.goto("/manage-feeds");
-  if (isMobile) {
-    await page.getByRole("combobox").first().tap();
-    await page.getByRole("option", { name: "Import/Export" }).tap();
-  } else {
-    await page.getByRole("tab", { name: "Import/Export" }).click();
-  }
+  const tab = page.getByRole("tab", { name: "Import/Export" });
+  // Narrow screens: the tab row scrolls horizontally (no <select> any more).
+  await tab.scrollIntoViewIfNeeded();
+  await (isMobile ? tab.tap() : tab.click());
   const card = page.getByTestId("freshrss-migration");
   await expect(card.getByRole("heading", { name: "Move from FreshRSS" })).toBeVisible({ timeout: 30_000 });
   return card;

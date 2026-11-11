@@ -88,7 +88,7 @@ export function DiscoveryPanel({
           value={searchQuery}
           onChange={(e) => handleSearchChange(e.target.value)}
           onFocus={handleSearchFocus}
-          className="h-9 ps-9 text-sm"
+          className="h-9 ps-9 text-body-sm"
         />
       </div>
 
@@ -156,10 +156,10 @@ function CategoryGrid({
     return (
       <div className="flex flex-col items-center justify-center py-8 text-center">
         <Globe className="size-5 text-muted-foreground/50 mb-2" />
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body-sm text-muted-foreground">
           {t("catalogEmpty")}
         </p>
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="text-footnote text-muted-foreground mt-1">
           {t("useSearchHint")}
         </p>
       </div>
@@ -175,14 +175,14 @@ function CategoryGrid({
             key={category.id}
             onClick={() => onSelect(category.id)}
             className={cn(
-              "ui-control-surface flex items-center gap-2 rounded-xl border px-3 py-2.5",
+              "ui-control-surface flex items-center gap-2 rounded-panel border px-3 py-2.5",
               "transition-colors text-start"
             )}
           >
-            <span className="text-lg">{category.icon}</span>
+            <span className="text-title-sm">{category.icon}</span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium truncate">{category.name}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-body-sm font-medium truncate">{category.name}</p>
+              <p className="text-footnote text-muted-foreground">
                 {t("feedsInCategory", { count: category.feedCount })}
               </p>
             </div>
@@ -218,12 +218,12 @@ function FeedList({
         variant="ghost"
         size="sm"
         onClick={onBack}
-        className="h-9 px-3 -ms-3 text-sm text-muted-foreground hover:text-foreground"
+        className="h-9 px-3 -ms-3 text-body-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4 me-1.5 rtl:rotate-180" />
         {t("backToCategories")}
       </Button>
-      <p className="text-xs font-medium text-muted-foreground px-0.5">
+      <p className="text-footnote font-medium text-muted-foreground px-0.5">
         {categoryName}
       </p>
 
@@ -232,7 +232,7 @@ function FeedList({
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : feeds.length === 0 ? (
-        <div className="py-8 text-center text-sm text-muted-foreground">
+        <div className="py-8 text-center text-body-sm text-muted-foreground">
           {t("noFeedsInCategory")}
         </div>
       ) : (
@@ -276,7 +276,7 @@ function SearchResults({
   const t = useTranslations("discovery");
   if (query.length < 2) {
     return (
-      <div className="py-8 text-center text-sm text-muted-foreground">
+      <div className="py-8 text-center text-body-sm text-muted-foreground">
         {t("minCharsToSearch")}
       </div>
     );
@@ -286,7 +286,7 @@ function SearchResults({
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ms-2 text-sm text-muted-foreground">{t("searching")}</span>
+        <span className="ms-2 text-body-sm text-muted-foreground">{t("searching")}</span>
       </div>
     );
   }
@@ -295,7 +295,7 @@ function SearchResults({
     return (
       <div className="flex flex-col items-center justify-center py-8 text-center">
         <AlertCircle className="size-5 text-warning mb-2" />
-        <p className="text-sm text-muted-foreground">{error.message}</p>
+        <p className="text-body-sm text-muted-foreground">{error.message}</p>
       </div>
     );
   }
@@ -303,10 +303,10 @@ function SearchResults({
   if (feeds.length === 0) {
     return (
       <div className="py-8 text-center">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body-sm text-muted-foreground">
           {hint || t("noFeedsFound")}
         </p>
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="text-footnote text-muted-foreground mt-1">
           {t("tryTopics")}
         </p>
       </div>
@@ -315,7 +315,7 @@ function SearchResults({
 
   return (
     <div className="space-y-1.5">
-      <p className="text-xs text-muted-foreground px-0.5">
+      <p className="text-footnote text-muted-foreground px-0.5">
         {feeds.length} {t("feedsFound")}
       </p>
       {feeds.map((feed, i) => (
@@ -353,14 +353,14 @@ function FeedCard({
 }) {
   const t = useTranslations("discovery");
   return (
-    <div className="ui-control-surface relative rounded-xl border px-2.5 py-2 pe-10 overflow-hidden w-full">
+    <div className="ui-control-surface relative rounded-panel border px-2.5 py-2 pe-10 overflow-hidden w-full">
       <div className="flex items-center gap-2 min-w-0">
         {feed.iconUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={feed.iconUrl}
             alt=""
-            className="h-4 w-4 rounded object-cover shrink-0"
+            className="h-4 w-4 rounded-chip object-cover shrink-0"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = "none";
             }}
@@ -368,13 +368,13 @@ function FeedCard({
         ) : (
           <Rss className="h-4 w-4 text-muted-foreground shrink-0" />
         )}
-        <p className="text-sm font-medium truncate" title={feed.title}>
+        <p className="text-body-sm font-medium truncate" title={feed.title}>
           {feed.title}
         </p>
       </div>
       {feed.description && (
         <p
-          className="text-xs text-muted-foreground mt-0.5 pe-1"
+          className="text-footnote text-muted-foreground mt-0.5 pe-1"
           style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
         >
           {feed.description}
@@ -384,7 +384,7 @@ function FeedCard({
         size="sm"
         variant={isSubscribed ? "ghost" : "ghost"}
         className={cn(
-          "absolute end-1.5 top-1.5 h-7 w-7 p-0 rounded-lg shrink-0",
+          "absolute end-1.5 top-1.5 h-7 w-7 p-0 rounded-row shrink-0",
           isSubscribed && "text-success cursor-default"
         )}
         onClick={isSubscribed ? undefined : onAdd}

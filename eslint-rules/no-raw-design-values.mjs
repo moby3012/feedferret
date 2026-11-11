@@ -8,6 +8,7 @@
  *   rounded-[…]            → rounded-chip | control | row | panel | sheet | full
  *   z-[…] / z-10 / zIndex  → z-(--z-sticky|bar|reader|overlay|toast|skip)
  *   text-[10px] …          → text-caption | footnote | body-sm | body | row-title | title-sm | title | headline | display
+ *   rounded-lg / text-sm / shadow-md (legacy named scale) → the role tokens above
  *   tracking-[…]           → tracking-title | tracking-subtitle | tracking-overline
  *   bg-amber-500/10 …      → bg-warning/10 · success · danger · info (+ -subtle)
  *   backdrop-blur-xl …     → backdrop-blur-bar | backdrop-blur-overlay
@@ -44,6 +45,19 @@ const RULES = [
   {
     re: new RegExp(P + String.raw`backdrop-blur(?:-(?:none|xs|sm|md|lg|xl|2xl|3xl|\[[^\]]*\]))?(?![\w-])`),
     msg: "Raw backdrop blur. Only two levels exist: backdrop-blur-bar | backdrop-blur-overlay (rows, cards and list panels never blur).",
+  },
+  {
+    // Legacy named scale (UX wave 2b, audit A-12): the role tokens replaced it.
+    re: new RegExp(P + PREFIX + String.raw`rounded(?:-(?:s|e|t|b|l|r|ss|se|ee|es|tl|tr|bl|br))?-(?:xs|sm|md|lg|xl|2xl|3xl|4xl)(?![\w-])`),
+    msg: "Legacy radius scale. Use a role token: rounded-chip (6) | control (10) | row (14) | panel (20) | sheet (28) | full.",
+  },
+  {
+    re: new RegExp(P + PREFIX + String.raw`text-(?:xs|sm|base|lg|xl|[2-9]xl)(?![\w-])`),
+    msg: "Legacy type scale. Use text-caption | footnote | body-sm | body | row-title | title-sm | title | headline | display.",
+  },
+  {
+    re: new RegExp(P + PREFIX + String.raw`shadow-(?:xs|sm|md|lg|xl|2xl)(?![\w-])`),
+    msg: "Legacy shadow. Two elevations only: shadow-bar | shadow-overlay (or elev-bar / elev-overlay); everything else is flat.",
   },
   {
     re: /env\(safe-area-inset/,

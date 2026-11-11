@@ -37,7 +37,7 @@ export function GestureSettings() {
   return (
     <section
       id="gestures"
-      className="scroll-mt-24 rounded-row border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6"
+      className="scroll-mt-24 rounded-row border border-border/65 bg-card/85 p-5 sm:p-6"
       aria-labelledby="gesture-settings-title"
       data-testid="gesture-settings"
     >

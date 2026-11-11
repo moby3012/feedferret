@@ -35,7 +35,7 @@ export const FeedFavicon = memo(function FeedFavicon({ icon, name, size = 16, ar
         // domain; no-referrer at least keeps our own page URL from being
         // sent along with it.
         referrerPolicy="no-referrer"
-        className="shrink-0 rounded-xs object-contain"
+        className="shrink-0 rounded-chip object-contain"
         style={{ width: size, height: size }}
         onError={() => setFailed(true)}
       />
@@ -45,7 +45,7 @@ export const FeedFavicon = memo(function FeedFavicon({ icon, name, size = 16, ar
     <span
       aria-hidden="true"
       style={{ width: size, height: size, fontSize: Math.max(8, size * 0.55), lineHeight: `${size}px` }}
-      className="inline-flex shrink-0 items-center justify-center rounded-xs bg-muted font-semibold uppercase text-muted-foreground"
+      className="inline-flex shrink-0 items-center justify-center rounded-chip bg-muted font-semibold uppercase text-muted-foreground"
     >
       {(name ?? "?").trim().charAt(0)}
     </span>

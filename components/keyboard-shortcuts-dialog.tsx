@@ -77,14 +77,14 @@ export function KeyboardShortcutsDialog({
         <div className="grid gap-6 sm:grid-cols-2">
           {groups.map((group) => (
             <div key={group.title} className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h4 className="text-footnote font-semibold uppercase tracking-wider text-muted-foreground">
                 {group.title}
               </h4>
               <ul className="space-y-1.5">
                 {group.items.map((item) => (
                   <li
                     key={item.description}
-                    className="flex items-center justify-between gap-3 text-sm"
+                    className="flex items-center justify-between gap-3 text-body-sm"
                   >
                     <span className="text-foreground/90">{item.description}</span>
                     <KbdGroup>

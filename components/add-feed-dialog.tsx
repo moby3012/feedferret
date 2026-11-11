@@ -277,7 +277,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="rounded-2xl"
+        className="rounded-panel"
         style={{ width: "calc(100vw - 1rem)", maxWidth: "28rem" }}
       >
         <DialogHeader>
@@ -289,10 +289,10 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
               specialized paths (web page / platform / monitor) behind an
               inner selector — so the tab row never wraps regardless of which
               optional connectors are configured. */}
-          <TabsList className="grid h-9 w-full grid-cols-3 rounded-xl">
-            <TabsTrigger value="url" className="text-xs rounded-lg">{t("sidebar.byUrl")}</TabsTrigger>
-            <TabsTrigger value="discover" className="text-xs rounded-lg">{t("sidebar.discover")}</TabsTrigger>
-            <TabsTrigger value="more" className="text-xs rounded-lg">{t("sidebar.moreSources")}</TabsTrigger>
+          <TabsList data-block="" className="w-full">
+            <TabsTrigger value="url">{t("sidebar.byUrl")}</TabsTrigger>
+            <TabsTrigger value="discover">{t("sidebar.discover")}</TabsTrigger>
+            <TabsTrigger value="more">{t("sidebar.moreSources")}</TabsTrigger>
           </TabsList>
 
           {/* URL Tab */}
@@ -309,7 +309,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && newFeedUrl) handleDiscover();
                 }}
-                className="h-9 text-sm flex-1"
+                className="h-9 text-body-sm flex-1"
               />
               <Button
                 size="sm"
@@ -325,13 +325,13 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
 
             {discoveredFeeds.length > 0 && (
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground font-medium px-0.5">
+                <p className="text-footnote text-muted-foreground font-medium px-0.5">
                   {discoveryMode === "topic" ? t("sidebar.topicFeeds") : t("sidebar.foundFeeds")}
                 </p>
                 {discoveredFeeds.map((f) => (
-                  <div key={f.url} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
+                  <div key={f.url} className="flex items-center gap-1.5 rounded-panel bg-muted px-2 py-1.5">
                     <Rss className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs truncate flex-1 text-foreground" title={f.url}>{f.title}</span>
+                    <span className="text-footnote truncate flex-1 text-foreground" title={f.url}>{f.title}</span>
                     {f.kind && (
                       <span className="shrink-0 rounded-chip bg-background px-1.5 py-0.5 text-caption text-muted-foreground">
                         {t.has(`sidebar.kinds.${f.kind}`) ? t(`sidebar.kinds.${f.kind}`) : f.kind}
@@ -341,7 +341,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 px-2 text-xs shrink-0"
+                        className="h-6 px-2 text-footnote shrink-0"
                         onClick={() => {
                           setGoogleNewsQuery(newFeedUrl.trim());
                           setMoreSource("news");
@@ -353,7 +353,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
                     )}
                     <Button
                       size="sm"
-                      className="h-6 px-2 text-xs shrink-0"
+                      className="h-6 px-2 text-footnote shrink-0"
                       onClick={() => handleAddFeed(f.url, f.title)}
                       disabled={isAddingFeed}
                     >
@@ -365,7 +365,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
             )}
 
             {discoveryMessage && discoveredFeeds.length === 0 && (
-              <div className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
+              <div className="rounded-panel border border-warning/20 bg-warning/10 px-3 py-2 text-footnote text-warning">
                 {discoveryMessage}
               </div>
             )}
@@ -374,7 +374,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
               value={newFeedCategoryId}
               onValueChange={setNewFeedCategoryId}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-9 text-body-sm">
                 <SelectValue placeholder={t("sidebar.categoryPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
@@ -421,7 +421,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
                 value={newFeedCategoryId}
                 onValueChange={setNewFeedCategoryId}
               >
-                <SelectTrigger className="h-9 text-sm">
+                <SelectTrigger className="h-9 text-body-sm">
                   <SelectValue placeholder={t("sidebar.addToCategory")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -444,18 +444,18 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
             {/* Starter packs — moved here from the URL tab (they belong with
                 "browse & discover", not the direct-add path). */}
             <div className="mt-4 pt-3 border-t border-border/40">
-              <p className="text-xs text-muted-foreground font-medium mb-1.5">{t("sidebar.starterPacks")}</p>
+              <p className="text-footnote text-muted-foreground font-medium mb-1.5">{t("sidebar.starterPacks")}</p>
               <div className="space-y-1">
                 {starterPacks.map((pack) => (
-                  <div key={pack.id} className="flex items-center gap-1.5 rounded-xl bg-muted px-2 py-1.5">
-                    <span className="text-xs flex-1 text-foreground">
+                  <div key={pack.id} className="flex items-center gap-1.5 rounded-panel bg-muted px-2 py-1.5">
+                    <span className="text-footnote flex-1 text-foreground">
                       {pack.name}
                       <span className="text-muted-foreground ms-1">({pack.feeds.length || "OPML"})</span>
                     </span>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-6 px-2 text-xs shrink-0"
+                      className="h-6 px-2 text-footnote shrink-0"
                       disabled={importingPack === pack.id || (pack.feeds.length === 0 && !pack.path)}
                       onClick={() => handleImportStarterPack(pack)}
                     >
@@ -474,7 +474,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
             {moreSources.length > 1 && (
               <div
                 className={cn(
-                  "grid w-full gap-1 rounded-xl bg-muted/60 p-1",
+                  "grid w-full gap-1 rounded-panel bg-muted/60 p-1",
                   // 4 sources → 2×2, so labels never squeeze at phone width.
                   moreSources.length === 3 ? "grid-cols-3" : "grid-cols-2",
                 )}
@@ -488,9 +488,9 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
                     aria-pressed={moreSource === src.value}
                     onClick={() => setMoreSource(src.value)}
                     className={cn(
-                      "rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                      "rounded-row px-2 py-1.5 text-footnote font-medium transition-colors",
                       moreSource === src.value
-                        ? "bg-background text-foreground shadow-sm"
+                        ? "bg-background text-foreground"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -504,7 +504,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
               value={newFeedCategoryId}
               onValueChange={setNewFeedCategoryId}
             >
-              <SelectTrigger className="h-9 text-sm">
+              <SelectTrigger className="h-9 text-body-sm">
                 <SelectValue placeholder={t("sidebar.addToCategory")} />
               </SelectTrigger>
               <SelectContent>

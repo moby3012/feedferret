@@ -231,6 +231,10 @@
 
   --hit-min: 44px;
 
+  /* The single focus style (app/styles/controls.css): 2 px --ring, inset. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: -2px;
+
   /* z-scale: only via z-(--z-*). Numeric / arbitrary z-index utilities are banned. */
   --z-sticky: 10;
   --z-bar: 30;
@@ -331,6 +335,8 @@
   /* Two elevation levels only (bar, overlay); everything else is flat. */
   --shadow-bar: 0 1px 0 oklch(0 0 0 / 0.04), 0 8px 24px -12px oklch(0 0 0 / 0.18);
   --shadow-overlay: 0 0 0 1px oklch(0 0 0 / 0.06), 0 24px 64px -24px oklch(0 0 0 / 0.35);
+  /* Not an elevation: the 1 px lift of a segmented-control thumb. */
+  --shadow-thumb: 0 1px 2px oklch(0 0 0 / 0.1);
   --blur-bar: 20px;
   --blur-overlay: 28px;
 }

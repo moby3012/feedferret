@@ -171,7 +171,7 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
         onKeyDown={(e) => {
           if (e.key === "Enter" && url.trim()) handleFindItems();
         }}
-        className="h-9 text-sm w-full"
+        className="h-9 text-body-sm w-full"
       />
       <div className="flex gap-1.5">
         <Button
@@ -196,13 +196,13 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
       </div>
 
       {suggestError && !candidates && (
-        <div className="rounded-xl border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
+        <div className="rounded-panel border border-warning/20 bg-warning/10 px-3 py-2 text-footnote text-warning">
           {suggestError}
         </div>
       )}
 
       {fullTextInfo && (
-        <div className="rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground space-y-1">
+        <div className="rounded-panel border border-border/60 bg-muted/40 px-3 py-2 text-footnote text-muted-foreground space-y-1">
           <p className="font-medium text-foreground">{t("aiFullTextTitle")}</p>
           <p>{t("aiFullTextHint")}</p>
           {fullTextInfo.notes && <p className="italic">{fullTextInfo.notes}</p>}
@@ -212,8 +212,8 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
       {candidates && candidates.length === 0 && (
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <FileSearch className="size-5 text-muted-foreground/50 mb-2" />
-          <p className="text-sm text-muted-foreground">{t("emptyTitle")}</p>
-          <p className="text-xs text-muted-foreground mt-1">{t("emptyHint")}</p>
+          <p className="text-body-sm text-muted-foreground">{t("emptyTitle")}</p>
+          <p className="text-footnote text-muted-foreground mt-1">{t("emptyHint")}</p>
         </div>
       )}
 
@@ -230,13 +230,13 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
                   key={i}
                   htmlFor={`page-feed-candidate-${i}`}
                   className={cn(
-                    "ui-control-surface flex items-start gap-2 rounded-xl border px-3 py-2 cursor-pointer",
+                    "ui-control-surface flex items-start gap-2 rounded-panel border px-3 py-2 cursor-pointer",
                     selectedIndex === i && "border-primary ring-1 ring-primary/40",
                   )}
                 >
                   <RadioGroupItem value={String(i)} id={`page-feed-candidate-${i}`} className="mt-0.5 shrink-0" />
                   <div className="min-w-0 flex-1 space-y-1">
-                    <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                    <p className="flex items-center gap-1.5 text-footnote font-medium text-foreground">
                       {t("itemsFound", { count: candidate.itemCount })}
                       {candidate.isAi && (
                         <span className="inline-flex items-center gap-0.5 rounded-full bg-brand/10 px-1.5 py-0.5 text-caption font-medium text-brand">
@@ -245,7 +245,7 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
                       )}
                     </p>
                     {candidate.sampleTitles.slice(0, 3).map((title, ti) => (
-                      <p key={ti} className="text-xs text-muted-foreground truncate">{title}</p>
+                      <p key={ti} className="text-footnote text-muted-foreground truncate">{title}</p>
                     ))}
                     {candidate.isAi && candidate.notes && (
                       <p className="text-caption text-muted-foreground italic">{candidate.notes}</p>
@@ -255,7 +255,7 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
                         {candidate.preview.slice(0, 3).map((item, pi) => (
                           <span
                             key={pi}
-                            className="rounded-lg bg-muted px-1.5 py-0.5 text-caption text-muted-foreground truncate max-w-[140px]"
+                            className="rounded-row bg-muted px-1.5 py-0.5 text-caption text-muted-foreground truncate max-w-[140px]"
                             title={item.title}
                           >
                             {item.title} · {hostOf(item.link)}
@@ -273,7 +273,7 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
             placeholder={t("namePlaceholder")}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-9 text-sm"
+            className="h-9 text-body-sm"
           />
 
           <Button

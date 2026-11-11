@@ -22,7 +22,7 @@ export function GesturesHelpSettings() {
       <GestureReference />
       {/* Keyboard shortcuts */}
       <PrefRow icon={Keyboard} title={t("keyboard.title")} description={t("keyboard.description")}>
-        <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground sm:min-w-80">
+        <div className="rounded-panel border border-border/70 bg-background/70 px-4 py-3 text-body-sm text-muted-foreground sm:min-w-80">
           <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
             <span className="font-mono text-foreground">j / k</span>
             <span>
@@ -92,7 +92,7 @@ function GestureReference() {
   return (
     <section
       id="gesture-help"
-      className="scroll-mt-24 rounded-row border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6"
+      className="scroll-mt-24 rounded-row border border-border/65 bg-card/85 p-5 sm:p-6"
       aria-labelledby="gesture-help-title"
       data-testid="gesture-help"
     >

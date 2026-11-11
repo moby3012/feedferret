@@ -95,23 +95,23 @@ export function SyncTutorialSection() {
   const apiUrl = `${instanceUrl || "https://your-feedferret"}/api/v1`;
 
   return (
-    <section className="rounded-2xl border border-border/65 bg-card/85 p-5 shadow-sm sm:p-6">
+    <section className="rounded-panel border border-border/65 bg-card/85 p-5 sm:p-6">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className="flex w-full items-start gap-4 text-start"
       >
-        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+        <div className="ui-brand-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-panel">
           <Rss className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-semibold tracking-title">{t("syncReaders.title")}</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <h2 className="text-title-sm font-semibold tracking-title">{t("syncReaders.title")}</h2>
+          <p className="mt-1 max-w-2xl text-body-sm leading-6 text-muted-foreground">
             {t("syncReaders.description")}
           </p>
         </div>
-        <span className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground">
+        <span className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-panel text-muted-foreground">
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </span>
       </button>
@@ -119,17 +119,17 @@ export function SyncTutorialSection() {
       {open && (
         <div className="animate-fade-in-up mt-6 space-y-6">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="ui-control-surface rounded-2xl border p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.greaderEndpoint")}</p>
-              <p className="mt-1 break-all text-sm font-mono">{greaderUrl}</p>
-              <p className="mt-2 text-xs text-muted-foreground">
+            <div className="ui-control-surface rounded-panel border p-4">
+              <p className="text-footnote font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.greaderEndpoint")}</p>
+              <p className="mt-1 break-all text-body-sm font-mono">{greaderUrl}</p>
+              <p className="mt-2 text-footnote text-muted-foreground">
                 {t("syncReaders.greaderUsernameHint")}
               </p>
             </div>
-            <div className="ui-control-surface rounded-2xl border p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.restApiBase")}</p>
-              <p className="mt-1 break-all text-sm font-mono">{apiUrl}</p>
-              <p className="mt-2 text-xs text-muted-foreground">
+            <div className="ui-control-surface rounded-panel border p-4">
+              <p className="text-footnote font-medium uppercase tracking-wider text-muted-foreground">{t("syncReaders.restApiBase")}</p>
+              <p className="mt-1 break-all text-body-sm font-mono">{apiUrl}</p>
+              <p className="mt-2 text-footnote text-muted-foreground">
                 {t("syncReaders.restApiHint")}
               </p>
             </div>
@@ -139,12 +139,12 @@ export function SyncTutorialSection() {
             {SYNC_CLIENTS.map((client) => (
               <div
                 key={client.name}
-                className="ui-control-surface rounded-2xl border p-4"
+                className="ui-control-surface rounded-panel border p-4"
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold">{client.name}</p>
+                      <p className="text-body-sm font-semibold">{client.name}</p>
                       <span className="rounded-full bg-muted px-2 py-0.5 text-caption font-medium text-muted-foreground">
                         {client.platforms}
                       </span>
@@ -160,14 +160,14 @@ export function SyncTutorialSection() {
                       </span>
                     </div>
                     {client.notesKey && (
-                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{t(client.notesKey as any)}</p>
+                      <p className="mt-1 text-footnote text-muted-foreground leading-relaxed">{t(client.notesKey as any)}</p>
                     )}
                   </div>
                   <a
                     href={client.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-border/60 bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted/60 transition-colors"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-panel border border-border/60 bg-background px-3 py-1.5 text-footnote font-medium hover:bg-muted/60 transition-colors"
                   >
                     {t("syncReaders.openSite")}
                     <ExternalLink className="h-3 w-3" />
@@ -175,14 +175,14 @@ export function SyncTutorialSection() {
                 </div>
                 {client.api === "greader" && (
                   <p className="mt-3 text-caption text-muted-foreground">
-                    {t("syncReaders.inClientChoose")} <strong>{client.serverField}</strong> and paste <code className="rounded bg-background/80 px-1 font-mono">{greaderUrl}</code> {t("syncReaders.serverUrl")}
+                    {t("syncReaders.inClientChoose")} <strong>{client.serverField}</strong> and paste <code className="rounded-chip bg-background/80 px-1 font-mono">{greaderUrl}</code> {t("syncReaders.serverUrl")}
                   </p>
                 )}
               </div>
             ))}
           </div>
 
-          <div className="rounded-2xl border border-warning/20 bg-warning/5 p-4 text-xs text-muted-foreground leading-relaxed">
+          <div className="rounded-panel border border-warning/20 bg-warning/5 p-4 text-footnote text-muted-foreground leading-relaxed">
             <p className="font-medium text-warning mb-1">{t("syncReaders.twoFactorNote")}</p>
             <p>
               {t("syncReaders.twoFactorNoteBody")}
