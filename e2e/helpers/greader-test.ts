@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { test as base, expect } from "@playwright/test";
+import { test as base, expect } from "./csp-test";
 import { manifest } from "./db";
 
 // These specs share the app projects' seeded users. Restore even on assertion

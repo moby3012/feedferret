@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/csp-test";
 
 // Shell spec PR 1: Markdown rendering and HTML sanitizing are server-only.
 // The production client bundle must not ship markdown-it or DOMPurify.

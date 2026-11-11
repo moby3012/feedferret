@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers/csp-test";
 import { manifest } from "./helpers/db";
 
 // Sign-in is rate limited (10 POSTs / 15 min / IP), so keep this spec to two logins.
