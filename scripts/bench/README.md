@@ -80,3 +80,94 @@ those files fully offline. Re-capturing changes expectations; review the
 fixture diff and the test table together. Selector results in the benchmark
 output now carry the gate verdict (`selected.quality`: `ok`/`review` + reasons);
 lists the gate rejects no longer appear as `selector` results at all.
+
+## bench-opml: feed health, discovery and full-text over OPML / site lists
+
+`scripts/bench-opml.mjs` (launcher) runs `scripts/bench/bench-opml.mts` under
+tsx. It is the harness from the AI/feed diagnosis (§11): one structured run over
+an OPML export or JSON site list that measures every feed with the app's own
+functions, so the same command can be re-run after a fix to compare numbers.
+
+```sh
+pnpm install --frozen-lockfile
+DATABASE_PROVIDER=sqlite DATABASE_URL=file:./dev.db pnpm run prisma:generate
+# everything FeedFerret ships as examples (starter OPMLs, discovery catalog,
+# publisher table, feed-everything.sites.json, platforms.sites.json, import fixture)
+node scripts/bench-opml.mjs --live --bundled --out bench-out/bundled
+# your own export
+node scripts/bench-opml.mjs --live --opml ~/feeds.opml --out bench-out/mine
+# rebuild summary.md / PLATFORMS.md from an existing results.jsonl
+node scripts/bench-opml.mjs --summarize --out bench-out/mine
+```
+
+Options: `--opml <file>` / `--sites <json>` (repeatable), `--bundled`,
+`--only <regex>` (id, URL or source list), `--limit N`, `--articles-per-feed 3`,
+`--stages health,discovery,pagefeed,fulltext,ai-dryrun`, `--concurrency 4`,
+`--delay-ms 1000`, `--timeout-ms 20000`, `--worker-timeout-ms 300000`,
+`--cache-dir <dir>` (default `<out>/cache`), `--no-snapshot`, `--resume`,
+`--ignore-robots`, `--render` / `--rsshub` (keep the matching
+`FEEDFERRET_*` env so a configured helper is used), `--ai` (see below).
+Site lists use the `feed-everything.sites.json` shape
+(`{id, category, url, platform?, nativeFeed?, expectation?}`); entries with
+`feedUrl`/`xmlUrl` are treated as feeds.
+
+### What each stage calls
+
+| stage | app functions | notes |
+|---|---|---|
+| health | `fetchFeedArticles` (parse, items, dates, content length) + `fetchWithSsrfProtection` (status, final URL, size, content type; one-hop `safeFetch` for the redirect status) | verdict `ok` / `ok-undated` / `stale` (>30 d) / `dead-stale` (>180 d) / `empty` / `broken` + error class |
+| discovery | `discoverFeeds(htmlUrl)` and `discoverFeeds(bare domain)` | exact match after normalisation (scheme, `www.`, trailing slash) plus a same-content check: the top candidate's item links vs. the shipped feed's (≥ 50 % overlap). `matchSource: resolver` = found only through platform/publisher rules |
+| sites | `discoverFeeds` → first 3 candidates validated with `fetchFeedArticles`; `nativeFeed` (if listed) fetched separately; `fetchAndSuggestFeedCandidatesDetailed` when nothing validated; `matchRadarRules` for RSSHub routes | the feed-creation path for URLs without a known feed |
+| fulltext | `fetchWithSsrfProtection` with exactly `fetchAndExtractReadable`'s direct-fetch options (impit, 2 MiB, 5 redirects, 12 s) + `extractReadableContent` | N newest items. On `fail` the page is fetched once more with undici to measure transport fallback (diagnosis F-P0-4). `--render` adds `renderViaSidecar` |
+| ai-dryrun | `buildFeedConfigPrompt` (homepage, same fetch as `proposeAiFeedConfig`), `buildExtractionPrompt` (articles) | no model call: checks whether body text / feed links reach the prompt |
+
+The full-text **verdict is bench-only scoring**, generic and host-agnostic:
+extracted plain text vs. the feed item (length ratio, link density, overlap of
+the feed's first sentences, multilingual consent / paywall / bot-challenge
+lexicon, `isAccessibleForFree:false`, CTA words at the edges). Reasons:
+`fail` = `blocked-http-4xx`, `http-404`, `fetch-*`, `bot-challenge`,
+`consent-wall`, `paywall-stub`, `worse-than-feed`, `js-shell-or-empty`,
+`no-content-extracted`; `partial` = `content-mismatch`,
+`link-heavy-boilerplate`, `teaser-no-gain`, `paywall-signals`,
+`edge-boilerplate`; `good` = `ok` / `feed-already-full`. Each article also
+records `appChainEscalates` (today's chain only escalates on fetch error /
+`extractedBy: "none"`) and `qualityGateWouldEscalate` (verdict ≠ good).
+
+### Outputs
+
+- `results.jsonl` – one line per feed/site with sub-objects per article.
+  No bodies, headers or keys; URL query params named like
+  key/token/secret/auth/sig/session and URL userinfo are masked.
+- `summary.md` – aggregate tables, failure reasons, top failing hosts, shipped
+  list entries needing attention. `PLATFORMS.md` when `platforms.sites.json`
+  was part of the input.
+- `meta.json` – run parameters (base commit, stages, helper flags).
+- `<cache-dir>/{feeds,pages,articles,articles-undici}/<sha1(url)>.gz` +
+  `.meta.json` raw snapshots (source for the offline fixture corpus, diagnosis
+  §10), `<cache-dir>/robots/`, `<cache-dir>/bench.db` (fresh SQLite, schema via
+  `prisma:push`). `bench-out/` is gitignored; private OPML snapshots must not be
+  copied into fixtures without review.
+
+### Politeness and safety
+
+- Refuses to run when `CI` is set unless `--allow-ci`; needs `--live`.
+- One worker process per entry (hard-killed at `--worker-timeout-ms`). The
+  scheduler never runs two entries that share a host and waits `--delay-ms`
+  between entries per host; inside a worker every request is sequential with
+  the same delay. App-internal parallelism (discovery verifies candidates in
+  batches) is unchanged.
+- robots.txt (RFC 9309 wildcards, group `*` or `feedferret`) is honoured for
+  homepages and article pages: disallowed URLs are reported as
+  `robots-disallowed`, not fetched. Feed URLs are fetched as a reader would.
+- Extra requests (robots, health metadata) send
+  `FeedFerret/1.0 (+https://github.com/moby3012/feedferret) bench-opml`;
+  app calls keep the app's own headers (impit browser profile for full-text).
+- Workers strip `FEEDFERRET_*` connector env and trust overrides, use only the
+  throwaway SQLite DB and refuse an internal-fetch-enabled configuration.
+- `--ai` (default off) calls `extractArticleWithAi` for non-good articles only
+  when `BENCH_AI_PROVIDER` (+ `BENCH_AI_API_KEY`, `BENCH_AI_MODEL`,
+  `BENCH_AI_OLLAMA_URL`) are set; usage is metered against a bench user in the
+  scratch DB, and a grounding ratio (output sentences found in the page) is
+  recorded. Keys are never written to outputs.
+- Offline replay from the cache is not implemented yet; `--summarize` only
+  rebuilds the reports.
