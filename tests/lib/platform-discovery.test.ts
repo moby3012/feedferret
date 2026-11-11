@@ -59,7 +59,8 @@ vi.mock("../../lib/rsshub", () => ({
 }));
 
 import { discoverFeeds } from "../../lib/feed-discovery";
-import { resetDiscoveryHostBlocks } from "../../lib/discovery-budget";
+import { hostBackoffRemainingMs, resetHostBackoff } from "../../lib/host-backoff";
+import { HttpStatusError } from "../../lib/ssrf";
 import { feedSourceLabel } from "../../lib/feed-source-label";
 
 const adapterFixture = (name: string) => readFileSync(path.join(__dirname, "../fixtures/adapters", `${name}.html`), "utf8");
@@ -73,7 +74,7 @@ beforeEach(() => {
   mocks.calls.length = 0;
   mocks.rsshub.config = null;
   mocks.rsshub.routes = [];
-  resetDiscoveryHostBlocks();
+  resetHostBackoff();
   vi.stubEnv("FEEDFERRET_DISABLE_IMPIT", "");
 });
 afterEach(() => {
@@ -304,10 +305,29 @@ describe("rate limits (429 / Retry-After)", () => {
   });
 
   it("any refusal carrying a Retry-After (HttpStatusError shape) is not retried and blocks the host", async () => {
-    const err = Object.assign(new Error("Fetch failed: 403"), { status: 403, retryAfterMs: 120_000 });
+    const err = new HttpStatusError(403, "Fetch failed: 403", 120_000);
     mocks.routes.set("https://ra.example.com/", { plain: err, impit: adapterFixture("xenforo") });
     await discoverFeeds("https://ra.example.com/");
     expect(mocks.calls.filter((c) => c.url === "https://ra.example.com/")).toHaveLength(1);
+    // Recorded in the shared per-host backoff (lib/host-backoff.ts) with the server's window.
+    expect(hostBackoffRemainingMs("https://ra.example.com/x")).toBeGreaterThan(110_000);
+  });
+
+  it("a 429 with Retry-After lands in the shared host backoff, which full-text fetches honour too", async () => {
+    mocks.routes.set("https://shared.example.com/", { plain: new HttpStatusError(429, "Fetch failed: 429", 30_000), impit: adapterFixture("xenforo") });
+    const result = await discoverFeeds("https://shared.example.com/");
+    expect(result.hint).toBe("rate-limited");
+    const remaining = hostBackoffRemainingMs("https://shared.example.com/article");
+    expect(remaining).toBeGreaterThan(0);
+  });
+
+  it("a full-text 403/network backoff (not a rate limit) does not block an interactive discovery", async () => {
+    const { recordHostFailure } = await import("../../lib/host-backoff");
+    recordHostFailure("https://ft.example.com/a", new HttpStatusError(403, "Fetch failed: 403"));
+    mocks.routes.set("https://ft.example.com/", '<html><head><link rel="alternate" type="application/rss+xml" href="/f.xml"></head></html>');
+    mocks.routes.set("https://ft.example.com/f.xml", rss("FT"));
+    const result = await discoverFeeds("https://ft.example.com/");
+    expect(result.feeds.map((f) => f.url)).toEqual(["https://ft.example.com/f.xml"]);
   });
 });
 

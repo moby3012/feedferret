@@ -3,27 +3,18 @@
 // across every stage (resolver lookups, RSSHub validations, page fetch,
 // candidate verification, transport retries and redirect hops), and per-host
 // rate-limit blocks so a 429 stops all further probes of that host — for both
-// transports, for the rest of this run and for the server's Retry-After window.
-//
-// TODO(P-PLAT/#275): unify the host block with lib/host-backoff.ts once the
-// full-text PR lands (its HttpStatusError carries `retryAfterMs`, which
-// `retryAfterMsOf` below already reads; on main today the SSRF error has no
-// Retry-After, so the default window applies).
+// transports, for the rest of this run and, via the shared per-host backoff
+// (lib/host-backoff.ts, also used by full text), for the server's Retry-After
+// window across runs.
+
+import { classifyFetchFailure, hostRateLimitRemainingMs, recordHostFailure } from "./host-backoff";
 
 export const DISCOVERY_DEADLINE_MS = 25_000;
 export const DISCOVERY_MAX_REQUESTS = 30;
 /** Per-request ceiling; a request never outlives the run's deadline either. */
 export const DISCOVERY_REQUEST_TIMEOUT_MS = 12_000;
-/** 429 without a (readable) Retry-After. */
-const DEFAULT_RATE_LIMIT_BLOCK_MS = 60_000;
-/** Sanity cap for a server's Retry-After (discovery only needs "not now"). */
-const MAX_BLOCK_MS = 60 * 60 * 1000;
-const MAX_TRACKED_HOSTS = 1_000;
 
 export type DiscoveryStopReason = "deadline" | "request-budget";
-
-/** In-process Retry-After windows, shared by discovery runs (and both transports). */
-const rateLimitedUntil = new Map<string, number>();
 
 function hostOf(url: string): string | null {
   try {
@@ -33,39 +24,10 @@ function hostOf(url: string): string | null {
   }
 }
 
-function statusOf(err: unknown): number | null {
-  const typed = (err as { status?: unknown } | null)?.status;
-  if (typeof typed === "number") return typed;
-  const m = /^Fetch failed: (\d{3})\b/.exec(err instanceof Error ? err.message : String(err ?? ""));
-  return m ? Number(m[1]) : null;
-}
-
-/** Retry-After carried by the fetch error (lib/ssrf HttpStatusError after #275), in ms. */
-export function retryAfterMsOf(err: unknown): number | null {
-  const v = (err as { retryAfterMs?: unknown } | null)?.retryAfterMs;
-  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
-}
-
-/** 429, or any refusal that told us when to come back: never retried, the host is blocked. */
+/** 429, or any refusal that told us when to come back (Retry-After): never retried, the host is blocked. */
 export function isRateLimitResponse(err: unknown): boolean {
-  return statusOf(err) === 429 || retryAfterMsOf(err) !== null;
-}
-
-/** Remaining Retry-After window of a host from earlier runs (ms, 0 = free). */
-export function hostRateLimitRemainingMs(url: string, now = Date.now()): number {
-  const host = hostOf(url);
-  const until = host ? rateLimitedUntil.get(host) : undefined;
-  if (until === undefined) return 0;
-  if (until <= now) {
-    rateLimitedUntil.delete(host!);
-    return 0;
-  }
-  return until - now;
-}
-
-/** Test helper. */
-export function resetDiscoveryHostBlocks() {
-  rateLimitedUntil.clear();
+  const { kind, retryAfterMs } = classifyFetchFailure(err);
+  return kind === "rate_limited" || retryAfterMs !== null;
 }
 
 export class DiscoveryBudget {
@@ -136,19 +98,13 @@ export class DiscoveryBudget {
     return true;
   }
 
-  /** Records a failed request: a rate-limit response blocks its host (both transports). */
+  /** Records a failed request: a rate-limit response blocks its host (both transports, shared backoff). */
   noteFailure(url: string, err: unknown): void {
     if (!isRateLimitResponse(err)) return;
     const host = hostOf(url);
     if (!host) return;
     this.blockedHosts.add(host);
-    const windowMs = Math.min(MAX_BLOCK_MS, retryAfterMsOf(err) ?? DEFAULT_RATE_LIMIT_BLOCK_MS);
-    if (rateLimitedUntil.size >= MAX_TRACKED_HOSTS) {
-      const oldest = rateLimitedUntil.keys().next().value;
-      if (oldest !== undefined) rateLimitedUntil.delete(oldest);
-    }
-    rateLimitedUntil.delete(host);
-    rateLimitedUntil.set(host, Date.now() + windowMs);
+    recordHostFailure(url, err);
   }
 
   /** Redirect hops count against the budget and may not land on a blocked host. */

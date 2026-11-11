@@ -13,7 +13,8 @@
 
 import type { HttpStatusError } from "@/lib/ssrf";
 
-type HostState = { failures: number; until: number };
+/** `rateLimited`: the window comes from a 429 or a server-sent Retry-After (not just our own guess). */
+type HostState = { failures: number; until: number; rateLimited: boolean };
 
 const MAX_HOSTS = 5_000;
 const MAX_BACKOFF_MS = 6 * 60 * 60 * 1000; // 6 h, local exponential delay only
@@ -107,8 +108,20 @@ export function recordHostFailure(url: string, error: unknown, now = Date.now())
     const wait = Math.max(exponential, retryAfter);
     prune(now);
     hosts.delete(host); // re-insert so Map order approximates recency for pruning
-    hosts.set(host, { failures, until: now + wait });
+    hosts.set(host, { failures, until: now + wait, rateLimited: kind === "rate_limited" || retryAfterMs !== null });
     return wait;
+}
+
+/**
+ * Remaining window in ms when the host asked us to slow down (429 or a
+ * Retry-After), else 0. Interactive callers (feed discovery) honour only this:
+ * a full-text 403/5xx/network backoff must not block a user's explicit request.
+ */
+export function hostRateLimitRemainingMs(url: string, now = Date.now()): number {
+    const host = hostOf(url);
+    const state = host ? hosts.get(host) : undefined;
+    if (!state?.rateLimited) return 0;
+    return Math.max(0, state.until - now);
 }
 
 /** A successful fetch clears the host's record. */
