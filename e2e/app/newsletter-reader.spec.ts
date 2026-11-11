@@ -175,6 +175,11 @@ test.describe("newsletter reader", () => {
     await expect(link).toHaveAttribute("href", `${FIXTURE}/newsletter/confirm/${seeded.tag}`);
     await expect(link).toHaveAttribute("target", "_blank");
     await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(link).toContainText("(opens in a new tab)");
+    await expect(banner.getByTestId("newsletter-confirm-host")).toHaveText(`Destination: ${new URL(FIXTURE).host}`);
+    // Failed sender check: no primary call to action, plus the warning hint.
+    await expect(banner).toHaveAttribute("data-sender-failed", "");
+    await expect(banner).toContainText("could not verify the sender");
 
     // Never fetched before the user's click (no prefetch, no server-side request).
     expect((await fixtureLog(seeded.tag)).confirms).toBe(0);
@@ -190,18 +195,27 @@ test.describe("newsletter reader", () => {
     expect((await fixtureLog(seeded.tag)).confirms).toBe(1);
   });
 
-  test("verified or unknown sender shows no warning; no banner without a confirmation link", async ({ app, page }) => {
-    const seeded = seedNewsletter(app.user.userId, { auth: "none" });
+  test("unverified sender: no warning, no banner, and one-click degrades to a link (no server request)", async ({ app, page }) => {
+    const seeded = seedNewsletter(app.user.userId, { auth: "none", oneClick: true });
     cleanups.push(seeded.cleanup);
     await openNewsletter(app, seeded);
     await expect(page.getByTestId("newsletter-meta")).toBeVisible();
     await expect(page.getByTestId("newsletter-auth-warning")).toHaveCount(0);
     await expect(page.getByTestId("newsletter-confirm-banner")).toHaveCount(0);
+
+    await app.activate(page.getByTestId("reader-more-button").filter({ visible: true }).first());
+    await app.activate(page.getByTestId("reader-menu").getByRole("menuitem", { name: "Unsubscribe from newsletter…" }));
+    const dialog = page.getByTestId("newsletter-unsubscribe-dialog");
+    await expect(dialog.getByTestId("newsletter-unsubscribe-link")).toHaveAttribute("href", `${FIXTURE}/newsletter/unsubscribe/${seeded.tag}`);
+    await expect(dialog.getByTestId("newsletter-unsubscribe-confirm")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    expect((await fixtureLog(seeded.tag)).posts).toHaveLength(0);
   });
 
   test("one-click unsubscribe from the reader menu, then remove the feed", async ({ app, page }) => {
     cleanups.push(allowInternalTargets());
-    const seeded = seedNewsletter(app.user.userId, { oneClick: true });
+    // One-click only for a verified ("pass") sender.
+    const seeded = seedNewsletter(app.user.userId, { auth: "pass", oneClick: true });
     cleanups.push(seeded.cleanup);
     await openNewsletter(app, seeded);
 

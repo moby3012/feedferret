@@ -313,6 +313,13 @@ export const RATE_LIMITS = {
     windowSecs: 10 * 60,
     prefix: "ai-connection-test",
   } satisfies RateLimitConfig,
+
+  // N1 PR D: RFC 8058 one-click unsubscribe (server-side POST to a sender URL), 10/min per user
+  newsletterUnsubscribe: {
+    limit: 10,
+    windowSecs: 60,
+    prefix: "newsletter-unsubscribe",
+  } satisfies RateLimitConfig,
 } as const;
 
 /**

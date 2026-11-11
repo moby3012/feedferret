@@ -81,7 +81,7 @@ function NewsletterDialogs({ state, onChange }: { state: DialogState | null; onC
       if (result.ok) {
         onChange({ ...unsubscribe, step: "done" });
       } else {
-        toast.error(t("unsubscribeFailed"));
+        toast.error(result.error === "rate-limited" ? t("unsubscribeRateLimited") : t("unsubscribeFailed"));
       }
     } catch {
       toast.error(t("unsubscribeFailed"));
@@ -174,6 +174,7 @@ function NewsletterDialogs({ state, onChange }: { state: DialogState | null; onC
                   >
                     {t("openUnsubscribePage")}
                     <ExternalLink className="size-4" aria-hidden />
+                    <span className="sr-only"> {t("newTab")}</span>
                   </a>
                 )}
                 {method === "mailto" && unsubscribe?.info.unsubscribe?.mailto && (

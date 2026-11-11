@@ -23,6 +23,15 @@ export function ReaderHeader({ article, hideImage, onOpenFeed }: { article: Arti
   // Newsletter: an e-mail style line, "Von: Name · Datum, Uhrzeit" (sender address on hover).
   const isNewsletter = newsletter !== null || article.feedIsNewsletter === true;
   const senderName = article.author || newsletter?.sender || "";
+  const confirmHost = (() => {
+    try {
+      return newsletter?.confirmationUrl ? new URL(newsletter.confirmationUrl).host : null;
+    } catch {
+      return null;
+    }
+  })();
+  // Failed sender check: the banner stays, but without the primary call to action.
+  const senderFailed = newsletter?.auth === "fail";
 
   useLayoutEffect(() => {
     markTitlePainted(article.id);
@@ -87,24 +96,31 @@ export function ReaderHeader({ article, hideImage, onOpenFeed }: { article: Arti
         </p>
       )}
       {newsletter?.confirmationUrl && (
-        <div className="ff-newsletter-confirm" role="note" aria-labelledby="newsletter-confirm-title" data-testid="newsletter-confirm-banner">
-          <MailCheck className="mt-0.5 size-5 shrink-0 text-brand" aria-hidden />
+        <div className="ff-newsletter-confirm" data-sender-failed={senderFailed ? "" : undefined} role="note" aria-labelledby="newsletter-confirm-title" data-testid="newsletter-confirm-banner">
+          {senderFailed ? <ShieldAlert className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden /> : <MailCheck className="mt-0.5 size-5 shrink-0 text-brand" aria-hidden />}
           <div className="min-w-0 flex-1">
             <p id="newsletter-confirm-title" className="text-body-sm font-semibold text-foreground">
               {tNl("confirmTitle")}
             </p>
             <p className="mt-0.5 text-footnote text-muted-foreground">{tNl("confirmBody")}</p>
+            {senderFailed && <p className="mt-1 text-footnote text-warning">{tNl("senderUnverifiedHint")}</p>}
             {/* A plain link: opened only by the user's click, never fetched or prefetched. */}
             <a
               href={newsletter.confirmationUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={cn(buttonVariants({ size: "sm" }), "mt-2")}
+              className={cn(buttonVariants({ size: "sm", variant: senderFailed ? "outline" : "default" }), "mt-2")}
               data-testid="newsletter-confirm-link"
             >
               {tNl("confirmButton")}
               <ExternalLink className="size-3.5" aria-hidden />
+              <span className="sr-only"> {tNl("newTab")}</span>
             </a>
+            {confirmHost && (
+              <p className="mt-1.5 break-all text-footnote text-muted-foreground" data-testid="newsletter-confirm-host">
+                {tNl("confirmDestination", { host: confirmHost })}
+              </p>
+            )}
           </div>
         </div>
       )}

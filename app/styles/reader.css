@@ -248,3 +248,7 @@
   border-radius: var(--radius-row);
   background: color-mix(in oklch, var(--brand) 8%, var(--surface-base));
 }
+.ff-newsletter-confirm[data-sender-failed] {
+  border-color: color-mix(in oklch, var(--warning) 35%, var(--divider));
+  background: color-mix(in oklch, var(--warning) 6%, var(--surface-base));
+}

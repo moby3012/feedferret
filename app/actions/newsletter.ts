@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { pickFields } from "@/lib/pick-fields";
 import { generateNewsletterToken } from "@/lib/inbound-email";
 import { logger } from "@/lib/logger";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { resolveNewsletterTarget, sendOneClickUnsubscribe, type NewsletterFeedActions, type NewsletterTarget } from "@/lib/newsletter-reader";
 import { addressString, ensurePrimaryNewsletterAddress, getInboundSource, MAX_NEWSLETTER_ADDRESSES } from "@/lib/newsletter-addresses";
 
@@ -114,10 +115,11 @@ export async function getNewsletterFeedActions(input: unknown): Promise<Newslett
 
 export type UnsubscribeNewsletterResult =
   | { ok: true; feedId: string; feedName: string }
-  | { ok: false; error: "not-found" | "no-one-click" | "failed"; status?: number };
+  | { ok: false; error: "not-found" | "no-one-click" | "failed" | "rate-limited"; status?: number };
 
 /**
- * RFC 8058 one-click unsubscribe of an article's (or feed's) newsletter. The
+ * RFC 8058 one-click unsubscribe of an article's (or feed's) newsletter. Only
+ * for mail with a verified ("pass") sender (see unsubscribeFor). The
  * URL is always re-read from the user's own row; the client only names the
  * article or feed. Senders without one-click get "no-one-click" (the client
  * opens their page or a mail on the user's click instead).
@@ -126,6 +128,8 @@ export async function unsubscribeNewsletter(input: unknown): Promise<Unsubscribe
   const { userId } = await requireUser();
   const target = pickTarget(input);
   if (!target) return { ok: false, error: "not-found" };
+  // Each call can make one outbound POST: bounded per user.
+  if (!checkRateLimit(`user:${userId}`, RATE_LIMITS.newsletterUnsubscribe).success) return { ok: false, error: "rate-limited" };
   const resolved = await resolveNewsletterTarget(userId, target);
   if (!resolved) return { ok: false, error: "not-found" };
   const unsubscribe = resolved.unsubscribe;

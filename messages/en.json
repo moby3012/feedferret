@@ -2379,6 +2379,9 @@
     "blockLastActive": "This is your last active address. Create a new one first.",
     "blockFailed": "Could not block the address",
     "noUnsubscribe": "No way to unsubscribe known",
-    "newsletterBadge": "Newsletter"
+    "newsletterBadge": "Newsletter",
+    "newTab": "(opens in a new tab)",
+    "confirmDestination": "Destination: {host}",
+    "unsubscribeRateLimited": "Too many unsubscribe requests in a short time. Please try again in a minute."
   }
 }

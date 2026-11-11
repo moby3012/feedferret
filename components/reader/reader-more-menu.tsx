@@ -47,7 +47,8 @@ function ReaderMoreMenu(p: ReaderMoreMenuProps) {
   const { article } = p;
   const newsletter = article.newsletter ?? null;
   // Newsletters without a web version link to "newsletter:…": nothing to fetch, open or copy.
-  const webLink = isWebLink(article.link);
+  // Web feed articles keep their usual behaviour.
+  const webLink = newsletter || article.feedIsNewsletter ? isWebLink(article.link) : !!article.link;
   const newsletterDialogs = useNewsletterDialogs();
   const { data: aiSettings } = useAiSettings();
   const { data: exportSettings } = useExportSettings();

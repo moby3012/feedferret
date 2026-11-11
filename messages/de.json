@@ -2379,6 +2379,9 @@
     "blockLastActive": "Das ist deine letzte aktive Adresse. Lege erst eine neue an.",
     "blockFailed": "Adresse konnte nicht gesperrt werden",
     "noUnsubscribe": "Kein Abmeldeweg bekannt",
-    "newsletterBadge": "Newsletter"
+    "newsletterBadge": "Newsletter",
+    "newTab": "(öffnet in neuem Tab)",
+    "confirmDestination": "Ziel: {host}",
+    "unsubscribeRateLimited": "Zu viele Abmeldungen in kurzer Zeit. Bitte gleich noch einmal versuchen."
   }
 }

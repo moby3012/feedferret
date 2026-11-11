@@ -60,12 +60,16 @@ const h = vi.hoisted(() => {
     inboundMailSource: { findMany: vi.fn(async () => (store.source ? [store.source] : [])) },
   };
   const safeFetch = vi.fn(async (_url: string, _init?: RequestInit, _opts?: Record<string, unknown>) => new Response("ok", { status: 200 }));
-  return { store, db, safeFetch };
+  const trusted = { value: false };
+  const rateLimited = { value: false };
+  const checkRateLimit = vi.fn((_id: string, _config: unknown) => ({ success: !rateLimited.value }));
+  return { store, db, safeFetch, trusted, rateLimited, checkRateLimit };
 });
 
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => (h.store.session ? { user: h.store.session } : null)) }));
 vi.mock("@/lib/db", () => ({ db: h.db }));
-vi.mock("@/lib/ssrf", () => ({ safeFetch: h.safeFetch, isTrustedFeedFetchingAllowed: vi.fn(async () => false) }));
+vi.mock("@/lib/ssrf", () => ({ safeFetch: h.safeFetch, isTrustedFeedFetchingAllowed: vi.fn(async () => h.trusted.value) }));
+vi.mock("@/lib/rate-limit", async (original) => ({ ...(await original<typeof import("@/lib/rate-limit")>()), checkRateLimit: h.checkRateLimit }));
 
 import { getNewsletterFeedActions, unsubscribeNewsletter } from "@/app/actions/newsletter";
 import { ONE_CLICK_BODY, safeWebUrl, unsubscribeFor } from "@/lib/newsletter-reader";
@@ -82,7 +86,7 @@ function seed() {
     emailSender: "digest@news.example.com",
     confirmationUrl: null,
     listUnsubscribeMailto: "mailto:leave@news.example.com",
-    newsletterAuth: "none",
+    newsletterAuth: "pass",
     newsletterAddressId: null,
     publishedAt: 1,
   };
@@ -94,6 +98,9 @@ function seed() {
     { id: "addr-primary", userId: "bob", token: "a".repeat(26), isActive: true, feedId: null, createdAt: 1 },
     { id: "addr-alias", userId: "bob", token: "b".repeat(26), isActive: true, feedId: null, createdAt: 2 },
   ];
+  h.trusted.value = false;
+  h.rateLimited.value = false;
+  h.checkRateLimit.mockClear();
   h.safeFetch.mockClear();
   h.safeFetch.mockImplementation(async () => new Response("ok", { status: 200 }));
 }
@@ -112,13 +119,65 @@ describe("unsubscribeNewsletter (RFC 8058 one-click)", () => {
     expect(ONE_CLICK_BODY).toBe("List-Unsubscribe=One-Click");
     expect(new Headers(init?.headers).get("content-type")).toBe("application/x-www-form-urlencoded");
     expect(init?.redirect).toBe("manual");
-    expect(opts).toMatchObject({ allowInternal: false });
+    expect(opts).toMatchObject({ allowInternal: false, context: "Unsubscribe" });
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    expect(init?.signal?.aborted).toBe(false);
+  });
+
+  it("allows internal targets only when the admin allows internal feed URLs", async () => {
+    h.trusted.value = true;
+    await unsubscribeNewsletter({ articleId: "a-bob" });
+    expect(h.safeFetch.mock.calls[0][2]).toMatchObject({ allowInternal: true });
+  });
+
+  it("never POSTs for an unverified or failed sender (RFC 8058 needs a DKIM-covered header)", async () => {
+    for (const auth of ["none", "fail", null]) {
+      h.store.articles[0].newsletterAuth = auth;
+      expect(await unsubscribeNewsletter({ articleId: "a-bob" })).toEqual({ ok: false, error: "no-one-click" });
+    }
+    expect(h.safeFetch).not.toHaveBeenCalled();
+    h.store.articles[0].newsletterAuth = "none";
+    // Degrades to the sender's page, opened by the user's click.
+    expect((await getNewsletterFeedActions({ feedId: "f-bob" }))?.unsubscribe).toEqual({ method: "link", url: ONE_CLICK_URL, mailto: "mailto:leave@news.example.com" });
+  });
+
+  it("is rate limited per user", async () => {
+    h.rateLimited.value = true;
+    expect(await unsubscribeNewsletter({ articleId: "a-bob" })).toEqual({ ok: false, error: "rate-limited" });
+    expect(h.checkRateLimit).toHaveBeenCalledWith("user:bob", expect.objectContaining({ limit: 10, windowSecs: 60 }));
+    expect(h.safeFetch).not.toHaveBeenCalled();
   });
 
   it("works from the feed menu (feed id) with the newest mail's header", async () => {
     const result = await unsubscribeNewsletter({ feedId: "f-bob" });
     expect(result.ok).toBe(true);
     expect(h.safeFetch.mock.calls[0][0]).toBe(ONE_CLICK_URL);
+  });
+
+  it("feed menu: prefers a verified mail, never a failed one", async () => {
+    const extra = (id: string, auth: string, publishedAt: number, url: string) => ({
+      ...h.store.articles[0],
+      id,
+      newsletterAuth: auth,
+      publishedAt,
+      listUnsubscribeUrl: url,
+    });
+    // Newer "none" and newest "fail" mails must not win over the verified one.
+    h.store.articles.push(extra("a-none", "none", 5, "https://news.example.com/u/unverified"));
+    h.store.articles.push(extra("a-fail", "fail", 9, "https://evil.example/u/spoofed"));
+    expect((await getNewsletterFeedActions({ feedId: "f-bob" }))?.unsubscribe?.url).toBe(ONE_CLICK_URL);
+    await unsubscribeNewsletter({ feedId: "f-bob" });
+    expect(h.safeFetch.mock.calls[0][0]).toBe(ONE_CLICK_URL);
+
+    // No verified mail: the newest unverified one, as a link only (no server request).
+    h.store.articles = h.store.articles.filter((a) => a.id !== "a-bob");
+    expect((await getNewsletterFeedActions({ feedId: "f-bob" }))?.unsubscribe).toEqual({ method: "link", url: "https://news.example.com/u/unverified", mailto: "mailto:leave@news.example.com" });
+
+    // Only failed mail: nothing to unsubscribe with.
+    h.store.articles = h.store.articles.filter((a) => a.id !== "a-none");
+    expect((await getNewsletterFeedActions({ feedId: "f-bob" }))?.unsubscribe).toBeNull();
+    expect(await unsubscribeNewsletter({ feedId: "f-bob" })).toEqual({ ok: false, error: "no-one-click" });
+    expect(h.safeFetch).toHaveBeenCalledTimes(1);
   });
 
   it("refuses another user's article or feed without any request", async () => {
@@ -193,14 +252,15 @@ describe("getNewsletterFeedActions", () => {
 
 describe("unsubscribeFor / safeWebUrl", () => {
   it("prefers one-click, then the https page, then mailto", () => {
-    expect(unsubscribeFor({ listUnsubscribeUrl: ONE_CLICK_URL, listUnsubscribeOneClick: true, listUnsubscribeMailto: null }, false)?.method).toBe("one-click");
-    expect(unsubscribeFor({ listUnsubscribeUrl: ONE_CLICK_URL, listUnsubscribeOneClick: null, listUnsubscribeMailto: null }, false)?.method).toBe("link");
-    expect(unsubscribeFor({ listUnsubscribeUrl: null, listUnsubscribeOneClick: null, listUnsubscribeMailto: "mailto:x@y.z?subject=unsubscribe" }, false)).toEqual({
+    expect(unsubscribeFor({ listUnsubscribeUrl: ONE_CLICK_URL, listUnsubscribeOneClick: true, listUnsubscribeMailto: null, newsletterAuth: "pass" }, false)?.method).toBe("one-click");
+    expect(unsubscribeFor({ listUnsubscribeUrl: ONE_CLICK_URL, listUnsubscribeOneClick: true, listUnsubscribeMailto: null, newsletterAuth: "none" }, false)?.method).toBe("link");
+    expect(unsubscribeFor({ listUnsubscribeUrl: ONE_CLICK_URL, listUnsubscribeOneClick: null, listUnsubscribeMailto: null, newsletterAuth: "pass" }, false)?.method).toBe("link");
+    expect(unsubscribeFor({ listUnsubscribeUrl: null, listUnsubscribeOneClick: null, listUnsubscribeMailto: "mailto:x@y.z?subject=unsubscribe", newsletterAuth: "pass" }, false)).toEqual({
       method: "mailto",
       url: null,
       mailto: "mailto:x@y.z?subject=unsubscribe",
     });
-    expect(unsubscribeFor({ listUnsubscribeUrl: null, listUnsubscribeOneClick: null, listUnsubscribeMailto: null }, false)).toBeNull();
+    expect(unsubscribeFor({ listUnsubscribeUrl: null, listUnsubscribeOneClick: null, listUnsubscribeMailto: null, newsletterAuth: "pass" }, false)).toBeNull();
   });
 
   it("drops non-https and script URLs", () => {
@@ -208,6 +268,6 @@ describe("unsubscribeFor / safeWebUrl", () => {
     expect(safeWebUrl("http://example.com/x", false)).toBeNull();
     expect(safeWebUrl("http://example.com/x", true)).toBe("http://example.com/x");
     expect(safeWebUrl("https://example.com/x", false)).toBe("https://example.com/x");
-    expect(unsubscribeFor({ listUnsubscribeUrl: null, listUnsubscribeOneClick: null, listUnsubscribeMailto: "javascript:alert(1)" }, false)).toBeNull();
+    expect(unsubscribeFor({ listUnsubscribeUrl: null, listUnsubscribeOneClick: null, listUnsubscribeMailto: "javascript:alert(1)", newsletterAuth: "pass" }, false)).toBeNull();
   });
 });

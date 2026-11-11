@@ -63,11 +63,20 @@ function safeMailto(raw: string | null | undefined): string | null {
   return raw;
 }
 
-/** One-click when the sender supports RFC 8058, else the https page, else mailto. */
-export function unsubscribeFor(row: Pick<NewsletterArticleRow, "listUnsubscribeUrl" | "listUnsubscribeMailto" | "listUnsubscribeOneClick">, allowHttp?: boolean): NewsletterUnsubscribe | null {
+/**
+ * One-click when the sender supports RFC 8058 AND the mail passed a verified
+ * sender check (RFC 8058 relies on a DKIM signature covering List-Unsubscribe
+ * and List-Unsubscribe-Post; without a trusted verdict the headers may be
+ * forged, so the server must not POST to them). Otherwise the https page
+ * (opened by the user's click), else mailto.
+ */
+export function unsubscribeFor(
+  row: Pick<NewsletterArticleRow, "listUnsubscribeUrl" | "listUnsubscribeMailto" | "listUnsubscribeOneClick" | "newsletterAuth">,
+  allowHttp?: boolean,
+): NewsletterUnsubscribe | null {
   const url = safeWebUrl(row.listUnsubscribeUrl, allowHttp);
   const mailto = safeMailto(row.listUnsubscribeMailto);
-  if (url && row.listUnsubscribeOneClick === true) return { method: "one-click", url, mailto };
+  if (url && row.listUnsubscribeOneClick === true && row.newsletterAuth === "pass") return { method: "one-click", url, mailto };
   if (url) return { method: "link", url, mailto };
   if (mailto) return { method: "mailto", url: null, mailto };
   return null;
@@ -122,8 +131,11 @@ export interface NewsletterFeedActions extends NewsletterArticleMeta {
 
 /**
  * Resolve an article or a newsletter feed of `userId` to its newsletter view.
- * A feed uses its newest mail that carries unsubscribe data (else its newest
- * mail). Another user's id resolves to null.
+ * A feed takes its unsubscribe data from its newest mail with a verified
+ * ("pass") sender, else from its newest unverified ("none") one — never from
+ * a mail whose sender check failed (spoofed headers). Without such a mail it
+ * falls back to the newest mail (for "Adresse sperren") with no unsubscribe.
+ * Another user's id resolves to null.
  */
 export async function resolveNewsletterTarget(userId: string, target: NewsletterTarget): Promise<NewsletterFeedActions | null> {
   const select = { ...NEWSLETTER_ARTICLE_SELECT, feed: { select: { sourceType: true, name: true } } } as const;
@@ -134,11 +146,18 @@ export async function resolveNewsletterTarget(userId: string, target: Newsletter
     const feed = await db.feed.findFirst({ where: { id: target.feedId, userId }, select: { id: true } });
     if (!feed) return null;
     const newest = { orderBy: [{ publishedAt: "desc" as const }, { id: "desc" as const }], select };
-    row =
-      (await db.article.findFirst({
-        where: { feedId: feed.id, userId, OR: [{ listUnsubscribeUrl: { not: null } }, { listUnsubscribeMailto: { not: null } }] },
+    const withUnsubscribe = (newsletterAuth: "pass" | "none") =>
+      db.article.findFirst({
+        where: { feedId: feed.id, userId, newsletterAuth, OR: [{ listUnsubscribeUrl: { not: null } }, { listUnsubscribeMailto: { not: null } }] },
         ...newest,
-      })) ?? (await db.article.findFirst({ where: { feedId: feed.id, userId, newsletterAuth: { not: null } }, ...newest }));
+      });
+    row = (await withUnsubscribe("pass")) ?? (await withUnsubscribe("none"));
+    if (!row) {
+      const fallback = await db.article.findFirst({ where: { feedId: feed.id, userId, newsletterAuth: { not: null } }, ...newest });
+      if (!fallback) return null;
+      const meta = await newsletterMetaFor(userId, fallback);
+      return meta ? { ...meta, unsubscribe: null, feedId: fallback.feedId, feedName: fallback.feed?.name ?? "" } : null;
+    }
   }
   if (!row) return null;
   const meta = await newsletterMetaFor(userId, row);
