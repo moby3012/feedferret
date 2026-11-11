@@ -39,7 +39,7 @@ import { springBack } from "./spring";
 // that pans on its own. All writes are inline styles from one rAF loop: zero
 // React renders during the drag. Visual hooks (app/styles/shell.css):
 //   data-back-swipe="drag|settle|commit|done"  on the surface
-//   --back-shade                               shade opacity over the list
+//   data-back-shade + --back-shade             on the list underneath: shade opacity
 
 export interface BackSwipeOptions {
   /** Pref on + the reader currently covers the list (compact / portrait tablet). */
@@ -51,6 +51,12 @@ export interface BackSwipeOptions {
   onStart?(): void;
   /** The reader has slid out: go back. Visual state stays until `reset()`. */
   onCommit(): void;
+  /**
+   * An overlay (sheet, menu, dialog) is open: no swipe starts, a running one
+   * springs back, and a release never commits — Back would close the overlay,
+   * not the article.
+   */
+  blocked?(): boolean;
   /** Test seam; default: UA + display-mode. */
   environment?(): BackSwipeEnvironment;
 }
@@ -107,28 +113,37 @@ export function createBackSwipe(surface: HTMLElement, o: BackSwipeOptions): { de
     }
     surface.style.transform = x === 0 ? "translate3d(0,0,0)" : `translate3d(${(x * sign()).toFixed(1)}px,0,0)`;
     const p = backSwipeProgress(x, width);
-    surface.style.setProperty("--back-shade", backShadeOpacity(p).toFixed(3));
-    if (under) under.style.transform = `translate3d(${(backParallaxOffset(p, width) * sign()).toFixed(1)}px,0,0)`;
+    if (under) {
+      under.style.transform = `translate3d(${(backParallaxOffset(p, width) * sign()).toFixed(1)}px,0,0)`;
+      under.style.setProperty("--back-shade", backShadeOpacity(p).toFixed(3));
+    }
   };
 
   const clearStyles = () => {
     surface.style.removeProperty("transform");
     surface.style.removeProperty("transition");
     surface.style.removeProperty("opacity");
-    surface.style.removeProperty("--back-shade");
     surface.removeAttribute("data-back-swipe");
     if (under) {
       under.style.removeProperty("transform");
       under.style.removeProperty("transition");
+      under.style.removeProperty("--back-shade");
+      under.removeAttribute("data-back-shade");
     }
     under = null;
     travel = 0;
     armed = false;
   };
 
+  const isBlocked = () => o.blocked?.() ?? false;
+
   const frame = () => {
     raf = 0;
     if (phase !== "locked") return;
+    if (isBlocked()) {
+      cancel(); // an overlay opened mid-gesture
+      return;
+    }
     const d = inlineDelta();
     write(reduced ? Math.max(0, d) : backSwipeTravel(d, width));
     const nowArmed = isBackArmed(d, width);
@@ -174,6 +189,12 @@ export function createBackSwipe(surface: HTMLElement, o: BackSwipeOptions): { de
       commitTimer = null;
       surface.removeEventListener("transitionend", onEnd);
       if (phase !== "committing") return;
+      if (isBlocked()) {
+        // An overlay opened during the slide-out: Back would only close it.
+        clearStyles();
+        phase = "idle";
+        return;
+      }
       phase = "committed";
       surface.setAttribute("data-back-swipe", "done");
       o.onCommit();
@@ -193,8 +214,8 @@ export function createBackSwipe(surface: HTMLElement, o: BackSwipeOptions): { de
         const ease = "cubic-bezier(0.2, 0.8, 0.2, 1)";
         surface.style.transition = `transform ${ms}ms ${ease}`;
         surface.style.transform = `translate3d(${(width * sign()).toFixed(1)}px,0,0)`;
-        surface.style.setProperty("--back-shade", "0");
         if (under) {
+          under.style.setProperty("--back-shade", "0");
           under.style.transition = `transform ${ms}ms ${ease}`;
           under.style.transform = "translate3d(0,0,0)";
         }
@@ -218,7 +239,7 @@ export function createBackSwipe(surface: HTMLElement, o: BackSwipeOptions): { de
     }
     if (!e.isPrimary || e.button !== 0 || pointersDownCount() > 1) return;
     if (e.pointerType !== "touch" && e.pointerType !== "pen") return; // mouse / trackpad never swipes
-    if (!o.enabled()) return;
+    if (!o.enabled() || isBlocked()) return;
     if (!backSwipeMayStart(e.clientX, window.innerWidth, (o.environment ?? defaultEnvironment)())) return;
     const target = e.target instanceof Element ? e.target : null;
     if (target?.closest(OWN_GESTURE_SELECTOR) || startsInPannableContent(target, surface)) return;
@@ -242,7 +263,7 @@ export function createBackSwipe(surface: HTMLElement, o: BackSwipeOptions): { de
       const axis = decideAxis(dx, e.clientY - startY);
       if (axis === null) return;
       // Vertical (the scroller owns it), towards inline-start (nothing to do), a selection being made.
-      if (axis === "y" || dx * sign() <= 0 || hasTextSelection() || !o.enabled() || !claimGesture(owner)) {
+      if (axis === "y" || dx * sign() <= 0 || hasTextSelection() || !o.enabled() || isBlocked() || !claimGesture(owner)) {
         phase = "idle";
         endSequence();
         return;
@@ -253,7 +274,10 @@ export function createBackSwipe(surface: HTMLElement, o: BackSwipeOptions): { de
       under = reduced ? null : o.under();
       surface.setAttribute("data-back-swipe", "drag");
       surface.style.transition = "none";
-      if (under) under.style.transition = "none";
+      if (under) {
+        under.style.transition = "none";
+        under.setAttribute("data-back-shade", "");
+      }
       try {
         surface.setPointerCapture(e.pointerId);
       } catch {
@@ -281,10 +305,12 @@ export function createBackSwipe(surface: HTMLElement, o: BackSwipeOptions): { de
     }
     clickGuardUntil = performance.now() + 400;
     if (raf) cancelAnimationFrame(raf);
-    frame(); // paint the release position
+    raf = 0;
+    frame(); // paint the release position (cancels when an overlay opened)
+    if (phase !== "locked") return;
     const d = inlineDelta();
     const v = velocityOf(samples) * sign();
-    if (o.enabled() && shouldCommitBack(d, v, width)) {
+    if (o.enabled() && !isBlocked() && shouldCommitBack(d, v, width)) {
       haptic("success");
       commit(v);
     } else {

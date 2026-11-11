@@ -87,6 +87,82 @@ test("a short slow swipe springs back; a left swipe does nothing", async ({ app,
   await expect(shell(page)).toHaveAttribute("data-reader", "open");
 });
 
+test("with the Aa sheet open a swipe does nothing: the article stays in place", async ({ app, page }) => {
+  await app.open();
+  const rowId = await rowIdOf(app, 3);
+  await openArticle(app, page, 3);
+  await app.activate(page.locator('[data-pane="reader"] .ff-reader-bar').getByRole("button", { name: "Text appearance" }));
+  const sheet = page.getByRole("dialog", { name: "Text appearance" });
+  await expect(sheet).toBeVisible();
+  await page.waitForTimeout(400);
+  // Not vacuous: the popover is non-modal and the touch lands in the reader below it,
+  // so only the overlay guard stops the swipe.
+  const sheetBox = (await sheet.boundingBox())!;
+  const y = Math.round(Math.min(sheetBox.y + sheetBox.height + 60, 760));
+  expect(await page.evaluate((y) => !!document.elementFromPoint(120, y)?.closest('[data-pane="reader"] .ff-reader-scroller'), y)).toBe(true);
+  // Record every swipe state the pane goes through (a late fallback reset must not hide a slide-out).
+  await pane(page).evaluate((el) => {
+    const w = window as unknown as { __swipeStates: string[] };
+    w.__swipeStates = [];
+    new MutationObserver(() => w.__swipeStates.push(el.getAttribute("data-back-swipe") ?? "-")).observe(el, { attributes: true, attributeFilter: ["data-back-swipe"] });
+  });
+  await touchDrag(page, { x: 120, y }, 250, 0, { steps: 12, stepMs: 16 });
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => (window as unknown as { __swipeStates: string[] }).__swipeStates)).toEqual([]);
+  await expect(sheet).toBeVisible(); // the swipe did not spend a Back on the sheet
+  await expect(shell(page)).toHaveAttribute("data-reader", "open");
+  expect(page.url()).toContain("a=");
+  expect(Math.abs((await pane(page).boundingBox())?.x ?? 99)).toBeLessThan(0.5);
+  // Close the sheet: the gesture works again and closes the article (not a stale overlay).
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await page.waitForTimeout(300);
+  await touchDrag(page, { x: 120, y: 420 }, 250, 0, { steps: 12, stepMs: 16 });
+  await expect(shell(page)).toHaveAttribute("data-reader", "closed");
+  await expect.poll(() => focusedRowId(page)).toBe(rowId);
+});
+
+test("mid-gesture the list underneath is visibly shaded", async ({ app, page }) => {
+  await app.open();
+  await openArticle(app, page, 3);
+  const cdp = await page.context().newCDPSession(page);
+  const move = (x: number) => cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: 420, id: 1 }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 60, y: 420, id: 1 }] });
+  for (let x = 70; x <= 160; x += 10) {
+    await move(x);
+    await page.waitForTimeout(16);
+  }
+  await page.waitForTimeout(150);
+  const list = page.locator('.ff-shell > [data-pane^="list-"][data-back-shade]');
+  await expect(list).toHaveCount(1);
+  expect(Number(await list.evaluate((el) => getComputedStyle(el, "::after").opacity))).toBeGreaterThan(0.1);
+  // Pixel check: the exposed strip of the list is darker with the shade than with it forced off.
+  const clip = { x: 10, y: 300, width: 60, height: 200 };
+  const luminance = async () => {
+    const png = await page.screenshot({ clip });
+    return page.evaluate(async (b64) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = img.width;
+      c.height = img.height;
+      const ctx = c.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
+      return sum / (d.length / 4);
+    }, png.toString("base64"));
+  };
+  const shaded = await luminance();
+  await list.evaluate((el) => el.style.setProperty("--back-shade", "0"));
+  const plain = await luminance();
+  expect(shaded).toBeLessThan(plain - 5);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+});
+
 test("vertical scrolling never triggers it", async ({ app, page }) => {
   await app.open();
   await openArticle(app, page, 5);

@@ -673,30 +673,25 @@ html[data-nav-anim="none"] .ff-shell > [data-pane] {
  * motion is inline (rAF); these rules only add depth + the shade.
  * ------------------------------------------------------------------------- */
 .ff-shell > [data-pane="reader"][data-back-swipe] {
-  position: relative; /* compact keeps its own `fixed` (higher specificity below) */
   will-change: transform;
   box-shadow: var(--shadow-overlay);
 }
-.ff-shell > [data-pane="reader"][data-back-swipe]::before {
+/* The shade lives ON the list underneath (every pane clips its own overflow,
+   so a pseudo-element outside the reader would never paint). */
+.ff-shell > [data-pane^="list-"][data-back-shade]::after {
   content: "";
   position: absolute;
-  inset-block: 0;
-  inset-inline-end: 100%;
-  width: 100vw;
-  background: var(--scrim, black);
+  inset: 0;
+  z-index: var(--z-reader);
+  background: var(--scrim);
   opacity: var(--back-shade, 0);
   pointer-events: none;
-}
-@media (width < 48rem) {
-  .ff-shell > [data-pane="reader"][data-back-swipe] {
-    position: fixed;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   .ff-shell > [data-pane="reader"][data-back-swipe] {
     box-shadow: none;
   }
-  .ff-shell > [data-pane="reader"][data-back-swipe]::before {
+  .ff-shell > [data-pane^="list-"][data-back-shade]::after {
     display: none;
   }
 }

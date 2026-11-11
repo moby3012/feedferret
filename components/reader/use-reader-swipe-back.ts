@@ -35,6 +35,19 @@ function coveredList(): HTMLElement | null {
   return document.querySelector<HTMLElement>(`.ff-shell > [data-pane="list-${tab}"]`);
 }
 
+/**
+ * Open UI above the reader that Back would close first: a nav overlay ("Aa",
+ * "…", context menus, palette — features/reader/nav/overlays.ts) or any other
+ * open dialog / menu / sheet (share fallbacks, confirms, Radix + vaul layers).
+ */
+const OPEN_LAYER_SELECTOR =
+  '[role="dialog"]:not([data-state="closed"]), [role="alertdialog"]:not([data-state="closed"]), [role="menu"]:not([data-state="closed"]), [role="listbox"]:not([data-state="closed"]), [data-vaul-drawer]:not([data-state="closed"])';
+
+export function overlayOpen(): boolean {
+  if (getNavState().overlay) return true;
+  return typeof document !== "undefined" && document.querySelector(OPEN_LAYER_SELECTOR) !== null;
+}
+
 /** Never longer than this between a committed swipe and the reader actually closing. */
 const CLOSE_TIMEOUT_MS = 1200;
 
@@ -61,6 +74,7 @@ export function useReaderSwipeBack(paneRef: RefObject<HTMLElement | null>, artic
       enabled: () => !!openRef.current && getGesturePrefs().swipeBack && readerCoversList(pane),
       dir: documentDir,
       under: coveredList,
+      blocked: overlayOpen,
       onStart: completeBackHint,
       onCommit: () => {
         const id = openRef.current;

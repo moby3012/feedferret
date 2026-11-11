@@ -110,6 +110,7 @@ describe("back swipe sequences", () => {
   let onCommit: ReturnType<typeof vi.fn<() => void>>;
   let onStart: ReturnType<typeof vi.fn<() => void>>;
   let enabled: boolean;
+  let blocked = false;
   let env = TAB;
   let swipe: ReturnType<typeof createBackSwipe>;
 
@@ -123,10 +124,11 @@ describe("back swipe sequences", () => {
     under = document.getElementById("list")!;
     surface.getBoundingClientRect = () => ({ width: W, height: 800, left: 0, top: 0, right: W, bottom: 800, x: 0, y: 0, toJSON() {} }) as DOMRect;
     enabled = true;
+    blocked = false;
     env = TAB;
     onCommit = vi.fn();
     onStart = vi.fn();
-    swipe = createBackSwipe(surface, { enabled: () => enabled, dir: () => "ltr", under: () => under, onStart, onCommit, environment: () => env });
+    swipe = createBackSwipe(surface, { enabled: () => enabled, dir: () => "ltr", under: () => under, onStart, onCommit, blocked: () => blocked, environment: () => env });
   });
   afterEach(() => {
     swipe.destroy();
@@ -236,6 +238,49 @@ describe("back swipe sequences", () => {
     pointer(text(), "pointerup", { id: 1, x: 250 });
     vi.advanceTimersByTime(2000);
     expect(onCommit).not.toHaveBeenCalled();
+    expect(surface.hasAttribute("data-back-swipe")).toBe(false);
+  });
+
+  it("shades the list underneath (not a pseudo outside the clipped reader)", () => {
+    pointer(text(), "pointerdown", { id: 1, x: 100 });
+    drag(text(), 1, 100, 160, 80);
+    vi.advanceTimersByTime(16);
+    expect(under.hasAttribute("data-back-shade")).toBe(true);
+    expect(Number(under.style.getPropertyValue("--back-shade"))).toBeGreaterThan(0);
+    pointer(text(), "pointercancel", { id: 1, x: 160 });
+    vi.advanceTimersByTime(2000);
+    expect(under.hasAttribute("data-back-shade")).toBe(false);
+  });
+
+  it("an open overlay blocks the start, cancels a running drag, and stops a commit", () => {
+    blocked = true;
+    pointer(text(), "pointerdown", { id: 1, x: 100 });
+    drag(text(), 1, 100, 350, 100);
+    pointer(text(), "pointerup", { id: 1, x: 350 });
+    vi.advanceTimersByTime(500);
+    expect(onStart).not.toHaveBeenCalled();
+    expect(surface.hasAttribute("data-back-swipe")).toBe(false);
+
+    blocked = false;
+    pointer(text(), "pointerdown", { id: 2, x: 100 });
+    drag(text(), 2, 100, 200, 80);
+    expect(surface.dataset.backSwipe).toBe("drag");
+    blocked = true; // overlay opens mid-gesture
+    drag(text(), 2, 200, 350, 80);
+    pointer(text(), "pointerup", { id: 2, x: 350 });
+    vi.advanceTimersByTime(2000);
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(surface.style.transform).toBe("");
+
+    blocked = false;
+    pointer(text(), "pointerdown", { id: 3, x: 100 });
+    drag(text(), 3, 100, 350, 100);
+    pointer(text(), "pointerup", { id: 3, x: 350 });
+    expect(surface.dataset.backSwipe).toBe("commit");
+    blocked = true; // overlay opens during the slide-out
+    vi.advanceTimersByTime(500);
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(surface.style.transform).toBe("");
     expect(surface.hasAttribute("data-back-swipe")).toBe(false);
   });
 
