@@ -8,6 +8,7 @@ import type { Article } from "@/lib/rss-data";
 import type { ResolvedTypography } from "@/features/reader/typography/typography";
 import { ChromeButton, type ReaderNavProps, type ReaderToggleProps } from "./chrome-button";
 import { ReaderActionPill } from "./reader-action-pill";
+import { ReaderBackHint } from "./reader-back-hint";
 import { ReaderTopBar } from "./reader-top-bar";
 import "@/app/styles/reader-chrome.css";
 
@@ -112,7 +113,8 @@ function ReaderChrome(p: ReaderChromeProps) {
           </span>
         </div>
       )}
-      <ReaderActionPill article={p.article} {...toggles} more={more("top")} />
+      <ReaderBackHint />
+      <ReaderActionPill article={p.article} {...toggles} onBack={p.onBack} more={more("top")} />
     </>
   );
 }

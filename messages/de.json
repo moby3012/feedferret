@@ -120,6 +120,8 @@
       },
       "haptics": "Haptisches Feedback",
       "hapticsDescription": "Eine kurze Vibration, wenn eine Wischgeste oder das Ziehen zum Aktualisieren auslöst – sofern dein Gerät das kann.",
+      "swipeBack": "Wischen nach rechts: zurück",
+      "swipeBackDescription": "In der Leseansicht überall nach rechts wischen, um zur Liste zurückzukehren.",
       "demoLabel": "So funktionieren die Gesten",
       "demoSwipe": "Wischen und loslassen, sobald die Farbe voll ist. Zurückziehen bricht ab.",
       "demoLongPress": "Lange drücken öffnet das Menü mit allen Aktionen. Screenreader finden es an jeder Zeile als „Aktionen“.",
@@ -155,8 +157,8 @@
         "title": "Leseansicht",
         "pullNext": "Am Ende nach oben ziehen",
         "pullNextResult": "Öffnet den nächsten Artikel.",
-        "edge": "Vom linken Rand wischen",
-        "edgeResult": "Zurück zur Liste (Systemgeste)."
+        "swipeBack": "Nach rechts wischen",
+        "swipeBackResult": "Zurück zur Liste – überall im Artikel, der Artikel folgt dem Finger."
       },
       "everywhere": {
         "title": "Überall",
@@ -2136,5 +2138,10 @@
       "notFound": "Dieser Feed ist keine Google-News-Suche.",
       "invalidCategory": "Diese Kategorie gibt es nicht mehr."
     }
+  },
+  "backHint": {
+    "label": "Tipp: Zurück",
+    "text": "Nach rechts wischen, um zurückzugehen",
+    "dismiss": "Verstanden"
   }
 }

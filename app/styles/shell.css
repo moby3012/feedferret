@@ -666,3 +666,45 @@ html[data-nav-anim="none"] .ff-shell > [data-pane] {
     background: var(--surface-sunken);
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Reader swipe-back (lib/gestures/back-swipe.ts): the reader layer follows a
+ * swipe towards inline-end; the list underneath gets a fading shade. All
+ * motion is inline (rAF); these rules only add depth + the shade.
+ * ------------------------------------------------------------------------- */
+.ff-shell > [data-pane="reader"][data-back-swipe] {
+  position: relative; /* compact keeps its own `fixed` (higher specificity below) */
+  will-change: transform;
+  box-shadow: var(--shadow-overlay);
+}
+.ff-shell > [data-pane="reader"][data-back-swipe]::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 100%;
+  width: 100vw;
+  background: var(--scrim, black);
+  opacity: var(--back-shade, 0);
+  pointer-events: none;
+}
+@media (width < 48rem) {
+  .ff-shell > [data-pane="reader"][data-back-swipe] {
+    position: fixed;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-shell > [data-pane="reader"][data-back-swipe] {
+    box-shadow: none;
+  }
+  .ff-shell > [data-pane="reader"][data-back-swipe]::before {
+    display: none;
+  }
+}
+/* Vertical pans + pinch stay native; a horizontal pan reaches the swipe. Content
+   that scrolls sideways (pre, table, embeds) is its own scroll container and
+   keeps its native pan. */
+@media (pointer: coarse) {
+  .ff-reader-scroller {
+    touch-action: pan-y pinch-zoom;
+  }
+}

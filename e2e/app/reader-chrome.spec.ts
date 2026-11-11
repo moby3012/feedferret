@@ -117,15 +117,16 @@ test("explicit previous / next step through the list without growing history; pr
   await expect.poll(() => app.where()).toBe(`/?a=${app.articleId(1)}`);
 });
 
-test("compact: the action pill has five ≥44 px actions and no back/prev doubling", async ({ app, page, isMobile }) => {
+test("compact: the action pill has Back + five ≥44 px actions and no prev/next doubling", async ({ app, page, isMobile }) => {
   test.skip(!isMobile, "the pill is the compact layout");
   await openArticle(app, page, 1);
   const pill = page.locator('[data-pane="reader"] nav.ff-reader-pill');
   await expect(pill).toBeVisible();
   const buttons = pill.getByRole("button");
-  await expect(buttons).toHaveCount(5);
+  // Back sits first, in thumb reach (owner report 2026-11-11); the top bar keeps its chevron too.
+  await expect(buttons).toHaveCount(6);
   const names = await buttons.evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
-  expect(names).toEqual(["Star", expect.stringMatching(/^Mark as (read|unread)$/), "Save to Read Later", "Share", "More actions"]);
+  expect(names).toEqual(["Back", "Star", expect.stringMatching(/^Mark as (read|unread)$/), "Save to Read Later", "Share", "More actions"]);
   for (const box of await buttons.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()))) {
     expect(box.width).toBeGreaterThanOrEqual(44);
     expect(box.height).toBeGreaterThanOrEqual(44);
