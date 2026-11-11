@@ -26,7 +26,7 @@ import {
   unknownExtensions,
   type OpmlOutline,
 } from "@/lib/opml";
-import { EXTRACTION_SOURCE_TYPES, normalizeSourceType, stringifyNonEmpty, type FeedExtractionConfig } from "@/lib/feed-extraction";
+import { BLOCKED_REQUEST_HEADERS, EXTRACTION_SOURCE_TYPES, JSON_ATTRS, MAX_FEED_REDIRECTS, XPATH_ATTRS, normalizeSourceType, stringifyNonEmpty, type FeedExtractionConfig } from "@/lib/feed-extraction";
 import { MAX_SEARCH_QUERY, validateFeedUrl, validateOpml } from "@/lib/validation";
 import { translateFreshRssReadFilters } from "./frss-filters";
 import { assertSafeHttpOptionsProxy, proxyFromHttpOptions } from "@/lib/ssrf";
@@ -125,19 +125,26 @@ const REMOTE_BLOCKED_HTTP = [
   "CURLOPT_POSTFIELDS",
   "CURLOPT_PROXY",
   "CURLOPT_PROXYTYPE",
+  "CURLOPT_USERAGENT",
+  "CURLOPT_FOLLOWLOCATION",
+  "CURLOPT_MAXREDIRS",
 ] as const;
+
+// Selector / XPath / JSON-path expressions run in the sync pipeline for every fetch;
+// a cheap expression can cost seconds of CPU on a crafted page (`:has(* * * *)`,
+// `//*[contains(., …)]`). A third party who controls a remote (dynamic) OPML must not
+// be able to plant them in another user's feeds on a shared instance.
+let remoteBlockedExpressions: string[] | null = null;
+const getRemoteBlockedExpressions = () =>
+  (remoteBlockedExpressions ??= [
+    "cssFullContent", "cssContentFilter", "cssFullContentFilter", "cssFullContentConditions",
+    "xPathToJson", ...XPATH_ATTRS, ...JSON_ATTRS,
+  ]);
 
 // FreshRSS' importer check plus digits: its own `sha1:*` values need them (upstream
 // `^[a-z:_-]{2,64}$` silently drops every `sha1:` criterion). `link:title` also passes.
 const UNICITY_PATTERN = /^[a-z0-9:_-]{2,64}$/;
 
-// Headers the fetcher must own: they would let a file re-target or desync the request
-// (virtual host, framing, connection reuse) instead of just describing it.
-const BLOCKED_HTTP_HEADERS = new Set([
-  "host", "content-length", "transfer-encoding", "connection", "keep-alive", "upgrade",
-  "te", "trailer", "expect", "proxy-connection",
-]);
-const MAX_REDIRECTS = 20;
 /** Per attribute: one selector / XPath / JSON path / header list / proxy URL. */
 export const MAX_EXPRESSION_LENGTH = 2_000;
 /** Per attribute: newline-separated search expressions (read filters, full-text conditions). */
@@ -185,6 +192,11 @@ export function mapOutlineToFeed(
     }
     extensions[name] = value;
   }
+  if (trust === "remote") {
+    const dropped = getRemoteBlockedExpressions().filter((name) => extensions[name] !== undefined);
+    for (const name of dropped) delete extensions[name];
+    if (dropped.length) issue("unsupported", "expression-remote-dropped", dropped.join(", "), "selectors and XPath/JSON expressions are not accepted from remote OPML");
+  }
   outline = { ...outline, extensions };
 
   const sourceType = normalizeSourceType(outline.type);
@@ -230,7 +242,7 @@ export function mapOutlineToFeed(
       const name = colon > 0 ? line.slice(0, colon).trim() : "";
       // Only the header name goes into the report: values may be credentials.
       if (!/^[!#$%&'*+.^`|~\w-]+$/.test(name)) dropped.push(name ? "(invalid header)" : "(line without name)");
-      else if (BLOCKED_HTTP_HEADERS.has(name.toLowerCase())) dropped.push(name);
+      else if (BLOCKED_REQUEST_HEADERS.has(name.toLowerCase())) dropped.push(name);
       else kept.push(line);
     }
     if (kept.length) http.CURLOPT_HTTPHEADER = kept.join("\n");
@@ -242,9 +254,9 @@ export function mapOutlineToFeed(
     if (!Number.isInteger(redirects)) {
       delete http.CURLOPT_MAXREDIRS;
       issue("adapted", "maxredirs-invalid", "CURLOPT_MAXREDIRS", "ignored; default redirect limit applies");
-    } else if (redirects < 0 || redirects > MAX_REDIRECTS) {
-      http.CURLOPT_MAXREDIRS = Math.min(MAX_REDIRECTS, Math.max(0, redirects));
-      issue("adapted", "maxredirs-clamped", "CURLOPT_MAXREDIRS", `${redirects} stored as ${http.CURLOPT_MAXREDIRS} (allowed 0–${MAX_REDIRECTS})`);
+    } else if (redirects < 0 || redirects > MAX_FEED_REDIRECTS) {
+      http.CURLOPT_MAXREDIRS = Math.min(MAX_FEED_REDIRECTS, Math.max(0, redirects));
+      issue("adapted", "maxredirs-clamped", "CURLOPT_MAXREDIRS", `${redirects} stored as ${http.CURLOPT_MAXREDIRS} (allowed 0–${MAX_FEED_REDIRECTS})`);
     }
   }
   if (http.CURLOPT_COOKIEFILE !== undefined) {
@@ -308,8 +320,10 @@ export function mapOutlineToFeed(
       );
     }
   }
-  if ((remove || extensions.cssFullContentConditions) && !extensions.cssFullContent) {
-    issue("adapted", "css-without-selector", "cssFullContent", "removal/condition settings stored, but no content selector: full-text stays off");
+  // cssContentFilter alone is fine (it cleans the feed's own content); conditions only
+  // gate a full-text download, which needs a content selector.
+  if (extensions.cssFullContentConditions && !extensions.cssFullContent) {
+    issue("adapted", "css-without-selector", "cssFullContentConditions", "conditions stored, but without a content selector there is no full-text download to gate");
   }
 
   let ruleQuery: string | null = null;

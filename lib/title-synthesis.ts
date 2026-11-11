@@ -75,6 +75,8 @@ export type ItemTitle = {
    * `unicityCriteria` identities don't change for existing rows.
    */
   identityTitle: string;
+  /** The title exactly as the feed supplied it ("" when it had none). */
+  rawTitle: string;
 };
 
 /**
@@ -84,10 +86,10 @@ export type ItemTitle = {
 export function resolveItemTitle(rawTitle: string | null | undefined, ...contentCandidates: Array<string | null | undefined>): ItemTitle {
   const raw = rawTitle ?? "";
   const identityTitle = raw || UNTITLED;
-  if (raw.trim() && raw.trim() !== UNTITLED) return { title: raw, identityTitle };
+  if (raw.trim() && raw.trim() !== UNTITLED) return { title: raw, identityTitle, rawTitle: raw };
   for (const candidate of contentCandidates) {
     const synthesized = synthesizeItemTitle(candidate);
-    if (synthesized) return { title: synthesized, titleSynthetic: true, identityTitle };
+    if (synthesized) return { title: synthesized, titleSynthetic: true, identityTitle, rawTitle: raw };
   }
-  return { title: identityTitle, identityTitle };
+  return { title: identityTitle, identityTitle, rawTitle: raw };
 }

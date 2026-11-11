@@ -18,7 +18,7 @@ const removeSelectorsFromHtml = async (html: string, selectors: string) =>
 
 const fixtureDir = join(__dirname, "../fixtures/freshrss");
 const goldenFixture = readFileSync(join(fixtureDir, "feeds_2026-11-09.opml.xml"), "utf8");
-const realExport = readFileSync(join(fixtureDir, "real-export-minimised.opml.xml"), "utf8");
+const syntheticExport = readFileSync(join(fixtureDir, "synthetic-export.opml.xml"), "utf8");
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,7 +86,7 @@ async function roundTrip(xml: string) {
   const original = await parseOpml(xml);
   const plan = planOpmlImport(original);
   const rows = planToRows(plan.categories, plan.feeds);
-  const exported = generateOpml(rows.feeds, rows.categories);
+  const exported = generateOpml(rows.feeds, rows.categories, { includeCredentials: true });
   return { original, plan, exported, reparsed: await parseOpml(exported) };
 }
 
@@ -108,10 +108,10 @@ const map = (extensions: Record<string, string>, trust: "local" | "remote" = "lo
 
 describe("export is readable by FreshRSS", () => {
   it("uses the literal frss: prefix (FreshRSS' lib_opml reads attributes by qualified name)", async () => {
-    const { exported } = await roundTrip(realExport);
+    const { exported } = await roundTrip(syntheticExport);
     expect(exported).toContain('xmlns:frss="https://freshrss.org/opml"');
-    expect(exported).toMatch(/ frss:cssFullContent="\.bodyarticle"/);
-    expect(exported).toMatch(/ frss:xPathItem="\/\/ea-tile"/);
+    expect(exported).toMatch(/ frss:cssFullContent="\.article-body"/);
+    expect(exported).toMatch(/ frss:xPathItem="\/\/x-card"/);
     expect(exported).not.toMatch(/ ffx:/);
 
     // What lib_opml sees: DOM nodeName of every extension attribute.
@@ -122,11 +122,11 @@ describe("export is readable by FreshRSS", () => {
   });
 
   it("encodes line breaks as character references so multi-line values survive XML attribute normalisation", async () => {
-    const { exported, reparsed } = await roundTrip(realExport);
+    const { exported, reparsed } = await roundTrip(syntheticExport);
     expect(exported).toContain("&#13;&#10;  substring-after(");
-    const community = feedOutlines(reparsed).find((o) => o.text === "Community site")!;
+    const community = feedOutlines(reparsed).find((o) => o.text === "Scraped List")!;
     expect(community.extensions!.xPathItemUid).toBe(
-      "concat(\r\n  substring-after(.//h3[@class='title']/a/@href, '/news/'),\r\n  '-',\r\n  translate(.//div[@class='date'], ' ', '-')\r\n)",
+      "concat(\r\n  substring-after(.//span[@class='name']/a/@href, '/item/'),\r\n  '-',\r\n  translate(.//time, ' ', '-')\r\n)",
     );
   });
 
@@ -142,8 +142,8 @@ describe("export is readable by FreshRSS", () => {
 // ── round trips ──────────────────────────────────────────────────────────────
 
 describe("FreshRSS → FeedFerret → FreshRSS round trip", () => {
-  it("keeps every frss: attribute of the (anonymised) real export", async () => {
-    const { original, reparsed } = await roundTrip(realExport);
+  it("keeps every frss: attribute of a real-shaped (synthetic) export", async () => {
+    const { original, reparsed } = await roundTrip(syntheticExport);
     const before = feedOutlines(original);
     const after = new Map(feedOutlines(reparsed).map((o) => [o.xmlUrl, o]));
     expect(after.size).toBe(before.length);
@@ -155,7 +155,7 @@ describe("FreshRSS → FeedFerret → FreshRSS round trip", () => {
       expect(back.description).toBe(feed.description);
     }
     // Category tree incl. both empty categories.
-    expect(reparsed.filter((o) => !o.xmlUrl).map((o) => o.text)).toEqual(["Strategy", "Unkategorisiert", "Scraped news", "Mods", "lifestyle", "webhosting"]);
+    expect(reparsed.filter((o) => !o.xmlUrl).map((o) => o.text)).toEqual(["Alpha", "Empty One", "Beta", "Gamma", "Delta", "Empty Two"]);
   });
 
   it("keeps every attribute of the full-spec golden fixture except the documented non-transferable ones", async () => {
@@ -281,15 +281,15 @@ describe("per-attribute mapping", () => {
     expect(off).toContain('frss:cssContentFilter=".ad"');
   });
 
-  it("exports the per-feed user agent as CURLOPT_USERAGENT (private export only)", () => {
+  it("exports the per-feed user agent as CURLOPT_USERAGENT (not a secret: in every variant)", () => {
     const row = { name: "F", url: "https://f.example.com/rss", sourceType: "rss", customUserAgent: "MyAgent/1.0" };
     expect(generateOpml([row])).toContain('frss:CURLOPT_USERAGENT="MyAgent/1.0"');
-    expect(generateApiOpml([row])).not.toContain("CURLOPT_USERAGENT");
+    expect(generateApiOpml([row])).toContain('frss:CURLOPT_USERAGENT="MyAgent/1.0"');
   });
 
   it("never writes an attribute twice when a preserved unknown attribute collides with a known one", async () => {
     const row = { name: "F", url: "https://f.example.com/rss", sourceType: "rss", priority: "important", scraperConfig: JSON.stringify({ extensions: { priority: "hidden", futureFlag: "x" } }) };
-    const xml = generateOpml([row]);
+    const xml = generateOpml([row], [], { includeCredentials: true });
     expect(xml.match(/frss:priority=/g)).toHaveLength(1);
     const [parsed] = await parseOpml(xml);
     expect(parsed.extensions).toMatchObject({ priority: "important", futureFlag: "x" });
@@ -368,9 +368,22 @@ describe("FreshRSS unicity criteria in article identity (Feed.php decideEntryGui
   });
 
   it("lists the keys older versions stored, for in-place re-keying", () => {
+    // Versions before #280 ran sha1:* through the generic part:part algorithm.
     expect(legacyDedupeKeys({ unicityCriteria: "sha1:link_published" }, item, "guid-1")).toEqual(["guid-1", `sha1:${sha1(item.link + unix)}`]);
+    expect(legacyDedupeKeys({ unicityCriteria: "sha1:title" }, item, "guid-1")).toEqual(["Hello", `sha1:${sha1("Hello")}`]);
+    // "title_published" is one unknown part for the generic algorithm → the item id.
+    expect(legacyDedupeKeys({ unicityCriteria: "sha1:title_published" }, item, "guid-1")).toEqual(["guid-1", `sha1:${sha1("Hello" + unix)}`]);
+    // Title-less item: old versions saw the identity title "Untitled", FreshRSS hashes "".
+    const untitled = { ...item, title: "" };
+    expect(legacyDedupeKeys({ unicityCriteria: "sha1:title" }, untitled, "guid-1", { ...untitled, title: "Untitled" })).toEqual(["Untitled", `sha1:${sha1("Untitled")}`]);
     expect(legacyDedupeKeys({ unicityCriteria: "link" }, item, "guid-1")).toEqual([]);
     expect(legacyDedupeKeys({ unicityCriteria: "id" }, item, "guid-1")).toEqual([]);
+  });
+
+  it("title-less items do not collide under title criteria (raw title \"\" falls back to the guid)", () => {
+    const a = key("sha1:title", { title: "", guid: "g-a" });
+    const b = key("sha1:title", { title: "", guid: "g-b" });
+    expect([a, b]).toEqual(["g-a", "g-b"]);
   });
 
   it("leaves FeedFerret's own criteria unchanged", () => {
@@ -434,10 +447,52 @@ describe("imported HTTP options stay inside the SSRF and secrecy rules", () => {
     expect(issues.filter((i) => i.code === "expression-too-long").map((i) => i.attribute).sort()).toEqual(["cssFullContent", "filtersActionRead", "xPathItem"]);
   });
 
+  it("refuses every CPU-heavy expression and every request option from remote (dynamic) OPML", () => {
+    const { feed, issues } = map({
+      cssFullContent: ":has(* * * * *)", cssContentFilter: ".ad", cssFullContentConditions: "intitle:x",
+      xPathItem: "//*[contains(.,'zz')]", xPathItemTitle: ".", jsonItem: "items", xPathToJson: "//script",
+      CURLOPT_USERAGENT: "Evil/1", CURLOPT_FOLLOWLOCATION: "1", CURLOPT_MAXREDIRS: "20",
+    }, "remote", { type: "HTML+XPath" });
+    expect(feed.data).toMatchObject({ scraperConfig: null, httpOptions: null });
+    expect(feed.data.fullTextSelector).toBeUndefined();
+    expect(feed.data.fullTextRemoveSelectors).toBeUndefined();
+    expect(feed.data.fullTextConditions).toBeUndefined();
+    expect(feed.data.customUserAgent).toBeUndefined();
+    expect(issues.find((i) => i.code === "expression-remote-dropped")!.attribute!.split(", ").sort()).toEqual(
+      ["cssContentFilter", "cssFullContent", "cssFullContentConditions", "jsonItem", "xPathItem", "xPathItemTitle", "xPathToJson"],
+    );
+    expect(issues.find((i) => i.code === "http-option-remote-dropped")!.attribute).toBe("CURLOPT_USERAGENT, CURLOPT_FOLLOWLOCATION, CURLOPT_MAXREDIRS");
+  });
+
   it("clamps an excessive redirect limit", () => {
     const { feed, issues } = map({ CURLOPT_MAXREDIRS: "5000" });
     expect(JSON.parse(feed.data.httpOptions!).CURLOPT_MAXREDIRS).toBe(20);
     expect(codes(issues)).toEqual(["maxredirs-clamped"]);
+  });
+
+  const secretRow = {
+    name: "S", url: "https://user:URL-SECRET@s.example.com/rss", htmlUrl: "https://user:HTML-SECRET@s.example.com/", sourceType: "rss",
+    authUsername: "basic-user", authPassword: "BASIC-SECRET",
+    httpOptions: JSON.stringify({
+      CURLOPT_COOKIE: "sid=COOKIE-SECRET", CURLOPT_HTTPHEADER: "Authorization: Bearer HEADER-SECRET", CURLOPT_POSTFIELDS: "token=POST-SECRET",
+      CURLOPT_PROXY: "http://u:PROXY-SECRET@proxy.example.com:3128", CURLOPT_USERPWD: "u:USERPWD-SECRET", CURLOPT_USERAGENT: "UA/1", CURLOPT_MAXREDIRS: 3,
+    }),
+    scraperConfig: JSON.stringify({ extensions: { apiKey: "EXT-SECRET" } }),
+  };
+  const ALL_SECRETS = ["URL-SECRET", "HTML-SECRET", "BASIC-SECRET", "basic-user", "COOKIE-SECRET", "HEADER-SECRET", "POST-SECRET", "PROXY-SECRET", "USERPWD-SECRET", "EXT-SECRET"];
+
+  it("the default (UI) export carries no credentials; non-secret request options stay", () => {
+    const xml = generateOpml([secretRow], [{ id: "c", name: "C", parentId: null, opmlUrl: "https://u:OPML-SECRET@lists.example.com/x.opml" }]);
+    for (const secret of [...ALL_SECRETS, "OPML-SECRET"]) expect(xml).not.toContain(secret);
+    expect(xml).toContain('frss:CURLOPT_USERAGENT="UA/1"');
+    expect(xml).toContain('frss:CURLOPT_MAXREDIRS="3"');
+    expect(xml).toContain('xmlUrl="https://s.example.com/rss"');
+  });
+
+  it("only the explicit opt-in exports FreshRSS-compatible credentials (never Basic auth or USERPWD-style unknown options)", () => {
+    const xml = generateOpml([secretRow], [], { includeCredentials: true });
+    for (const secret of ["URL-SECRET", "COOKIE-SECRET", "HEADER-SECRET", "POST-SECRET", "PROXY-SECRET", "EXT-SECRET"]) expect(xml).toContain(secret);
+    for (const secret of ["BASIC-SECRET", "basic-user", "USERPWD-SECRET"]) expect(xml).not.toContain(secret);
   });
 
   it("never exports credentials or cURL options through the API export", () => {

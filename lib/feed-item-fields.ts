@@ -12,6 +12,8 @@ export type FetchedFeedArticle = {
    * dedupe-key input for title-based unicityCriteria. Defaults to `title`.
    */
   identityTitle?: string;
+  /** Title exactly as supplied by the feed ("" when none); FreshRSS `sha1:*title*` criteria hash it. */
+  rawTitle?: string;
   link: string;
   content: string;
   summary?: string | null;

@@ -49,7 +49,7 @@ Full attribute matrix incl. export and round trip: [freshrss-compat.md](freshrss
 | `frss:filtersActionRead`: plain word / `"phrase"` | literal keyword in `filtersActionRead` | supported (same title+body substring semantics) |
 | …: `intitle:` `intext:` `author:` `inurl:`, negated words `-x`/`!x`, `OR` between those terms | feed-scoped auto-read rule (mark read) | supported (exact, never looser) |
 | …: regex, `#tag`, parentheses, `date:`/`pubdate:`, `f:` `c:` `e:` `L:` `S:`, multi-word field values, negated phrases, plain words next to other terms (FeedFerret free text also matches author/link/feed name), any value containing `:` `"` `'` outside a single quoted phrase | — | **not imported, reported** (never translated partially or approximately) |
-| `frss:CURLOPT_COOKIE/HTTPHEADER/PROXY/POST/POSTFIELDS/USERAGENT/FOLLOWLOCATION/MAXREDIRS` | `httpOptions`, `customUserAgent` | supported for your own file (`Host`/framing headers dropped, redirects ≤ 20); dropped for remote OPML |
+| `frss:CURLOPT_COOKIE/HTTPHEADER/PROXY/POST/POSTFIELDS/USERAGENT/FOLLOWLOCATION/MAXREDIRS` | `httpOptions`, `customUserAgent` | supported for your own file (`Host`/framing headers dropped, redirects ≤ 20); dropped for remote OPML (dynamic categories, GReader import), which also cannot set selectors or XPath/JSON expressions |
 | `frss:CURLOPT_COOKIEFILE` | — | **not imported, reported** (path on the FreshRSS server) |
 | `frss:CURLOPT_PROXYTYPE` | `httpOptions` | stored; scheme comes from the proxy URL — reported |
 | `frss:opmlUrl` (dynamic category) | `Category.opmlUrl` | supported for your own file; not followed from remote OPML |

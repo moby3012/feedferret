@@ -1254,6 +1254,8 @@
       "deselectAll": "Deselect all",
       "selectFeedsToExport": "Select feeds to export, or leave all unchecked to export everything.",
       "exportAllFeeds": "Export all feeds",
+      "includeCredentials": "Include credentials (FreshRSS-compatible)",
+      "includeCredentialsWarning": "Contains cookies, HTTP headers, POST data, proxy credentials and user/password in feed URLs in plain text. Don't share the file; use it only to move to FreshRSS.",
       "exportFeedsCount": "{count} feeds",
       "exportAllDataJson": "Export all data (JSON)",
       "downloadFeedsJson": "Download feeds, labels, saved searches, and auto-read rules as JSON.",
@@ -1455,7 +1457,7 @@
         "proxytype-ignored": "Proxy type is derived from the proxy URL",
         "ttl-invalid": "Invalid refresh interval",
         "ttl-clamped": "Refresh interval adjusted",
-        "css-without-selector": "Full-text settings without a content selector",
+        "css-without-selector": "Full-text conditions without a content selector",
         "filter-untranslatable": "Filter has no equivalent",
         "proxy-blocked": "Proxy not allowed (internal address), not imported",
         "connector-route-blocked": "This connector address (RSSHub/changedetection.io) is not allowed, not imported",
@@ -1470,7 +1472,8 @@
         "maxredirs-invalid": "Invalid redirect limit ignored",
         "maxredirs-clamped": "Redirect limit adjusted",
         "css-conditions-partial": "Some full-text conditions cannot be evaluated: full text for all articles",
-        "expression-too-long": "Expression too long, not imported"
+        "expression-too-long": "Expression too long, not imported",
+        "expression-remote-dropped": "Selectors/XPath not accepted from remote OPML"
       }
     },
     "toasts": {

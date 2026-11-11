@@ -8,7 +8,7 @@ import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { computeContentHash, normalizeLinkForComparison } from "./content-hash";
-import { buildDedupeKey, legacyDedupeKeys } from "./dedupe-key";
+import { buildDedupeKey, isFreshRssHashedCriteria, legacyDedupeKeys } from "./dedupe-key";
 import { decryptIfValue } from "./crypto";
 import type { AiConfig, MeteredAiConfig } from "./ai-summary";
 import { logger, urlForLog } from "./logger";
@@ -680,9 +680,18 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             // a title-based dedupe key of an existing row.
             const identityItem = { ...item, title: item.identityTitle ?? item.title };
             const preparedKey = (item as GoogleNewsPreparedArticle).dedupeKey;
+            const hashedCriteria = !preparedKey && !isGoogleNews && isFreshRssHashedCriteria(feed.unicityCriteria);
+            // FreshRSS hashes the title as published ("" when absent, never "Untitled",
+            // or every title-less item would collide) and the unmodified content.
+            // `item.content` is still the body as published: remove-selectors and the size
+            // cap only apply to the copy sanitized in the HTML worker.
+            const hashedItem = hashedCriteria ? { ...item, title: item.rawTitle ?? item.title, content: item.content || item.summary || "" } : identityItem;
             const dedupeKey = preparedKey
-                ?? (isGoogleNews ? googleNewsStableKey(identityItem) : buildDedupeKey(feed, identityItem, externalId));
-            const legacyKeys = preparedKey || isGoogleNews ? [] : legacyDedupeKeys(feed, identityItem, externalId);
+                ?? (isGoogleNews ? googleNewsStableKey(identityItem) : buildDedupeKey(feed, hashedItem, externalId));
+            // Once a feed has been re-keyed for its criterion (marker), no legacy lookups.
+            const legacyKeys = hashedCriteria && feed.dedupeRekeyedFor !== feed.unicityCriteria
+                ? legacyDedupeKeys(feed, hashedItem, externalId, { ...identityItem, content: (item.content || item.summary || "") })
+                : [];
             // Linkless items get a synthetic link from the feed URL — without
             // connector secrets (legacy rows may still carry the RSSHub key).
             const link = item.link || `${publicFeedUrl}#${encodeURIComponent(dedupeKey)}`;
@@ -736,6 +745,10 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         const { createdArticleIds, fullTextCandidateIds } = await upsertArticleBatch(articles, {
             fullTextActive: fullTextMode !== "off",
         });
+        // Every item of this fetch went through rekeyLegacyRows: later syncs skip the lookup.
+        if (isFreshRssHashedCriteria(feed.unicityCriteria) && feed.dedupeRekeyedFor !== feed.unicityCriteria) {
+            feedPatch.dedupeRekeyedFor = feed.unicityCriteria;
+        }
 
         await db.feed.update({
             where: { id: feed.id },

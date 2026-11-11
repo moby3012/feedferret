@@ -55,6 +55,18 @@ export const HTTP_ATTRS = [
   "CURLOPT_USERAGENT",
 ] as const;
 
+/**
+ * Request headers a feed's `CURLOPT_HTTPHEADER` may never set: they would re-target or
+ * desync the request (virtual host, framing, connection reuse) instead of describing it.
+ * Enforced by the fetcher for every source (import, feed dialog, REST/MCP).
+ */
+export const BLOCKED_REQUEST_HEADERS: ReadonlySet<string> = new Set([
+  "host", "content-length", "transfer-encoding", "connection", "keep-alive", "upgrade",
+  "te", "trailer", "expect", "proxy-connection",
+]);
+/** Upper bound for `CURLOPT_MAXREDIRS`. */
+export const MAX_FEED_REDIRECTS = 20;
+
 export type FeedExtractionConfig = {
   xpath?: Record<string, string>;
   json?: Record<string, string>;

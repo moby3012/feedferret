@@ -116,3 +116,56 @@ it("a genuinely new article still gets inserted next to re-keyed ones", async ()
   const after = await rows(feed.id);
   expect(after.map((r) => r.dedupeKey)).toEqual(ITEMS.map((i) => sha1(i.link + unix(i.date))));
 });
+
+describe("review follow-ups (P2-1, P2-2, P3)", () => {
+  it("sha1:title: rows stored under the bare title by earlier versions are re-keyed, not duplicated", async () => {
+    state.body = rss(ITEMS);
+    const feed = await state.db.feed.create({ data: { userId, name: "Blog", url: "https://blog.example/feed3", unicityCriteria: "sha1:title" } });
+    for (const item of ITEMS) {
+      await state.db.article.create({
+        data: { userId, feedId: feed.id, title: item.title, link: item.link, externalId: item.guid, dedupeKey: item.title, content: "", excerpt: "", publishedAt: new Date(item.date), isRead: true } as never,
+      });
+    }
+    const before = await rows(feed.id);
+    await syncFeed(userId, feed.id);
+    const after = await rows(feed.id);
+    expect(after.map((r) => r.id)).toEqual(before.map((r) => r.id));
+    expect(after.map((r) => r.dedupeKey)).toEqual(ITEMS.map((i) => sha1(i.title)));
+    expect(after.every((r) => r.isRead)).toBe(true);
+  });
+
+  it("title-less items do not collide: FreshRSS hashes the raw empty title and falls back to each guid", async () => {
+    state.body = `<?xml version="1.0"?><rss version="2.0"><channel><title>B</title>${["n-1", "n-2"]
+      .map((guid) => `<item><guid>${guid}</guid><description>&lt;p&gt;Text of ${guid} that is long enough to synthesize a display title from&lt;/p&gt;</description></item>`)
+      .join("")}</channel></rss>`;
+    const feed = await state.db.feed.create({ data: { userId, name: "Notes", url: "https://notes.example/feed", unicityCriteria: "sha1:title" } });
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id)).map((r) => r.dedupeKey).sort()).toEqual(["n-1", "n-2"]);
+  });
+
+  it("marks the feed once re-keyed and skips the legacy lookup afterwards", async () => {
+    state.body = rss(ITEMS);
+    const feed = await state.db.feed.create({ data: { userId, name: "Blog", url: "https://blog.example/feed4", unicityCriteria: "sha1:link_published" } });
+    await syncFeed(userId, feed.id);
+    expect((await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).dedupeRekeyedFor).toBe("sha1:link_published");
+    // A legacy-keyed row appearing after the marker is no longer looked up (proves the skip).
+    const newKey = sha1(ITEMS[0].link + unix(ITEMS[0].date));
+    await state.db.article.updateMany({ where: { feedId: feed.id, dedupeKey: newKey }, data: { dedupeKey: "guid-1" } });
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id)).map((r) => r.dedupeKey).sort()).toEqual(["guid-1", newKey, sha1(ITEMS[1].link + unix(ITEMS[1].date))].sort());
+    // Changing the criterion re-arms it.
+    await state.db.feed.update({ where: { id: feed.id }, data: { unicityCriteria: "sha1:link_published_title" } });
+    await syncFeed(userId, feed.id);
+    expect((await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).dedupeRekeyedFor).toBe("sha1:link_published_title");
+  });
+
+  it("content criteria hash the content as published, before remove-selectors change it", async () => {
+    const raw = '<p>Body</p><div class="ad">Ad</div>';
+    state.body = `<?xml version="1.0"?><rss version="2.0"><channel><title>C</title><item><title>T</title><link>https://c.example/1</link><description>${raw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</description></item></channel></rss>`;
+    const feed = await state.db.feed.create({ data: { userId, name: "C", url: "https://c.example/feed", unicityCriteria: "sha1:content", fullTextRemoveSelectors: ".ad" } });
+    await syncFeed(userId, feed.id);
+    const [row] = await state.db.article.findMany({ where: { feedId: feed.id }, select: { dedupeKey: true, content: true } });
+    expect(row.dedupeKey).toBe(sha1(raw));
+    expect(row.content).not.toContain("Ad</div>");
+  });
+});

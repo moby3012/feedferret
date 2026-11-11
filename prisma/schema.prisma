@@ -321,6 +321,9 @@ model Feed {
   priority        String   @default("main") // important | main | category | feed | hidden
   unicityCriteria String   @default("id")
   unicityCriteriaForced Boolean @default(false)
+  // FreshRSS `sha1:*` criterion for which existing rows were already moved from their
+  // older dedupe keys (lib/rss-sync.ts rekeyLegacyRows); null = not done yet.
+  dedupeRekeyedFor String?
   scraperConfig   String?  // JSON for XPath / JSON DotNotation / xPathToJson settings
   httpOptions     String?  // JSON for Scout Studio cURL-like fetch options
   userId          String

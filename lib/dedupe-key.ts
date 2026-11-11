@@ -77,7 +77,12 @@ export function buildDedupeKey(
     externalId: string | null,
 ): string {
     if (isFreshRssHashedCriteria(feed.unicityCriteria)) return freshRssHashedGuid(feed.unicityCriteria!, item, externalId);
-    const parts = (feed.unicityCriteria || "id")
+    return genericDedupeKey(feed.unicityCriteria, item, externalId);
+}
+
+/** FeedFerret's own `part:part` criteria; also what every version before #280 did for `sha1:*`. */
+function genericDedupeKey(criteria: string | null | undefined, item: DedupeKeyItem, externalId: string | null): string {
+    const parts = (criteria || "id")
         .split(":")
         .map((part) => part.trim())
         .filter(Boolean);
@@ -97,21 +102,23 @@ export function buildDedupeKey(
 }
 
 /**
- * Keys an article of a `sha1:*` feed may already be stored under from earlier
- * FeedFerret versions, which did not know these criteria and keyed such feeds like
- * `id` (guid, else link, else title). Pre-release builds of the FreshRSS support
- * used a `sha1:`-prefixed digest. The sync re-keys a matching row in place instead
- * of inserting a duplicate. Empty for every other criterion.
+ * Keys an article of a `sha1:*` feed may already be stored under. Versions before #280
+ * did not know these criteria and ran them through the generic `part:part` algorithm
+ * (`sha1:title` → the bare title, `sha1:link_published` → guid/link/title); pre-release
+ * builds of #280 stored a `sha1:`-prefixed digest. `legacyItem` is the item as those
+ * versions saw it (identity title "Untitled" for title-less items, content as fetched).
+ * The sync re-keys a row found under one of these in place. Empty for other criteria.
  */
 export function legacyDedupeKeys(
     feed: { unicityCriteria?: string | null },
     item: DedupeKeyItem,
     externalId: string | null,
+    legacyItem: DedupeKeyItem = item,
 ): string[] {
     if (!isFreshRssHashedCriteria(feed.unicityCriteria)) return [];
     const current = buildDedupeKey(feed, item, externalId);
-    const f = freshRssFields(item);
+    const f = freshRssFields(legacyItem);
     const input = FRESHRSS_SHA1_CRITERIA[feed.unicityCriteria!].map((field) => f[field]).join("");
-    const candidates = [externalId || item.link || item.title || "", input ? `sha1:${sha1Hex(input)}` : ""];
+    const candidates = [genericDedupeKey(feed.unicityCriteria, legacyItem, externalId), input ? `sha1:${sha1Hex(input)}` : ""];
     return [...new Set(candidates.filter((key) => key && key !== current))];
 }

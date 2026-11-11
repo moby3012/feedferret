@@ -1254,6 +1254,8 @@
       "deselectAll": "Alle abwählen",
       "selectFeedsToExport": "Feeds zum Export auswählen oder alle abwählen, um alles zu exportieren.",
       "exportAllFeeds": "Alle Feeds exportieren",
+      "includeCredentials": "Zugangsdaten mitexportieren (FreshRSS-kompatibel)",
+      "includeCredentialsWarning": "Enthält Cookies, HTTP-Header, POST-Daten, Proxy-Zugangsdaten und Benutzername/Passwort in Feed-URLs im Klartext. Datei nicht teilen und nur für den Umzug zu FreshRSS verwenden.",
       "exportFeedsCount": "{count} Feeds",
       "exportAllDataJson": "Alle Daten exportieren (JSON)",
       "downloadFeedsJson": "Feeds, Labels, gespeicherte Suchen und Auto-Lesen-Regeln als JSON herunterladen.",
@@ -1455,7 +1457,7 @@
         "proxytype-ignored": "Proxy-Typ wird aus der Proxy-URL abgeleitet",
         "ttl-invalid": "Ungültiges Aktualisierungsintervall",
         "ttl-clamped": "Aktualisierungsintervall angepasst",
-        "css-without-selector": "Volltext-Einstellungen ohne Inhalts-Selektor",
+        "css-without-selector": "Volltext-Bedingungen ohne Inhalts-Selektor",
         "filter-untranslatable": "Filter hat keine Entsprechung",
         "proxy-blocked": "Proxy nicht erlaubt (interne Adresse), nicht importiert",
         "connector-route-blocked": "Diese Connector-Adresse (RSSHub/changedetection.io) ist nicht erlaubt, nicht importiert",
@@ -1470,7 +1472,8 @@
         "maxredirs-invalid": "Ungültiges Weiterleitungslimit ignoriert",
         "maxredirs-clamped": "Weiterleitungslimit angepasst",
         "css-conditions-partial": "Volltext-Bedingungen teils nicht auswertbar: Volltext für alle Artikel",
-        "expression-too-long": "Ausdruck zu lang, nicht übernommen"
+        "expression-too-long": "Ausdruck zu lang, nicht übernommen",
+        "expression-remote-dropped": "Selektoren/XPath aus Remote-OPML nicht übernommen"
       }
     },
     "toasts": {

@@ -204,10 +204,12 @@ describe("OPML import: every entry point maps FreshRSS exports identically", () 
     expect(results).toEqual([{ category: "Remote", success: true, count: 7 }]);
 
     const blog = await state.db.feed.findFirstOrThrow({ where: { userId, name: "Example Blog" } });
-    const http = JSON.parse(blog.httpOptions!);
-    expect(http).toMatchObject({ CURLOPT_FOLLOWLOCATION: true, CURLOPT_USERAGENT: "Mozilla/5.0 (X11; Linux x86_64) FreshRSS" });
-    for (const key of ["CURLOPT_COOKIE", "CURLOPT_HTTPHEADER", "CURLOPT_PROXY", "CURLOPT_COOKIEFILE"]) expect(http).not.toHaveProperty(key);
-    expect(blog).toMatchObject({ sourceType: "HTML+XPath", fullTextSelector: "div.post-body" });
+    // Remote files set no request option and no selector/XPath expression (#280 security review).
+    expect(blog.httpOptions).toBeNull();
+    expect(blog.customUserAgent).toBeNull();
+    expect(blog).toMatchObject({ sourceType: "HTML+XPath", fullTextSelector: null });
+    // Only the inert unknown attribute is kept; no XPath reaches the fetcher.
+    expect(JSON.parse(blog.scraperConfig!)).toEqual({ extensions: { futureFlag: "yes" } });
     // Everything lands below the dynamic category; no rules, no nested dynamic URLs.
     const tech = await state.db.category.findFirstOrThrow({ where: { userId, name: "Tech" } });
     expect(tech.parentId).toBe(category.id);

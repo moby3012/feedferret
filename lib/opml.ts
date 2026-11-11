@@ -62,6 +62,33 @@ function extensionsAttr(name: string, value: unknown) {
 export interface OpmlExportOptions {
     /** Refresh interval (minutes) of feeds without their own; used for the TTL of muted feeds. */
     defaultUpdateFrequency?: number;
+    /**
+     * Include credentials and request options that may carry them: cookies, HTTP headers,
+     * POST bodies, proxy settings, user:pass in URLs and unknown `frss:*` values. Off by
+     * default; only an explicit opt-in of the signed-in owner turns it on.
+     */
+    includeCredentials?: boolean;
+}
+
+/** cURL options without secrets: kept in the default (credential-free) export. */
+const SHAREABLE_HTTP_OPTIONS = new Set(["CURLOPT_USERAGENT", "CURLOPT_FOLLOWLOCATION", "CURLOPT_MAXREDIRS"]);
+
+const stripUserinfo = (value: string | null | undefined) => value?.replace(/(https?:\/\/)[^/@?#]+@/gi, "$1") ?? value;
+
+function redactFeedForShareableExport(feed: any) {
+    const scraper = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
+    delete scraper.extensions;
+    const http = parseJsonObject<FeedHttpOptions>(readPlainColumnOrNull("feed.httpOptions", feed.httpOptions));
+    const safeHttp = Object.fromEntries(Object.entries(http).filter(([name]) => SHAREABLE_HTTP_OPTIONS.has(name)));
+    return {
+        ...feed,
+        url: stripUserinfo(feed.url),
+        htmlUrl: stripUserinfo(feed.htmlUrl),
+        httpOptions: Object.keys(safeHttp).length ? JSON.stringify(safeHttp) : null,
+        authUsername: null,
+        authPassword: null,
+        scraperConfig: JSON.stringify(scraper),
+    };
 }
 
 /** FreshRSS priority for a feed; FeedFerret's "hide from All feeds" is FreshRSS' "category". */
@@ -176,23 +203,21 @@ function categoryOutline(category: any, lines: string[], indent: string, childre
     lines.push(`${indent}</outline>`);
 }
 
+/** API exports (REST, GReader) are always the credential-free variant. */
+export function generateApiOpml(feeds: any[], categories: any[] = [], options: OpmlExportOptions = {}) {
+    return generateOpml(feeds, categories, { ...options, includeCredentials: false });
+}
+
 /**
  * Generates an OPML string from feeds and optional categories. When categories
  * are provided, Scout Studio dynamic OPML categories and nested structure are kept.
+ * Credential-free unless `options.includeCredentials` is true.
  */
-/** API exports expose only public subscription configuration. Unknown HTTP and
- * scraper extensions are omitted: they can carry arbitrary credentials. */
-export function generateApiOpml(feeds: any[], categories: any[] = [], options: OpmlExportOptions = {}) {
-    const publicUrl = (value: string | null) => value?.replace(/(https?:\/\/)[^/@]+@/gi, "$1") ?? value;
-    return generateOpml(feeds.map((feed) => {
-        const scraper = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
-        delete scraper.extensions;
-        return { ...feed, url: publicUrl(feed.url), htmlUrl: publicUrl(feed.htmlUrl),
-            httpOptions: null, customUserAgent: null, authPassword: null, scraperConfig: JSON.stringify(scraper) };
-    }), categories.map((category) => ({ ...category, opmlUrl: publicUrl(category.opmlUrl) })), options);
-}
-
 export function generateOpml(feeds: any[], categories: any[] = [], options: OpmlExportOptions = {}): string {
+    if (options.includeCredentials !== true) {
+        feeds = feeds.map(redactFeedForShareableExport);
+        categories = categories.map((category) => ({ ...category, opmlUrl: stripUserinfo(category.opmlUrl) }));
+    }
     const header = `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0" xmlns:${OPML_EXTENSION_PREFIX}="${OPML_EXTENSION_NAMESPACE}">
   <head>
