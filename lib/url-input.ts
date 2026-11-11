@@ -218,3 +218,14 @@ export function isConnectError(error: unknown): boolean {
 export function isTlsError(error: unknown): boolean {
   return classifyFetchFailure(error) === "tls";
 }
+
+/**
+ * `s` without any trailing run of `ch` — a backward character scan. Never
+ * `s.replace(/x+$/, "")` on untrusted strings: the regex retries the run from
+ * every start position (quadratic on "////…/a").
+ */
+export function trimTrailing(s: string, ch: string): string {
+  let end = s.length;
+  while (end > 0 && s[end - 1] === ch) end--;
+  return end === s.length ? s : s.slice(0, end);
+}

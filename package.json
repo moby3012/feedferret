@@ -82,6 +82,7 @@
     "entities": "8.0.0",
     "geist": "^1.7.0",
     "highlight.js": "^11.11.1",
+    "htmlparser2": "12.0.0",
     "imapflow": "^2.11.0",
     "impit": "^0.14.3",
     "input-otp": "1.4.2",

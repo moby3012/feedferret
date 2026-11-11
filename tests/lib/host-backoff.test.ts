@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   classifyFetchFailure,
   hostBackoffRemainingMs,
+  hostRateLimitRemainingMs,
   recordHostFailure,
   recordHostSuccess,
   resetHostBackoff,
@@ -81,5 +82,26 @@ describe("normalizeLinkForComparison", () => {
     }
     expect(n("https://news.example/story/43?id=7")).not.toBe(base);
     expect(n("https://news.example/story/42?id=8")).not.toBe(base);
+  });
+});
+
+describe("hostRateLimitRemainingMs (interactive callers)", () => {
+  beforeEach(() => resetHostBackoff());
+
+  it("counts only windows the server asked for: 429, or any status with Retry-After", () => {
+    const now = 1_000_000;
+    recordHostFailure("https://a.example/x", new HttpStatusError(429, "Fetch failed: 429", null), now);
+    expect(hostRateLimitRemainingMs("https://a.example/y", now)).toBeGreaterThan(0);
+    recordHostFailure("https://b.example/x", new HttpStatusError(503, "Fetch failed: 503", 60_000), now);
+    expect(hostRateLimitRemainingMs("https://b.example/y", now)).toBe(120_000);
+  });
+
+  it("ignores our own guesses for 403 / 5xx / network failures (still deferred for full text)", () => {
+    const now = 1_000_000;
+    recordHostFailure("https://c.example/x", new HttpStatusError(403, "Fetch failed: 403"), now);
+    recordHostFailure("https://d.example/x", new Error("socket hang up"), now);
+    expect(hostRateLimitRemainingMs("https://c.example/y", now)).toBe(0);
+    expect(hostRateLimitRemainingMs("https://d.example/y", now)).toBe(0);
+    expect(hostBackoffRemainingMs("https://c.example/y", now)).toBeGreaterThan(0);
   });
 });

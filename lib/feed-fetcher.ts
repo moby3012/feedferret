@@ -48,6 +48,13 @@ export type FeedFetchConfig = {
    * errors; left off for ordinary syncs.
    */
   includeErrorBody?: boolean;
+  /** Aborts the fetch (feed discovery's run deadline). */
+  signal?: AbortSignal;
+  /**
+   * Called for every redirect hop before any other redirect policy; false
+   * refuses the hop (feed discovery counts hops against its request budget).
+   */
+  onRedirect?: (nextUrl: string) => boolean;
 };
 
 export type FetchedFeedArticle = {
@@ -341,6 +348,7 @@ async function fetchText(storedFeed: FeedFetchConfig, accept: string): Promise<C
     method: parseBooleanLike(String(http.CURLOPT_POST ?? "")) ? "POST" : "GET",
     body: http.CURLOPT_POSTFIELDS ? String(http.CURLOPT_POSTFIELDS) : undefined,
     headers,
+    ...(feed.signal ? { signal: feed.signal } : {}),
   };
 
   // Internal fetch targets are allowed when: the caller forced it (trusted
@@ -372,7 +380,7 @@ async function fetchText(storedFeed: FeedFetchConfig, accept: string): Promise<C
   // Trusted connector request: the internal allowance (and the secret) only
   // follow redirects to another allowed route on the same connector origin.
   const connectorOrigin = connector.trusted ? new URL(connector.url).origin : null;
-  const redirectGuard =
+  const policyGuard =
     connectorOrigin
       ? (next: string) => {
           if (new URL(next).origin !== connectorOrigin) return null;
@@ -382,6 +390,10 @@ async function fetchText(storedFeed: FeedFetchConfig, accept: string): Promise<C
       : googleNewsOverride
         ? (next: string) => (isTrustedGoogleNewsOverrideUrl(next) ? next : null)
         : undefined;
+  const onRedirect = feed.onRedirect;
+  const redirectGuard = onRedirect
+    ? (next: string) => (onRedirect(next) ? (policyGuard ? policyGuard(next) : next) : null)
+    : policyGuard;
 
   if (http.CURLOPT_PROXY) {
     // The proxy host is a connection target of its own: apply the same SSRF rules as to the

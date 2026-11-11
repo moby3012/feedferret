@@ -116,7 +116,21 @@ function discoverySitePage() {
   const posts = DISC_POSTS.map((t) => `<article class="post"><h2><a href="/disc/site/posts/${slug(t)}">${t}</a></h2><time datetime="2026-11-01T09:00:00Z">Nov 1, 2026</time><p>${t} — teaser.</p></article>`).join("");
   return `<!doctype html><html><head><title>Harbour Notes</title>${head}</head><body><main><div class="posts">${posts}</div></main><footer><a href="/disc/site/about">About</a> <a href="/disc/site/feed.xml" aria-label="RSS feed"><svg viewBox="0 0 8 8"></svg></a></footer></body></html>`;
 }
+// P-PLAT software adapter: a Discourse forum installed in a sub-folder that
+// does NOT advertise its feed (no <link rel=alternate>, no RSS anchor) — only
+// the generator meta tells discovery which software it is.
+function discourseForumPage() {
+  return `<!doctype html><html><head><title>Harbour Forum</title><meta name="generator" content="Discourse 3.4.0 - https://github.com/discourse/discourse version e2e"><meta id="data-discourse-setup" data-base-uri="/disc/forum"></head><body><div id="main-outlet"><a href="/disc/forum/t/welcome/1">Welcome</a></div></body></html>`;
+}
 function handleDiscoverySite(res, url) {
+  if (url.pathname === "/disc/forum" || url.pathname === "/disc/forum/") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(discourseForumPage());
+    return true;
+  }
+  if (url.pathname === "/disc/forum/latest.rss") {
+    res.writeHead(200, { "content-type": "application/rss+xml" }).end(`<?xml version="1.0"?><rss version="2.0"><channel><title>Harbour Forum - Latest topics</title><link>${baseUrl}/disc/forum/</link><description>Discourse fixture</description><item><title>Welcome</title><guid>forum-1</guid><link>${baseUrl}/disc/forum/t/welcome/1</link></item></channel></rss>`);
+    return true;
+  }
   if (url.pathname === "/disc/site" || url.pathname === "/disc/site/") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(discoverySitePage());
     return true;

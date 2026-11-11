@@ -761,7 +761,9 @@
       "needsRsshub": "Requires RSSHub – configure under Settings › Server",
       "rateLimited": "Try again later",
       "blocked": "This site blocked automated access – try a native feed from the publisher",
-      "tlsError": "The secure (HTTPS) connection to this site failed (certificate error). For your safety we don't switch to unencrypted http automatically — if you trust the site, enter the address with http://."
+      "tlsError": "The secure (HTTPS) connection to this site failed (certificate error). For your safety we don't switch to unencrypted http automatically — if you trust the site, enter the address with http://.",
+      "needsRsshubFor": "{platform} has no feed of its own – requires RSSHub (configure under Settings › Server)",
+      "partial": "The search was stopped early (time or request limit) before it found a feed. Try again later or enter the feed address directly."
     },
     "kinds": {
       "videos": "Videos",
@@ -782,7 +784,22 @@
       "news": "News",
       "diary": "Diary & reviews",
       "topic": "Topic",
-      "rsshub": "via RSSHub"
+      "rsshub": "via RSSHub",
+      "latest": "Latest",
+      "category": "Category",
+      "thread": "Thread",
+      "downloads": "Downloads",
+      "announcements": "Announcements"
+    },
+    "feedSource": {
+      "platform": "{name} feed",
+      "forum": "{name} forum",
+      "blog": "{name} blog",
+      "wiki": "{name} wiki",
+      "rsshub": "via RSSHub",
+      "html": "Offered by the page",
+      "commonPath": "Usual feed address",
+      "curated": "Known source"
     },
     "starterPacks": "Starter packs",
     "deleteConfirmTitle": "Delete feed?",

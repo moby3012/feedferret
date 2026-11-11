@@ -5,7 +5,7 @@
 
 import { discoverFeeds, type DiscoveredFeed } from "./feed-discovery";
 import { checkRateLimit, RATE_LIMITS } from "./rate-limit";
-import { isTlsError, normalizeUrlInput, URL_INPUT_ERROR_TEXT, type UrlInputErrorCode } from "./url-input";
+import { isTlsError, normalizeUrlInput, trimTrailing, URL_INPUT_ERROR_TEXT, type UrlInputErrorCode } from "./url-input";
 
 export type AddFeedErrorCode =
   | UrlInputErrorCode
@@ -57,7 +57,7 @@ export function pageFetchErrorCode(error: unknown): AddFeedErrorCode {
 }
 
 /** The client-safe subset of a discovery result row. */
-export type ClientDiscoveredFeed = Pick<DiscoveredFeed, "url" | "title" | "type" | "source" | "kind" | "platform">;
+export type ClientDiscoveredFeed = Pick<DiscoveredFeed, "url" | "title" | "type" | "source" | "kind" | "platform" | "via">;
 
 export function discoveredFeedForClient(feed: DiscoveredFeed): ClientDiscoveredFeed {
   return {
@@ -67,6 +67,7 @@ export function discoveredFeedForClient(feed: DiscoveredFeed): ClientDiscoveredF
     ...(feed.source ? { source: feed.source } : {}),
     ...(feed.kind ? { kind: feed.kind } : {}),
     ...(feed.platform ? { platform: feed.platform } : {}),
+    ...(feed.via ? { via: feed.via } : {}),
   };
 }
 
@@ -104,7 +105,7 @@ export function sameFeedAddress(a: string, b: string): boolean {
   const key = (u: string) => {
     try {
       const url = new URL(u);
-      const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, "") : url.pathname;
+      const path = url.pathname.length > 1 ? trimTrailing(url.pathname, "/") : url.pathname;
       return `${url.host.toLowerCase()}${path}${url.search}`;
     } catch {
       return u;
