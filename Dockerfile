@@ -57,9 +57,10 @@ RUN mkdir -p /app/data && touch /app/data/dev.db && chown -R nextjs:nodejs /app/
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-# HTML parsing worker thread (lib/html-worker): its own esbuild bundle, loaded
-# from /app/build/html-worker/worker.mjs; jsdom resolves from the standalone
-# node_modules. scripts/docker-smoke.sh fails when it is missing.
+# HTML parsing worker thread (lib/html-worker): its own self-contained esbuild
+# bundle (parsers incl. jsdom inside, no node_modules needed), loaded from
+# /app/build/html-worker/worker.cjs. scripts/docker-smoke.sh fails when it is
+# missing or cannot parse.
 COPY --from=builder --chown=nextjs:nodejs /app/build/html-worker ./build/html-worker
 # Defense in depth: Next's standalone file tracing can pick up prisma.config.ts from the
 # project root when some server code does a dynamic fs access (see lib/ai/fake.ts and

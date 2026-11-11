@@ -1,5 +1,5 @@
 // The HTML tasks the worker pool (lib/html-worker/pool.ts) can run. Everything
-// reachable from here is bundled into build/html-worker/worker.mjs, so this
+// reachable from here is bundled into build/html-worker/worker.cjs, so this
 // graph must stay free of I/O modules (db, ssrf, auth, next): the bundle
 // script fails the build when one sneaks in (scripts/build-html-worker.mjs).
 // Inputs and outputs cross the thread boundary by structured clone.
@@ -24,6 +24,18 @@ import { parseOpmlInProcess } from "@/lib/opml-parse-core";
 import { extractCatalogOpmlEntries } from "@/lib/catalog-opml-core";
 import { renderMarkdownToHtmlInProcess } from "@/lib/markdown-render-core";
 import { htmlToMarkdown } from "@/lib/html-to-markdown";
+
+/**
+ * The `__test*` tasks (busy loop, memory bomb) exist for the pool's own tests.
+ * They run only with FEEDFERRET_HTML_WORKER_TEST_TASKS=1 and never when
+ * NODE_ENV=production, so a production worker cannot be told to spin or
+ * allocate by anything that can name a task.
+ */
+function assertTestTasksEnabled() {
+  if (process.env.FEEDFERRET_HTML_WORKER_TEST_TASKS !== "1" || process.env.NODE_ENV === "production") {
+    throw new Error("HTML worker test tasks are disabled");
+  }
+}
 
 export const htmlTasks = {
   /** Loads the parsers and the sanitizer's window (boot warm-up). */
@@ -50,14 +62,16 @@ export const htmlTasks = {
   catalogOpmlEntries: (input: string) => extractCatalogOpmlEntries(input),
   renderMarkdown: (input: string) => renderMarkdownToHtmlInProcess(input),
   htmlToMarkdown: (input: string) => htmlToMarkdown(input),
-  /** Test-only probes for the pool's timeout / crash handling. */
+  /** Test-only probes for the pool's timeout / memory handling (refused unless enabled, never in production). */
   async __testBusyLoop(input: { ms: number }): Promise<number> {
+    assertTestTasksEnabled();
     const until = Date.now() + input.ms;
     let n = 0;
     while (Date.now() < until) n++;
     return n;
   },
   async __testAllocate(input: { mb: number }): Promise<number> {
+    assertTestTasksEnabled();
     const keep: string[][] = [];
     for (let i = 0; i < input.mb; i++) keep.push(Array.from({ length: 16_384 }, (_, j) => `${i}:${j}:${"x".repeat(24)}`));
     return keep.length;

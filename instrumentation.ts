@@ -76,7 +76,7 @@ export async function register() {
             // Fail closed: nothing is parsed on the main thread. Make it loud.
             console.error("[html-worker] UNAVAILABLE: full text, page feeds, newsletters and feed-item sanitizing are disabled until the worker bundle is fixed (see /api/health).");
             const { writeSystemLog } = await import("./lib/system-log");
-            await writeSystemLog("error", "sync", "HTML worker unavailable: full text, page feeds, newsletters and feed-item sanitizing are disabled (fail closed). Check build/html-worker/worker.mjs in the deployment.");
+            await writeSystemLog("error", "sync", "HTML worker unavailable: full text, page feeds, newsletters and feed-item sanitizing are disabled (fail closed). Check build/html-worker/worker.cjs in the deployment.");
         })().catch((error) => console.error("[html-worker] warm-up failed", error));
     }
 

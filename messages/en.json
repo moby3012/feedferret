@@ -1048,6 +1048,7 @@
     "aiSummaryHint": "AI summaries may not be fully accurate. Always verify important information.",
     "noContent": "No content",
     "noContentDescription": "This article has no content. Open the original to read it.",
+    "plainTextFallback": "Shown as plain text (formatting temporarily unavailable)",
     "openOriginal": "Open original",
     "fetchFullText": "Fetch full text",
     "fetching": "Fetching…",

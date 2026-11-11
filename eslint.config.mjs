@@ -14,17 +14,45 @@ const TRANSPORTS = ["node:http", "node:https", "http", "https", "undici"];
 const PARSE_MESSAGE =
   "Untrusted HTML/XML is parsed only in the HTML worker pool: call runInHtmlWorker / runHtmlTask (lib/html-worker), " +
   "or import a parse-free helper module instead (type imports are fine).";
-const PARSER_PACKAGES = ["jsdom", "isomorphic-dompurify", "dompurify", "linkedom", "defuddle", "@mozilla/readability", "@extractus/article-extractor", "turndown", "parse5"];
+export const PARSER_PACKAGES = [
+  "jsdom", "isomorphic-dompurify", "dompurify", "linkedom", "defuddle", "@mozilla/readability", "@extractus/article-extractor",
+  "turndown", "parse5", "cheerio", "@xmldom/xmldom", "xpath",
+];
 export const WORKER_ONLY_MODULES = [
   "readability-core", "extraction-trim-core", "ftr-site-config", "lazy-media", "html-to-markdown", "sanitize-html",
   "feed-parse-core", "page-feed-suggest-core", "page-digest", "selector-extract", "newsletter-html", "feed-item-sanitize",
   "opml-parse-core", "catalog-opml-core", "markdown-render-core", "html-worker/tasks",
 ];
+const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, (ch) => (ch === "/" ? "\\x2F" : `\\${ch}`));
+// A worker-only module by any spelling: "@/lib/x", "./x", "../lib/x", with or
+// without an extension (".ts", ".js", ".mjs", ".tsx", …), plus the task
+// registry imported relatively from inside lib/html-worker ("./tasks").
+// Slashes are written as \x2F so the same source also works inside an
+// esquery attribute regex (no-restricted-syntax), which cannot contain "/".
+const WORKER_ONLY_SPECIFIER = `(^|\\x2F)(${WORKER_ONLY_MODULES.map(escapeRe).join("|")})(\\.[cm]?[jt]sx?)?$|^\\.\\x2Ftasks(\\.[cm]?[jt]sx?)?$`;
+// A parser package or one of its subpaths ("cheerio/lib/…", "dompurify/dist/…").
+const PARSER_SPECIFIER = `^(${PARSER_PACKAGES.map(escapeRe).join("|")})(\\x2F.*)?$`;
 const parsePaths = PARSER_PACKAGES.map((name) => ({ name, message: PARSE_MESSAGE, allowTypeImports: true }));
-const parsePatterns = [{
-  regex: `(^|/)(${WORKER_ONLY_MODULES.join("|")})$`,
-  message: PARSE_MESSAGE,
-  allowTypeImports: true,
+const parsePatterns = [
+  { regex: WORKER_ONLY_SPECIFIER, message: PARSE_MESSAGE, allowTypeImports: true },
+  // Subpaths only ("cheerio/slim"): the bare names are covered by `parsePaths`.
+  { regex: `^(${PARSER_PACKAGES.map(escapeRe).join("|")})\\x2F.+$`, message: PARSE_MESSAGE, allowTypeImports: true },
+];
+// no-restricted-imports does not see `await import(…)` or `require(…)`.
+const parseSyntax = [WORKER_ONLY_SPECIFIER, PARSER_SPECIFIER].flatMap((re) => [
+  { selector: `ImportExpression[source.value=/${re}/]`, message: PARSE_MESSAGE },
+  { selector: `CallExpression[callee.name='require'][arguments.0.value=/${re}/]`, message: PARSE_MESSAGE },
+  { selector: `CallExpression[callee.property.name='resolve'][callee.object.name='require'][arguments.0.value=/${re}/]`, message: PARSE_MESSAGE },
+]);
+const FETCH_SYNTAX = [{
+  selector: "CallExpression[callee.name='fetch']",
+  message: "Outbound requests must use safeFetch/fetchWithSsrfProtection from lib/ssrf (socket DNS pinning).",
+}, {
+  selector: "CallExpression[callee.type='MemberExpression'][callee.object.name='globalThis'][callee.property.name='fetch']",
+  message: "Use safeFetch from lib/ssrf, including instead of globalThis.fetch.",
+}, {
+  selector: "CallExpression[callee.type='MemberExpression'][callee.object.name='globalThis'][callee.computed=true][callee.property.value='fetch']",
+  message: "Use safeFetch from lib/ssrf, including instead of globalThis['fetch'].",
 }];
 const MAIN_THREAD_FILES = [
   "lib/**/*.{ts,tsx}", "app/**/*.{ts,tsx}", "server/**/*.{ts,tsx}", "features/**/*.{ts,tsx}", "hooks/**/*.{ts,tsx}",
@@ -45,22 +73,16 @@ const config = [
     // HTML parsing boundary for all main-thread code (the lib/app-api config
     // below repeats it next to the transport rule: options do not merge).
     files: MAIN_THREAD_FILES,
-    rules: { "no-restricted-imports": ["error", { paths: parsePaths, patterns: parsePatterns }] },
+    rules: {
+      "no-restricted-imports": ["error", { paths: parsePaths, patterns: parsePatterns }],
+      "no-restricted-syntax": ["error", ...parseSyntax],
+    },
   },
   {
     files: ["lib/**/*.{ts,tsx}", "app/api/**/*.{ts,tsx}", "app/actions/**/*.{ts,tsx}", "auth.ts"],
     rules: {
       "no-restricted-globals": ["error", { name: "fetch", message: "Use safeFetch from lib/ssrf for outbound requests." }],
-      "no-restricted-syntax": ["error", {
-        selector: "CallExpression[callee.name='fetch']",
-        message: "Outbound requests must use safeFetch/fetchWithSsrfProtection from lib/ssrf (socket DNS pinning).",
-      }, {
-        selector: "CallExpression[callee.type='MemberExpression'][callee.object.name='globalThis'][callee.property.name='fetch']",
-        message: "Use safeFetch from lib/ssrf, including instead of globalThis.fetch.",
-      }, {
-        selector: "CallExpression[callee.type='MemberExpression'][callee.object.name='globalThis'][callee.computed=true][callee.property.value='fetch']",
-        message: "Use safeFetch from lib/ssrf, including instead of globalThis['fetch'].",
-      }],
+      "no-restricted-syntax": ["error", ...FETCH_SYNTAX, ...parseSyntax],
       "no-restricted-imports": ["error", {
         paths: [...transportPaths([...TRANSPORTS, "imapflow"]), ...parsePaths],
         patterns: parsePatterns,
@@ -100,7 +122,10 @@ const config = [
   },
   {
     files: WORKER_FILES,
-    rules: { "no-restricted-imports": ["error", { paths: transportPaths([...TRANSPORTS, "imapflow"]) }] },
+    rules: {
+      "no-restricted-imports": ["error", { paths: transportPaths([...TRANSPORTS, "imapflow"]) }],
+      "no-restricted-syntax": ["error", ...FETCH_SYNTAX],
+    },
   },
   {
     rules: {

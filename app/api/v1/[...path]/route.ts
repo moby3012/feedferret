@@ -17,7 +17,7 @@ import { handleFreshRssUpload } from "@/lib/import/freshrss-upload";
 import { importOpmlXml, OpmlImportInputError } from "@/lib/import/opml-import";
 import { normalizeActionUrl } from "@/lib/add-feed-input";
 import { logger } from "@/lib/logger";
-import { renderMarkdownForDisplay } from "@/lib/markdown-render";
+import { mapRendered, renderMarkdownForDisplay } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
 import { isRsshubConfigured, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
 import { connectorFeedUrlError, getConnectorSecretRules, redactFeedForClient, redactFeedsForClient, redactFeedWith, stripConnectorSecrets, stripConnectorSecretsWith } from "@/lib/connector-secrets";
@@ -178,7 +178,7 @@ async function listArticles(user: ApiUser, request: Request) {
   ]);
 
   return NextResponse.json({
-    items: await Promise.all(items.map(articlePayload)),
+    items: await mapRendered(items, articlePayload),
     pagination: { limit, offset, total, nextOffset: offset + items.length < total ? offset + items.length : null },
   });
 }

@@ -391,8 +391,9 @@ priority lane, default 64), `FEEDFERRET_HTML_WORKER_BACKGROUND_AGING_MS`
 `FEEDFERRET_HTML_WORKER_BACKGROUND_WAIT_MS` (a background task gives up and is
 retried on the next sync after this, default 60000).
 
-The worker code ships as `build/html-worker/worker.mjs` (built by
-`pnpm run build`, included in the Docker image). If it is missing, parsing
+The worker code ships as `build/html-worker/worker.cjs`, a self-contained
+bundle with all parsers (built by `pnpm run build`, included in the Docker
+image; it needs no `node_modules`). If it is missing, parsing
 fails closed: full text, page feeds, newsletter ingest and feed sync pause
 (nothing unsanitized is stored), the server logs an error at startup and
 `/api/health` reports `"htmlWorker": "unavailable"`.

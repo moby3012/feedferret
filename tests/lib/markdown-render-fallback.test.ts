@@ -3,8 +3,9 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { resetHtmlWorkerPool } from "@/lib/html-worker/pool";
+import { resetHtmlWorkerPool, runHtmlTask } from "@/lib/html-worker/pool";
 import {
+  mapRendered,
   markdownPlainTextFallback,
   renderMarkdownForDisplay,
   renderMarkdownToHtml,
@@ -68,5 +69,53 @@ describe("markdown rendering resilience", () => {
       { html: "<p>**md**</p>", fallback: true },
       { html: "", fallback: false },
     ]);
+  });
+
+  describe("cold-cache bursts against the real worker pool", () => {
+    function smallPool(queue: number) {
+      process.env.FEEDFERRET_HTML_WORKER_INLINE = "0";
+      process.env.FEEDFERRET_HTML_WORKER_POOL_SIZE = "1";
+      process.env.FEEDFERRET_HTML_WORKER_QUEUE = String(queue);
+      resetHtmlWorkerPool();
+    }
+    afterEach(() => {
+      delete process.env.FEEDFERRET_HTML_WORKER_POOL_SIZE;
+      delete process.env.FEEDFERRET_HTML_WORKER_QUEUE;
+    });
+
+    it("a 250-item API page renders every article for real (bounded concurrency), even with a tiny queue", async () => {
+      smallPool(8);
+      const docs = Array.from({ length: 250 }, (_, i) => `# Post ${i}\n\nBody *${i}* with [link](https://x.example/${i}).`);
+      const out = await mapRendered(docs, (md) => renderMarkdownForDisplay(md));
+      expect(out.filter((r) => r.fallback !== null)).toEqual([]);
+      expect(out[249].html).toContain("<h1>Post 249</h1>");
+    }, 60_000);
+
+    it("unbounded Promise.all over the same page would overflow the queue (why mapRendered exists)", async () => {
+      smallPool(8);
+      const docs = Array.from({ length: 250 }, (_, i) => `# Other ${i}\n\ntext ${i}`);
+      const out = await Promise.all(docs.map((md) => renderMarkdownForDisplay(md)));
+      expect(out.some((r) => r.fallback === "busy")).toBe(true);
+    }, 60_000);
+
+    it("identical markdown rendering concurrently shares one in-flight render", async () => {
+      smallPool(1);
+      const results = await Promise.all(Array.from({ length: 50 }, () => renderMarkdownForDisplay("# Same\n\nshared body")));
+      // 50 separate tasks could never fit a queue of 1: every one got the real rendering.
+      expect(results.every((r) => r.fallback === null && r.html.includes("<h1>Same</h1>"))).toBe(true);
+    }, 60_000);
+
+    it("a momentarily busy pool is waited for and retried once before falling back", async () => {
+      smallPool(1);
+      await runHtmlTask("warm", null); // worker booted: the busy window below is the tasks only
+      const running = runHtmlTask("__testBusyLoop", { ms: 120 }).catch(() => 0);
+      await new Promise((r) => setTimeout(r, 20));
+      const queued = runHtmlTask("__testBusyLoop", { ms: 60 }).catch(() => 0);
+      // Queue (1) is full right now: the first attempt is `busy`, the retry 250 ms later succeeds.
+      const rendered = await renderMarkdownForDisplay("# Retry\n\nafter busy");
+      expect(rendered.fallback).toBeNull();
+      expect(rendered.html).toContain("<h1>Retry</h1>");
+      await Promise.all([running, queued]);
+    }, 60_000);
   });
 });

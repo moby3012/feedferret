@@ -16,16 +16,18 @@
 //   - two priority lanes: interactive work (a user waiting on a manual
 //     full-text fetch, an add-feed / page-feed preview) goes first and at
 //     least one worker is reserved for it; background work (scheduled sync,
-//     imports — marked with `runAsBackgroundHtmlWork`) is promoted once it has
-//     waited `backgroundAgingMs` (no starvation under sustained interactive
-//     load) and gives up after a bounded queue wait (`busy`, retried next sync),
+//     imports — marked with `runAsBackgroundHtmlWork`) is FIFO; its head is
+//     promoted ahead of interactive work once it has waited
+//     `backgroundAgingMs`, so the background lane keeps making progress under
+//     sustained interactive load, and each task gives up after a bounded queue
+//     wait (`busy`, retried next sync),
 //   - bounded queues: when one is full, callers get a `busy` error at once
 //     instead of piling up work.
 // Callers bound their input first (lib/html-guard.ts) so legitimate huge
 // pages degrade to "parse a prefix" rather than "time out".
 //
 // The worker script is a separate esbuild bundle (scripts/build-html-worker.mjs
-// → build/html-worker/worker.mjs, run by `pnpm run build`, `pnpm dev` and the
+// → build/html-worker/worker.cjs, run by `pnpm run build`, `pnpm dev` and the
 // vitest global setup; the Docker image copies it next to server.js).
 // The pool FAILS CLOSED: a missing bundle makes every task reject with
 // `unavailable` (full text keeps the feed content, page feeds report an
@@ -92,11 +94,12 @@ export type HtmlWorkerPoolOptions = {
   /** Background tasks give up (`busy`) after waiting this long in the queue (ms). */
   backgroundQueueWaitMs: number;
   /**
-   * Aging: a background task that has waited this long (ms) is dispatched
-   * before queued interactive tasks (still never on the reserved worker), so
-   * sustained interactive load cannot starve background work. Must be well
-   * below `backgroundQueueWaitMs`: an aged task waits at most this plus one
-   * task timeout for the next non-reserved worker.
+   * Aging: when the HEAD of the (FIFO) background queue has waited this long
+   * (ms), it is dispatched before queued interactive tasks (still never on the
+   * reserved worker), so sustained interactive load cannot starve the
+   * background lane. The bound is per head: the head waits at most this plus
+   * one task timeout for the next non-reserved worker; the tasks behind it move
+   * up one by one and are bounded by their own `backgroundQueueWaitMs`.
    */
   backgroundAgingMs: number;
   /** Default per-task timeout (ms), counted from the moment a worker picks the task up. */
@@ -118,7 +121,7 @@ export function defaultPoolOptions(): HtmlWorkerPoolOptions {
   return {
     workerPath:
       process.env.FEEDFERRET_HTML_WORKER_PATH ||
-      path.join(/*turbopackIgnore: true*/ process.cwd(), "build", "html-worker", "worker.mjs"),
+      path.join(/*turbopackIgnore: true*/ process.cwd(), "build", "html-worker", "worker.cjs"),
     // Two by default even on small machines: one worker stays reserved for
     // interactive work while background sync uses the other.
     size: intFromEnv("FEEDFERRET_HTML_WORKER_POOL_SIZE", 2, 1, 8),
@@ -137,7 +140,7 @@ export function defaultPoolOptions(): HtmlWorkerPoolOptions {
 }
 
 // The only environment the parsing code reads.
-const WORKER_ENV_KEYS = ["NODE_ENV", "TZ", "FEEDFERRET_DISABLE_FTR"];
+const WORKER_ENV_KEYS = ["NODE_ENV", "TZ", "FEEDFERRET_DISABLE_FTR", "FEEDFERRET_HTML_WORKER_TEST_TASKS"];
 
 function workerEnv(): Record<string, string> {
   const env: Record<string, string> = {};
@@ -509,8 +512,19 @@ export function currentHtmlTaskPriority(): HtmlTaskPriority {
   return state().priority.getStore() ?? "interactive";
 }
 
+/**
+ * Test-only in-process execution (FEEDFERRET_HTML_WORKER_INLINE=1, refused in
+ * production). The task registry is loaded through a computed specifier that
+ * bundlers ignore, so the parser graph (jsdom, Defuddle, Readability, …) is
+ * NOT compiled into the Next server build — it exists only in the worker
+ * bundle. Vitest resolves the specifier at runtime.
+ */
+const TASKS_MODULE = ["./", "tasks"].join("");
+
 async function runInline<K extends HtmlTaskName>(task: K, input: HtmlTaskInput<K>): Promise<HtmlTaskOutput<K>> {
-  const { runHtmlTaskInProcess } = await import("./tasks");
+  const { runHtmlTaskInProcess } = (await import(
+    /* webpackIgnore: true */ /* turbopackIgnore: true */ /* @vite-ignore */ TASKS_MODULE
+  )) as typeof import("./tasks");
   return runHtmlTaskInProcess(task, input);
 }
 

@@ -1,5 +1,5 @@
 // The HTML worker pool (lib/html-worker) against the real bundled worker
-// (build/html-worker/worker.mjs, built by the vitest global setup): the main
+// (build/html-worker/worker.cjs, built by the vitest global setup): the main
 // event loop must stay responsive while a worker chews on hostile HTML, a task
 // over budget must terminate its worker, and extraction results must be
 // identical to in-process extraction.
@@ -167,6 +167,8 @@ console.log(JSON.stringify(out));`,
       ["pageDigest", { html: page, url }],
       ["selectorExtract", { html: page, url, selector: null, removeSelectors: null, mode: "preview" }],
       ["selectorText", { html: page, url, selector: "body" }],
+      // <style> blocks + inline styles exercise jsdom's CSS layer (strict-mode bundling regression).
+      ["selectorExtract", { html: '<html><body><style>p{color:red}</style><article><p style="color:red;margin:1px">styled</p></article></body></html>', url, selector: "article", mode: "sync" }],
       ["newsletterBody", { html: '<p>Hi <a href="https://x.example/?utm_source=a">x</a><img src="https://open.substack.com/o" width=1></p>', text: null, fallbackHtml: null, inlineImages: [] }],
       ["sanitizeFeedItems", { items: ["<p>a<script>x</script></p>", "<img src=x onerror=alert(1)>"], removeSelectors: ".ad" }],
       ["removeSelectors", { items: ['<p>keep</p><div class="ad">x</div>', "<p>none</p>"], selectors: ".ad, :is(aside, .promo)" }],
@@ -175,6 +177,22 @@ console.log(JSON.stringify(out));`,
       const viaWorker = await pool.run(task, input as never);
       const inProcess = await runHtmlTaskInProcess(task, input as never);
       expect(viaWorker, task).toEqual(inProcess);
+    }
+  }, 60_000);
+
+  it("the worker bundle is self-contained: it runs from a directory without node_modules (Docker layout)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ff-html-worker-iso-"));
+    try {
+      const isolated = join(dir, "worker.cjs");
+      writeFileSync(isolated, readFileSync(defaultPoolOptions().workerPath));
+      const pool = makePool({ workerPath: isolated });
+      const html = '<html><head><style>body{color:red}</style></head><body><article><h1>Iso</h1><p style="color:blue">' + "lorem ipsum dolor sit amet ".repeat(60) + "</p></article></body></html>";
+      const viaIsolated = await pool.run("extractReadable", { html, url: "https://iso.example/a" });
+      expect(viaIsolated).toEqual(await runHtmlTaskInProcess("extractReadable", { html, url: "https://iso.example/a" }));
+      await expect(pool.run("renderMarkdown", "# M\n\n$x^2$")).resolves.toContain("katex");
+      await expect(pool.run("parseOpml", '<?xml version="1.0"?><opml><body><outline text="x" xmlUrl="https://f"/></body></opml>')).resolves.toEqual([{ text: "x", xmlUrl: "https://f" }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
 
@@ -385,6 +403,21 @@ describe("fail closed", () => {
     expect(copy.htmlWorkerStatus()).toBe("unavailable");
     const seen = await runAsBackgroundHtmlWork(async () => copy.currentHtmlTaskPriority());
     expect(seen).toBe("background");
+  });
+
+  it("the __test* tasks are refused in a production worker and without the test flag", async () => {
+    (process.env as Record<string, string>).NODE_ENV = "production";
+    const prodPool = makePool();
+    await expect(prodPool.run("__testBusyLoop", { ms: 1 })).rejects.toMatchObject({ name: "HtmlTaskFailedError", message: "HTML worker test tasks are disabled" });
+    (process.env as Record<string, string>).NODE_ENV = "test";
+    const flag = process.env.FEEDFERRET_HTML_WORKER_TEST_TASKS;
+    delete process.env.FEEDFERRET_HTML_WORKER_TEST_TASKS;
+    try {
+      const plainPool = makePool();
+      await expect(plainPool.run("__testAllocate", { mb: 1 })).rejects.toMatchObject({ name: "HtmlTaskFailedError" });
+    } finally {
+      process.env.FEEDFERRET_HTML_WORKER_TEST_TASKS = flag;
+    }
   });
 
   it("the test-only inline flag is refused in production", async () => {

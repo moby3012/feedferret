@@ -9,7 +9,7 @@ import { hashApiToken } from "@/lib/token";
 import { touchApiPassword } from "@/lib/greader";
 import { logger } from "@/lib/logger";
 import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
-import { renderMarkdownToHtml } from "@/lib/markdown-render";
+import { mapRendered, renderMarkdownToHtml } from "@/lib/markdown-render";
 import { readBoundedBytes, RequestTooLargeError } from "@/lib/bounded-body";
 import { getConnectorSecretRules, redactFeedsForClient, stripConnectorSecretsWith } from "@/lib/connector-secrets";
 
@@ -153,8 +153,10 @@ async function getItems(
   });
 
   const secretRules = await getConnectorSecretRules();
-  return Promise.all(
-    articles.filter((a) => a.extId && a.feed.extId).map(async (a) => ({
+  // Bounded render concurrency (Markdown → HTML runs in the worker pool).
+  return mapRendered(
+    articles.filter((a) => a.extId && a.feed.extId),
+    async (a) => ({
       id: decimalExternalId(a.extId),
       feed_id: decimalExternalId(a.feed.extId),
       title: a.title,
@@ -164,7 +166,7 @@ async function getItems(
       is_saved: a.isStarred ? 1 : 0,
       is_read: a.isRead ? 1 : 0,
       created_on_time: Math.floor(a.publishedAt.getTime() / 1000),
-    })),
+    }),
   );
 }
 
