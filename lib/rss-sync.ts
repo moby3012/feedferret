@@ -1112,11 +1112,9 @@ export async function syncAllFeeds() {
         },
     });
 
+    // JS sorting keeps null-first ordering identical on SQLite and PostgreSQL.
+    feeds.sort((a, b) => (a.lastFetchedAt?.getTime() ?? -Infinity) - (b.lastFetchedAt?.getTime() ?? -Infinity) || a.id.localeCompare(b.id));
     const results = await mapWithConcurrency(feeds, getSyncConcurrency(), async (feed) => {
-        if (Date.now() - startedAt >= budgetMs) {
-            deferred++;
-            return { feed: feed.url, success: true, skipped: true, deferred: true, count: 0 };
-        }
         // F6: skip auto-muted feeds — see the equivalent comment in
         // syncUserFeeds.
         if (feed.autoMuted) {
@@ -1133,6 +1131,11 @@ export async function syncAllFeeds() {
 
         if (diffMinutes < effectiveUpdateFrequency) {
             return { feed: feed.url, success: true, skipped: true, count: 0 };
+        }
+
+        if (Date.now() - startedAt >= budgetMs) {
+            deferred++;
+            return { feed: feed.url, success: true, skipped: true, deferred: true, count: 0 };
         }
 
         const res = await syncFeed(feed.userId, feed.id);

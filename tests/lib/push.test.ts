@@ -52,5 +52,6 @@ it("continues the batch after a hanging endpoint exceeds the total deadline", as
     const pending = sendPushToUser("u", { title: "test" });
     await vi.advanceTimersByTimeAsync(10_001);
     expect(await pending).toMatchObject({ sent: 1, failed: 1 });
+    expect(vi.getTimerCount()).toBe(0);
   } finally { vi.useRealTimers(); }
 });

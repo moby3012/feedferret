@@ -82,6 +82,9 @@ export async function sendPushToUser(userId: string, payload: BrowserPushPayload
     try {
       // IP literals bypass lookup, so retain the URL check as well. Push
       // subscriptions never inherit the feed/internal-network opt-in.
+      // web-push exposes no AbortSignal/request handle. The race bounds batch
+      // latency, but a slow underlying request may settle later; its socket
+      // inactivity timeout still applies. Never record late success in the DB.
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([(async () => {
         await assertSafeFetchUrl(subscription.endpoint, { context: "Push endpoint" });

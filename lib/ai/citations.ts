@@ -98,7 +98,7 @@ export function neutralizeLinks(text: string): string {
     .replace(SCHEME_URL, " ")
     .replace(EMAIL, " ")
     .replace(WWW, " ")
-    .replace(DOMAIN_LIKE, (token) => /^(?:node|vue|next|nuxt)\.js$/i.test(token) ? token : token.replace(new RegExp(DOT, "gu"), "[.]"));
+    .replace(DOMAIN_LIKE, (token) => /^[a-z][a-z0-9]*\.js$/i.test(token) ? token : token.replace(new RegExp(DOT, "gu"), "[.]"));
 }
 
 /**

@@ -12,7 +12,7 @@ export async function writeSystemLog(
       data: {
         level,
         category,
-        message: redact(message),
+        message: redact(String(message)),
         metadata: metadata ? JSON.stringify(redactValue(metadata)) : null,
       },
     })

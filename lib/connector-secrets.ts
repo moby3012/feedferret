@@ -1,4 +1,3 @@
-import { redact } from "./redact";
 // Connector access secrets stay server-side (security audit #2, N3 / M4).
 //
 // The admin-configured RSSHub `?key=` and changedetection.io `?token=` used to
@@ -28,6 +27,7 @@ import { redact } from "./redact";
 // - A user-chosen proxy never sees the secret: with CURLOPT_PROXY set the
 //   fetcher requests the keyless URL as an ordinary external fetch.
 
+import { redact } from "./redact";
 import { logger } from "@/lib/logger";
 import { changedetectionRouteError, rsshubRouteError } from "@/lib/rsshub-route";
 
@@ -230,14 +230,12 @@ export async function stripConnectorSecrets(rawUrl: string): Promise<string> {
  */
 export async function redactFeedsForClient<T extends { url?: string | null; lastError?: string | null }>(feeds: T[]): Promise<T[]> {
   const rules = await getConnectorSecretRules();
-  if (!rules.length) return feeds;
   return feeds.map((feed) => redactFeedWith(rules, feed));
 }
 
 export async function redactFeedForClient<T extends { url?: string | null; lastError?: string | null }>(feed: T): Promise<T> {
   if (!feed) return feed;
   const rules = await getConnectorSecretRules();
-  if (!rules.length) return feed;
   return redactFeedWith(rules, feed);
 }
 
