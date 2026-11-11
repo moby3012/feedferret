@@ -1,6 +1,14 @@
 // K1 perf: clustering cost on a 5k-article / 48 h window (real SQLite file).
 // Budget: an incremental tick of 200 new articles must fit the 400 ms tick
-// budget (CI runners are slower and noisy → 4× slack there; locally strict).
+// budget.
+//
+// The budgets are CPU time (process.cpuUsage: user + system), not wall-clock.
+// The work is synchronous (better-sqlite3 + the engine run on the one thread of
+// this file's own process), so CPU time measures the work itself and stays put
+// when the machine is oversubscribed (full suite in parallel, shared CI
+// runner), while wall-clock time doubles. A real regression (more work per
+// tick) still raises it one-to-one. Wall-clock is checked only on request:
+//   STORY_BENCH_STRICT=1 pnpm exec vitest run tests/server/story-bench.test.ts
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -28,7 +36,16 @@ const NOW = Date.UTC(2026, 10, 10, 12, 0, 0);
 const H = 3_600_000;
 const WINDOW_ARTICLES = 5_000;
 const NEW_ARTICLES = 200;
-const BUDGET_MS = process.env.CI ? 1_600 : 400;
+const BUDGET_MS = 400;
+/** Opt-in: also hold the wall-clock time to the budget (quiet machine only). */
+const STRICT = process.env.STORY_BENCH_STRICT === "1";
+/** The job's own wall-clock budget: generous, so machine load can never stop a tick early (processed < batch). */
+const JOB_BUDGET_MS = 30_000;
+/** CPU time of this process in ms (user + system, all its threads). */
+const cpuMs = () => {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+};
 const FEEDS = 40;
 
 // Deterministic RNG + zipf-ish vocabulary of pseudo words.
@@ -145,23 +162,28 @@ describe("story clustering performance (5k articles / 48 h, SQLite)", () => {
     // the median resists one noisy sample on a shared machine.
     expect(NEW_ARTICLES).toBeLessThanOrEqual(PENDING_BATCH); // one round of the real tick
     const samples: number[] = [];
+    const walls: number[] = [];
     let attached = 0;
     for (let k = 0; k < 3; k++) {
       await insert(buildSeeds(NEW_ARTICLES, `n${k}`, 0.4, 1.5, k * 0.5));
+      const c0 = cpuMs();
       const t0 = performance.now();
-      // The job's own budget gets the same CI slack as the assertion below,
-      // otherwise a slow runner stops the tick early (processed < batch).
-      const tick = await clusterUser(userId, { budgetMs: BUDGET_MS, now: NOW });
-      samples.push(performance.now() - t0);
+      // Generous job budget: a loaded machine must not stop the tick early (processed < batch);
+      // the assertion below is on the CPU time the tick needed.
+      const tick = await clusterUser(userId, { budgetMs: JOB_BUDGET_MS, now: NOW });
+      walls.push(performance.now() - t0);
+      samples.push(cpuMs() - c0);
       expect(tick.processed).toBe(NEW_ARTICLES);
       expect(tick.morePending).toBe(false);
       attached += tick.joined + tick.created;
     }
     const sorted = [...samples].sort((a, b) => a - b);
-    timings.incrementalTickMsAll = samples.map((x) => Math.round(x)).join("/");
-    timings.incrementalTickMedianMs = Math.round(sorted[1]);
+    timings.incrementalTickCpuMsAll = samples.map((x) => Math.round(x)).join("/");
+    timings.incrementalTickWallMsAll = walls.map((x) => Math.round(x)).join("/");
+    timings.incrementalTickCpuMedianMs = Math.round(sorted[1]);
     timings.incrementalAttachedTotal = attached;
     expect(sorted[1]).toBeLessThan(BUDGET_MS);
+    if (STRICT) expect([...walls].sort((a, b) => a - b)[1]).toBeLessThan(BUDGET_MS);
   }, 120_000);
 
   it("pure engine: 200 pending against a 5k window", async () => {
@@ -178,17 +200,23 @@ describe("story clustering performance (5k articles / 48 h, SQLite)", () => {
       sig: computeStorySig({ title: i % 2 ? reword(stories[i % stories.length]) : headline() }),
     }));
     const runs: number[] = [];
+    const walls: number[] = [];
     for (let k = 0; k < 5; k++) {
+      const c0 = cpuMs();
       const t0 = performance.now();
       const engine = new ClusterEngine(pending, window, []);
       engine.step(Infinity);
-      runs.push(performance.now() - t0);
+      walls.push(performance.now() - t0);
+      runs.push(cpuMs() - c0);
     }
     runs.sort((a, b) => a - b);
-    timings.engineMedianMs = Math.round(runs[2]);
-    timings.engineMaxMs = Math.round(runs[4]);
-    expect(runs[2]).toBeLessThan(CI_ENGINE_BUDGET);
+    walls.sort((a, b) => a - b);
+    timings.engineCpuMedianMs = Math.round(runs[2]);
+    timings.engineCpuMaxMs = Math.round(runs[4]);
+    timings.engineWallMedianMs = Math.round(walls[2]);
+    expect(runs[2]).toBeLessThan(ENGINE_BUDGET_MS);
+    if (STRICT) expect(walls[2]).toBeLessThan(ENGINE_BUDGET_MS);
   });
 });
 
-const CI_ENGINE_BUDGET = process.env.CI ? 600 : 150;
+const ENGINE_BUDGET_MS = 150;

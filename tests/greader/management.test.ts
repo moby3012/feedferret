@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,7 +41,16 @@ beforeAll(() => {
   process.env.AUTH_SECRET = "contract-secret";
   execFileSync("node_modules/.bin/prisma", ["db", "push"], { env: { ...process.env, DATABASE_URL: state.url }, stdio: "pipe" });
 }, 30000);
+// Real-cost bcrypt (API password: cost 12) takes ~0.3 s per hash on a quiet machine and several times that
+// on a loaded one; a few tests do several. Only a hang should hit the timeout, not a busy CI runner.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 let clock = Date.now();
+// Spies are restored here, not at the end of a test body: an assertion that fails before an inline
+// `mockRestore()` would otherwise leak the spy (and its call counts, Date.now stub) into every later test.
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.mocked(discoverFeeds).mockReset(); // drop an unconsumed mockResolvedValueOnce
+});
 beforeEach(async () => {
   clock += 3600_001;
   vi.spyOn(Date, "now").mockReturnValue(clock);

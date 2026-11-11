@@ -61,6 +61,17 @@ export type SuggestionResult = {
   candidates: FeedCandidate[];
   /** Structurally valid candidates dropped by the preview quality gate. */
   rejected: { count: number; reasons: Partial<Record<PreviewRejectReason, number>> };
+  /** Work-bound diagnostics of the single-page run (absent on merged multi-fetch results). */
+  work?: SuggestionWork;
+};
+
+export type SuggestionWork = {
+  /** Repeating groups found on the page, before the cap. */
+  groupsFound: number;
+  /** Groups actually validated (after the MAX_GROUPS cap and within the time budget). */
+  groupsEvaluated: number;
+  /** True when the time budget stopped validation before every capped group was visited. */
+  budgetExceeded: boolean;
 };
 
 // A repeating item must appear at least this many times to be a candidate —
@@ -69,8 +80,8 @@ const MIN_REPEAT = 3;
 const PREVIEW_CAP = 10;
 // Work bounds for pathological pages (hundreds of repeating blocks): only the
 // largest groups are validated, within a wall-clock budget.
-const MAX_GROUPS = 40;
-const SUGGEST_TIME_BUDGET_MS = 1_500;
+export const MAX_GROUPS = 40;
+export const SUGGEST_TIME_BUDGET_MS = 1_500;
 
 /** Largest repeating groups first, one per derived item selector, capped. */
 function limitGroups(groups: Group[]): Group[] {
@@ -396,7 +407,13 @@ function repairConfig(
  * navigation/login/map/ad/placeholder lists are rejected, borderline ones are
  * returned with review reasons. Never throws.
  */
-export function suggestFeedCandidatesDetailed(rawHtml: string, url: string): SuggestionResult {
+export function suggestFeedCandidatesDetailed(
+  rawHtml: string,
+  url: string,
+  /** `now`: injectable clock (ms) so the time budget can be tested without wall-clock timing. */
+  opts: { now?: () => number } = {},
+): SuggestionResult {
+  const now = opts.now ?? Date.now;
   const rejected: SuggestionResult["rejected"] = { count: 0, reasons: {} };
   let dom: JSDOM;
   try {
@@ -407,8 +424,10 @@ export function suggestFeedCandidatesDetailed(rawHtml: string, url: string): Sug
   try {
     const document = dom.window.document;
     const xpath = new dom.window.XPathEvaluator();
-    const groups = limitGroups(collectGroups(document));
-    const deadline = Date.now() + SUGGEST_TIME_BUDGET_MS;
+    const allGroups = collectGroups(document);
+    const groups = limitGroups(allGroups);
+    const work: SuggestionWork = { groupsFound: allGroups.length, groupsEvaluated: 0, budgetExceeded: false };
+    const deadline = now() + SUGGEST_TIME_BUDGET_MS;
 
     const scored: Array<{ group: Group; candidate: FeedCandidate; nodes: Element[] }> = [];
     const seenSelectors = new Set<string>();
@@ -416,7 +435,11 @@ export function suggestFeedCandidatesDetailed(rawHtml: string, url: string): Sug
     for (const group of groups) {
       // Bounded work on huge pages: stop validating more groups once the
       // budget is spent (groups are ordered largest first).
-      if (Date.now() > deadline) break;
+      if (now() > deadline) {
+        work.budgetExceeded = true;
+        break;
+      }
+      work.groupsEvaluated++;
       const xPathItem = buildItemXPath(group);
       if (!xPathItem || seenSelectors.has(xPathItem)) continue;
       seenSelectors.add(xPathItem);
@@ -496,7 +519,7 @@ export function suggestFeedCandidatesDetailed(rawHtml: string, url: string): Sug
     }
 
     const candidates = scored.map((s) => s.candidate).sort((a, b) => b.score - a.score);
-    return { candidates, rejected };
+    return { candidates, rejected, work };
   } catch {
     return { candidates: [], rejected };
   } finally {

@@ -1,5 +1,6 @@
 "use client";
 import { signOut as authSignOut } from "next-auth/react";
+import { serverSessionAlive } from "@/features/bootstrap/auth-session";
 import { getStateBatcher } from "@/features/articles/batcher-registry";
 import { announceOfflineSession, revokeOfflineScope } from "@/features/offline/session";
 import { clearAllOffline } from "@/features/offline/store";
@@ -29,6 +30,26 @@ export async function clearAccountBrowserData() {
   } catch { /* Cache storage can be unavailable in private browsing. */ }
 }
 
+/** How often a resurrected session is signed out again. */
+const SIGN_OUT_VERIFY_ATTEMPTS = 3;
+
+/**
+ * The session cookie is a rolling JWT: ANY authenticated request that was already in flight when the
+ * sign-out cleared the cookie (a page/server-action request, a session poll of another tab) answers with a
+ * fresh `Set-Cookie` and brings the session back. Check once the dust has settled and sign out again while
+ * the server still sees a user. A failing check never blocks the sign-out (offline, no `fetch`).
+ */
+async function ensureSessionEnded(options: Omit<NonNullable<Parameters<typeof authSignOut>[0]>, "redirect">) {
+  for (let attempt = 0; attempt < SIGN_OUT_VERIFY_ATTEMPTS; attempt++) {
+    try {
+      if (!(await serverSessionAlive())) return;
+      await authSignOut({ ...options, redirect: false });
+    } catch {
+      return;
+    }
+  }
+}
+
 export async function signOut(options?: Parameters<typeof authSignOut>[0]) {
   // The offline layer stops FIRST: the session generation of this tab is dropped (in-flight prefetches are
   // aborted, their late answers are refused), before anything is cleared — a response that arrives during
@@ -41,9 +62,11 @@ export async function signOut(options?: Parameters<typeof authSignOut>[0]) {
     batcher.flush();
     await Promise.race([batcher.whenIdle(), new Promise((resolve) => setTimeout(resolve, FLUSH_TIMEOUT_MS))]);
   }
-  // …then nothing of this account survives in memory or storage for the next one.
+  // …then in-flight reads are cancelled. The cache itself is NOT cleared yet: clearing it makes every mounted
+  // observer (counts, briefing, server-action reads) refetch at once, and those authenticated requests race the
+  // sign-out. Their responses roll the session cookie forward (proxy / /api/auth/session) and a late one lands
+  // AFTER the sign-out cleared it, silently signing the device back in.
   qc?.cancelQueries();
-  qc?.clear();
   // Offline article bodies are account data too (IndexedDB, all users on this device). Removing the session
   // record also makes every other tab's writes fail the generation check; then they are told to leave.
   await clearAllOffline();
@@ -54,6 +77,10 @@ export async function signOut(options?: Parameters<typeof authSignOut>[0]) {
   const { redirect = true, ...rest } = options ?? {};
   const redirectTo = rest.redirectTo ?? rest.callbackUrl ?? window.location.href;
   const data = await authSignOut({ ...rest, redirectTo, redirect: false });
+  // Nothing of this account survives in memory or storage for the next one (the session is gone now, so the
+  // refetches this triggers answer 401 and cannot roll a cookie).
+  qc?.clear();
+  await ensureSessionEnded(rest);
   announceOfflineSession(null);
   await clearAccountBrowserData();
   if (!redirect) return data;
