@@ -31,6 +31,7 @@ import {
   Play,
   Mail,
   BellOff,
+  X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -81,6 +82,8 @@ import {
   useUnreadNotificationCount,
   useMarkNotificationRead,
   useMarkAllNotificationsRead,
+  useDismissNotification,
+  useClearAllNotifications,
 } from "@/hooks/use-rss-data";
 import { toast } from "sonner";
 import {
@@ -170,6 +173,9 @@ export function RssSidebar({
   const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
   const markNotificationRead = useMarkNotificationRead();
   const markAllNotificationsRead = useMarkAllNotificationsRead();
+  const dismissNotification = useDismissNotification();
+  const clearAllNotifications = useClearAllNotifications();
+  const [clearNotificationsOpen, setClearNotificationsOpen] = useState(false);
 
 
 
@@ -662,14 +668,29 @@ export function RssSidebar({
                   <DropdownMenuContent align="end" side="top" className="w-80 rounded-panel border-border/70 p-2">
                     <div className="flex items-center justify-between px-2 py-1.5">
                       <p className="text-body-sm font-semibold">{t("sidebar.notifications")}</p>
-                      {unreadNotifications > 0 && (
-                        <button
-                          className="hidden sm:inline text-footnote text-link hover:underline"
-                          onClick={() => markAllNotificationsRead.mutate()}
-                        >
-                          {t("sidebar.markAllRead")}
-                        </button>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {unreadNotifications > 0 && (
+                          <button
+                            className="hidden sm:inline text-footnote text-link hover:underline"
+                            onClick={() => markAllNotificationsRead.mutate()}
+                          >
+                            {t("sidebar.markAllRead")}
+                          </button>
+                        )}
+                        {notifications.length > 0 && (
+                          <button
+                            type="button"
+                            data-testid="notifications-clear-all"
+                            className="text-footnote text-link hover:underline"
+                            onClick={() => {
+                              setNotificationsOpen(false);
+                              setClearNotificationsOpen(true);
+                            }}
+                          >
+                            {t("sidebar.clearAllNotifications")}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <DropdownMenuSeparator />
                     {notifications.length === 0 ? (
@@ -695,6 +716,13 @@ export function RssSidebar({
                           <DropdownMenuItem
                             key={notification.id}
                             className="items-start gap-3 rounded-panel px-2 py-2"
+                            data-testid="notification-item"
+                            onKeyDown={(e) => {
+                              if (e.key === "Delete" || e.key === "Backspace") {
+                                e.preventDefault();
+                                dismissNotification.mutate(notification.id);
+                              }
+                            }}
                             onClick={() => {
                               if (!notification.isRead) markNotificationRead.mutate(notification.id);
                               if (notification.articleId) {
@@ -718,6 +746,21 @@ export function RssSidebar({
                                 {notification.body}
                               </span>
                             </span>
+                            <button
+                              type="button"
+                              aria-label={t("sidebar.dismissNotification")}
+                              title={t("sidebar.dismissNotification")}
+                              data-testid="notification-dismiss"
+                              className="-me-1 flex size-6 shrink-0 items-center justify-center rounded-row text-muted-foreground hover:bg-muted hover:text-foreground"
+                              onPointerUp={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                dismissNotification.mutate(notification.id);
+                              }}
+                            >
+                              <X className="size-3.5" aria-hidden />
+                            </button>
                           </DropdownMenuItem>
                         );
                       })
@@ -761,6 +804,19 @@ export function RssSidebar({
 
 
     </aside>
+
+    <AlertDialog open={clearNotificationsOpen} onOpenChange={setClearNotificationsOpen}>
+      <AlertDialogContent data-testid="notifications-clear-confirm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("sidebar.clearNotificationsTitle")}</AlertDialogTitle>
+          <AlertDialogDescription>{t("sidebar.clearNotificationsDescription")}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction onClick={() => clearAllNotifications.mutate()}>{t("sidebar.clearNotificationsConfirm")}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <AlertDialog open={!!markAllFeed} onOpenChange={(open) => !open && setMarkAllFeed(null)}>
       <AlertDialogContent data-testid="feeds-mark-all-confirm">

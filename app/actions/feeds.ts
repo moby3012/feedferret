@@ -1582,6 +1582,29 @@ export async function markAllNotificationsRead() {
     });
 }
 
+/**
+ * Dismiss ONE notification of the signed-in user. A notification is a one-shot
+ * event record (feed auto-muted, keyword hit, …): deleting it never touches the
+ * feed's mute / error state, and nothing re-creates it unless a new event fires.
+ */
+export async function dismissNotification(notificationId: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    if (typeof notificationId !== "string" || !notificationId) throw new Error("Invalid notification");
+    const { count } = await db.notification.deleteMany({
+        where: { id: notificationId, userId: session.user.id },
+    });
+    return { deleted: count };
+}
+
+/** Dismiss ALL notifications of the signed-in user (same guarantees as above). */
+export async function clearAllNotifications() {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    const { count } = await db.notification.deleteMany({ where: { userId: session.user.id } });
+    return { deleted: count };
+}
+
 export async function previewFeedExtraction(feedId: string, articleUrl: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");

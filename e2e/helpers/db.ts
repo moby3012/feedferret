@@ -533,3 +533,80 @@ export function setUserColumns(userKey: string, values: Record<string, string | 
   write(values);
   return () => write(before);
 }
+
+const isoNow = (offsetMs = 0) => new Date(Date.now() - offsetMs).toISOString().replace("Z", "+00:00");
+
+/** Insert `count` unread "feed auto-muted" notifications for a user (newest first by creation order). */
+export function seedNotifications(userKey: string, count: number): string[] {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    const insert = db.prepare(
+      `INSERT INTO "Notification" (id, userId, type, title, body, isRead, createdAt) VALUES (?, ?, 'feed_auto_muted', ?, ?, 0, ?)`,
+    );
+    return Array.from({ length: count }, (_, i) => {
+      const id = `e2e-notif-${userKey}-${Date.now()}-${i}`;
+      insert.run(id, userId, `Muted feed ${i + 1}`, `Auto-muted after 10 consecutive failed syncs: Error ${400 + i}`, isoNow(i * 1000));
+      return id;
+    });
+  } finally {
+    db.close();
+  }
+}
+
+export function notificationCountInDb(userKey: string): number {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    return (db.prepare(`SELECT COUNT(*) AS n FROM "Notification" WHERE userId = ?`).get(userId) as { n: number }).n;
+  } finally {
+    db.close();
+  }
+}
+
+export function deleteNotificationsInDb(userKey: string) {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    db.prepare(`DELETE FROM "Notification" WHERE userId = ?`).run(userId);
+  } finally {
+    db.close();
+  }
+}
+
+/** Auto-mute the user's first feed (as the sync would) and return its id. */
+export function autoMuteFirstFeed(userKey: string): string {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    const feed = db.prepare(`SELECT id FROM "Feed" WHERE userId = ? ORDER BY id LIMIT 1`).get(userId) as { id: string };
+    db.prepare(`UPDATE "Feed" SET autoMuted = 1, consecutiveFailureCount = 10, lastError = 'boom' WHERE id = ?`).run(feed.id);
+    return feed.id;
+  } finally {
+    db.close();
+  }
+}
+
+export function feedMuteState(feedId: string): { autoMuted: boolean; consecutiveFailureCount: number; lastError: string | null } {
+  const db = open();
+  try {
+    const r = db.prepare(`SELECT autoMuted, consecutiveFailureCount, lastError FROM "Feed" WHERE id = ?`).get(feedId) as {
+      autoMuted: number;
+      consecutiveFailureCount: number;
+      lastError: string | null;
+    };
+    return { autoMuted: !!r.autoMuted, consecutiveFailureCount: r.consecutiveFailureCount, lastError: r.lastError };
+  } finally {
+    db.close();
+  }
+}
+
+/** Undo `autoMuteFirstFeed`. */
+export function unmuteFeedInDb(feedId: string) {
+  const db = open();
+  try {
+    db.prepare(`UPDATE "Feed" SET autoMuted = 0, consecutiveFailureCount = 0, lastError = NULL WHERE id = ?`).run(feedId);
+  } finally {
+    db.close();
+  }
+}
