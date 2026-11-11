@@ -32,6 +32,7 @@ next-env.d.ts
 # generated prisma
 /lib/prisma-client
 /prisma/schema.generated.prisma
+/prisma/baseline.generated.prisma
 
 # database
 *.db

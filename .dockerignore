@@ -21,6 +21,7 @@ next-env.d.ts
 # generated prisma (regenerated during the build)
 lib/prisma-client
 prisma/schema.generated.prisma
+prisma/baseline.generated.prisma
 
 # local databases
 *.db

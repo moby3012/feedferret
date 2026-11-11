@@ -67,12 +67,18 @@ findings=$(docker run --rm --user 0 --entrypoint sh "$IMAGE" -c '
       -o -name "*.harness" -o -name "*.pem" -o -name "*.key" \
       -o -name "*.db-journal" -o -name "*.tsbuildinfo" \) -print
   # test / tooling / agent directories that must never ship
-  for d in tests e2e .e2e .pm graft .git .github .husky .claude playwright-report test-results perf-results; do
+  for d in tests e2e .e2e .pm graft .git .github .husky .claude playwright-report test-results perf-results prisma/migrations-archive; do
     [ -e "$d" ] && echo "./$d"
   done
   # un-bundled TypeScript sources (a traced "whole project" shows up as these)
   find . \( -path ./node_modules -o -path ./.next/node_modules \) -prune -o -type f \
       \( -name "*.ts" -o -name "*.tsx" \) ! -name "*.d.ts" -print | head -n 20
+  # startup migration files (scripts/db-migrate.sh) must ship
+  for f in scripts/db-migrate.sh scripts/db-common.sh scripts/db-sync.sh scripts/db-state.mjs scripts/migration-utils.mjs \
+      prisma/baseline.schema.prisma prisma/migrations/sqlite/migration_lock.toml prisma/migrations/postgresql/migration_lock.toml \
+      prisma/migrations/sqlite/00000000000000_init/migration.sql prisma/migrations/postgresql/00000000000000_init/migration.sql; do
+    [ -f "$f" ] || echo "missing: $f"
+  done
   # SQLite databases: only the runtime data dir and the committed prisma/dev.db
   find . -path ./node_modules -prune -o -type f -name "*.db" ! -path ./data/dev.db ! -path ./prisma/dev.db -print
 ' | sort -u)
@@ -201,6 +207,13 @@ wait_for_search_indexes() {
 
 # ── first start (fresh database) ─────────────────────────────────────────────
 start_and_wait_healthy "$APP1"
+app1_logs=$(docker logs "$APP1" 2>&1 || true)
+if ! grep -q "Database state: empty" <<<"$app1_logs" || ! grep -q "Database schema matches prisma/schema.prisma" <<<"$app1_logs"; then
+  fail "1st start: expected migrate deploy on an empty database without drift"
+  sed -n '/Updating database schema/,/Database is ready/p' <<<"$app1_logs" >&2
+  exit 1
+fi
+log "1st start: migrate deploy created the schema"
 wait_for_search_indexes
 before=$(search_index_fingerprint)
 log "search indexes after 1st start:"
@@ -213,12 +226,22 @@ start_and_wait_healthy "$APP2"
 # Capture first: with pipefail, `docker logs | grep -q` can fail when grep exits
 # early and docker logs gets SIGPIPE (a false "schema changed" failure).
 app2_logs=$(docker logs "$APP2" 2>&1 || true)
-if ! grep -q "already in sync with the Prisma schema" <<<"$app2_logs"; then
-  fail "2nd start: prisma db push changed the schema of an up-to-date database (expected 'already in sync')"
-  sed -n '/Running database sync/,/Database is ready/p' <<<"$app2_logs" >&2
+if ! grep -q "Database state: migrated" <<<"$app2_logs" || ! grep -q "No pending migrations to apply" <<<"$app2_logs"; then
+  fail "2nd start: expected 'Database state: migrated' + 'No pending migrations to apply' (prisma migrate deploy)"
+  sed -n '/Updating database schema/,/Database is ready/p' <<<"$app2_logs" >&2
   exit 1
 fi
-log "2nd start: db push found the database already in sync"
+if grep -qiE "db push|Legacy database" <<<"$app2_logs"; then
+  fail "2nd start: the migrate startup must not run db push"
+  sed -n '/Updating database schema/,/Database is ready/p' <<<"$app2_logs" >&2
+  exit 1
+fi
+if grep -q "Schema drift" <<<"$app2_logs"; then
+  fail "2nd start: database drifted from prisma/schema.prisma"
+  sed -n '/Updating database schema/,/Database is ready/p' <<<"$app2_logs" >&2
+  exit 1
+fi
+log "2nd start: migrate deploy found no pending migrations, no db push, no drift"
 wait_for_search_indexes
 after=$(search_index_fingerprint)
 if [ "$before" != "$after" ]; then
