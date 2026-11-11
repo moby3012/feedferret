@@ -63,7 +63,12 @@ async function tableNames(url) {
 }
 async function fingerprint(url) {
   const counts = {};
-  for (const name of await tableNames(url)) counts[name] = Number((await query(url, `SELECT count(*) AS n FROM "${name}"`))[0].n);
+  // Only non-empty tables: a later additive migration may create new (empty) tables during the
+  // upgrade, which is not a data change; a table that lost its rows still disappears from `counts`.
+  for (const name of await tableNames(url)) {
+    const n = Number((await query(url, `SELECT count(*) AS n FROM "${name}"`))[0].n);
+    if (n > 0) counts[name] = n;
+  }
   return JSON.stringify({
     counts,
     user: await query(url, 'SELECT id, email FROM "User" ORDER BY id'),

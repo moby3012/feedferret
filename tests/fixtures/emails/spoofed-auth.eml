@@ -1,0 +1,15 @@
+Authentication-Results: mx.receiver.example;
+ spf=fail (sender IP is 203.0.113.9) smtp.mailfrom=attacker.example;
+ dkim=none;
+ dmarc=fail (p=REJECT) header.from=bank.example
+Received: from evil.attacker.example (203.0.113.9) by mx.receiver.example; Wed, 11 Nov 2026 09:00:00 +0000
+Authentication-Results: mx.receiver.example; spf=pass smtp.mailfrom=bank.example; dkim=pass header.d=bank.example; dmarc=pass header.from=bank.example
+From: Bank <news@bank.example>
+To: aaaaaaaaaaaaaaaaaaaaaaaaaa@nl.example.org
+Subject: Your statement
+Date: Wed, 11 Nov 2026 09:00:00 +0000
+Message-ID: <spoof-1@attacker.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Totally the bank.

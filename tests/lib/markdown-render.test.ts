@@ -58,4 +58,12 @@ describe("renderMarkdownToHtml — GFM polish (tables/code/task-lists/math/image
     expect(clean).not.toContain("width");
     expect(clean).not.toContain("color");
   });
+
+  it("caps attacker-sized math and keeps raw HTML out", async () => {
+    const html = await renderMarkdownToHtml('$\\rule{500em}{500em}$ <div class="katex" style="top:-500px">x</div>\n');
+    expect(html).not.toMatch(/style="[^"]*500em/); // the TeX source annotation may still mention it
+    expect(html).toMatch(/style="[^"]*10em/);
+    expect(html).not.toContain("<div class=\"katex\"");
+    expect(html).toContain('class="katex');
+  });
 });

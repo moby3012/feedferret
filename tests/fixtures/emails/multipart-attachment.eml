@@ -1,0 +1,37 @@
+From: Shop News <news@shop.example>
+To: aaaaaaaaaaaaaaaaaaaaaaaaaa@nl.example.org
+Subject: November catalogue
+Date: Wed, 11 Nov 2026 10:00:00 +0000
+Message-ID: <catalogue-11@shop.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed"
+
+--mixed
+Content-Type: multipart/related; boundary="rel"
+
+--rel
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>See our logo:</p><img src="cid:logo@shop" alt="Logo"><img src="cid:missing@shop" alt="Missing"></body></html>
+--rel
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-ID: <logo@shop>
+Content-Disposition: inline; filename="logo.png"
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgAAACAAFUok9dAAAAAElFTkSuQmCC
+--rel--
+
+--mixed
+Content-Type: application/pdf; name="catalogue.pdf"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="catalogue.pdf"
+
+JVBERi0xLjQKJSBmYWtlIHBkZiBib2R5IGZvciB0ZXN0CiUlRU9GCg==
+--mixed
+Content-Type: application/octet-stream; name="setup.exe"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="setup.exe"
+
+TVqQACBmYWtlIGV4ZQ==
+--mixed--

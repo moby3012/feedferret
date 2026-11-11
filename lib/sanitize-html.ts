@@ -15,38 +15,77 @@ import type { UponSanitizeAttributeHookEvent } from "isomorphic-dompurify";
 
 let hookRegistered = false;
 
-// Declarations dropped outright regardless of value: these size an element
-// independently of its container and are the recurring cause of mobile
-// overflow from source-page inline styles.
-const DROPPED_STYLE_PROPS = new Set(["width", "min-width"]);
+// True only while sanitizeTrustedRendererHtml() runs. DOMPurify.sanitize is
+// synchronous, so no other sanitize call can observe this flag set.
+let trustedRendererPass = false;
+
+// Inline `style` is filtered with a parsed ALLOWLIST (security review of N1 /
+// #263): untrusted article and newsletter HTML must not be able to
+//   - make the reader fetch anything (`background-image:url(…)`,
+//     `list-style-image`, `image-set()`, `border-image`, CSS escapes such as
+//     `\75 rl(` that spell `url(`), which is a tracking/IP leak, or
+//   - escape the article box (`position:fixed`, `z-index`, `!important`
+//     overrides of our prose CSS, offsets).
+// Anything not explicitly allowed is dropped, declaration by declaration.
+
+// Typography, alignment, box spacing and borders: safe in every context.
+const ALLOWED_STYLE_PROPS = new Set([
+    "font", "font-family", "font-size", "font-style", "font-weight", "font-variant", "font-variant-numeric",
+    "font-feature-settings", "font-stretch", "line-height", "letter-spacing", "word-spacing",
+    "text-align", "text-align-last", "text-decoration", "text-decoration-line", "text-decoration-style",
+    "text-decoration-color", "text-decoration-thickness", "text-underline-offset", "text-transform",
+    "text-indent", "text-overflow", "white-space", "word-break", "overflow-wrap", "word-wrap", "hyphens",
+    "tab-size", "vertical-align", "direction", "unicode-bidi",
+    "max-width", "max-height", "height", "min-height",
+    "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+    "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+    "border", "border-top", "border-right", "border-bottom", "border-left",
+    "border-width", "border-style", "border-color",
+    "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
+    "border-top-style", "border-right-style", "border-bottom-style", "border-left-style",
+    "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+    "border-radius", "border-top-left-radius", "border-top-right-radius", "border-bottom-left-radius",
+    "border-bottom-right-radius", "border-collapse", "border-spacing",
+    "display", "float", "clear", "list-style-type", "list-style-position", "table-layout", "caption-side",
+    "empty-cells", "overflow", "overflow-x", "overflow-y",
+]);
+
+// Sizing that blows out the mobile layout: only for our own KaTeX markup.
+const KATEX_ONLY_STYLE_PROPS = new Set(["width", "min-width", "top", "position"]);
 
 // Hardcoded text/background colors from the source page survive sanitization
 // otherwise and outrank our prose/dark-mode CSS on specificity (an inline
 // style always beats a class), so a source page's dark-gray-on-white text
 // renders as near-black-on-dark in our reader's dark mode. Our own prose
 // styling already handles light/dark for both; drop the source's opinion.
-const DROPPED_COLOR_STYLE_PROPS = new Set(["color", "background", "background-color"]);
+// (`background*` is not in the allowlist at all: it can also carry url().)
 
-// `position` values that let an element escape its container's normal flow
-// entirely — meaningful on a live page's own layout, never inside our
-// reader's scrollable excerpt. `fixed`/`sticky` position relative to the
-// viewport (not any ancestor, so a plain `overflow: hidden` container does
-// NOT clip them); `absolute` escapes to the nearest positioned ancestor,
-// which inside sanitized article content is typically none, falling back to
-// the same viewport-relative behavior. Reported case: a browser-rendered
-// page (M7-T2 sidecar) carried a fixed-position image/lightbox element whose
-// offset broke the reader's layout — see the "position" branch below.
-const ESCAPING_POSITION_VALUES = new Set(["fixed", "sticky", "absolute"]);
+// CSS functions allowed in values; any other `name(` (url, image-set,
+// expression, element, cross-fade, attr, env, …) drops the declaration.
+const ALLOWED_CSS_FUNCTIONS = new Set(["rgb", "rgba", "hsl", "hsla", "calc", "min", "max", "clamp", "var"]);
+
+// Escapes (`\75`), comments, markup, `!important` and legacy script vectors
+// are never needed by legitimate inline typography.
+const FORBIDDEN_VALUE_RE = /\\|\/\*|\*\/|[<>{}@]|!\s*important|javascript:|expression|behavior|-moz-binding/i;
+
+function isSafeStyleValue(value: string): boolean {
+    if (!value || FORBIDDEN_VALUE_RE.test(value)) return false;
+    // Only plain printable ASCII-ish values (no control chars that some parsers skip).
+    if (/[\u0000-\u001f\u007f]/.test(value)) return false;
+    for (const match of value.matchAll(/([a-z0-9_-]*)\s*\(/gi)) {
+        if (!ALLOWED_CSS_FUNCTIONS.has(match[1].toLowerCase())) return false;
+    }
+    return true;
+}
 
 /**
- * Strips layout-breaking declarations from an inline `style` attribute value
- * while preserving everything else (including `max-width`). Robust to
+ * Filters an inline `style` attribute value through the allowlist above,
+ * keeping the original spelling of every surviving declaration. Robust to
  * whitespace and casing, e.g. "Min-Width : 600px" or "POSITION:Fixed".
  *
- * `keepWidth` exempts `width`/`min-width` from stripping — used for KaTeX's
- * own server-rendered math markup (see the hook below), which relies on
- * precise inline widths for character spacing/alignment and isn't
- * attacker-controlled the way scraped source-page styles are.
+ * `keepWidth` (our own KaTeX markup, see the hook below) additionally allows
+ * `width`/`min-width`/`top` and `position: relative`, which KaTeX's
+ * server-rendered math relies on for spacing/alignment.
  */
 export function stripLayoutBreakingStyles(styleValue: string, keepWidth = false): string {
     return styleValue
@@ -54,15 +93,17 @@ export function stripLayoutBreakingStyles(styleValue: string, keepWidth = false)
         .map((decl) => decl.trim())
         .filter((decl) => {
             if (!decl) return false;
-            const [rawProp, rawValue] = decl.split(":");
-            const prop = rawProp?.trim().toLowerCase();
-            if (!prop) return false;
-            if (!keepWidth && DROPPED_STYLE_PROPS.has(prop)) return false;
-            if (DROPPED_COLOR_STYLE_PROPS.has(prop)) return false;
-            if (prop === "position" && ESCAPING_POSITION_VALUES.has((rawValue || "").trim().toLowerCase())) {
-                return false;
+            const colon = decl.indexOf(":");
+            if (colon <= 0) return false;
+            const prop = decl.slice(0, colon).trim().toLowerCase();
+            const value = decl.slice(colon + 1).trim();
+            if (!/^[a-z-]+$/.test(prop)) return false;
+            if (!isSafeStyleValue(value)) return false;
+            if (ALLOWED_STYLE_PROPS.has(prop)) return true;
+            if (keepWidth && KATEX_ONLY_STYLE_PROPS.has(prop)) {
+                return prop !== "position" || value.toLowerCase() === "relative";
             }
-            return true;
+            return false;
         })
         .join("; ");
 }
@@ -86,13 +127,19 @@ export async function getSanitizer() {
         DOMPurify.addHook("uponSanitizeAttribute", (node, data: UponSanitizeAttributeHookEvent) => {
             const attrName = data.attrName.toLowerCase();
             // KaTeX (rendered server-side by lib/markdown-render.ts) depends
-            // on inline width for math-symbol spacing/alignment — the normal
-            // width-strip below is meant for untrusted scraped-page styles,
-            // not our own generated markup, so exempt anything inside a
-            // `.katex` subtree.
-            const isKatex = typeof node.closest === "function" && !!node.closest(".katex");
+            // on inline width/top for math-symbol spacing/alignment. The
+            // exemption applies ONLY inside sanitizeTrustedRendererHtml():
+            // a `.katex` class in untrusted article/newsletter HTML is just a
+            // class and gets the normal allowlist (security review of #263).
+            const isKatex = trustedRendererPass && typeof node.closest === "function" && !!node.closest(".katex");
 
             if (!isKatex && (attrName === "width" || attrName === "min-width")) {
+                data.keepAttr = false;
+                return;
+            }
+
+            // Legacy `background="https://…"` attribute: a remote fetch (tracking).
+            if (attrName === "background") {
                 data.keepAttr = false;
                 return;
             }
@@ -100,6 +147,12 @@ export async function getSanitizer() {
             if (attrName === "style" && data.attrValue) {
                 data.attrValue = stripLayoutBreakingStyles(data.attrValue, isKatex);
             }
+        });
+
+        // <style> elements (allowed by DOMPurify's default profile) would
+        // restyle the whole app and can fetch url()s: never keep them.
+        DOMPurify.addHook("uponSanitizeElement", (node, data) => {
+            if (data.tagName === "style") node.parentNode?.removeChild(node);
         });
 
         // Reverse-tabnabbing protection: any element that keeps a `target`
@@ -115,4 +168,21 @@ export async function getSanitizer() {
     }
 
     return DOMPurify;
+}
+
+/**
+ * Sanitizes HTML produced by OUR OWN renderer (markdown-it with `html: false`
+ * + KaTeX with `trust: false`, lib/markdown-render.ts), where the input cannot
+ * carry raw markup. Only here does KaTeX's own layout CSS (width, top,
+ * position: relative) survive inside `.katex` subtrees. Never pass untrusted
+ * HTML to this function.
+ */
+export async function sanitizeTrustedRendererHtml(html: string): Promise<string> {
+    const DOMPurify = await getSanitizer();
+    trustedRendererPass = true;
+    try {
+        return DOMPurify.sanitize(html, { ADD_ATTR: ["target", "rel"] });
+    } finally {
+        trustedRendererPass = false;
+    }
 }
