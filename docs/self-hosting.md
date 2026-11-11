@@ -144,7 +144,7 @@ openssl rand -base64 32
 
 > **Important:** `AUTH_SECRET` must remain stable across all deploys. FeedFerret uses this key to encrypt stored API credentials (e.g. AI summary credentials). If you change it, encrypted data in the database becomes unreadable.
 >
-> Optionally set `FEEDFERRET_ENCRYPTION_KEY` (`openssl rand -base64 32`) as a separate master key for stored secrets, and `FEEDFERRET_ENCRYPTION_KEYS_OLD` for decrypt-only keys after a rotation. `node scripts/secrets-cli.mjs status` (inside the container) shows which key each stored secret uses. Details: [security.md → Stored secrets](security.md#stored-secrets-encryption-at-rest).
+> Optionally set `FEEDFERRET_ENCRYPTION_KEY` (`openssl rand -base64 32`) as a separate master key for stored secrets, and `FEEDFERRET_ENCRYPTION_KEYS_OLD` for decrypt-only keys after a rotation. `node scripts/secrets-cli.mjs status` (inside the container) shows which key each stored secret uses; `migrate` / `rotate` re-seal them (the app also does it at startup). **Back up the key together with the database** — without it stored secrets cannot be recovered. Details: [security.md → Stored secrets](security.md#stored-secrets-encryption-at-rest).
 
 **Minimal `.env` to get started:**
 
