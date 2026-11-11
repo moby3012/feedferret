@@ -2266,8 +2266,8 @@
     "pause": "Pause",
     "resume": "Resume",
     "disconnect": "Disconnect",
-    "disconnectTitle": "Disconnect mailbox? Every user's address changes",
-    "disconnectBody": "FeedFerret stops reading newsletters and deletes the stored credentials. If a different mailbox is connected afterwards, every user's address changes; only the same mailbox makes the old addresses work again.",
+    "disconnectTitle": "Disconnect mailbox?",
+    "disconnectBody": "New newsletters stop arriving until a mailbox is connected. The stored credentials are deleted. Reconnecting the same mailbox keeps every address – with a different mailbox every user's address changes.",
     "cancel": "Cancel",
     "errors": {
       "invalid-email": "Please enter a valid e-mail address without “+”.",
@@ -2289,8 +2289,8 @@
       "unknown": "Unknown error. Please try again.",
       "confirm-address-change": "Please confirm that every user's address changes."
     },
-    "confirmChangeTitle": "Every user's address changes",
-    "confirmChangeBody": "With this mailbox everyone gets a new newsletter address. The old addresses stop receiving mail – everyone has to move their newsletters to the new address.",
+    "confirmChangeTitle": "Connect a different mailbox?",
+    "confirmChangeBody": "With a different mailbox every user's address changes. The old addresses stop receiving mail – everyone has to move their newsletters to the new address.",
     "confirmChangeOk": "Yes, change addresses",
     "manualTo": "To",
     "manualSubject": "Subject",

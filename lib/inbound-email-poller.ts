@@ -29,6 +29,12 @@ import { detectImapPreset, emailDomain, getImapPreset, trustedAuthservIdForPrese
 export const CREDENTIALS_PURPOSE = "inboundMailSource.credentials";
 export const PROCESSED_FOLDER = "FeedFerret";
 export const PROCESSED_KEYWORD = "$FeedFerret";
+/**
+ * A disconnected IMAP source keeps its row (without credentials) under this
+ * kind, only to remember the last base mailbox: reconnecting the SAME mailbox
+ * keeps every user address and needs no confirmation. Nothing polls it.
+ */
+export const DISCONNECTED_IMAP_KIND = "imap-disconnected";
 
 /** Connect + greeting + TLS budget per attempt. */
 export const CONNECT_TIMEOUT_MS = 10_000;
@@ -156,7 +162,11 @@ export function classifyImapError(error: unknown): ImapErrorCode {
 }
 
 const EMAIL_LIKE_RE = /[^\s<>"'(),;:]+@[^\s<>"'(),;:]+/g;
-const TOKEN_LIKE_RE = /\+ff-[a-z2-7]{6,}/gi;
+// `+ff-<token>` plain or URL-encoded (`%2Bff-…`). Residual risk (accepted):
+// only this shape is redacted; a token quoted some other way in a server
+// error would survive — server texts never contain recipient addresses in
+// practice, and lastError is admin-only.
+const TOKEN_LIKE_RE = /(?:\+|%2B)ff-[a-z2-7]{6,}/gi;
 
 /**
  * Error text that is safe to store in `InboundMailSource.lastError` and show
@@ -502,6 +512,8 @@ export interface PollSummary {
   moved: number;
   /** Matching mail left for later: owner over the daily quota, per-poll / per-address caps. */
   deferred: number;
+  /** `+ff-` mail with no active address behind it: marked processed without download. */
+  junk: number;
   /** Unprocessed mail outside the scan window (newest SCAN_UID_LIMIT UIDs). */
   outOfWindow: number;
   /** The total deadline hit; what was done until then is kept. */
@@ -539,17 +551,18 @@ export const POLL_LEASE_MS = POLL_TOTAL_TIMEOUT_MS + POLL_GRACE_MS + 5_000;
  * set to the real finish time; a crashed poll frees the source when its
  * lease runs out.
  */
-async function claimSource(source: SourceRow, force: boolean, now: Date): Promise<boolean> {
+async function claimSource(source: SourceRow, force: boolean, now: Date): Promise<Date | null> {
   const gap = force ? FORCED_POLL_GAP_MS : pollGapMs(source.errorCount);
+  const leaseEnd = new Date(now.getTime() + POLL_LEASE_MS);
   const claimed = await db.inboundMailSource.updateMany({
     where: {
       id: source.id,
       paused: false,
       OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: new Date(now.getTime() - gap) } }],
     },
-    data: { lastCheckedAt: new Date(now.getTime() + POLL_LEASE_MS) },
+    data: { lastCheckedAt: leaseEnd },
   });
-  return claimed.count === 1;
+  return claimed.count === 1 ? leaseEnd : null;
 }
 
 /** Auto-read rules, keyword alerts and push for newly ingested newsletter items (like rss-sync). */
@@ -597,12 +610,26 @@ async function markProcessed(
   // custom keywords gets plain \Seen + \Flagged, and that is remembered.
   if (keywordsAllowed(client)) {
     const ok = await client.messageFlagsAdd(uids, ["\\Seen", "\\Flagged", PROCESSED_KEYWORD], { uid: true }).catch(() => false);
-    if (ok !== false) return "flagged";
+    // Some servers accept the STORE but silently drop unknown keywords: check.
+    if (ok !== false && (await keywordStuck(client, uids))) return "flagged";
   }
   const plain = await client.messageFlagsAdd(uids, ["\\Seen", "\\Flagged"], { uid: true }).catch(() => false);
   if (plain !== false) return "flagged-no-keyword";
   logger.warn("[newsletter-imap] could not mark processed mail; Message-ID dedupe keeps it from being stored twice");
   return "failed";
+}
+
+async function keywordStuck(client: ImapClientLike, uids: number[]): Promise<boolean> {
+  try {
+    let seen = 0;
+    for await (const msg of client.fetch(uids, { uid: true, flags: true }, { uid: true })) {
+      if (!msg.flags?.has(PROCESSED_KEYWORD)) return false;
+      seen += 1;
+    }
+    return seen > 0;
+  } catch {
+    return false;
+  }
 }
 
 /** Processed = our keyword; plain \Seen + \Flagged only on a server known to refuse keywords. */
@@ -612,12 +639,19 @@ export function alreadyProcessed(flags: Set<string> | undefined, keywordsUnsuppo
   return keywordsUnsupported && flags.has("\\Seen") && flags.has("\\Flagged");
 }
 
-/** Users whose daily quota is already used up (checked once per poll, before any download). */
-async function usersOverQuota(tokens: string[]): Promise<{ tokenUser: Map<string, string>; full: Set<string> }> {
+/**
+ * Owners of the ACTIVE addresses among `tokens` (same rule as ingestRawEmail
+ * routing) and which of them already used up today's quota — once per poll,
+ * before any download.
+ */
+async function activeOwnersAndQuota(tokens: string[]): Promise<{ tokenUser: Map<string, string>; full: Set<string> }> {
   const tokenUser = new Map<string, string>();
   const full = new Set<string>();
   if (tokens.length === 0) return { tokenUser, full };
-  const rows = await db.newsletterAddress.findMany({ where: { token: { in: tokens.slice(0, 500) } }, select: { token: true, userId: true } });
+  const rows: { token: string; userId: string }[] = [];
+  for (let i = 0; i < tokens.length; i += 500) {
+    rows.push(...(await db.newsletterAddress.findMany({ where: { token: { in: tokens.slice(i, i + 500) }, isActive: true }, select: { token: true, userId: true } })));
+  }
   for (const r of rows) tokenUser.set(r.token, r.userId);
   const userIds = [...new Set(rows.map((r) => r.userId))];
   if (userIds.length > 0) {
@@ -641,10 +675,11 @@ type Candidate = { uid: number; size: number; recipients: string[]; tokens: stri
 export async function pollImapSource(source: SourceRow, options: PollOptions = {}): Promise<PollSummary> {
   const clock = () => options.now?.() ?? new Date();
   const now = clock();
-  const summary: PollSummary = { sourceId: source.id, status: "skipped", scanned: 0, matched: 0, created: 0, moved: 0, deferred: 0, outOfWindow: 0 };
+  const summary: PollSummary = { sourceId: source.id, status: "skipped", scanned: 0, matched: 0, created: 0, moved: 0, deferred: 0, junk: 0, outOfWindow: 0 };
   if (source.kind !== "imap") return summary;
   if (source.paused) return { ...summary, status: "paused" };
-  if (!(await claimSource(source, !!options.force, now))) return summary;
+  const leaseEnd = await claimSource(source, !!options.force, now);
+  if (!leaseEnd) return summary;
 
   const settings = parseImapSettings(source.settings);
   const credentials = openImapCredentials(source.credentials);
@@ -689,13 +724,14 @@ export async function pollImapSource(source: SourceRow, options: PollOptions = {
         if (alreadyProcessed(msg.flags, settings.keywordsUnsupported)) continue;
         const { addresses, tokens } = mailboxRecipients(recipientHeaderValues(msg.headers), mailbox, settings.presetId);
         if (addresses.length === 0) continue; // not ours: never touched
-        candidates.push({ uid: msg.uid, size: msg.size ?? 0, recipients: addresses, tokens });
+        // Same bound as ingestRawEmail: only the first 10 tokens of a mail route it.
+        candidates.push({ uid: msg.uid, size: msg.size ?? 0, recipients: addresses, tokens: tokens.slice(0, 10) });
       }
       summary.matched = candidates.length;
 
       // Quota check BEFORE any download: an over-quota user's mail stays in
       // the inbox (for tomorrow) without costing a download or a poll slot.
-      const { tokenUser, full } = await usersOverQuota([...new Set(candidates.flatMap((c) => c.tokens))]);
+      const { tokenUser, full } = await activeOwnersAndQuota([...new Set(candidates.flatMap((c) => c.tokens))]);
       const owner = (c: Candidate) => c.tokens.map((t) => tokenUser.get(t)).find(Boolean) ?? null;
       const perToken = new Map<string, number>();
 
@@ -703,12 +739,20 @@ export async function pollImapSource(source: SourceRow, options: PollOptions = {
       let processed = 0;
       try {
         for (const candidate of candidates) {
+          const userId = owner(candidate);
+          // No ACTIVE address behind any token (guessed, revoked, deleted):
+          // ingest would drop it anyway. Mark it processed without download
+          // and without using a slot, so junk cannot starve real mail.
+          if (!userId) {
+            done.push(candidate.uid);
+            summary.junk += 1;
+            continue;
+          }
           if (aborted || processed >= MAX_MESSAGES_PER_POLL) {
             summary.deferred += 1;
             continue;
           }
-          const userId = owner(candidate);
-          if (userId && full.has(userId)) {
+          if (full.has(userId)) {
             summary.deferred += 1;
             continue;
           }
@@ -749,6 +793,7 @@ export async function pollImapSource(source: SourceRow, options: PollOptions = {
           const how = await markProcessed(client, done, settings.processedFolder);
           if (how !== "failed") summary.moved = done.length;
           if (how === "flagged-no-keyword" && !settings.keywordsUnsupported) settingsPatch = { keywordsUnsupported: true };
+          if (summary.junk > 0) logger.info("[newsletter-imap] mail to unknown/inactive addresses set aside", { sourceId: source.id, junk: summary.junk });
         }
       }
     } finally {
@@ -796,28 +841,48 @@ export async function pollImapSource(source: SourceRow, options: PollOptions = {
   const code = failure ? classifyImapError(failure) : null;
   // A timeout after real progress is a slow mailbox, not a broken one: no backoff.
   const hardError = !!failure && !(code === "timeout" && progress);
+  // The only settings change a poll makes is keywordsUnsupported, merged
+  // into the CURRENT row (an admin may have changed host/port meanwhile).
+  let settingsJson: string | undefined;
+  if (settingsPatch) {
+    const current = await db.inboundMailSource.findUnique({ where: { id: source.id }, select: { settings: true } }).catch(() => null);
+    const parsed = (() => {
+      try {
+        return current?.settings ? (JSON.parse(current.settings) as Record<string, unknown>) : null;
+      } catch {
+        return null;
+      }
+    })();
+    if (parsed) settingsJson = JSON.stringify({ ...parsed, ...(settingsPatch as object) });
+  }
   const bookkeeping = {
     lastCheckedAt: finishedAt,
     ...(created.length > 0 ? { lastReceivedAt: finishedAt } : {}),
-    ...(settingsPatch && settings ? { settings: JSON.stringify({ ...settings, ...(settingsPatch as object) }) } : {}),
+    ...(settingsJson ? { settings: settingsJson } : {}),
   };
+  // Guarded by our own lease: if it ran out and another poll claimed the
+  // source, this (late) finish must not overwrite that poll's state.
+  const finish = (data: Record<string, unknown>) =>
+    db.inboundMailSource.updateMany({ where: { id: source.id, lastCheckedAt: leaseEnd }, data }).then((r) => {
+      if (r.count !== 1) logger.warn("[newsletter-imap] lease lost before finish; bookkeeping skipped", { sourceId: source.id });
+    });
   if (hardError) {
     const detail = redactImapError(String((failure as { responseText?: string })?.responseText || (failure as Error)?.message || ""), [credentials?.pass, credentials?.user]);
     summary.status = "error";
     summary.errorCode = code!;
     logger.warn("[newsletter-imap] poll failed", { sourceId: source.id, code });
-    await db.inboundMailSource
-      .update({ where: { id: source.id }, data: { ...bookkeeping, errorCount: { increment: 1 }, lastError: formatStoredError(code!, detail) } })
-      .catch(() => undefined);
+    await finish({ ...bookkeeping, errorCount: { increment: 1 }, lastError: formatStoredError(code!, detail) }).catch(() => undefined);
   } else {
     summary.status = "ok";
     if (failure || summary.partial) summary.partial = true;
-    await db.inboundMailSource
-      .update({ where: { id: source.id }, data: { ...bookkeeping, errorCount: 0, lastError: null } })
-      .catch((e) => logger.error("[newsletter-imap] bookkeeping failed:", e));
+    await finish({ ...bookkeeping, errorCount: 0, lastError: null }).catch((e) => logger.error("[newsletter-imap] bookkeeping failed:", e));
   }
 
   // Everything that was actually created gets its hooks, also after a timeout.
+  // Residual risk (accepted): if ingest hangs past the grace period the
+  // connection is torn down and an article created by that very call after
+  // this point gets no auto-read / alert / push hooks (it is still stored and
+  // visible). Bounded by the 10 MB parse limit; not worth a cross-poll queue.
   if (created.length > 0) await afterIngest(created);
   if (summary.matched > 0 || summary.status === "error" || summary.partial) {
     logger.info("[newsletter-imap] poll", {

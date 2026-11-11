@@ -21,10 +21,14 @@ const h = vi.hoisted(() => {
       findMany: vi.fn(async () => [source]),
       findUnique: vi.fn(async () => source),
     },
-    newsletterAddress: { findMany: vi.fn(async (_args: unknown): Promise<{ token: string; userId: string }[]> => []) },
+    newsletterAddress: { findMany: vi.fn(async (_args: any): Promise<{ token: string; userId: string }[]> => []) },
     newsletterQuota: { findMany: vi.fn(async (_args: unknown): Promise<{ userId: string; count: number }[]> => []) },
   };
-  return { source, db, hooks: { autoRead: vi.fn(async () => ({ applied: 0 })), alerts: vi.fn(async () => undefined), push: vi.fn(async () => undefined) } };
+  // Tokens whose address is deactivated; every other token is an active address of user `u-<first char>`.
+  const inactive = new Set<string>();
+  const activeOwners = async ({ where }: any) =>
+    (where.token.in as string[]).filter((t) => !inactive.has(t) && where.isActive === true).map((t) => ({ token: t, userId: `u-${t[0]}` }));
+  return { source, db, inactive, activeOwners, hooks: { autoRead: vi.fn(async () => ({ applied: 0 })), alerts: vi.fn(async () => undefined), push: vi.fn(async () => undefined) } };
 });
 
 vi.mock("@/lib/db", () => ({ db: h.db }));
@@ -61,7 +65,7 @@ const publicLookup = async () => [{ address: "142.250.1.108", family: 4 }];
 
 type FakeMsg = { uid: number; headers: string; flags?: string[]; size?: number; source?: string };
 
-function fakeClient(messages: FakeMsg[], opts: { moveFails?: boolean | "throw"; folders?: string[]; connectError?: unknown; permanentFlags?: string[]; slowFetchMs?: number } = {}) {
+function fakeClient(messages: FakeMsg[], opts: { moveFails?: boolean | "throw"; folders?: string[]; connectError?: unknown; permanentFlags?: string[]; slowFetchMs?: number; dropKeywords?: boolean } = {}) {
   const calls = { moved: [] as number[][], flagged: [] as { uids: number[]; flags: string[] }[], created: [] as string[], fetchedSource: [] as number[], options: null as unknown };
   const folders = [...(opts.folders ?? ["INBOX"])];
   const client: ImapClientLike = {
@@ -97,6 +101,10 @@ function fakeClient(messages: FakeMsg[], opts: { moveFails?: boolean | "throw"; 
     }),
     messageFlagsAdd: vi.fn(async (uids, flags: string[]) => {
       calls.flagged.push({ uids: uids as number[], flags });
+      for (const m of messages) {
+        if ((uids as number[]).includes(m.uid)) m.flags = [...(m.flags ?? []), ...flags.filter((f) => !(opts.dropKeywords && f.startsWith("$")))];
+      }
+      return true;
     }),
     logout: vi.fn(async () => undefined),
     close: vi.fn(),
@@ -111,7 +119,9 @@ function fakeClient(messages: FakeMsg[], opts: { moveFails?: boolean | "throw"; 
 beforeEach(() => {
   vi.clearAllMocks();
   h.db.inboundMailSource.updateMany.mockResolvedValue({ count: 1 });
-  h.db.newsletterAddress.findMany.mockResolvedValue([]);
+  h.inactive.clear();
+  h.db.newsletterAddress.findMany.mockImplementation(h.activeOwners);
+  h.db.inboundMailSource.findUnique.mockImplementation(async () => h.source);
   h.db.newsletterQuota.findMany.mockResolvedValue([]);
 });
 
@@ -239,7 +249,7 @@ describe("pollImapSource", () => {
     expect(calls.created).toEqual(["FeedFerret"]);
     expect(calls.moved).toEqual([[1, 4]]);
     expect(client.messageFlagsAdd).not.toHaveBeenCalled();
-    expect(h.db.inboundMailSource.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ errorCount: 0, lastError: null, lastReceivedAt: expect.any(Date) }) }));
+    expect(h.db.inboundMailSource.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ errorCount: 0, lastError: null, lastReceivedAt: expect.any(Date) }) }));
     expect(h.hooks.autoRead).toHaveBeenCalledWith("u1", { onlyArticleIds: ["a1"] });
     expect(h.hooks.alerts).toHaveBeenCalledWith("u1", ["a1"]);
     expect(h.hooks.push).toHaveBeenCalledWith("u1", ["a1"]);
@@ -296,7 +306,7 @@ describe("pollImapSource", () => {
     expect(call.data.lastCheckedAt.getTime()).toBe(now.getTime() + POLL_LEASE_MS);
     expect(POLL_LEASE_MS).toBeGreaterThan(60_000);
     // … and the finish writes the real time back.
-    const done = (h.db.inboundMailSource.update.mock.calls.at(-1) as unknown as [{ data: { lastCheckedAt: Date } }])[0].data;
+    const done = (h.db.inboundMailSource.updateMany.mock.calls.at(-1) as unknown as [{ data: { lastCheckedAt: Date } }])[0].data;
     expect(done.lastCheckedAt.getTime()).toBe(now.getTime());
   });
 
@@ -304,7 +314,7 @@ describe("pollImapSource", () => {
     const { factory } = fakeClient([], { connectError: Object.assign(new Error("x"), { authenticationFailed: true, responseText: "Invalid credentials hunter2-app-pass" }) });
     const summary = await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false });
     expect(summary).toMatchObject({ status: "error", errorCode: "auth-failed" });
-    const data = (h.db.inboundMailSource.update.mock.calls.at(-1) as unknown as [{ data: { errorCount: unknown; lastError: string } }])[0].data;
+    const data = (h.db.inboundMailSource.updateMany.mock.calls.at(-1) as unknown as [{ data: { errorCount: unknown; lastError: string } }])[0].data;
     expect(data.errorCount).toEqual({ increment: 1 });
     expect(data.lastError.startsWith("auth-failed")).toBe(true);
     expect(data.lastError).not.toContain("hunter2");
@@ -367,7 +377,7 @@ describe("pollImapSource", () => {
     const { factory, calls } = fakeClient([{ uid: 3, headers: hdr(`news.box+ff-${TOKEN_A}@gmail.com`) }], { moveFails: true, folders: ["INBOX", "FeedFerret"], permanentFlags: ["\\Seen", "\\Flagged", "\\Deleted"] });
     await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, ingest: vi.fn(async () => ({ status: "duplicate" as const })) });
     expect(calls.flagged).toEqual([{ uids: [3], flags: ["\\Seen", "\\Flagged"] }]);
-    const data = (h.db.inboundMailSource.update.mock.calls.at(-1) as unknown as [{ data: { settings: string } }])[0].data;
+    const data = (h.db.inboundMailSource.updateMany.mock.calls.at(-1) as unknown as [{ data: { settings: string } }])[0].data;
     expect(JSON.parse(data.settings)).toMatchObject({ keywordsUnsupported: true });
 
     // With the remembered setting the search excludes \Seen+\Flagged mail instead.
@@ -389,8 +399,54 @@ describe("pollImapSource", () => {
     expect(ingest.mock.calls.length).toBeLessThan(4);
     expect(calls.moved[0]).toHaveLength(ingest.mock.calls.length);
     expect(h.hooks.autoRead).toHaveBeenCalledWith("u1", { onlyArticleIds: ingest.mock.results.map((_, i) => `a${i + 1}`) });
-    const data = (h.db.inboundMailSource.update.mock.calls.at(-1) as unknown as [{ data: { errorCount: unknown } }])[0].data;
+    const data = (h.db.inboundMailSource.updateMany.mock.calls.at(-1) as unknown as [{ data: { errorCount: unknown } }])[0].data;
     expect(data.errorCount).toBe(0);
+  });
+
+  it("junk to unknown or deactivated addresses is set aside without download and without using slots (F1/F2)", async () => {
+    const JUNK = "j".repeat(26);
+    const msgs: FakeMsg[] = [];
+    for (let uid = 1; uid <= 80; uid++) msgs.push({ uid, headers: hdr(`news.box+ff-${JUNK}@gmail.com`) }); // unknown token
+    for (let uid = 81; uid <= 85; uid++) msgs.push({ uid, headers: hdr(`news.box+ff-${TOKEN_B}@gmail.com`) }); // deactivated address
+    msgs.push({ uid: 90, headers: hdr(`news.box+ff-${TOKEN_A}@gmail.com`) });
+    h.inactive.add(TOKEN_B);
+    h.db.newsletterAddress.findMany.mockImplementation(async (args: any) => (await h.activeOwners(args)).filter((r) => r.token !== JUNK));
+    const { factory, calls } = fakeClient(msgs, { folders: ["INBOX", "FeedFerret"] });
+    const ingest = vi.fn(async () => ({ status: "created" as const, userId: "u-a", articleId: "a1" }));
+    const summary = await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, ingest });
+    expect(calls.fetchedSource).toEqual([90]);
+    expect(summary).toMatchObject({ junk: 85, created: 1, moved: 86, deferred: 0 });
+    expect(calls.moved[0]).toHaveLength(86);
+    // Only ACTIVE addresses are looked up (same rule as ingest routing).
+    expect((h.db.newsletterAddress.findMany.mock.calls[0][0] as { where: { isActive: boolean } }).where.isActive).toBe(true);
+  });
+
+  it("a mail with an active and an inactive token belongs to the active one's owner (F2)", async () => {
+    h.inactive.add(TOKEN_B);
+    const { factory, calls } = fakeClient([{ uid: 1, headers: `Delivered-To: news.box+ff-${TOKEN_B}@gmail.com\r\nTo: news.box+ff-${TOKEN_A}@gmail.com` }], { folders: ["INBOX", "FeedFerret"] });
+    h.db.newsletterQuota.findMany.mockResolvedValue([{ userId: "u-b", count: 100 }]); // the inactive token's owner is full: irrelevant
+    await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, ingest: vi.fn(async () => ({ status: "duplicate" as const })) });
+    expect(calls.fetchedSource).toEqual([1]);
+  });
+
+  it("detects a server that accepts but drops the keyword and falls back (F3)", async () => {
+    const { factory, calls } = fakeClient([{ uid: 4, headers: hdr(`news.box+ff-${TOKEN_A}@gmail.com`) }], { moveFails: true, folders: ["INBOX", "FeedFerret"], dropKeywords: true });
+    await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, ingest: vi.fn(async () => ({ status: "duplicate" as const })) });
+    expect(calls.flagged.map((f) => f.flags)).toEqual([["\\Seen", "\\Flagged", "$FeedFerret"], ["\\Seen", "\\Flagged"]]);
+    const data = (h.db.inboundMailSource.updateMany.mock.calls.at(-1) as unknown as [{ data: { settings: string } }])[0].data;
+    expect(JSON.parse(data.settings).keywordsUnsupported).toBe(true);
+  });
+
+  it("finish merges only keywordsUnsupported into the CURRENT row and is guarded by the lease (F4/F8)", async () => {
+    // Meanwhile the admin moved the source to another server.
+    const changed = JSON.stringify({ host: "imap.new.example", port: 143, secure: false, folder: "INBOX", presetId: null, processedFolder: "FeedFerret" });
+    h.db.inboundMailSource.findUnique.mockImplementation(async () => ({ ...h.source, settings: changed }));
+    const { factory } = fakeClient([{ uid: 5, headers: hdr(`news.box+ff-${TOKEN_A}@gmail.com`) }], { moveFails: true, folders: ["INBOX", "FeedFerret"], permanentFlags: ["\\Seen", "\\Flagged"] });
+    const now = new Date("2026-11-11T12:00:00Z");
+    await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, now: () => now, ingest: vi.fn(async () => ({ status: "duplicate" as const })) });
+    const call = (h.db.inboundMailSource.updateMany.mock.calls.at(-1) as unknown as [{ where: { id: string; lastCheckedAt: Date }; data: { settings: string } }])[0];
+    expect(JSON.parse(call.data.settings)).toMatchObject({ host: "imap.new.example", port: 143, keywordsUnsupported: true });
+    expect(call.where).toEqual({ id: "src1", lastCheckedAt: new Date(now.getTime() + POLL_LEASE_MS) });
   });
 
   it("skips paused sources and blocked hosts", async () => {

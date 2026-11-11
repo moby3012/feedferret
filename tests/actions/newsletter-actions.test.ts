@@ -12,7 +12,14 @@ const h = vi.hoisted(() => {
       bob: { role: "USER", isActive: true, twoFactorEnabled: false },
       eve: { role: "USER", isActive: true, twoFactorEnabled: false },
     } as Record<string, { role: string; isActive: boolean; twoFactorEnabled: boolean }>,
-    source: null as null | Record<string, unknown>,
+    rows: [] as Record<string, any>[],
+    /** The active IMAP row (kind "imap"); setting null clears every row. */
+    get source(): Record<string, any> | null {
+      return this.rows.find((r) => r.kind === "imap") ?? null;
+    },
+    set source(value: Record<string, any> | null) {
+      this.rows = value ? [value] : [];
+    },
     addresses: [] as Address[],
     seq: 0,
   };
@@ -34,19 +41,25 @@ const h = vi.hoisted(() => {
     },
     adminAuditLog: { create: vi.fn(async () => ({})) },
     inboundMailSource: {
-      findFirst: vi.fn(async ({ select }: any) => (store.source ? pick(store.source, select) : null)),
-      findMany: vi.fn(async () => (store.source ? [store.source] : [])),
+      findFirst: vi.fn(async ({ where, select }: any) => {
+        const row = store.rows.find((r) => !where?.kind || r.kind === where.kind);
+        return row ? pick(row, select) : null;
+      }),
+      findMany: vi.fn(async ({ where }: any = {}) => store.rows.filter((r) => !where?.kind?.not || r.kind !== where.kind.not)),
       create: vi.fn(async ({ data, select }: any) => {
-        store.source = { id: "src1", createdAt: new Date(), lastReceivedAt: null, lastCheckedAt: null, ...data };
-        return pick(store.source!, select);
+        const row = { id: `src${store.rows.length + 1}`, createdAt: new Date(), updatedAt: new Date(), lastReceivedAt: null, lastCheckedAt: null, ...data };
+        store.rows.push(row);
+        return pick(row, select);
       }),
-      update: vi.fn(async ({ data, select }: any) => {
-        store.source = { ...store.source!, ...data };
-        return pick(store.source!, select);
+      update: vi.fn(async ({ where, data, select }: any) => {
+        const row = store.rows.find((r) => r.id === where.id)!;
+        Object.assign(row, data);
+        return pick(row, select);
       }),
-      delete: vi.fn(async () => {
-        store.source = null;
-        return {};
+      deleteMany: vi.fn(async ({ where }: any) => {
+        const before = store.rows.length;
+        store.rows = store.rows.filter((r) => r.kind !== where.kind);
+        return { count: before - store.rows.length };
       }),
     },
     newsletterAddress: {
@@ -130,7 +143,7 @@ describe("admin wizard actions", () => {
     await expect(call()).rejects.toThrow(/Unauthorized/);
     expect(h.db.inboundMailSource.create).not.toHaveBeenCalled();
     expect(h.db.inboundMailSource.update).not.toHaveBeenCalled();
-    expect(h.db.inboundMailSource.delete).not.toHaveBeenCalled();
+    expect(h.db.inboundMailSource.deleteMany).not.toHaveBeenCalled();
     expect(h.poller.testImapConnection).not.toHaveBeenCalled();
   });
 
@@ -207,27 +220,52 @@ describe("admin wizard actions", () => {
     expect(await admin.checkNewsletterTestMail({ since: startedAt, marker: "nope" })).toMatchObject({ arrived: false });
   });
 
-  it("requires an explicit confirmation before every user address changes (server-side)", async () => {
+  it("asks for confirmation only when a DIFFERENT mailbox would change existing addresses (F5)", async () => {
+    // No addresses yet: switching mailboxes freely.
     await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p" });
+    expect((await admin.saveNewsletterImap({ email: "first@gmail.com", password: "p" })).ok).toBe(true);
+    expect((await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p" })).ok).toBe(true);
+
     as("bob");
     await user.getMyNewsletterInbox(); // bob now has an address
     as("admin");
     h.poller.testImapConnection.mockClear();
-    const other = await admin.saveNewsletterImap({ email: "other@gmail.com", password: "p2" });
-    expect(other).toMatchObject({ ok: false, code: "confirm-address-change" });
+    expect(await admin.saveNewsletterImap({ email: "other@gmail.com", password: "p2" })).toMatchObject({ ok: false, code: "confirm-address-change" });
     expect(h.poller.testImapConnection).not.toHaveBeenCalled();
     expect(h.store.source!.address).toBe("box@gmail.com");
-    // Same mailbox: no confirmation needed (e.g. new app password).
+    // Same mailbox (e.g. new app password): no confirmation.
     expect((await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p3" })).ok).toBe(true);
-    expect((await admin.saveNewsletterImap({ email: "other@gmail.com", password: "p2", confirmAddressChange: true })).ok).toBe(true);
-    expect(h.store.source!.address).toBe("other@gmail.com");
 
-    // Disconnect needs confirm; a fresh connect while addresses exist needs it too.
+    // Disconnect needs confirm, wipes credentials, remembers only the mailbox.
     expect(await admin.disconnectNewsletterInbound()).toEqual({ ok: false, code: "confirm-required" });
     expect(h.store.source).not.toBeNull();
     expect(await admin.disconnectNewsletterInbound({ confirm: true })).toEqual({ ok: true });
+    expect(h.store.source).toBeNull();
+    expect(h.store.rows).toEqual([expect.objectContaining({ kind: "imap-disconnected", address: "box@gmail.com", credentials: null })]);
+    expect((await admin.getNewsletterInboundState()).source).toBeNull();
+    as("bob");
+    expect((await user.getMyNewsletterInbox()).available).toBe(false);
+    as("admin");
+
+    // Reconnecting the SAME mailbox keeps every address: no confirmation.
+    expect((await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p" })).ok).toBe(true);
+    expect(h.store.rows.map((r) => r.kind)).toEqual(["imap"]);
+    expect(h.poller.testImapConnection).toHaveBeenCalled();
+
+    // A different one after a disconnect does need it.
+    await admin.disconnectNewsletterInbound({ confirm: true });
     expect(await admin.saveNewsletterImap({ email: "third@gmail.com", password: "p" })).toMatchObject({ ok: false, code: "confirm-address-change" });
     expect((await admin.saveNewsletterImap({ email: "third@gmail.com", password: "p", confirmAddressChange: true })).ok).toBe(true);
+    expect(h.store.source!.address).toBe("third@gmail.com");
+  });
+
+  it("keeps the learned keywordsUnsupported while host and port stay the same (F4)", async () => {
+    await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p" });
+    h.store.source!.settings = JSON.stringify({ ...JSON.parse(h.store.source!.settings), keywordsUnsupported: true });
+    await admin.saveNewsletterImap({ email: "box@gmail.com", password: "new-pass" });
+    expect(JSON.parse(h.store.source!.settings).keywordsUnsupported).toBe(true);
+    await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p", host: "imap.other.example", port: 993 });
+    expect(JSON.parse(h.store.source!.settings).keywordsUnsupported).toBeUndefined();
   });
 
   it("pauses, resumes (clearing backoff) and disconnects", async () => {

@@ -19,6 +19,7 @@ import {
   parseImapSettings,
   pollInboundSourceNow,
   PROCESSED_FOLDER,
+  DISCONNECTED_IMAP_KIND,
   sealImapCredentials,
   storedErrorCode,
   testImapConnection,
@@ -127,6 +128,10 @@ function toView(row: SourceRow): InboundSourceView {
   };
 }
 
+async function lastDisconnectedRow(): Promise<{ address: string | null } | null> {
+  return db.inboundMailSource.findFirst({ where: { kind: DISCONNECTED_IMAP_KIND }, orderBy: { updatedAt: "desc" }, select: { address: true } });
+}
+
 async function imapSourceRow(): Promise<SourceRow | null> {
   return db.inboundMailSource.findFirst({ where: { kind: "imap" }, orderBy: { createdAt: "asc" }, select: SOURCE_SELECT });
 }
@@ -214,6 +219,8 @@ async function resolveConnectInput(input: unknown): Promise<Resolved> {
       folder: existingSettings?.folder ?? "INBOX",
       presetId: server.presetId,
       processedFolder: existingSettings?.processedFolder ?? PROCESSED_FOLDER,
+      // Learned by the poller about THIS server; kept while host + port stay.
+      ...(existingSettings?.keywordsUnsupported && existingSettings.host === server.host && existingSettings.port === server.port ? { keywordsUnsupported: true } : {}),
     },
   };
 }
@@ -243,9 +250,10 @@ export async function saveNewsletterImap(input: unknown): Promise<TestResult & {
   // a new one after a disconnect while addresses exist) changes all of them.
   // Enforced here, not only in the UI.
   const { confirmAddressChange } = pickFields((input ?? {}) as ConnectInput, ["confirmAddressChange"]);
-  const changesAddresses = resolved.existing
-    ? resolved.existing.address !== resolved.mailbox
-    : (await db.newsletterAddress.count()) > 0;
+  // Only relevant when user addresses exist at all. After a disconnect the
+  // last mailbox is remembered, so reconnecting the SAME one needs no confirm.
+  const previous = resolved.existing ?? (await lastDisconnectedRow());
+  const changesAddresses = previous?.address !== resolved.mailbox && (await db.newsletterAddress.count()) > 0;
   if (changesAddresses && confirmAddressChange !== true) {
     return { ok: false, code: "confirm-address-change", server: resolved.server, preset };
   }
@@ -266,6 +274,8 @@ export async function saveNewsletterImap(input: unknown): Promise<TestResult & {
   const row = resolved.existing
     ? await db.inboundMailSource.update({ where: { id: resolved.existing.id }, data, select: SOURCE_SELECT })
     : await db.inboundMailSource.create({ data, select: SOURCE_SELECT });
+  // The remembered mailbox of an earlier disconnect is no longer needed.
+  if (!resolved.existing) await db.inboundMailSource.deleteMany({ where: { kind: DISCONNECTED_IMAP_KIND } });
   await logAdminAction(session.user.id, "newsletter.inbound.save", { kind: "imap", host: resolved.server.host, presetId: resolved.server.presetId });
   return { ok: true, server: resolved.server, preset, folderCount: result.folders.length, processedFolderExists: result.processedFolderExists, source: toView(row) };
 }
@@ -356,7 +366,13 @@ export async function disconnectNewsletterInbound(input?: unknown): Promise<{ ok
   if (confirm !== true) return { ok: false, code: "confirm-required" };
   const existing = await imapSourceRow();
   if (!existing) return { ok: true };
-  await db.inboundMailSource.delete({ where: { id: existing.id } });
+  // Credentials and secrets are wiped; only the base mailbox is remembered
+  // (see DISCONNECTED_IMAP_KIND) so reconnecting it keeps every user address.
+  await db.inboundMailSource.deleteMany({ where: { kind: DISCONNECTED_IMAP_KIND } });
+  await db.inboundMailSource.update({
+    where: { id: existing.id },
+    data: { kind: DISCONNECTED_IMAP_KIND, credentials: null, webhookSecret: null, paused: true, errorCount: 0, lastError: null },
+  });
   await logAdminAction(session.user.id, "newsletter.inbound.disconnect");
   return { ok: true };
 }

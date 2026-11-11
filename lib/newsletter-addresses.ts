@@ -10,7 +10,8 @@ export type InboundSourceSummary = { id: string; kind: string; address: string |
 /** The inbound source user addresses derive from (IMAP first), or null when none is set up. */
 export async function getInboundSource(): Promise<InboundSourceSummary | null> {
   const sources = await db.inboundMailSource.findMany({
-    where: { address: { not: null } },
+    // A disconnected IMAP row only remembers the last mailbox: not a source.
+    where: { address: { not: null }, kind: { not: "imap-disconnected" } },
     select: { id: true, kind: true, address: true, paused: true },
     orderBy: { createdAt: "asc" },
   });

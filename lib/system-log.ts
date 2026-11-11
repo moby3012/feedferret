@@ -4,7 +4,9 @@ import { db } from "@/lib/db"
 // N1: newsletter address tokens (`box+ff-<token>@…`, `<token>@domain`) are
 // secrets — whoever knows one can post into that user's library. They never
 // belong in SystemLog, whatever code path logs an address.
-const NEWSLETTER_TOKEN_RE = /\+ff-[a-z2-7]{6,}/gi
+// Plain and URL-encoded (`%2Bff-`); other encodings are an accepted residual
+// risk (no code path logs addresses in another form).
+const NEWSLETTER_TOKEN_RE = /(?:\+|%2B)ff-[a-z2-7]{6,}/gi
 
 /** Metadata with `+ff-<token>` replaced by `+ff-[token]` in every string value (deep). */
 export function redactLogMetadata(value: unknown): unknown {

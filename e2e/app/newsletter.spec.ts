@@ -156,15 +156,25 @@ test.describe("newsletter inbox", () => {
     await wizard.getByLabel("App password").fill("e2e-app-pass");
     await wizard.getByTestId("nl-save").click();
     const confirm = page.getByTestId("nl-confirm-change");
-    await expect(confirm).toContainText("Every user's address changes");
+    await expect(confirm).toContainText("every user's address changes");
     await confirm.getByRole("button", { name: "Cancel" }).click();
     await expect(wizard.getByTestId("nl-test-step")).toHaveCount(0);
 
     // Disconnect warns the same way.
     await wizard.getByRole("button", { name: "Back" }).click();
     await card.getByTestId("nl-status-disconnect").click();
-    await expect(page.getByRole("alertdialog")).toContainText("Every user's address changes");
+    await expect(page.getByRole("alertdialog")).toContainText("New newsletters stop arriving until a mailbox is connected");
     await page.getByTestId("nl-disconnect-confirm").click();
     await expect(wizard.getByTestId("nl-path-imap")).toBeVisible();
+
+    // Reconnecting the SAME mailbox keeps every address: no confirmation.
+    await wizard.getByTestId("nl-path-imap").click();
+    await wizard.getByLabel("Mailbox e-mail address").fill("e2e.box@gmail.com");
+    await wizard.getByLabel("App password").fill("e2e-app-pass");
+    await wizard.getByTestId("nl-save").click();
+    await expect(wizard.getByTestId("nl-test-step")).toBeVisible();
+    await expect(page.getByTestId("nl-confirm-change")).toHaveCount(0);
+    await page.goto("/settings?tab=newsletter");
+    await expect(page.getByTestId("newsletter-address")).toHaveText(address, { timeout: 20_000 });
   });
 });

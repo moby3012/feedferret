@@ -16,6 +16,10 @@ describe("SystemLog never stores newsletter tokens (N1)", () => {
     expect(JSON.parse(data.metadata!)).toEqual({ to: "box+ff-[token]@gmail.com", list: [{ cc: "x+ff-[token]@a.de" }], n: 3 });
   });
 
+  it("also redacts the URL-encoded form", () => {
+    expect(redactLogMetadata({ url: `mailto:box%2Bff-${TOKEN}%40gmail.com` })).toEqual({ url: "mailto:box+ff-[token]%40gmail.com" });
+  });
+
   it("leaves other values alone", () => {
     expect(redactLogMetadata({ to: "me@example.org", subject: "Hi +ff" })).toEqual({ to: "me@example.org", subject: "Hi +ff" });
   });

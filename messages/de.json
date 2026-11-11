@@ -2266,8 +2266,8 @@
     "pause": "Pausieren",
     "resume": "Fortsetzen",
     "disconnect": "Trennen",
-    "disconnectTitle": "Postfach trennen? Alle Nutzer-Adressen ändern sich",
-    "disconnectBody": "FeedFerret liest dann keine Newsletter mehr und löscht die gespeicherten Zugangsdaten. Wird danach ein anderes Postfach verbunden, ändern sich alle Nutzer-Adressen; nur mit demselben Postfach funktionieren die bisherigen Adressen wieder.",
+    "disconnectTitle": "Postfach trennen?",
+    "disconnectBody": "Neue Newsletter kommen nicht mehr an, bis ein Postfach verbunden ist. Die gespeicherten Zugangsdaten werden gelöscht. Wird dasselbe Postfach wieder verbunden, bleiben alle Adressen gleich – bei einem anderen Postfach ändern sich alle Nutzer-Adressen.",
     "cancel": "Abbrechen",
     "errors": {
       "invalid-email": "Bitte eine gültige E-Mail-Adresse ohne „+“ eingeben.",
@@ -2289,8 +2289,8 @@
       "unknown": "Unbekannter Fehler. Versuch es noch einmal.",
       "confirm-address-change": "Bitte bestätige, dass sich alle Nutzer-Adressen ändern."
     },
-    "confirmChangeTitle": "Alle Nutzer-Adressen ändern sich",
-    "confirmChangeBody": "Mit diesem Postfach bekommt jede Person eine neue Newsletter-Adresse. Die bisherigen Adressen empfangen danach nichts mehr – alle müssen ihre Newsletter auf die neue Adresse umstellen.",
+    "confirmChangeTitle": "Anderes Postfach verbinden?",
+    "confirmChangeBody": "Bei einem anderen Postfach ändern sich alle Nutzer-Adressen. Die bisherigen Adressen empfangen dann nichts mehr – alle müssen ihre Newsletter auf die neue Adresse umstellen.",
     "confirmChangeOk": "Ja, Adressen ändern",
     "manualTo": "An",
     "manualSubject": "Betreff",
