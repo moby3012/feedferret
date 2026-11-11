@@ -78,20 +78,31 @@ A remote sync never overwrites HTTP options of an existing feed.
 
 ### Where imported expressions run
 
-| Expression | Evaluated in | Engine | Input bounds |
-|---|---|---|---|
-| `xPathItem*`, `xPathToJson` | `lib/feed-fetcher.ts` during feed sync | jsdom `XPathEvaluator`, **main thread** of the server process (background sync runs in-process, `instrumentation.ts`) | fetched document ≤ `maxSizeKb` (default 5 MB), fetch timeout 30 s |
-| `jsonItem*` | `lib/feed-fetcher.ts` | plain dot/bracket path walk (no evaluation) | same |
-| `cssFullContent` | `lib/rss-sync.ts` `autoFetchFullTextForArticles` | jsdom `querySelector`, main thread | page ≤ 2 MB, 12 s timeout, ≤ 5 redirects, ≤ 20 articles per feed sync |
-| `cssContentFilter` | `lib/remove-selectors.ts` from `lib/rss-sync.ts` (feed items + full-text page) | jsdom `querySelectorAll`, main thread; invalid selector = no-op | feed body ≤ `maxSizeKb`; full-text page ≤ 2 MB |
-| `cssFullContentConditions`, `filtersActionRead` | `lib/full-text-conditions.ts`, `lib/feed-content-filter.ts`, auto-read rules | translated to literal substring checks and FeedFerret search (DB queries); **no regex is ever executed** (regex lines are refused) | translated query ≤ `MAX_SEARCH_QUERY` |
+Every DOM-based expression is evaluated in the **HTML worker pool** (`lib/html-worker`,
+`runInHtmlWorker` / `runHtmlTask`) on input bounded by `lib/html-guard.ts`, never on the
+main thread (enforced by ESLint boundary rules). Sync work runs at background priority
+(`runAsBackgroundHtmlWork`); a manual refresh is interactive.
 
-**Pending #281** (bounded HTML parsing worker pool): until it is merged, selector and
-XPath evaluation has no CPU time limit — a 15-character selector such as
-`:has(* * * * *)` can take seconds on a crafted page. With #281 all of the above
-(including the feed-content `removeSelectorsFromHtml`) moves to `runInHtmlWorker`, one
-task per feed batch. Until then the exposure is limited to expressions the feed's
-owner set themselves (own file, feed dialog, REST/MCP); remote files cannot set them.
+| Expression | Worker task | Called from | Bounds |
+|---|---|---|---|
+| `xPathItem*` (HTML+XPath / XML+XPath) | `xpathArticles` (`lib/feed-parse-core.ts`) | `lib/feed-fetcher.ts`, one task per fetched document | document ≤ `maxSizeKb` (default 5 MB) + guard limits, task timeout (default 8 s) |
+| `xPathToJson` | `xpathString` | `lib/feed-fetcher.ts` | same |
+| `jsonItem*` | — (dot/bracket path walk on parsed JSON, no evaluation) | `lib/feed-fetcher.ts` | document size |
+| `cssContentFilter` on feed content | `sanitizeFeedItems` with `removeSelectors` (`lib/feed-item-sanitize-client.ts`) | `lib/rss-sync.ts`, the feed's whole batch in chunks of ≤ 50 items / 512 KiB per task | guard limits per item, task timeout per chunk |
+| `cssFullContent` + `cssContentFilter` on full text | `selectorExtract` (`lib/selector-extract.ts`) | `lib/rss-sync.ts` `autoFetchFullTextForArticles`, one task per article | page ≤ 2 MB, 12 s fetch, ≤ 20 articles per feed sync |
+| `cssFullContentConditions`, `filtersActionRead` | — (not DOM: literal substring checks + FeedFerret search as DB queries; **no regex** is ever executed) | `lib/full-text-conditions.ts`, `lib/feed-content-filter.ts`, auto-read rules | translated query ≤ `MAX_SEARCH_QUERY` |
+
+Worker failures follow the pool's semantics:
+
+- `busy` / `unavailable`: the feed sync is **deferred** (no failure streak, no
+  auto-mute, nothing stored); the next sync retries it.
+- `timeout` / `memory` / `crashed` on feed content: the item is retried alone and, if it
+  still fails, stored empty; the feed sync succeeds.
+- the same on full text: recorded in `fullTextStatus` like any failed extraction.
+- the same on XPath: the fetch fails and counts as a feed error (the configuration
+  cannot be evaluated in budget).
+
+Covered by `tests/lib/frss-content-filter-worker.sqlite.test.ts`.
 
 Import limits: OPML ≤ 5 MB, ≤ 20 000 outlines, depth ≤ 16, no DTD/entities (XXE /
 billion laughs), each selector / XPath / JSON path / header list ≤ 2 000 characters,

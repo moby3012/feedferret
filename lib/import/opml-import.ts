@@ -130,8 +130,9 @@ const REMOTE_BLOCKED_HTTP = [
   "CURLOPT_MAXREDIRS",
 ] as const;
 
-// Selector / XPath / JSON-path expressions run in the sync pipeline for every fetch;
-// a cheap expression can cost seconds of CPU on a crafted page (`:has(* * * *)`,
+// Selector / XPath / JSON-path expressions run on every fetch. They are evaluated in
+// the HTML worker pool under a time limit (lib/html-worker), but a cheap expression
+// can still burn a full task timeout per sync on a crafted page (`:has(* * * *)`,
 // `//*[contains(., …)]`). A third party who controls a remote (dynamic) OPML must not
 // be able to plant them in another user's feeds on a shared instance.
 let remoteBlockedExpressions: string[] | null = null;
@@ -181,8 +182,8 @@ export function mapOutlineToFeed(
 
   const issue = (kind: ImportIssue["kind"], code: string, attribute?: string, detail?: string) =>
     issues.push({ kind, code, subject, attribute, detail });
-  // Selectors, XPath and search expressions run on the sync worker's main thread (jsdom)
-  // with no per-expression time limit, so oversized ones are refused at the door.
+  // Oversized selectors / XPath / search expressions are refused at the door: they only
+  // make the worker's per-task time limit (lib/html-worker) the common case.
   const extensions: Record<string, string> = {};
   for (const [name, value] of Object.entries(outline.extensions ?? {})) {
     const limit = name === "filtersActionRead" || name === "cssFullContentConditions" ? MAX_FILTER_LIST_LENGTH : MAX_EXPRESSION_LENGTH;
