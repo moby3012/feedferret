@@ -15,7 +15,7 @@ import { logger, urlForLog } from "./logger";
 import { getConnectorSecretRules, redactConnectorTextWith, stripConnectorSecretsWith } from "./connector-secrets";
 import { getSanitizer } from "./sanitize-html";
 import { resolveFullTextMode } from "./full-text-mode";
-import { fetchAndExtractReadable } from "./readability-extract";
+import { fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
 import { assessExtraction, decideFullText } from "./extraction-quality";
 import { classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
 import { normalizeLazyMedia } from "./lazy-media";
@@ -44,6 +44,9 @@ import { NEWSLETTER_SOURCE_TYPE } from "./newsletter-constants";
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 const MAX_AUTO_TAG_PER_SYNC = 3;
 const MAX_AI_EXTRACTIONS_PER_SYNC_BATCH = 5;
+// Per-sync caps for the other escalation tiers of unattended full text.
+export const MAX_RENDER_ESCALATIONS_PER_SYNC = 10;
+export const MAX_HOSTED_ESCALATIONS_PER_SYNC = 5;
 
 export interface ArticleSyncInput {
     feedId: string;
@@ -340,12 +343,15 @@ export async function upsertArticleBatch(
             delete writable.readMinutes;
             if (contentChanged || legacyFullText) writable.feedContent = next.content;
         }
-        // A genuine upstream content change invalidates the previous full-text
-        // attempt, so it is extracted again exactly once for the new version.
-        const fullTextReset = contentChanged ? { fullTextStatus: null, fullTextReason: null, fullTextAttempts: null } : {};
+        // A genuine upstream change of the content OR of the source link (a
+        // different page) invalidates the previous full-text attempt, so it is
+        // extracted again exactly once for the new version. Cosmetic link
+        // rewrites (synthetic links, resolved Google News redirects) do not.
+        const cosmeticLink = article.linkSynthetic || article.linkCosmetic;
+        const sourceChanged = contentChanged || (linkChanged && !cosmeticLink);
+        const fullTextReset = sourceChanged ? { fullTextStatus: null, fullTextReason: null, fullTextAttempts: null } : {};
         const legacyAdopt = legacyFullText ? { feedContent: next.content, fullTextStatus: "ok", fullTextReason: "legacy" } : {};
 
-        const cosmeticLink = article.linkSynthetic || article.linkCosmetic;
         if (otherChanged || (linkChanged && !cosmeticLink)) {
             await db.article.update({
                 where: { id: existing.id },
@@ -369,7 +375,7 @@ export async function upsertArticleBatch(
         }
 
         if (
-            contentChanged ||
+            sourceChanged ||
             (!legacyFullText && needsFullTextAttempt({ fullTextStatus: existing.fullTextStatus, fullTextAttempts: existing.fullTextAttempts }))
         ) {
             retryFullTextIds.push(existing.id);
@@ -930,18 +936,26 @@ async function autoFetchFullTextViaEngine(
                   usage: { userId, feature: "extraction" },
               }
             : null;
-    let aiExtractionsUsed = 0;
+    // Escalation tiers are bounded per sync call: AI (also metered against the
+    // user's daily token cap by runAiPrompt/reserveBudget), the render sidecar
+    // and the hosted API each get a fixed number of uses; a tier whose budget
+    // is spent is skipped for the remaining articles of this sync. The budget
+    // is decremented only when a tier actually runs.
+    const escalationBudget: EscalationBudget = {
+        ai: aiConfig ? MAX_AI_EXTRACTIONS_PER_SYNC_BATCH : 0,
+        render: MAX_RENDER_ESCALATIONS_PER_SYNC,
+        hosted: MAX_HOSTED_ESCALATIONS_PER_SYNC,
+    };
 
     for (const article of articles) {
         if (!article.link) continue;
         try {
             if (await deferIfHostBackingOff(article)) continue;
-            const useAiForThisArticle = !!aiConfig && aiExtractionsUsed < MAX_AI_EXTRACTIONS_PER_SYNC_BATCH;
-            if (useAiForThisArticle) aiExtractionsUsed++;
             const baselineHtml = feedBaseline(article);
             const extractOptions = {
                 ...baseExtractOptions,
-                ...(useAiForThisArticle ? { aiExtraction: aiConfig! } : {}),
+                ...(aiConfig ? { aiExtraction: aiConfig } : {}),
+                escalationBudget,
                 baselineHtml,
                 gate: "auto" as const,
             };

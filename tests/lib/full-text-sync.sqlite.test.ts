@@ -21,6 +21,13 @@ const state = vi.hoisted(() => ({
   fetchFeed: null as unknown as ReturnType<typeof import("vitest").vi.fn>,
   page: null as unknown as (url: string) => Promise<string>,
   pageFetches: [] as string[],
+  aiCalls: 0,
+}));
+vi.mock("@/lib/ai-extraction", () => ({
+  extractArticleWithAi: async () => {
+    state.aiCalls++;
+    return null;
+  },
 }));
 vi.mock("@/lib/db", () => ({
   get db() {
@@ -45,7 +52,9 @@ vi.mock("@/lib/ssrf", async (importOriginal) => {
 });
 vi.mock("@/lib/render-sidecar", () => ({ renderViaSidecar: async () => null }));
 
-import { syncFeed } from "../../lib/rss-sync";
+import { syncFeed, upsertArticleBatch } from "../../lib/rss-sync";
+import { refetchArticleFullText } from "../../lib/full-text-fetch";
+import { FULL_TEXT_STATE_SELECT, recordFullTextMiss } from "../../lib/full-text-store";
 import { HttpStatusError } from "../../lib/ssrf";
 import { resetHostBackoff } from "../../lib/host-backoff";
 import { resetTransportMemory } from "../../lib/readability-extract";
@@ -59,10 +68,10 @@ const fullPage = (id: string) =>
   `<!doctype html><html><head><title>Story ${id}</title></head><body><article><h1>Story ${id}</h1>${Array.from({ length: 8 }, (_, n) => P(id, n)).join("")}</article></body></html>`;
 const teaser = (id: string, version = 1) => `<p>Teaser ${id} v${version}</p>`;
 
-function items(versions: Record<string, number> = {}) {
+function items(versions: Record<string, number> = {}, links: Record<string, string> = {}) {
   return ["1", "2", "3"].map((id, n) => ({
     title: `Story ${id}`,
-    link: `https://news${id}.example/story-${id}`,
+    link: links[id] ?? `https://news${id}.example/story-${id}`,
     content: teaser(id, versions[id] ?? 1),
     externalId: `guid-${id}`,
     publishedAt: new Date(Date.UTC(2026, 10, 10, 12 - n)),
@@ -107,6 +116,7 @@ beforeEach(async () => {
   resetHostBackoff();
   resetTransportMemory();
   state.pageFetches = [];
+  state.aiCalls = 0;
   state.page = async (url) => fullPage(url.slice(-1));
   state.fetchFeed.mockReset();
   state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items() }));
@@ -248,5 +258,144 @@ describe("auto full text: no churn", () => {
     await syncFeed(userId, feed.id);
     await syncFeed(userId, feed.id);
     expect(state.pageFetches).toEqual([]);
+  });
+
+  it("a genuine source-link change (same teaser) invalidates stored full text and re-extracts once", async () => {
+    const feed = await autoFeed();
+    await syncFeed(userId, feed.id);
+    state.pageFetches = [];
+    state.page = async () =>
+      `<!doctype html><html><body><article><h1>Moved</h1>${Array.from({ length: 8 }, (_, n) => P("moved", n)).join("")}</article></body></html>`;
+    state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items({}, { "3": "https://elsewhere.example/story-3-new" }) }));
+    await syncFeed(userId, feed.id);
+    expect(state.pageFetches).toEqual(["https://elsewhere.example/story-3-new"]);
+    const moved = (await rows(feed.id)).find((r) => r.externalId === "guid-3")!;
+    expect(moved.fullTextStatus).toBe("ok");
+    expect(moved.content).toContain("story moved");
+    // and only once
+    state.pageFetches = [];
+    await syncFeed(userId, feed.id);
+    expect(state.pageFetches).toEqual([]);
+  });
+
+  it("a cosmetic link rewrite does not invalidate stored full text", async () => {
+    const feed = await autoFeed();
+    await syncFeed(userId, feed.id);
+    const row = await state.db.article.findFirstOrThrow({ where: { feedId: feed.id, externalId: "guid-1" } });
+    const result = await upsertArticleBatch([
+      {
+        feedId: feed.id,
+        userId,
+        title: row.title,
+        link: "https://news1.example/story-1?resolved",
+        linkCosmetic: true,
+        externalId: row.externalId,
+        dedupeKey: row.dedupeKey!,
+        contentHash: row.contentHash,
+        content: row.feedContent!,
+        excerpt: row.excerpt ?? "",
+        author: row.author,
+        publishedAt: row.publishedAt,
+        imageUrl: row.imageUrl,
+        enclosures: row.enclosures,
+      },
+    ], { fullTextActive: true });
+    expect(result.fullTextCandidateIds).toEqual([]);
+    const after = await state.db.article.findFirstOrThrow({ where: { id: row.id } });
+    expect(after.link).toBe("https://news1.example/story-1?resolved");
+    expect(after.fullTextStatus).toBe("ok");
+    expect(after.updatedAt.getTime()).toBe(row.updatedAt.getTime());
+  });
+});
+
+describe("full text: concurrency (stale results are discarded)", () => {
+  it("manual fetch in flight while a sync records an upstream change: the stale full text is discarded", async () => {
+    const feed = await state.db.feed.create({ data: { userId, name: "Manual", url: "https://manual.example/feed.xml" } });
+    await syncFeed(userId, feed.id); // mode off: teasers only
+    const target = await state.db.article.findFirstOrThrow({ where: { feedId: feed.id, externalId: "guid-1" } });
+    let afterSync: Date | null = null;
+    state.page = async (url) => {
+      // Interleave deterministically: the sync lands between snapshot and store.
+      state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items({ "1": 2 }) }));
+      await tick();
+      await syncFeed(userId, feed.id);
+      afterSync = (await state.db.article.findFirstOrThrow({ where: { id: target.id } })).updatedAt;
+      return fullPage(url.slice(-1));
+    };
+    await expect(refetchArticleFullText(userId, target.id)).rejects.toThrow(/updated while/);
+    const row = await state.db.article.findFirstOrThrow({ where: { id: target.id } });
+    expect(row.content).toBe(teaser("1", 2)); // the new upstream version, not v1's full text
+    expect(row.feedContent).toBeNull();
+    expect(row.fullTextStatus).toBeNull();
+    expect(afterSync).not.toBeNull();
+    expect(row.updatedAt.getTime()).toBe(afterSync!.getTime()); // never rolled back
+    expect(row.updatedAt.getTime()).toBeGreaterThan(target.updatedAt.getTime());
+  });
+
+  it("sync extraction in flight while a manual fetch stores full text: the sync result is discarded", async () => {
+    const feed = await autoFeed();
+    state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items().slice(0, 1) }));
+    let nested = false;
+    let manualDone = false;
+    state.page = async (url) => {
+      if (nested) return fullPage("manual");
+      nested = true;
+      const row = await state.db.article.findFirstOrThrow({ where: { link: url, feedId: feed.id } });
+      await refetchArticleFullText(userId, row.id);
+      manualDone = true;
+      return fullPage("sync");
+    };
+    await syncFeed(userId, feed.id);
+    expect(manualDone).toBe(true);
+    const [row] = await rows(feed.id);
+    expect(row.content).toContain("story manual");
+    expect(row.content).not.toContain("story sync");
+    expect(row.feedContent).toBe(teaser("1"));
+  });
+
+  it("concurrent failed attempts never lose an increment", async () => {
+    const feed = await state.db.feed.create({ data: { userId, name: "Plain", url: "https://plain2.example/feed.xml" } });
+    await syncFeed(userId, feed.id);
+    const snap = await state.db.article.findFirstOrThrow({ where: { feedId: feed.id, externalId: "guid-1" }, select: FULL_TEXT_STATE_SELECT });
+    const results = await Promise.all([
+      recordFullTextMiss(snap, "failed", "http_503"),
+      recordFullTextMiss(snap, "failed", "http_503"),
+      recordFullTextMiss(snap, "failed", "http_503"),
+    ]);
+    expect(results).toEqual([true, true, true]);
+    const row = await state.db.article.findFirstOrThrow({ where: { id: snap.id } });
+    expect(row.fullTextAttempts).toBe(3);
+    expect(row.updatedAt.getTime()).toBe(snap.updatedAt.getTime());
+  });
+});
+
+describe("full text: AI escalation is bounded per sync", () => {
+  it("ai mode spends at most MAX AI extractions per sync, and only with an AI provider configured", async () => {
+    const many = Array.from({ length: 8 }, (_, n) => ({
+      title: `Walled ${n}`,
+      link: `https://walled${n}.example/story`,
+      content: `<p>Teaser walled ${n}</p>`,
+      externalId: `walled-${n}`,
+      publishedAt: new Date(Date.UTC(2026, 10, 10, 12 - n)),
+    }));
+    state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: many }));
+    state.page = async () =>
+      `<!doctype html><html><body><main><div><p>We and our 170 vendors use cookies and process personal data such as IP addresses and device identifiers for personalised ads and content, ad and content measurement.</p><p>Click Accept all to give your consent, or manage your privacy settings at any time.</p></div></main></body></html>`;
+
+    // No AI provider: AI never runs even in "ai" mode.
+    const noAi = await state.db.feed.create({ data: { userId, name: "AI", url: "https://ai.example/feed.xml", fullTextMode: "ai" } });
+    await syncFeed(userId, noAi.id);
+    expect(state.aiCalls).toBe(0);
+
+    await state.db.feed.deleteMany({ where: { userId } });
+    resetHostBackoff();
+    await state.db.user.update({ where: { id: userId }, data: { aiProvider: "openai" } });
+    try {
+      const feed = await state.db.feed.create({ data: { userId, name: "AI", url: "https://ai2.example/feed.xml", fullTextMode: "ai" } });
+      await syncFeed(userId, feed.id);
+      expect(state.aiCalls).toBe(5);
+    } finally {
+      await state.db.user.update({ where: { id: userId }, data: { aiProvider: null } });
+    }
   });
 });

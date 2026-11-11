@@ -94,7 +94,13 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
     }
     const plainLength = result.quality?.textLength ?? 0;
 
-    await storeFullText(article, { content: result.html, format: "html", excerpt: result.excerpt });
+    const stored = await storeFullText(article, { content: result.html, format: "html", excerpt: result.excerpt });
+    if (!stored) {
+        // The article changed while the page was being fetched (a sync recorded
+        // an upstream update, or another fetch stored full text first): this
+        // result belongs to an outdated version and is discarded.
+        throw new Error("This article was updated while its full text was loading. Try again.");
+    }
     const updated = await db.article.findFirstOrThrow({
         where: { id: article.id, userId },
         // feedContent is internal (the feed version kept for sync comparisons).

@@ -9,6 +9,13 @@ const state = vi.hoisted(() => ({
   plain: null as null | (() => Promise<string>),
   sidecar: null as null | string,
   calls: [] as string[],
+  aiCalls: 0,
+}));
+vi.mock("../../lib/ai-extraction", () => ({
+  extractArticleWithAi: vi.fn(async () => {
+    state.aiCalls++;
+    return null;
+  }),
 }));
 
 vi.mock("../../lib/ssrf", async (importOriginal) => {
@@ -57,6 +64,7 @@ describe("fetchAndExtractReadable escalation", () => {
     state.plain = null;
     state.sidecar = null;
     state.calls = [];
+    state.aiCalls = 0;
     resetTransportMemory();
     resetHostBackoff();
   });
@@ -128,5 +136,18 @@ describe("fetchAndExtractReadable escalation", () => {
     state.plain = fail(429);
     await expect(fetchAndExtractReadable("https://busy.example/a")).rejects.toThrow("Fetch failed: 429");
     expect(hostBackoffRemainingMs("https://busy.example/other")).toBeGreaterThan(0);
+  });
+
+  it("bounds AI, render and hosted escalation by the shared per-sync budget", async () => {
+    state.impit = ok(WALL);
+    state.plain = ok(WALL);
+    const budget = { ai: 1, render: 2, hosted: 0 };
+    const ai = { provider: "openai" as const, apiKey: "k", usage: { userId: "u", feature: "extraction" as const } };
+    for (let i = 0; i < 4; i++) {
+      await fetchAndExtractReadable(`https://walled-${i}.example/a`, { aiExtraction: ai, escalationBudget: budget });
+    }
+    expect(state.aiCalls).toBe(1);
+    expect(state.calls.filter((c) => c === "sidecar")).toHaveLength(2);
+    expect(budget).toEqual({ ai: 0, render: 0, hosted: 0 });
   });
 });

@@ -16,7 +16,8 @@ import type { HttpStatusError } from "@/lib/ssrf";
 type HostState = { failures: number; until: number };
 
 const MAX_HOSTS = 5_000;
-const MAX_BACKOFF_MS = 6 * 60 * 60 * 1000; // 6 h
+const MAX_BACKOFF_MS = 6 * 60 * 60 * 1000; // 6 h, local exponential delay only
+const MAX_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1000; // sanity cap for a server's Retry-After
 const BASE_RATE_LIMIT_MS = 5 * 60 * 1000; // 429 without Retry-After
 const BASE_BLOCKED_MS = 2 * 60 * 1000; // 401/402/403/451, 5xx
 const BASE_NETWORK_MS = 60 * 1000; // timeouts, resets, DNS hiccups
@@ -99,8 +100,11 @@ export function recordHostFailure(url: string, error: unknown, now = Date.now())
     const prior = hosts.get(host);
     const failures = (prior?.failures ?? 0) + 1;
     const base = kind === "rate_limited" ? BASE_RATE_LIMIT_MS : kind === "blocked" ? BASE_BLOCKED_MS : BASE_NETWORK_MS;
+    // Only our own exponential guess is capped at 6 h; a server's explicit
+    // Retry-After is honoured as sent (sanity-capped at 7 days).
     const exponential = Math.min(MAX_BACKOFF_MS, base * 2 ** (failures - 1));
-    const wait = Math.min(MAX_BACKOFF_MS, Math.max(exponential, retryAfterMs ?? 0));
+    const retryAfter = Math.min(MAX_RETRY_AFTER_MS, Math.max(0, retryAfterMs ?? 0));
+    const wait = Math.max(exponential, retryAfter);
     prune(now);
     hosts.delete(host); // re-insert so Map order approximates recency for pruning
     hosts.set(host, { failures, until: now + wait });

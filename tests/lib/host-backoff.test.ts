@@ -32,6 +32,14 @@ describe("host backoff", () => {
     expect(hostBackoffRemainingMs("https://other.example/x", now)).toBe(0);
   });
 
+  it("honours a Retry-After longer than the local cap, sanity-capped at 7 days", () => {
+    const day = 24 * 60 * 60 * 1000;
+    expect(recordHostFailure(URL_A, new HttpStatusError(429, "Fetch failed: 429", 2 * day), 0)).toBe(2 * day);
+    expect(hostBackoffRemainingMs(URL_A, day)).toBe(day);
+    resetHostBackoff();
+    expect(recordHostFailure(URL_A, new HttpStatusError(503, "Fetch failed: 503", 30 * day), 0)).toBe(7 * day);
+  });
+
   it("grows exponentially per consecutive failure and is capped", () => {
     const now = 0;
     const first = recordHostFailure(URL_A, new HttpStatusError(403, "Fetch failed: 403"), now);

@@ -471,7 +471,21 @@ export type FetchAndExtractReadableOptions = {
   baselineHtml?: string | null;
   // Gate mode used together with `baselineHtml` (see `decideFullText`).
   gate?: "auto" | "manual";
+  // Shared, mutable per-sync budget for the costly escalation tiers. Each tier
+  // runs only while its counter is > 0 and decrements it when it actually runs.
+  // Omitted (manual fetch): no limit beyond the tiers' own opt-ins.
+  escalationBudget?: EscalationBudget;
 };
+
+export type EscalationBudget = { ai: number; render: number; hosted: number };
+
+/** Takes one unit of `tier` from the budget; true when the tier may run. */
+function takeBudget(budget: EscalationBudget | undefined, tier: keyof EscalationBudget): boolean {
+  if (!budget) return true;
+  if (budget[tier] <= 0) return false;
+  budget[tier]--;
+  return true;
+}
 
 // Feed items with at least this much plain text are "substantial" (see goodEnough).
 const SUBSTANTIAL_FEED_TEXT_LENGTH = 1000;
@@ -596,14 +610,15 @@ export async function fetchAndExtractReadable(
   // M6: per-feed opt-in AI-extraction, on the already-fetched HTML — before
   // falling to the (slower, whole-page-re-fetching) render sidecar.
   const aiSource = (bestFetchedHtml as string | null) ?? lastFetchedHtml;
-  if (!goodEnough() && options.aiExtraction && aiSource) {
+  if (!goodEnough() && options.aiExtraction && aiSource && takeBudget(options.escalationBudget, "ai")) {
     const aiResult = await extractArticleWithAi(aiSource, url, options.aiExtraction);
     if (aiResult) consider(await buildResultFromMarkdown(aiResult.content, aiResult.title, "ai"), null);
   }
 
   // Render sidecar (M7-T2, admin-configured): client-only pages, consent/bot
   // walls a real browser gets past, or a direct fetch that was blocked outright.
-  if (!goodEnough()) {
+  // Every attempt counts against the per-sync budget (a no-op when no sidecar is configured).
+  if (!goodEnough() && takeBudget(options.escalationBudget, "render")) {
     const rendered = await renderViaSidecar(url, { context: "Full-text" });
     if (rendered) consider(await extractReadableContent(rendered, url), rendered);
   }
@@ -613,7 +628,7 @@ export async function fetchAndExtractReadable(
   let hostedRateLimited = false;
   if (!goodEnough() && options.userId) {
     const hostedConfig = await getHostedFetchConfigForUser(options.userId);
-    if (hostedConfig) {
+    if (hostedConfig && takeBudget(options.escalationBudget, "hosted")) {
       const outcome = await fetchViaHostedApiDetailed(url, hostedConfig);
       if (outcome.ok) consider(await buildResultFromMarkdown(outcome.result.content, outcome.result.title, "hosted"), null);
       else hostedRateLimited = outcome.rateLimited;
