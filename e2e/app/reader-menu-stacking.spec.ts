@@ -44,7 +44,7 @@ test("desktop 2000×950: reader … menu is above the article and clickable", as
   await expect(menu).toBeHidden();
 });
 
-test("desktop 2000×950: list … menu opens on-screen, above the list, clickable", async ({ app, page }) => {
+test("desktop 2000×950: list … menu opens on-screen and above the list", async ({ app, page }) => {
   test.skip(app.isMobile, "wide desktop layout only");
   await app.open();
   await page.locator(`${ACTIVE_LIST} [data-testid="list-menu-button"]`).click();
@@ -53,6 +53,7 @@ test("desktop 2000×950: list … menu opens on-screen, above the list, clickabl
   await page.waitForTimeout(250);
   const first = menu.getByRole("menuitem").first();
   await expectTopmost(first, "first list-menu item");
-  await first.click({ timeout: 3_000 });
+  // Read-only: Escape closes it (activating an item would persist list settings across specs).
+  await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
 });
