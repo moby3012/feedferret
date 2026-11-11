@@ -426,9 +426,12 @@ function detectViewOnlineUrl(links: LinkInfo[]): string | null {
 // forged Authentication-Results / ARC headers, including ones that look like
 // the receiver's. A verdict ("pass" | "fail") is therefore ONLY produced when
 // the transport knows the receiver's authserv-id (`trustedAuthservId`, set per
-// IMAP preset / Cloudflare in PR B, e.g. "mx.google.com"): then the topmost
-// header carrying exactly that id counts (RFC 8601 §5: receivers remove forged
-// headers claiming their own id). Without a configured id the verdict is
+// IMAP preset / Cloudflare in PR B, e.g. "mx.google.com"): then only the
+// TOPMOST Authentication-Results counts, and only if it carries exactly that id.
+// A preset may only name a provider that strips forged headers claiming its
+// own authserv-id (RFC 8601 §5). Values are parsed with quoted-strings and
+// comments honoured (tokenizeAuthResults), so `smtp.mailfrom="x; dmarc=pass"`
+// cannot inject a result. Without a configured id the verdict is
 // always "none"; the topmost header's results are kept only as UNVERIFIED
 // evidence (`newsletterAuthDetail`) for display/debugging. ARC results never
 // produce a verdict (seals are not validated here) and are recorded as
@@ -442,21 +445,86 @@ interface AuthResult {
   props: Record<string, string>;
 }
 
-function parseAuthResultsValue(value: string): { authservId: string; results: AuthResult[] } {
-  let text = value;
-  // Strip RFC 5322 comments (non-nested is enough for a verdict).
-  for (let i = 0; i < 3; i++) text = text.replace(/\([^()]*\)/g, " ");
-  const parts = text.split(";").map((p) => p.trim()).filter(Boolean);
-  const authservId = (parts.shift() ?? "").split(/\s+/)[0].toLowerCase();
-  const results: AuthResult[] = [];
-  for (const part of parts) {
-    const m = /^([a-z0-9_-]+)\s*=\s*([a-z]+)/i.exec(part);
-    if (!m) continue;
-    const props: Record<string, string> = {};
-    for (const p of part.slice(m[0].length).matchAll(/([a-z0-9_.-]+)\s*=\s*("[^"]*"|[^\s]+)/gi)) {
-      props[p[1].toLowerCase()] = p[2].replace(/^"|"$/g, "").toLowerCase();
+/**
+ * Splits an Authentication-Results value into `;`-separated segments of
+ * whitespace-separated tokens, honouring RFC 5322 quoted-strings (a `;` or
+ * `dmarc=pass` inside `smtp.mailfrom="…"` stays inside that value) and
+ * (nested) comments, which count as whitespace. `a = b` is joined to `a=b`.
+ */
+export function tokenizeAuthResults(value: string): string[][] {
+  const segments: string[][] = [];
+  let tokens: string[] = [];
+  let token = "";
+  let inQuote = false;
+  let depth = 0;
+  const flushToken = () => {
+    if (!token) return;
+    const last = tokens[tokens.length - 1];
+    if (last !== undefined && (token.startsWith("=") || last.endsWith("="))) tokens[tokens.length - 1] = last + token;
+    else tokens.push(token);
+    token = "";
+  };
+  const flushSegment = () => {
+    flushToken();
+    segments.push(tokens);
+    tokens = [];
+  };
+  const text = value.slice(0, 8000);
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuote) {
+      if (c === "\\" && i + 1 < text.length) token += text[++i];
+      else {
+        token += c;
+        if (c === '"') inQuote = false;
+      }
+    } else if (depth > 0) {
+      if (c === "\\") i++;
+      else if (c === "(") depth++;
+      else if (c === ")") depth--;
+    } else if (c === '"') {
+      inQuote = true;
+      token += c;
+    } else if (c === "(") {
+      flushToken();
+      depth = 1;
+    } else if (c === ";") {
+      flushSegment();
+    } else if (/\s/.test(c)) {
+      flushToken();
+    } else {
+      token += c;
     }
-    results.push({ method: m[1].toLowerCase(), result: m[2].toLowerCase(), props });
+  }
+  flushSegment();
+  return segments.filter((seg) => seg.length > 0);
+}
+
+function splitPair(token: string): [string, string] | null {
+  // First "=" outside a quoted-string.
+  let inQuote = false;
+  for (let i = 0; i < token.length; i++) {
+    if (token[i] === '"') inQuote = !inQuote;
+    else if (token[i] === "=" && !inQuote) return [token.slice(0, i), token.slice(i + 1)];
+  }
+  return null;
+}
+
+function parseAuthResultsValue(value: string): { authservId: string; results: AuthResult[] } {
+  const [head = [], ...rest] = tokenizeAuthResults(value);
+  const authservId = (head[0] ?? "").replace(/"/g, "").toLowerCase();
+  const results: AuthResult[] = [];
+  for (const segment of rest) {
+    const first = splitPair(segment[0]);
+    if (!first || !/^[a-z0-9_-]+(?:\/\d+)?$/i.test(first[0]) || !/^[a-z]+$/i.test(first[1])) continue;
+    const props: Record<string, string> = {};
+    for (const tok of segment.slice(1)) {
+      const pair = splitPair(tok);
+      if (!pair || !/^[a-z0-9_.-]+$/i.test(pair[0])) continue;
+      const raw = pair[1];
+      props[pair[0].toLowerCase()] = (/^"[^"]*"$/.test(raw) ? raw.slice(1, -1) : raw).toLowerCase();
+    }
+    results.push({ method: first[0].replace(/\/\d+$/, "").toLowerCase(), result: first[1].toLowerCase(), props });
   }
   return { authservId, results };
 }
@@ -513,11 +581,10 @@ export function evaluateSenderAuth(
 ): SenderAuthEvidence {
   const trusted = trustedAuthservId?.trim().toLowerCase() || null;
   const ar = headers.filter((h) => h.key === "authentication-results").map((h) => parseAuthResultsValue(h.value));
-  if (trusted) {
-    const mine = ar.find((p) => p.authservId === trusted);
-    if (mine) {
-      return { verdict: verdictFor(mine.results, fromAddress), verified: true, source: "authentication-results", authservId: mine.authservId, results: summarize(mine.results) };
-    }
+  // Only the TOPMOST header may carry the verdict, and only with the trusted id.
+  if (trusted && ar.length > 0 && ar[0].authservId === trusted) {
+    const mine = ar[0];
+    return { verdict: verdictFor(mine.results, fromAddress), verified: true, source: "authentication-results", authservId: mine.authservId, results: summarize(mine.results) };
   }
   if (ar.length > 0) {
     return { verdict: "none", verified: false, source: "authentication-results", authservId: ar[0].authservId.slice(0, 100) || null, results: summarize(ar[0].results) };
@@ -549,12 +616,13 @@ export function quotaDay(now: Date = new Date()): string {
  * Returns the day key to release on, or null when the quota is used up.
  */
 export async function reserveNewsletterQuota(userId: string, day: string = quotaDay(), limit = MAX_NEWSLETTER_MAILS_PER_DAY): Promise<string | null> {
-  try {
-    await db.newsletterQuota.create({ data: { userId, day, count: 0 } });
-    // First reservation of this day: prune old rows (bounded per user).
+  // INSERT … ON CONFLICT DO NOTHING (same syntax on SQLite and Postgres): no
+  // duplicate-key error per mail, and real DB errors propagate (the caller
+  // throws, so transports retry) instead of looking like "rate-limited".
+  const inserted = await db.$executeRaw`INSERT INTO "NewsletterQuota" ("userId", "day", "count") VALUES (${userId}, ${day}, 0) ON CONFLICT ("userId", "day") DO NOTHING`;
+  if (inserted > 0) {
+    // First reservation of this day: prune older rows (bounded per user).
     await db.newsletterQuota.deleteMany({ where: { userId, day: { lt: day } } });
-  } catch {
-    // Row exists (or a concurrent first delivery created it).
   }
   const taken = await db.newsletterQuota.updateMany({ where: { userId, day, count: { lt: limit } }, data: { count: { increment: 1 } } });
   return taken.count === 1 ? day : null;

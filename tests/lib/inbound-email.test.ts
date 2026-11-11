@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   detectConfirmationUrl,
   evaluateSenderAuth,
+  tokenizeAuthResults,
   extractRecipientTokens,
   generateNewsletterToken,
   isNewsletterToken,
@@ -115,10 +116,21 @@ describe("evaluateSenderAuth (verdict only from the configured receiver)", () =>
     expect(forged.results[0]).toMatchObject({ method: "dmarc", result: "pass" });
   });
 
-  it("uses the topmost header with the trusted id and ignores others", () => {
-    const headers = [ar("forged.example; dmarc=pass"), ar("mx.google.com; dmarc=fail header.from=bank.example"), ar("mx.google.com; dmarc=pass")];
-    expect(evaluateSenderAuth(headers, "a@bank.example", "mx.google.com")).toMatchObject({ verdict: "fail", verified: true });
-    expect(verdict([ar("forged.example; dmarc=pass")], "a@x.example", "mx.google.com")).toBe("none");
+  it("uses only the topmost header, and only when it carries the trusted id", () => {
+    const real = [ar("mx.google.com; dmarc=fail header.from=bank.example"), ar("mx.google.com; dmarc=pass")];
+    expect(evaluateSenderAuth(real, "a@bank.example", "mx.google.com")).toMatchObject({ verdict: "fail", verified: true });
+    // Topmost has another id: no verdict, even if a lower header has the trusted id.
+    const shifted = [ar("forged.example; dmarc=pass"), ar("mx.google.com; dmarc=pass")];
+    expect(evaluateSenderAuth(shifted, "a@bank.example", "mx.google.com")).toMatchObject({ verdict: "none", verified: false });
+  });
+
+  it("ignores ; and results inside quoted-strings and comments", () => {
+    const injected = ar('mx.r; spf=fail smtp.mailfrom="x; dmarc=pass"@evil.example; dkim=none (no sig; dmarc=pass)');
+    const res = evaluateSenderAuth([injected], "a@bank.example", "mx.r");
+    expect(res.verdict).toBe("fail");
+    expect(res.results.map((r) => r.method)).toEqual(["spf", "dkim"]);
+    expect(tokenizeAuthResults('mx.r 1; dkim = pass header.d="a;b" (c;(d)e); x=y')).toEqual([["mx.r", "1"], ["dkim=pass", 'header.d="a;b"'], ["x=y"]]);
+    expect(tokenizeAuthResults('mx.r; spf=pass smtp.mailfrom="esc\\"aped; still"@x')).toEqual([["mx.r"], ["spf=pass", 'smtp.mailfrom="esc"aped; still"@x']]);
   });
 
   it("requires DKIM/SPF alignment with From when there is no DMARC result", () => {

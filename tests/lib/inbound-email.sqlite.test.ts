@@ -356,6 +356,19 @@ describe("review fixes (#263)", () => {
     expect((await db.newsletterQuota.findUniqueOrThrow({ where: key })).count).toBe(99);
   });
 
+  it("surfaces real DB errors from the quota instead of reporting rate-limited", async () => {
+    const spy = vi.spyOn(db.newsletterQuota, "updateMany").mockRejectedValueOnce(new Error("db down"));
+    await expect(ingestRawEmail(eml("substack-confirmation.eml"), { recipients: [RECIPIENT] })).rejects.toThrow("db down");
+    spy.mockRestore();
+    // Creating today's row prunes older days only when the row is new.
+    await db.newsletterQuota.create({ data: { userId: "v", day: "2000-01-01", count: 3 } });
+    expect(await reserveNewsletterQuota("v", "2000-01-02", 5)).toBe("2000-01-02");
+    expect(await db.newsletterQuota.count({ where: { userId: "v" } })).toBe(1);
+    await db.newsletterQuota.create({ data: { userId: "v", day: "2000-01-01", count: 3 } });
+    expect(await reserveNewsletterQuota("v", "2000-01-02", 5)).toBe("2000-01-02");
+    expect(await db.newsletterQuota.count({ where: { userId: "v" } })).toBe(2);
+  });
+
   it("gives the slot back when ingestion fails after reserving", async () => {
     const spy = vi.spyOn(db.article, "create").mockRejectedValueOnce(new Error("db down"));
     await expect(ingestRawEmail(eml("substack-confirmation.eml"), { recipients: [RECIPIENT] })).rejects.toThrow("db down");

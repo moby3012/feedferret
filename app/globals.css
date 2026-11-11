@@ -29,6 +29,10 @@
      Wide tables / code blocks scroll in their own overflow-x box (below). */
   position: relative;
   contain: layout paint;
+  /* Paint containment clips at the border box; let keyboard focus rings on
+     links at the very edge stay visible (they are inset already, see
+     app/styles/controls.css, but third-party outline styles are not). */
+  overflow-clip-margin: var(--focus-ring-width);
 }
 
 /* Per-feed "hide images": when a feed's hideArticleImage is on, hide not just
