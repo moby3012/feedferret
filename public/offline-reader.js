@@ -17,6 +17,7 @@
  *    rendered DOM (lists, title, the article iframe) is emptied at once, not only the DB. */
 (function () {
   "use strict";
+  document.getElementById("retry").addEventListener("click", function () { location.reload(); });
 
   // Keep in sync with features/offline/store.ts (tests/features/offline-reader-contract.test.ts checks it).
   var DB_NAME = "feedferret-offline";

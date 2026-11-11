@@ -220,14 +220,14 @@ test("service worker precache is intact and holds no authenticated data", async 
     for (const name of await window.caches.keys()) out[name] = (await (await window.caches.open(name)).keys()).map((r) => new URL(r.url).pathname + new URL(r.url).search);
     return out;
   });
-  expect(caches["feedferret-pwa-v4"]).toEqual(expect.arrayContaining(["/offline.html", "/offline-reader.js", "/manifest.json", "/logo.svg"]));
+  expect(caches["feedferret-pwa-v5"]).toEqual(expect.arrayContaining(["/offline.html", "/offline-reader.js", "/manifest.json", "/logo.svg"]));
   for (const urls of Object.values(caches)) expect(urls.filter((u) => u.startsWith("/api/"))).toEqual([]);
   // No authenticated HTML either: the only page in any cache is the public offline page.
   for (const urls of Object.values(caches)) expect(urls.filter((u) => u === "/" || u.startsWith("/?") || u.startsWith("/settings"))).toEqual([]);
-  expect(Object.keys(caches).every((n) => ["feedferret-pwa-v4", "feedferret-static-v1", "feedferret-runtime-v3", "feedferret-settings-v1"].includes(n))).toBe(true);
+  expect(Object.keys(caches).every((n) => ["feedferret-pwa-v5", "feedferret-static-v1", "feedferret-runtime-v3", "feedferret-settings-v1"].includes(n))).toBe(true);
   // The settings cache holds the per-device badge switch (sent on every shell start) and nothing else.
   for (const url of caches["feedferret-settings-v1"] ?? []) expect(url).toBe("/__feedferret/badge-pref");
-  const offline = await page.evaluate(async () => (await (await window.caches.open("feedferret-pwa-v4")).match("/offline.html"))?.text());
+  const offline = await page.evaluate(async () => (await (await window.caches.open("feedferret-pwa-v5")).match("/offline.html"))?.text());
   expect(offline).toContain("FeedFerret Offline");
 });
 

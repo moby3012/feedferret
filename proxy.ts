@@ -1,7 +1,8 @@
 import authConfig from "./auth.config";
 import NextAuth from "next-auth";
+import { createNonce, cspHeaders, cspMode } from "./lib/csp";
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 
 const { auth } = NextAuth(authConfig);
 
@@ -19,15 +20,35 @@ function detectLocale(request: NextRequest): string {
   return DEFAULT_LOCALE;
 }
 
-export default auth((request: NextRequest) => {
+const authenticated = auth((request: NextRequest) => {
   const locale = detectLocale(request);
-  const response = NextResponse.next();
+  const response = NextResponse.next({ request: { headers: new Headers(request.headers) } });
   const current = request.cookies.get('locale')?.value;
   if (current !== locale) {
     response.cookies.set('locale', locale, { maxAge: 365 * 24 * 60 * 60, sameSite: 'lax', path: '/' });
   }
   return response;
 });
+
+// L3: wrap Auth.js itself — its authorization redirects bypass the inner callback,
+// and they must carry the same policy as pages.
+export default async function proxy(request: NextRequest, event: Parameters<typeof authenticated>[1]) {
+  const csp = cspHeaders(cspMode(process.env.FEEDFERRET_CSP), createNonce(), process.env.NODE_ENV === "development");
+  const headers = new Headers(request.headers);
+  // Never trust incoming values: a client-sent CSP / x-nonce header would let it pick the nonce.
+  headers.delete("content-security-policy");
+  headers.delete("content-security-policy-report-only");
+  headers.delete("x-nonce");
+  if (csp.requestPolicy) headers.set("content-security-policy", csp.requestPolicy);
+  if (csp.nonce) headers.set("x-nonce", csp.nonce);
+  const response = await authenticated(new NextRequest(request, { headers }), event)
+    ?? NextResponse.next({ request: { headers } });
+  // See CspHeaders.response: an enforced CSP set here would clobber the renderer's nonce.
+  response.headers.delete("content-security-policy");
+  response.headers.delete("content-security-policy-report-only");
+  for (const [name, value] of Object.entries(csp.response)) response.headers.set(name, value);
+  return response;
+}
 
 // Public static files stay outside the auth gate: the service worker precaches
 // them (also on the login page, before any session exists) and a redirect to

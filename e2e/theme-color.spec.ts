@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./helpers/csp-test";
 
 // Public pages (no session) follow the persisted theme for the OS chrome too:
 // `<meta name="theme-color">` is the bar surface of the resolved theme

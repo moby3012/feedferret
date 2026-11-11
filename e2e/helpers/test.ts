@@ -1,4 +1,4 @@
-import { test as base, expect, type Locator, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "./csp-test";
 import { manifest, resetArticleState, type SeedUser } from "./db";
 import { touchHoldOn } from "./gestures";
 

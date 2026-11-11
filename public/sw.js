@@ -5,7 +5,7 @@
 // Never cached here: navigations (they carry the signed-in user's page — the only HTML ever stored is the public
 // /offline.html from the precache, also when it is served in place of a slow page) and `/api/*` (authenticated JSON).
 // Offline article data lives in IndexedDB (features/offline), not in these caches.
-const CACHE_NAME = "feedferret-pwa-v4";
+const CACHE_NAME = "feedferret-pwa-v5";
 const STATIC_CACHE = "feedferret-static-v1";
 const RUNTIME_CACHE = "feedferret-runtime-v3";
 const STATIC_MAX_ENTRIES = 150;
