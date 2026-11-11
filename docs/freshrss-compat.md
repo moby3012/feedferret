@@ -6,7 +6,7 @@ FeedFerret reads and writes the [FreshRSS OPML extension](https://freshrss.githu
 `app/Models/Feed.php`), not only the spec page.
 
 Code: `lib/opml.ts` (parse + export), `lib/import/opml-import.ts` (mapping, report),
-`lib/dedupe-key.ts` (unicity), `lib/full-text-conditions.ts`, `lib/remove-selectors.ts`.
+`lib/dedupe-key.ts` (unicity), `lib/full-text-conditions.ts`, `lib/feed-item-sanitize-client.ts` (remove-selectors run in the HTML worker, `lib/html-worker/tasks.ts`).
 Tests: `tests/lib/opml-freshrss-compat.test.ts` (round trips, per-attribute, security),
 fixtures in `tests/fixtures/freshrss/`.
 
