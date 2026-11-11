@@ -38,7 +38,12 @@ beforeAll(() => {
     cpSync(join(repo, "scripts", f), join(work, "scripts", f));
   }
   for (const f of ["schema.prisma", "baseline.schema.prisma"]) cpSync(join(repo, "prisma", f), join(work, "prisma", f));
-  cpSync(join(repo, "prisma", "migrations"), join(work, "prisma", "migrations"), { recursive: true });
+  // Only the baseline: the scenarios below add their own later migrations, so the expectations must
+  // not depend on how many real migrations the repo has accumulated since.
+  cpSync(join(repo, "prisma", "migrations"), join(work, "prisma", "migrations"), {
+    recursive: true,
+    filter: (src) => !/[\\/]\d{14}_[^\\/]+$/.test(src) || /[\\/]00000000000000_init$/.test(src),
+  });
   symlinkSync(join(repo, "node_modules"), join(work, "node_modules"));
 });
 afterAll(() => rmSync(work, { recursive: true, force: true }));
