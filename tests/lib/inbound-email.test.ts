@@ -105,25 +105,33 @@ describe("inbound mail source secrets", () => {
   });
 });
 
-describe("evaluateSenderAuth (trust model: topmost receiver header only)", () => {
+describe("evaluateSenderAuth (verdict only from the configured receiver)", () => {
   const ar = (value: string) => ({ key: "authentication-results", value });
-  it("uses the topmost header and ignores forged ones below", () => {
-    expect(evaluateSenderAuth([ar("mx.r; dmarc=fail header.from=bank.example"), ar("mx.r; dmarc=pass")], "a@bank.example")).toBe("fail");
-    expect(evaluateSenderAuth([ar("mx.r; dmarc=pass (p=none) header.from=x.example")], "a@x.example")).toBe("pass");
+  const verdict = (...args: Parameters<typeof evaluateSenderAuth>) => evaluateSenderAuth(...args).verdict;
+
+  it("never yields a verdict without a trusted authserv-id (forged pass -> none)", () => {
+    const forged = evaluateSenderAuth([ar("mx.google.com; dmarc=pass header.from=bank.example")], "a@bank.example");
+    expect(forged).toMatchObject({ verdict: "none", verified: false, authservId: "mx.google.com" });
+    expect(forged.results[0]).toMatchObject({ method: "dmarc", result: "pass" });
   });
+
+  it("uses the topmost header with the trusted id and ignores others", () => {
+    const headers = [ar("forged.example; dmarc=pass"), ar("mx.google.com; dmarc=fail header.from=bank.example"), ar("mx.google.com; dmarc=pass")];
+    expect(evaluateSenderAuth(headers, "a@bank.example", "mx.google.com")).toMatchObject({ verdict: "fail", verified: true });
+    expect(verdict([ar("forged.example; dmarc=pass")], "a@x.example", "mx.google.com")).toBe("none");
+  });
+
   it("requires DKIM/SPF alignment with From when there is no DMARC result", () => {
-    expect(evaluateSenderAuth([ar("mx.r; dkim=pass header.d=attacker.example; spf=pass smtp.mailfrom=b@attacker.example")], "a@bank.example")).toBe("none");
-    expect(evaluateSenderAuth([ar("mx.r; dkim=pass header.d=bank.example")], "news@mail.bank.example")).toBe("pass");
-    expect(evaluateSenderAuth([ar("mx.r; spf=softfail smtp.mailfrom=bank.example")], "a@bank.example")).toBe("fail");
+    const t = "mx.r";
+    expect(verdict([ar("mx.r; dkim=pass header.d=attacker.example; spf=pass smtp.mailfrom=b@attacker.example")], "a@bank.example", t)).toBe("none");
+    expect(verdict([ar("mx.r; dkim=pass header.d=bank.example")], "news@mail.bank.example", t)).toBe("pass");
+    expect(verdict([ar("mx.r; spf=softfail smtp.mailfrom=bank.example")], "a@bank.example", t)).toBe("fail");
   });
-  it("pins the receiver's authserv-id when known", () => {
-    const headers = [ar("forged.example; dmarc=pass"), ar("mx.google.com; dmarc=fail")];
-    expect(evaluateSenderAuth(headers, "a@x.example", "mx.google.com")).toBe("fail");
-    expect(evaluateSenderAuth([ar("forged.example; dmarc=pass")], "a@x.example", "mx.google.com")).toBe("none");
-  });
-  it("falls back to the highest-i ARC-Authentication-Results, none without evidence", () => {
+
+  it("never derives a verdict from ARC (seals unverified), keeps it as evidence", () => {
     const arc = (value: string) => ({ key: "arc-authentication-results", value });
-    expect(evaluateSenderAuth([arc("i=1; mx.a; dmarc=fail"), arc("i=2; mx.b; dmarc=pass")], "a@x.example")).toBe("pass");
-    expect(evaluateSenderAuth([], "a@x.example")).toBe("none");
+    const res = evaluateSenderAuth([arc("i=1; mx.a; dmarc=fail"), arc("i=2; mx.google.com; dmarc=pass")], "a@x.example", "mx.google.com");
+    expect(res).toMatchObject({ verdict: "none", verified: false, source: "arc", authservId: "mx.google.com" });
+    expect(evaluateSenderAuth([], "a@x.example")).toMatchObject({ verdict: "none", source: null });
   });
 });

@@ -141,7 +141,7 @@ model User {
   role          String    @default("USER")
   // N1 newsletter-to-feed: per-user inbound addresses (lib/inbound-email.ts).
   newsletterAddresses NewsletterAddress[]
-  newsletterQuota     NewsletterQuota?
+  newsletterQuotas    NewsletterQuota[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([digestEnabled])
@@ -445,7 +445,8 @@ model Article {
   listUnsubscribeUrl      String?   // RFC 2369 https URL
   listUnsubscribeMailto   String?   // RFC 2369 mailto URL
   listUnsubscribeOneClick Boolean?  // RFC 8058 List-Unsubscribe-Post: List-Unsubscribe=One-Click
-  newsletterAuth          String?   // "pass" | "fail" | "none": receiver's SPF/DKIM/DMARC verdict (display only, never blocks)
+  newsletterAuth          String?   // "pass" | "fail" | "none": verified receiver verdict (display only, never blocks)
+  newsletterAuthDetail    String?   // JSON SenderAuthEvidence incl. UNVERIFIED header results (debug/display)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, feedId, dedupeKey])
@@ -798,8 +799,9 @@ model NewsletterAddress {
 // N1: per-user daily newsletter quota, reserved with conditional UPDATEs
 // (lib/inbound-email.ts reserveNewsletterQuota) so concurrency cannot exceed it.
 model NewsletterQuota {
-  userId String @id
+  userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  day    String // UTC "YYYY-MM-DD"
+  day    String // server UTC date "YYYY-MM-DD" at reservation time
   count  Int    @default(0)
+  @@id([userId, day])
 }

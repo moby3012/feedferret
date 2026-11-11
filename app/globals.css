@@ -23,8 +23,12 @@
      escapes the normal document flow, which a plain `overflow: hidden`
      ancestor does not clip). `contain: layout` makes this element the
      containing block for such descendants too, so they're always confined
-     here instead of breaking out to the viewport. */
-  contain: layout;
+     here instead of breaking out to the viewport. `paint` additionally clips
+     anything offset/sized out of the box (e.g. forged negative offsets), and
+     `position: relative` keeps absolutely positioned leftovers inside it.
+     Wide tables / code blocks scroll in their own overflow-x box (below). */
+  position: relative;
+  contain: layout paint;
 }
 
 /* Per-feed "hide images": when a feed's hideArticleImage is on, hide not just

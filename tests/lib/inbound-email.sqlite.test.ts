@@ -34,7 +34,7 @@ vi.mock("@/lib/feed-fetcher", async (original) => ({
 }));
 
 import { db } from "@/lib/db";
-import { ingestRawEmail, MAX_NEWSLETTER_MAILS_PER_DAY, NEWSLETTER_SOURCE_TYPE, reserveNewsletterQuota } from "@/lib/inbound-email";
+import { ingestRawEmail, MAX_NEWSLETTER_MAILS_PER_DAY, NEWSLETTER_SOURCE_TYPE, quotaDay, reserveNewsletterQuota } from "@/lib/inbound-email";
 import { syncFeed } from "@/lib/rss-sync";
 import { hashApiToken } from "@/lib/token";
 import { POST as feverPOST } from "@/app/api/fever/route";
@@ -301,11 +301,20 @@ describe("review fixes (#263)", () => {
     }
   });
 
-  it("records the receiver's verdict, ignoring forged lower Authentication-Results", async () => {
+  it("stores no verdict without a configured receiver id, only unverified evidence", async () => {
     const spoof = await ingestRawEmail(eml("spoofed-auth.eml"), { recipients: [RECIPIENT] });
-    expect((await db.article.findUniqueOrThrow({ where: { id: spoof.articleId } })).newsletterAuth).toBe("fail");
+    const row = await db.article.findUniqueOrThrow({ where: { id: spoof.articleId } });
+    expect(row.newsletterAuth).toBe("none");
+    expect(JSON.parse(row.newsletterAuthDetail!)).toMatchObject({ verified: false, source: "authentication-results", authservId: "mx.receiver.example" });
     const plain = await ingestRawEmail(eml("rfc8058-one-click-unsubscribe.eml"), { recipients: [RECIPIENT] });
     expect((await db.article.findUniqueOrThrow({ where: { id: plain.articleId } })).newsletterAuth).toBe("none");
+  });
+
+  it("records the configured receiver's verdict, ignoring forged lower headers", async () => {
+    const spoof = await ingestRawEmail(eml("spoofed-auth.eml"), { recipients: [RECIPIENT], trustedAuthservId: "mx.receiver.example" });
+    const row = await db.article.findUniqueOrThrow({ where: { id: spoof.articleId } });
+    expect(row.newsletterAuth).toBe("fail");
+    expect(JSON.parse(row.newsletterAuthDetail!)).toMatchObject({ verified: true, verdict: "fail" });
   });
 
   it("creates exactly one Newsletter folder on concurrent first deliveries", async () => {
@@ -319,24 +328,40 @@ describe("review fixes (#263)", () => {
     expect(new Set(feeds.map((f) => f.categoryId)).size).toBe(1);
   });
 
-  it("reserves the quota atomically under concurrency", async () => {
-    const at = new Date("2026-11-11T12:00:00Z");
-    const granted = await Promise.all(Array.from({ length: 25 }, () => reserveNewsletterQuota("v", at, 7)));
+  it("reserves the quota atomically under concurrency, one row per day", async () => {
+    const granted = await Promise.all(Array.from({ length: 25 }, () => reserveNewsletterQuota("v", "2026-11-11", 7)));
     expect(granted.filter(Boolean)).toHaveLength(7);
-    expect(await reserveNewsletterQuota("v", new Date("2026-11-12T00:00:01Z"), 7)).toBe(true);
+    expect(await reserveNewsletterQuota("v", "2026-11-11", 7)).toBeNull();
+    expect(await reserveNewsletterQuota("v", "2026-11-12", 7)).toBe("2026-11-12");
+    // An older day can never reset today's counter.
+    await reserveNewsletterQuota("v", "2026-11-11", 7);
+    expect((await db.newsletterQuota.findUniqueOrThrow({ where: { userId_day: { userId: "v", day: "2026-11-12" } } })).count).toBe(1);
   });
 
-  it("counts mails to fixed web-feed targets and enforces 100/day", async () => {
+  it("counts mails to fixed web-feed targets on the server day and enforces 100/day", async () => {
     expect(MAX_NEWSLETTER_MAILS_PER_DAY).toBe(100);
     const web = await db.feed.create({ data: { userId: "u", url: "https://blog.example/feed", name: "Blog" } });
     await db.newsletterAddress.update({ where: { token: TOKEN }, data: { feedId: web.id } });
-    const now = new Date();
-    await db.newsletterQuota.create({ data: { userId: "u", day: now.toISOString().slice(0, 10), count: 99 } });
-    expect((await ingestRawEmail(eml("substack-confirmation.eml"), { recipients: [RECIPIENT], receivedAt: now })).status).toBe("created");
-    expect((await ingestRawEmail(eml("rfc8058-one-click-unsubscribe.eml"), { recipients: [RECIPIENT], receivedAt: now })).status).toBe("rate-limited");
+    const day = quotaDay();
+    const key = { userId_day: { userId: "u", day } };
+    await db.newsletterQuota.create({ data: { userId: "u", day, count: 99 } });
+    // receivedAt (transport/mail time) never selects the counter row.
+    const past = new Date("2020-01-01T00:00:00Z");
+    expect((await ingestRawEmail(eml("substack-confirmation.eml"), { recipients: [RECIPIENT], receivedAt: past })).status).toBe("created");
+    expect((await ingestRawEmail(eml("rfc8058-one-click-unsubscribe.eml"), { recipients: [RECIPIENT] })).status).toBe("rate-limited");
+    expect((await db.newsletterQuota.findUniqueOrThrow({ where: key })).count).toBe(100);
     // A duplicate does not burn quota.
-    await db.newsletterQuota.update({ where: { userId: "u" }, data: { count: 99 } });
-    expect((await ingestRawEmail(eml("substack-confirmation.eml"), { recipients: [RECIPIENT], receivedAt: now })).status).toBe("duplicate");
-    expect((await db.newsletterQuota.findUniqueOrThrow({ where: { userId: "u" } })).count).toBe(99);
+    await db.newsletterQuota.update({ where: key, data: { count: 99 } });
+    expect((await ingestRawEmail(eml("substack-confirmation.eml"), { recipients: [RECIPIENT] })).status).toBe("duplicate");
+    expect((await db.newsletterQuota.findUniqueOrThrow({ where: key })).count).toBe(99);
+  });
+
+  it("gives the slot back when ingestion fails after reserving", async () => {
+    const spy = vi.spyOn(db.article, "create").mockRejectedValueOnce(new Error("db down"));
+    await expect(ingestRawEmail(eml("substack-confirmation.eml"), { recipients: [RECIPIENT] })).rejects.toThrow("db down");
+    spy.mockRestore();
+    expect((await db.newsletterQuota.findUniqueOrThrow({ where: { userId_day: { userId: "u", day: quotaDay() } } })).count).toBe(0);
+    expect((await ingestRawEmail(eml("substack-confirmation.eml"), { recipients: [RECIPIENT] })).status).toBe("created");
+    expect((await db.newsletterQuota.findUniqueOrThrow({ where: { userId_day: { userId: "u", day: quotaDay() } } })).count).toBe(1);
   });
 });

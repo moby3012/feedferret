@@ -8,7 +8,7 @@ import MarkdownIt from "markdown-it";
 import taskLists from "markdown-it-task-lists";
 import markdownItKatex from "@vscode/markdown-it-katex";
 import hljs from "highlight.js";
-import { getSanitizer } from "@/lib/sanitize-html";
+import { sanitizeTrustedRendererHtml } from "@/lib/sanitize-html";
 
 let markdownIt: MarkdownIt | null = null;
 
@@ -46,7 +46,11 @@ function getMarkdownIt(): MarkdownIt {
       // KaTeX math (`$inline$` / `$$block$$` / ```math fences), pre-rendered
       // to static HTML+MathML server-side — no client-side JS needed to
       // display formulas, only KaTeX's stylesheet for layout/fonts.
-      .use(markdownItKatex, { throwOnError: false });
+      // `trust: false` (no \htmlClass/\htmlStyle/\href) and size caps keep
+      // attacker-written math (markdown articles come from feeds) from
+      // producing huge or offset boxes; html:false keeps raw HTML out, which
+      // is what makes this output safe for sanitizeTrustedRendererHtml().
+      .use(markdownItKatex, { throwOnError: false, trust: false, maxSize: 10, maxExpand: 200 });
 
     // Lazy-load article images, same as the HTML-format article path.
     const defaultImageRule =
@@ -66,6 +70,5 @@ function getMarkdownIt(): MarkdownIt {
  */
 export async function renderMarkdownToHtml(markdown: string): Promise<string> {
   const rawHtml = getMarkdownIt().render(markdown);
-  const DOMPurify = await getSanitizer();
-  return DOMPurify.sanitize(rawHtml, { ADD_ATTR: ["target", "rel"] });
+  return sanitizeTrustedRendererHtml(rawHtml);
 }

@@ -15,6 +15,10 @@ import type { UponSanitizeAttributeHookEvent } from "isomorphic-dompurify";
 
 let hookRegistered = false;
 
+// True only while sanitizeTrustedRendererHtml() runs. DOMPurify.sanitize is
+// synchronous, so no other sanitize call can observe this flag set.
+let trustedRendererPass = false;
+
 // Inline `style` is filtered with a parsed ALLOWLIST (security review of N1 /
 // #263): untrusted article and newsletter HTML must not be able to
 //   - make the reader fetch anything (`background-image:url(…)`,
@@ -123,11 +127,11 @@ export async function getSanitizer() {
         DOMPurify.addHook("uponSanitizeAttribute", (node, data: UponSanitizeAttributeHookEvent) => {
             const attrName = data.attrName.toLowerCase();
             // KaTeX (rendered server-side by lib/markdown-render.ts) depends
-            // on inline width for math-symbol spacing/alignment — the normal
-            // width-strip below is meant for untrusted scraped-page styles,
-            // not our own generated markup, so exempt anything inside a
-            // `.katex` subtree.
-            const isKatex = typeof node.closest === "function" && !!node.closest(".katex");
+            // on inline width/top for math-symbol spacing/alignment. The
+            // exemption applies ONLY inside sanitizeTrustedRendererHtml():
+            // a `.katex` class in untrusted article/newsletter HTML is just a
+            // class and gets the normal allowlist (security review of #263).
+            const isKatex = trustedRendererPass && typeof node.closest === "function" && !!node.closest(".katex");
 
             if (!isKatex && (attrName === "width" || attrName === "min-width")) {
                 data.keepAttr = false;
@@ -164,4 +168,21 @@ export async function getSanitizer() {
     }
 
     return DOMPurify;
+}
+
+/**
+ * Sanitizes HTML produced by OUR OWN renderer (markdown-it with `html: false`
+ * + KaTeX with `trust: false`, lib/markdown-render.ts), where the input cannot
+ * carry raw markup. Only here does KaTeX's own layout CSS (width, top,
+ * position: relative) survive inside `.katex` subtrees. Never pass untrusted
+ * HTML to this function.
+ */
+export async function sanitizeTrustedRendererHtml(html: string): Promise<string> {
+    const DOMPurify = await getSanitizer();
+    trustedRendererPass = true;
+    try {
+        return DOMPurify.sanitize(html, { ADD_ATTR: ["target", "rel"] });
+    } finally {
+        trustedRendererPass = false;
+    }
 }

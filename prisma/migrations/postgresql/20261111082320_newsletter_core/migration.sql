@@ -8,7 +8,8 @@ ADD COLUMN     "emailSender" TEXT,
 ADD COLUMN     "listUnsubscribeMailto" TEXT,
 ADD COLUMN     "listUnsubscribeOneClick" BOOLEAN,
 ADD COLUMN     "listUnsubscribeUrl" TEXT,
-ADD COLUMN     "newsletterAuth" TEXT;
+ADD COLUMN     "newsletterAuth" TEXT,
+ADD COLUMN     "newsletterAuthDetail" TEXT;
 
 -- CreateTable
 CREATE TABLE "InboundMailSource" (
@@ -52,7 +53,7 @@ CREATE TABLE "NewsletterQuota" (
     "day" TEXT NOT NULL,
     "count" INTEGER NOT NULL DEFAULT 0,
 
-    CONSTRAINT "NewsletterQuota_pkey" PRIMARY KEY ("userId")
+    CONSTRAINT "NewsletterQuota_pkey" PRIMARY KEY ("userId","day")
 );
 
 -- CreateIndex

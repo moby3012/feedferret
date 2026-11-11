@@ -422,15 +422,17 @@ function detectViewOnlineUrl(links: LinkInfo[]): string | null {
 //
 // Trust model: SPF/DKIM/DMARC are evaluated by the RECEIVING provider (Gmail,
 // Fastmail, Cloudflare, …), which PREPENDS its Authentication-Results header
-// (RFC 8601) above everything the sender wrote. A sender can put any number of
-// forged Authentication-Results / ARC headers into the message, but they always
-// end up BELOW the receiver's. So only the topmost header is evaluated; when the
-// transport knows the receiver's authserv-id (e.g. "mx.google.com"), pass it as
-// `trustedAuthservId` and only a header carrying that id counts. Without an
-// Authentication-Results header the topmost ARC-Authentication-Results (highest
-// i=, added by the most recent hop) is used under the same rules — weaker,
-// because ARC seals are not verified here. The verdict is display metadata only
-// ("pass" | "fail" | "none"); mail is never dropped because of it.
+// (RFC 8601) above everything the sender wrote. A sender can add any number of
+// forged Authentication-Results / ARC headers, including ones that look like
+// the receiver's. A verdict ("pass" | "fail") is therefore ONLY produced when
+// the transport knows the receiver's authserv-id (`trustedAuthservId`, set per
+// IMAP preset / Cloudflare in PR B, e.g. "mx.google.com"): then the topmost
+// header carrying exactly that id counts (RFC 8601 §5: receivers remove forged
+// headers claiming their own id). Without a configured id the verdict is
+// always "none"; the topmost header's results are kept only as UNVERIFIED
+// evidence (`newsletterAuthDetail`) for display/debugging. ARC results never
+// produce a verdict (seals are not validated here) and are recorded as
+// unverified evidence only. Mail is never dropped because of any of this.
 
 export type NewsletterAuth = "pass" | "fail" | "none";
 
@@ -471,76 +473,96 @@ function aligned(domain: string | null, fromDomain: string | null): boolean {
   return domain === fromDomain || fromDomain.endsWith(`.${domain}`) || domain.endsWith(`.${fromDomain}`);
 }
 
+export interface SenderAuthEvidence {
+  verdict: NewsletterAuth;
+  /** True only when the results came from the configured receiver (trustedAuthservId). */
+  verified: boolean;
+  source: "authentication-results" | "arc" | null;
+  authservId: string | null;
+  results: { method: string; result: string; domain: string | null }[];
+}
+
+function verdictFor(results: AuthResult[], fromAddress: string | null): NewsletterAuth {
+  const fromDomain = domainOf(fromAddress ?? undefined);
+  const dmarc = results.find((r) => r.method === "dmarc");
+  if (dmarc?.result === "pass") return "pass";
+  if (dmarc?.result === "fail") return "fail";
+  const dkimPass = results.some((r) => r.method === "dkim" && r.result === "pass" && aligned(r.props["header.d"] ?? domainOf(r.props["header.i"]), fromDomain));
+  const spfPass = results.some((r) => r.method === "spf" && r.result === "pass" && aligned(domainOf(r.props["smtp.mailfrom"]) ?? r.props["smtp.helo"] ?? null, fromDomain));
+  if (dkimPass || spfPass) return "pass";
+  const failed = results.some((r) => (r.method === "dkim" || r.method === "spf") && (r.result === "fail" || r.result === "softfail"));
+  return failed ? "fail" : "none";
+}
+
+function summarize(results: AuthResult[]): SenderAuthEvidence["results"] {
+  return results.slice(0, 10).map((r) => ({
+    method: r.method.slice(0, 20),
+    result: r.result.slice(0, 20),
+    domain: (r.props["header.d"] ?? r.props["header.from"] ?? domainOf(r.props["smtp.mailfrom"]) ?? null)?.slice(0, 100) ?? null,
+  }));
+}
+
 /**
- * Verdict from the trusted Authentication-Results (see trust model above).
- * `headers` must be in message order (topmost first), keys lowercase.
+ * Sender authentication evidence (see trust model above). `headers` must be in
+ * message order (topmost first), keys lowercase.
  */
 export function evaluateSenderAuth(
   headers: readonly { key: string; value: string }[],
   fromAddress: string | null,
   trustedAuthservId?: string | null,
-): NewsletterAuth {
+): SenderAuthEvidence {
   const trusted = trustedAuthservId?.trim().toLowerCase() || null;
-  // Topmost header; with a known receiver id, the topmost header carrying it
-  // (RFC 8601 §5: receivers strip forged headers that claim their own id).
-  const choose = (values: string[]) => {
-    if (values.length === 0) return null;
-    if (!trusted) return parseAuthResultsValue(values[0]);
-    for (const value of values) {
-      const parsed = parseAuthResultsValue(value);
-      if (parsed.authservId === trusted) return parsed;
+  const ar = headers.filter((h) => h.key === "authentication-results").map((h) => parseAuthResultsValue(h.value));
+  if (trusted) {
+    const mine = ar.find((p) => p.authservId === trusted);
+    if (mine) {
+      return { verdict: verdictFor(mine.results, fromAddress), verified: true, source: "authentication-results", authservId: mine.authservId, results: summarize(mine.results) };
     }
-    return null;
-  };
-  const ar = headers.filter((h) => h.key === "authentication-results").map((h) => h.value);
+  }
+  if (ar.length > 0) {
+    return { verdict: "none", verified: false, source: "authentication-results", authservId: ar[0].authservId.slice(0, 100) || null, results: summarize(ar[0].results) };
+  }
   const arc = headers
     .filter((h) => h.key === "arc-authentication-results")
     .map((h) => /^\s*i\s*=\s*(\d+)\s*;([\s\S]*)$/.exec(h.value))
     .filter((m): m is RegExpExecArray => !!m)
-    .sort((x, y) => Number(y[1]) - Number(x[1]))
-    .map((m) => m[2]);
-  const chosen = ar.length > 0 ? choose(ar) : choose(arc);
-  if (!chosen || chosen.results.length === 0) return "none";
-
-  const fromDomain = domainOf(fromAddress ?? undefined);
-  const dmarc = chosen.results.find((r) => r.method === "dmarc");
-  if (dmarc) {
-    if (dmarc.result === "pass") return "pass";
-    if (dmarc.result === "fail") return "fail";
+    .sort((x, y) => Number(y[1]) - Number(x[1]));
+  if (arc.length > 0) {
+    const parsed = parseAuthResultsValue(arc[0][2]);
+    return { verdict: "none", verified: false, source: "arc", authservId: parsed.authservId.slice(0, 100) || null, results: summarize(parsed.results) };
   }
-  const dkimPass = chosen.results.some((r) => r.method === "dkim" && r.result === "pass" && aligned(r.props["header.d"] ?? domainOf(r.props["header.i"]), fromDomain));
-  const spfPass = chosen.results.some((r) => r.method === "spf" && r.result === "pass" && aligned(domainOf(r.props["smtp.mailfrom"]) ?? r.props["smtp.helo"] ?? null, fromDomain));
-  if (dkimPass || spfPass) return "pass";
-  const failed = chosen.results.some((r) => (r.method === "dkim" || r.method === "spf") && (r.result === "fail" || r.result === "softfail"));
-  return failed ? "fail" : "none";
+  return { verdict: "none", verified: false, source: null, authservId: null, results: [] };
 }
 
 // ---------------------------------------------------------------------------
 // Quota (atomic per-user daily counter)
 
-function quotaDay(at: Date): string {
-  return at.toISOString().slice(0, 10);
+/** Quota day = the SERVER's UTC date at reservation time, never a mail/transport timestamp. */
+export function quotaDay(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
 }
 
 /**
- * Reserves one slot of today's quota. Each step is a single conditional
- * UPDATE, so concurrent deliveries can never push the count past the limit.
+ * Reserves one slot on the (userId, day) counter row. The increment is a
+ * single conditional UPDATE, so concurrent deliveries can never exceed the
+ * limit; a new day is a new row, so the counter can never be reset backwards.
+ * Returns the day key to release on, or null when the quota is used up.
  */
-export async function reserveNewsletterQuota(userId: string, at: Date, limit = MAX_NEWSLETTER_MAILS_PER_DAY): Promise<boolean> {
-  const day = quotaDay(at);
+export async function reserveNewsletterQuota(userId: string, day: string = quotaDay(), limit = MAX_NEWSLETTER_MAILS_PER_DAY): Promise<string | null> {
   try {
     await db.newsletterQuota.create({ data: { userId, day, count: 0 } });
+    // First reservation of this day: prune old rows (bounded per user).
+    await db.newsletterQuota.deleteMany({ where: { userId, day: { lt: day } } });
   } catch {
     // Row exists (or a concurrent first delivery created it).
   }
-  const reset = await db.newsletterQuota.updateMany({ where: { userId, day: { not: day } }, data: { day, count: 1 } });
-  if (reset.count === 1) return limit >= 1;
   const taken = await db.newsletterQuota.updateMany({ where: { userId, day, count: { lt: limit } }, data: { count: { increment: 1 } } });
-  return taken.count === 1;
+  return taken.count === 1 ? day : null;
 }
 
-async function releaseNewsletterQuota(userId: string, at: Date): Promise<void> {
-  await db.newsletterQuota.updateMany({ where: { userId, day: quotaDay(at), count: { gt: 0 } }, data: { count: { decrement: 1 } } });
+/** Gives back a slot taken by reserveNewsletterQuota, on the same row. */
+export async function releaseNewsletterQuota(userId: string, day: string): Promise<void> {
+  await db.newsletterQuota.updateMany({ where: { userId, day, count: { gt: 0 } }, data: { count: { decrement: 1 } } });
 }
 
 // ---------------------------------------------------------------------------
@@ -718,7 +740,7 @@ export async function ingestRawEmail(raw: Buffer | string, options: IngestOption
     unsubscribe: ListUnsubscribe;
     viewOnline: string | null;
     publishedAt: Date;
-    auth: NewsletterAuth;
+    auth: SenderAuthEvidence;
   };
   try {
     const from = mailbox(email.from);
@@ -748,74 +770,94 @@ export async function ingestRawEmail(raw: Buffer | string, options: IngestOption
   const { from, sender, subject, content, plain, confirmationUrl, unsubscribe, viewOnline, publishedAt, auth } = prepared;
 
   // Counted per user for every newsletter mail, whatever feed it lands in.
-  if (!(await reserveNewsletterQuota(userId, receivedAt))) {
+  const quotaKey = await reserveNewsletterQuota(userId);
+  if (!quotaKey) {
     logger.warn("[inbound-email] daily limit reached", { userId, messageId });
     return { status: "rate-limited", userId, messageId };
   }
 
-  const feed = await resolveFeed(userId, address.feedId, sender);
-  const dedupeKey = messageId
-    ? `email:${messageId}`
-    : `email:sha256:${createHash("sha256").update([userId, feed.id, from?.address ?? "", subject, email.date ?? ""].join("\u0000")).digest("hex")}`;
-
-  const existing = await db.article.findUnique({
-    where: { userId_feedId_dedupeKey: { userId, feedId: feed.id, dedupeKey } },
-    select: { id: true },
-  });
-  if (existing) {
-    await releaseNewsletterQuota(userId, receivedAt);
-    logger.info("[inbound-email] duplicate mail ignored", { userId, feedId: feed.id, messageId });
-    return { status: "duplicate", userId, feedId: feed.id, articleId: existing.id, messageId };
-  }
-
-  const link = viewOnline ?? `${feed.url}#${encodeURIComponent(dedupeKey)}`;
-  const title = (subject || sender.title).slice(0, 500);
-  const meta = computeArticleMeta({ content, contentFormat: "html", title, link });
-
+  // The slot is kept only once the article row exists; every other exit
+  // (duplicate, race, DB error) gives it back on the same (userId, day) row.
+  let keepSlot = false;
+  let feed: ResolvedFeed;
   let articleId: string;
   try {
-    const created = await db.article.create({
-      data: {
-        feedId: feed.id,
-        userId,
-        title,
-        link,
-        externalId: messageId,
-        dedupeKey,
-        contentHash: viewOnline ? computeContentHash(viewOnline) : null,
-        content,
-        contentFormat: "html",
-        excerpt: plain.slice(0, 200),
-        author: (from?.name || from?.address || null)?.slice(0, 200) ?? null,
-        publishedAt,
-        kind: meta.kind,
-        readMinutes: meta.readMinutes,
-        emailMessageId: messageId,
-        emailSender: from?.address ?? null,
-        confirmationUrl,
-        listUnsubscribeUrl: unsubscribe.url,
-        listUnsubscribeMailto: unsubscribe.mailto,
-        listUnsubscribeOneClick: unsubscribe.url ? unsubscribe.oneClick : null,
-        newsletterAuth: auth,
-      },
+    feed = await resolveFeed(userId, address.feedId, sender);
+    const feedId = feed.id;
+    const dedupeKey = messageId
+      ? `email:${messageId}`
+      : `email:sha256:${createHash("sha256").update([userId, feedId, from?.address ?? "", subject, email.date ?? ""].join("\u0000")).digest("hex")}`;
+
+    const existing = await db.article.findUnique({
+      where: { userId_feedId_dedupeKey: { userId, feedId, dedupeKey } },
       select: { id: true },
     });
-    articleId = created.id;
-  } catch (error) {
-    // Same Message-ID delivered twice concurrently (IMAP + webhook, retries).
-    const raced = await db.article.findUnique({
-      where: { userId_feedId_dedupeKey: { userId, feedId: feed.id, dedupeKey } },
-      select: { id: true },
-    });
-    await releaseNewsletterQuota(userId, receivedAt);
-    if (raced) return { status: "duplicate", userId, feedId: feed.id, articleId: raced.id, messageId };
-    throw error;
+    if (existing) {
+      logger.info("[inbound-email] duplicate mail ignored", { userId, feedId, messageId });
+      return { status: "duplicate", userId, feedId, articleId: existing.id, messageId };
+    }
+
+    const link = viewOnline ?? `${feed.url}#${encodeURIComponent(dedupeKey)}`;
+    const title = (subject || sender.title).slice(0, 500);
+    const meta = computeArticleMeta({ content, contentFormat: "html", title, link });
+
+    try {
+      const created = await db.article.create({
+        data: {
+          feedId,
+          userId,
+          title,
+          link,
+          externalId: messageId,
+          dedupeKey,
+          contentHash: viewOnline ? computeContentHash(viewOnline) : null,
+          content,
+          contentFormat: "html",
+          excerpt: plain.slice(0, 200),
+          author: (from?.name || from?.address || null)?.slice(0, 200) ?? null,
+          publishedAt,
+          kind: meta.kind,
+          readMinutes: meta.readMinutes,
+          emailMessageId: messageId,
+          emailSender: from?.address ?? null,
+          confirmationUrl,
+          listUnsubscribeUrl: unsubscribe.url,
+          listUnsubscribeMailto: unsubscribe.mailto,
+          listUnsubscribeOneClick: unsubscribe.url ? unsubscribe.oneClick : null,
+          newsletterAuth: auth.verdict,
+          newsletterAuthDetail: JSON.stringify(auth).slice(0, 4000),
+        },
+        select: { id: true },
+      });
+      articleId = created.id;
+      keepSlot = true;
+    } catch (error) {
+      // Same Message-ID delivered twice concurrently (IMAP + webhook, retries).
+      const raced = await db.article.findUnique({
+        where: { userId_feedId_dedupeKey: { userId, feedId, dedupeKey } },
+        select: { id: true },
+      });
+      if (raced) return { status: "duplicate", userId, feedId, articleId: raced.id, messageId };
+      throw error;
+    }
+  } finally {
+    if (!keepSlot) {
+      await releaseNewsletterQuota(userId, quotaKey).catch(() => {
+        logger.warn("[inbound-email] quota release failed", { userId });
+      });
+    }
   }
 
-  await db.newsletterAddress.update({ where: { id: address.id }, data: { lastReceivedAt: receivedAt } });
-  // A fixed target may be a normal web feed: never touch its sync bookkeeping.
-  if (feed.sourceType === NEWSLETTER_SOURCE_TYPE) {
-    await db.feed.update({ where: { id: feed.id }, data: { lastFetchedAt: receivedAt, lastStatus: "ok", lastError: null } });
+  // Bookkeeping only: the article exists, so a failure here must not make the
+  // transport retry (that would just hit the dedupe path).
+  try {
+    await db.newsletterAddress.update({ where: { id: address.id }, data: { lastReceivedAt: receivedAt } });
+    // A fixed target may be a normal web feed: never touch its sync bookkeeping.
+    if (feed.sourceType === NEWSLETTER_SOURCE_TYPE) {
+      await db.feed.update({ where: { id: feed.id }, data: { lastFetchedAt: receivedAt, lastStatus: "ok", lastError: null } });
+    }
+  } catch {
+    logger.warn("[inbound-email] bookkeeping update failed", { userId, feedId: feed.id, articleId });
   }
 
   logger.info("[inbound-email] newsletter stored", {

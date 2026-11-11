@@ -9,6 +9,7 @@ ALTER TABLE "Article" ADD COLUMN "listUnsubscribeMailto" TEXT;
 ALTER TABLE "Article" ADD COLUMN "listUnsubscribeOneClick" BOOLEAN;
 ALTER TABLE "Article" ADD COLUMN "listUnsubscribeUrl" TEXT;
 ALTER TABLE "Article" ADD COLUMN "newsletterAuth" TEXT;
+ALTER TABLE "Article" ADD COLUMN "newsletterAuthDetail" TEXT;
 
 -- CreateTable
 CREATE TABLE "InboundMailSource" (
@@ -46,9 +47,11 @@ CREATE TABLE "NewsletterAddress" (
 
 -- CreateTable
 CREATE TABLE "NewsletterQuota" (
-    "userId" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
     "day" TEXT NOT NULL,
     "count" INTEGER NOT NULL DEFAULT 0,
+
+    PRIMARY KEY ("userId", "day"),
     CONSTRAINT "NewsletterQuota_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 

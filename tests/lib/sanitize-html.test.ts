@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getSanitizer, stripLayoutBreakingStyles } from "../../lib/sanitize-html";
+import { getSanitizer, sanitizeTrustedRendererHtml, stripLayoutBreakingStyles } from "../../lib/sanitize-html";
 
 describe("getSanitizer", () => {
   it("forces rel=noopener noreferrer on any link that keeps a target attribute", async () => {
@@ -118,5 +118,25 @@ describe("inline style allowlist", () => {
     expect(clean).not.toContain("attacker.example");
     expect(clean).not.toContain("<style");
     expect(clean).toContain("font-weight:bold");
+  });
+});
+
+// ── KaTeX exemption only for our own renderer (re-review of #263) ───────────
+describe("KaTeX layout exemption", () => {
+  const forged = '<div class="katex" style="position:relative;top:-500px;height:1000px;width:5000px;min-width:4000px"><span class="katex-html" style="top:-9999px;position:relative">x</span></div><img class="katex" width="9000" src="https://example.com/a.png">';
+
+  it("does not trust a forged .katex class in untrusted HTML", async () => {
+    const DOMPurify = await getSanitizer();
+    const clean = DOMPurify.sanitize(forged);
+    expect(clean).not.toMatch(/position|top:|width/);
+    expect(clean).toContain("height:1000px"); // plain allowlisted property, clipped by the reader box
+  });
+
+  it("keeps KaTeX layout only inside the trusted renderer pass, and resets afterwards", async () => {
+    const trusted = await sanitizeTrustedRendererHtml('<span class="katex"><span style="position:relative;top:-0.5em;width:2em">x</span></span>');
+    expect(trusted).toContain("position:relative");
+    expect(trusted).toContain("top:-0.5em");
+    const DOMPurify = await getSanitizer();
+    expect(DOMPurify.sanitize(forged)).not.toMatch(/position|top:/);
   });
 });
