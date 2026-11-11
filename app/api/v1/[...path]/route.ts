@@ -20,8 +20,8 @@ import { isRsshubConfigured, getRsshubConfig, buildRsshubPublicRouteUrl, validat
 import { connectorFeedUrlError, getConnectorSecretRules, redactFeedForClient, redactFeedsForClient, redactFeedWith, stripConnectorSecrets, stripConnectorSecretsWith } from "@/lib/connector-secrets";
 import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } from "@/lib/changedetection";
-import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
-import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
+import { fetchAndSuggestFeedCandidatesDetailed } from "@/lib/page-feed-suggest";
+import { createPageFeedForUser, noPageFeedCandidateMessage, suggestTopPageFeed } from "@/lib/page-feed-create";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactWebhookConfigs } from "@/lib/webhooks";
 import { AI_OPERATOR_DELETE_ERROR, ruleHasAiDeleteConflict } from "@/lib/rule-ai-operators";
 import { parseRuleActions } from "@/lib/auto-read-rules";
@@ -403,13 +403,15 @@ async function suggestPageFeed(_user: ApiUser, request: Request) {
   const urlError = validateFeedUrl(url);
   if (urlError) return apiError(urlError, 400);
 
-  const candidates = await fetchAndSuggestFeedCandidates(url);
+  const { candidates, rejected } = await fetchAndSuggestFeedCandidatesDetailed(url);
   return NextResponse.json({
+    rejected,
     candidates: candidates.map((c) => ({
       config: c.config,
       score: c.score,
       itemCount: c.itemCount,
       sampleTitles: c.sampleTitles,
+      quality: c.quality,
     })),
   });
 }
@@ -425,8 +427,9 @@ async function createPageFeed(user: ApiUser, request: Request) {
   // top-scoring candidate so a URL alone is enough to build a page-feed.
   let config = body?.config;
   if (!config || typeof config !== "object" || !allowedString(config.xPathItem)) {
-    config = await suggestTopPageFeedConfig(url);
-    if (!config) return apiError("No feed-like repeating items found on that page; provide an explicit config with xPathItem", 422);
+    const top = await suggestTopPageFeed(url);
+    config = top.config;
+    if (!config) return apiError(noPageFeedCandidateMessage(top.rejected), 422);
   }
 
   try {

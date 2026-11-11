@@ -844,7 +844,25 @@
       "aiBadge": "AI",
       "aiSuggestFailed": "AI couldn't set this up. Try again or use Find items.",
       "aiFullTextTitle": "This looks like a single article, not a listing",
-      "aiFullTextHint": "Add the site's own feed instead, then turn on automatic full-text extraction in that feed's settings."
+      "aiFullTextHint": "Add the site's own feed instead, then turn on automatic full-text extraction in that feed's settings.",
+      "previewLabel": "Preview of the first items",
+      "previewNoDate": "no date",
+      "previewFlagged": "looks like navigation",
+      "review": {
+        "badge": "Review needed",
+        "okBadge": "Preview looks plausible",
+        "duplicates": "Items repeat (same link or title).",
+        "mixedItems": "Some items look like navigation, ads or placeholders.",
+        "fewItems": "Only a few distinct items were found.",
+        "outsideSection": "Items link outside the section of the URL you entered.",
+        "otherSites": "Most items link to other websites."
+      },
+      "rejected": {
+        "tooFewPlausibleItems": "{count, plural, one {One list was skipped} other {# lists were skipped}}: too few real entries — mostly menu, login, map or placeholder links.",
+        "mostlyJunk": "{count, plural, one {One list was skipped} other {# lists were skipped}}: mostly navigation, ad or login links instead of entries.",
+        "navigationChrome": "{count, plural, one {One list was skipped} other {# lists were skipped}}: it belongs to the page's navigation or footer.",
+        "navigationList": "{count, plural, one {One list was skipped} other {# lists were skipped}}: it only contains short menu or filter links without dates or text."
+      }
     },
     "rsshub": {
       "tabLabel": "From platform",

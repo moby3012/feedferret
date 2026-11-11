@@ -16,7 +16,7 @@ import {
     MAX_SAVED_SEARCH_NAME,
     CreateFeedSchema,
 } from "@/lib/validation";
-import { fetchAndSuggestFeedCandidates, type SuggestedFieldConfig } from "@/lib/page-feed-suggest";
+import { fetchAndSuggestFeedCandidatesDetailed, type SuggestedFieldConfig } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser } from "@/lib/page-feed-create";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs } from "@/lib/webhooks";
 import { buildXPathArticles } from "@/lib/feed-fetcher";
@@ -321,7 +321,7 @@ export async function suggestFeedFromUrl(url: string) {
     if (urlError) return { success: false, error: urlError };
 
     try {
-        const candidates = await fetchAndSuggestFeedCandidates(url);
+        const { candidates, rejected } = await fetchAndSuggestFeedCandidatesDetailed(url);
         return {
             success: true,
             candidates: candidates.map((candidate) => ({
@@ -329,13 +329,20 @@ export async function suggestFeedFromUrl(url: string) {
                 score: candidate.score,
                 itemCount: candidate.itemCount,
                 sampleTitles: candidate.sampleTitles,
-                preview: candidate.previewArticles.slice(0, PAGE_FEED_PREVIEW_CAP).map((article) => ({
+                // Preview quality gate verdict: "review" candidates are shown
+                // with a "please review" label and their reasons.
+                quality: candidate.quality,
+                preview: candidate.previewArticles.slice(0, PAGE_FEED_PREVIEW_CAP).map((article, i) => ({
                     title: article.title,
                     link: article.link,
                     publishedAt: article.publishedAt ? article.publishedAt.toISOString() : null,
                     imageUrl: article.imageUrl || null,
+                    flagged: candidate.previewIssues[i] != null,
                 })),
             })),
+            // Lists the gate dropped (navigation, login, maps, placeholders…)
+            // and why, so an empty result can explain itself.
+            rejected: { count: rejected.count, reasons: rejected.reasons },
         };
     } catch (error) {
         logger.error("Failed to suggest feed candidates from page:", error);
