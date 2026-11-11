@@ -609,6 +609,7 @@ export type SecretHealth = {
     resealed: number;
     undecryptable: number;
     oldKey: number;
+    conflicts: number;
     problems: Array<{ column: string; id: string; reason: string }>;
   };
 };
@@ -628,6 +629,7 @@ function toSecretHealth(state: ReturnType<typeof import("@/lib/secret-migration"
       resealed: last?.totals.resealed ?? 0,
       undecryptable: last?.totals.undecryptable ?? 0,
       oldKey: last?.totals.oldKey ?? 0,
+      conflicts: last?.totals.conflicts ?? 0,
       problems: (last?.problems ?? []).slice(0, 20),
     },
   };
@@ -639,10 +641,12 @@ export async function getSecretHealth(): Promise<SecretHealth> {
   return toSecretHealth(getSecretMigrationState());
 }
 
-/** Runs the re-seal pass now (same as at boot: legacy and old-key values → current key). */
+/** Runs the re-seal pass now (same as at boot). Refused while FEEDFERRET_SECRET_MIGRATION=0. */
 export async function runSecretResealNow(): Promise<SecretHealth> {
   await checkAdmin();
-  const { getSecretMigrationState, runSecretMigration } = await import("@/lib/secret-migration");
+  const { getSecretMigrationState, runSecretMigration, secretMigrationEnabled } = await import("@/lib/secret-migration");
+  // FEEDFERRET_SECRET_MIGRATION=0 means "operator runs secrets:migrate by hand" (controlled rollout).
+  if (!secretMigrationEnabled()) throw new Error("Re-seal is disabled (FEEDFERRET_SECRET_MIGRATION=0). Use the secrets CLI.");
   await runSecretMigration();
   return toSecretHealth(getSecretMigrationState());
 }

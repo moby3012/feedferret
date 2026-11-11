@@ -53,7 +53,7 @@ export function SecretHealthCard() {
           <dt className="text-muted-foreground">{t("lastPass")}</dt>
           <dd>
             {m.running ? t("running") : !m.enabled && !m.finishedAt ? t("disabled") : m.finishedAt
-              ? t("lastPassResult", { resealed: m.resealed, undecryptable: m.undecryptable })
+              ? t("lastPassResult", { resealed: m.resealed, undecryptable: m.undecryptable, conflicts: m.conflicts })
               : t("notYet")}
           </dd>
         </dl>
@@ -72,8 +72,11 @@ export function SecretHealthCard() {
           </ul>
         </div>
       )}
+      {m && !m.enabled && (
+        <p className="text-footnote text-muted-foreground" data-testid="secret-health-disabled">{t("disabledHint")}</p>
+      )}
       <div className="flex justify-end">
-        <Button variant="outline" className="rounded-panel" onClick={rerun} disabled={busy || !health}>
+        <Button variant="outline" className="rounded-panel" onClick={rerun} disabled={busy || !health || !m?.enabled}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : t("rerun")}
         </Button>
       </div>

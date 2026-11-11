@@ -446,16 +446,39 @@ Formats (`lib/secret-box-core.mjs`):
 | plaintext (read only) | — | TOTP seeds, feed Basic-Auth and fetch options, notification tokens, webhook secret/header values of older releases |
 
 The master key is `FEEDFERRET_ENCRYPTION_KEY` when set, otherwise `AUTH_SECRET`.
+Key material is used verbatim, and `FEEDFERRET_ENCRYPTION_KEYS_OLD` is a
+comma-separated list whose entries are trimmed. A master key with leading/trailing
+whitespace or a comma would get a different key id once moved into that list, so
+it is rejected: production refuses to start, the CLI exits with an error (the value
+is never printed). This applies to `FEEDFERRET_ENCRYPTION_KEY`, and to `AUTH_SECRET`
+while it is the master key. Check before upgrading:
+`node -e 'const v=process.env.AUTH_SECRET||"";console.log(v!==v.trim()||v.includes(",")?"BAD":"OK")'`
+inside the running container (prints only OK/BAD).
 
 **Writes.** Every write of a secret column is sealed with the current key: the
 setting forms call `sealSecret` / `encryptIfValue(value, purpose)`, and a Prisma
 write extension on the app's database client (`lib/secret-sealing.ts`) seals
 every registry column (`SECRET_COLUMNS`) on create/update/upsert, so no write
 path (REST, MCP, OPML import, repair, newsletter wizard …) can store a secret in
-the clear. A value is stored as-is only when it **decrypts** as ciphertext for that
-very column (e.g. a kept stored value); anything else — including input that merely
-looks like an `ff2.` envelope, or ciphertext copied from another column — is treated
-as plaintext and sealed, so it reads back exactly as submitted. OAuth account tokens
+the clear. Writes fail closed: an envelope-shaped value
+(`ff2.` prefix, or the v1 `iv:tag:ct` shape in a previously-v1 column) is stored
+as-is only when it **decrypts** for that very column with the configured keys (e.g.
+a kept stored value). One that does not — forged input, ciphertext copied from
+another column, or a stored value whose key is missing after a misconfigured
+restart — rejects the whole write (`SecretKeyError`) instead of being re-sealed as
+if it were plaintext (that would silently turn ciphertext into an HMAC key or an
+`Authorization` header and lose the original). Fix the key configuration
+(`FEEDFERRET_ENCRYPTION_KEYS_OLD`) or re-enter the secret. Plaintext — including
+strings with colons in previously-plaintext columns — is sealed. The `ff2.` prefix
+is reserved: a secret that literally starts with `ff2.` cannot be stored.
+
+**AAD scope (accepted limitation).** The AAD — and the HKDF info — is the column
+purpose (`feed.authPassword`), not the row. A ciphertext therefore cannot be moved
+to another column, but it can be copied to the same column of another row by someone
+with direct write access to the database. That attacker could equally write any
+plaintext there; the app never returns stored ciphertext to clients, so a user
+cannot obtain another user's envelope through the app. Row binding would make every
+row copy/restore operation key-dependent and is out of scope. OAuth account tokens
 (`Account.access_token` / `refresh_token` / `id_token`) are never used by the app:
 they are dropped on write and cleared by the re-seal pass.
 
@@ -464,7 +487,8 @@ that is not v2 under the current key (legacy plaintext, v1, or a key from
 `FEEDFERRET_ENCRYPTION_KEYS_OLD`). Each row is a compare-and-swap on the stored
 string, so a concurrent edit always wins; `updatedAt` is kept. TOTP seeds are also
 re-sealed on the next successful login. Opt out with `FEEDFERRET_SECRET_MIGRATION=0`
-and run the CLI instead. **Startup never fails because of a stored secret**: a row the
+and run the CLI instead (the admin card's "Re-seal now" is disabled then, so a
+controlled rollout cannot be bypassed from the UI). **Startup never fails because of a stored secret**: a row the
 keys cannot open is counted and logged with its column, the first 8 characters of
 its row id and the reason (never the value), written to the system log (category
 `security`) and shown under *Server management → Instance → Stored secrets*.
@@ -540,8 +564,10 @@ hold:
 
 Tokens signed with the raw `AUTH_SECRET` by releases before M8 PR 5 are verified as
 long as `AUTH_SECRET` itself is unchanged; to stop accepting them set
-`FEEDFERRET_LEGACY_MAC_UNTIL` (ISO date, e.g. 90 days after this release) — clients
-holding such a token must log in again after that date. `secrets:rotate` never tells
+`FEEDFERRET_LEGACY_MAC_UNTIL` (ISO date, e.g. `2027-02-15`, 90 days after this
+release) — clients holding such a token must log in again after that date. An
+unparsable value is ignored (treated as not set, legacy signatures stay accepted)
+and logged once at boot. `secrets:rotate` never tells
 you an old key is safe to remove; it only reports the database side.
 
 ### Backups and losing the key

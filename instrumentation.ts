@@ -4,6 +4,11 @@ export async function register() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
     if (process.env.NEXT_PHASE !== "phase-production-build") validateAuthSecret();
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+        // Warn once at boot about an unparsable FEEDFERRET_LEGACY_MAC_UNTIL (treated as not set).
+        const { legacyMacCutoff } = await import("./lib/secret-box");
+        legacyMacCutoff();
+    }
     validateEnvironment();
 
     if (process.env.NEXT_PHASE !== "phase-production-build") {

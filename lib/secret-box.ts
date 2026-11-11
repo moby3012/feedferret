@@ -14,6 +14,7 @@ import {
   isV2,
   loadKeyring,
   openSecret as openSecretCore,
+  prepareForWrite,
   sealV2,
 } from "./secret-box-core.mjs";
 
@@ -40,6 +41,16 @@ export function getKeyring(): Keyring {
 /** Decrypt any supported format. Throws `SecretKeyError` when the value exists but the keys do not fit. */
 export function openSecret(purpose: string, stored: string, legacy: LegacyFormat): OpenedSecret {
   return openSecretCore(purpose, stored, { legacy, keyring: getKeyring }) as OpenedSecret;
+}
+
+/**
+ * Prepare user input for a secret column: plaintext is sealed; an
+ * envelope-shaped value (`ff2.` / v1 in a v1 column) is kept only if it
+ * decrypts for this purpose, otherwise SecretKeyError (fail closed).
+ */
+export function sealInputForColumn(purpose: string, value: string): string {
+  const legacy = (SECRET_COLUMNS.find((c) => c.purpose === purpose)?.legacy ?? "plaintext") as LegacyFormat;
+  return prepareForWrite(purpose, value, legacy, getKeyring());
 }
 
 /** Seal with the current key (v2). `purpose` = registry purpose, e.g. "feed.authPassword" (AAD). */
@@ -105,11 +116,29 @@ export function legacyMacSecret(): string {
   throw new Error("AUTH_SECRET must be set.");
 }
 
-export function legacyMacAccepted(now = Date.now()): boolean {
+let warnedLegacyMacUntil = false;
+
+/**
+ * Parsed FEEDFERRET_LEGACY_MAC_UNTIL (ms), or null when unset. An unparsable
+ * value is treated as NOT SET (legacy MACs keep verifying) and warned once.
+ */
+export function legacyMacCutoff(): number | null {
   const until = process.env.FEEDFERRET_LEGACY_MAC_UNTIL?.trim();
-  if (!until) return true;
+  if (!until) return null;
   const cutoff = Date.parse(until);
-  return Number.isNaN(cutoff) || now < cutoff;
+  if (Number.isNaN(cutoff)) {
+    if (!warnedLegacyMacUntil) {
+      warnedLegacyMacUntil = true;
+      console.warn("[secrets] FEEDFERRET_LEGACY_MAC_UNTIL is not a valid ISO date; ignoring it (legacy GReader/Telegram signatures stay accepted).");
+    }
+    return null;
+  }
+  return cutoff;
+}
+
+export function legacyMacAccepted(now = Date.now()): boolean {
+  const cutoff = legacyMacCutoff();
+  return cutoff === null || now < cutoff;
 }
 
 export function currentMacKey(purpose: string): Buffer {

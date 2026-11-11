@@ -39,7 +39,7 @@ import { generateMarkReadUrl, verifyMarkReadUrl } from "../../lib/telegram-callb
 import { beginTwoFactorSetup, updateAiSettings, updateContentFetchSettings, updateNotificationChannels } from "../../app/actions/settings";
 import { updateExportSettings } from "../../app/actions/export";
 import { updateGlobalSettings } from "../../app/actions/admin";
-import { createAutoReadRule, updateFeed } from "../../app/actions/feeds";
+import { createAutoReadRule, updateAutoReadRule, updateFeed } from "../../app/actions/feeds";
 import { runSecretMigration, getSecretMigrationState } from "../../lib/secret-migration";
 import { main as secretsCli } from "../../scripts/secrets-cli.mjs";
 
@@ -244,55 +244,72 @@ describe("writer paths store v2", () => {
   });
 });
 
-describe("forged or foreign envelopes are plaintext (authenticate before preserving)", () => {
+describe("envelope-shaped values must authenticate for the destination column (fail closed)", () => {
   const FORGED = `ff2.deadbeef.${"A".repeat(16)}.${"B".repeat(30)}`;
 
-  it("notification tokens: a forged envelope and another column's ciphertext read back as submitted", async () => {
-    const foreign = sealSecret("feed.authPassword", S.password); // valid ciphertext, wrong column
-    await updateNotificationChannels({ gotifyToken: FORGED, ntfyToken: foreign });
-    const row = await raw.user.findUniqueOrThrow({ where: { id: ids.user } });
-    expect(row.gotifyToken).not.toBe(FORGED);
-    expect(row.ntfyToken).not.toBe(foreign);
-    expectSealed(row.gotifyToken, "user.gotifyToken", FORGED);
-    expectSealed(row.ntfyToken, "user.ntfyToken", foreign);
+  it("notification tokens: a forged envelope or another column's ciphertext is rejected, nothing stored", async () => {
+    await updateNotificationChannels({ gotifyToken: "S3CRET-before" });
+    const before = (await raw.user.findUniqueOrThrow({ where: { id: ids.user } })).gotifyToken;
+    await expect(updateNotificationChannels({ gotifyToken: FORGED })).rejects.toBeInstanceOf(SecretKeyError);
+    await expect(updateNotificationChannels({ gotifyToken: sealSecret("feed.authPassword", S.password) })).rejects.toBeInstanceOf(SecretKeyError);
+    expect((await raw.user.findUniqueOrThrow({ where: { id: ids.user } })).gotifyToken).toBe(before);
   });
 
-  it("feed credentials (updateFeed): forged envelope / cross-column copy are sealed literals", async () => {
-    const foreign = sealSecret("user.gotifyToken", "S3CRET-other-column");
-    await updateFeed(ids.feed, { authType: "basic", authUsername: FORGED, authPassword: foreign });
-    const row = await raw.feed.findUniqueOrThrow({ where: { id: ids.feed } });
-    expect(readFeedCredentials(row)).toMatchObject({ authUsername: FORGED, authPassword: foreign });
+  it("feed credentials (updateFeed): forged envelope / cross-column copy are rejected", async () => {
+    await expect(updateFeed(ids.feed, { authType: "basic", authUsername: FORGED })).rejects.toBeInstanceOf(SecretKeyError);
+    await expect(updateFeed(ids.feed, { authType: "basic", authPassword: sealSecret("user.gotifyToken", "S3CRET-other") })).rejects.toBeInstanceOf(SecretKeyError);
   });
 
-  it("webhook JSON (createAutoReadRule): forged secret / foreign header are sealed literals", async () => {
-    const foreign = sealSecret("feed.authPassword", S.password);
-    const created = await createAutoReadRule({
+  it("webhook JSON (createAutoReadRule): a forged secret or foreign header is rejected", async () => {
+    await expect(createAutoReadRule({
       name: "forged", query: "x", actions: ["webhook_call:0"],
-      webhookConfigs: [{ url: "https://hook.example/f", secret: FORGED, headers: { Authorization: foreign } }],
+      webhookConfigs: [{ url: "https://hook.example/f", secret: FORGED }],
+    })).rejects.toBeInstanceOf(SecretKeyError);
+    await expect(createAutoReadRule({
+      name: "foreign", query: "x", actions: ["webhook_call:0"],
+      webhookConfigs: [{ url: "https://hook.example/f", headers: { Authorization: sealSecret("feed.authPassword", S.password) } }],
+    })).rejects.toBeInstanceOf(SecretKeyError);
+    expect(await raw.autoReadRule.count({ where: { name: { in: ["forged", "foreign"] } } })).toBe(0);
+  });
+
+  it("admin v1 columns: a fake v1 value or foreign v2 value is rejected", async () => {
+    state.session = { user: { id: ids.admin } };
+    await expect(updateGlobalSettings({ rsshubApiKey: "AAAA:BBBB:CCCC" })).rejects.toBeInstanceOf(SecretKeyError);
+    await expect(updateGlobalSettings({ smtpPassword: sealSecret("user.aiApiKey", "S3CRET-x") })).rejects.toBeInstanceOf(SecretKeyError);
+    // a v1-shaped string in a column that was never v1 is just plaintext (passwords contain colons)
+    state.session = { user: { id: ids.user }, authenticatedAt: Math.floor(Date.now() / 1000) };
+    await updateFeed(ids.feed, { authType: "basic", authPassword: "AAAA:BBBB:CCCC" });
+    expect(readFeedCredentials(await raw.feed.findUniqueOrThrow({ where: { id: ids.feed } })).authPassword).toBe("AAAA:BBBB:CCCC");
+  });
+
+  it("keep path with a missing old key: the stored webhook secret is never re-sealed as a literal", async () => {
+    process.env.FEEDFERRET_ENCRYPTION_KEY = KEY_A;
+    const created = await createAutoReadRule({
+      name: "keep-wrong-key", query: "x", actions: ["webhook_call:0"],
+      webhookConfigs: [{ url: "https://hook.example/k", secret: S.webhook, headers: { Authorization: S.header } }],
     });
-    const stored = (await raw.autoReadRule.findUniqueOrThrow({ where: { id: created.id } })).webhookConfigs!;
-    expect(getWebhookConfig({ webhookConfigs: stored }, 0)).toMatchObject({ secret: FORGED, headers: { Authorization: foreign } });
+    const storedUnderA = (await raw.autoReadRule.findUniqueOrThrow({ where: { id: created.id } })).webhookConfigs!;
+    // misconfigured restart: KEY_A is gone; the UI re-saves with secretRef (keep)
+    process.env.FEEDFERRET_ENCRYPTION_KEY = KEY_B;
+    await expect(updateAutoReadRule(created.id, {
+      webhookConfigs: [{ url: "https://hook.example/k", secretRef: 0, secret: "", headers: { Authorization: "__keep__" } }],
+    })).rejects.toBeInstanceOf(SecretKeyError);
+    expect((await raw.autoReadRule.findUniqueOrThrow({ where: { id: created.id } })).webhookConfigs).toBe(storedUnderA);
+    // with the key back (as old key) the same save works and keeps the secret
+    process.env.FEEDFERRET_ENCRYPTION_KEYS_OLD = KEY_A;
+    await updateAutoReadRule(created.id, {
+      webhookConfigs: [{ url: "https://hook.example/k", secretRef: 0, secret: "", headers: { Authorization: "__keep__" } }],
+    });
+    const after = (await raw.autoReadRule.findUniqueOrThrow({ where: { id: created.id } })).webhookConfigs!;
+    expect(getWebhookConfig({ webhookConfigs: after }, 0)).toMatchObject({ secret: S.webhook, headers: { Authorization: S.header } });
     await raw.autoReadRule.delete({ where: { id: created.id } });
   });
 
-  it("admin connector key and v1 columns: a fake v1 / foreign v2 value is sealed as plaintext", async () => {
-    state.session = { user: { id: ids.admin } };
-    const fakeV1 = "AAAA:BBBB:CCCC";
-    await updateGlobalSettings({ rsshubApiKey: fakeV1, smtpPassword: sealSecret("user.aiApiKey", "S3CRET-x") });
-    const row = await raw.globalSettings.findUniqueOrThrow({ where: { id: "global" } });
-    expect(openSecret("globalSettings.rsshubApiKey", row.rsshubApiKey!, "v1").value).toBe(fakeV1);
-    expect(isV2(row.smtpPassword!)).toBe(true);
-    expect(openSecret("globalSettings.smtpPassword", row.smtpPassword!, "v1").value).toMatch(/^ff2\./);
-  });
-
-  it("a value sealed for the same column under an unknown key is not preserved", () => {
+  it("scalar keep path with a missing key: the write is rejected, the stored value untouched", () => {
     process.env.FEEDFERRET_ENCRYPTION_KEY = KEY_A;
     const underA = sealSecret("user.gotifyToken", "S3CRET-a");
     process.env.FEEDFERRET_ENCRYPTION_KEY = KEY_B;
-    const out = sealWriteArgs("User", "update", { data: { gotifyToken: underA } }) as { data: { gotifyToken: string } };
-    expect(out.data.gotifyToken).not.toBe(underA);
-    expect(openSecret("user.gotifyToken", out.data.gotifyToken, "plaintext").value).toBe(underA);
-    // with KEY_A configured as old key it authenticates and is kept verbatim
+    expect(() => sealWriteArgs("User", "update", { data: { gotifyToken: underA } })).toThrow(SecretKeyError);
     process.env.FEEDFERRET_ENCRYPTION_KEYS_OLD = KEY_A;
     expect((sealWriteArgs("User", "update", { data: { gotifyToken: underA } }) as { data: { gotifyToken: string } }).data.gotifyToken).toBe(underA);
   });
@@ -520,5 +537,52 @@ describe("signed tokens", () => {
     const keyring = loadKeyring(process.env);
     const sealed = sealV2("globalSettings.smtpPassword", S.smtp, keyring);
     expect(() => openCore("globalSettings.resendApiKey", sealed, { legacy: "v1", keyring })).toThrow(/cannot be decrypted/);
+  });
+});
+
+describe("operational guards (M8 PR 5 re-review)", () => {
+  it("key material with surrounding whitespace or commas is rejected (loadKeyring, boot)", async () => {
+    const { keyMaterialProblem } = await import("../../lib/secret-box-core.mjs");
+    const { validateAuthSecret } = await import("../../lib/auth-secret");
+    expect(keyMaterialProblem({ AUTH_SECRET: AUTH })).toBeNull();
+    expect(keyMaterialProblem({ AUTH_SECRET: `${AUTH} ` })).toMatch(/AUTH_SECRET/);
+    expect(keyMaterialProblem({ AUTH_SECRET: `${AUTH},x` })).toMatch(/AUTH_SECRET/);
+    // AUTH_SECRET is not key material for v2 once FEEDFERRET_ENCRYPTION_KEY is set
+    expect(keyMaterialProblem({ AUTH_SECRET: `${AUTH} `, FEEDFERRET_ENCRYPTION_KEY: KEY_A })).toBeNull();
+    expect(keyMaterialProblem({ AUTH_SECRET: AUTH, FEEDFERRET_ENCRYPTION_KEY: ` ${KEY_A}` })).toMatch(/FEEDFERRET_ENCRYPTION_KEY/);
+    expect(() => loadKeyring({ AUTH_SECRET: `${AUTH}\n` })).toThrow(/leading\/trailing whitespace/);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(() => validateAuthSecret(`${AUTH} `, true)).toThrow(/Refusing to start/);
+    expect(JSON.stringify(error.mock.calls)).not.toContain(AUTH);
+    error.mockRestore();
+    expect(() => validateAuthSecret(AUTH, true)).not.toThrow();
+  });
+
+  it("an invalid FEEDFERRET_LEGACY_MAC_UNTIL is ignored (legacy MACs accepted) and warned once", async () => {
+    const { legacyMacAccepted, legacyMacCutoff } = await import("../../lib/secret-box");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    process.env.FEEDFERRET_LEGACY_MAC_UNTIL = "next tuesday";
+    expect(legacyMacCutoff()).toBeNull();
+    expect(legacyMacAccepted()).toBe(true);
+    legacyMacCutoff();
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes("FEEDFERRET_LEGACY_MAC_UNTIL"))).toHaveLength(1);
+    warn.mockRestore();
+    const legacySig = createHmac("sha256", AUTH).update("user-1:2").digest("hex");
+    expect(verifyGReaderToken(`user-1.2.${legacySig}`)).toBe("user-1");
+  });
+
+  it("admin re-seal is refused while FEEDFERRET_SECRET_MIGRATION=0; health reports enabled + conflicts", async () => {
+    const { getSecretHealth, runSecretResealNow } = await import("../../app/actions/admin");
+    state.session = { user: { id: ids.admin } };
+    process.env.FEEDFERRET_SECRET_MIGRATION = "0";
+    try {
+      await expect(runSecretResealNow()).rejects.toThrow(/FEEDFERRET_SECRET_MIGRATION=0/);
+      const health = await getSecretHealth();
+      expect(health.migration.enabled).toBe(false);
+      expect(health.migration).toHaveProperty("conflicts");
+      expectNoPlaintext(health);
+    } finally {
+      delete process.env.FEEDFERRET_SECRET_MIGRATION;
+    }
   });
 });

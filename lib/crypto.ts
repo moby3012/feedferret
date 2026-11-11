@@ -2,7 +2,7 @@
 // v2 `ff2.` format (lib/secret-box.ts); reads accept v2, legacy v1
 // (sha256(AUTH_SECRET), `iv:tag:ct`) and, per column, legacy plaintext.
 import { createCipheriv, createHash, randomBytes } from "crypto";
-import { openSecret, sealSecret, warnSecretOnce } from "@/lib/secret-box";
+import { openSecret, sealInputForColumn, warnSecretOnce } from "@/lib/secret-box";
 
 const ALGORITHM = "aes-256-gcm";
 
@@ -31,11 +31,12 @@ export function encrypt(plaintext: string): string {
 /**
  * Seal a secret for storage (v2, current key). `purpose` is the column's
  * registry purpose (`lib/secret-box-core.mjs` SECRET_COLUMNS), e.g.
- * "user.aiApiKey": it binds the ciphertext to that column (AAD).
+ * "user.aiApiKey": it binds the ciphertext to that column (AAD). Envelope-shaped
+ * input that does not decrypt for this column throws SecretKeyError.
  */
 export function encryptIfValue(value: string | null | undefined, purpose: string): string | null {
   if (!value) return null;
-  return sealSecret(purpose, value);
+  return sealInputForColumn(purpose, value);
 }
 
 /**

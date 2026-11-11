@@ -1980,12 +1980,13 @@
       "running": "läuft…",
       "disabled": "deaktiviert (FEEDFERRET_SECRET_MIGRATION=0)",
       "notYet": "noch nicht gelaufen",
-      "lastPassResult": "{resealed} neu verschlüsselt, {undecryptable} nicht entschlüsselbar",
+      "lastPassResult": "{resealed} neu verschlüsselt, {undecryptable} nicht entschlüsselbar, {conflicts} gleichzeitig geändert (nächster Lauf)",
       "authSecretHint": "Gespeicherte Geheimnisse nutzen einen aus AUTH_SECRET abgeleiteten Schlüssel. Setze FEEDFERRET_ENCRYPTION_KEY, damit ein Wechsel von AUTH_SECRET sie nie unlesbar macht (docs/security.md).",
       "undecryptableHint": "{count} gespeicherte(s) Geheimnis(se) lassen sich mit den konfigurierten Schlüsseln nicht entschlüsseln. Fehlenden Schlüssel in FEEDFERRET_ENCRYPTION_KEYS_OLD eintragen oder das Geheimnis neu eingeben.",
       "passFailed": "Der letzte Lauf ist fehlgeschlagen; siehe Server-Log.",
       "loadFailed": "Verschlüsselungsstatus konnte nicht geladen werden.",
-      "rerun": "Jetzt neu verschlüsseln"
+      "rerun": "Jetzt neu verschlüsseln",
+      "disabledHint": "Hintergrund-Neuverschlüsselung ist aus (FEEDFERRET_SECRET_MIGRATION=0): mit `secrets-cli migrate` im Container neu verschlüsseln, danach einschalten."
     }
   },
   "accessibility": {

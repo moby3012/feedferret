@@ -1980,12 +1980,13 @@
       "running": "running…",
       "disabled": "disabled (FEEDFERRET_SECRET_MIGRATION=0)",
       "notYet": "not run yet",
-      "lastPassResult": "{resealed} re-sealed, {undecryptable} undecryptable",
+      "lastPassResult": "{resealed} re-sealed, {undecryptable} undecryptable, {conflicts} changed concurrently (retried next pass)",
       "authSecretHint": "Stored secrets use a key derived from AUTH_SECRET. Set FEEDFERRET_ENCRYPTION_KEY so rotating AUTH_SECRET never makes them unreadable (docs/security.md).",
       "undecryptableHint": "{count} stored secret(s) cannot be decrypted with the configured keys. Add the missing key to FEEDFERRET_ENCRYPTION_KEYS_OLD, or re-enter the secret.",
       "passFailed": "The last re-seal pass failed; see the server log.",
       "loadFailed": "Could not load the encryption status.",
-      "rerun": "Re-seal now"
+      "rerun": "Re-seal now",
+      "disabledHint": "Background re-seal is off (FEEDFERRET_SECRET_MIGRATION=0): re-seal with `secrets-cli migrate` in the container, then enable it."
     }
   },
   "accessibility": {
