@@ -49,6 +49,73 @@ function tagEnd(s: string, start: number): number {
   return -1;
 }
 
+const isTagNameEnd = (ch: string | undefined) => ch === undefined || /[\s/>]/.test(ch);
+
+/** Start of the `</name` end tag closing an RCDATA/raw-text element, or -1. */
+function rawTextEnd(lower: string, name: string, from: number): number {
+  const needle = `</${name}`;
+  for (let at = lower.indexOf(needle, from); at >= 0; at = lower.indexOf(needle, at + 1)) {
+    const next = lower[at + needle.length];
+    if (next === undefined) return -1; // need more bytes to decide
+    if (isTagNameEnd(next)) return at;
+  }
+  return -1;
+}
+
+/**
+ * Start of the `</script` end tag that really closes a script element, per the
+ * WHATWG script-data states: inside `<!--` (escaped) a nested `<script`
+ * enters the double-escaped state, where `</script>` does NOT end the
+ * element (it only leaves double-escaping); `-->` returns to script data.
+ */
+function scriptDataEnd(lower: string, from: number): number {
+  let state: "data" | "escaped" | "double" = "data";
+  let i = from;
+  while (i < lower.length) {
+    if (state === "data") {
+      const lt = lower.indexOf("<", i);
+      if (lt < 0) return -1;
+      if (lower.startsWith("<!--", lt)) {
+        state = "escaped";
+        i = lt + 4;
+        continue;
+      }
+      if (lower.startsWith("</script", lt)) {
+        const next = lower[lt + 8];
+        if (next === undefined) return -1;
+        if (isTagNameEnd(next)) return lt;
+      }
+      if (lower.length - lt < 9) return -1; // a token may straddle the chunk boundary
+      i = lt + 1;
+      continue;
+    }
+    // escaped / double-escaped: find the next interesting token.
+    const candidates = [lower.indexOf("-->", i), lower.indexOf("<script", i), lower.indexOf("</script", i)].filter((n) => n >= 0);
+    if (!candidates.length) return -1;
+    const at = Math.min(...candidates);
+    if (lower.startsWith("-->", at)) {
+      state = "data";
+      i = at + 3;
+      continue;
+    }
+    const closingTag = lower.startsWith("</script", at);
+    const after = lower[at + (closingTag ? 8 : 7)];
+    if (after === undefined) return -1;
+    if (!isTagNameEnd(after)) {
+      i = at + 1;
+      continue;
+    }
+    if (state === "escaped") {
+      if (closingTag) return at;
+      state = "double";
+    } else if (closingTag) {
+      state = "escaped";
+    }
+    i = at + (closingTag ? 8 : 7);
+  }
+  return -1;
+}
+
 /**
  * Resumable scan for the end of the document head over a lower-cased latin1
  * view of the bytes (all markup is ASCII in ASCII-compatible encodings).
@@ -78,12 +145,12 @@ function scanHead(lower: string, from: number): { end: number; resume: number } 
     const gt = tagEnd(lower, lt);
     if (gt < 0) return { end: -1, resume: lt };
     if (closing && name === "head") return { end: gt + 1, resume: gt + 1 };
-    if (!closing && RAW_TEXT_ELEMENTS.has(name) && lower[gt - 1] !== "/") {
-      const close = new RegExp(`</${name}[\\s/>]`, "g");
-      close.lastIndex = gt + 1;
-      const hit = close.exec(lower);
-      if (!hit) return { end: -1, resume: lt };
-      i = hit.index;
+    // WHATWG: a raw-text start tag opens raw text even with `/>` syntax
+    // (`<script/>` is not self-closing in HTML).
+    if (!closing && RAW_TEXT_ELEMENTS.has(name)) {
+      const close = name === "script" ? scriptDataEnd(lower, gt + 1) : rawTextEnd(lower, name, gt + 1);
+      if (close < 0) return { end: -1, resume: lt };
+      i = close;
       continue;
     }
     i = gt + 1;

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseHttpLinkHeader } from "../../lib/http-link-header";
 import { decodeHtmlBytes, findHtmlHeadEnd, readHtmlPrefix } from "../../lib/html-prefix";
-import { discoverFeeds } from "../../lib/feed-discovery";
+import { discoverFeeds, headAdvertisesFeed } from "../../lib/feed-discovery";
 
 // ─── RFC 8288 Link header ──────────────────────────────────────────────────
 
@@ -64,6 +64,23 @@ describe("findHtmlHeadEnd", () => {
     expect(html.slice(0, findHtmlHeadEnd(html))).toMatch(/<link rel="alternate" href="\/f"><\/head>$/);
   });
 
+  it("treats <script/> as opening raw text (not self-closing) — reviewer repro", () => {
+    const html = `<html><head><script/>var t = '<link rel="alternate" type="application/rss+xml" href="/fake.xml"></head><body>';</script><link rel="alternate" type="application/rss+xml" href="/real.xml"></head><body>`;
+    expect(html.slice(0, findHtmlHeadEnd(html))).toMatch(/href="\/real\.xml"><\/head>$/);
+  });
+
+  it("honours script escaped / double-escaped states", () => {
+    // Inside <!-- … --> a nested <script> double-escapes: its </script> does not end the outer script.
+    const html = `<head><script><!--<script>document.write('</script></head><body>')</script>--></script><link rel="alternate" type="application/atom+xml" href="/real.atom"></head>`;
+    expect(html.slice(0, findHtmlHeadEnd(html))).toMatch(/href="\/real\.atom"><\/head>$/);
+    // Escaped (no nested <script>): </script> does end it.
+    const escaped = `<head><script><!-- x </script><link rel="alternate" href="/a"></head>`;
+    expect(escaped.slice(0, findHtmlHeadEnd(escaped))).toBe(escaped);
+    // Self-closing <style/> too.
+    const style = `<head><style/>a::after{content:"</head><body>"}</style><title>x</title></head>`;
+    expect(style.slice(0, findHtmlHeadEnd(style))).toBe(style);
+  });
+
   it("stops at the first <body> when </head> is omitted", () => {
     const html = `<html><head><link rel="alternate" href="/f"><BODY class="x"><p>hi`;
     expect(html.slice(0, findHtmlHeadEnd(html))).toBe(`<html><head><link rel="alternate" href="/f">`);
@@ -93,6 +110,22 @@ describe("readHtmlPrefix", () => {
     const html = '<html><head><scr' + 'ipt>x="</he' + 'ad>"</scr' + 'ipt><!' + '-- c --></he' + 'ad><body>BODY';
     const chunks = Array.from({ length: Math.ceil(html.length / 3) }, (_, i) => enc(html.slice(i * 3, i * 3 + 3)));
     expect(await readHtmlPrefix(streamOf(chunks), { stopAtHead: true })).toBe('<html><head><script>x="</head>"</script><!-- c --></head>');
+  });
+
+  it("feed-like markup inside script never triggers the early stop (reviewer repro, byte by byte)", async () => {
+    const html = `<html><head><script/>var t = '<link rel="alternate" type="application/rss+xml" href="/fake.xml"></head>';</script>`
+      + `<script><!--<script>x('</script></head>')</script>--></script>`
+      + `<link rel="alternate" type="application/rss+xml" href="/real.xml"></head><body><p>${"x".repeat(5000)}</p>`;
+    const out = await readHtmlPrefix(streamOf(Array.from(enc(html), (b) => new Uint8Array([b]))), { stopAtHead: headAdvertisesFeed });
+    expect(out).toContain('href="/real.xml"');
+    expect(out.endsWith('href="/real.xml"></head>')).toBe(true);
+  });
+
+  it("headAdvertisesFeed only counts real <link> elements", () => {
+    expect(headAdvertisesFeed(`<head><script>'<link rel="alternate" type="application/rss+xml" href="/f">'</script></head>`)).toBe(false);
+    expect(headAdvertisesFeed(`<head><!-- <link rel="alternate" type="application/rss+xml" href="/f"> --></head>`)).toBe(false);
+    expect(headAdvertisesFeed(`<head><link rel="Alternate" type="application/rss+xml" href="/f"></head>`)).toBe(true);
+    expect(headAdvertisesFeed(`<head><link rel="alternate" type="text/html" href="/f"></head>`)).toBe(false);
   });
 
   it("keeps reading the body (up to the budget) when the predicate rejects the head", async () => {
@@ -192,8 +225,6 @@ describe("discoverFeeds: HTTP Link header + final URL", () => {
     await discoverFeeds("https://big.example/");
     const options = mocks.fetchWith.mock.calls[0][2];
     expect(options.maxBytes).toBe(1024 * 1024);
-    expect(typeof options.untilHead).toBe("function");
-    expect(options.untilHead('<head><link rel="alternate" type="application/rss+xml" href="/f"></head>')).toBe(true);
-    expect(options.untilHead("<head><title>none</title></head>")).toBe(false);
+    expect(options.untilHead).toBe(headAdvertisesFeed);
   });
 });

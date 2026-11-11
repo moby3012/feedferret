@@ -257,10 +257,17 @@ export function linkHeaderFeedType(entry: { url: string; rels: string[]; type?: 
   return null;
 }
 
-/** Early-stop predicate for the page prefix read: the head already advertises a feed. */
-function headAdvertisesFeed(headHtml: string): boolean {
-  return /<link\b[^>]*\brel\s*=\s*["']?[^"'>]*\balternate\b[^>]*>/i.test(headHtml)
-    && /(application\/(rss|atom)\+xml|application\/feed\+json)/i.test(headHtml);
+/**
+ * Early-stop predicate for the page prefix read: the head already advertises
+ * a feed via a real `<link rel=alternate>` element. Parsed with the HTML
+ * parser (not a regex), so feed-like markup inside `<script>`/`<style>`/
+ * comments never counts — a false positive here would truncate discovery
+ * before the real `<link>`.
+ */
+export function headAdvertisesFeed(headHtml: string): boolean {
+  const { document } = new JSDOM(headHtml).window;
+  return [...document.querySelectorAll('link[rel~="alternate" i][href]')].some((el) =>
+    /^application\/(?:rss\+xml|atom\+xml|feed\+json)\b/i.test((el.getAttribute("type") || "").trim()));
 }
 
 /** Stage 2 — classic HTML discovery: `<link rel=alternate>`, feed-looking anchors, common feed paths. */

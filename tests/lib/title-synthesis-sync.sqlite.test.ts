@@ -62,37 +62,48 @@ const EXPECTED_TITLES = [
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const SOURCES: Array<{ name: string; sourceType: string; scraperConfig?: string; body: string }> = [
-  {
-    name: "RSS",
-    sourceType: "rss",
-    body: `<?xml version="1.0"?><rss version="2.0"><channel><title>Toots</title>${POSTS.map((p) =>
-      `<item><title></title><link>${p.link}</link><guid>${p.id}</guid><description>${esc(p.html)}</description><pubDate>Mon, 10 Nov 2026 12:00:00 GMT</pubDate></item>`).join("")}</channel></rss>`,
-  },
-  {
-    name: "Atom",
-    sourceType: "rss",
-    body: `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Toots</title>${POSTS.map((p) =>
-      `<entry><id>${p.id}</id><link href="${p.link}"/><updated>2026-11-10T12:00:00Z</updated><content type="html">${esc(p.html)}</content></entry>`).join("")}</feed>`,
-  },
-  {
-    name: "JSONFeed",
-    sourceType: "JSONFeed",
-    body: JSON.stringify({ version: "https://jsonfeed.org/version/1.1", title: "Toots", items: POSTS.map((p) => ({ id: p.id, url: p.link, content_html: p.html, date_published: "2026-11-10T12:00:00Z" })) }),
-  },
-  {
-    name: "HTML+XPath",
-    sourceType: "HTML+XPath",
-    scraperConfig: JSON.stringify({ xpath: { xPathItem: "//article", xPathItemUri: ".//a/@href", xPathItemContent: ".//div[@class='body']", xPathItemTitle: ".//h2", xPathItemUid: "@id" } }),
-    body: `<html><body>${POSTS.map((p) => `<article id="${p.id}"><a href="${p.link}">open</a><div class="body">${p.html}</div></article>`).join("")}</body></html>`,
-  },
-  {
-    name: "HTML+XPath+JSON",
-    sourceType: "HTML+XPath+JSON+DotNotation",
-    scraperConfig: JSON.stringify({ xPathToJson: "//script[@id='data']", json: { item: "items", itemUri: "url", itemContent: "html", itemUid: "id" } }),
-    body: `<html><body><script id="data" type="application/json">${JSON.stringify({ items: POSTS.map((p) => ({ id: p.id, url: p.link, html: p.html })) }).replace(/</g, "\\u003c")}</script></body></html>`,
-  },
-];
+type Source = { name: string; sourceType: string; scraperConfig?: string; body: string };
+
+/** Fixtures for every fetcher path; `titles[i]` (already markup-escaped for HTML/XML) or none. */
+function buildSources(titles?: string[]): Source[] {
+  const xmlTitle = (i: number) => (titles ? esc(titles[i]) : "");
+  return [
+    {
+      name: "RSS",
+      sourceType: "rss",
+      body: `<?xml version="1.0"?><rss version="2.0"><channel><title>Toots</title>${POSTS.map((p, i) =>
+        `<item><title>${xmlTitle(i)}</title><link>${p.link}</link><guid>${p.id}</guid><description>${esc(p.html)}</description><pubDate>Mon, 10 Nov 2026 12:00:00 GMT</pubDate></item>`).join("")}</channel></rss>`,
+    },
+    {
+      name: "Atom",
+      sourceType: "rss",
+      body: `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Toots</title>${POSTS.map((p, i) =>
+        `<entry><id>${p.id}</id>${titles ? `<title type="html">${xmlTitle(i)}</title>` : ""}<link href="${p.link}"/><updated>2026-11-10T12:00:00Z</updated><content type="html">${esc(p.html)}</content></entry>`).join("")}</feed>`,
+    },
+    {
+      name: "JSONFeed",
+      sourceType: "JSONFeed",
+      body: JSON.stringify({ version: "https://jsonfeed.org/version/1.1", title: "Toots", items: POSTS.map((p, i) => ({ id: p.id, url: p.link, ...(titles ? { title: titles[i] } : {}), content_html: p.html, date_published: "2026-11-10T12:00:00Z" })) }),
+    },
+    {
+      name: "HTML+XPath",
+      sourceType: "HTML+XPath",
+      scraperConfig: JSON.stringify({ xpath: { xPathItem: "//article", xPathItemUri: ".//a/@href", xPathItemContent: ".//div[@class='body']", xPathItemTitle: ".//h2", xPathItemUid: "@id" } }),
+      body: `<html><body>${POSTS.map((p, i) => `<article id="${p.id}">${titles ? `<h2>${titles[i]}</h2>` : ""}<a href="${p.link}">open</a><div class="body">${p.html}</div></article>`).join("")}</body></html>`,
+    },
+    {
+      name: "HTML+XPath+JSON",
+      sourceType: "HTML+XPath+JSON+DotNotation",
+      scraperConfig: JSON.stringify({ xPathToJson: "//script[@id='data']", json: { item: "items", itemUri: "url", itemTitle: "title", itemContent: "html", itemUid: "id" } }),
+      body: `<html><body><script id="data" type="application/json">${JSON.stringify({ items: POSTS.map((p, i) => ({ id: p.id, url: p.link, ...(titles ? { title: titles[i] } : {}), html: p.html })) }).replace(/</g, "\\u003c")}</script></body></html>`,
+    },
+  ];
+}
+
+const SOURCES = buildSources();
+// Real titles with entities / odd whitespace: must round-trip identically
+// through the old and new code (no normalization drift → no rewrite).
+const TITLED_SOURCES = buildSources(["  Tom &amp;amp; Jerry &#x1F600;  —  spaced  ", "Caf&eacute; &lt;b&gt;bold&lt;/b&gt;"]);
 
 beforeAll(async () => {
   const url = `file:${join(dir, "test.db")}`;
@@ -186,4 +197,57 @@ it("a real feed title is never replaced by a synthesized one", async () => {
   await tick();
   await syncFeed(userId, feed.id);
   expect(await rows(feed.id)).toEqual(first);
+});
+
+/** Counts every Article write during `fn` (update / updateMany / upsert). */
+async function articleWrites(fn: () => Promise<unknown>) {
+  const calls: Array<{ op: string; data: Record<string, unknown> }> = [];
+  const spies = (["update", "updateMany", "upsert"] as const).map((op) => {
+    const original = (state.db.article[op] as (a: unknown) => unknown).bind(state.db.article);
+    return vi.spyOn(state.db.article, op).mockImplementation(((args: { data?: Record<string, unknown>; update?: Record<string, unknown> }) => {
+      calls.push({ op, data: (args.data ?? args.update ?? {}) as Record<string, unknown> });
+      return original(args);
+    }) as never);
+  });
+  try {
+    await fn();
+  } finally {
+    spies.forEach((spy) => spy.mockRestore());
+  }
+  return calls;
+}
+
+describe("re-syncing an unchanged feed after the upgrade never advances Article.updatedAt", () => {
+  for (const [kind, sources] of [["title-less", SOURCES], ["titled (entities/whitespace)", TITLED_SOURCES]] as const) {
+    describe.each(sources)(`${kind} $name`, (source) => {
+      it.each(["id", "link:title"])("unicityCriteria=%s: upgrade sync only cosmetic, next sync writes nothing", async (criteria) => {
+        state.body = source.body;
+        const feed = await state.db.feed.create({ data: { userId, name: "Toots", url: "https://social.example/@a.feed", sourceType: source.sourceType, scraperConfig: source.scraperConfig ?? null, unicityCriteria: criteria } });
+        state.legacy = true;
+        await syncFeed(userId, feed.id);
+        const before = await rows(feed.id);
+        expect(before).toHaveLength(2);
+
+        state.legacy = false;
+        await tick();
+        const upgradeWrites = await articleWrites(() => syncFeed(userId, feed.id));
+        if (kind === "title-less") {
+          // Only the cosmetic placeholder upgrade, always pinning updatedAt.
+          expect(upgradeWrites.length).toBeGreaterThan(0);
+          for (const write of upgradeWrites) {
+            expect(write.op).toBe("update");
+            expect(Object.keys(write.data).sort()).toEqual(["title", "updatedAt"]);
+          }
+        } else {
+          expect(upgradeWrites).toEqual([]);
+        }
+        const upgraded = await rows(feed.id);
+        expect(upgraded.map((r) => r.updatedAt.getTime())).toEqual(before.map((r) => r.updatedAt.getTime()));
+
+        await tick();
+        expect(await articleWrites(() => syncFeed(userId, feed.id))).toEqual([]);
+        expect(await rows(feed.id)).toEqual(upgraded);
+      });
+    });
+  }
 });
