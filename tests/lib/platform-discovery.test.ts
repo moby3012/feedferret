@@ -421,3 +421,32 @@ describe("hostile pages through discoverFeeds", () => {
     expect(result.feeds.map((f) => f.title)).toEqual(["Survivor"]);
   });
 });
+
+describe("<base> and oversized addresses through discoverFeeds", () => {
+  it("<base href=\"\"> before a hostile <base>: relative links resolve against the response URL", async () => {
+    mocks.routes.set("https://site.example.com/blog/", `<html><head><base href=""><base href="https://evil.example/"></head><body><a href="feed.xml">RSS</a></body></html>`);
+    mocks.routes.set("https://site.example.com/blog/feed.xml", rss("Site feed"));
+    const result = await discoverFeeds("https://site.example.com/blog/");
+    expect(result.feeds.map((f) => f.url)).toEqual(["https://site.example.com/blog/feed.xml"]);
+    expect(mocks.calls.some((c) => c.url.includes("evil.example"))).toBe(false);
+  });
+
+  it("an oversized <base> is not truncated into a different (attacker) base", async () => {
+    mocks.routes.set(
+      "https://site2.example.com/",
+      `<html><head><base href="https://evil.example/${"a".repeat(3000)}"></head><body><a href="feed.xml">RSS</a></body></html>`,
+    );
+    mocks.routes.set("https://site2.example.com/feed.xml", rss("Site2 feed"));
+    const result = await discoverFeeds("https://site2.example.com/");
+    expect(result.feeds.map((f) => f.url)).toEqual(["https://site2.example.com/feed.xml"]);
+    expect(mocks.calls.some((c) => c.url.includes("evil.example"))).toBe(false);
+  });
+
+  it("a 3,000-char href gives no candidate and no request", async () => {
+    const href = `/feed.xml?${"a".repeat(2990)}`;
+    mocks.routes.set("https://site3.example.com/", `<html><body><a href="${href}">RSS</a><link rel="alternate" type="application/rss+xml" href="${href}"></body></html>`);
+    const result = await discoverFeeds("https://site3.example.com/", { limits: { deadlineMs: 5_000, maxRequests: 30 } });
+    expect(result.feeds).toEqual([]);
+    expect(mocks.calls.some((c) => c.url.startsWith("https://site3.example.com/feed.xml?"))).toBe(false);
+  });
+});

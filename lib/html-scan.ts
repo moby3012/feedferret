@@ -16,6 +16,12 @@ export const HTML_SCAN_MAX_CHARS = 512 * 1024;
 /** Inline-script text kept for adapter fingerprints / install-base patterns. */
 export const SCRIPT_TEXT_CAP = 64 * 1024;
 const ATTR_VALUE_CAP = 2048;
+/**
+ * Attributes whose value is an address (or install path). An oversized one
+ * is DROPPED (treated as absent / unusable), never truncated: a truncated
+ * prefix is a different URL that discovery would then probe.
+ */
+const URL_ATTRS = new Set(["href", "src", "action", "data-base-uri", "data-base-url"]);
 const ANCHOR_TEXT_CAP = 300;
 const MAX_ANCHORS = 2000;
 const MAX_LINKS = 500;
@@ -139,6 +145,9 @@ export function scanHtml(html: string, options: { selectors?: string[] } = {}): 
   let chromeDepth = 0;
   let anchor: (ScannedAnchor & { depth: number }) | null = null;
   let inInlineScript = false;
+  // The first <base> carrying an href attribute decides, even an empty or
+  // unusable one (then relative links resolve against the document URL).
+  let baseSeen = false;
 
   const finishAnchor = () => {
     if (!anchor) return;
@@ -155,7 +164,7 @@ export function scanHtml(html: string, options: { selectors?: string[] } = {}): 
     }
   };
 
-  const openElement = (name: string, attribs: Record<string, string>, selfClosing: boolean) => {
+  const openElement = (name: string, attribs: Record<string, string>, selfClosing: boolean, oversized: Set<string>) => {
     if (pending.size) {
       for (const [s, sel] of compiled) {
         if (pending.has(s) && matches(sel, name, attribs)) {
@@ -166,7 +175,11 @@ export function scanHtml(html: string, options: { selectors?: string[] } = {}): 
     }
     switch (name) {
       case "base":
-        if (scan.baseHref === null && attribs.href) scan.baseHref = attribs.href.slice(0, ATTR_VALUE_CAP);
+        if (!baseSeen && (attribs.href !== undefined || oversized.has("href"))) {
+          baseSeen = true;
+          // "" (empty or oversized) = no usable base: the document URL applies.
+          scan.baseHref = attribs.href ?? "";
+        }
         break;
       case "link":
         if (scan.links.length < MAX_LINKS) scan.links.push({ tag: name, attrs: capAttrs(attribs) });
@@ -195,7 +208,7 @@ export function scanHtml(html: string, options: { selectors?: string[] } = {}): 
     if (chrome) chromeDepth++;
     if (name === "a" && attribs.href !== undefined && scan.anchors.length < MAX_ANCHORS) {
       anchor = {
-        href: attribs.href.slice(0, ATTR_VALUE_CAP),
+        href: attribs.href,
         title: (attribs.title ?? "").slice(0, ANCHOR_TEXT_CAP),
         ariaLabel: (attribs["aria-label"] ?? "").slice(0, ANCHOR_TEXT_CAP),
         className: (attribs.class ?? "").slice(0, ANCHOR_TEXT_CAP),
@@ -239,6 +252,8 @@ export function scanHtml(html: string, options: { selectors?: string[] } = {}): 
   let attrCount = 0;
   let attrName = "";
   let attrValue = "";
+  let attrOverflow = false;
+  let oversized = new Set<string>();
   const fromCodePoint = (cp: number) => {
     try {
       return String.fromCodePoint(cp);
@@ -254,30 +269,39 @@ export function scanHtml(html: string, options: { selectors?: string[] } = {}): 
         tagName = input.slice(start, end).toLowerCase();
         attribs = {};
         attrCount = 0;
+        oversized = new Set();
       },
       onattribname(start, end) {
         attrName = input.slice(start, end).toLowerCase();
         attrValue = "";
+        attrOverflow = false;
       },
       onattribdata(start, end) {
-        if (attrValue.length < ATTR_VALUE_CAP) attrValue += input.slice(start, Math.min(end, start + ATTR_VALUE_CAP - attrValue.length));
+        if (attrOverflow) return;
+        const room = ATTR_VALUE_CAP - attrValue.length;
+        if (end - start > room) attrOverflow = true;
+        attrValue += input.slice(start, start + Math.min(end - start, room));
       },
       onattribentity(cp) {
-        if (attrValue.length < ATTR_VALUE_CAP) attrValue += fromCodePoint(cp);
+        if (attrOverflow) return;
+        const ch = fromCodePoint(cp);
+        if (attrValue.length + ch.length > ATTR_VALUE_CAP) attrOverflow = true;
+        else attrValue += ch;
       },
       onattribend(_quote: QuoteType) {
-        // First occurrence wins (HTML semantics); bounded attribute count.
-        if (attrCount < MAX_ATTRS && !(attrName in attribs)) {
-          attribs[attrName] = attrValue;
-          attrCount++;
-        }
+        // First occurrence wins (HTML semantics), so a dropped value still
+        // claims its name; bounded attribute count.
+        if (attrCount >= MAX_ATTRS || attrName in attribs || oversized.has(attrName)) return;
+        attrCount++;
+        if (attrOverflow && URL_ATTRS.has(attrName)) oversized.add(attrName);
+        else attribs[attrName] = attrValue; // non-address values: capped prefix is fine (labels, classes)
       },
       onopentagend() {
-        openElement(tagName, attribs, false);
+        openElement(tagName, attribs, false, oversized);
       },
       onselfclosingtag() {
         // `<x/>` in HTML is an open tag (void or not); foreign `<svg/>` closes itself.
-        openElement(tagName, attribs, tagName === "svg" || tagName === "path" || tagName === "use");
+        openElement(tagName, attribs, tagName === "svg" || tagName === "path" || tagName === "use", oversized);
       },
       onclosetag(start, end) {
         closeElement(input.slice(start, end).toLowerCase());

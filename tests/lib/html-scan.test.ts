@@ -72,8 +72,44 @@ describe("scanHtml collects what discovery needs", () => {
     const big = scanHtml(`<script>${"x".repeat(200_000)}</script>${fill("<p>", HTML_SCAN_MAX_CHARS + 10)}`);
     expect(big.truncated).toBe(true);
     expect(big.scriptText.length).toBeLessThanOrEqual(SCRIPT_TEXT_CAP);
-    const attr = scanHtml(`<link rel="alternate" href="/${"a".repeat(100_000)}">`);
-    expect(attr.links[0].attrs.href.length).toBe(2048);
+    // Labels may be capped; addresses are dropped instead (see below).
+    const attr = scanHtml(`<link rel="alternate" title="${"t".repeat(100_000)}" href="/f">`);
+    expect(attr.links[0].attrs.title.length).toBe(2048);
+    expect(attr.links[0].attrs.href).toBe("/f");
+  });
+});
+
+describe("addresses: never a truncated prefix, first <base> with an href decides", () => {
+  const long = (n: number) => `/feed.xml?${"a".repeat(n)}`;
+
+  it("an oversized href / src is dropped, not truncated (anchor not collected, link has no href)", () => {
+    const scan = scanHtml(
+      `<link rel="alternate" type="application/rss+xml" href="${long(3000)}"><a href="${long(3000)}">RSS</a><script src="${long(3000)}"></script><a href="/ok.xml">RSS</a>`,
+      { selectors: ["script[src]"] },
+    );
+    expect(scan.links[0].attrs.href).toBeUndefined();
+    expect(scan.anchors.map((a) => a.href)).toEqual(["/ok.xml"]);
+    expect(scan.selectorHits.has("script[src]")).toBe(false);
+  });
+
+  it("an oversized value spread over entities is dropped too", () => {
+    const scan = scanHtml(`<a href="/x?${"&amp;".repeat(3000)}">RSS</a>`);
+    expect(scan.anchors).toEqual([]);
+  });
+
+  it("a dropped attribute still claims its name: a later duplicate does not win", () => {
+    const scan = scanHtml(`<a href="${long(3000)}" href="/feed.xml">RSS</a>`);
+    expect(scan.anchors).toEqual([]);
+  });
+
+  it("first <base> with an href attribute wins, even when empty", () => {
+    expect(scanHtml(`<base href=""><base href="https://evil.example/">`).baseHref).toBe("");
+    expect(scanHtml(`<base target="_blank"><base href="/b/"><base href="/c/">`).baseHref).toBe("/b/");
+    expect(scanHtml(`<p>no base</p>`).baseHref).toBeNull();
+  });
+
+  it("an oversized first <base> is unusable (document URL), and still blocks later ones", () => {
+    expect(scanHtml(`<base href="https://evil.example/${"a".repeat(3000)}"><base href="https://evil2.example/">`).baseHref).toBe("");
   });
 });
 
