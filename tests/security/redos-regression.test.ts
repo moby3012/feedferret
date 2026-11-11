@@ -91,10 +91,14 @@ const CASES: Case[] = [
   { name: "search tokenizeSearch (user query)", units: SEARCH_UNITS, run: tokenizeSearch },
 ];
 
-/** Best of up to three runs: the suite runs in parallel workers, so one slow sample is scheduler noise, not a regression (a quadratic regex needs seconds to minutes on every run). */
+/**
+ * Best of up to five runs with a short pause in between: the suite runs in parallel workers, so a slow
+ * sample is scheduler/GC noise, not a regression (a quadratic regex needs seconds to minutes on every run).
+ */
 function elapsed(fn: () => unknown): number {
   let best = Infinity;
-  for (let i = 0; i < 3 && best > BUDGET_MS; i++) {
+  for (let i = 0; i < 5 && best > BUDGET_MS; i++) {
+    if (i > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
     const t0 = performance.now();
     fn();
     best = Math.min(best, performance.now() - t0);

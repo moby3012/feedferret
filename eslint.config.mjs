@@ -40,15 +40,6 @@ const config = [
     },
   },
   {
-    // Discovery code is being rewritten with linear scanners in feat/platform-adapters;
-    // drop this override once that branch has landed.
-    files: ["lib/feed-adapters/**", "lib/feed-discovery.ts", "lib/discovery-budget.ts", "lib/transport-fallback.ts", "lib/smart-url-resolver*.ts"],
-    rules: {
-      "regexp/no-super-linear-backtracking": "off",
-      "regexp/no-super-linear-move": "off",
-    },
-  },
-  {
     // The transport boundary owns undici dispatchers and the authenticated
     // loopback CONNECT server. Push needs an HTTPS Agent for web-push's own
     // https.request; its shared agent uses safeLookup and checks IP literals.
