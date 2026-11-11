@@ -1,0 +1,28 @@
+Return-Path: <bounce@mg2.substack.com>
+Delivered-To: inbox+ff-aaaaaaaaaaaaaaaaaaaaaaaaaa@example.org
+Received: from mg2.substack.com by mx.example.org; Tue, 10 Nov 2026 09:00:00 +0000
+From: Pragmatic Notes <pragmaticnotes@substack.com>
+To: inbox+ff-aaaaaaaaaaaaaaaaaaaaaaaaaa@example.org
+Subject: Confirm your subscription to Pragmatic Notes
+Date: Tue, 10 Nov 2026 09:00:00 +0000
+Message-ID: <confirm-123@substack.com>
+List-Unsubscribe: <https://substack.com/unsubscribe/abc?utm_source=email>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset=utf-8
+
+Please confirm your subscription to Pragmatic Notes.
+
+Confirm subscription: https://pragmaticnotes.substack.com/subscribe/confirm?token=xyz123&email=reader%40example.org
+
+--b1
+Content-Type: text/html; charset=utf-8
+
+<html><head><style>body{background:#fff}</style></head><body>
+<p>Thanks for signing up! Please confirm your subscription to <b>Pragmatic Notes</b>.</p>
+<p><a href="https://pragmaticnotes.substack.com/subscribe/confirm?token=xyz123&amp;email=reader%40example.org">Confirm subscription</a></p>
+<p><a href="https://substack.com/unsubscribe/abc">Unsubscribe</a></p>
+</body></html>
+--b1--

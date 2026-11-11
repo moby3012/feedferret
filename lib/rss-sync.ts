@@ -26,6 +26,7 @@ import { UNTITLED } from "./title-synthesis";
 import { googleNewsStableKey, prepareGoogleNewsArticles, type GoogleNewsPreparedArticle } from "./google-news-ingest";
 import { GOOGLE_NEWS_MIN_UPDATE_MINUTES } from "./google-news-url";
 import type { ResolveOptions } from "./google-news";
+import { NEWSLETTER_SOURCE_TYPE } from "./newsletter-constants";
 
 const MAX_AUTO_SUMMARIES_PER_SYNC = 3;
 const MAX_AUTO_TAG_PER_SYNC = 3;
@@ -435,6 +436,9 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
     });
 
     if (!feed) throw new Error("Feed not found");
+    // N1: newsletter feeds are filled by inbound mail (lib/inbound-email.ts) and
+    // have no fetchable URL — a sync must not fail/auto-mute them.
+    if (feed.sourceType === NEWSLETTER_SOURCE_TYPE) return { success: true, count: 0, createdArticleIds: [] };
 
     // Connector secrets (RSSHub key / changedetection.io token) must not reach
     // stored article links, feed errors, notifications or rule payloads.
@@ -1025,7 +1029,7 @@ export async function syncUserFeeds(userId: string) {
     const userDefaultUpdateFrequency = user?.defaultUpdateFrequency ?? 60;
 
     const feeds = await db.feed.findMany({
-        where: { userId },
+        where: { userId, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
         select: {
             id: true,
             userId: true,
@@ -1088,6 +1092,7 @@ export async function syncAllFeeds() {
     );
 
     const feeds = await db.feed.findMany({
+        where: { sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
         select: {
             id: true,
             userId: true,

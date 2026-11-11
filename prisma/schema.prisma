@@ -139,6 +139,8 @@ model User {
   exportWallabagUsername     String?
   exportWallabagPassword     String?                    // encrypted at rest
   role          String    @default("USER")
+  // N1 newsletter-to-feed: per-user inbound addresses (lib/inbound-email.ts).
+  newsletterAddresses NewsletterAddress[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([digestEnabled])
@@ -362,6 +364,11 @@ model Feed {
   readerFontSizeOverride   String?  // null = inherit user.readerFontSize; else "small"|"medium"|"large"|"xl"
   readerWidthOverride      String?  // null = inherit user.readerWidth; else "normal"|"wide"|"full"
   openOriginalOverride     Boolean? // null = inherit user.openOriginalByDefault
+  // N1 newsletter feeds (sourceType "newsletter", url "newsletter:<senderKey>"):
+  // never fetched over HTTP; filled by lib/inbound-email.ts. Sender grouping key,
+  // e.g. "list:digest.example.com" / "domain:example.com" / "from:writer@substack.com".
+  newsletterSender         String?
+  newsletterAddresses      NewsletterAddress[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, url])
@@ -429,6 +436,14 @@ model Article {
   cluster     StoryCluster? @relation(fields: [clusterId], references: [id], onDelete: SetNull)
   storySig    String?    // JSON StorySig, <= 600 chars
   clusteredAt DateTime?
+  // N1 newsletter metadata (lib/inbound-email.ts), null for web feed items.
+  // Dedupe uses dedupeKey "email:<Message-ID>" (unique per user+feed).
+  emailMessageId          String?
+  emailSender             String?   // normalized From address
+  confirmationUrl         String?   // double-opt-in link (shown to the user, never auto-clicked)
+  listUnsubscribeUrl      String?   // RFC 2369 https URL
+  listUnsubscribeMailto   String?   // RFC 2369 mailto URL
+  listUnsubscribeOneClick Boolean?  // RFC 8058 List-Unsubscribe-Post: List-Unsubscribe=One-Click
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, feedId, dedupeKey])
@@ -731,4 +746,49 @@ model DiscoveryCatalogFeed {
 model ExternalIdSequence {
   name String @id
   value BigInt
+}
+
+// N1 newsletter-to-feed: admin-wide inbound mail transport (one row per way in).
+// Transports (IMAP poller, webhook) arrive in later PRs; this PR only stores them.
+// Secrets are sealed with the v2 `ff2.` format (lib/secret-box.ts, purposes
+// "inboundMailSource.credentials" / "inboundMailSource.webhookSecret") and never
+// sent to the browser.
+model InboundMailSource {
+  id             String    @id @default(cuid())
+  kind           String    // "imap" | "cloudflare" | "webhook"
+  name           String?
+  // Base address the per-user addresses derive from: the mailbox for IMAP
+  // plus-addressing ("box@example.com" -> "box+ff-<token>@example.com") or the
+  // routed domain for cloudflare/webhook ("<token>@<domain>").
+  address        String?
+  settings       String?   // JSON, non-secret (host, port, tls, folder, provider preset)
+  credentials    String?   // ff2-sealed JSON (e.g. IMAP user/app password)
+  webhookSecret  String?   // ff2-sealed HMAC secret
+  paused         Boolean   @default(false)
+  lastReceivedAt DateTime?
+  lastCheckedAt  DateTime?
+  lastError      String?   // metadata only, never mail content
+  errorCount     Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  @@index([kind])
+}
+
+// N1: per-user inbound newsletter address. `token` is unguessable (≥128 bit)
+// and the only thing that routes a mail to a user.
+model NewsletterAddress {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token       String   @unique
+  alias       String?  // optional user label / slug
+  feedId      String?  // set: every mail goes to this feed instead of sender grouping
+  feed        Feed?    @relation(fields: [feedId], references: [id], onDelete: SetNull)
+  description String?
+  isActive    Boolean  @default(true)
+  lastReceivedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([userId, isActive])
+  @@index([feedId])
 }

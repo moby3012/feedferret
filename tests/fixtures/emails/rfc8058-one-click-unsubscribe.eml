@@ -1,0 +1,16 @@
+From: Morning Digest <news@digest.example.com>
+To: Reader <aaaaaaaaaaaaaaaaaaaaaaaaaa@nl.example.org>
+Subject: Your morning digest
+Date: Wed, 11 Nov 2026 06:00:00 +0000
+Message-ID: <digest-2026-11-11@digest.example.com>
+List-Unsubscribe: <mailto:unsubscribe@digest.example.com?subject=unsubscribe>,
+ <https://digest.example.com/unsubscribe/opaque-token-1>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Good morning!
+
+Top story: https://digest.example.com/story/1?utm_campaign=morning
+
+Have a nice day.

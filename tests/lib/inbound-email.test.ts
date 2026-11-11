@@ -1,0 +1,105 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  detectConfirmationUrl,
+  extractRecipientTokens,
+  generateNewsletterToken,
+  isNewsletterToken,
+  isTrackingImage,
+  newsletterAddressFor,
+  normalizeMessageId,
+  parseListId,
+  parseListUnsubscribe,
+  senderIdentity,
+  stripTrackingParams,
+} from "@/lib/inbound-email";
+import { SECRET_COLUMNS, openSecret, sealSecret } from "@/lib/secret-box";
+
+const T = "abcdefghijklmnopqrstuvwxyz";
+
+describe("tokens and addresses", () => {
+  it("generates unguessable base32 tokens", () => {
+    const tokens = new Set(Array.from({ length: 200 }, generateNewsletterToken));
+    expect(tokens.size).toBe(200);
+    for (const t of tokens) expect(isNewsletterToken(t)).toBe(true);
+  });
+
+  it("builds plus-addresses for IMAP and token@domain for domain sources", () => {
+    expect(newsletterAddressFor({ kind: "imap", address: "Box+old@Example.org" }, T)).toBe(`box+ff-${T}@example.org`);
+    expect(newsletterAddressFor({ kind: "cloudflare", address: "nl.example.org" }, T)).toBe(`${T}@nl.example.org`);
+    expect(newsletterAddressFor({ kind: "webhook", address: null }, T)).toBeNull();
+  });
+
+  it("extracts tokens from both address forms, ignores everything else", () => {
+    expect(extractRecipientTokens([`Reader <box+ff-${T}@example.org>`])).toEqual([T]);
+    expect(extractRecipientTokens([`${T.toUpperCase()}@nl.example.org, other@example.org`])).toEqual([T]);
+    expect(extractRecipientTokens([`${T}+tech@nl.example.org`])).toEqual([T]);
+    expect(extractRecipientTokens(["box+ff-short@example.org", "plain@example.org", `box+ff-${T}x@example.org`])).toEqual([]);
+  });
+});
+
+describe("header parsing", () => {
+  it("normalizes Message-ID", () => {
+    expect(normalizeMessageId(" <abc@x.y> ")).toBe("abc@x.y");
+    expect(normalizeMessageId("")).toBeNull();
+    expect(normalizeMessageId("<has space@x>")).toBeNull();
+  });
+
+  it("parses List-Id with phrase", () => {
+    expect(parseListId('"Morning Brew" <Brew.List.Example>')).toEqual({ id: "brew.list.example", phrase: "Morning Brew" });
+    expect(parseListId("<x.example>")).toEqual({ id: "x.example", phrase: null });
+  });
+
+  it("parses List-Unsubscribe / -Post (https + mailto only, one-click needs https)", () => {
+    expect(parseListUnsubscribe("<mailto:u@x.example>, <https://x.example/u?t=1>", "List-Unsubscribe=One-Click"))
+      .toEqual({ url: "https://x.example/u?t=1", mailto: "mailto:u@x.example", oneClick: true });
+    expect(parseListUnsubscribe("<http://x.example/u>, <javascript:alert(1)>", "List-Unsubscribe=One-Click"))
+      .toEqual({ url: null, mailto: null, oneClick: false });
+  });
+
+  it("groups senders: List-Id, then domain, then full address on shared platforms", () => {
+    expect(senderIdentity({ listId: "<a.b>", fromName: "A", fromAddress: "x@b.example" }).key).toBe("list:a.b");
+    expect(senderIdentity({ listId: null, fromName: "News", fromAddress: "hi@mail.brand.example" })).toMatchObject({ key: "domain:brand.example", title: "News" });
+    expect(senderIdentity({ listId: null, fromName: "Writer", fromAddress: "writer@substack.com" }).key).toBe("from:writer@substack.com");
+  });
+});
+
+describe("hygiene helpers", () => {
+  it("strips tracking params only", () => {
+    expect(stripTrackingParams("https://x.example/a?utm_source=n&id=3&mc_eid=9")).toBe("https://x.example/a?id=3");
+    expect(stripTrackingParams("https://x.example/a?id=3")).toBe("https://x.example/a?id=3");
+    expect(stripTrackingParams("mailto:a@b?utm_source=x")).toBe("mailto:a@b?utm_source=x");
+  });
+
+  it("recognises tracking images", () => {
+    expect(isTrackingImage({ src: "https://cdn.example/a.png", width: "1", height: "1" })).toBe(true);
+    expect(isTrackingImage({ src: "https://cdn.example/a.png", style: "width:1px;height:1px" })).toBe(true);
+    expect(isTrackingImage({ src: "https://x.list-manage.com/track/open.php?u=1" })).toBe(true);
+    expect(isTrackingImage({ src: "https://email.brand.example/o/abc" })).toBe(true);
+    expect(isTrackingImage({ src: "https://cdn.example/hero.png", width: "600" })).toBe(false);
+    expect(isTrackingImage({ src: "https://cdn.example/hero.png", style: "width:100%" })).toBe(false);
+  });
+
+  it("only flags confirmations with a confirm-ish subject/body and link", () => {
+    const links = [{ href: "https://x.example/unsubscribe", text: "Unsubscribe" }, { href: "https://x.example/c?t=1", text: "Anmeldung bestätigen" }];
+    expect(detectConfirmationUrl("Bitte bestätige deine Anmeldung", "", links)).toBe("https://x.example/c?t=1");
+    expect(detectConfirmationUrl("Weekly issue", "Nothing to confirm here? no.", links)).toBeNull();
+    expect(detectConfirmationUrl("Confirm your subscription", "", [links[0]])).toBeNull();
+  });
+});
+
+describe("inbound mail source secrets", () => {
+  beforeEach(() => {
+    vi.stubEnv("AUTH_SECRET", "inbound-email-test-secret-0123456789");
+    vi.stubEnv("FEEDFERRET_ENCRYPTION_KEY", "");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("registers the new secret columns with their own AAD purpose", () => {
+    const purposes = SECRET_COLUMNS.filter((c) => c.model === "inboundMailSource").map((c) => c.purpose);
+    expect(purposes).toEqual(["inboundMailSource.credentials", "inboundMailSource.webhookSecret"]);
+    const sealed = sealSecret("inboundMailSource.credentials", '{"user":"a","password":"b"}');
+    expect(sealed.startsWith("ff2.")).toBe(true);
+    expect(openSecret("inboundMailSource.credentials", sealed, "plaintext").value).toBe('{"user":"a","password":"b"}');
+    expect(() => openSecret("inboundMailSource.webhookSecret", sealed, "plaintext")).toThrow();
+  });
+});
