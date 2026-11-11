@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * what undici gets, `impit` what the browser-fingerprint client gets.
  */
 
-type Route = string | Error | { plain: string | Error; impit: string | Error };
+/** "hang" = never answers until the request's abort signal fires. */
+type Body = string | Error | "hang";
+type Route = Body | { plain: Body; impit: Body };
 const mocks = vi.hoisted(() => ({
   routes: new Map<string, unknown>(),
   headers: new Map<string, Record<string, string>>(),
@@ -16,12 +18,18 @@ const mocks = vi.hoisted(() => ({
   rsshub: { config: null as null | { url: string }, routes: [] as Array<{ route: string; title: string }> },
 }));
 
-function respond(url: string, options: any = {}) {
+async function respond(url: string, options: any = {}, signal?: AbortSignal | null) {
   const impersonate = options?.impersonate === true;
   mocks.calls.push({ url, impersonate });
   const route = mocks.routes.get(url) as Route | undefined;
   if (route === undefined) throw new Error("Fetch failed: 404");
   const body = typeof route === "object" && !(route instanceof Error) ? (impersonate ? route.impit : route.plain) : route;
+  if (body === "hang") {
+    return new Promise<string>((_, reject) => {
+      if (signal?.aborted) return reject(new Error("aborted"));
+      signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+    });
+  }
   if (body instanceof Error) throw body;
   if (options?.maxBytes && Buffer.byteLength(body) > options.maxBytes) return Buffer.from(body).subarray(0, options.maxBytes).toString("utf8");
   return body;
@@ -31,10 +39,10 @@ vi.mock("../../lib/ssrf", async () => {
   const actual = await vi.importActual<any>("../../lib/ssrf");
   return {
     ...actual,
-    fetchTextWithSsrfProtection: vi.fn(async (url: string, _init?: unknown, options?: any) => respond(url, options)),
-    fetchWithSsrfProtection: vi.fn(async (url: string, _init?: unknown, options?: any) => ({
+    fetchTextWithSsrfProtection: vi.fn(async (url: string, init?: RequestInit, options?: any) => respond(url, options, init?.signal)),
+    fetchWithSsrfProtection: vi.fn(async (url: string, init?: RequestInit, options?: any) => ({
       notModified: false,
-      text: respond(url, options),
+      text: await respond(url, options, init?.signal),
       etag: null,
       lastModified: null,
       headers: new Headers(mocks.headers.get(url) ?? {}),
@@ -51,6 +59,7 @@ vi.mock("../../lib/rsshub", () => ({
 }));
 
 import { discoverFeeds } from "../../lib/feed-discovery";
+import { resetDiscoveryHostBlocks } from "../../lib/discovery-budget";
 import { feedSourceLabel } from "../../lib/feed-source-label";
 
 const adapterFixture = (name: string) => readFileSync(path.join(__dirname, "../fixtures/adapters", `${name}.html`), "utf8");
@@ -64,6 +73,7 @@ beforeEach(() => {
   mocks.calls.length = 0;
   mocks.rsshub.config = null;
   mocks.rsshub.routes = [];
+  resetDiscoveryHostBlocks();
   vi.stubEnv("FEEDFERRET_DISABLE_IMPIT", "");
 });
 afterEach(() => {
@@ -190,6 +200,20 @@ describe("transport fallback", () => {
     expect(result.feeds.map((f) => f.url)).toEqual(["https://empty.example.com/atom.xml"]);
   });
 
+  it("an empty 200 body on a candidate feed (bot wall) → verified via the other transport", async () => {
+    mocks.routes.set(
+      "https://wall2.example.com/",
+      '<html><head><link rel="alternate" type="application/rss+xml" title="Wall" href="/feed.xml"></head></html>',
+    );
+    mocks.routes.set("https://wall2.example.com/feed.xml", { plain: "  \n ", impit: rss("Wall feed") });
+    const result = await discoverFeeds("https://wall2.example.com/");
+    expect(result.feeds.map((f) => f.url)).toEqual(["https://wall2.example.com/feed.xml"]);
+    expect(mocks.calls.filter((c) => c.url === "https://wall2.example.com/feed.xml")).toEqual([
+      { url: "https://wall2.example.com/feed.xml", impersonate: false },
+      { url: "https://wall2.example.com/feed.xml", impersonate: true },
+    ]);
+  });
+
   it("both transports refused → the first refusal's hint (blocked), no second retry loop", async () => {
     mocks.routes.set("https://wall.example.com/", { plain: refused(403), impit: refused(429) });
     const result = await discoverFeeds("https://wall.example.com/");
@@ -240,5 +264,81 @@ describe("feedSourceLabel", () => {
     expect(feedSourceLabel({ source: "curated" })?.key).toBe("feedSource.curated");
     expect(feedSourceLabel({ source: "topic" })).toBeNull();
     expect(feedSourceLabel({ source: "software", via: { family: "forum", name: "phpBB" } })).toEqual({ key: "feedSource.forum", values: { name: "phpBB" } });
+  });
+});
+
+describe("rate limits (429 / Retry-After)", () => {
+  it("429 is never retried on the other transport; the host gets no further probe in this run", async () => {
+    mocks.routes.set("https://busy.example.com/", { plain: refused(429), impit: adapterFixture("xenforo") });
+    const result = await discoverFeeds("https://busy.example.com/");
+    expect(result.feeds).toEqual([]);
+    expect(result.hint).toBe("rate-limited");
+    // One request in total: no impit retry, no common-path / software probes of that host.
+    expect(mocks.calls.filter((c) => new URL(c.url).hostname === "busy.example.com")).toEqual([
+      { url: "https://busy.example.com/", impersonate: false },
+    ]);
+  });
+
+  it("a candidate answering 429 blocks its host for the remaining candidates (both transports)", async () => {
+    const links = ["/a.xml", "/b.xml", "/c.xml"].map((h) => `<link rel="alternate" type="application/rss+xml" href="${h}">`).join("");
+    mocks.routes.set("https://feeds.example.com/", `<html><head>${links}</head></html>`);
+    mocks.routes.set("https://feeds.example.com/a.xml", refused(429));
+    mocks.routes.set("https://feeds.example.com/b.xml", refused(429));
+    mocks.routes.set("https://feeds.example.com/c.xml", refused(429));
+    const result = await discoverFeeds("https://feeds.example.com/", { limits: { deadlineMs: 5_000, maxRequests: 30 } });
+    expect(result.feeds).toEqual([]);
+    const feedCalls = mocks.calls.filter((c) => c.url.endsWith(".xml"));
+    // Batch of three goes out in parallel; nothing after the 429s, no impit retries, no common paths.
+    expect(feedCalls.every((c) => c.impersonate === false)).toBe(true);
+    expect(mocks.calls.some((c) => c.url === "https://feeds.example.com/feed")).toBe(false);
+  });
+
+  it("the Retry-After window also holds for the next discovery run (no request at all)", async () => {
+    mocks.routes.set("https://slow.example.com/", refused(429));
+    await discoverFeeds("https://slow.example.com/");
+    mocks.calls.length = 0;
+    mocks.routes.set("https://slow.example.com/", adapterFixture("xenforo"));
+    const again = await discoverFeeds("https://slow.example.com/");
+    expect(again.hint).toBe("rate-limited");
+    expect(mocks.calls).toEqual([]);
+  });
+
+  it("any refusal carrying a Retry-After (HttpStatusError shape) is not retried and blocks the host", async () => {
+    const err = Object.assign(new Error("Fetch failed: 403"), { status: 403, retryAfterMs: 120_000 });
+    mocks.routes.set("https://ra.example.com/", { plain: err, impit: adapterFixture("xenforo") });
+    await discoverFeeds("https://ra.example.com/");
+    expect(mocks.calls.filter((c) => c.url === "https://ra.example.com/")).toHaveLength(1);
+  });
+});
+
+describe("run budget", () => {
+  it("deadline: in-flight requests are aborted and verified feeds come back as a partial result", async () => {
+    const links = ['<link rel="alternate" type="application/rss+xml" title="Fast" href="/fast.xml">', '<link rel="alternate" type="application/rss+xml" title="Slow" href="/slow.xml">'].join("");
+    mocks.routes.set("https://tarpit.example.com/", `<html><head>${links}</head></html>`);
+    mocks.routes.set("https://tarpit.example.com/fast.xml", rss("Fast"));
+    mocks.routes.set("https://tarpit.example.com/slow.xml", "hang");
+    const started = Date.now();
+    const result = await discoverFeeds("https://tarpit.example.com/", { limits: { deadlineMs: 300, maxRequests: 30 } });
+    expect(Date.now() - started).toBeLessThan(3_000);
+    expect(result.feeds.map((f) => f.url)).toEqual(["https://tarpit.example.com/fast.xml"]);
+    expect(result.partial).toBe("deadline");
+  });
+
+  it("request budget: no more requests than the budget across stages (incl. retries)", async () => {
+    const anchors = Array.from({ length: 25 }, (_, i) => `<a href="/feeds/${i}.rss">RSS ${i}</a>`).join("");
+    mocks.routes.set("https://many.example.com/", `<html><body>${anchors}</body></html>`);
+    for (let i = 0; i < 25; i++) mocks.routes.set(`https://many.example.com/feeds/${i}.rss`, refused(403));
+    const result = await discoverFeeds("https://many.example.com/", { limits: { deadlineMs: 5_000, maxRequests: 8 } });
+    expect(mocks.calls.length).toBeLessThanOrEqual(8);
+    expect(result.feeds).toEqual([]);
+    expect(result.partial).toBe("request-budget");
+  });
+
+  it("a normal run reports no partial flag", async () => {
+    mocks.routes.set("https://ok.example.com/", '<html><head><link rel="alternate" type="application/rss+xml" href="/f.xml"></head></html>');
+    mocks.routes.set("https://ok.example.com/f.xml", rss("OK"));
+    const result = await discoverFeeds("https://ok.example.com/");
+    expect(result.feeds).toHaveLength(1);
+    expect(result.partial).toBeUndefined();
   });
 });

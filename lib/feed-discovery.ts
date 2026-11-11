@@ -7,6 +7,7 @@ import { detectSoftwareFeeds, matchPlatformAdapters, rsshubOnlyPlatform, type Ad
 import type { AdapterFamily } from "./feed-adapters/registry";
 import { cleanUrlInput, httpFallbackUrl, isConnectError, isTlsError, normalizeUrlInput } from "./url-input";
 import { withTransportFallback } from "./transport-fallback";
+import { DiscoveryBudget, DiscoveryBudgetRefusal, type DiscoveryStopReason } from "./discovery-budget";
 
 export type DiscoveredFeed = {
   url: string;
@@ -40,11 +41,15 @@ export type DiscoveryResult = {
   hintPlatform?: string;
   /** URL mode: the page address actually read (after redirects / http fallback). */
   pageUrl?: string;
+  /** Set when the run hit its deadline or request budget: `feeds` may be incomplete. */
+  partial?: DiscoveryStopReason;
 };
 
 export type DiscoverOptions = {
   /** UI locale ("de", "en-GB") — localizes Google News topic feeds. */
   locale?: string | null;
+  /** Overrides the run's deadline / request budget (tests, batch tools). */
+  limits?: { deadlineMs: number; maxRequests: number };
 };
 
 export type StarterPack = {
@@ -232,12 +237,33 @@ export const COMMON_FEED_PATHS = [
 type VerifiedCandidate = { url: string; title: string; type: DiscoveredFeed["type"]; signature: string | null };
 
 /**
+ * One budgeted request with the transport fallback: claims a request slot
+ * (refused → DiscoveryBudgetRefusal, nothing is sent), shares the run's abort
+ * signal, counts the retry and every redirect hop, and blocks the host on a
+ * rate-limit response.
+ */
+async function budgetedFetch<T>(
+  budget: DiscoveryBudget,
+  url: string,
+  attempt: (impersonate: boolean, request: { signal: AbortSignal; timeoutMs: number; redirectGuard: (next: string) => string | null }) => Promise<T>,
+  isEmpty?: (result: T) => boolean,
+): Promise<T> {
+  if (!budget.take(url)) throw new DiscoveryBudgetRefusal(url);
+  return withTransportFallback(
+    url,
+    (impersonate) => attempt(impersonate, { signal: budget.signal, timeoutMs: budget.requestTimeoutMs(), redirectGuard: budget.redirectGuard }),
+    { isEmpty, beforeRetry: () => budget.take(url), onFailure: (err) => budget.noteFailure(url, err) },
+  );
+}
+
+/**
  * Fetch-verifies a candidate from its first FEED_SNIFF_BYTES (stream cut off
  * there) — the size of the whole feed never matters here; the full-size
  * limits apply when the feed is actually synced. `preferOwnTitle`: replace
  * the candidate's label (anchor text, "host feed") with the feed's own title.
  */
 async function verifyFeedCandidate(
+  budget: DiscoveryBudget,
   url: string,
   title: string,
   fallbackType: DiscoveredFeed["type"],
@@ -245,14 +271,21 @@ async function verifyFeedCandidate(
 ): Promise<VerifiedCandidate | null> {
   try {
     const allowInternal = await isTrustedFeedFetchingAllowed();
-    const text = await withTransportFallback(url, (impersonate) =>
-      fetchTextWithSsrfProtection(url, {}, {
-        maxBytes: FEED_SNIFF_BYTES,
-        readPrefix: true,
-        timeoutMs: 12_000,
-        allowInternal,
-        impersonate,
-      }));
+    const text = await budgetedFetch(
+      budget,
+      url,
+      (impersonate, req) =>
+        fetchTextWithSsrfProtection(url, { signal: req.signal }, {
+          maxBytes: FEED_SNIFF_BYTES,
+          readPrefix: true,
+          timeoutMs: req.timeoutMs,
+          redirectGuard: req.redirectGuard,
+          allowInternal,
+          impersonate,
+        }),
+      // An empty 200 (bot wall) is a refusal too → other transport.
+      (t) => !t.trim(),
+    );
     const sniff = sniffFeedPrefix(text);
     if (!sniff) return null;
     const ownTitle = sniff.title;
@@ -281,10 +314,10 @@ function toDiscovered(f: ResolvedFeed, source: "resolver" | "topic" | "curated")
 }
 
 /** Registry platform candidates are guesses until the endpoint answers with a feed. */
-async function verifyPlatformAdapterCandidates(candidates: AdapterCandidate[]): Promise<DiscoveredFeed[]> {
+async function verifyPlatformAdapterCandidates(budget: DiscoveryBudget, candidates: AdapterCandidate[]): Promise<DiscoveredFeed[]> {
   const checked = await Promise.all(
     candidates.map(async (c, i): Promise<DiscoveredFeed | null> => {
-      const ok = await verifyFeedCandidate(c.url, c.title, "unknown", true);
+      const ok = await verifyFeedCandidate(budget, c.url, c.title, "unknown", true);
       if (!ok) return null;
       return {
         url: c.url,
@@ -301,19 +334,32 @@ async function verifyPlatformAdapterCandidates(candidates: AdapterCandidate[]): 
   return checked.filter((f): f is DiscoveredFeed => f !== null);
 }
 
-/** SSRF-protected text fetch handed to the pure resolver for its one-step lookups. */
-const resolverFetchText = async (url: string, init?: { headers?: Record<string, string> }) =>
-  fetchTextWithSsrfProtection(
-    url,
-    {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; FeedFerret/1.0; +feed-discovery)",
-        ...(init?.headers ?? {}),
+/** SSRF-protected, budgeted text fetch handed to the pure resolver for its one-step lookups. */
+const resolverFetchText = (budget: DiscoveryBudget) => async (url: string, init?: { headers?: Record<string, string> }) => {
+  if (!budget.take(url)) throw new DiscoveryBudgetRefusal(url);
+  try {
+    return await fetchTextWithSsrfProtection(
+      url,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; FeedFerret/1.0; +feed-discovery)",
+          ...(init?.headers ?? {}),
+        },
+        signal: budget.signal,
       },
-    },
-    // YouTube channel/watch pages are ~1–3 MB of HTML.
-    { maxBytes: 4 * 1024 * 1024, timeoutMs: 12_000, allowInternal: await isTrustedFeedFetchingAllowed() },
-  );
+      // YouTube channel/watch pages are ~1–3 MB of HTML.
+      {
+        maxBytes: 4 * 1024 * 1024,
+        timeoutMs: budget.requestTimeoutMs(),
+        redirectGuard: budget.redirectGuard,
+        allowInternal: await isTrustedFeedFetchingAllowed(),
+      },
+    );
+  } catch (err) {
+    budget.noteFailure(url, err);
+    throw err;
+  }
+};
 
 /**
  * Stage 1 — deterministic platform resolution (YouTube, Reddit, GitHub, …).
@@ -321,20 +367,23 @@ const resolverFetchText = async (url: string, init?: { headers?: Record<string, 
  * unknown host might be Mastodon) and are fetch-checked before being offered.
  * Curated publisher-table hits come back separately: they are only a fallback.
  */
-async function resolveWithPlatformRules(input: string): Promise<{ matched: boolean; feeds: DiscoveredFeed[]; curated: ResolvedFeed[] }> {
-  const { matched, feeds } = await resolveSource(input, { fetchText: resolverFetchText });
+async function resolveWithPlatformRules(
+  input: string,
+  budget: DiscoveryBudget,
+): Promise<{ matched: boolean; feeds: DiscoveredFeed[]; curated: ResolvedFeed[] }> {
+  const { matched, feeds } = await resolveSource(input, { fetchText: resolverFetchText(budget) });
   if (!feeds.length) {
     // Registry platform adapters (lib/feed-adapters/registry.ts): URL pattern → native endpoints, verified.
     const parsed = parseSourceInput(input);
     const candidates = parsed.type === "url" ? matchPlatformAdapters(parsed.url) : [];
     if (!candidates.length) return { matched, feeds: [], curated: [] };
-    return { matched: true, feeds: await verifyPlatformAdapterCandidates(candidates), curated: [] };
+    return { matched: true, feeds: await verifyPlatformAdapterCandidates(budget, candidates), curated: [] };
   }
   const curated = feeds.filter((f) => f.curated);
   const checked = await Promise.all(
     feeds.filter((f) => !f.curated).map(async (f) => {
       if (!f.verify) return toDiscovered(f, "resolver");
-      const ok = await verifyFeedCandidate(f.url, f.title, f.format ?? "unknown");
+      const ok = await verifyFeedCandidate(budget, f.url, f.title, f.format ?? "unknown");
       return ok ? { ...toDiscovered(f, "resolver"), type: ok.type } : null;
     }),
   );
@@ -342,10 +391,10 @@ async function resolveWithPlatformRules(input: string): Promise<{ matched: boole
 }
 
 /** Curated publisher routes, verified — only consulted when the page itself yields no feed. */
-async function verifyCurated(curated: ResolvedFeed[]): Promise<DiscoveredFeed[]> {
+async function verifyCurated(curated: ResolvedFeed[], budget: DiscoveryBudget): Promise<DiscoveredFeed[]> {
   const checked = await Promise.all(
     curated.map(async (f) => {
-      const ok = await verifyFeedCandidate(f.url, f.title, f.format ?? "unknown");
+      const ok = await verifyFeedCandidate(budget, f.url, f.title, f.format ?? "unknown");
       return ok ? { ...toDiscovered(f, "curated"), type: ok.type } : null;
     }),
   );
@@ -357,7 +406,7 @@ async function verifyCurated(curated: ResolvedFeed[]): Promise<DiscoveredFeed[]>
  * instance, each validated before it is offered. Empty (and free) when no
  * instance is configured or no rule matches.
  */
-async function resolveWithRadarRules(pageUrl: string): Promise<{ feeds: DiscoveredFeed[]; needsRsshub?: boolean }> {
+async function resolveWithRadarRules(pageUrl: string, budget: DiscoveryBudget): Promise<{ feeds: DiscoveredFeed[]; needsRsshub?: boolean }> {
   try {
     const { radarRoutesFor, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } = await import("./rsshub");
     const matches = radarRoutesFor(pageUrl).slice(0, 4);
@@ -365,9 +414,12 @@ async function resolveWithRadarRules(pageUrl: string): Promise<{ feeds: Discover
     const config = await getRsshubConfig();
     if (!config) return { feeds: [], needsRsshub: true };
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 15_000); });
+    // Never past the run's deadline (the validation request has its own timeout).
+    const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.min(15_000, budget.remainingMs())); });
     const results = await Promise.all(
       matches.map(async (m): Promise<DiscoveredFeed | null> => {
+        // Each validation is one request against the RSSHub instance.
+        if (!budget.take(buildRsshubPublicRouteUrl(config, m.route))) return null;
         const validation = await Promise.race([validateRsshubRoute(config, m.route), timeout]);
         if (!validation || !validation.ok) return null;
         return {
@@ -505,7 +557,7 @@ type HtmlDiscovery = { feeds: DiscoveredFeed[]; hint?: DiscoveryHint; pageUrl: s
  * anchors anywhere in the page (scored), then common feed paths — verified
  * by a prefix sniff, ranked by score, de-duplicated by URL and content.
  */
-async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boolean } = {}): Promise<HtmlDiscovery> {
+async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opts: { httpFallback?: boolean } = {}): Promise<HtmlDiscovery> {
   let html = "";
   let hint: DiscoveryHint | undefined;
   const allowInternal = await isTrustedFeedFetchingAllowed();
@@ -549,15 +601,18 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
     }
   };
 
-  // Refused (401/402/403/429) or empty with the plain client → once more with
-  // the browser-fingerprint client (lib/transport-fallback.ts).
+  // Refused (401/402/403) or empty with the plain client → once more with the
+  // browser-fingerprint client (lib/transport-fallback.ts); a 429 blocks the
+  // host instead. Budgeted like every discovery request.
   const fetchPage = (url: string) =>
-    withTransportFallback(
+    budgetedFetch(
+      budget,
       url,
-      (impersonate) =>
-        fetchWithSsrfProtection(url, {}, {
+      (impersonate, req) =>
+        fetchWithSsrfProtection(url, { signal: req.signal }, {
           maxBytes: 1024 * 1024,
-          timeoutMs: 12_000,
+          timeoutMs: req.timeoutMs,
+          redirectGuard: req.redirectGuard,
           // Large pages: read a bounded prefix (never fail on size). Stop at the
           // end of <head> only when it already advertises a feed; otherwise keep
           // reading so feed anchors in the body are still found.
@@ -565,7 +620,7 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
           allowInternal,
           impersonate,
         }),
-      { isEmpty: (r) => !r.notModified && !r.text.trim() },
+      (r) => !r.notModified && !r.text.trim(),
     );
 
   let selfSniff: FeedSniff | null = null;
@@ -593,7 +648,11 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
       }
     }
   } catch (err) {
-    hint = isTlsError(err) ? "tls-error" : hintForFetchError(err);
+    hint = isTlsError(err)
+      ? "tls-error"
+      : err instanceof DiscoveryBudgetRefusal && budget.isHostBlocked(pageUrl)
+        ? "rate-limited"
+        : hintForFetchError(err);
   }
 
   const discovered = new Map<string, DiscoveredFeed & { score: number }>();
@@ -680,11 +739,11 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
   const common = byScore.filter(([, c]) => c.origin === "common");
   const BATCH = 5;
   const runBatches = async (entries: Array<[string, Candidate]>) => {
-    for (let i = 0; i < entries.length && discovered.size < 10; i += BATCH) {
+    for (let i = 0; i < entries.length && discovered.size < 10 && !budget.stopReason; i += BATCH) {
       const batch = entries.slice(i, i + BATCH);
       const verified = await Promise.all(
         batch.map(([url, c]) =>
-          verifyFeedCandidate(url, c.title, c.type, c.origin === "anchor" || c.origin === "common" || c.origin === "software")),
+          verifyFeedCandidate(budget, url, c.title, c.type, c.origin === "anchor" || c.origin === "common" || c.origin === "software")),
       );
       verified.forEach((v, idx) => {
         if (v) accept(v, batch[idx][1]);
@@ -732,15 +791,25 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
   const pageUrl = parsed.url.toString();
   const normalized = normalizeUrlInput(cleaned);
   const httpFallback = normalized.ok && normalized.schemeAssumed;
+  // One deadline + request budget for every stage below (lib/discovery-budget.ts).
+  const budget = new DiscoveryBudget(options.limits);
+  try {
+    return await discoverUrl(cleaned, parsed.url, pageUrl, httpFallback, budget);
+  } finally {
+    budget.dispose();
+  }
+}
+
+async function discoverUrl(cleaned: string, url: URL, pageUrl: string, httpFallback: boolean, budget: DiscoveryBudget): Promise<DiscoveryResult> {
   const [native, radar] = await Promise.all([
-    resolveWithPlatformRules(cleaned).catch(() => ({ matched: false, feeds: [] as DiscoveredFeed[], curated: [] as ResolvedFeed[] })),
-    resolveWithRadarRules(pageUrl),
+    resolveWithPlatformRules(cleaned, budget).catch(() => ({ matched: false, feeds: [] as DiscoveredFeed[], curated: [] as ResolvedFeed[] })),
+    resolveWithRadarRules(pageUrl, budget),
   ]);
 
   const html: Partial<HtmlDiscovery> & { feeds: DiscoveredFeed[] } = native.feeds.length
     ? { feeds: [] }
-    : await discoverFeedsInHtml(pageUrl, { httpFallback }).catch(() => ({ feeds: [] }));
-  const curated = !native.feeds.length && !html.feeds.length && native.curated.length ? await verifyCurated(native.curated) : [];
+    : await discoverFeedsInHtml(pageUrl, budget, { httpFallback }).catch(() => ({ feeds: [] }));
+  const curated = !native.feeds.length && !html.feeds.length && native.curated.length ? await verifyCurated(native.curated, budget) : [];
   const merged = new Map<string, DiscoveredFeed>();
   for (const f of [...native.feeds, ...html.feeds, ...curated, ...radar.feeds]) if (!merged.has(f.url)) merged.set(f.url, f);
 
@@ -749,7 +818,7 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
   if (merged.size === 0) {
     if (radar.needsRsshub) {
       hint = "needs-rsshub";
-      hintPlatform = rsshubOnlyPlatform(parsed.url) ?? undefined;
+      hintPlatform = rsshubOnlyPlatform(url) ?? undefined;
     } else if (html.hint) {
       hint = html.hint;
     }
@@ -761,6 +830,8 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
     hint,
     ...(hintPlatform ? { hintPlatform } : {}),
     pageUrl: html.pageUrl ?? pageUrl,
+    // Deadline / request budget hit: whatever verified so far, plus the reason.
+    ...(budget.stopReason ? { partial: budget.stopReason } : {}),
   };
 }
 

@@ -211,6 +211,8 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
           message = t("sidebar.hints.blocked");
         } else if (data.hint === "tls-error") {
           message = t("sidebar.hints.tlsError");
+        } else if (data.partial) {
+          message = t("sidebar.hints.partial");
         }
         setDiscoveryMessage(message);
         toast.info(message);

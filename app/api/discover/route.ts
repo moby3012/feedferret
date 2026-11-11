@@ -25,8 +25,8 @@ export async function GET(req: NextRequest) {
   const locale = req.nextUrl.searchParams.get("locale")?.slice(0, 10) || null;
 
   try {
-    const { mode, feeds, hint, hintPlatform } = await discoverFeeds(url, { locale });
-    return NextResponse.json({ feeds, mode, hint, ...(hintPlatform ? { hintPlatform } : {}) });
+    const { mode, feeds, hint, hintPlatform, partial } = await discoverFeeds(url, { locale });
+    return NextResponse.json({ feeds, mode, hint, ...(hintPlatform ? { hintPlatform } : {}), ...(partial ? { partial } : {}) });
   } catch (error) {
     return NextResponse.json({ feeds: [], mode: "url", error: String(error) });
   }
