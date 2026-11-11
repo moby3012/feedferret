@@ -6,6 +6,32 @@ const config = [
   { ignores: [".claude/**", ".next/**"] },
   ...coreWebVitals,
   {
+    files: ["lib/**/*.{ts,tsx}", "app/api/**/*.{ts,tsx}", "app/actions/**/*.{ts,tsx}", "auth.ts"],
+    rules: {
+      "no-restricted-globals": ["error", { name: "fetch", message: "Use safeFetch from lib/ssrf for outbound requests." }],
+      "no-restricted-syntax": ["error", {
+        selector: "CallExpression[callee.name='fetch']",
+        message: "Outbound requests must use safeFetch/fetchWithSsrfProtection from lib/ssrf (socket DNS pinning).",
+      }, {
+        selector: "CallExpression[callee.type='MemberExpression'][callee.object.name='globalThis'][callee.property.name='fetch']",
+        message: "Use safeFetch from lib/ssrf, including instead of globalThis.fetch.",
+      }, {
+        selector: "CallExpression[callee.type='MemberExpression'][callee.object.name='globalThis'][callee.computed=true][callee.property.value='fetch']",
+        message: "Use safeFetch from lib/ssrf, including instead of globalThis['fetch'].",
+      }],
+      "no-restricted-imports": ["error", {
+        paths: ["node:http", "node:https", "http", "https", "undici"].map(name => ({ name, message: "Use lib/ssrf; raw transports require a documented exception in eslint.config.mjs." })),
+      }],
+    },
+  },
+  {
+    // The transport boundary owns undici dispatchers and the authenticated
+    // loopback CONNECT server. Push needs an HTTPS Agent for web-push's own
+    // https.request; its shared agent uses safeLookup and checks IP literals.
+    files: ["lib/ssrf.ts", "lib/safe-dispatcher.ts", "lib/egress-proxy.ts", "lib/push.ts"],
+    rules: { "no-restricted-imports": "off" },
+  },
+  {
     rules: {
       // react-hooks v5 (shipped with eslint-config-next 16) introduces stricter rules.
       // These patterns are used throughout the codebase for data-driven state initialization

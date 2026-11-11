@@ -65,6 +65,19 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/plain" }).end("ok");
     return;
   }
+  if (url.pathname === "/h4/feed") {
+    res.writeHead(200, { "content-type": "application/rss+xml" }).end(
+      `<?xml version="1.0"?><rss version="2.0"><channel><title>H4 fixture</title><link>${baseUrl}</link><description>Offline transport fixture</description><item><title>H4 article</title><guid>h4-article</guid><link>${baseUrl}/h4/article</link><description>Short excerpt.</description></item></channel></rss>`,
+    );
+    return;
+  }
+  if (url.pathname === "/h4/article") {
+    const paragraph = "This offline article explains how a DNS answer is checked inside the connection lookup. The same address is then used by the socket, preventing a second resolution from reaching a private service. ";
+    res.writeHead(200, { "content-type": "text/html" }).end(
+      `<!doctype html><html><head><title>H4 article</title></head><body><main><article><h1>H4 article</h1>${Array.from({ length: 12 }, () => `<p>${paragraph.repeat(3)}</p>`).join("")}</article></main></body></html>`,
+    );
+    return;
+  }
   if (handleGoogleNews(req, res, url)) return;
   const m = /^\/feeds\/([a-z0-9-]+)\.xml$/.exec(url.pathname);
   const feed = m && FEEDS.find((f) => f.slug === m[1]);

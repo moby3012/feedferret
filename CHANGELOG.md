@@ -7,6 +7,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Security — outbound DNS pinning and redirects (H4 / M9)
+
+- Outbound requests, including browser push endpoints, now validate DNS inside the actual socket lookup to block DNS rebinding. Feed/page redirects remain individually guarded and cross-origin redirects discard custom credentials and request bodies.
+- **Upgrade note — API endpoint redirects are refused.** Webhooks, Gotify/ntfy/Telegram notifications, Wallabag, Ollama, mail APIs (including Resend/Mailgun), feedsearch and OPML catalog imports no longer follow redirects automatically. For example, an `http://` webhook that redirects to HTTPS now fails with HTTP 301. Configure the final HTTPS URL directly (including its final path/trailing slash). The error explains: “Ziel leitet weiter – bitte die endgültige https-URL eintragen”. For fixed external services, an operator/application update may be needed if their endpoint moves.
+
 ### Security — connector secrets, SSRF and step-up (audit #2, wave 3)
 
 - **RSSHub key / changedetection.io token stay on the server.** They are no longer stored in feed URLs, shown in feed lists, previews, OPML exports (UI, GReader, API v1), MCP results, GReader `origin.htmlUrl`, feed errors, notifications or rule payloads. The feed fetcher adds the current secret right before the request — and only for an allowed feed route: an ordinary RSSHub platform route, or a single changedetection.io watch feed (`/rss/watch/<uuid>`). Every other path on a connector host (RSSHub `/rsshub/*` incl. `transform`, `/api/*`, changedetection's all-watches `/rss`) gets neither the secret nor internal-network access, and adding such a feed is refused (UI, API v1, MCP, GReader quick-add, OPML and FreshRSS import). Percent-encoded tricks (`/%72sshub/…`, `%2F`) are rejected.

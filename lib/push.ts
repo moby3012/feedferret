@@ -1,9 +1,13 @@
+import https from "node:https";
+import { safeLookup } from "./safe-dispatcher";
+import { assertSafeFetchUrl } from "./ssrf";
 import { db } from "@/lib/db";
 import webpush, { type PushSubscription as WebPushSubscription } from "web-push";
 import { logger } from "@/lib/logger";
 
 /** web-push has no default request timeout: a tarpit endpoint would hang the sender forever. */
 const PUSH_REQUEST_TIMEOUT_MS = 10_000;
+const pushAgent = new https.Agent({ lookup: safeLookup, keepAlive: true });
 
 export type BrowserPushPayload = {
   title: string;
@@ -76,7 +80,10 @@ export async function sendPushToUser(userId: string, payload: BrowserPushPayload
 
   for (const subscription of subscriptions) {
     try {
-      await webpush.sendNotification(toWebPushSubscription(subscription), body, { timeout: PUSH_REQUEST_TIMEOUT_MS });
+      // IP literals bypass lookup, so retain the URL check as well. Push
+      // subscriptions never inherit the feed/internal-network opt-in.
+      await assertSafeFetchUrl(subscription.endpoint, { context: "Push endpoint" });
+      await webpush.sendNotification(toWebPushSubscription(subscription), body, { timeout: PUSH_REQUEST_TIMEOUT_MS, agent: pushAgent });
       sent += 1;
       await db.pushSubscription.update({
         where: { id: subscription.id },

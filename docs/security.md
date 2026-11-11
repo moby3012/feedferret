@@ -270,3 +270,31 @@ When enabled, any admin without 2FA active receives an error on every admin serv
 ## Vulnerability Reporting
 
 For critical vulnerabilities, contact the maintainers directly instead of filing a public GitHub issue. For non-critical issues, open a GitHub issue with the `security` label.
+
+
+### Outbound DNS pinning
+
+User-controlled HTTP requests use `safeFetch` / `fetchWithSsrfProtection` in
+`lib/ssrf.ts`, backed by npm undici's fetch and matching dispatchers. DNS answers
+are checked inside the socket lookup, including every A/AAAA answer. Private,
+loopback, link-local, metadata and IPv4-mapped private addresses are refused.
+Disabling TLS verification does not disable this check. Per-feed proxies have
+separate connection checks; connector trust never authorizes an internal proxy.
+The remote target of a user-selected proxy is resolved by that proxy, so the
+proxy operator controls its egress policy.
+
+For HTTPS browser impersonation, impit uses an authenticated, ephemeral loopback
+CONNECT proxy that pins target DNS while preserving end-to-end TLS/SNI. Plain
+HTTP uses pinned undici. If the bridge cannot start, requests fall back to pinned
+undici. `FEEDFERRET_DISABLE_IMPIT=1` disables impersonation. When `HTTPS_PROXY`
+(or `HTTP_PROXY`, including lowercase equivalents) is configured by the operator,
+the bridge chains CONNECT through it and logs once that target DNS pinning then
+depends on that upstream. Chained upstreams must use HTTP or HTTPS.
+
+Explicit per-feed/instance internal access and trusted connector routes retain
+separate unpinned connection pools. Connector redirect guards and the test-only
+Google News override remain scoped to their authorized routes. Cross-origin
+redirects discard the request body and all custom headers except `accept*`,
+`user-agent` and `if-*`; 303 and POST 301/302 redirects become GET. One-hop API
+clients refuse automatic redirects. ESLint bans bare outbound `fetch` calls in
+`lib/**` and `app/api/**` outside `lib/ssrf.ts`.

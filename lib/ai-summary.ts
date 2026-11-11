@@ -1,4 +1,4 @@
-import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed, readTextWithLimit } from "@/lib/ssrf";
+import { safeFetch, assertSafeFetchUrl, isTrustedFeedFetchingAllowed, readTextWithLimit } from "@/lib/ssrf";
 import { fakePrompt, isFakeAiEnabled } from "@/lib/ai/fake";
 import { classifyAiError } from "@/lib/ai/errors";
 import { estimateTokens, reserveBudget, settleUsage, type AiFeature } from "@/lib/ai/usage";
@@ -147,7 +147,7 @@ async function dispatchAiPrompt(prompt: string, config: AiConfig, maxTokens: num
 
 async function summarizeOpenAI(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
   const model = config.model || "gpt-4o-mini";
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await safeFetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -170,7 +170,7 @@ async function summarizeOpenAI(prompt: string, config: AiConfig, maxTokens = 300
 
 async function summarizeAnthropic(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
   const model = config.model || "claude-haiku-4-5-20251001";
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await safeFetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -203,7 +203,7 @@ async function summarizeOllama(prompt: string, config: AiConfig, maxTokens = 300
     throw new Error(err instanceof Error ? err.message : "Ollama base URL is not allowed");
   }
 
-  const res = await fetch(`${base}/api/chat`, {
+  const res = await safeFetch(`${base}/api/chat`, {
     redirect: "manual",
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -214,7 +214,7 @@ async function summarizeOllama(prompt: string, config: AiConfig, maxTokens = 300
       options: { num_predict: maxTokens },
     }),
     signal: AbortSignal.timeout(60_000),
-  });
+  }, { allowInternal });
   if (!res.ok) {
     // Status only: the Ollama host is user-chosen (N10).
     await res.body?.cancel().catch(() => {});
@@ -227,7 +227,7 @@ async function summarizeOllama(prompt: string, config: AiConfig, maxTokens = 300
 async function summarizeGemini(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
   const model = config.model || "gemini-1.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey || ""}`;
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -247,7 +247,7 @@ async function summarizeGemini(prompt: string, config: AiConfig, maxTokens = 300
 // OpenRouter uses OpenAI-compatible chat completions endpoint.
 async function summarizeOpenRouter(prompt: string, config: AiConfig, maxTokens = 300): Promise<string> {
   const model = config.model || "openai/gpt-4o-mini";
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const res = await safeFetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

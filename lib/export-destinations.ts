@@ -20,7 +20,7 @@
 // shipped as if confirmed working." See the PR description / roadmap for the
 // follow-up note.
 
-import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed, readTextWithLimit } from "@/lib/ssrf";
+import { safeFetch, assertSafeFetchUrl, isTrustedFeedFetchingAllowed, readTextWithLimit } from "@/lib/ssrf";
 
 export type ObsidianExportInput = {
   vault: string;
@@ -92,13 +92,13 @@ async function getWallabagAccessToken(config: WallabagConfig, timeoutMs = 15_000
       username: config.username,
       password: config.password,
     });
-    const res = await fetch(`${base}/oauth/v2/token`, {
+    const res = await safeFetch(`${base}/oauth/v2/token`, {
       redirect: "manual",
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
       signal: controller.signal,
-    });
+    }, { allowInternal: await isTrustedFeedFetchingAllowed() });
     if (!res.ok) {
       // Status only: echoing the body of a user-chosen host is a read-SSRF channel (N10).
       await res.body?.cancel().catch(() => {});
@@ -132,7 +132,7 @@ export async function sendToWallabag(config: WallabagConfig, article: WallabagAr
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
     const base = config.baseUrl.replace(/\/$/, "");
-    const res = await fetch(`${base}/api/entries`, {
+    const res = await safeFetch(`${base}/api/entries`, {
       redirect: "manual",
       method: "POST",
       headers: {
@@ -146,7 +146,7 @@ export async function sendToWallabag(config: WallabagConfig, article: WallabagAr
         tags: article.tags?.length ? article.tags.join(",") : undefined,
       }),
       signal: controller.signal,
-    });
+    }, { allowInternal: await isTrustedFeedFetchingAllowed() });
     if (!res.ok) {
       await res.body?.cancel().catch(() => {});
       return { success: false, error: `Wallabag rejected the entry (HTTP ${res.status})` };

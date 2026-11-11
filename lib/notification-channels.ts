@@ -1,4 +1,4 @@
-import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { safeFetch, assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 
 export type ChannelPayload = {
   title: string;
@@ -51,7 +51,7 @@ export async function sendTelegramNotification(
     if (payload.url) buttons.push({ text: "↗ Open", url: payload.url });
     if (buttons.length) messageBody.reply_markup = { inline_keyboard: [buttons] };
 
-    const res = await fetch(
+    const res = await safeFetch(
       `https://api.telegram.org/bot${config.botToken}/sendMessage`,
       {
         method: "POST",
@@ -80,7 +80,7 @@ export async function sendGotifyNotification(
     await assertSafeFetchUrl(config.url, { context: "Notification channel", allowInternal });
 
     const base = config.url.replace(/\/$/, "");
-    const res = await fetch(`${base}/message?token=${encodeURIComponent(config.token)}`, {
+    const res = await safeFetch(`${base}/message?token=${encodeURIComponent(config.token)}`, {
       redirect: "manual",
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -90,7 +90,7 @@ export async function sendGotifyNotification(
         priority: config.priority ?? 5,
       }),
       signal: AbortSignal.timeout(10_000),
-    });
+    }, { allowInternal: await isTrustedFeedFetchingAllowed() });
 
     if (!res.ok) {
       // Status only: user-chosen host, its body must not be echoed (N10).
@@ -119,13 +119,13 @@ export async function sendNtfyNotification(
     if (payload.url) headers["X-Click"] = payload.url;
     if (config.token) headers["Authorization"] = `Bearer ${config.token}`;
 
-    const res = await fetch(config.url, {
+    const res = await safeFetch(config.url, {
       redirect: "manual",
       method: "POST",
       headers,
       body: payload.body,
       signal: AbortSignal.timeout(10_000),
-    });
+    }, { allowInternal: await isTrustedFeedFetchingAllowed() });
 
     if (!res.ok) {
       // Status only: user-chosen host, its body must not be echoed (N10).

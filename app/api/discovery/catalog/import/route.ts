@@ -1,3 +1,4 @@
+import { safeFetch } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -226,7 +227,7 @@ export async function POST(request: Request) {
     try {
       logger.log(`[discovery/import] fetching ${source.name} from ${source.url}`);
 
-      const response = await fetch(source.url, {
+      const response = await safeFetch(source.url, {
         headers: { "User-Agent": "FeedFerret/1.0" },
         signal: AbortSignal.timeout(15000),
       });

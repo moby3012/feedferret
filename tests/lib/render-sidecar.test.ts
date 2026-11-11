@@ -94,6 +94,7 @@ describe("extractHtmlFromSidecarResponse", () => {
 
 // Stub the SSRF layer so we don't touch DNS or the database in unit tests.
 vi.mock("../../lib/ssrf", () => ({
+  safeFetch: (url: string, init: RequestInit) => globalThis.fetch(url, init),
   assertSafeFetchUrl: vi.fn(async (u: string) => new URL(u)),
   isTrustedFeedFetchingAllowed: vi.fn(async () => false),
 }));

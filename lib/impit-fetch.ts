@@ -17,6 +17,7 @@
 //   - If the native impit binary can't load on this platform, we log once and
 //     permanently fall back to native fetch (never throws to the caller).
 
+import { getEgressProxy } from "./egress-proxy";
 import { logger } from "./logger";
 
 // The subset of the WHATWG Response the SSRF fetch loop actually touches. Both
@@ -114,4 +115,22 @@ export function getImpitFetch(): FetchLike | null {
   }
 
   return cached;
+}
+
+let pinnedCached: Promise<FetchLike | null> | undefined;
+export function getPinnedImpitFetch(): Promise<FetchLike | null> {
+  return pinnedCached ??= (async () => {
+    if (process.env.FEEDFERRET_DISABLE_IMPIT) return null;
+    try {
+      const upstream = proxyFromEnv();
+      if (upstream) logger.warn("[impit] admin egress proxy configured; target DNS pinning depends on upstream");
+      const { Impit } = require("impit") as typeof import("impit");
+      const { url } = await getEgressProxy(upstream);
+      const instance = new Impit({ browser: "chrome", proxyUrl: url });
+      return wrapFetchErrors((url, init) => instance.fetch(url, init as Parameters<typeof instance.fetch>[1]) as unknown as Promise<FetchResponseLike>);
+    } catch (error) {
+      logger.warn("[impit] pinning proxy unavailable; falling back to pinned undici", error);
+      return null;
+    }
+  })();
 }

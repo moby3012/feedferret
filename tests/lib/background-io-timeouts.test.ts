@@ -9,6 +9,8 @@ const m = vi.hoisted(() => ({
   subscriptions: [{ id: "s1", endpoint: "https://push.example/1", p256dh: "p", auth: "a" }],
 }));
 
+// Push delivery now also validates the endpoint; keep this timeout fixture offline.
+vi.mock("dns/promises", () => ({ default: { lookup: async () => [{ address: "8.8.8.8", family: 4 }] } }));
 vi.mock("web-push", () => ({ default: { setVapidDetails: vi.fn(), sendNotification: m.sendNotification } }));
 vi.mock("nodemailer", () => ({ default: { createTransport: (...args: unknown[]) => (m.createTransport(...args), { sendMail: m.sendMail }) } }));
 vi.mock("@/lib/db", () => ({

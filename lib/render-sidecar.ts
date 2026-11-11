@@ -22,7 +22,7 @@
 
 import { db } from "@/lib/db";
 import { decryptIfValue } from "@/lib/crypto";
-import { assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { safeFetch, assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 
 export type RenderSidecarConfig = { url: string; token: string | null };
 
@@ -179,13 +179,13 @@ export async function renderWithConfigDetailed(
     };
     if (config.token) headers.authorization = `Bearer ${config.token}`;
 
-    const response = await fetch(config.url, {
+    const response = await safeFetch(config.url, {
       method: "POST",
       headers,
       body: JSON.stringify({ url: targetUrl }),
       redirect: "follow",
       signal: controller.signal,
-    });
+    }, { allowInternal: true });
 
     if (!response.ok) {
       // Surface the sidecar's own error body when it sent one (our reference

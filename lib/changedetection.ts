@@ -27,7 +27,7 @@
 
 import { db } from "@/lib/db";
 import { decryptIfValue } from "@/lib/crypto";
-import { assertSafeFetchUrl, fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { safeFetch, assertSafeFetchUrl, fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 
 export type ChangedetectionConfig = { baseUrl: string; apiKey: string; rssToken: string };
 
@@ -145,12 +145,12 @@ export async function createWatch(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
-    const res = await fetch(apiUrl(config, "/watch"), {
+    const res = await safeFetch(apiUrl(config, "/watch"), {
       method: "POST",
       headers: { "x-api-key": config.apiKey, "content-type": "application/json" },
       body: JSON.stringify(body),
       signal: controller.signal,
-    });
+    }, { allowInternal: true });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       return {
@@ -194,10 +194,10 @@ export async function testChangedetectionConnection(config: ChangedetectionConfi
   }
 
   try {
-    const res = await fetch(apiUrl(config, "/systeminfo"), {
+    const res = await safeFetch(apiUrl(config, "/systeminfo"), {
       headers: { "x-api-key": config.apiKey },
       signal: AbortSignal.timeout(15_000),
-    });
+    }, { allowInternal: true });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       return { ok: false, reason: `HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ""}` };

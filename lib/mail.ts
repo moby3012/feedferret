@@ -1,3 +1,4 @@
+import { safeFetch } from "@/lib/ssrf";
 import nodemailer from "nodemailer";
 import type { GlobalSettings } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -216,7 +217,7 @@ async function sendWithResend({
   apiKey: string;
   extraHeaders?: Record<string, string>;
 }) {
-  const response = await fetch("https://api.resend.com/emails", {
+  const response = await safeFetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -252,7 +253,7 @@ async function sendWithPostmark({
   const headers = extraHeaders
     ? Object.entries(extraHeaders).map(([Name, Value]) => ({ Name, Value }))
     : undefined;
-  const response = await fetch("https://api.postmarkapp.com/email", {
+  const response = await safeFetch("https://api.postmarkapp.com/email", {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -304,7 +305,7 @@ async function sendWithMailgun({
     }
   }
 
-  const response = await fetch(url, {
+  const response = await safeFetch(url, {
     method: "POST",
     headers: {
       Authorization: `Basic ${Buffer.from(`api:${apiKey}`).toString("base64")}`,
@@ -335,7 +336,7 @@ async function sendWithSendgrid({
   apiKey: string;
   extraHeaders?: Record<string, string>;
 }) {
-  const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+  const response = await safeFetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
