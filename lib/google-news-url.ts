@@ -11,6 +11,7 @@
 // points it at the local fixture server); the client always builds/reads the
 // public origin and the server rebuilds URLs itself.
 
+import { trimTrailingSlashes } from "@/lib/linear-text";
 export const GOOGLE_NEWS_ORIGIN = "https://news.google.com";
 export const GOOGLE_NEWS_MAX_QUERY = 200;
 /** Feeds are polled no more often than this (minutes) — Google throttles aggressive pollers. */
@@ -90,7 +91,7 @@ export function buildGoogleNewsSearchUrl(
   const q = when ? `${query} when:${when}` : query;
   const { hl, gl, ceid } = googleNewsLocaleParams(search.edition || "de-DE");
   const enc = encodeURIComponent;
-  return `${origin.replace(/\/+$/, "")}/rss/search?q=${enc(q)}&hl=${enc(hl)}&gl=${enc(gl)}&ceid=${enc(ceid)}`;
+  return `${trimTrailingSlashes(origin)}/rss/search?q=${enc(q)}&hl=${enc(hl)}&gl=${enc(gl)}&ceid=${enc(ceid)}`;
 }
 
 /** True for a Google News RSS URL on the given origins (public origin always included). */
@@ -109,7 +110,7 @@ export function isGoogleNewsRssUrl(url: string | null | undefined, extraOrigins:
 export function parseGoogleNewsSearchUrl(url: string | null | undefined, extraOrigins: string[] = []): GoogleNewsSearch | null {
   if (!isGoogleNewsRssUrl(url, extraOrigins)) return null;
   const u = new URL(url!);
-  if (u.pathname.replace(/\/+$/, "") !== "/rss/search") return null;
+  if (trimTrailingSlashes(u.pathname) !== "/rss/search") return null;
   let query = normalizeGoogleNewsQuery(u.searchParams.get("q") ?? "");
   if (!query) return null;
   let when: GoogleNewsWindow = "";

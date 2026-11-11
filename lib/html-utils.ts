@@ -16,6 +16,7 @@
  * feed parsing) need stylesheets, so dropping `<style>` blocks is pure upside
  * and also speeds up parsing of large pages.
  */
+import { replaceElements } from "@/lib/linear-text";
 export function stripStyleBlocks(html: string): string {
-  return html.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "");
+  return replaceElements(html, ["style"], "");
 }

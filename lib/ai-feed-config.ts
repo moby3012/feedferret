@@ -20,6 +20,7 @@ import { redactUrlForPrompt, redactUrlsInPromptText } from "./prompt-url";
 import { getSanitizer } from "./sanitize-html";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import type { SuggestedFieldConfig } from "./page-feed-suggest";
+import { findRoleMainTag, replaceComments, replaceElements } from "@/lib/linear-text";
 
 export type { SuggestedFieldConfig };
 
@@ -52,16 +53,19 @@ const FULLTEXT_MIN_CHARS = 400;
  * structured page digest instead (lib/page-digest.ts).
  */
 export function reduceHtmlForPrompt(html: string): string {
-  const withoutComments = html.replace(/<!--[\s\S]*?-->/g, " ");
-  const withoutNoisyTags = withoutComments.replace(
-    /<(script|style|svg|noscript|template)\b[^>]*>[\s\S]*?<\/\1>/gi,
-    " ",
-  );
-  const withoutHead = withoutNoisyTags.replace(/<head\b[^>]*>[\s\S]*?<\/head>/i, " ");
-  const starts = [/<main\b/i, /<[a-z]+\b[^>]*\brole\s*=\s*["']?main\b/i, /<article\b/i, /<body\b/i];
+  // Linear helpers (lib/linear-text.ts): `html` is a fetched, attacker-controlled page.
+  const withoutComments = replaceComments(html, " ");
+  const withoutNoisyTags = replaceElements(withoutComments, ["script", "style", "svg", "noscript", "template"], " ");
+  const withoutHead = replaceElements(withoutNoisyTags, ["head"], " ", { limit: 1 });
+  const starts: Array<(s: string) => number> = [
+    (s) => s.search(/<main\b/i),
+    findRoleMainTag,
+    (s) => s.search(/<article\b/i),
+    (s) => s.search(/<body\b/i),
+  ];
   let from = 0;
-  for (const re of starts) {
-    const at = withoutHead.search(re);
+  for (const find of starts) {
+    const at = find(withoutHead);
     if (at >= 0) {
       from = at;
       break;

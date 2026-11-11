@@ -28,6 +28,7 @@
 import { db } from "@/lib/db";
 import { decryptIfValue } from "@/lib/crypto";
 import { safeFetch, assertSafeFetchUrl, fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { matchOpenTags, trimTrailingSlashes } from "@/lib/linear-text";
 
 export type ChangedetectionConfig = { baseUrl: string; apiKey: string; rssToken: string };
 
@@ -89,12 +90,12 @@ export async function isChangedetectionConfigured(): Promise<boolean> {
 }
 
 function apiUrl(config: ChangedetectionConfig, path: string): string {
-  return `${config.baseUrl.replace(/\/+$/, "")}/api/v1${path}`;
+  return `${trimTrailingSlashes(config.baseUrl)}/api/v1${path}`;
 }
 
 /** Builds the per-watch RSS feed URL. This is just a plain RSS feed once changedetection.io has ≥2 snapshots. */
 export function buildWatchFeedUrl(config: ChangedetectionConfig, uuid: string): string {
-  const base = config.baseUrl.replace(/\/+$/, "");
+  const base = trimTrailingSlashes(config.baseUrl);
   return `${base}/rss/watch/${uuid}?token=${encodeURIComponent(config.rssToken)}`;
 }
 
@@ -103,7 +104,7 @@ export function buildWatchFeedUrl(config: ChangedetectionConfig, uuid: string): 
  * feed fetcher adds the token server-side (lib/connector-secrets.ts).
  */
 export function buildWatchFeedPublicUrl(config: ChangedetectionConfig, uuid: string): string {
-  const base = config.baseUrl.replace(/\/+$/, "");
+  const base = trimTrailingSlashes(config.baseUrl);
   return `${base}/rss/watch/${encodeURIComponent(uuid)}`;
 }
 
@@ -247,7 +248,7 @@ export async function discoverRssToken(baseUrl: string): Promise<RssTokenDiscove
   // Prefer the token from the actual RSS <link> tag over a bare "token="
   // scan of the whole page, so we don't accidentally pick up an unrelated
   // query param from some other link.
-  const linkTags = html.match(/<link\b[^>]*>/gi) ?? [];
+  const linkTags = matchOpenTags(html, "link");
   const rssLinkTag = linkTags.find((tag) => /type=["']application\/rss\+xml["']/i.test(tag));
   const fromLinkTag = rssLinkTag?.match(RSS_TOKEN_RE)?.[1];
   const token = fromLinkTag ?? html.match(RSS_TOKEN_RE)?.[1];

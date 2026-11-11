@@ -1,4 +1,5 @@
 import coreWebVitals from "eslint-config-next/core-web-vitals";
+import regexp from "eslint-plugin-regexp";
 import noRawDesignValues from "./eslint-rules/no-raw-design-values.mjs";
 
 /** @type {import("eslint").Linter.Config[]} */
@@ -22,6 +23,20 @@ const config = [
       "no-restricted-imports": ["error", {
         paths: ["node:http", "node:https", "http", "https", "undici", "imapflow"].map(name => ({ name, message: "Use lib/ssrf; raw transports require a documented exception in eslint.config.mjs." })),
       }],
+    },
+  },
+  {
+    // ReDoS guard: Node runs everything on one event loop, so a super-linear
+    // regex over untrusted text (feed XML/HTML, fetched pages, mail headers,
+    // OPML, AI output, user input) freezes the whole instance. These two rules
+    // flag the polynomial/exponential shapes (`<[^>]*>`, `\s+x`, `X+$`, …).
+    // Fix by using lib/linear-text.ts, a DOM parser, or a bounded pattern; if the
+    // input is provably small/trusted, disable the line WITH a reason.
+    files: ["lib/**/*.{ts,tsx}", "app/**/*.{ts,tsx}", "server/**/*.{ts,tsx}", "features/**/*.{ts,tsx}", "hooks/**/*.{ts,tsx}", "auth.ts", "auth.config.ts", "proxy.ts", "instrumentation.ts"],
+    plugins: { regexp },
+    rules: {
+      "regexp/no-super-linear-backtracking": "error",
+      "regexp/no-super-linear-move": "error",
     },
   },
   {

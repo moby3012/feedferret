@@ -38,6 +38,7 @@ import {
   type ExtractionQuality,
 } from "@/lib/extraction-quality";
 import { classifyFetchFailure, recordHostFailure, recordHostSuccess } from "@/lib/host-backoff";
+import { collapseNewlineWhitespace, stripTags } from "@/lib/linear-text";
 
 export type ExtractionResult = {
   html: string | null; // sanitized, cleaned article HTML (null if extraction failed)
@@ -67,15 +68,13 @@ export class EscalationBudgetExhaustedError extends Error {
 const MIN_CONTENT_TEXT_LENGTH = 200;
 
 function textLength(html: string): number {
-  return html
-    .replace(/<[^>]*>/g, " ")
+  return stripTags(html)
     .replace(/\s+/g, " ")
     .trim().length;
 }
 
 function countWords(html: string): number {
-  const text = html
-    .replace(/<[^>]*>/g, " ")
+  const text = stripTags(html)
     .replace(/\s+/g, " ")
     .trim();
   return text ? text.split(" ").length : 0;
@@ -194,7 +193,7 @@ function escapeHtml(text: string): string {
 function textToParagraphs(text: string): string {
   return text
     .split(/\n{2,}|\r\n{2,}/)
-    .map((block) => block.replace(/\s*\n\s*/g, " ").trim())
+    .map((block) => collapseNewlineWhitespace(block).trim())
     .filter(Boolean)
     .map((block) => `<p>${escapeHtml(block)}</p>`)
     .join("\n");

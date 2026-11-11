@@ -65,7 +65,7 @@ function slugify(value: string, fallback: string) {
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-|-$/g, ""); // runs of "-" were already collapsed to one above
   return slug || fallback;
 }
 

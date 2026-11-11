@@ -12,6 +12,7 @@
 import { z } from "zod";
 import { type AiConfig, runAiPrompt, stripHtml } from "./ai-summary";
 import { escapeUntrusted } from "./ai/citations";
+import { looksLikeEmail } from "@/lib/linear-text";
 
 const MAX_CONTENT_CHARS = 4_000;
 const MAX_TITLE_CHARS = 300;
@@ -210,7 +211,14 @@ const MIN_GROUNDED_SHARE = 0.5;
 const MAX_CLEAN_TITLE_LENGTH_FACTOR = 1.5;
 
 const URL_LIKE = /(?:https?:\/\/|www\.)\S+|\b[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.(?:com|org|net|de|io|info|biz|ru|cn|tk|xyz|top|shop|link|click)\b/iu;
-const EMAIL_LIKE = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+/**
+ * `URL_LIKE` backtracks super-linearly on long dotted runs ("a.a.a.a…"), and `title` comes from the feed.
+ * Fail closed: a clean-title candidate longer than this is rejected outright (real ones are ≤ MAX_CLEAN_TITLE_LENGTH),
+ * so a URL can never hide behind the scan window. The *source* only ever relaxes the check ("the original already
+ * had a URL"), so cutting it can only make the guard stricter.
+ */
+const URL_SCAN_CHARS = 4_096;
+const urlLikeInSource = (text: string) => URL_LIKE.test(text.slice(0, URL_SCAN_CHARS));
 const NUMBER_LIKE = /\d+(?:[.,/-]\d+)*/g;
 
 /** Digit runs of a text with separators dropped ("1,5" → "15", "030-123" → "030123"). */
@@ -240,8 +248,9 @@ export function acceptCleanTitle(cleanTitle: string | null, title: string, body 
 
   const lede = stripHtml(body ?? "").slice(0, GROUNDING_BODY_CHARS);
   const source = `${original} ${lede}`;
-  if (URL_LIKE.test(candidate) && !URL_LIKE.test(source)) return null;
-  if (EMAIL_LIKE.test(candidate) && !EMAIL_LIKE.test(source)) return null;
+  if (candidate.length > URL_SCAN_CHARS) return null;
+  if (URL_LIKE.test(candidate) && !urlLikeInSource(source)) return null;
+  if (looksLikeEmail(candidate) && !looksLikeEmail(source)) return null;
   const sourceNumbers = numberKeys(source);
   for (const key of numberKeys(candidate)) {
     if (!sourceNumbers.some((known) => known.includes(key))) return null;

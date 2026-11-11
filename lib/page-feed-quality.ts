@@ -12,6 +12,7 @@
 // dates, images) plus the page URL — no DOM, no network.
 
 import type { FetchedFeedArticle } from "./feed-fetcher";
+import { stripTags, trimEndWhile, trimTrailingSlashes } from "@/lib/linear-text";
 
 /** Why a candidate that is still offered needs a human look (UI-translated). */
 export type PreviewReviewReason =
@@ -120,11 +121,11 @@ const CTA_ARROW = /[→↗➔➜⟶]\s*$/;
 // your rights", "Mehr erfahren über …"): a button, not an entry title.
 const CTA_PREFIX = /^(learn more|read more|find out more|see more|view more|click here|mehr erfahren|mehr lesen|jetzt mehr|hier klicken|en savoir plus|lire la suite|leer más|leggi di più|scopri di più)\b/i;
 
+const TITLE_TRAILING = /[\s→↗➔➜⟶:|·•…\-–—.!?]/u;
+
 /** Collapse whitespace, strip trailing CTA arrows/punctuation, lowercase. */
 export function normalizeTitle(title: string): string {
-  return title
-    .replace(/\s+/g, " ")
-    .replace(/[\s→↗➔➜⟶:|·•…\-–—.!?]+$/u, "")
+  return trimEndWhile(title.replace(/\s+/g, " "), (ch) => TITLE_TRAILING.test(ch))
     .trim()
     .toLowerCase();
 }
@@ -180,7 +181,7 @@ export function linkKey(link: string): string {
     const u = new URL(link);
     const params = [...u.searchParams.entries()].filter(([k]) => !TRACKING_PARAM.test(k)).sort();
     const query = params.length ? "?" + params.map(([k, v]) => `${k}=${v}`).join("&") : "";
-    return `${u.hostname.replace(/^www\./, "").toLowerCase()}${u.pathname.replace(/\/+$/, "") || "/"}${query}`;
+    return `${u.hostname.replace(/^www\./, "").toLowerCase()}${trimTrailingSlashes(u.pathname) || "/"}${query}`;
   } catch {
     return link;
   }
@@ -419,7 +420,7 @@ export function assessPreviewQuality(articles: FetchedFeedArticle[], ctx: Qualit
         /* classified above */
       }
     }
-    if ((article.content ?? "").replace(/<[^>]*>/g, " ").trim().length >= 40) withText++;
+    if (stripTags(article.content ?? "").trim().length >= 40) withText++;
     plausibleLinks.add(key);
     plausibleTitles.add(normalizeTitle(article.title));
     if (isArticleLikeLink(article.link)) articleLike++;

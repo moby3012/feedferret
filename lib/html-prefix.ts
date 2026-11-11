@@ -169,10 +169,13 @@ function charsetFromContentType(contentType?: string | null): string | null {
 }
 
 function charsetFromMeta(latin1Prefix: string): string | null {
+  // eslint-disable-next-line regexp/no-super-linear-backtracking -- only ever sees the first 1 KiB of the document (charsetFromMeta caller)
   const direct = /<meta\b[^>]*?\bcharset\s*=\s*["']?\s*([a-z0-9_:.()-]+)/i.exec(latin1Prefix);
   if (direct) return direct[1];
   for (const tag of latin1Prefix.match(/<meta\b[^>]*>/gi) ?? []) {
+    // eslint-disable-next-line regexp/no-super-linear-backtracking -- 1 KiB prefix only
     if (!/http-equiv\s*=\s*["']?\s*content-type/i.test(tag)) continue;
+    // eslint-disable-next-line regexp/no-super-linear-backtracking -- 1 KiB prefix only
     const m = /charset\s*=\s*["']?\s*([a-z0-9_:.()-]+)/i.exec(tag);
     if (m) return m[1];
   }

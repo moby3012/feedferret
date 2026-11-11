@@ -25,6 +25,7 @@ import { applyAutoReadRules } from "@/lib/auto-read-rules";
 import { applyKeywordAlerts } from "@/lib/keyword-alerts";
 import { queueNewArticleNotifications } from "@/lib/notifications";
 import { detectImapPreset, emailDomain, getImapPreset, trustedAuthservIdForPreset, type ImapPreset } from "@/lib/newsletter-imap-presets";
+import { isAddressRun, matchAddressRuns } from "@/lib/linear-text";
 
 export const CREDENTIALS_PURPOSE = "inboundMailSource.credentials";
 export const PROCESSED_FOLDER = "FeedFerret";
@@ -149,7 +150,8 @@ export function classifyImapError(error: unknown): ImapErrorCode {
   if (error instanceof ImapPollError) return error.code;
   const e = (error ?? {}) as Record<string, unknown>;
   const code = String(e.code ?? "");
-  const text = [e.responseText, e.message, e.serverResponseCode].filter((v) => typeof v === "string").join(" ");
+  // Capped: server-provided text, and `imap.*(?:…)` below backtracks super-linearly on "imapimapimap…".
+  const text = [e.responseText, e.message, e.serverResponseCode].filter((v) => typeof v === "string").join(" ").slice(0, 2_000);
   if (code === "ERR_SSRF_PRIVATE_IP") return "host-blocked";
   if (IMAP_DISABLED_RE.test(text)) return "imap-disabled";
   if (APP_PASSWORD_RE.test(text)) return "app-password-required";
@@ -161,7 +163,6 @@ export function classifyImapError(error: unknown): ImapErrorCode {
   return "unknown";
 }
 
-const EMAIL_LIKE_RE = /[^\s<>"'(),;:]+@[^\s<>"'(),;:]+/g;
 // `+ff-<token>` plain or URL-encoded (`%2Bff-…`). Residual risk (accepted):
 // only this shape is redacted; a token quoted some other way in a server
 // error would survive — server texts never contain recipient addresses in
@@ -177,7 +178,7 @@ export function redactImapError(text: string, secrets: readonly (string | null |
   for (const secret of secrets) {
     if (secret && secret.length >= 3) out = out.split(secret).join("[redacted]");
   }
-  return out.replace(TOKEN_LIKE_RE, "+ff-[token]").replace(EMAIL_LIKE_RE, "[address]").replace(/\s+/g, " ").trim().slice(0, 300);
+  return out.replace(TOKEN_LIKE_RE, "+ff-[token]").replace(/[^\s<>"'(),;:]+/g, (run) => (isAddressRun(run) ? "[address]" : run)).replace(/\s+/g, " ").trim().slice(0, 300);
 }
 
 export function formatStoredError(code: ImapErrorCode, detail: string): string {
@@ -325,7 +326,6 @@ export function recipientHeaderValues(raw: Buffer | string | undefined | null): 
     .map((h) => h.value);
 }
 
-const ADDRESS_RE = /[^\s<>"',;:()[\]]+@[^\s<>"',;:()[\]]+/g;
 
 function canonicalLocal(local: string, preset: ImapPreset | null): string {
   return preset?.ignoreLocalDots ? local.replace(/\./g, "") : local;
@@ -347,7 +347,7 @@ export function mailboxRecipients(values: readonly string[], mailbox: string, pr
   const addresses: string[] = [];
   const tokens: string[] = [];
   for (const value of values) {
-    for (const address of String(value).toLowerCase().match(ADDRESS_RE) ?? []) {
+    for (const address of matchAddressRuns(String(value).toLowerCase())) {
       const i = address.lastIndexOf("@");
       const domain = address.slice(i + 1);
       const local = address.slice(0, i);

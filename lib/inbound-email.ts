@@ -25,6 +25,7 @@ import { computeContentHash } from "./content-hash";
 import { logger } from "./logger";
 
 import { NEWSLETTER_CATEGORY_NAME, NEWSLETTER_FEED_URL_PREFIX, NEWSLETTER_SOURCE_TYPE } from "./newsletter-constants";
+import { matchAddressRuns, trimEndChars, trimEndWhile } from "@/lib/linear-text";
 
 export { NEWSLETTER_CATEGORY_NAME, NEWSLETTER_FEED_URL_PREFIX, NEWSLETTER_SOURCE_TYPE };
 
@@ -77,7 +78,6 @@ export function newsletterAddressFor(source: { kind: string; address: string | n
   return `${token}@${domain}`;
 }
 
-const ADDRESS_RE = /[^\s<>"',;:()[\]]+@[^\s<>"',;:()[\]]+/g;
 
 /**
  * Candidate tokens in recipient strings ("Name <a@b>", bare addresses, lists).
@@ -86,7 +86,7 @@ const ADDRESS_RE = /[^\s<>"',;:()[\]]+@[^\s<>"',;:()[\]]+/g;
 export function extractRecipientTokens(recipients: readonly string[]): string[] {
   const tokens: string[] = [];
   for (const recipient of recipients) {
-    for (const address of String(recipient).toLowerCase().match(ADDRESS_RE) ?? []) {
+    for (const address of matchAddressRuns(String(recipient).toLowerCase())) {
       const local = address.slice(0, address.lastIndexOf("@"));
       const plus = PLUS_TOKEN_RE.exec(local);
       const token = plus ? plus[1] : local.split("+")[0];
@@ -120,7 +120,7 @@ function mailbox(address: ParsedEmail["from"]): { name: string; address: string 
 /** Message-ID without brackets/whitespace; null when absent or implausible. */
 export function normalizeMessageId(value: string | null | undefined): string | null {
   if (!value) return null;
-  const id = value.trim().replace(/^<+/, "").replace(/>+$/, "").trim();
+  const id = trimEndChars(value.trim().replace(/^<+/, ""), ">").trim();
   if (!id || id.length > 250 || /\s/.test(id)) return null;
   return id;
 }
@@ -532,7 +532,7 @@ function parseAuthResultsValue(value: string): { authservId: string; results: Au
 function domainOf(value: string | undefined): string | null {
   if (!value) return null;
   const at = value.lastIndexOf("@");
-  const domain = (at >= 0 ? value.slice(at + 1) : value).replace(/[>.\s]+$/, "").toLowerCase();
+  const domain = trimEndWhile(at >= 0 ? value.slice(at + 1) : value, (ch) => ch === ">" || ch === "." || /\s/.test(ch)).toLowerCase();
   return domain || null;
 }
 

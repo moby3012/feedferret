@@ -15,6 +15,7 @@ import { isTrustedGoogleNewsOverrideUrl } from "./google-news";
 import { stripStyleBlocks } from "./html-utils";
 import { parseDurationSecs } from "./article-kind";
 import { resolveItemTitle } from "./title-synthesis";
+import { firstImgSrc } from "@/lib/linear-text";
 
 export type FeedFetchConfig = {
   url: string;
@@ -307,9 +308,10 @@ export function buildXPathArticlesFromDocument(
   };
 }
 
-function extractImageFromHtml(html: string) {
-  const imgMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-  return imgMatch ? imgMatch[1] : null;
+export function extractImageFromHtml(html: string) {
+  // Feed item HTML is attacker-controlled and parsed in the background sync:
+  // linear scanner instead of `/<img[^>]+src=…/` (O(n²) on "<img <img <img …").
+  return firstImgSrc(html);
 }
 
 function parseHttpOptions(feed: FeedFetchConfig) {

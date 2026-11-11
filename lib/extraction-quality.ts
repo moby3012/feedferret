@@ -10,6 +10,7 @@
 
 import { JSDOM } from "jsdom";
 import { htmlToPlainText } from "@/lib/article-kind";
+import { iterElementInners } from "@/lib/linear-text";
 
 export type QualityVerdict = "good" | "thin" | "wall" | "boilerplate" | "empty";
 
@@ -72,16 +73,16 @@ function countDistinct(text: string, patterns: RegExp[]): number {
 /** Plain text of the link bodies in an HTML fragment (cheap regex, no DOM). */
 function linkTextLength(html: string): number {
     let total = 0;
-    for (const match of html.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)) {
-        total += htmlToPlainText(match[1]).length;
+    for (const inner of iterElementInners(html, "a")) {
+        total += htmlToPlainText(inner).length;
     }
     return total;
 }
 
 function substantialParagraphs(html: string): number {
     let count = 0;
-    for (const match of html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
-        if (htmlToPlainText(match[1]).length >= 80) count++;
+    for (const inner of iterElementInners(html, "p")) {
+        if (htmlToPlainText(inner).length >= 80) count++;
     }
     return count;
 }

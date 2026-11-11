@@ -11,6 +11,7 @@
 // is not. Unambiguous markers (advertorial, "sponsored post", …) match anywhere
 // in the title or the first 300 characters of text.
 
+import { iterOpenTags } from "@/lib/linear-text";
 const MAX_TEXT_CHARS = 300;
 
 // Words that only mean "this is an ad" when used as a label. Split by how
@@ -61,7 +62,6 @@ const SPONSORED_REL = /\brel\s*=\s*["'][^"']*\bsponsored\b[^"']*["']/i;
 // Only mediums that actually say "paid". `native`/`partner`/`advertorial` are
 // too common in organic campaign tagging to flag on.
 const SPONSORED_UTM = /[?&]utm_medium=(?:sponsored|affiliate|paid)(?:[&#"'\s]|$)/i;
-const ANCHOR_TAG = /<a\b[^>]*>/gi;
 const MAX_HTML_SCAN_CHARS = 60_000;
 
 /** A rel="sponsored" link within this many leading HTML chars counts on its own (an intro-level disclosure). */
@@ -79,9 +79,10 @@ const MIN_SPONSORED_LINKS = 2;
 function hasSponsoredLinks(html: string): boolean {
   const scanned = html.slice(0, MAX_HTML_SCAN_CHARS);
   let count = 0;
-  for (const match of scanned.matchAll(ANCHOR_TAG)) {
-    if (!SPONSORED_REL.test(match[0]) && !SPONSORED_UTM.test(match[0])) continue;
-    if ((match.index ?? 0) < LEAD_HTML_CHARS) return true;
+  for (const tag of iterOpenTags(scanned, "a")) {
+    const text = scanned.slice(tag.start, tag.end);
+    if (!SPONSORED_REL.test(text) && !SPONSORED_UTM.test(text)) continue;
+    if (tag.start < LEAD_HTML_CHARS) return true;
     count += 1;
     if (count >= MIN_SPONSORED_LINKS) return true;
   }
@@ -135,14 +136,14 @@ const CLICKBAIT_PHRASES = new RegExp(
 );
 
 // "?!" / "!!" / "?!?" endings and ≥2 shouted words (5+ letters, so "NASA"/"EZB"/"USA" never count).
-const SHOUT_ENDING = /(?:\?!|!\?|!!+)\s*$/;
+const SHOUT_ENDING = /(?:\?!|!\?|!!)$/; // tested against trimmed text (a `\s*$` tail here was quadratic on whitespace runs)
 const SHOUT_WORD = /(?<![\p{L}])\p{Lu}{5,}(?![\p{L}])/gu;
 
 export function detectClickbait(title: string): boolean {
   const t = (title ?? "").trim();
   if (!t) return false;
   if (CLICKBAIT_PHRASES.test(t)) return true;
-  if (SHOUT_ENDING.test(t)) return true;
+  if (SHOUT_ENDING.test(t.trimEnd())) return true;
   const shouted = t.match(SHOUT_WORD);
   return !!shouted && shouted.length >= 2;
 }
