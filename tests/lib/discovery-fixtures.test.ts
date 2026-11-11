@@ -9,10 +9,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * larger body fails with "Response too large".
  */
 
-const mocks = vi.hoisted(() => ({ routes: new Map<string, string | Error>(), calls: [] as Array<{ url: string; options: any }> }));
+const mocks = vi.hoisted(() => ({
+  routes: new Map<string, string | Error>(),
+  /** url → redirect target (followed through the caller's redirectGuard, like the real transport). */
+  redirects: new Map<string, string>(),
+  calls: [] as Array<{ url: string; options: any }>,
+}));
 
-function respond(url: string, options: any = {}) {
+function respond(url: string, options: any = {}): string {
   mocks.calls.push({ url, options });
+  const target = mocks.redirects.get(url);
+  if (target) {
+    const next = options?.redirectGuard ? options.redirectGuard(target, url) : target;
+    if (!next) throw new Error("Redirect refused");
+    return respond(next, options);
+  }
   const body = mocks.routes.get(url);
   if (body === undefined) throw new Error("Fetch failed: 404");
   if (body instanceof Error) throw body;
@@ -47,7 +58,19 @@ vi.mock("../../lib/rsshub", () => ({
   buildRsshubPublicRouteUrl: vi.fn(),
 }));
 
-import { discoverFeeds, FEED_INDEX_BYTES, FEED_SNIFF_BYTES, RESOLVER_PAGE_BYTES, lateLinkElements, sectionAffinity, sectionFeedPaths, sectionSegments, sniffFeedPrefix } from "../../lib/feed-discovery";
+import {
+  discoverFeeds,
+  FEED_INDEX_BYTES,
+  FEED_SNIFF_BYTES,
+  isSameSite,
+  RESOLVER_PAGE_BYTES,
+  lateLinkElements,
+  sectionAffinity,
+  sectionFeedPaths,
+  sectionSegments,
+  siteOf,
+  sniffFeedPrefix,
+} from "../../lib/feed-discovery";
 
 const fixture = (name: string) => readFileSync(path.join(__dirname, "../fixtures/web", name, "page.html"), "utf8");
 const rss = (title: string, firstLink = `https://x.example/${encodeURIComponent(title)}/1`) =>
@@ -62,6 +85,7 @@ function bigFeed(): string {
 
 beforeEach(() => {
   mocks.routes.clear();
+  mocks.redirects.clear();
   mocks.calls.length = 0;
 });
 
@@ -88,6 +112,10 @@ describe("sniffFeedPrefix: non-standard RSS", () => {
   it("rejects an <rss> root without <channel> (`<rss><items>` API look-alike)", () => {
     expect(sniffFeedPrefix('<?xml version="1.0"?><rss version="2.0"><items><title>API</title><item><title>A</title></item></items></rss>')).toBeNull();
   });
+
+  it("a cut-off prefix with <rss but no <channel> yet stays undecided (classified as RSS, not rejected)", () => {
+    expect(sniffFeedPrefix(`<?xml version="1.0"?><rss version="2.0"><!-- ${"x".repeat(5000)}`)).toMatchObject({ type: "rss" });
+  });
 });
 
 describe("section affinity", () => {
@@ -107,10 +135,25 @@ describe("section affinity", () => {
     expect(sectionAffinity([], "https://x.example/rss")).toBe(0);
   });
 
+  it("gives no bonus to another site's feed and never matches on the hostname", () => {
+    const site = "https://www.paper.example/inland";
+    expect(sectionAffinity(["inland"], "https://rss.paper.example/inland.xml", "", site)).toBe(1); // same site, other subdomain
+    expect(sectionAffinity(["inland"], "https://aggregator.example/inland.xml", "Inland", site)).toBe(0); // foreign site
+    expect(sectionAffinity(["inland"], "https://feeds.paper.example/x.xml", "Paper · Inland", site)).toBe(1); // title, same site
+    expect(sectionAffinity(["inland"], "https://inland.paper.example/all.xml", "Alle", site)).toBe(0); // hostname only
+    expect(siteOf("news.bbc.co.uk")).toBe("bbc.co.uk");
+    expect(siteOf("rss.nytimes.com")).toBe("nytimes.com");
+    expect(isSameSite("https://feeds.npr.org/1/rss.xml", "https://www.npr.org/")).toBe(true);
+    expect(isSameSite("https://evil.example/", "https://www.npr.org/")).toBe(false);
+  });
+
   it("builds section-relative feed paths only for shallow section pages", () => {
     expect(sectionFeedPaths(new URL("https://news.example/inland"))).toEqual(["/inland/feed", "/inland/rss", "/rss/inland", "/feed/inland"]);
     expect(sectionFeedPaths(new URL("https://news.example/"))).toEqual([]);
     expect(sectionFeedPaths(new URL("https://news.example/a/b/c/d"))).toEqual([]);
+    expect(sectionFeedPaths(new URL("https://news.example/a/b/c"))).toEqual([]);
+    expect(sectionFeedPaths(new URL("https://news.example/inland/a-1234567"))).toEqual([]);
+    expect(sectionFeedPaths(new URL("https://news.example/section/world"))).toHaveLength(4);
     expect(sectionFeedPaths(new URL("https://news.example/story.html"))).toEqual([]);
     expect(sectionFeedPaths(new URL("https://blog.example/2024/05/hello"))).toEqual([]);
     expect(sectionFeedPaths(new URL("https://blog.example/my-very-long-post-title/"))).toEqual([]);
@@ -125,7 +168,18 @@ describe("lateLinkElements", () => {
     // Unterminated `<link` spam stays linear and bounded.
     const t = Date.now();
     lateLinkElements(`<html>${"y".repeat(600 * 1024)}${"<link ".repeat(200_000)}`);
+    lateLinkElements(`<html>${"y".repeat(600 * 1024)}${"<script>".repeat(100_000)}`);
+    lateLinkElements(`<html>${"y".repeat(600 * 1024)}${"<!--".repeat(100_000)}`);
     expect(Date.now() - t).toBeLessThan(2000);
+  });
+
+  it("skips <link> look-alikes inside scripts/comments and keeps offsets right after case-changing characters", () => {
+    // "İ" lower-cases to two UTF-16 units: a lower-cased copy would shift every later offset.
+    const html =
+      `<html><head><title>${"İ".repeat(1000)}</title><script>${"s".repeat(600 * 1024)} var x = '<link rel="alternate" type="application/rss+xml" href="/in-script.xml">';</script>` +
+      `<!-- <link rel="alternate" type="application/rss+xml" href="/in-comment.xml"> -->` +
+      `<LINK REL="alternate" TYPE="application/rss+xml" HREF="/real.xml"></head></html>`;
+    expect(lateLinkElements(html).map((l) => l.attrs.href)).toEqual(["/real.xml"]);
   });
 });
 
@@ -319,5 +373,36 @@ describe("discovery fixtures", () => {
     mocks.routes.set("https://wp.example/my-very-long-post-title/feed/", rss("Comments on: My very long post title"));
     const r = await discoverFeeds("https://wp.example/my-very-long-post-title/");
     expect(r.feeds[0].url).toBe("https://wp.example/feed/");
+  });
+
+  it("does not follow a feed index page on ANOTHER site; follows a same-site one and resolves its links against its final URL", async () => {
+    // /feeds/ on the page's site redirects to another site's listing → not followed.
+    mocks.routes.set("https://xsite.example/", '<html><body><a href="/feeds/">Feeds</a></body></html>');
+    mocks.redirects.set("https://xsite.example/feeds/", "https://other.example/listing/feeds");
+    mocks.routes.set("https://other.example/listing/feeds", '<!doctype html><html><body><a href="https://other.example/listing/evil.xml">Alle Feeds</a></body></html>');
+    mocks.routes.set("https://other.example/listing/evil.xml", rss("Foreign"));
+    const foreign = await discoverFeeds("https://xsite.example/");
+    expect(foreign.feeds.map((f) => f.url)).not.toContain("https://other.example/listing/evil.xml");
+    expect(mocks.calls.some((c) => c.url === "https://other.example/listing/evil.xml")).toBe(false);
+
+    // Same site, redirected into a subdirectory: relative links resolve against the FINAL URL.
+    mocks.calls.length = 0;
+    mocks.routes.set("https://same.example/", '<html><body><a href="/rss">RSS</a></body></html>');
+    mocks.redirects.set("https://same.example/rss", "https://www.same.example/service/rss/");
+    mocks.routes.set("https://www.same.example/service/rss/", '<!doctype html><html><body><a href="alle.xml">Alle Meldungen</a></body></html>');
+    mocks.routes.set("https://www.same.example/service/rss/alle.xml", rss("Same · Alle"));
+    const same = await discoverFeeds("https://same.example/");
+    expect(same.feeds.map((f) => f.url)).toEqual(["https://www.same.example/service/rss/alle.xml"]);
+  });
+
+  it("section bonus only for same-site feeds: a foreign feed repeating the section word does not outrank the site's feed", async () => {
+    mocks.routes.set(
+      "https://site.example/inland",
+      '<html><head><link rel="alternate" type="application/rss+xml" title="Site" href="/feed.xml"><link rel="alternate" type="application/rss+xml" title="Aggregator Inland" href="https://aggregator.example/inland.xml"></head></html>',
+    );
+    mocks.routes.set("https://site.example/feed.xml", rss("Site"));
+    mocks.routes.set("https://aggregator.example/inland.xml", rss("Aggregator Inland"));
+    const r = await discoverFeeds("https://site.example/inland");
+    expect(r.feeds.map((f) => f.url)).toEqual(["https://site.example/feed.xml", "https://aggregator.example/inland.xml"]);
   });
 });
