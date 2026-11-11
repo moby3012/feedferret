@@ -244,6 +244,60 @@ describe("writer paths store v2", () => {
   });
 });
 
+describe("forged or foreign envelopes are plaintext (authenticate before preserving)", () => {
+  const FORGED = `ff2.deadbeef.${"A".repeat(16)}.${"B".repeat(30)}`;
+
+  it("notification tokens: a forged envelope and another column's ciphertext read back as submitted", async () => {
+    const foreign = sealSecret("feed.authPassword", S.password); // valid ciphertext, wrong column
+    await updateNotificationChannels({ gotifyToken: FORGED, ntfyToken: foreign });
+    const row = await raw.user.findUniqueOrThrow({ where: { id: ids.user } });
+    expect(row.gotifyToken).not.toBe(FORGED);
+    expect(row.ntfyToken).not.toBe(foreign);
+    expectSealed(row.gotifyToken, "user.gotifyToken", FORGED);
+    expectSealed(row.ntfyToken, "user.ntfyToken", foreign);
+  });
+
+  it("feed credentials (updateFeed): forged envelope / cross-column copy are sealed literals", async () => {
+    const foreign = sealSecret("user.gotifyToken", "S3CRET-other-column");
+    await updateFeed(ids.feed, { authType: "basic", authUsername: FORGED, authPassword: foreign });
+    const row = await raw.feed.findUniqueOrThrow({ where: { id: ids.feed } });
+    expect(readFeedCredentials(row)).toMatchObject({ authUsername: FORGED, authPassword: foreign });
+  });
+
+  it("webhook JSON (createAutoReadRule): forged secret / foreign header are sealed literals", async () => {
+    const foreign = sealSecret("feed.authPassword", S.password);
+    const created = await createAutoReadRule({
+      name: "forged", query: "x", actions: ["webhook_call:0"],
+      webhookConfigs: [{ url: "https://hook.example/f", secret: FORGED, headers: { Authorization: foreign } }],
+    });
+    const stored = (await raw.autoReadRule.findUniqueOrThrow({ where: { id: created.id } })).webhookConfigs!;
+    expect(getWebhookConfig({ webhookConfigs: stored }, 0)).toMatchObject({ secret: FORGED, headers: { Authorization: foreign } });
+    await raw.autoReadRule.delete({ where: { id: created.id } });
+  });
+
+  it("admin connector key and v1 columns: a fake v1 / foreign v2 value is sealed as plaintext", async () => {
+    state.session = { user: { id: ids.admin } };
+    const fakeV1 = "AAAA:BBBB:CCCC";
+    await updateGlobalSettings({ rsshubApiKey: fakeV1, smtpPassword: sealSecret("user.aiApiKey", "S3CRET-x") });
+    const row = await raw.globalSettings.findUniqueOrThrow({ where: { id: "global" } });
+    expect(openSecret("globalSettings.rsshubApiKey", row.rsshubApiKey!, "v1").value).toBe(fakeV1);
+    expect(isV2(row.smtpPassword!)).toBe(true);
+    expect(openSecret("globalSettings.smtpPassword", row.smtpPassword!, "v1").value).toMatch(/^ff2\./);
+  });
+
+  it("a value sealed for the same column under an unknown key is not preserved", () => {
+    process.env.FEEDFERRET_ENCRYPTION_KEY = KEY_A;
+    const underA = sealSecret("user.gotifyToken", "S3CRET-a");
+    process.env.FEEDFERRET_ENCRYPTION_KEY = KEY_B;
+    const out = sealWriteArgs("User", "update", { data: { gotifyToken: underA } }) as { data: { gotifyToken: string } };
+    expect(out.data.gotifyToken).not.toBe(underA);
+    expect(openSecret("user.gotifyToken", out.data.gotifyToken, "plaintext").value).toBe(underA);
+    // with KEY_A configured as old key it authenticates and is kept verbatim
+    process.env.FEEDFERRET_ENCRYPTION_KEYS_OLD = KEY_A;
+    expect((sealWriteArgs("User", "update", { data: { gotifyToken: underA } }) as { data: { gotifyToken: string } }).data.gotifyToken).toBe(underA);
+  });
+});
+
 describe("AAD and keys", () => {
   it("a value moved to another column does not decrypt", () => {
     const sealed = sealSecret("feed.authPassword", S.password);
@@ -387,6 +441,33 @@ describe("migration (secrets:migrate / secrets:rotate core)", () => {
     spy.mockRestore();
     expect(report.totals.conflicts).toBe(1);
     expectSealed((await raw.user.findUniqueOrThrow({ where: { id: ids.user } })).gotifyToken, "user.gotifyToken", "S3CRET-new");
+  });
+
+  it("CAS includes the observed updatedAt: a concurrent edit of another column wins and is not rewound", async () => {
+    await raw.user.update({ where: { id: ids.user }, data: { gotifyToken: S.gotify } });
+    const keyring = loadKeyring(process.env);
+    const only = SECRET_COLUMNS.filter((c) => c.column === "gotifyToken");
+    const original = raw.user.updateMany.bind(raw.user);
+    let edited: Date | null = null;
+    const spy = vi.spyOn(raw.user, "updateMany").mockImplementation((async (args: Parameters<typeof original>[0]) => {
+      if (!edited) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        edited = (await raw.user.update({ where: { id: ids.user }, data: { name: "edited concurrently" } })).updatedAt;
+      }
+      return original(args);
+    }) as never);
+    const report = await migrateSecrets(raw, { keyring, mode: "migrate", columns: only, clearOAuthTokens: false });
+    spy.mockRestore();
+    expect(report.totals.conflicts).toBe(1);
+    const row = await raw.user.findUniqueOrThrow({ where: { id: ids.user } });
+    expect(row.name).toBe("edited concurrently");
+    expect(row.updatedAt.getTime()).toBe(edited!.getTime()); // not rewound
+    expect(row.gotifyToken).toBe(S.gotify); // retried next pass
+    const next = await migrateSecrets(raw, { keyring, mode: "migrate", columns: only, clearOAuthTokens: false });
+    expect(next.totals.resealed).toBe(1);
+    const after = await raw.user.findUniqueOrThrow({ where: { id: ids.user } });
+    expectSealed(after.gotifyToken, "user.gotifyToken", S.gotify);
+    expect(after.updatedAt.getTime()).toBe(edited!.getTime());
   });
 
   it("clears unused OAuth account tokens", async () => {

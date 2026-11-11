@@ -452,7 +452,10 @@ setting forms call `sealSecret` / `encryptIfValue(value, purpose)`, and a Prisma
 write extension on the app's database client (`lib/secret-sealing.ts`) seals
 every registry column (`SECRET_COLUMNS`) on create/update/upsert, so no write
 path (REST, MCP, OPML import, repair, newsletter wizard …) can store a secret in
-the clear. Already-sealed values pass through unchanged. OAuth account tokens
+the clear. A value is stored as-is only when it **decrypts** as ciphertext for that
+very column (e.g. a kept stored value); anything else — including input that merely
+looks like an `ff2.` envelope, or ciphertext copied from another column — is treated
+as plaintext and sealed, so it reads back exactly as submitted. OAuth account tokens
 (`Account.access_token` / `refresh_token` / `id_token`) are never used by the app:
 they are dropped on write and cleared by the re-seal pass.
 
@@ -484,8 +487,8 @@ example after a session-key leak) would make them unreadable. To decouple them:
    signed with it keep working).
 4. Restart. The re-seal pass moves every value to the new key. Check with
    `secrets:status` (no `:old`, `plaintext` or `v1` buckets) or the admin card.
-5. Remove `FEEDFERRET_ENCRYPTION_KEYS_OLD` once nothing uses the old key id. (GReader
-   tokens issued before the switch stop verifying then; clients log in again.)
+5. Retire the old key only as described in "Retiring an old key" below — a clean
+   `secrets:status` is necessary but **not sufficient**.
 
 ### CLI
 
@@ -499,9 +502,9 @@ node scripts/secrets-cli.mjs migrate [--dry-run] [--batch 500] [--json]  # legac
 node scripts/secrets-cli.mjs rotate  [--dry-run] [--batch 500] [--json]  # everything not under the current key → current key
 ```
 
-`migrate` and `rotate` are idempotent and batched by row id; a value changed by the
-running app between read and write is skipped (counted as `conflicts`; the new value
-is already sealed). `migrate` leaves values under an old key alone and reports them
+`migrate` and `rotate` are idempotent and batched by row id; a row changed by the
+running app between read and write (its secret or its `updatedAt`) is skipped and
+counted as `conflicts` — the next pass picks it up. `migrate` leaves values under an old key alone and reports them
 (`old key (rotate)`); `rotate` re-seals those too.
 
 ### Key rotation
@@ -512,8 +515,34 @@ is already sealed). `migrate` leaves values under an old key alone and reports t
    (comma-separated, decrypt-only).
 3. Restart. The re-seal pass moves every value to the new key; `secrets:rotate`
    forces a pass, `--dry-run` shows the counts first.
-4. `secrets:status` shows no `v2:<kid>:old` bucket any more → remove the old key from
-   `FEEDFERRET_ENCRYPTION_KEYS_OLD` and restart.
+4. Retire the old key only as described in "Retiring an old key" below.
+
+### Retiring an old key
+
+A key in `FEEDFERRET_ENCRYPTION_KEYS_OLD` does two jobs: it decrypts stored values
+sealed with it, **and** it verifies HMAC-signed tokens that live outside the database
+and that the re-seal pass cannot see:
+
+| Artifact | Signed with | Lifetime |
+|---|---|---|
+| GReader / FreshRSS-API client tokens (`Authorization: GoogleLogin auth=…`) | key current at login | until the client logs in again (no expiry) |
+| Telegram "mark read" buttons | key current when sent | 7 days |
+
+So `secrets:status` showing no `:old` bucket only means the **database** no longer
+needs the key. Remove it from `FEEDFERRET_ENCRYPTION_KEYS_OLD` only when all of these
+hold:
+
+1. `secrets:status` exits 0 and shows no `v2:<kid>:old` bucket;
+2. at least 7 days have passed since the key stopped being current (Telegram links
+   signed with it have expired);
+3. every GReader client has re-authenticated since the switch — or you accept that
+   clients still holding an old token get a 401 and must log in again.
+
+Tokens signed with the raw `AUTH_SECRET` by releases before M8 PR 5 are verified as
+long as `AUTH_SECRET` itself is unchanged; to stop accepting them set
+`FEEDFERRET_LEGACY_MAC_UNTIL` (ISO date, e.g. 90 days after this release) — clients
+holding such a token must log in again after that date. `secrets:rotate` never tells
+you an old key is safe to remove; it only reports the database side.
 
 ### Backups and losing the key
 

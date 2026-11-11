@@ -4,7 +4,8 @@
 // upsert / *Many write that sets a column from the SECRET_COLUMNS registry
 // stores it v2-sealed (`ff2.`, current key, purpose as AAD). Writers may pass
 // plaintext (feed auth, notification tokens, TOTP seeds, webhook JSON …) or an
-// already-sealed value (kept as-is), so no write path can store a secret in
+// already-sealed value (kept as-is only if it decrypts for this column; a forged
+// or foreign envelope is sealed as a literal string), so no write path can store a secret in
 // the clear by forgetting to call `sealSecret`. Readers go through
 // lib/secret-box.ts and accept every format.
 //

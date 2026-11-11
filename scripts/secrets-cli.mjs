@@ -155,7 +155,13 @@ function printMigration(report) {
   for (const p of report.problems) console.error(`  undecryptable: ${p.column} row ${p.id} (${p.reason})`);
   if (report.problemsTruncated) console.error("  … more rows (list truncated)");
   if (report.mode === "rotate" && !report.dryRun && t.undecryptable === 0 && report.keys.old.length) {
-    console.log("\nNo value needs an old key any more once `secrets:status` shows no `:old` bucket: remove FEEDFERRET_ENCRYPTION_KEYS_OLD then.");
+    console.log([
+      "",
+      "Stored secrets no longer need an old key once `secrets:status` shows no `:old` bucket.",
+      "That alone does NOT make it safe to remove FEEDFERRET_ENCRYPTION_KEYS_OLD: old keys also verify",
+      "signed tokens that live outside the database (GReader client tokens, Telegram mark-read links,",
+      "valid 7 days). Keep them until those have expired / clients re-authenticated; see docs/security.md.",
+    ].join("\n"));
   }
 }
 
