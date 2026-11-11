@@ -108,6 +108,19 @@ export async function listTables({ provider, url, configDir = join(here, "..", "
   }
 }
 
+const DEFAULT_LOCK_WAIT_MS = 10 * 60_000;
+/**
+ * FEEDFERRET_DB_LOCK_TIMEOUT_MS: positive integer milliseconds, else the default (with a warning).
+ * @param {string | undefined} raw @param {(message: string) => void} [warn]
+ */
+export function lockWaitMs(raw, warn = () => {}) {
+  if (raw === undefined || raw === "") return DEFAULT_LOCK_WAIT_MS;
+  const value = Number(raw);
+  if (/^\d+$/.test(String(raw).trim()) && Number.isSafeInteger(value) && value > 0) return value;
+  warn(`⚠️ Ignoring invalid FEEDFERRET_DB_LOCK_TIMEOUT_MS=${JSON.stringify(raw)} (expected a positive integer of milliseconds); using ${DEFAULT_LOCK_WAIT_MS}.`);
+  return DEFAULT_LOCK_WAIT_MS;
+}
+
 /** @param {string} url */
 export async function pgClient(url) {
   const pg = (await importPackage("pg")).default;

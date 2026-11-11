@@ -133,6 +133,12 @@ the log-only drift check that runs after `migrate deploy` and takes about a seco
   plain DDL only if every statement is one of the following: `CREATE TABLE`,
   `CREATE [UNIQUE] INDEX`, `CREATE TYPE … AS ENUM`, `ALTER TABLE … ADD COLUMN` /
   `ADD CONSTRAINT … FOREIGN KEY|UNIQUE`, the generated pg_trgm guard blocks, or comments.
+  Column `DEFAULT`s must be literals: strings, numbers, `true`/`false`, `NULL`, `CURRENT_TIMESTAMP`,
+  `now()`, `literal::type` and `ARRAY[literals]::type`. `CHECK`, `GENERATED` and `COLLATE` are
+  rejected, as are any other functions or expressions. The SQL is tokenized with awareness of
+  quotes, `$tag$` dollar quotes and comments, and split only on top-level `;`. Input that cannot
+  be tokenized also counts as not pure DDL: an unterminated quote, an unterminated comment or a
+  nested block comment.
   Anything else stops the adoption, *even with* `-- ff:allow-destructive`. That covers
   `INSERT`/`UPDATE`/`DELETE` backfills, other `DO` blocks, functions, drops, renames,
   type changes and SQLite `RedefineTables`, because marking such a migration as applied

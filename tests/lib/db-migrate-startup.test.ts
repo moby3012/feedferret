@@ -12,6 +12,7 @@ import Database from "better-sqlite3";
 import {
   classifyTables,
   detectState,
+  lockWaitMs,
   normalizeProvider,
   postgresSchema,
   sqliteFilePath,
@@ -80,6 +81,20 @@ describe("db-state", () => {
     expect(await detectState({ provider: "sqlite", url: `file:${migrated}` })).toBe("migrated");
     expect(await detectState({ provider: "sqlite", url: `file:${join(work, "nope.db")}` })).toBe("empty");
     expect(await detectState({ provider: "sqlite", url: "file:./state-legacy.db", configDir: work })).toBe("legacy");
+  });
+
+  it("validates FEEDFERRET_DB_LOCK_TIMEOUT_MS (positive integer ms, else default + warning)", () => {
+    const warnings: string[] = [];
+    const warn = (m: string) => warnings.push(m);
+    expect(lockWaitMs(undefined, warn)).toBe(600_000);
+    expect(lockWaitMs("", warn)).toBe(600_000);
+    expect(lockWaitMs("30000", warn)).toBe(30_000);
+    expect(warnings).toEqual([]);
+    for (const bad of ["0", "-5", "1.5", "abc", "1e3", "Infinity", "NaN", "99999999999999999999"]) {
+      expect(lockWaitMs(bad, warn)).toBe(600_000);
+    }
+    expect(warnings).toHaveLength(8);
+    expect(warnings[0]).toMatch(/Ignoring invalid FEEDFERRET_DB_LOCK_TIMEOUT_MS/);
   });
 
   it("assert-additive rejects destructive SQL and accepts additive SQL", () => {

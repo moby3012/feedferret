@@ -22,15 +22,15 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { prepareSchema } from "./prepare-prisma-schema.mjs";
 import { baseline as BASELINE_MIGRATION, pureDdlViolations } from "./migration-utils.mjs";
-import { classifyTables, ensurePgTrgm, listTables, normalizeProvider, waitForPostgres } from "./db-state.mjs";
+import { classifyTables, ensurePgTrgm, listTables, lockWaitMs, normalizeProvider, waitForPostgres } from "./db-state.mjs";
 
 const CONFIG = "prisma/startup.config.mjs";
 // Fixed key for pg_advisory_lock (bytes of "FFMIGRAT"); distinct from Prisma's own migrate lock.
 const LOCK_KEY = "5063819808149225812";
-const LOCK_WAIT_MS = Number(process.env.FEEDFERRET_DB_LOCK_TIMEOUT_MS || 10 * 60_000);
-
 const ts = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const log = (message) => console.log(`[${ts()}] ${message}`);
+
+const LOCK_WAIT_MS = lockWaitMs(process.env.FEEDFERRET_DB_LOCK_TIMEOUT_MS, log);
 class StartupError extends Error {}
 const fail = (message) => { throw new StartupError(message); };
 
