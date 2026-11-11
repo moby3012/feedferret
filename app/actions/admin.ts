@@ -233,7 +233,7 @@ export async function updateUserRole(userId: string, role: string) {
 export async function suspendUser(userId: string) {
   const session = await checkAdmin();
   const target = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
-  await db.user.update({ where: { id: userId }, data: { isActive: false, apiTokenVersion: { increment: 1 } } });
+  await db.$transaction([db.user.update({ where: { id: userId }, data: { isActive: false, apiTokenVersion: { increment: 1 } } }), db.emailChangeRequest.deleteMany({ where: { userId } })]);
   await logAdminAction(session.user.id!, "user.suspend", { targetId: userId, targetEmail: target?.email ?? undefined });
   revalidatePath("/");
 }

@@ -31,11 +31,12 @@ export type UpdateProfileResult =
     | {
           success: true;
           emailChanged: boolean;
+          emailPending?: string;
           feverRotationRequired: boolean;
           /** Email change only: "sent" = old + new address notified, "failed" = mail configured but a send failed, "unavailable" = no mail delivery. */
           emailNotice?: "sent" | "failed" | "unavailable";
       }
-    | { success: false; code: "stepUpRequired" | "reloginRequired" | "rateLimited" | "invalidEmail" | "emailTaken" };
+    | { success: false; code: "emailPendingSendFailed" | "stepUpRequired" | "reloginRequired" | "rateLimited" | "invalidEmail" | "emailTaken" };
 
 function isUniqueViolation(error: unknown): boolean {
   return !!error && typeof error === "object" && (error as { code?: unknown }).code === "P2002";
@@ -54,10 +55,11 @@ async function emailTakenByOtherUser(email: string, userId: string): Promise<boo
 }
 
 /** Whether an email change can send the confirmation / old-address notice (UI warns when not). */
-export async function getEmailChangeMailStatus(): Promise<{ mailConfigured: boolean }> {
-  await requireUser();
+export async function getEmailChangeMailStatus(): Promise<{ mailConfigured: boolean; emailPending?: string }> {
+  const session = await requireUser();
+  const pending = await db.emailChangeRequest.findUnique({ where: { userId: session.user.id } });
   const { isMailServiceEnabled } = await import("@/lib/mail");
-  return { mailConfigured: await isMailServiceEnabled() };
+  return { mailConfigured: await isMailServiceEnabled(), emailPending: pending && pending.expiresAt > new Date() ? pending.newEmail : undefined };
 }
 
 export async function updateProfile(data: {
@@ -77,7 +79,7 @@ export async function updateProfile(data: {
   // magic-link flow lower-cases them: store the normalized form.
   if (typeof profile.email === "string") profile.email = profile.email.trim().toLowerCase();
 
-  const current = await db.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { email: true, uiLanguage: true } });
+  const current = await db.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { email: true, uiLanguage: true, sessionVersion: true } });
   if (profile.email !== undefined && profile.email !== current.email) {
     // The account email is the login identity (and the GReader/Fever username).
     if (typeof profile.email !== "string" || !/^[^\s@]+@[^\s@]+$/.test(profile.email) || profile.email.length > 254) {
@@ -95,6 +97,22 @@ export async function updateProfile(data: {
     if (!stepUp.ok) return { success: false, code: stepUp.code };
     // Checked after the step-up so a bare session can't probe which addresses exist.
     if (await emailTakenByOtherUser(profile.email, session.user.id)) return { success: false, code: "emailTaken" };
+    const { isMailServiceEnabled } = await import("@/lib/mail");
+    if (await isMailServiceEnabled()) {
+      if (!checkRateLimit(session.user.id, { prefix: "email-change-request", limit: 3, windowSecs: 3600 }).success) return { success: false, code: "rateLimited" };
+      const { requestEmailChange, EmailChangeNoticeError } = await import("@/lib/email-change");
+      let sent: boolean;
+      try {
+        sent = await requestEmailChange(session.user.id, current.email, profile.email, current.uiLanguage, current.sessionVersion);
+      } catch (error) {
+        if (error instanceof EmailChangeNoticeError) return { success: false, code: "emailPendingSendFailed" };
+        throw error;
+      }
+      if (profile.name !== undefined) await db.user.update({ where: { id: session.user.id }, data: { name: profile.name } });
+      revalidatePath("/");
+      return { success: true, emailChanged: false, emailPending: profile.email, feverRotationRequired: false, emailNotice: sent ? "sent" : "failed" };
+    }
+
   }
 
   let emailChanged: boolean;
@@ -155,11 +173,11 @@ export async function changePassword(data: {
   if (!currentMatches) return { success: false, error: t("currentPasswordIncorrect") };
 
   const hashedPassword = await bcrypt.hash(parsed.data.newPassword, 10);
-  await db.user.update({
+  await db.$transaction([db.user.update({
     where: { id: session.user.id },
     // Keep the independent API password; revoke issued GReader Auth/T tokens.
     data: { password: hashedPassword, sessionVersion: { increment: 1 }, apiTokenVersion: { increment: 1 } },
-  });
+  }), db.emailChangeRequest.deleteMany({ where: { userId: session.user.id } })]);
 
   return { success: true };
 }
@@ -283,14 +301,14 @@ export async function beginTwoFactorSetup() {
     accountName: user.email,
   });
 
-  await db.user.update({
+  await db.$transaction([db.user.update({
     where: { id: session.user.id },
     data: {
       twoFactorEnabled: false,
       twoFactorSecret: secret,
       twoFactorLastAcceptedStep: null,
     },
-  });
+  }), db.emailChangeRequest.deleteMany({ where: { userId: session.user.id } })]);
 
   return { secret, uri, issuer, accountName: user.email };
 }
@@ -314,10 +332,10 @@ export async function confirmTwoFactorSetup(code: string) {
     throw new Error("Invalid one-time code");
   }
 
-  await db.user.update({
+  await db.$transaction([db.user.update({
     where: { id: session.user.id },
     data: { twoFactorEnabled: true, sessionVersion: { increment: 1 }, apiTokenVersion: { increment: 1 } },
-  });
+  }), db.emailChangeRequest.deleteMany({ where: { userId: session.user.id } })]);
 
   revalidatePath("/settings");
   return { enabled: true };
@@ -340,7 +358,7 @@ export async function disableTwoFactor(code: string) {
     throw new Error("Invalid one-time code");
   }
 
-  await db.user.update({
+  await db.$transaction([db.user.update({
     where: { id: session.user.id },
     data: {
       twoFactorEnabled: false,
@@ -348,7 +366,7 @@ export async function disableTwoFactor(code: string) {
       sessionVersion: { increment: 1 },
       apiTokenVersion: { increment: 1 },
     },
-  });
+  }), db.emailChangeRequest.deleteMany({ where: { userId: session.user.id } })]);
 
   revalidatePath("/settings");
   return { enabled: false };
@@ -1095,4 +1113,10 @@ export async function getNotificationChannelStatus() {
     gotify: !!(user?.gotifyEnabled && user.gotifyUrl && user.gotifyToken),
     ntfy: !!(user?.ntfyEnabled && user.ntfyUrl),
   };
+}
+
+export async function cancelPendingEmailChange() {
+  const session = await requireUser();
+  await db.emailChangeRequest.deleteMany({ where: { userId: session.user.id } });
+  revalidatePath("/");
 }

@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { useUpdateProfile, useEmailChangeMailStatus } from "@/hooks/use-rss-data";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import { cancelPendingEmailChange } from "@/app/actions/settings";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 export function EmailSection({ currentEmail }: { currentEmail: string | null }) {
@@ -16,23 +18,40 @@ export function EmailSection({ currentEmail }: { currentEmail: string | null }) 
   const { update: updateSession } = useSession();
   const [email, setEmail] = useState("");
   const [proof, setProof] = useState("");
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const handleCancel = async () => {
+    setCancelling(true);
+    try {
+      await cancelPendingEmailChange();
+      await mailStatus.refetch();
+      setCancelOpen(false);
+    } catch {
+      toast.error(t("profile.emailCancelFailed"));
+    } finally {
+      setCancelling(false);
+    }
+  };
 
-  const handleSubmit = async () => {
-    const next = email.trim().toLowerCase();
+  const handleSubmit = async (address = email) => {
+    const next = address.trim().toLowerCase();
     if (!next || next === currentEmail) return;
     try {
       // The proof field takes the current login password or a TOTP code; the
       // server tries both (passwordless accounts: a sign-in < 10 min ago).
       const result = await updateProfile.mutateAsync({ email: next, currentPassword: proof, totp: proof });
       if (result.success) {
-        toast.success(t("profile.emailChanged"));
-        if (result.emailNotice === "failed") toast.warning(t("profile.emailChangeNoticeFailed"));
+        if (result.emailPending && result.emailNotice === "failed") toast.error(t("profile.emailPendingSendFailed"));
+        else toast.success(result.emailPending ? t("profile.emailPending", { email: result.emailPending }) : t("profile.emailChanged"));
+        await mailStatus.refetch();
+        if (!result.emailPending && result.emailNotice === "failed") toast.warning(t("profile.emailChangeNoticeFailed"));
         setEmail("");
         setProof("");
         await updateSession?.().catch(() => undefined);
         return;
       }
       const messages = {
+        emailPendingSendFailed: t("profile.emailPendingSendFailed"),
         stepUpRequired: t("apiPassword.stepUpRequired"),
         reloginRequired: t("apiPassword.reloginRequired"),
         rateLimited: t("profile.emailChangeRateLimited"),
@@ -58,6 +77,11 @@ export function EmailSection({ currentEmail }: { currentEmail: string | null }) 
       </div>
 
       <div className="grid gap-4 sm:max-w-sm">
+        {mailStatus.data?.emailPending ? <div role="status" className="space-y-2 text-body-sm">
+          <p>{t("profile.emailPending", { email: mailStatus.data.emailPending })}</p>
+          <Button variant="outline" disabled={updateProfile.isPending} onClick={() => handleSubmit(mailStatus.data!.emailPending!)}>{t("profile.emailResend")}</Button>
+          <Button variant="outline" disabled={cancelling} onClick={() => setCancelOpen(true)}>{t("profile.emailCancel")}</Button>
+        </div> : null}
         <div className="grid gap-1.5">
           <label className="text-body-sm font-medium" htmlFor="new-email-input">{t("profile.newEmail")}</label>
           <Input
@@ -91,13 +115,25 @@ export function EmailSection({ currentEmail }: { currentEmail: string | null }) 
         ) : null}
         <Button
           type="button"
-          onClick={handleSubmit}
+          onClick={() => handleSubmit()}
           disabled={updateProfile.isPending || !email.trim() || email.trim().toLowerCase() === currentEmail}
           className="h-11 w-fit rounded-panel px-5"
         >
           {updateProfile.isPending ? t("profile.updating") : t("profile.updateEmail")}
         </Button>
       </div>
+      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("profile.emailCancel")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("profile.emailCancelConfirm")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelling}>{t("profile.emailCancelKeep")}</AlertDialogCancel>
+            <AlertDialogAction disabled={cancelling} onClick={event => { event.preventDefault(); void handleCancel(); }}>{t("profile.emailCancel")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

@@ -458,3 +458,27 @@ Read surfaces never return stored secrets:
 - Webhook configs (settings UI, REST, MCP) report `hasSecret`, a `secretRef`, and header names whose values are masked as `"__keep__"`. Sending an entry back with its `secretRef` keeps the stored secret (omitted, `""` or `"__keep__"`; `null` removes it) and every header sent as `"__keep__"` (`null` or leaving the header out removes it).
 - The feed dialog's fetch options (`httpOptions`) show only non-sensitive cURL options; cookies, headers, POST bodies, proxy URLs and any other option appear as `"__keep__"`. Saving keeps those values, a removed key clears it.
 - Values starting with the reserved `ff2.` prefix that are not valid v2 are rejected as malformed (never read as plaintext); `secrets:status` lists them as `malformed`.
+
+### Email address changes
+
+With mail delivery enabled, changing the account email requires the existing step-up
+proof and confirmation at the new address. The old login remains active until the
+confirmation button is submitted. Pending requests expire after 24 hours; resending
+replaces both links and shares a limit of three requests per hour per account
+(using the existing process-local rate limiter). The old address receives a cancel
+link, and settings also offer authenticated cancellation. Link GETs never consume
+requests. Confirmation revokes browser sessions and GReader tokens and clears Fever
+keys; sign in again and rotate Fever credentials afterward.
+
+Password changes, two-factor setup/enable/disable, and administrator suspension
+invalidate pending requests atomically with the account mutation. Without mail
+configured, the existing immediate change after step-up remains available and the
+settings warning still applies. The old-address security notice must be delivered before a pending request is
+created or replaced. If it fails, the request is refused. Failure delivering the
+new-address confirmation leaves the pending request available for resend and shows
+an error; resend requires step-up again. Cancellation via the old-address link
+revokes browser/API sessions and clears Fever keys because it may signal compromise.
+
+The request/resend rate limit is per process: it resets on restart and is not
+shared between replicas. Operators running multiple replicas must also enforce
+shared limits at their ingress if they require a global quota.

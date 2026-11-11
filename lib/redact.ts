@@ -1,6 +1,8 @@
 /** Scrub credentials from arbitrary diagnostic text, including encoded URLs. */
 export function redact(text: string): string {
   return text
+    .replace(/\/account\/confirm-email\?[^\s"'<>#]*/gi, url => url.replace(/((?:\?|&amp;|&)(?:t|c)=)[^&#\s"']*/gi, "$1***"))
+    .replace(/(?:%2f|\/)account(?:%2f|\/)confirm-email%3f(?:(?!%23)[^\s"'<>#])*/gi, url => url.replace(/((?:%3f|%26)(?:t|c)%3d)(?:(?!%26|%23)[^&#\s"'])*/gi, "$1***"))
     .replace(/((?:[?&#;]|&amp;)[\w.-]*(?:key|token|secret|passw(?:or)?d|pwd|auth|sig(?:nature)?)=)[^&#\s"']*/gi, "$1***")
     .replace(/((?:%3f|%26|%23|%3b)(?:[\w.-]|%[0-9a-f]{2})*?(?:key|token|secret|passw(?:or)?d|pwd|auth|sig(?:nature)?)%3d)(?:(?!%26|%23|%3b)[^&#\s"'])*/gi, "$1***")
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]+@/gi, "$1***@");

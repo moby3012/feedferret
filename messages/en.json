@@ -198,7 +198,14 @@
     "invalidEmail": "Enter a valid email address.",
     "emailTaken": "This email address is already in use.",
     "emailChangeNoMail": "This server has no email delivery configured: no confirmation will be sent to the new address and no notice to the old one. Double-check the new address.",
-    "emailChangeNoticeFailed": "Email changed, but the notification emails could not be sent."
+    "emailChangeNoticeFailed": "Email changed, but the notification emails could not be sent.",
+    "emailPending": "Confirmation sent to {email}",
+    "emailResend": "Resend (authentication required)",
+    "emailCancel": "Cancel email change",
+    "emailPendingSendFailed": "The confirmation emails could not all be sent. Your current address remains active. Please try again.",
+    "emailCancelConfirm": "Are you sure you want to cancel the pending email address change?",
+    "emailCancelKeep": "Keep email change",
+    "emailCancelFailed": "The email change could not be cancelled. Please try again."
   },
   "twoFactor": {
     "title": "Two-factor authentication",
@@ -2330,5 +2337,14 @@
       "limit": "At most {limit} addresses.",
       "lastActive": "One address has to stay active. Create a new one first."
     }
+  },
+  "emailChangeConfirm": {
+    "title": "Change email address",
+    "confirmed": "Email confirmed. Please sign in again.",
+    "cancelled": "Email change cancelled.",
+    "invalid": "This link is invalid or expired.",
+    "cancel": "Cancel email change",
+    "confirm": "Confirm email address",
+    "signIn": "Sign in"
   }
 }
