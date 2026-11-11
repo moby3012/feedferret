@@ -5,9 +5,23 @@ import { completeBackHint, createBackSwipe, documentDir, getGesturePrefs } from 
 import { isCompactLayout, subscribeLayoutClass } from "@/features/reader/layout/layout-class";
 import { getNavState, nav } from "@/features/reader/nav/store";
 
-/** The reader is a layer over the list (compact): the layouts where swipe-back applies. */
+/** The reader is a layer over the list by layout class (compact) — for widgets that need a subscription. */
 export function isReaderOverList(): boolean {
   return isCompactLayout();
+}
+
+/**
+ * At gesture start: does the (resting, open) reader pane actually cover the
+ * list? Geometry, not breakpoints, so every stacked layout (compact, and
+ * portrait tablets where the reader pushes over the list) gets swipe-back and
+ * two-pane layouts never do.
+ */
+function readerCoversList(pane: HTMLElement): boolean {
+  const list = coveredList();
+  if (!list) return false;
+  const r = pane.getBoundingClientRect();
+  const l = list.getBoundingClientRect();
+  return r.left < l.right - 1 && r.right > l.left + 1;
 }
 
 /** `isReaderOverList()` for post-mount widgets (`false` during SSR / hydration). */
@@ -44,7 +58,7 @@ export function useReaderSwipeBack(paneRef: RefObject<HTMLElement | null>, artic
     if (!pane) return;
     let closeTimer: ReturnType<typeof setTimeout> | null = null;
     const h = createBackSwipe(pane, {
-      enabled: () => !!openRef.current && getGesturePrefs().swipeBack && isReaderOverList(),
+      enabled: () => !!openRef.current && getGesturePrefs().swipeBack && readerCoversList(pane),
       dir: documentDir,
       under: coveredList,
       onStart: completeBackHint,
