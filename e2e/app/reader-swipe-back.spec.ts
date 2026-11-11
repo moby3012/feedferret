@@ -229,6 +229,24 @@ test.describe("first use", () => {
     await expect(hint).toBeHidden();
     expect(await page.evaluate(() => localStorage.getItem("ff:back-hint"))).toBe("done");
   });
+
+  test("portrait tablet shows the tip too; two panes never do (and do not retire it)", async ({ app, page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("ff:gesture-hint", "done");
+      localStorage.setItem("ff:feeds-hint", "done");
+    });
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await app.open();
+    await app.activate(app.row(2));
+    await expect(shell(page)).toHaveAttribute("data-reader", "open");
+    await page.waitForTimeout(400);
+    await expect(page.getByTestId("reader-back-hint")).toHaveCount(0);
+    await page.setViewportSize({ width: 820, height: 1180 });
+    const hint = page.getByTestId("reader-back-hint");
+    await expect(hint).toBeVisible();
+    await expect(hint).toBeInViewport({ ratio: 1 });
+    expect(await page.evaluate(() => localStorage.getItem("ff:back-hint"))).toBeNull();
+  });
 });
 
 test("pill at 320 px: six items, each a ≥44 px target", async ({ app, page }) => {
@@ -248,18 +266,34 @@ test("pill at 320 px: six items, each a ≥44 px target", async ({ app, page }) 
   expect(await buttons.count()).toBeGreaterThan(0);
 });
 
-test("portrait tablet: swipe-back works where the reader covers the list", async ({ app, page }) => {
+test("portrait tablet (820 px, stacked reader): swipe-back closes it, focus returns to the row", async ({ app, page }) => {
   await page.setViewportSize({ width: 820, height: 1180 });
   await app.open();
+  const rowId = await rowIdOf(app, 3);
   await app.row(3).scrollIntoViewIfNeeded();
   await app.activate(app.row(3));
   await expect(shell(page)).toHaveAttribute("data-reader", "open");
   await page.waitForTimeout(500);
   const geo = await readerGeometry(page);
+  expect(geo.overlaps).toBe(true); // #250: the reader pushes over the list below 960 px
   await touchDrag(page, { x: geo.left + 120, y: 500 }, 400, 0, { steps: 12, stepMs: 16 });
+  await expect(shell(page)).toHaveAttribute("data-reader", "closed");
+  await expect(page).not.toHaveURL(/[?&]a=/);
+  await expect.poll(() => focusedRowId(page)).toBe(rowId);
+  expect(await pane(page).evaluate((el) => el.style.transform)).toBe("");
+});
+
+test("two panes (1024 px): no swipe-back, the reader stays", async ({ app, page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await app.open();
+  await app.activate(app.row(3));
+  await expect(shell(page)).toHaveAttribute("data-reader", "open");
+  await page.waitForTimeout(500);
+  const geo = await readerGeometry(page);
+  expect(geo.overlaps).toBe(false);
+  await touchDrag(page, { x: geo.left + 120, y: 400 }, 400, 0, { steps: 12, stepMs: 16 });
   await page.waitForTimeout(600);
-  // Stacked (reader over the list) → back; two panes side by side → nothing to go back from.
-  await expect(shell(page)).toHaveAttribute("data-reader", geo.overlaps ? "closed" : "open");
+  await expect(shell(page)).toHaveAttribute("data-reader", "open");
 });
 
 test("mid-gesture screenshots (390 px)", async ({ app, page }) => {

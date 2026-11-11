@@ -1,14 +1,9 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { completeBackHint, createBackSwipe, documentDir, getGesturePrefs } from "@/lib/gestures";
-import { isCompactLayout, subscribeLayoutClass } from "@/features/reader/layout/layout-class";
+import { useReaderStacked } from "@/features/reader/layout/layout-class";
 import { getNavState, nav } from "@/features/reader/nav/store";
-
-/** The reader is a layer over the list by layout class (compact) — for widgets that need a subscription. */
-export function isReaderOverList(): boolean {
-  return isCompactLayout();
-}
 
 /**
  * At gesture start: does the (resting, open) reader pane actually cover the
@@ -24,9 +19,9 @@ function readerCoversList(pane: HTMLElement): boolean {
   return r.left < l.right - 1 && r.right > l.left + 1;
 }
 
-/** `isReaderOverList()` for post-mount widgets (`false` during SSR / hydration). */
+/** The reader is a layer over the list (compact + portrait tablets) — for post-mount widgets (the tip). */
 export function useReaderOverList(): boolean {
-  return useSyncExternalStore(subscribeLayoutClass, isReaderOverList, () => false);
+  return useReaderStacked() === true;
 }
 
 /** The active list pane the reader covers (it moves with a parallax lag under the drag). */

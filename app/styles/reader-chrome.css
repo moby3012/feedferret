@@ -231,7 +231,7 @@
   }
 }
 
-/* ------------------------------------------------------------------ one-time swipe-back tip (compact) */
+/* ------------------------------------------------------------------ one-time swipe-back tip (stacked reader: compact + portrait tablets) */
 .ff-reader-back-hint {
   position: absolute;
   inset-inline: max(12px, var(--safe-l)) max(12px, var(--safe-r));
@@ -259,10 +259,16 @@
   font-weight: 600;
 }
 .ff-reader-back-hint-ok:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
+  outline: var(--focus-ring-width) solid var(--ring);
+  outline-offset: var(--focus-ring-offset);
 }
+/* No pill from 48rem: the tip sits at the bottom edge instead. */
 @media (width >= 48rem) {
+  .ff-reader-back-hint {
+    bottom: calc(var(--safe-b) + 16px);
+  }
+}
+@media (width >= 60rem) {
   .ff-reader-back-hint {
     display: none;
   }
