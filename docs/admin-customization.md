@@ -58,4 +58,4 @@ Safety rules:
 
 ## Deployment note
 
-These settings require the current Prisma schema. The Docker startup script runs `prisma db push`, so self-hosted Compose/Coolify deployments apply the new columns automatically on startup.
+These settings require the current Prisma schema. The Docker startup script runs `prisma migrate deploy`, so self-hosted Compose/Coolify deployments apply the new columns automatically on startup.

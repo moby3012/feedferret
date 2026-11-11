@@ -53,10 +53,11 @@ s.on('error', () => { s.destroy(); process.exit(1); });
     log "✅ PostgreSQL is ready."
 fi
 
-log "🔄 Running database sync (db push)..."
-# Prepares the provider schema and runs `prisma db push`; keeps the app's own search
-# objects (SQLite FTS5 tables, Postgres pg_trgm indexes) intact. See scripts/db-sync.sh.
-PRISMA_CMD="$PRISMA_CMD" sh scripts/db-sync.sh
+log "🔄 Updating database schema (FEEDFERRET_DB_SYNC=${FEEDFERRET_DB_SYNC:-migrate})..."
+# Default: `prisma migrate deploy` (adopts a pre-migrations db-push database once).
+# Fallback: FEEDFERRET_DB_SYNC=push (db push, refuses data loss). See scripts/db-migrate.sh
+# and docs/database.md. Keeps the app's own search objects (SQLite FTS5, pg_trgm) intact.
+PRISMA_CMD="$PRISMA_CMD" sh scripts/db-migrate.sh
 
 log "✅ Database is ready."
 log "🌟 Starting Next.js server..."

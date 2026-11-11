@@ -70,7 +70,13 @@ RUN rm -f ./prisma.config.ts ./prisma.config.js ./prisma.config.mjs
 # It marks the SQLite FTS tables as external so `db push` leaves them alone.
 COPY --chown=nextjs:nodejs prisma ./prisma
 COPY --chown=nextjs:nodejs scripts/prepare-prisma-schema.mjs ./scripts/prepare-prisma-schema.mjs
+# Startup schema: scripts/db-migrate.sh (migrate deploy, default) + db-sync.sh (db push fallback).
+COPY --chown=nextjs:nodejs scripts/db-common.sh ./scripts/db-common.sh
+COPY --chown=nextjs:nodejs scripts/db-migrate.sh ./scripts/db-migrate.sh
+COPY --chown=nextjs:nodejs scripts/db-migrate.mjs ./scripts/db-migrate.mjs
 COPY --chown=nextjs:nodejs scripts/db-sync.sh ./scripts/db-sync.sh
+COPY --chown=nextjs:nodejs scripts/db-state.mjs ./scripts/db-state.mjs
+COPY --chown=nextjs:nodejs scripts/migration-utils.mjs ./scripts/migration-utils.mjs
 COPY --chown=nextjs:nodejs start.sh ./start.sh
 # Stored-secret status CLI (M8): `node scripts/secrets-cli.mjs status`. Plain ESM, read-only.
 COPY --chown=nextjs:nodejs scripts/secrets-cli.mjs ./scripts/secrets-cli.mjs

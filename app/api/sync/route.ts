@@ -29,11 +29,12 @@ export async function GET(request: Request) {
         lastCronSyncTime = now;
         
         const results = await syncAllFeeds();
-        const synced = results.filter(r => r.success).length;
+        const synced = results.filter(r => r.success && !r.skipped).length;
         
         return NextResponse.json({ 
             success: true, 
             synced,
+            deferred: results.filter(r => "deferred" in r && r.deferred).length,
             total: results.length,
             results: results.map(r => ({ success: r.success, count: r.count }))
         });

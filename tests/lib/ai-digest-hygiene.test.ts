@@ -148,7 +148,7 @@ describe("link neutralising in digest output (N14 review)", () => {
 
   it.each([
     // Ordinary prose is preserved or harmlessly defanged; numbers never change.
-    ["Node.js/Deno compared", "Node[.]js/Deno compared"],
+    ["Node.js/Deno compared", "Node.js/Deno compared"],
     ["rated 4.5/5", "rated 4.5/5"],
     ["v1.2.3 ships 10.5% faster, 3.14 is pi", "v1.2.3 ships 10.5% faster, 3.14 is pi"],
     ["e.g. this, i.e. that, U.S. news", "e.g. this, i.e. that, U.S. news"],

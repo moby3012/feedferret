@@ -49,6 +49,7 @@ services:
       - DATABASE_PROVIDER=${DATABASE_PROVIDER:-postgresql}
       - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-feedferret}:${POSTGRES_PASSWORD:-feedferret-change-me}@postgres:5432/${POSTGRES_DB:-feedferret}?schema=public}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-feedferret-change-me}
+      - FEEDFERRET_DB_SYNC=${FEEDFERRET_DB_SYNC:-migrate}
       - AUTH_SECRET=${AUTH_SECRET:?set AUTH_SECRET}
       - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
       - AUTH_URL=${AUTH_URL:-https://feedferret.example.com}

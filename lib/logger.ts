@@ -1,6 +1,8 @@
+import { redactValue } from "./redact";
 const isDev = process.env.NODE_ENV !== "production";
 
 function fmt(level: string, ...args: unknown[]) {
+  args = args.map(arg => redactValue(arg));
   if (typeof args[0] === "string") {
     return [`[${level}] ${args[0]}`, ...args.slice(1)];
   }

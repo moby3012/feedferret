@@ -1,3 +1,4 @@
+import { redact } from "./redact";
 import { db } from "./db";
 import { backfillExternalIds } from "./external-id-store";
 import { syncAllFeeds } from "./rss-sync";
@@ -183,7 +184,7 @@ async function tick() {
         );
         await runPostTickJobs(state);
     } catch (error) {
-        state.lastError = String(error);
+        state.lastError = redact(String(error));
         logger.error("[background-sync] tick failed:", error);
     } finally {
         state.running = false;
