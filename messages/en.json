@@ -922,7 +922,10 @@
     "savedSearchFallback": "Saved Search",
     "feedNavigation": "Feed navigation",
     "feedActions": "Feed actions",
-    "recentlyRead": "Recently read"
+    "recentlyRead": "Recently read",
+    "brokenFeeds": "Broken feeds",
+    "brokenFeedsCount": "Broken feeds ({count})",
+    "viewAllBrokenFeeds": "View all broken feeds"
   },
   "articleList": {
     "newItems": "{count} new",
@@ -1441,7 +1444,8 @@
       "titleAlert": "Delete alert?",
       "titleSavedSearch": "Delete saved search?",
       "description": "“{name}” will be removed. This cannot be undone."
-    }
+    },
+    "brokenTab": "Broken feeds"
   },
   "feedEdit": {
     "authTab": "Authentication",
@@ -2159,7 +2163,8 @@
     "notificationsUnread": "Notifications ({count} new)",
     "gesturesHelp": "Gestures & help",
     "more": "More",
-    "moreWithNotifications": "More, {count} new notifications"
+    "moreWithNotifications": "More, {count} new notifications",
+    "brokenFeeds": "Broken feeds"
   },
   "googleNews": {
     "tabLabel": "Google News",
@@ -2383,5 +2388,92 @@
     "newTab": "(opens in a new tab)",
     "confirmDestination": "Destination: {host}",
     "unsubscribeRateLimited": "Too many unsubscribe requests in a short time. Please try again in a minute."
+  },
+  "brokenFeeds": {
+    "title": "Broken feeds",
+    "description": "Feeds that were muted or keep failing. Re-test them, repair the address or remove them.",
+    "summary": "{count, plural, one {# broken feed} other {# broken feeds}}",
+    "summaryMuted": "{count} of them muted",
+    "empty": "No broken feeds",
+    "emptyDescription": "All your feeds are being fetched successfully.",
+    "loadError": "The list could not be loaded.",
+    "retry": "Reload",
+    "muted": "Muted",
+    "failures": "{count, plural, one {# failed attempt in a row} other {# failed attempts in a row}}",
+    "failingSince": "Failing since {date}",
+    "failingSinceUnknown": "Failing since unknown",
+    "lastSuccess": "Last success: {date}",
+    "lastSuccessUnknown": "Last success: unknown",
+    "technicalDetail": "Technical details",
+    "categories": {
+      "access": "Access denied – maybe login or bot protection",
+      "not-found": "Not found – did the feed move?",
+      "rate-limited": "Too many requests – the server is throttling us",
+      "server": "Server error",
+      "unreachable": "Unreachable",
+      "invalid-feed": "Not a valid feed",
+      "rsshub": "Needs RSSHub",
+      "unsafe-target": "Address not allowed (internal address)",
+      "unknown": "Unknown error"
+    },
+    "actions": {
+      "retest": "Re-test",
+      "retesting": "Testing…",
+      "repair": "Repair",
+      "edit": "Edit",
+      "unmute": "Unmute",
+      "remove": "Remove"
+    },
+    "retest": {
+      "recovered": "“{name}” works again and is reactivated.",
+      "stillBroken": "Still failing: {category}",
+      "rateLimited": "Too many tests. Try again in {seconds} s.",
+      "failed": "The test failed."
+    },
+    "unmuted": "“{name}” unmuted.",
+    "unmuteFailed": "Could not unmute the feed.",
+    "repair": {
+      "title": "New address for “{name}”",
+      "searching": "Looking for feeds on {site}…",
+      "none": "No other feed was found on the site.",
+      "noneHint": {
+        "needs-rsshub": "This site needs RSSHub.",
+        "rate-limited": "The site throttles automated access.",
+        "blocked": "The site blocks automated access."
+      },
+      "use": "Use this",
+      "close": "Close",
+      "applied": "New address for “{name}” applied.",
+      "appliedStillBroken": "New address applied, but the first fetch still failed.",
+      "unsupported": "This feed type can't be repaired automatically.",
+      "rateLimited": "Too many requests. Try again shortly.",
+      "errors": {
+        "invalid-url": "That address isn't allowed.",
+        "duplicate": "You already subscribe to this feed.",
+        "not-a-feed": "There is no readable feed at that address.",
+        "unsupported": "This feed type can't be repaired automatically.",
+        "rate-limited": "Too many requests. Try again shortly."
+      },
+      "failed": "The search failed."
+    },
+    "bulk": {
+      "retestAll": "Re-test all",
+      "retestProgress": "Testing {done} of {total}…",
+      "cancel": "Cancel",
+      "retestDone": "{recovered} work again, {failed} still failing.",
+      "removeStale": "Remove all failing for more than 30 days",
+      "removeStaleCount": "Remove failing > 30 days ({count})",
+      "removeStaleTitle": "Remove {count, plural, one {# feed} other {# feeds}}?",
+      "removeStaleDescription": "These feeds have been failing for more than 30 days. They are deleted together with their articles. This can't be undone.",
+      "removeStaleConfirm": "Remove {count, plural, one {# feed} other {# feeds}}",
+      "removeStaleDone": "{count, plural, one {# feed removed} other {# feeds removed}}.",
+      "removeStaleFailed": "The feeds could not be removed."
+    },
+    "removeTitle": "Remove “{name}”?",
+    "removeDescription": "The feed is deleted together with its articles. This can't be undone.",
+    "removeConfirm": "Remove feed",
+    "removed": "“{name}” removed.",
+    "removeFailed": "The feed could not be removed.",
+    "cancel": "Cancel"
   }
 }

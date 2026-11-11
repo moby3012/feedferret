@@ -145,6 +145,44 @@ function handleNewsletter(req, res, url) {
   return false;
 }
 
+// --- "Defekte Feeds" (broken-feeds triage spec) -------------------------------
+// /broken/forbidden.xml  always 403 · /broken/missing.xml always 404
+// /broken/flaky.xml      403 until GET /broken/heal (then a valid feed), reset by GET /broken/break
+// /broken/moved/         a site page advertising /broken/moved/new.xml (the old feed URL 404s)
+let brokenHealed = false;
+const brokenRss = (title) =>
+  `<?xml version="1.0"?><rss version="2.0"><channel><title>${title}</title><link>${baseUrl}</link><description>${title}</description><item><title>${title} item</title><guid>${title}-1</guid><link>${baseUrl}/broken/article</link><description>Recovered.</description></item></channel></rss>`;
+
+function handleBrokenFeeds(res, url) {
+  if (!url.pathname.startsWith("/broken/")) return false;
+  const text = (status, body, type = "text/plain") => res.writeHead(status, { "content-type": type }).end(body);
+  switch (url.pathname) {
+    case "/broken/forbidden.xml":
+      return text(403, "forbidden"), true;
+    case "/broken/missing.xml":
+    case "/broken/moved/old.xml":
+      return text(404, "not found"), true;
+    case "/broken/flaky.xml":
+      return brokenHealed ? text(200, brokenRss("Flaky fixture"), "application/rss+xml") : text(403, "forbidden"), true;
+    case "/broken/heal":
+      brokenHealed = true;
+      return text(200, "healed"), true;
+    case "/broken/break":
+      brokenHealed = false;
+      return text(200, "broken"), true;
+    case "/broken/moved/new.xml":
+      return text(200, brokenRss("Moved fixture"), "application/rss+xml"), true;
+    case "/broken/moved/":
+      return text(
+        200,
+        `<!doctype html><html><head><title>Moved site</title><link rel="alternate" type="application/rss+xml" title="Moved fixture" href="/broken/moved/new.xml"></head><body><h1>Moved site</h1></body></html>`,
+        "text/html; charset=utf-8",
+      ), true;
+    default:
+      return false;
+  }
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url ?? "/", baseUrl);
   if (url.pathname === "/healthz") {
@@ -177,6 +215,7 @@ const server = http.createServer((req, res) => {
     );
     return;
   }
+  if (handleBrokenFeeds(res, url)) return;
   if (handleGoogleNews(req, res, url)) return;
   if (handleListingPages(res, url)) return;
   const m = /^\/feeds\/([a-z0-9-]+)\.xml$/.exec(url.pathname);

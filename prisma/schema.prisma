@@ -339,6 +339,11 @@ model Feed {
   // Resets to 0 on any successful sync or a manual unmute.
   consecutiveFailureCount Int      @default(0)
   autoMuted               Boolean  @default(false)
+  // "Defekte Feeds" overview: start of the current failure streak (null while
+  // healthy; set on the first failed sync, cleared on success / manual unmute)
+  // and the last time a sync succeeded (null = never recorded).
+  failingSince            DateTime?
+  lastSuccessAt           DateTime?
   // Conditional GET (HTTP caching): sent as If-None-Match / If-Modified-Since on the next fetch.
   etag              String?
   lastModifiedHeader String?

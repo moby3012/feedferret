@@ -102,6 +102,8 @@ import {
   BellOff,
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
+import { BrokenFeeds } from "@/components/broken-feeds";
+import { countBrokenFeeds } from "@/lib/broken-feeds";
 import { toast } from "sonner";
 import {
   Select,
@@ -769,10 +771,11 @@ type FeedManagementTab =
   | "labels"
   | "saved-searches"
   | "health"
+  | "broken"
   | "rules"
   | "alerts";
 
-const FEED_MANAGEMENT_TABS: readonly FeedManagementTab[] = ["feeds", "opml", "categories", "labels", "saved-searches", "health", "rules", "alerts"];
+const FEED_MANAGEMENT_TABS: readonly FeedManagementTab[] = ["feeds", "opml", "categories", "labels", "saved-searches", "health", "broken", "rules", "alerts"];
 
 /** A `?tab=` value of /manage-feeds, or undefined (→ the first tab). */
 export function parseFeedManagementTab(value: string | null | undefined): FeedManagementTab | undefined {
@@ -813,6 +816,7 @@ export function FeedManagement({
   const setSavedSearchSharing = useSetSavedSearchSharing();
   const applyRetention = useApplyRetentionPolicies();
   const { data: feedHealth = [] } = useFeedHealth();
+  const brokenFeedCount = countBrokenFeeds(feeds as any[]);
   const { data: readingPreferences } = useReadingPreferences();
   const updateGlobalSettings = useUpdateGlobalSettings();
   const [autoMuteThreshold, setAutoMuteThreshold] = useState<string>("10");
@@ -1070,6 +1074,7 @@ export function FeedManagement({
     { value: "opml", label: t("importExportTab") },
     { value: "labels", label: t("labelsAndSearchesTab") },
     { value: "health", label: t("healthTab") },
+    { value: "broken", label: brokenFeedCount > 0 ? `${t("brokenTab")} (${brokenFeedCount})` : t("brokenTab") },
     { value: "rules", label: t("rulesAndAlertsTab") },
     // Keyword alerts are being migrated into the newer rules system (see the
     // migration banner in the "rules" tab below) and no longer get a
@@ -1564,6 +1569,13 @@ export function FeedManagement({
                   </div>
                 </ScrollArea>
               </div>
+            </TabsContent>
+
+            <TabsContent
+              value="broken"
+              className="h-full mt-0 focus-ring"
+            >
+              <BrokenFeeds onEdit={setEditingFeed} />
             </TabsContent>
 
             <TabsContent

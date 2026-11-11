@@ -469,6 +469,8 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                     lastStatus: "ok",
                     lastError: null,
                     ...applySyncSuccess(),
+                    failingSince: null,
+                    lastSuccessAt: new Date(),
                     ...(remoteFeed.etag ? { etag: remoteFeed.etag } : {}),
                     ...(remoteFeed.lastModifiedHeader ? { lastModifiedHeader: remoteFeed.lastModifiedHeader } : {}),
                 },
@@ -481,6 +483,8 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             lastStatus: "ok",
             lastError: null,
             ...applySyncSuccess(),
+            failingSince: null,
+            lastSuccessAt: new Date(),
             etag: remoteFeed.etag ?? null,
             lastModifiedHeader: remoteFeed.lastModifiedHeader ?? null,
         };
@@ -629,6 +633,8 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 lastError: redact(String(error)).slice(0, 1000),
                 consecutiveFailureCount: failureUpdate.consecutiveFailureCount,
                 autoMuted: failureUpdate.autoMuted,
+                // Start of the failure streak (rows from before the column: their previous attempt).
+                failingSince: feed.failingSince ?? (feed.consecutiveFailureCount > 0 ? feed.lastFetchedAt : null) ?? new Date(),
             },
         });
         const errorMessage = redact(String(error)).slice(0, 500);

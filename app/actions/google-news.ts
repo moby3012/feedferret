@@ -13,7 +13,8 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { pickFields } from "@/lib/pick-fields";
 import { redactFeedForClient } from "@/lib/connector-secrets";
-import { stripFeedSecrets } from "@/lib/feed-secrets";
+import { credentialResetForUrlChange, stripFeedSecrets } from "@/lib/feed-secrets";
+import { readPlainColumn } from "@/lib/secret-box";
 import { cleanGoogleNewsTitle, googleNewsOrigin, isGoogleNewsFeedUrl, parseGoogleNewsFeedUrl } from "@/lib/google-news";
 import {
   GOOGLE_NEWS_MAX_QUERY,
@@ -138,7 +139,7 @@ export async function updateGoogleNewsFeedQuery(feedId: string, raw: SearchInput
   if (!checkRateLimit(`user:${userId}`, RATE_LIMITS.urlDiscover).success) {
     return { success: false as const, error: "rateLimited" as GoogleNewsErrorCode };
   }
-  const feed = await db.feed.findFirst({ where: { id: feedId, userId }, select: { id: true, url: true, name: true } });
+  const feed = await db.feed.findFirst({ where: { id: feedId, userId }, select: { id: true, url: true, name: true, httpOptions: true } });
   if (!feed || !isGoogleNewsFeedUrl(feed.url)) return { success: false as const, error: "notFound" as GoogleNewsErrorCode };
   if (feed.url === built.url) return { success: true as const, changed: false };
 
@@ -162,6 +163,8 @@ export async function updateGoogleNewsFeedQuery(feedId: string, raw: SearchInput
       etag: null,
       lastModifiedHeader: null,
       lastFetchedAt: null,
+      // Same rule as every URL change: stored auth/cookies/headers never follow a feed to another origin.
+      ...credentialResetForUrlChange(feed.url, built.url, readPlainColumn("feed.httpOptions", feed.httpOptions)),
     },
   });
   await syncFeed(userId, feed.id, { googleNews: INTERACTIVE_RESOLVE });

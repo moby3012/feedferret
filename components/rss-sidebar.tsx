@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useRef, type ReactNode 
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { useBrokenFeedCount } from "@/hooks/use-broken-feeds";
 import { FeedSource } from "@/lib/rss-data";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -28,6 +29,7 @@ import {
   Rss,
   Trash2,
   AlertCircle,
+  AlertTriangle,
   Play,
   Mail,
   BellOff,
@@ -177,6 +179,7 @@ export function RssSidebar({
   // Same handler (and Undo toast) as the header / end-of-list card / shortcuts.
   const { markViewRead } = useMarkViewRead();
   const { data: notifications = [] } = useNotifications();
+  const brokenFeedCount = useBrokenFeedCount();
   const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
   const markNotificationRead = useMarkNotificationRead();
   const markAllNotificationsRead = useMarkAllNotificationsRead();
@@ -621,6 +624,26 @@ export function RssSidebar({
                 </TooltipContent>
               </Tooltip>
             )}
+            {brokenFeedCount > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href="/manage-feeds?tab=broken" data-testid="sidebar-broken-feeds">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="relative h-11 w-11 rounded-panel text-warning sm:h-9 sm:w-9"
+                      aria-label={t("sidebar.brokenFeedsCount", { count: brokenFeedCount })}
+                    >
+                      <AlertTriangle className="h-4 w-4" aria-hidden />
+                      <span className="absolute -end-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-warning px-1 text-caption font-bold text-background">
+                        {brokenFeedCount > 99 ? "99+" : brokenFeedCount}
+                      </span>
+                    </Button>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="top">{t("sidebar.brokenFeedsCount", { count: brokenFeedCount })}</TooltipContent>
+              </Tooltip>
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link href="/manage-feeds">
@@ -775,6 +798,17 @@ export function RssSidebar({
                           </DropdownMenuItem>
                         );
                       })
+                    )}
+                    {brokenFeedCount > 0 && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild className="rounded-panel px-2 py-2 text-body-sm" data-testid="notifications-broken-feeds">
+                          <Link href="/manage-feeds?tab=broken">
+                            <AlertTriangle className="h-3.5 w-3.5 text-warning" aria-hidden />
+                            {t("sidebar.viewAllBrokenFeeds")}
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
                     )}
                     {unreadNotifications > 0 && (
                       <>

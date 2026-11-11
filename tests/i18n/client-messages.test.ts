@@ -23,6 +23,7 @@ const ROUTE_SCOPED_FILES = new Set([
   "components/feed-management.tsx",
   "components/feed-edit-dialog.tsx",
   "components/freshrss-migration.tsx",
+  "components/broken-feeds.tsx", // rendered only by feed-management ("Defekte Feeds" tab)
   "app/server-settings/client.tsx",
   "components/server-management-dialog.tsx",
   "components/newsletter/inbound-wizard.tsx", // rendered only by server-management-dialog (newsletter tab)
