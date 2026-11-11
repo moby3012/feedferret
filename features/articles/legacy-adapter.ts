@@ -1,4 +1,5 @@
 import type { Article } from "@/lib/rss-data";
+import { isNewsletterFeed } from "@/lib/newsletter-constants";
 import type { ArticleDetail, ArticleKind, ArticleListItem, ArticleMedia } from "./types";
 
 // Thin adapter between the slim list rows and the existing (pre-shell) list and
@@ -6,7 +7,7 @@ import type { ArticleDetail, ArticleKind, ArticleListItem, ArticleMedia } from "
 // inline, `labels: [{label}]`). No body parsing: everything is a field copy,
 // memoized per row object so cache writes for one article re-map only that one.
 
-type FeedLike = { id: string; name: string; icon?: string | null };
+type FeedLike = { id: string; name: string; icon?: string | null; url?: string | null; sourceType?: string | null };
 type LabelLike = { id: string; name: string; color: string };
 
 export type LegacyArticle = Article & {
@@ -46,6 +47,7 @@ export function toLegacyArticle(item: ArticleListItem, ctx: LegacyContext): Lega
     feedId: item.feedId,
     feedName: feed?.name ?? "",
     feedIcon: feed?.icon || "",
+    feedIsNewsletter: isNewsletterFeed(feed),
     title: item.title,
     link: item.link,
     excerpt: item.excerpt,
@@ -92,5 +94,6 @@ export function withDetail<T extends Article>(article: T, detail: ArticleDetail 
     aiSummary: detail.aiSummary,
     aiSummarizedAt: detail.aiSummarizedAt,
     readAt: detail.readAt,
+    newsletter: detail.newsletter ?? null,
   };
 }

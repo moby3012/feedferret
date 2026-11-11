@@ -6,6 +6,9 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { pickFields } from "@/lib/pick-fields";
 import { generateNewsletterToken } from "@/lib/inbound-email";
+import { logger } from "@/lib/logger";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { resolveNewsletterTarget, sendOneClickUnsubscribe, type NewsletterFeedActions, type NewsletterTarget } from "@/lib/newsletter-reader";
 import { addressString, ensurePrimaryNewsletterAddress, getInboundSource, MAX_NEWSLETTER_ADDRESSES } from "@/lib/newsletter-addresses";
 
 export interface NewsletterAddressView {
@@ -90,4 +93,50 @@ export async function setMyNewsletterAddressActive(input: unknown): Promise<{ ok
   const updated = await db.newsletterAddress.updateMany({ where: { id, userId }, data: { isActive: active } });
   if (updated.count !== 1) return { ok: false };
   return { ok: true, inbox: await getMyNewsletterInbox() };
+}
+
+// ---------------------------------------------------------------------------
+// N1 PR D: reader / feed-menu actions
+
+function pickTarget(input: unknown): NewsletterTarget | null {
+  const { articleId, feedId } = pickFields((input ?? {}) as { articleId?: unknown; feedId?: unknown }, ["articleId", "feedId"]);
+  if (typeof articleId === "string" && articleId && articleId.length <= 128) return { articleId };
+  if (typeof feedId === "string" && feedId && feedId.length <= 128) return { feedId };
+  return null;
+}
+
+/** What "Newsletter abbestellen" / "Adresse sperren" can do for one of the user's newsletter feeds (null: not a newsletter / not theirs). */
+export async function getNewsletterFeedActions(input: unknown): Promise<NewsletterFeedActions | null> {
+  const { userId } = await requireUser();
+  const target = pickTarget(input);
+  if (!target) return null;
+  return resolveNewsletterTarget(userId, target);
+}
+
+export type UnsubscribeNewsletterResult =
+  | { ok: true; feedId: string; feedName: string }
+  | { ok: false; error: "not-found" | "no-one-click" | "failed" | "rate-limited"; status?: number };
+
+/**
+ * RFC 8058 one-click unsubscribe of an article's (or feed's) newsletter. Only
+ * for mail with a verified ("pass") sender (see unsubscribeFor). The
+ * URL is always re-read from the user's own row; the client only names the
+ * article or feed. Senders without one-click get "no-one-click" (the client
+ * opens their page or a mail on the user's click instead).
+ */
+export async function unsubscribeNewsletter(input: unknown): Promise<UnsubscribeNewsletterResult> {
+  const { userId } = await requireUser();
+  const target = pickTarget(input);
+  if (!target) return { ok: false, error: "not-found" };
+  // Each call can make one outbound POST: bounded per user.
+  if (!checkRateLimit(`user:${userId}`, RATE_LIMITS.newsletterUnsubscribe).success) return { ok: false, error: "rate-limited" };
+  const resolved = await resolveNewsletterTarget(userId, target);
+  if (!resolved) return { ok: false, error: "not-found" };
+  const unsubscribe = resolved.unsubscribe;
+  if (unsubscribe?.method !== "one-click" || !unsubscribe.url) {
+    logger.info("[newsletter] unsubscribe without one-click", { userId, feedId: resolved.feedId });
+    return { ok: false, error: "no-one-click" };
+  }
+  const result = await sendOneClickUnsubscribe(unsubscribe.url, { userId, feedId: resolved.feedId });
+  return result.ok ? { ok: true, feedId: resolved.feedId, feedName: resolved.feedName } : result;
 }

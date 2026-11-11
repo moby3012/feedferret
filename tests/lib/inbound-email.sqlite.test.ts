@@ -211,6 +211,9 @@ describe("content hygiene", () => {
     // No "view online" link: synthetic, stable per message.
     expect(row.link).toBe(`newsletter:domain:digest.example.com#${encodeURIComponent("email:digest-2026-11-11@digest.example.com")}`);
     expect(row.contentHash).toBeNull();
+    // N1 PR D: the delivering address is remembered for "Adresse sperren".
+    const address = await db.newsletterAddress.findUniqueOrThrow({ where: { token: TOKEN } });
+    expect(row.newsletterAddressId).toBe(address.id);
   });
 
   it("sanitizes XSS, SVG, forms, frames and layout-busting styles", async () => {

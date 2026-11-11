@@ -3,10 +3,13 @@
 import { useCallback, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { ArrowUp, ChevronDown, ChevronUp, Copy, ExternalLink, Loader2, MoreHorizontal, Send, Sparkles, Tag, Wand2 } from "lucide-react";
+import { ArrowUp, Ban, ChevronDown, ChevronUp, Copy, ExternalLink, Loader2, MailX, MoreHorizontal, Send, Sparkles, Tag, Wand2 } from "lucide-react";
 import { ResponsiveMenu, type OverlayMenuItem } from "@/components/ui/responsive-overlay";
 import { getLayoutClass, isCoarsePointer } from "@/features/reader/layout/layout-class";
 import { useOwnedOverlay } from "@/features/reader/nav/use-owned-overlay";
+import { nav } from "@/features/reader/nav/store";
+import { useNewsletterDialogs } from "@/components/newsletter/newsletter-actions";
+import { isWebLink } from "@/lib/newsletter-constants";
 import { useAiSettings, useBuildObsidianExportLink, useExportArticleToWallabag, useExportSettings } from "@/hooks/use-rss-data";
 import type { Article } from "@/lib/rss-data";
 import { SUMMARIZE_EVENT } from "./reader-events";
@@ -40,7 +43,13 @@ export default function ReaderMoreMenuEntry(p: ReaderMoreMenuProps | { warmup: t
 
 function ReaderMoreMenu(p: ReaderMoreMenuProps) {
   const t = useTranslations("articleReader");
+  const tNl = useTranslations("newsletterReader");
   const { article } = p;
+  const newsletter = article.newsletter ?? null;
+  // Newsletters without a web version link to "newsletter:…": nothing to fetch, open or copy.
+  // Web feed articles keep their usual behaviour.
+  const webLink = newsletter || article.feedIsNewsletter ? isWebLink(article.link) : !!article.link;
+  const newsletterDialogs = useNewsletterDialogs();
   const { data: aiSettings } = useAiSettings();
   const { data: exportSettings } = useExportSettings();
   const buildObsidianLink = useBuildObsidianExportLink();
@@ -80,8 +89,26 @@ function ReaderMoreMenu(p: ReaderMoreMenuProps) {
     setOpen(true);
   };
 
+  // A dialog opens only once the menu (a vaul sheet on touch) is gone.
+  const afterClose = (fn: () => void) => () => void nav.closeOverlay("reader-menu").then(() => window.requestAnimationFrame(() => window.setTimeout(fn, 0)));
+  const newsletterInfo = newsletter ? { unsubscribe: newsletter.unsubscribe, blockAddress: newsletter.blockAddress, feedId: article.feedId, feedName: article.feedName } : null;
+  const newsletterItems: OverlayMenuItem[] = newsletterInfo
+    ? [
+        {
+          id: "newsletter-unsubscribe",
+          label: tNl("menuUnsubscribe"),
+          icon: MailX,
+          separated: true,
+          onSelect: afterClose(() => newsletterDialogs.openUnsubscribe({ articleId: article.id }, newsletterInfo)),
+        },
+        ...(newsletterInfo.blockAddress
+          ? [{ id: "newsletter-block", label: tNl("menuBlock"), icon: Ban, onSelect: afterClose(() => newsletterDialogs.openBlock({ articleId: article.id }, newsletterInfo)) }]
+          : []),
+      ]
+    : [];
+
   const items: OverlayMenuItem[] = [
-    ...(article.link
+    ...(webLink
       ? [{ id: "full-text", label: p.isFetchingFullText ? t("fetching") : t("fetchFullText"), icon: p.isFetchingFullText ? Loader2 : Wand2, disabled: p.isFetchingFullText, onSelect: () => p.onFetchFullText?.(article.id) }]
       : []),
     ...(aiSettings?.provider
@@ -106,8 +133,8 @@ function ReaderMoreMenu(p: ReaderMoreMenuProps) {
               };
             }),
     },
-    { id: "original", label: t("openOriginal"), icon: ExternalLink, disabled: !article.link, separated: true, onSelect: p.onOpenOriginal },
-    { id: "copy", label: t("copyLink"), icon: Copy, disabled: !article.link, onSelect: p.onCopyLink },
+    { id: "original", label: t("openOriginal"), icon: ExternalLink, disabled: !webLink, separated: true, onSelect: p.onOpenOriginal },
+    { id: "copy", label: t("copyLink"), icon: Copy, disabled: !webLink, onSelect: p.onCopyLink },
     ...(canExport
       ? [
           {
@@ -122,6 +149,7 @@ function ReaderMoreMenu(p: ReaderMoreMenuProps) {
           },
         ]
       : []),
+    ...newsletterItems,
     { id: "previous", label: t("previousArticle"), icon: ChevronUp, disabled: !p.hasPrevious, separated: true, onSelect: p.onPrevious },
     { id: "next", label: t("nextArticle"), icon: ChevronDown, disabled: !p.hasNext, onSelect: p.onNext },
     { id: "top", label: t("scrollToTop"), icon: ArrowUp, onSelect: p.onScrollTop },
@@ -151,6 +179,7 @@ function ReaderMoreMenu(p: ReaderMoreMenuProps) {
         testId="reader-menu"
         returnFocus={() => triggerRef.current}
       />
+      {newsletterDialogs.element}
     </>
   );
 }

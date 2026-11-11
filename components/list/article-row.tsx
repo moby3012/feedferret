@@ -282,7 +282,7 @@ function SourceLine({ article, faviconSize = 14, minimal = false }: { article: L
   const time = useRowTime(article.publishedAt);
   return (
     <div className="flex min-w-0 items-center gap-1.5 text-footnote text-muted-foreground">
-      <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={faviconSize} />
+      <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} newsletter={article.feedIsNewsletter} size={faviconSize} />
       <span className="min-w-0 truncate">{article.feedName}</span>
       {article.isSponsored && <SponsoredChip />}
       {(article.duplicateCount ?? 0) > 0 && (
@@ -522,7 +522,7 @@ function MinimalBody(p: BodyProps) {
   const time = useRowTime(article.publishedAt);
   return (
     <div className="flex min-h-11 min-w-0 items-center gap-2 px-(--gutter) py-1 fine:min-h-9">
-      <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} size={14} />
+      <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} newsletter={article.feedIsNewsletter} size={14} />
       <Title
         text={article.kind === "social" ? article.excerpt || p.shownTitle : p.shownTitle}
         terms={p.highlightTerms}

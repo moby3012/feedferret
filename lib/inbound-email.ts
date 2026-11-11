@@ -894,6 +894,7 @@ export async function ingestRawEmail(raw: Buffer | string, options: IngestOption
           listUnsubscribeOneClick: unsubscribe.url ? unsubscribe.oneClick : null,
           newsletterAuth: auth.verdict,
           newsletterAuthDetail: JSON.stringify(auth).slice(0, 4000),
+          newsletterAddressId: address.id,
         },
         select: { id: true },
       });

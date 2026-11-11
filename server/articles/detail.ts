@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import type { ArticleDetail } from "@/features/articles/types";
 import { parseStoredEntities } from "@/lib/article-enrichment";
+import { NEWSLETTER_ARTICLE_SELECT, newsletterMetaFor, type NewsletterArticleRow } from "@/lib/newsletter-reader";
 import { LIST_SELECT, getCleanTitlesSetting, toListItem, type ListRow } from "./list";
 
 /**
@@ -19,7 +20,16 @@ export async function renderArticleHtml(content: string | null | undefined, cont
 export async function getArticleDetail(userId: string, id: string): Promise<ArticleDetail | null> {
   const row = await db.article.findFirst({
     where: { id, userId },
-    select: { ...LIST_SELECT, content: true, contentFormat: true, aiSummary: true, aiSummarizedAt: true, entities: true },
+    select: {
+      ...LIST_SELECT,
+      ...NEWSLETTER_ARTICLE_SELECT,
+      feed: { select: { url: true, sourceType: true } },
+      content: true,
+      contentFormat: true,
+      aiSummary: true,
+      aiSummarizedAt: true,
+      entities: true,
+    },
   });
   if (!row) return null;
   const item = toListItem(row as unknown as ListRow, { cleanTitles: await getCleanTitlesSetting(userId) });
@@ -32,5 +42,6 @@ export async function getArticleDetail(userId: string, id: string): Promise<Arti
     readAt: row.readAt?.toISOString() ?? null,
     entities: parseStoredEntities(row.entities),
     originalTitle: item.displayTitle ? row.title : null,
+    newsletter: await newsletterMetaFor(userId, row as unknown as NewsletterArticleRow),
   };
 }

@@ -227,3 +227,28 @@
     animation: ff-reader-fade 120ms linear;
   }
 }
+
+/* N1 PR D: newsletter reader — sender warning and double-opt-in banner. */
+.ff-newsletter-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: var(--text-footnote);
+  line-height: var(--text-footnote--line-height);
+  color: var(--warning);
+}
+.ff-newsletter-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in oklch, var(--brand) 35%, var(--divider));
+  border-radius: var(--radius-row);
+  background: color-mix(in oklch, var(--brand) 8%, var(--surface-base));
+}
+.ff-newsletter-confirm[data-sender-failed] {
+  border-color: color-mix(in oklch, var(--warning) 35%, var(--divider));
+  background: color-mix(in oklch, var(--warning) 6%, var(--surface-base));
+}

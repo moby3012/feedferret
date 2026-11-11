@@ -448,6 +448,7 @@ model Article {
   listUnsubscribeOneClick Boolean?  // RFC 8058 List-Unsubscribe-Post: List-Unsubscribe=One-Click
   newsletterAuth          String?   // "pass" | "fail" | "none": verified receiver verdict (display only, never blocks)
   newsletterAuthDetail    String?   // JSON SenderAuthEvidence incl. UNVERIFIED header results (debug/display)
+  newsletterAddressId     String?   // NewsletterAddress that delivered it (N1 PR D "Adresse sperren"); plain id, no FK
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([userId, feedId, dedupeKey])

@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { NewsletterIcon } from "@/components/list/feed-favicon";
 
 /** Feed icon for the reader chrome: the feed's icon URL, else the site favicon, else the emoji/initial. */
-export function FeedFavicon({ feedIcon, feedName, articleLink, size }: { feedIcon: string; feedName: string; articleLink: string; size: number }) {
+export function FeedFavicon({ feedIcon, feedName, articleLink, size, newsletter = false }: { feedIcon: string; feedName: string; articleLink: string; size: number; newsletter?: boolean }) {
   const [failed, setFailed] = useState(false);
   const isUrl = feedIcon?.startsWith("http") || feedIcon?.startsWith("/");
+  if (newsletter && !(isUrl && !failed)) return <NewsletterIcon size={size} />;
   let src: string | null = null;
   if (isUrl) src = feedIcon;
   else {
