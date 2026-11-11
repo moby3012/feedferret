@@ -1081,7 +1081,7 @@ export async function exportOpml(selectedFeedIds?: string[]) {
         where.id = { in: selectedFeedIds };
     }
 
-    const [feeds, categories] = await Promise.all([
+    const [feeds, categories, user] = await Promise.all([
         db.feed.findMany({
             where,
             include: { category: { select: { id: true, name: true, parentId: true, opmlUrl: true } } },
@@ -1091,11 +1091,14 @@ export async function exportOpml(selectedFeedIds?: string[]) {
             where: { userId: session.user.id },
             orderBy: [{ order: "asc" }, { name: "asc" }],
         }),
+        db.user.findUnique({ where: { id: session.user.id }, select: { defaultUpdateFrequency: true } }),
     ]);
 
     // Connector secrets are not the user's to export (N3); the user's own feed
     // options (Scout Studio extension attributes) still are.
-    return generateOpml(await redactFeedsForClient(feeds), selectedFeedIds?.length ? [] : categories);
+    return generateOpml(await redactFeedsForClient(feeds), selectedFeedIds?.length ? [] : categories, {
+        defaultUpdateFrequency: user?.defaultUpdateFrequency,
+    });
 }
 
 export async function exportUserData() {

@@ -2,6 +2,7 @@ import { guardHtml } from "@/lib/html-guard";
 import { HtmlTaskFailedError, isHtmlWorkerError, runHtmlTask } from "@/lib/html-worker/pool";
 import { OpmlParseError, assertSafeOpmlXml, type OpmlOutline } from "./opml-shared";
 import { readPlainColumnOrNull } from "@/lib/secret-box";
+import { resolveFullTextMode } from "@/lib/full-text-mode";
 import {
     OPML_EXTENSION_NAMESPACE,
     OPML_EXTENSION_PREFIX,
@@ -58,49 +59,120 @@ function extensionsAttr(name: string, value: unknown) {
     return attr(`${OPML_EXTENSION_PREFIX}:${name}`, value);
 }
 
-function feedExtensionAttributes(feed: any) {
+export interface OpmlExportOptions {
+    /** Refresh interval (minutes) of feeds without their own; used for the TTL of muted feeds. */
+    defaultUpdateFrequency?: number;
+}
+
+/** FreshRSS priority for a feed; FeedFerret's "hide from All feeds" is FreshRSS' "category". */
+export function exportPriority(feed: { priority?: string | null; hideFromAllFeeds?: boolean | null }) {
+    const priority = feed.priority || "main";
+    if (priority === "main" && feed.hideFromAllFeeds) return "category";
+    return priority === "main" ? undefined : priority;
+}
+
+/**
+ * Signed FreshRSS TTL in seconds (negative = muted, refresh disabled). A value that
+ * FeedFerret had to round or clamp on import is written back verbatim as long as the
+ * feed still carries the interval it was mapped to.
+ */
+export function exportTtl(
+    feed: { updateFrequency?: number | null; autoMuted?: boolean | null },
+    preservedTtl: string | undefined,
+    options: OpmlExportOptions,
+) {
+    const muted = Boolean(feed.autoMuted);
+    if (!feed.updateFrequency && !muted) return undefined;
+    if (preservedTtl !== undefined && /^-?\d+$/.test(preservedTtl)) {
+        const seconds = Number(preservedTtl);
+        if ((seconds < 0) === muted && ttlToMinutes(seconds).minutes === feed.updateFrequency) return preservedTtl;
+    }
+    const minutes = feed.updateFrequency || options.defaultUpdateFrequency || 60;
+    return String(minutes * 60 * (muted ? -1 : 1));
+}
+
+export const MIN_UPDATE_MINUTES = 5;
+export const MAX_UPDATE_MINUTES = 10_080;
+
+/** Maps a FreshRSS TTL (seconds) onto FeedFerret's refresh interval range (minutes). */
+export function ttlToMinutes(seconds: number) {
+    const exact = Math.abs(seconds) / 60;
+    const minutes = Math.min(MAX_UPDATE_MINUTES, Math.max(MIN_UPDATE_MINUTES, Math.ceil(exact)));
+    return { minutes, exact: minutes === exact };
+}
+
+/** Read-filter lines for `frss:filtersActionRead`: FeedFerret keywords plus the preserved FreshRSS lines. */
+export function exportReadFilters(keywords: string | null | undefined, preserved: string | undefined) {
+    const lines: string[] = [];
+    const seen = new Set<string>();
+    // FeedFerret keywords are literal substrings; FreshRSS would read spaces, `OR`,
+    // `field:`, a leading `-`/`!`/`#` or `/…/` as search syntax, so such keywords are quoted.
+    const keywordLines = (keywords ?? "").split(/\r?\n/).map((line) => {
+        const keyword = line.trim();
+        const needsQuotes = /[\s:()]|^[-!#/]/.test(keyword) || keyword.toUpperCase() === "OR";
+        if (!keyword || !needsQuotes) return keyword;
+        return keyword.includes('"') ? (keyword.includes("'") ? keyword : `'${keyword}'`) : `"${keyword}"`;
+    });
+    for (const line of [...keywordLines, ...(preserved ?? "").split(/\r?\n/)]) {
+        const trimmed = line.trim();
+        if (!trimmed || seen.has(trimmed)) continue;
+        seen.add(trimmed);
+        lines.push(trimmed);
+    }
+    return lines.join("\n") || undefined;
+}
+
+function feedExtensionAttributes(feed: any, options: OpmlExportOptions) {
     const scraper = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
     // httpOptions may be v2-sealed (M8); unreadable values are left out of the export.
     const httpOptions = parseJsonObject<FeedHttpOptions>(readPlainColumnOrNull("feed.httpOptions", feed.httpOptions));
+    if (httpOptions.CURLOPT_USERAGENT === undefined && feed.customUserAgent) httpOptions.CURLOPT_USERAGENT = feed.customUserAgent;
+    const emitted = new Set<string>();
     let out = "";
+    const emit = (name: string, value: unknown) => {
+        const rendered = extensionsAttr(name, value);
+        if (rendered) emitted.add(name);
+        out += rendered;
+    };
 
-    out += extensionsAttr("priority", feed.priority && feed.priority !== "main" ? feed.priority : undefined);
-    out += extensionsAttr("unicityCriteria", feed.unicityCriteria && feed.unicityCriteria !== "id" ? feed.unicityCriteria : undefined);
-    out += extensionsAttr("unicityCriteriaForced", feed.unicityCriteriaForced ? "true" : undefined);
+    emit("priority", exportPriority(feed));
+    emit("unicityCriteria", feed.unicityCriteria && feed.unicityCriteria !== "id" ? feed.unicityCriteria : undefined);
+    emit("unicityCriteriaForced", feed.unicityCriteriaForced ? "true" : undefined);
+    emit("ttl", exportTtl(feed, scraper.preserved?.ttl, options));
 
-    for (const name of XPATH_ATTRS) out += extensionsAttr(name, scraper.xpath?.[name]);
-    for (const name of JSON_ATTRS) out += extensionsAttr(name, scraper.json?.[name]);
-    out += extensionsAttr("xPathToJson", scraper.xPathToJson);
+    for (const name of XPATH_ATTRS) emit(name, scraper.xpath?.[name]);
+    for (const name of JSON_ATTRS) emit(name, scraper.json?.[name]);
+    emit("xPathToJson", scraper.xPathToJson);
 
-    out += extensionsAttr("filtersActionRead", feed.filtersActionRead);
-    out += extensionsAttr("cssFullContent", feed.fullTextSelector);
-    out += extensionsAttr("cssFullContentConditions", feed.fullTextConditions);
-    out += extensionsAttr("cssContentFilter", feed.fullTextRemoveSelectors);
+    emit("filtersActionRead", exportReadFilters(feed.filtersActionRead, scraper.preserved?.filtersActionRead));
+    // In FreshRSS a non-empty selector *is* the switch for full-content download, so a
+    // selector kept on a feed whose full text is turned off must not be exported.
+    if (resolveFullTextMode(feed) !== "off") emit("cssFullContent", feed.fullTextSelector);
+    emit("cssFullContentConditions", feed.fullTextConditions);
+    emit("cssContentFilter", feed.fullTextRemoveSelectors);
 
-    for (const name of HTTP_ATTRS) out += extensionsAttr(name, httpOptions[name]);
+    for (const name of HTTP_ATTRS) emit(name, httpOptions[name]);
 
-    // Refresh interval in seconds; negative = muted (FreshRSS convention).
-    if (feed.updateFrequency) out += extensionsAttr("ttl", feed.updateFrequency * 60 * (feed.autoMuted ? -1 : 1));
-
-    // Extension attributes this version does not understand are kept verbatim.
+    // Extension attributes this version does not understand are kept verbatim (never
+    // twice: a duplicate attribute makes the whole document invalid XML).
     for (const [name, value] of Object.entries(scraper.extensions ?? {})) {
-        if (/^[A-Za-z_][\w.-]*$/.test(name)) out += extensionsAttr(name, value);
+        if (/^[A-Za-z_][\w.-]*$/.test(name) && !emitted.has(name)) emit(name, value);
     }
 
     return out;
 }
 
-function feedOutline(feed: any, indent: string) {
+function feedOutline(feed: any, indent: string, options: OpmlExportOptions) {
     const type = normalizeSourceType(feed.sourceType || "rss");
-    return `${indent}<outline text="${escapeXml(feed.name)}" title="${escapeXml(feed.name)}" type="${escapeXml(type)}" xmlUrl="${escapeXml(feed.url)}"${attr("htmlUrl", feed.htmlUrl || feed.url)}${attr("description", feed.description)}${feedExtensionAttributes(feed)}/>`;
+    return `${indent}<outline text="${escapeXml(feed.name)}" title="${escapeXml(feed.name)}" type="${escapeXml(type)}" xmlUrl="${escapeXml(feed.url)}"${attr("htmlUrl", feed.htmlUrl || feed.url)}${attr("description", feed.description)}${feedExtensionAttributes(feed, options)}/>`;
 }
 
-function categoryOutline(category: any, lines: string[], indent: string, childrenByParent: Map<string | null, any[]>, feedsByCategory: Map<string | null, any[]>) {
+function categoryOutline(category: any, lines: string[], indent: string, childrenByParent: Map<string | null, any[]>, feedsByCategory: Map<string | null, any[]>, options: OpmlExportOptions) {
     const children = childrenByParent.get(category.id) ?? [];
     const feeds = feedsByCategory.get(category.id) ?? [];
     lines.push(`${indent}<outline text="${escapeXml(category.name)}" title="${escapeXml(category.name)}"${extensionsAttr("opmlUrl", category.opmlUrl)}>`);
-    for (const child of children) categoryOutline(child, lines, `${indent}  `, childrenByParent, feedsByCategory);
-    for (const feed of feeds) lines.push(feedOutline(feed, `${indent}  `));
+    for (const child of children) categoryOutline(child, lines, `${indent}  `, childrenByParent, feedsByCategory, options);
+    for (const feed of feeds) lines.push(feedOutline(feed, `${indent}  `, options));
     lines.push(`${indent}</outline>`);
 }
 
@@ -110,17 +182,17 @@ function categoryOutline(category: any, lines: string[], indent: string, childre
  */
 /** API exports expose only public subscription configuration. Unknown HTTP and
  * scraper extensions are omitted: they can carry arbitrary credentials. */
-export function generateApiOpml(feeds: any[], categories: any[] = []) {
+export function generateApiOpml(feeds: any[], categories: any[] = [], options: OpmlExportOptions = {}) {
     const publicUrl = (value: string | null) => value?.replace(/(https?:\/\/)[^/@]+@/gi, "$1") ?? value;
     return generateOpml(feeds.map((feed) => {
         const scraper = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
         delete scraper.extensions;
         return { ...feed, url: publicUrl(feed.url), htmlUrl: publicUrl(feed.htmlUrl),
-            httpOptions: null, authPassword: null, scraperConfig: JSON.stringify(scraper) };
-    }), categories.map((category) => ({ ...category, opmlUrl: publicUrl(category.opmlUrl) })));
+            httpOptions: null, customUserAgent: null, authPassword: null, scraperConfig: JSON.stringify(scraper) };
+    }), categories.map((category) => ({ ...category, opmlUrl: publicUrl(category.opmlUrl) })), options);
 }
 
-export function generateOpml(feeds: any[], categories: any[] = []): string {
+export function generateOpml(feeds: any[], categories: any[] = [], options: OpmlExportOptions = {}): string {
     const header = `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0" xmlns:${OPML_EXTENSION_PREFIX}="${OPML_EXTENSION_NAMESPACE}">
   <head>
@@ -141,7 +213,7 @@ export function generateOpml(feeds: any[], categories: any[] = []): string {
     }
 
     const lines: string[] = [];
-    for (const feed of feedsByCategory.get(null) ?? []) lines.push(feedOutline(feed, "    "));
+    for (const feed of feedsByCategory.get(null) ?? []) lines.push(feedOutline(feed, "    ", options));
 
     if (categories.length > 0) {
         const childrenByParent = new Map<string | null, any[]>();
@@ -151,7 +223,7 @@ export function generateOpml(feeds: any[], categories: any[] = []): string {
             childrenByParent.get(key)!.push(category);
         }
         for (const root of childrenByParent.get(null) ?? []) {
-            categoryOutline(root, lines, "    ", childrenByParent, feedsByCategory);
+            categoryOutline(root, lines, "    ", childrenByParent, feedsByCategory, options);
         }
     } else {
         const byName = new Map<string, any[]>();
@@ -162,7 +234,7 @@ export function generateOpml(feeds: any[], categories: any[] = []): string {
         }
         for (const [catName, catFeeds] of byName) {
             lines.push(`    <outline text="${escapeXml(catName)}" title="${escapeXml(catName)}">`);
-            for (const feed of catFeeds) lines.push(feedOutline(feed, "      "));
+            for (const feed of catFeeds) lines.push(feedOutline(feed, "      ", options));
             lines.push(`    </outline>`);
         }
     }
@@ -237,8 +309,14 @@ export function httpOptionsFromOutline(outline: OpmlOutline) {
 const XML_ILLEGAL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
 
 function escapeXml(unsafe: string): string {
-    return unsafe.replace(XML_ILLEGAL_CHARS, "").replace(/[<>&"']/g, (c) => {
+    // Tab/LF/CR must be character references: a literal one inside an attribute value is
+    // normalised to a space by every XML parser, which would join multi-line values
+    // (read filters, HTTP headers, full-text conditions, multi-line XPath) into one line.
+    return unsafe.replace(XML_ILLEGAL_CHARS, "").replace(/[<>&"'\t\n\r]/g, (c) => {
         switch (c) {
+            case '\t': return '&#9;';
+            case '\n': return '&#10;';
+            case '\r': return '&#13;';
             case '<': return '&lt;';
             case '>': return '&gt;';
             case '&': return '&amp;';

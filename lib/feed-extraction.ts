@@ -1,5 +1,10 @@
 export const OPML_EXTENSION_NAMESPACE = "https://fresh" + "rss.org/opml";
-export const OPML_EXTENSION_PREFIX = "ffx";
+// FreshRSS reads its attributes by qualified name (`frss:cssFullContent`, lib_opml
+// uses DOM `nodeName`), not by namespace URI: any other prefix is silently ignored
+// there, so exports must use exactly this one.
+export const OPML_EXTENSION_PREFIX = "frss";
+/** Prefix used by FeedFerret exports before the FreshRSS-compatible one (still read on import). */
+export const LEGACY_OPML_EXTENSION_PREFIXES = ["ffx"] as const;
 
 export const EXTRACTION_SOURCE_TYPES = new Set([
   "rss",
@@ -56,6 +61,12 @@ export type FeedExtractionConfig = {
   xPathToJson?: string;
   /** Source-specific extension attributes (e.g. unknown `frss:*` OPML attributes) preserved verbatim. */
   extensions?: Record<string, string>;
+  /**
+   * Known `frss:*` values that FeedFerret cannot represent exactly in its own fields
+   * (e.g. read filters it cannot evaluate, a refresh interval outside its range). Kept
+   * only so an export writes the original value back; never used for fetching.
+   */
+  preserved?: Partial<Record<"filtersActionRead" | "ttl", string>>;
 };
 
 export type FeedHttpOptions = Record<string, string | number | boolean>;

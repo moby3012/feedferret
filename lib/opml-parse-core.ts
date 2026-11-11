@@ -4,7 +4,21 @@
 // the HTML worker pool via `parseOpml` in lib/opml.ts.
 
 import { JSDOM } from "jsdom";
-import { OPML_EXTENSION_NAMESPACE, OPML_EXTENSION_PREFIX } from "./feed-extraction";
+import { LEGACY_OPML_EXTENSION_PREFIXES, OPML_EXTENSION_NAMESPACE, OPML_EXTENSION_PREFIX } from "./feed-extraction";
+
+const UNBOUND_EXTENSION_PREFIXES = [OPML_EXTENSION_PREFIX, ...LEGACY_OPML_EXTENSION_PREFIXES].map((prefix) => `${prefix}:`);
+
+/**
+ * Local name of a FreshRSS extension attribute, or null for any other attribute. Any
+ * prefix bound to the namespace counts; files that use `frss:` (or FeedFerret's former
+ * `ffx:`) without declaring the namespace are accepted too.
+ */
+function extensionAttributeName(attribute: Attr): string | null {
+    if (attribute.namespaceURI === OPML_EXTENSION_NAMESPACE) return attribute.localName;
+    if (attribute.namespaceURI) return null;
+    const prefix = UNBOUND_EXTENSION_PREFIXES.find((candidate) => attribute.name.startsWith(candidate));
+    return prefix ? attribute.name.slice(prefix.length) : null;
+}
 import { OPML_PARSE_LIMITS, OpmlParseError, assertSafeOpmlXml, type OpmlOutline } from "./opml-shared";
 
 /**
@@ -35,11 +49,8 @@ export function parseOpmlInProcess(xml: string): OpmlOutline[] {
         // the importer can report/preserve them instead of silently dropping them.
         const extensions: Record<string, string> = {};
         for (const attribute of Array.from(element.attributes)) {
-            const inNamespace = attribute.namespaceURI === OPML_EXTENSION_NAMESPACE;
-            const legacyPrefix = !attribute.namespaceURI && attribute.name.startsWith(`${OPML_EXTENSION_PREFIX}:`);
-            if (!inNamespace && !legacyPrefix) continue;
-            const name = inNamespace ? attribute.localName : attribute.name.slice(OPML_EXTENSION_PREFIX.length + 1);
-            if (attribute.value !== "") extensions[name] = attribute.value;
+            const name = extensionAttributeName(attribute);
+            if (name && attribute.value !== "") extensions[name] = attribute.value;
         }
 
         const outline: OpmlOutline = {

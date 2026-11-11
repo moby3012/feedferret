@@ -18,6 +18,7 @@ import { isHtmlWorkerError, runInHtmlWorker } from "./html-worker";
 import { runAsBackgroundHtmlWork } from "./html-worker/pool";
 import type { SelectorExtractOutput } from "./selector-extract";
 import { resolveFullTextMode } from "./full-text-mode";
+import { filterByFullTextConditions } from "./full-text-conditions";
 import { EscalationBudgetExhaustedError, fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
 import { decideFullText } from "./extraction-quality";
 import { classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
@@ -605,8 +606,10 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             return maxChars && content.length > maxChars ? content.slice(0, maxChars) : content;
         });
         // Item bodies are attacker-controlled HTML: sanitized in the HTML
-        // worker pool on bounded input, never on the main thread.
-        const sanitizedItems = await sanitizeFeedItemBodies(itemContents);
+        // worker pool on bounded input, never on the main thread. The feed's
+        // remove-selectors (FreshRSS `cssContentFilter`) run in the same worker
+        // task, on the feed's own content too — not only on downloaded full text.
+        const sanitizedItems = await sanitizeFeedItemBodies(itemContents, { removeSelectors: feed.fullTextRemoveSelectors });
 
         const articles = remoteFeed.articles.map((item, index) => {
             const content = itemContents[index];
@@ -686,7 +689,12 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         // so it can't be trusted alone — resolveFullTextMode() falls back to the
         // legacy `autoFetchFullText` boolean.
         if (fullTextCandidateIds.length > 0 && fullTextMode !== "off") {
-            const candidates = fullTextCandidateIds.slice(0, MAX_FULL_TEXT_FETCHES_PER_SYNC);
+            // FreshRSS `cssFullContentConditions`: only matching articles get full text.
+            const eligible = await filterByFullTextConditions(userId, fullTextCandidateIds, feed.fullTextConditions).catch((e) => {
+                logger.warn("[rss-sync] full-text conditions failed, fetching all candidates:", e);
+                return fullTextCandidateIds;
+            });
+            const candidates = eligible.slice(0, MAX_FULL_TEXT_FETCHES_PER_SYNC);
             if (fullTextMode === "selector") {
                 await autoFetchFullTextForArticles(userId, candidates, feed);
             } else if (fullTextMode === "auto" || fullTextMode === "ai") {

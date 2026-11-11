@@ -203,7 +203,7 @@ it("shares Fever failures with Basic and stops before credential lookup", async 
 });
 it("redacts both API OPML exports for read-scope bearer tokens", async () => {
   await db.apiToken.create({ data: { userId: "u", name: "read", tokenHash: hashApiToken("export-read"), scope: "read" } });
-  await db.feed.create({ data: { userId: "u", name: "Public", url: "https://user:feed-password@example.org/rss", httpOptions: JSON.stringify({ CURLOPT_COOKIE: "cookie-secret", CURLOPT_HTTPHEADER: "header-secret", CURLOPT_POSTFIELDS: "post-secret", CURLOPT_PROXY: "http://user:proxy-password@proxy.org" }), scraperConfig: JSON.stringify({ extensions: { password: "extension-secret" } }), fullTextSelector: "article" } });
+  await db.feed.create({ data: { userId: "u", name: "Public", url: "https://user:feed-password@example.org/rss", httpOptions: JSON.stringify({ CURLOPT_COOKIE: "cookie-secret", CURLOPT_HTTPHEADER: "header-secret", CURLOPT_POSTFIELDS: "post-secret", CURLOPT_PROXY: "http://user:proxy-password@proxy.org" }), scraperConfig: JSON.stringify({ extensions: { password: "extension-secret" } }), fullTextSelector: "article", fullTextMode: "selector" } });
   const { GET: v1 } = await import("@/app/api/v1/[...path]/route");
   state.session = ""; // Exercise v1 bearer authentication rather than session fallback.
   const outputs = [await call("subscription/export", undefined, "Bearer export-read"), await v1(new Request("http://localhost/api/v1/opml", { headers: { Authorization: "Bearer export-read" } }), { params: Promise.resolve({ path: ["opml"] }) })];

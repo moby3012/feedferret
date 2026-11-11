@@ -1455,7 +1455,6 @@
         "proxytype-ignored": "Proxy-Typ wird aus der Proxy-URL abgeleitet",
         "ttl-invalid": "Ungültiges Aktualisierungsintervall",
         "ttl-clamped": "Aktualisierungsintervall angepasst",
-        "css-conditions-not-evaluated": "Bedingungen für Volltext werden nicht ausgewertet",
         "css-without-selector": "Volltext-Einstellungen ohne Inhalts-Selektor",
         "filter-untranslatable": "Filter hat keine Entsprechung",
         "proxy-blocked": "Proxy nicht erlaubt (interne Adresse), nicht importiert",
@@ -1464,7 +1463,13 @@
         "filter-too-long": "Übersetzter Filter ist zu lang",
         "filter-rule-remote-dropped": "Regeln werden aus Remote-OPML nicht angelegt",
         "filter-rule-created": "Filter als Auto-Lesen-Regel angelegt",
-        "nested-dynamic-opml-dropped": "Verschachtelte dynamische Kategorie wird nicht verfolgt"
+        "nested-dynamic-opml-dropped": "Verschachtelte dynamische Kategorie wird nicht verfolgt",
+        "priority-hidden-approximated": "Aus „Alle Feeds“ ausgeblendet (FeedFerret kennt keine strengere Stufe)",
+        "unicity-invalid": "Ungültiges Eindeutigkeitskriterium, „id“ verwendet",
+        "http-header-dropped": "HTTP-Header nicht erlaubt, nicht übernommen",
+        "maxredirs-invalid": "Ungültiges Weiterleitungslimit ignoriert",
+        "maxredirs-clamped": "Weiterleitungslimit angepasst",
+        "css-conditions-partial": "Volltext-Bedingungen teils nicht auswertbar: Volltext für alle Artikel"
       }
     },
     "toasts": {
@@ -1590,6 +1595,7 @@
       "selectorPlaceholder": "article, .post-content (automatische Erkennung, wenn leer)",
       "selectorAppliesHint": "Wird verwendet, wenn der Volltext-Modus auf Benutzerdefinierter Selektor gesetzt ist.",
       "removeSelectors": "Selektoren entfernen (kommagetrennt)",
+      "removeSelectorsDescription": "CSS-Selektoren (kommagetrennt), die aus dem Artikelinhalt dieses Feeds und aus geladenem Volltext entfernt werden.",
       "removePlaceholder": ".ads, .sidebar, .comments",
       "contentFormatLabel": "Bevorzugtes Inhaltsformat",
       "contentFormatHtml": "HTML",
@@ -1627,12 +1633,14 @@
       "feedOnly": "Nur Feed",
       "hidden": "Versteckt",
       "unicityCriteria": "Eindeutigkeitskriterien",
-      "unicityCriteriaPlaceholder": "id, link, title, title:link",
+      "unicityCriteriaPlaceholder": "id, link, title:link, sha1:link_published",
       "forced": "Erzwungen",
       "scraperConfig": "Scraper-Konfigurations-JSON",
       "httpOptions": "HTTP / cURL-Optionen JSON",
       "httpOptionsMaskedHint": "Gespeicherte Geheimnisse ({names}) erscheinen als „__keep__“: so lassen, um den gespeicherten Wert zu behalten, ersetzen zum Ändern, Schlüssel entfernen zum Löschen.",
       "fullContentConditions": "Vollinhalt-Bedingungen",
+      "fullContentConditionsDescription": "Eine Suche pro Zeile (FreshRSS-Syntax, z. B. intitle:test). Wenn gesetzt, wird Volltext nur für passende Artikel geladen.",
+      "fullContentConditionsPlaceholder": "intitle:test\ninurl:/gadgets/",
       "autoReadFilters": "Auto-Lesen-Filter",
       "autoReadFiltersDescription": "Ein Stichwort pro Zeile. Neue Artikel, die eines dieser Wörter enthalten (in Titel, Zusammenfassung oder Text), werden automatisch als gelesen markiert – sie zählen nicht als ungelesen und lösen keine Benachrichtigungen aus.",
       "autoReadFiltersPlaceholder": "gesponsert\ngewinnspiel\ncrypto"

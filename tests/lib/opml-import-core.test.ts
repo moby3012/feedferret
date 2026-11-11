@@ -51,7 +51,8 @@ describe("FreshRSS OPML golden fixture → plan", () => {
       fullTextConditions: "title=Review\nurl~/gadgets/",
       enableSelectorMode: true,
     });
-    expect(codes(await issuesFor("Ars Technica"))).toEqual(["css-conditions-not-evaluated"]);
+    // Both condition lines are plain keywords, so they are evaluated: nothing to report.
+    expect(codes(await issuesFor("Ars Technica"))).toEqual([]);
   });
 
   it("translates Hacker News read-filters and reports what has no equivalent", async () => {
@@ -117,7 +118,10 @@ describe("FreshRSS OPML golden fixture → plan", () => {
     const f = await feed("Lone Feed");
     expect(f.data).toMatchObject({ priority: "hidden", updateFrequency: 10_080 });
     expect(f.data.mute).toBeUndefined();
-    expect(codes(await issuesFor("Lone Feed"))).toEqual(["ttl-clamped"]);
+    expect(codes(await issuesFor("Lone Feed"))).toEqual(["priority-hidden-approximated", "ttl-clamped"]);
+    expect(f.data.hideFromAllFeeds).toBe(true);
+    // The original TTL is kept for the export back to FreshRSS.
+    expect(JSON.parse(f.data.scraperConfig!).preserved).toEqual({ ttl: "86400000" });
   });
 
   it("never drops a frss attribute silently: every attribute is mapped, reported or preserved", async () => {

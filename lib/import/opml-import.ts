@@ -18,12 +18,15 @@
 import { db } from "@/lib/db";
 import {
   httpOptionsFromOutline,
+  MAX_UPDATE_MINUTES,
+  MIN_UPDATE_MINUTES,
   parseOpml,
   scraperConfigFromOutline,
+  ttlToMinutes,
   unknownExtensions,
   type OpmlOutline,
 } from "@/lib/opml";
-import { EXTRACTION_SOURCE_TYPES, normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
+import { EXTRACTION_SOURCE_TYPES, normalizeSourceType, stringifyNonEmpty, type FeedExtractionConfig } from "@/lib/feed-extraction";
 import { MAX_SEARCH_QUERY, validateFeedUrl, validateOpml } from "@/lib/validation";
 import { translateFreshRssReadFilters } from "./frss-filters";
 import { assertSafeHttpOptionsProxy, proxyFromHttpOptions } from "@/lib/ssrf";
@@ -61,6 +64,8 @@ export interface FeedWriteData {
   fullTextConditions?: string;
   fullTextRemoveSelectors?: string;
   enableSelectorMode?: boolean;
+  /** FreshRSS priorities below "main" keep the feed out of the main stream ("All feeds"). */
+  hideFromAllFeeds?: boolean;
   updateFrequency?: number;
   mute?: boolean;
   customUserAgent?: string;
@@ -122,8 +127,17 @@ const REMOTE_BLOCKED_HTTP = [
   "CURLOPT_PROXYTYPE",
 ] as const;
 
-const MIN_UPDATE_MINUTES = 5;
-const MAX_UPDATE_MINUTES = 10_080;
+// FreshRSS' importer check plus digits: its own `sha1:*` values need them (upstream
+// `^[a-z:_-]{2,64}$` silently drops every `sha1:` criterion). `link:title` also passes.
+const UNICITY_PATTERN = /^[a-z0-9:_-]{2,64}$/;
+
+// Headers the fetcher must own: they would let a file re-target or desync the request
+// (virtual host, framing, connection reuse) instead of just describing it.
+const BLOCKED_HTTP_HEADERS = new Set([
+  "host", "content-length", "transfer-encoding", "connection", "keep-alive", "upgrade",
+  "te", "trailer", "expect", "proxy-connection",
+]);
+const MAX_REDIRECTS = 20;
 
 function emptyReport(dryRun: boolean): OpmlImportReport {
   return {
@@ -170,17 +184,53 @@ export function mapOutlineToFeed(
 
   let priority = "main";
   if (extensions.priority) {
-    if (PRIORITIES.has(extensions.priority)) priority = extensions.priority;
+    const given = extensions.priority.toLowerCase();
+    if (PRIORITIES.has(given)) priority = given;
     else issue("adapted", "priority-invalid", "priority", `'${extensions.priority}' replaced by 'main'`);
   }
+  if (priority === "feed" || priority === "hidden") {
+    issue("adapted", "priority-hidden-approximated", "priority", `'${priority}': hidden from "All feeds", still listed in its category`);
+  }
 
-  const scraper = scraperConfigFromOutline(outline);
+  let unicityCriteria = "id";
+  if (extensions.unicityCriteria) {
+    if (UNICITY_PATTERN.test(extensions.unicityCriteria)) unicityCriteria = extensions.unicityCriteria;
+    else issue("adapted", "unicity-invalid", "unicityCriteria", "invalid value replaced by 'id'");
+  }
+
+  const scraper: FeedExtractionConfig = scraperConfigFromOutline(outline);
+  const preserved: NonNullable<FeedExtractionConfig["preserved"]> = {};
   const unknown = unknownExtensions(extensions);
   if (unknown.length) {
     issue("preserved", "unknown-extension", unknown.map((name) => `frss:${name}`).join(", "), "kept on the feed and written back on export; no effect on fetching");
   }
 
   const http = httpOptionsFromOutline(outline);
+  if (typeof http.CURLOPT_HTTPHEADER === "string") {
+    const kept: string[] = [];
+    const dropped: string[] = [];
+    for (const line of http.CURLOPT_HTTPHEADER.split(/\r?\n|\r/).map((value) => value.trim()).filter(Boolean)) {
+      const colon = line.indexOf(":");
+      const name = colon > 0 ? line.slice(0, colon).trim() : "";
+      // Only the header name goes into the report: values may be credentials.
+      if (!/^[!#$%&'*+.^`|~\w-]+$/.test(name)) dropped.push(name ? "(invalid header)" : "(line without name)");
+      else if (BLOCKED_HTTP_HEADERS.has(name.toLowerCase())) dropped.push(name);
+      else kept.push(line);
+    }
+    if (kept.length) http.CURLOPT_HTTPHEADER = kept.join("\n");
+    else delete http.CURLOPT_HTTPHEADER;
+    if (dropped.length) issue("unsupported", "http-header-dropped", "CURLOPT_HTTPHEADER", dropped.join(", "));
+  }
+  if (http.CURLOPT_MAXREDIRS !== undefined) {
+    const redirects = Number(http.CURLOPT_MAXREDIRS);
+    if (!Number.isInteger(redirects)) {
+      delete http.CURLOPT_MAXREDIRS;
+      issue("adapted", "maxredirs-invalid", "CURLOPT_MAXREDIRS", "ignored; default redirect limit applies");
+    } else if (redirects < 0 || redirects > MAX_REDIRECTS) {
+      http.CURLOPT_MAXREDIRS = Math.min(MAX_REDIRECTS, Math.max(0, redirects));
+      issue("adapted", "maxredirs-clamped", "CURLOPT_MAXREDIRS", `${redirects} stored as ${http.CURLOPT_MAXREDIRS} (allowed 0–${MAX_REDIRECTS})`);
+    }
+  }
   if (http.CURLOPT_COOKIEFILE !== undefined) {
     delete http.CURLOPT_COOKIEFILE;
     issue("unsupported", "cookiefile-server-local", "CURLOPT_COOKIEFILE", "path on the FreshRSS server, not transferable");
@@ -199,23 +249,27 @@ export function mapOutlineToFeed(
     htmlUrl: outline.htmlUrl || null,
     description: outline.description || null,
     priority,
-    priorityGiven: priority !== "main" || extensions.priority === "main",
-    unicityCriteria: extensions.unicityCriteria || "id",
-    unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1",
-    scraperConfig: stringifyNonEmpty(scraper),
+    priorityGiven: priority !== "main" || extensions.priority?.toLowerCase() === "main",
+    unicityCriteria,
+    unicityCriteriaForced: /^(true|1|yes|on)$/i.test(extensions.unicityCriteriaForced ?? ""),
+    scraperConfig: null,
     httpOptions: stringifyNonEmpty(http),
   };
+  if (data.priorityGiven) data.hideFromAllFeeds = priority !== "main" && priority !== "important";
   if (typeof http.CURLOPT_USERAGENT === "string") data.customUserAgent = http.CURLOPT_USERAGENT;
 
   if (extensions.ttl !== undefined) {
     const seconds = Number(extensions.ttl);
-    if (!Number.isFinite(seconds)) {
+    if (!/^\s*-?\d+\s*$/.test(extensions.ttl) || !Number.isSafeInteger(seconds)) {
       issue("adapted", "ttl-invalid", "ttl", `'${extensions.ttl}' ignored`);
     } else if (seconds !== 0) {
-      const minutes = Math.ceil(Math.abs(seconds) / 60);
-      const clamped = Math.min(MAX_UPDATE_MINUTES, Math.max(MIN_UPDATE_MINUTES, minutes));
-      data.updateFrequency = clamped;
-      if (clamped !== minutes) issue("adapted", "ttl-clamped", "ttl", `${Math.abs(seconds)}s stored as ${clamped} min (allowed ${MIN_UPDATE_MINUTES}–${MAX_UPDATE_MINUTES})`);
+      const { minutes, exact } = ttlToMinutes(seconds);
+      data.updateFrequency = minutes;
+      if (!exact) {
+        // Written back unchanged on export while the feed keeps this interval.
+        preserved.ttl = String(seconds);
+        issue("adapted", "ttl-clamped", "ttl", `${Math.abs(seconds)}s stored as ${minutes} min (allowed ${MIN_UPDATE_MINUTES}–${MAX_UPDATE_MINUTES} min)`);
+      }
       if (seconds < 0) data.mute = true;
     }
   }
@@ -228,7 +282,15 @@ export function mapOutlineToFeed(
   if (remove) data.fullTextRemoveSelectors = remove;
   if (extensions.cssFullContentConditions) {
     data.fullTextConditions = extensions.cssFullContentConditions;
-    issue("adapted", "css-conditions-not-evaluated", "cssFullContentConditions", "stored, but full-text extraction runs for every article of this feed");
+    const conditions = translateFreshRssReadFilters(extensions.cssFullContentConditions);
+    if (conditions.unsupported.length) {
+      issue(
+        "adapted",
+        "css-conditions-partial",
+        "cssFullContentConditions",
+        `${conditions.unsupported.map(({ line }) => line).join(" | ")} — cannot be evaluated, so full text is fetched for every article`,
+      );
+    }
   }
   if ((remove || extensions.cssFullContentConditions) && !extensions.cssFullContent) {
     issue("adapted", "css-without-selector", "cssFullContent", "removal/condition settings stored, but no content selector: full-text stays off");
@@ -238,6 +300,14 @@ export function mapOutlineToFeed(
   if (extensions.filtersActionRead !== undefined) {
     const translation = translateFreshRssReadFilters(extensions.filtersActionRead);
     data.filtersActionRead = translation.keywordLines.join("\n") || null;
+    // Every line that is not a plain keyword (rule-translated or not translatable) is kept
+    // verbatim so an export to FreshRSS carries the original filter text.
+    const keywords = new Set(translation.keywordLines);
+    const otherLines = extensions.filtersActionRead
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !keywords.has(line) && !keywords.has(line.replace(/^"(.*)"$|^'(.*)'$/, "$1$2")));
+    if (otherLines.length) preserved.filtersActionRead = [...new Set(otherLines)].join("\n");
     for (const { line, reason } of translation.unsupported) {
       issue("unsupported", "filter-untranslatable", "filtersActionRead", `${line} — ${reason}`);
     }
@@ -253,6 +323,9 @@ export function mapOutlineToFeed(
       }
     }
   }
+
+  if (Object.keys(preserved).length) scraper.preserved = preserved;
+  data.scraperConfig = stringifyNonEmpty(scraper);
 
   return { url: outline.xmlUrl, name: outline.text, data, ruleQuery };
 }
@@ -417,6 +490,7 @@ export async function applyOpmlImportPlan(
       ...(d.fullTextSelector !== undefined ? { fullTextSelector: d.fullTextSelector } : {}),
       ...(d.fullTextConditions !== undefined ? { fullTextConditions: d.fullTextConditions } : {}),
       ...(d.fullTextRemoveSelectors !== undefined ? { fullTextRemoveSelectors: d.fullTextRemoveSelectors } : {}),
+      ...(d.hideFromAllFeeds !== undefined ? { hideFromAllFeeds: d.hideFromAllFeeds } : {}),
       ...(d.updateFrequency !== undefined ? { updateFrequency: d.updateFrequency } : {}),
       ...(d.mute ? { autoMuted: true } : {}),
       ...(d.customUserAgent ? { customUserAgent: d.customUserAgent } : {}),
