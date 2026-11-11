@@ -41,3 +41,16 @@ it("blocks private IP literals before web-push (lookup would not run)", async ()
   expect(await sendPushToUser("u", { title: "test" })).toMatchObject({ sent: 0, failed: 1 });
   expect(mocks.send).not.toHaveBeenCalled();
 });
+it("continues the batch after a hanging endpoint exceeds the total deadline", async () => {
+  vi.useFakeTimers();
+  try {
+    mocks.subscriptions.mockResolvedValue([
+      { id: "one", endpoint: "https://rebind.test/push", p256dh: "test", auth: "test" },
+      { id: "two", endpoint: "https://rebind.test/push", p256dh: "test", auth: "test" },
+    ]);
+    mocks.send.mockImplementationOnce(() => new Promise(() => {})).mockResolvedValueOnce({});
+    const pending = sendPushToUser("u", { title: "test" });
+    await vi.advanceTimersByTimeAsync(10_001);
+    expect(await pending).toMatchObject({ sent: 1, failed: 1 });
+  } finally { vi.useRealTimers(); }
+});

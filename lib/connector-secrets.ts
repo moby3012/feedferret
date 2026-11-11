@@ -1,3 +1,4 @@
+import { redact } from "./redact";
 // Connector access secrets stay server-side (security audit #2, N3 / M4).
 //
 // The admin-configured RSSHub `?key=` and changedetection.io `?token=` used to
@@ -207,7 +208,7 @@ export function applyConnectorSecretsWith(rules: ConnectorSecretRule[], rawUrl: 
 
 /** Replaces every configured secret value occurring in free text (errors, logs) with "***". */
 export function redactConnectorTextWith(rules: ConnectorSecretRule[], text: string): string {
-  let out = text;
+  let out = redact(text);
   for (const rule of rules) {
     if (!rule.value || rule.value.length < 4) continue;
     out = out.split(rule.value).join("***");

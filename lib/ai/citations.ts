@@ -91,14 +91,14 @@ const DOMAIN_LIKE = new RegExp(`(?<![\\p{L}\\p{N}_@.-])${LABEL}(?:${DOT}${LABEL}
  * that looks like an address. Scheme URLs, e-mail addresses and `www.` tokens
  * are removed; every other domain-like token is DEFANGED (`evil-login[.]com`)
  * rather than deleted, so ordinary text such as "Node.js/Deno" stays readable
- * ("Node[.]js/Deno") and numbers ("rated 4.5/5") are untouched.
+ * ("Node.js/Deno") and numbers ("rated 4.5/5") are untouched.
  */
 export function neutralizeLinks(text: string): string {
   return text
     .replace(SCHEME_URL, " ")
     .replace(EMAIL, " ")
     .replace(WWW, " ")
-    .replace(DOMAIN_LIKE, (token) => token.replace(new RegExp(DOT, "gu"), "[.]"));
+    .replace(DOMAIN_LIKE, (token) => /^(?:node|vue|next|nuxt)\.js$/i.test(token) ? token : token.replace(new RegExp(DOT, "gu"), "[.]"));
 }
 
 /**

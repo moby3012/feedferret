@@ -1,3 +1,4 @@
+import { writeSystemLog } from "./system-log";
 import { db } from "./db";
 import { applyAutoReadRules } from "./auto-read-rules";
 import { applyKeywordAlerts } from "./keyword-alerts";
@@ -1083,6 +1084,10 @@ export async function syncUserFeeds(userId: string) {
 }
 
 export async function syncAllFeeds() {
+    const startedAt = Date.now();
+    const configuredBudget = Number(process.env.SYNC_ALL_BUDGET_MS);
+    const budgetMs = Number.isFinite(configuredBudget) && configuredBudget > 0 ? configuredBudget : 240_000;
+    let deferred = 0;
     await syncDynamicOpmlCategories().catch((e) =>
         logger.error("[rss-sync] dynamic OPML sync failed:", e),
     );
@@ -1108,6 +1113,10 @@ export async function syncAllFeeds() {
     });
 
     const results = await mapWithConcurrency(feeds, getSyncConcurrency(), async (feed) => {
+        if (Date.now() - startedAt >= budgetMs) {
+            deferred++;
+            return { feed: feed.url, success: true, skipped: true, deferred: true, count: 0 };
+        }
         // F6: skip auto-muted feeds — see the equivalent comment in
         // syncUserFeeds.
         if (feed.autoMuted) {
@@ -1130,6 +1139,7 @@ export async function syncAllFeeds() {
         return { feed: feed.url, ...res };
     });
 
+    if (deferred) await writeSystemLog("warn", "sync", "Feed sync budget exhausted; remaining feeds deferred", { deferred, budgetMs });
     return results;
 }
 
