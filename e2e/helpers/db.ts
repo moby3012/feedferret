@@ -649,6 +649,35 @@ export function restoreFeedMuteState(feedId: string, prior: FeedMuteRow) {
   const db = open();
   try {
     db.prepare(`UPDATE "Feed" SET autoMuted = ?, consecutiveFailureCount = ?, lastError = ? WHERE id = ?`).run(prior.autoMuted, prior.consecutiveFailureCount, prior.lastError, feedId);
+
+/** An empty category (optionally nested) for the user; `cleanup` removes whatever is left of it. */
+export function insertEmptyCategory(userKey: string, name: string, parentId: string | null = null): { id: string; cleanup: () => void } {
+  const { userId } = manifest().users[userKey];
+  const id = `e2e-cat-${userKey}-${name.replace(/\W+/g, "-")}-${Date.now()}`;
+  const db = open();
+  try {
+    const iso = new Date().toISOString().replace("Z", "+00:00");
+    db.prepare(`INSERT INTO "Category" (id, name, userId, parentId, "order", createdAt, updatedAt) VALUES (?, ?, ?, ?, 99, ?, ?)`).run(id, name, userId, parentId, iso, iso);
+  } finally {
+    db.close();
+  }
+  return {
+    id,
+    cleanup: () => {
+      const c = open();
+      try {
+        c.prepare(`DELETE FROM "Category" WHERE id = ?`).run(id);
+      } finally {
+        c.close();
+      }
+    },
+  };
+}
+
+export function categoryExists(id: string): boolean {
+  const db = open();
+  try {
+    return !!db.prepare(`SELECT 1 FROM "Category" WHERE id = ?`).get(id);
   } finally {
     db.close();
   }

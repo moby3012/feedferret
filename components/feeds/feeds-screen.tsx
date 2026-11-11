@@ -64,6 +64,8 @@ import { parseCountDisplay, showsCount, type CountDisplay } from "@/lib/count-di
 import { completeFeedsHint, createSwipeRow, documentDir, useFeedsHintDue, useTouchRows, type LongPressPoint } from "@/lib/gestures";
 import { markInAppNavigation } from "@/lib/in-app-back";
 import { useSignOut } from "@/components/shell/use-sign-out";
+import { isDeletableEmptyCategory } from "@/lib/empty-category";
+import { DeleteEmptyCategoryDialog } from "@/components/delete-empty-category-dialog";
 import { cn } from "@/lib/utils";
 
 // Compact Feeds screen (Feeds tab root, audit-ux-2 A-03 / R3): a Reeder-style
@@ -175,6 +177,8 @@ export function FeedsScreen() {
   const [menuOpen, setMenuOpen] = useOwnedOverlay("feed-menu");
   const [markAll, setMarkAll] = useState<MarkAllTarget | null>(null);
   const [feedToDelete, setFeedToDelete] = useState<{ id: string; name: string } | null>(null);
+  // Inline "Delete category" of an empty folder's "No feeds" line.
+  const [categoryToDelete, setCategoryToDelete] = useState<{ id: string; name: string } | null>(null);
   const refreshFeed = useRefreshFeed();
   const deleteFeed = useDeleteFeed();
   const { markViewRead } = useArticleActions();
@@ -335,7 +339,23 @@ export function FeedsScreen() {
                     {isOpen && (
                       <ul className="ff-feeds-folder" aria-label={c.name}>
                         {inFolder.length === 0 ? (
-                          <li className="ff-feeds-empty-folder">{tSidebar("noFeeds")}</li>
+                          <li className="ff-feeds-empty-folder">
+                            <span className="italic">{tSidebar("noFeeds")}</span>
+                            {isDeletableEmptyCategory(c.id, items, categories as any[]) && (
+                              <>
+                                <span aria-hidden> · </span>
+                                <button
+                                  type="button"
+                                  className="ff-feeds-empty-folder-action"
+                                  data-testid="delete-empty-category"
+                                  aria-label={tSidebar("deleteCategoryNamed", { name: c.name })}
+                                  onClick={() => setCategoryToDelete({ id: c.id, name: c.name })}
+                                >
+                                  {tSidebar("deleteCategoryAction")}
+                                </button>
+                              </>
+                            )}
+                          </li>
                         ) : (
                           inFolder.map((f) => (
                             <li key={f.id}>
@@ -394,6 +414,8 @@ export function FeedsScreen() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DeleteEmptyCategoryDialog category={categoryToDelete} onClose={() => setCategoryToDelete(null)} />
 
       <AlertDialog open={feedToDelete !== null} onOpenChange={(o) => !o && setFeedToDelete(null)}>
         <AlertDialogContent>
