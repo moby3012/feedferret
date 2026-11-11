@@ -473,5 +473,12 @@ keys; sign in again and rotate Fever credentials afterward.
 Password changes, two-factor setup/enable/disable, and administrator suspension
 invalidate pending requests atomically with the account mutation. Without mail
 configured, the existing immediate change after step-up remains available and the
-settings warning still applies. Delivery failures leave the old address active and
-show a warning; resend requires step-up again.
+settings warning still applies. The old-address security notice must be delivered before a pending request is
+created or replaced. If it fails, the request is refused. Failure delivering the
+new-address confirmation leaves the pending request available for resend and shows
+an error; resend requires step-up again. Cancellation via the old-address link
+revokes browser/API sessions and clears Fever keys because it may signal compromise.
+
+The request/resend rate limit is per process: it resets on restart and is not
+shared between replicas. Operators running multiple replicas must also enforce
+shared limits at their ingress if they require a global quota.

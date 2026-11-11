@@ -201,7 +201,11 @@
     "emailChangeNoticeFailed": "E-Mail-Adresse geändert, aber die Benachrichtigungs-Mails konnten nicht gesendet werden.",
     "emailPending": "Bestätigung an {email} gesendet",
     "emailResend": "Erneut senden (Authentifizierung erforderlich)",
-    "emailCancel": "Änderung abbrechen"
+    "emailCancel": "Änderung abbrechen",
+    "emailPendingSendFailed": "Die E-Mails zur Bestätigung konnten nicht vollständig gesendet werden. Deine bisherige Adresse bleibt aktiv. Bitte versuch es erneut.",
+    "emailCancelConfirm": "Möchtest du die ausstehende Änderung deiner E-Mail-Adresse wirklich abbrechen?",
+    "emailCancelKeep": "Änderung beibehalten",
+    "emailCancelFailed": "Die Änderung konnte nicht abgebrochen werden. Bitte versuch es erneut."
   },
   "twoFactor": {
     "title": "Zwei-Faktor-Authentifizierung",
@@ -2333,5 +2337,14 @@
       "limit": "Maximal {limit} Adressen.",
       "lastActive": "Eine Adresse muss aktiv bleiben. Erstelle zuerst eine neue."
     }
+  },
+  "emailChangeConfirm": {
+    "title": "E-Mail-Adresse ändern",
+    "confirmed": "E-Mail-Adresse bestätigt. Bitte melde dich erneut an.",
+    "cancelled": "Änderung abgebrochen.",
+    "invalid": "Dieser Link ist ungültig oder abgelaufen.",
+    "cancel": "Änderung abbrechen",
+    "confirm": "E-Mail-Adresse bestätigen",
+    "signIn": "Anmelden"
   }
 }

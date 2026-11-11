@@ -36,7 +36,7 @@ export type UpdateProfileResult =
           /** Email change only: "sent" = old + new address notified, "failed" = mail configured but a send failed, "unavailable" = no mail delivery. */
           emailNotice?: "sent" | "failed" | "unavailable";
       }
-    | { success: false; code: "stepUpRequired" | "reloginRequired" | "rateLimited" | "invalidEmail" | "emailTaken" };
+    | { success: false; code: "emailPendingSendFailed" | "stepUpRequired" | "reloginRequired" | "rateLimited" | "invalidEmail" | "emailTaken" };
 
 function isUniqueViolation(error: unknown): boolean {
   return !!error && typeof error === "object" && (error as { code?: unknown }).code === "P2002";
@@ -100,8 +100,14 @@ export async function updateProfile(data: {
     const { isMailServiceEnabled } = await import("@/lib/mail");
     if (await isMailServiceEnabled()) {
       if (!checkRateLimit(session.user.id, { prefix: "email-change-request", limit: 3, windowSecs: 3600 }).success) return { success: false, code: "rateLimited" };
-      const { requestEmailChange } = await import("@/lib/email-change");
-      const sent = await requestEmailChange(session.user.id, current.email, profile.email, current.uiLanguage, current.sessionVersion);
+      const { requestEmailChange, EmailChangeNoticeError } = await import("@/lib/email-change");
+      let sent: boolean;
+      try {
+        sent = await requestEmailChange(session.user.id, current.email, profile.email, current.uiLanguage, current.sessionVersion);
+      } catch (error) {
+        if (error instanceof EmailChangeNoticeError) return { success: false, code: "emailPendingSendFailed" };
+        throw error;
+      }
       if (profile.name !== undefined) await db.user.update({ where: { id: session.user.id }, data: { name: profile.name } });
       revalidatePath("/");
       return { success: true, emailChanged: false, emailPending: profile.email, feverRotationRequired: false, emailNotice: sent ? "sent" : "failed" };

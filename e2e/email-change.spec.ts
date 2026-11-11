@@ -19,6 +19,7 @@ for (const cancel of [false, true]) {
       await expect(button).toBeVisible();
       expect(userColumns({ email: user.email }, ["email"]).email).toBe(user.email);
       expect(db.prepare('SELECT count(*) AS n FROM "EmailChangeRequest" WHERE userId = ?').get(row.id)).toEqual({ n: 1 });
+      await expect(page.locator('input[name="token"]')).toHaveValue(cancel ? cancelToken : token);
       await button.click();
       await expect(page.getByRole("status")).toContainText(cancel ? "cancelled" : "confirmed");
       expect(db.prepare('SELECT email FROM "User" WHERE id = ?').get(row.id)).toEqual({ email: cancel ? user.email : next });
@@ -30,3 +31,10 @@ for (const cancel of [false, true]) {
     }
   });
 }
+
+test("invalid links show the localized expired-link message", async ({ page, context }) => {
+  await context.addCookies([{ name: "locale", value: "de", domain: "localhost", path: "/" }]);
+  await page.goto("/account/confirm-email?t=invalid");
+  await page.getByRole("button", { name: "E-Mail-Adresse bestätigen", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("ungültig oder abgelaufen");
+});
