@@ -155,6 +155,7 @@ async function validatePagefeed(
     const linked = articles.filter((a) => a.link && a.link.trim().length > 0);
     const ok = articles.length >= PAGEFEED_MIN_ITEMS && linked.length > 0;
     const sampleTitles = articles
+      .filter((a) => !a.titleSynthetic)
       .map((a) => a.title)
       .filter((t) => t && t !== "Untitled")
       .slice(0, 5);

@@ -53,11 +53,13 @@ export async function prepareGoogleNewsArticles(
   const prepared: GoogleNewsPreparedArticle[] = articles.map((item) => {
     // Pin identity to the guid / original Google link before the link changes.
     const pinned = { ...item, externalId: item.externalId || item.link || null };
-    return { ...pinned, dedupeKey: googleNewsStableKey(pinned) };
+    // Title-less items: identity uses the pre-synthesis placeholder, not the
+    // synthesized display title (lib/title-synthesis.ts).
+    return { ...pinned, dedupeKey: googleNewsStableKey({ ...pinned, title: item.identityTitle ?? item.title }) };
   });
   // Rows stored before keys were forced stable (feed with link/title
   // criteria) keep their old key: computed exactly as the old sync did.
-  const legacyKeys = prepared.map((item) => buildDedupeKey(feed, item, item.externalId ?? null));
+  const legacyKeys = prepared.map((item) => buildDedupeKey(feed, { ...item, title: item.identityTitle ?? item.title }, item.externalId ?? null));
   try {
     const edition = parseGoogleNewsFeedUrl(feed.url)?.edition;
     const keys = prepared.map((item) => item.dedupeKey!);

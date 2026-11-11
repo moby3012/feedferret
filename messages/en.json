@@ -744,6 +744,11 @@
     "foundFeeds": "Found feeds",
     "topicFeeds": "News & search feeds for this topic — pick one",
     "resolverNoResult": "Nothing found for that. Try the site's address or a feed URL.",
+    "hints": {
+      "needsRsshub": "Requires RSSHub – configure under Settings › Server",
+      "rateLimited": "Try again later",
+      "blocked": "This site blocked automated access – try a native feed from the publisher"
+    },
     "kinds": {
       "videos": "Videos",
       "playlist": "Playlist",

@@ -1,5 +1,7 @@
 import { JSDOM } from "jsdom";
-import { fetchTextWithSsrfProtection } from "./ssrf";
+import { fetchTextWithSsrfProtection, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
+import { parseHttpLinkHeader } from "./http-link-header";
+import { hintForFetchError } from "./fetch-error-hint";
 import { buildTopicFeeds, parseSourceInput, resolveSource, type ResolvedFeed } from "./smart-url-resolver";
 
 export type DiscoveredFeed = {
@@ -16,10 +18,13 @@ export type DiscoveredFeed = {
   confidence?: number;
 };
 
+export type DiscoveryHint = "needs-rsshub" | "rate-limited" | "blocked";
+
 export type DiscoveryResult = {
   /** "topic" = the input was a plain phrase and `feeds` are search-engine feeds to pick from. */
   mode: "url" | "topic" | "empty";
   feeds: DiscoveredFeed[];
+  hint?: DiscoveryHint;
 };
 
 export type DiscoverOptions = {
@@ -127,6 +132,7 @@ async function verifyFeedCandidate(url: string, title: string, fallbackType: Dis
     const text = await fetchTextWithSsrfProtection(url, {}, {
       maxBytes: 512 * 1024,
       timeoutMs: 12_000,
+      allowInternal: await isTrustedFeedFetchingAllowed(),
     });
     const lower = text.trim().slice(0, 1000).toLowerCase();
     if (!looksLikeFeedContent(text, "")) return null;
@@ -156,7 +162,7 @@ function toDiscovered(f: ResolvedFeed, source: "resolver" | "topic"): Discovered
 }
 
 /** SSRF-protected text fetch handed to the pure resolver for its one-step lookups. */
-const resolverFetchText = (url: string, init?: { headers?: Record<string, string> }) =>
+const resolverFetchText = async (url: string, init?: { headers?: Record<string, string> }) =>
   fetchTextWithSsrfProtection(
     url,
     {
@@ -166,7 +172,7 @@ const resolverFetchText = (url: string, init?: { headers?: Record<string, string
       },
     },
     // YouTube channel/watch pages are ~1–3 MB of HTML.
-    { maxBytes: 4 * 1024 * 1024, timeoutMs: 12_000 },
+    { maxBytes: 4 * 1024 * 1024, timeoutMs: 12_000, allowInternal: await isTrustedFeedFetchingAllowed() },
   );
 
 /**
@@ -192,13 +198,13 @@ async function resolveWithPlatformRules(input: string): Promise<{ matched: boole
  * instance, each validated before it is offered. Empty (and free) when no
  * instance is configured or no rule matches.
  */
-async function resolveWithRadarRules(pageUrl: string): Promise<DiscoveredFeed[]> {
+async function resolveWithRadarRules(pageUrl: string): Promise<{ feeds: DiscoveredFeed[]; needsRsshub?: boolean }> {
   try {
     const { radarRoutesFor, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } = await import("./rsshub");
     const matches = radarRoutesFor(pageUrl).slice(0, 4);
-    if (!matches.length) return [];
+    if (!matches.length) return { feeds: [] };
     const config = await getRsshubConfig();
-    if (!config) return [];
+    if (!config) return { feeds: [], needsRsshub: true };
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 15_000); });
     const results = await Promise.all(
@@ -218,35 +224,68 @@ async function resolveWithRadarRules(pageUrl: string): Promise<DiscoveredFeed[]>
         };
       }),
     ).finally(() => clearTimeout(timer));
-    return results.filter((f): f is DiscoveredFeed => f !== null);
+    return { feeds: results.filter((f): f is DiscoveredFeed => f !== null) };
   } catch {
-    return [];
+    return { feeds: [] };
   }
 }
 
-/** Stage 2 — classic HTML discovery: `<link rel=alternate>`, feed-looking anchors, common feed paths. */
-async function discoverFeedsInHtml(pageUrl: string): Promise<DiscoveredFeed[]> {
-  let html = "";
-  try {
-    html = await fetchTextWithSsrfProtection(pageUrl, {}, {
-      maxBytes: 512 * 1024,
-      timeoutMs: 12_000,
-    });
-  } catch {
-    // The page itself may be unreachable/blocked while /feed still works —
-    // fall through to the common-path probes below.
-  }
+const LINK_HEADER_FEED_TYPES: Record<string, DiscoveredFeed["type"]> = {
+  "application/rss+xml": "rss",
+  "application/atom+xml": "atom",
+  "application/feed+json": "unknown",
+};
 
-  const dom = new JSDOM(html);
-  const { document } = dom.window;
-  const discovered = new Map<string, DiscoveredFeed>();
-  const base = new URL(pageUrl);
+/**
+ * Feed type of an HTTP `Link` header entry, or null when it is not a feed:
+ * exact `alternate` relation token AND a feed media type. `application/json`
+ * only counts with a JSON Feed hint (`feed` in the path or title). No URL-only
+ * fallback — a Link header without a feed type is not a feed advertisement.
+ */
+export function linkHeaderFeedType(entry: { url: string; rels: string[]; type?: string; title?: string }): DiscoveredFeed["type"] | null {
+  if (!entry.rels.includes("alternate") || !entry.type) return null;
+  if (entry.type in LINK_HEADER_FEED_TYPES) return LINK_HEADER_FEED_TYPES[entry.type];
+  if (entry.type === "application/json") {
+    let path = entry.url;
+    try {
+      path = new URL(entry.url, "http://x.invalid").pathname;
+    } catch {
+      // keep raw
+    }
+    if (/feed/i.test(path) || /\bfeed\b/i.test(entry.title ?? "")) return "unknown";
+  }
+  return null;
+}
+
+/**
+ * Early-stop predicate for the page prefix read: the head already advertises
+ * a feed via a real `<link rel=alternate>` element. Parsed with the HTML
+ * parser (not a regex), so feed-like markup inside `<script>`/`<style>`/
+ * comments never counts — a false positive here would truncate discovery
+ * before the real `<link>`.
+ */
+export function headAdvertisesFeed(headHtml: string): boolean {
+  const { document } = new JSDOM(headHtml).window;
+  return [...document.querySelectorAll('link[rel~="alternate" i][href]')].some((el) =>
+    /^application\/(?:rss\+xml|atom\+xml|feed\+json)\b/i.test((el.getAttribute("type") || "").trim()));
+}
+
+/** Stage 2 — classic HTML discovery: `<link rel=alternate>`, feed-looking anchors, common feed paths. */
+async function discoverFeedsInHtml(pageUrl: string): Promise<{ feeds: DiscoveredFeed[]; hint?: DiscoveryHint }> {
+  let html = "";
+  let hint: DiscoveryHint | undefined;
+  const allowInternal = await isTrustedFeedFetchingAllowed();
+  // Relative references resolve against the FINAL URL after redirects (and
+  // a document `<base href>`), not the URL the user typed.
+  let base = new URL(pageUrl);
+  let responseUrl = base;
   const candidateLinks = new Map<string, { title: string; type: DiscoveredFeed["type"]; strong: boolean; commonPath: boolean }>();
 
-  const addCandidate = (href: string | null, title: string | null, type: DiscoveredFeed["type"], strong = false, commonPath = false) => {
+  const addCandidate = (href: string | null, title: string | null, type: DiscoveredFeed["type"], strong = false, commonPath = false, resolveAgainst: URL = base) => {
     if (!href) return;
     try {
-      const feedUrl = new URL(href, base).toString();
+      const feedUrl = new URL(href, resolveAgainst).toString();
+      if (!/^https?:$/.test(new URL(feedUrl).protocol)) return;
       if (!strong && !looksLikeFeedUrl(feedUrl)) return;
       if (!candidateLinks.has(feedUrl)) {
         candidateLinks.set(feedUrl, { title: title || feedUrl, type, strong, commonPath });
@@ -255,6 +294,40 @@ async function discoverFeedsInHtml(pageUrl: string): Promise<DiscoveredFeed[]> {
       // invalid URL
     }
   };
+
+  try {
+    const result = await fetchWithSsrfProtection(pageUrl, {}, {
+      maxBytes: 1024 * 1024,
+      timeoutMs: 12_000,
+      // Large pages: read a bounded prefix (never fail on size). Stop at the
+      // end of <head> only when it already advertises a feed; otherwise keep
+      // reading so feed anchors in the body are still found.
+      untilHead: headAdvertisesFeed,
+      allowInternal,
+    });
+    if (result.url) base = responseUrl = new URL(result.url);
+    if (!result.notModified) {
+      html = result.text;
+      for (const entry of parseHttpLinkHeader(result.headers?.get("link") ?? null)) {
+        const type = linkHeaderFeedType(entry);
+        if (type) addCandidate(entry.url, entry.title || null, type, true);
+      }
+    }
+  } catch (err) {
+    hint = hintForFetchError(err);
+  }
+
+  const dom = new JSDOM(html);
+  const { document } = dom.window;
+  const discovered = new Map<string, DiscoveredFeed>();
+  const baseHref = document.querySelector("base[href]")?.getAttribute("href");
+  if (baseHref) {
+    try {
+      base = new URL(baseHref, base);
+    } catch {
+      // invalid <base href>: keep the response URL
+    }
+  }
 
   const linkEls = document.querySelectorAll('link[rel~="alternate"]');
   for (const el of linkEls) {
@@ -272,7 +345,7 @@ async function discoverFeedsInHtml(pageUrl: string): Promise<DiscoveredFeed[]> {
 
   for (const commonPath of COMMON_FEED_PATHS) {
     // Root-relative on purpose ("/?feed=rss2" must stay at the site root).
-    addCandidate(commonPath, `${base.hostname} feed`, "unknown", true, true);
+    addCandidate(commonPath, `${responseUrl.hostname} feed`, "unknown", true, true, responseUrl);
   }
 
   // Verify in small parallel batches (each probe can take up to the timeout);
@@ -292,7 +365,7 @@ async function discoverFeedsInHtml(pageUrl: string): Promise<DiscoveredFeed[]> {
     });
   }
 
-  return [...discovered.values()].slice(0, 10);
+  return { feeds: [...discovered.values()].slice(0, 10), hint };
 }
 
 /**
@@ -318,10 +391,20 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
     resolveWithRadarRules(pageUrl),
   ]);
 
-  const html = native.feeds.length ? [] : await discoverFeedsInHtml(pageUrl).catch(() => []);
+  const html = native.feeds.length ? { feeds: [] } : await discoverFeedsInHtml(pageUrl).catch(() => ({ feeds: [] }));
   const merged = new Map<string, DiscoveredFeed>();
-  for (const f of [...native.feeds, ...html, ...radar]) if (!merged.has(f.url)) merged.set(f.url, f);
-  return { mode: "url", feeds: [...merged.values()] };
+  for (const f of [...native.feeds, ...html.feeds, ...radar.feeds]) if (!merged.has(f.url)) merged.set(f.url, f);
+
+  let hint: DiscoveryHint | undefined;
+  if (merged.size === 0) {
+    if (radar.needsRsshub) {
+      hint = "needs-rsshub";
+    } else if (html.hint) {
+      hint = html.hint;
+    }
+  }
+
+  return { mode: "url", feeds: [...merged.values()], hint };
 }
 
 /** Back-compat wrapper: feeds for a page URL (or any input `discoverFeeds` understands). */

@@ -78,6 +78,7 @@
     "date-fns": "^4.2.1",
     "defuddle": "^0.19.1",
     "embla-carousel-react": "8.6.0",
+    "entities": "8.0.0",
     "geist": "^1.7.0",
     "highlight.js": "^11.11.1",
     "impit": "^0.14.3",

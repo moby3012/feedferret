@@ -13,6 +13,7 @@ import { logger } from "./logger";
 import { isTrustedGoogleNewsOverrideUrl } from "./google-news";
 import { stripStyleBlocks } from "./html-utils";
 import { parseDurationSecs } from "./article-kind";
+import { resolveItemTitle } from "./title-synthesis";
 
 export type FeedFetchConfig = {
   url: string;
@@ -49,7 +50,15 @@ export type FeedFetchConfig = {
 };
 
 export type FetchedFeedArticle = {
+  /** Display title; synthesized from content when the feed supplied none. */
   title: string;
+  /** `title` was synthesized from content (provenance — never a real title). */
+  titleSynthetic?: true;
+  /**
+   * Title as stored before synthesis existed (`raw || "Untitled"`): the
+   * dedupe-key input for title-based unicityCriteria. Defaults to `title`.
+   */
+  identityTitle?: string;
   link: string;
   content: string;
   summary?: string | null;
@@ -184,17 +193,22 @@ function buildJsonArticles(json: unknown, config: FeedExtractionConfig): Fetched
     title: firstString(dotGet(json, "title")),
     description: firstString(dotGet(json, "description")),
     htmlUrl: firstString(dotGet(json, "home_page_url")) || firstString(dotGet(json, "feed_url")),
-    articles: items.map((item) => ({
-      title: firstString(dotGet(item, settings.jsonItemTitle || settings.itemTitle || "title")) || "Untitled",
-      link: firstString(dotGet(item, settings.jsonItemUri || settings.itemUri || "url")) || firstString(dotGet(item, "external_url")),
-      content: itemContent(dotGet(item, settings.jsonItemContent || settings.itemContent || "content_html")) || itemContent(dotGet(item, "content_text")),
-      summary: firstString(dotGet(item, "summary")),
-      author: firstString(dotGet(item, settings.jsonItemAuthor || settings.itemAuthor || "author.name")) || firstString(dotGet(item, "author")),
-      publishedAt: dateFrom(dotGet(item, settings.jsonItemTimestamp || settings.itemTimestamp || "date_published"), settings.jsonItemTimeFormat || settings.itemTimeFormat),
-      imageUrl: firstString(dotGet(item, settings.jsonItemThumbnail || settings.itemThumbnail || "image")) || firstString(dotGet(item, "banner_image")),
-      externalId: firstString(dotGet(item, settings.jsonItemUid || settings.itemUid || "id")),
-      categories: categoriesFrom(dotGet(item, settings.jsonItemCategories || settings.itemCategories || "tags")),
-    })),
+    articles: items.map((item) => {
+      const content = itemContent(dotGet(item, settings.jsonItemContent || settings.itemContent || "content_html")) || itemContent(dotGet(item, "content_text"));
+      const summary = firstString(dotGet(item, "summary"));
+      const rawTitle = firstString(dotGet(item, settings.jsonItemTitle || settings.itemTitle || "title"));
+      return {
+        ...resolveItemTitle(rawTitle, content, summary),
+        link: firstString(dotGet(item, settings.jsonItemUri || settings.itemUri || "url")) || firstString(dotGet(item, "external_url")),
+        content,
+        summary,
+        author: firstString(dotGet(item, settings.jsonItemAuthor || settings.itemAuthor || "author.name")) || firstString(dotGet(item, "author")),
+        publishedAt: dateFrom(dotGet(item, settings.jsonItemTimestamp || settings.itemTimestamp || "date_published"), settings.jsonItemTimeFormat || settings.itemTimeFormat),
+        imageUrl: firstString(dotGet(item, settings.jsonItemThumbnail || settings.itemThumbnail || "image")) || firstString(dotGet(item, "banner_image")),
+        externalId: firstString(dotGet(item, settings.jsonItemUid || settings.itemUid || "id")),
+        categories: categoriesFrom(dotGet(item, settings.jsonItemCategories || settings.itemCategories || "tags")),
+      };
+    }),
   };
 }
 
@@ -245,10 +259,12 @@ export function buildXPathArticles(raw: string, feedUrl: string, config: FeedExt
     const rawLink = evaluateString(xpath, settings.xPathItemUri || settings.itemUri, node);
     const link = rawLink ? new URL(rawLink, feedUrl).toString() : "";
     const rawImage = evaluateString(xpath, settings.xPathItemThumbnail || settings.itemThumbnail, node);
+    const content = evaluateContent(xpath, settings.xPathItemContent || settings.itemContent, node);
+    const rawTitle = evaluateString(xpath, settings.xPathItemTitle || settings.itemTitle, node);
     articles.push({
-      title: evaluateString(xpath, settings.xPathItemTitle || settings.itemTitle, node) || "Untitled",
+      ...resolveItemTitle(rawTitle, content),
       link,
-      content: evaluateContent(xpath, settings.xPathItemContent || settings.itemContent, node),
+      content,
       author: evaluateString(xpath, settings.xPathItemAuthor || settings.itemAuthor, node) || null,
       publishedAt: dateFrom(evaluateString(xpath, settings.xPathItemTimestamp || settings.itemTimestamp, node), settings.xPathItemTimeFormat || settings.itemTimeFormat),
       imageUrl: rawImage ? new URL(rawImage, feedUrl).toString() : null,
@@ -392,7 +408,7 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
       const content = htmlText(item.content) || htmlText(item["content:encoded"]) || htmlText(item.summary) || htmlText(item.contentSnippet);
       const pubDate = htmlText(item.pubDate) || htmlText(item.isoDate);
       return {
-        title: htmlText(item.title) || "Untitled",
+        ...resolveItemTitle(htmlText(item.title), content, htmlText(item.summary), htmlText(item.contentSnippet)),
         link: htmlText(item.link),
         content,
         summary: htmlText(item.summary) || htmlText(item.contentSnippet) || null,

@@ -222,7 +222,8 @@ export function suggestFeedCandidates(rawHtml: string, url: string): FeedCandida
     if (linked.length === 0) continue;
 
     const linkFraction = linked.length / articles.length;
-    const realTitles = articles.map((a) => a.title).filter((t) => t && t !== "Untitled");
+    // Synthesized (content-derived) titles say nothing about title quality.
+    const realTitles = articles.filter((a) => !a.titleSynthetic).map((a) => a.title).filter((t) => t && t !== "Untitled");
     const avgTitleLen = realTitles.length
       ? realTitles.reduce((s, t) => s + t.length, 0) / realTitles.length
       : 0;

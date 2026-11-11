@@ -197,7 +197,14 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
       setDiscoveryMode(data.mode === "topic" ? "topic" : "url");
       setDiscoveredFeeds(feeds);
       if (feeds.length === 0) {
-        const message = t("sidebar.resolverNoResult");
+        let message = t("sidebar.resolverNoResult");
+        if (data.hint === "needs-rsshub") {
+          message = t("sidebar.hints.needsRsshub");
+        } else if (data.hint === "rate-limited") {
+          message = t("sidebar.hints.rateLimited");
+        } else if (data.hint === "blocked") {
+          message = t("sidebar.hints.blocked");
+        }
         setDiscoveryMessage(message);
         toast.info(message);
       }
@@ -219,7 +226,11 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
         categoryId: newFeedCategoryId === "none" ? undefined : newFeedCategoryId,
       });
       if (!result?.success) {
-        toast.error(result?.error || t("sidebar.errors.couldNotAdd"));
+        let err = result?.error;
+        if (err === "rate-limited") err = t("sidebar.hints.rateLimited");
+        else if (err === "blocked") err = t("sidebar.hints.blocked");
+        else if (err === "needs-rsshub") err = t("sidebar.hints.needsRsshub");
+        toast.error(err || t("sidebar.errors.couldNotAdd"));
         return;
       }
       toast.success(t("sidebar.feedAdded", { name: result.feed?.name || title || "feed" }));
