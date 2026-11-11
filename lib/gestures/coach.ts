@@ -13,6 +13,8 @@ import { useSyncExternalStore } from "react";
 export const GESTURE_HINT_KEY = "ff:gesture-hint";
 //   ff:feeds-hint     the same for the Feeds screen ("long-press a feed for its actions")
 export const FEEDS_HINT_KEY = "ff:feeds-hint";
+//   ff:back-hint      the same for the reader ("swipe right to go back")
+export const BACK_HINT_KEY = "ff:back-hint";
 
 /** One per-device "seen" flag in localStorage with a React subscription. */
 function createHintFlag(key: string) {
@@ -66,6 +68,7 @@ function createHintFlag(key: string) {
 
 const gestureHint = createHintFlag(GESTURE_HINT_KEY);
 const feedsHint = createHintFlag(FEEDS_HINT_KEY);
+const backHint = createHintFlag(BACK_HINT_KEY);
 
 /** The hint was dismissed or the gestures were used: never show it again on this device. */
 export function completeGestureHint() {
@@ -100,6 +103,20 @@ export function resetFeedsHint() {
 
 export function useFeedsHintDue(): boolean {
   return feedsHint.useDue();
+}
+
+/** Reader tip ("swipe right to go back") dismissed, or a swipe-back was used. */
+export function completeBackHint() {
+  backHint.complete();
+}
+
+/** Settings → Gesten & Hilfe: show the reader tip again. */
+export function resetBackHint() {
+  backHint.reset();
+}
+
+export function useBackHintDue(): boolean {
+  return backHint.useDue();
 }
 
 // The nudge (first row slides open once) plays at most once per browser

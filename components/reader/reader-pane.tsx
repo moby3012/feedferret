@@ -12,6 +12,7 @@ import { useReaderStacked } from "@/features/reader/layout/layout-class";
 import { getNavState, nav, useNav } from "@/features/reader/nav/store";
 import { ReaderEmptyState } from "./reader-empty";
 import { preloadReaderChunks, ReaderLazyWarmup, ReaderView } from "./reader-view";
+import { useReaderSwipeBack } from "./use-reader-swipe-back";
 
 // The reader chrome + header ship with the shell, so a tap paints the title
 // from the list row in the same frame (spec §2.4: ≤100 ms). Only the body
@@ -35,11 +36,19 @@ export const ReaderPane = memo(function ReaderPane() {
   const isFetchingFullText = useIsFetchingFullText();
   const paneRef = useRef<HTMLElement>(null);
 
+  const swipedRef = useReaderSwipeBack(paneRef, articleId);
+
   // Last opened id survives the close until the pane's transition has ended.
   const [shownId, setShownId] = useState(articleId);
   if (articleId && articleId !== shownId) setShownId(articleId);
   useEffect(() => {
     if (articleId || !shownId) return;
+    if (swipedRef.current) {
+      // A swipe already slid the pane out: there is no close transition to wait for.
+      swipedRef.current = false;
+      setShownId(null);
+      return;
+    }
     const pane = paneRef.current;
     const duration = pane ? parseFloat(getComputedStyle(pane).transitionDuration) || 0 : 0;
     if (!pane || duration === 0) {
@@ -55,7 +64,7 @@ export const ReaderPane = memo(function ReaderPane() {
       pane.removeEventListener("transitionend", done);
       pane.removeEventListener("transitioncancel", done);
     };
-  }, [articleId, shownId]);
+  }, [articleId, shownId, swipedRef]);
 
   useReaderFocus(paneRef, articleId);
   const warm = usePreloadReader();

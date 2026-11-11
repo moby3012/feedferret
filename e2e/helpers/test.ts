@@ -7,6 +7,7 @@ export const PWA_DISMISSED_KEY = "feedferret:pwa-install-prompt-dismissed";
 /** localStorage key of the one-time gesture hint (lib/gestures/coach.ts): "done" = never show. */
 export const GESTURE_HINT_KEY = "ff:gesture-hint";
 export const FEEDS_HINT_KEY = "ff:feeds-hint";
+export const BACK_HINT_KEY = "ff:back-hint";
 
 export type RowToggle = "read" | "star" | "later";
 const MENU_ITEM: Record<RowToggle, RegExp> = {
@@ -341,18 +342,19 @@ export const test = base.extend<{ app: App; gestureHint: boolean }>({
     // Headless Chromium shell crashes the renderer on the SW's Badge API call;
     // the SW is not under test here and would add cross-test caching.
     await page.context().addInitScript(
-      ([key, hintKey, feedsHintKey, hint]) => {
+      ([key, hintKey, feedsHintKey, backHintKey, hint]) => {
         try {
           localStorage.setItem(key, "1");
           if (!hint) {
             localStorage.setItem(hintKey, "done");
             localStorage.setItem(feedsHintKey, "done");
+            localStorage.setItem(backHintKey, "done");
           }
         } catch {
           /* ignore */
         }
       },
-      [PWA_DISMISSED_KEY, GESTURE_HINT_KEY, FEEDS_HINT_KEY, gestureHint] as const,
+      [PWA_DISMISSED_KEY, GESTURE_HINT_KEY, FEEDS_HINT_KEY, BACK_HINT_KEY, gestureHint] as const,
     );
     await provide(new App(page, isMobile, manifest().users[userKey], userKey));
   },

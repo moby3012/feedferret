@@ -230,3 +230,51 @@
     opacity: 1;
   }
 }
+
+/* ------------------------------------------------------------------ one-time swipe-back tip (stacked reader: compact + portrait tablets) */
+.ff-reader-back-hint {
+  position: absolute;
+  inset-inline: max(12px, var(--safe-l)) max(12px, var(--safe-r));
+  bottom: calc(var(--safe-b) + var(--tabbar-inset) + var(--tabbar-h) + 12px);
+  z-index: var(--z-bar);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 420px;
+  margin-inline: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-row);
+  background: color-mix(in oklch, var(--brand) 8%, var(--surface-raised));
+  box-shadow: var(--shadow-bar);
+}
+.ff-reader-back-hint-ok {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding-inline: 12px;
+  border-radius: var(--radius-control);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: var(--text-footnote);
+  font-weight: 600;
+}
+.ff-reader-back-hint-ok:focus-visible {
+  outline: var(--focus-ring-width) solid var(--ring);
+  outline-offset: var(--focus-ring-offset);
+}
+/* No pill from 48rem: the tip sits at the bottom edge instead. */
+@media (width >= 48rem) {
+  .ff-reader-back-hint {
+    bottom: calc(var(--safe-b) + 16px);
+  }
+}
+@media (width >= 60rem) {
+  .ff-reader-back-hint {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ff-reader-back-hint {
+    animation: ff-reader-fade var(--dur-base) var(--ease-out);
+  }
+}

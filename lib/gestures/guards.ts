@@ -9,7 +9,7 @@ export { startsInPannableContent, startsAtSystemEdge, SYSTEM_EDGE_PX } from "@/l
 // gesture; a lock on one axis excludes the other gesture for that sequence.
 
 export interface GestureOwner {
-  kind: "swipe" | "pull";
+  kind: "swipe" | "pull" | "back";
   cancel(): void;
 }
 

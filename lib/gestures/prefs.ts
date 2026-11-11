@@ -9,6 +9,7 @@ import { useSyncExternalStore } from "react";
 //   ff:haptics      "0" = off (default on)
 //   ff:swipe-end    action for a swipe towards inline-end (→ in LTR); default "read"
 //   ff:swipe-start  action for a swipe towards inline-start (← in LTR); default "later"
+//   ff:swipe-back   "0" = off: the reader's swipe towards inline-end goes back (default on)
 
 export type SwipeActionId = "read" | "later" | "star" | "none";
 export const SWIPE_ACTIONS: readonly SwipeActionId[] = ["read", "later", "star", "none"];
@@ -17,11 +18,13 @@ export interface GesturePrefs {
   haptics: boolean;
   swipeEnd: SwipeActionId;
   swipeStart: SwipeActionId;
+  /** Reader: swipe towards inline-end (→ in LTR) goes back to the list. */
+  swipeBack: boolean;
 }
 
-export const DEFAULT_GESTURE_PREFS: GesturePrefs = { haptics: true, swipeEnd: "read", swipeStart: "later" };
+export const DEFAULT_GESTURE_PREFS: GesturePrefs = { haptics: true, swipeEnd: "read", swipeStart: "later", swipeBack: true };
 
-const KEYS = { haptics: "ff:haptics", swipeEnd: "ff:swipe-end", swipeStart: "ff:swipe-start" } as const;
+const KEYS = { haptics: "ff:haptics", swipeEnd: "ff:swipe-end", swipeStart: "ff:swipe-start", swipeBack: "ff:swipe-back" } as const;
 
 const listeners = new Set<() => void>();
 let snapshot: GesturePrefs | null = null;
@@ -39,6 +42,7 @@ function read(): GesturePrefs {
       haptics: ls.getItem(KEYS.haptics) !== "0",
       swipeEnd: isAction(end) ? end : DEFAULT_GESTURE_PREFS.swipeEnd,
       swipeStart: isAction(start) ? start : DEFAULT_GESTURE_PREFS.swipeStart,
+      swipeBack: ls.getItem(KEYS.swipeBack) !== "0",
     };
   } catch {
     return DEFAULT_GESTURE_PREFS;
@@ -54,7 +58,7 @@ export function getGesturePrefs(): GesturePrefs {
 
 export function setGesturePref<K extends keyof GesturePrefs>(key: K, value: GesturePrefs[K]) {
   try {
-    const raw = key === "haptics" ? (value ? "1" : "0") : String(value);
+    const raw = typeof value === "boolean" ? (value ? "1" : "0") : String(value);
     window.localStorage.setItem(KEYS[key], raw);
   } catch {
     /* private mode: keep it for this page only */

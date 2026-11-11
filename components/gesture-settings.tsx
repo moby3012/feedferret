@@ -7,7 +7,7 @@ import { Bookmark, Check, Hand, MousePointer2, MoveHorizontal, Star, type Lucide
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { SWIPE_ACTIONS, resetGestureHint, setGesturePref, useGesturePrefs, useTouchRows, type SwipeActionId } from "@/lib/gestures";
+import { SWIPE_ACTIONS, resetBackHint, resetGestureHint, setGesturePref, useGesturePrefs, useTouchRows, type SwipeActionId } from "@/lib/gestures";
 
 const ACTION_ICON: Record<Exclude<SwipeActionId, "none">, LucideIcon> = { read: Check, later: Bookmark, star: Star };
 
@@ -88,6 +88,20 @@ export function GestureSettings() {
             ))}
             <div className="flex items-center justify-between gap-4 pt-1">
               <div>
+                <div id="gesture-swipe-back" className="text-body-sm font-medium">
+                  {t("swipeBack")}
+                </div>
+                <p className="text-footnote text-muted-foreground">{t("swipeBackDescription")}</p>
+              </div>
+              <Switch
+                aria-labelledby="gesture-swipe-back"
+                data-testid="gesture-swipe-back"
+                checked={prefs.swipeBack}
+                onCheckedChange={(checked) => setGesturePref("swipeBack", checked)}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4 pt-1">
+              <div>
                 <div className="text-body-sm font-medium">{t("haptics")}</div>
                 <p className="text-footnote text-muted-foreground">{t("hapticsDescription")}</p>
               </div>
@@ -101,6 +115,7 @@ export function GestureSettings() {
                   data-testid="gesture-hint-reset"
                   onClick={() => {
                     resetGestureHint();
+                    resetBackHint();
                     toast.success(t("hintReset"));
                   }}
                 >

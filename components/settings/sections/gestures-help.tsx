@@ -77,7 +77,7 @@ function GestureReference() {
       title: t("reader.title"),
       items: [
         { icon: ArrowUp, gesture: t("reader.pullNext"), result: t("reader.pullNextResult") },
-        { icon: MoveHorizontal, gesture: t("reader.edge"), result: t("reader.edgeResult") },
+        { icon: MoveHorizontal, gesture: t("reader.swipeBack"), result: t("reader.swipeBackResult") },
       ],
     },
     {

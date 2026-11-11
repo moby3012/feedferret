@@ -120,6 +120,8 @@
       },
       "haptics": "Haptic feedback",
       "hapticsDescription": "A short vibration when a swipe or pull-to-refresh triggers, where this device supports it.",
+      "swipeBack": "Swipe right: back",
+      "swipeBackDescription": "In the reader, swipe right anywhere to return to the list.",
       "demoLabel": "How the gestures work",
       "demoSwipe": "Swipe and let go once the colour is full. Pull back to cancel.",
       "demoLongPress": "A long press opens the menu with every action. Screen readers find it on each row as “Actions”.",
@@ -155,8 +157,8 @@
         "title": "Reader",
         "pullNext": "Pull up at the end",
         "pullNextResult": "Opens the next article.",
-        "edge": "Swipe from the left edge",
-        "edgeResult": "Back to the list (system gesture)."
+        "swipeBack": "Swipe right",
+        "swipeBackResult": "Back to the list — anywhere in the article; it follows your finger."
       },
       "everywhere": {
         "title": "Everywhere",
@@ -2136,5 +2138,10 @@
       "notFound": "This feed is not a Google News search.",
       "invalidCategory": "That category no longer exists."
     }
+  },
+  "backHint": {
+    "label": "Tip: going back",
+    "text": "Swipe right to go back",
+    "dismiss": "Got it"
   }
 }
