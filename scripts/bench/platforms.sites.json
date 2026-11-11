@@ -1,0 +1,319 @@
+[
+  {
+    "id": "plat-reddit-sub",
+    "category": "platform",
+    "platform": "reddit",
+    "url": "https://www.reddit.com/r/commandandconquer/",
+    "nativeFeed": "https://www.reddit.com/r/commandandconquer/.rss",
+    "expectation": "URL-schema .rss"
+  },
+  {
+    "id": "plat-reddit-user",
+    "category": "platform",
+    "platform": "reddit",
+    "url": "https://www.reddit.com/user/spez/",
+    "nativeFeed": "https://www.reddit.com/user/spez/.rss",
+    "expectation": "URL-schema .rss; 429-prone"
+  },
+  {
+    "id": "plat-reddit-post",
+    "category": "platform",
+    "platform": "reddit",
+    "url": "https://www.reddit.com/r/commandandconquer/comments/1xqfn7j/tiberian_sun_reborn_red_alert_2_apocalypse_rising/",
+    "nativeFeed": "https://www.reddit.com/r/commandandconquer/comments/1xqfn7j/tiberian_sun_reborn_red_alert_2_apocalypse_rising/.rss",
+    "expectation": "comments feed"
+  },
+  {
+    "id": "plat-x-profile",
+    "category": "platform",
+    "platform": "twitter",
+    "url": "https://x.com/EA",
+    "expectation": "no native; RSSHub twitter/user needs API creds"
+  },
+  {
+    "id": "plat-youtube-handle",
+    "category": "platform",
+    "platform": "youtube",
+    "url": "https://www.youtube.com/@EA",
+    "expectation": "needs channel_id resolution; consent redirect from EU"
+  },
+  {
+    "id": "plat-youtube-channel",
+    "category": "platform",
+    "platform": "youtube",
+    "url": "https://www.youtube.com/channel/UCBR8-60-B28hp2BmDPdntcQ",
+    "nativeFeed": "https://www.youtube.com/feeds/videos.xml?channel_id=UCBR8-60-B28hp2BmDPdntcQ",
+    "expectation": "URL-schema"
+  },
+  {
+    "id": "plat-youtube-playlist",
+    "category": "platform",
+    "platform": "youtube",
+    "url": "https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
+    "nativeFeed": "https://www.youtube.com/feeds/videos.xml?playlist_id=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
+    "expectation": "URL-schema"
+  },
+  {
+    "id": "plat-facebook-page",
+    "category": "platform",
+    "platform": "facebook",
+    "url": "https://www.facebook.com/EA",
+    "expectation": "login wall; no native"
+  },
+  {
+    "id": "plat-instagram-profile",
+    "category": "platform",
+    "platform": "instagram",
+    "url": "https://www.instagram.com/ea/",
+    "expectation": "login wall; no native"
+  },
+  {
+    "id": "plat-tiktok-profile",
+    "category": "platform",
+    "platform": "tiktok",
+    "url": "https://www.tiktok.com/@ea",
+    "expectation": "JS; no native"
+  },
+  {
+    "id": "plat-steam-app-news",
+    "category": "platform",
+    "platform": "steam",
+    "url": "https://store.steampowered.com/news/app/1213210",
+    "nativeFeed": "https://store.steampowered.com/feeds/news/app/1213210/",
+    "expectation": "C&C Remastered; native news RSS"
+  },
+  {
+    "id": "plat-steam-store-app",
+    "category": "platform",
+    "platform": "steam",
+    "url": "https://store.steampowered.com/app/1213210/",
+    "nativeFeed": "https://store.steampowered.com/feeds/news/app/1213210/",
+    "expectation": "store page -> app news RSS"
+  },
+  {
+    "id": "plat-steam-community-hub",
+    "category": "platform",
+    "platform": "steam",
+    "url": "https://steamcommunity.com/app/1213210",
+    "nativeFeed": "https://store.steampowered.com/feeds/news/app/1213210/",
+    "expectation": "hub; no hub feed, app news RSS"
+  },
+  {
+    "id": "plat-steam-workshop",
+    "category": "platform",
+    "platform": "steam",
+    "url": "https://steamcommunity.com/app/1213210/workshop/",
+    "expectation": "no native workshop feed"
+  },
+  {
+    "id": "plat-ea-game",
+    "category": "platform",
+    "platform": "ea",
+    "url": "https://www.ea.com/games/command-and-conquer/command-and-conquer-remastered",
+    "expectation": "JS-heavy product page"
+  },
+  {
+    "id": "plat-ea-news",
+    "category": "platform",
+    "platform": "ea",
+    "url": "https://www.ea.com/games/apex-legends/apex-legends/news",
+    "expectation": "news/patch notes listing"
+  },
+  {
+    "id": "plat-cnc-community",
+    "category": "platform",
+    "platform": "cnc",
+    "url": "https://cnc.community/",
+    "expectation": "community portal"
+  },
+  {
+    "id": "plat-cncnet-forums",
+    "category": "platform",
+    "platform": "cnc",
+    "url": "https://forums.cncnet.org/",
+    "expectation": "forum (Invision?)"
+  },
+  {
+    "id": "plat-cncnet",
+    "category": "platform",
+    "platform": "cnc",
+    "url": "https://cncnet.org/",
+    "expectation": "portal/news"
+  },
+  {
+    "id": "plat-ppmforums",
+    "category": "platform",
+    "platform": "cnc",
+    "url": "https://ppmforums.com/",
+    "expectation": "Project Perfect Mod, phpBB-like"
+  },
+  {
+    "id": "plat-cncnz",
+    "category": "platform",
+    "platform": "cnc",
+    "url": "https://www.cncnz.com/",
+    "expectation": "news site"
+  },
+  {
+    "id": "plat-openra",
+    "category": "platform",
+    "platform": "cnc",
+    "url": "https://www.openra.net/",
+    "nativeFeed": "https://www.openra.net/news/atom/",
+    "expectation": "advertised atom"
+  },
+  {
+    "id": "plat-openra-github",
+    "category": "platform",
+    "platform": "cnc",
+    "url": "https://github.com/OpenRA/OpenRA/releases",
+    "nativeFeed": "https://github.com/OpenRA/OpenRA/releases.atom",
+    "expectation": "GitHub URL-schema"
+  },
+  {
+    "id": "plat-moddb-game",
+    "category": "platform",
+    "platform": "moddb",
+    "url": "https://www.moddb.com/games/cc-red-alert-2",
+    "nativeFeed": "https://rss.moddb.com/games/cc-red-alert-2/articles/feed/rss.xml",
+    "expectation": "site 403 to bots; rss.moddb.com works"
+  },
+  {
+    "id": "plat-moddb-mod",
+    "category": "platform",
+    "platform": "moddb",
+    "url": "https://www.moddb.com/mods/mental-omega",
+    "nativeFeed": "https://rss.moddb.com/mods/mental-omega/articles/feed/rss.xml",
+    "expectation": "URL-schema rss.<host>"
+  },
+  {
+    "id": "plat-moddb-news",
+    "category": "platform",
+    "platform": "moddb",
+    "url": "https://www.moddb.com/mods/mental-omega/news",
+    "nativeFeed": "https://rss.moddb.com/mods/mental-omega/articles/feed/rss.xml",
+    "expectation": ""
+  },
+  {
+    "id": "plat-indiedb-game",
+    "category": "platform",
+    "platform": "indiedb",
+    "url": "https://www.indiedb.com/games/cortex-command",
+    "nativeFeed": "https://rss.indiedb.com/games/cortex-command/articles/feed/rss.xml",
+    "expectation": "same engine as ModDB"
+  },
+  {
+    "id": "plat-nexus-game",
+    "category": "platform",
+    "platform": "nexusmods",
+    "url": "https://www.nexusmods.com/skyrimspecialedition",
+    "nativeFeed": "https://www.nexusmods.com/skyrimspecialedition/rss/newtoday/",
+    "expectation": "Cloudflare 403 to bots"
+  },
+  {
+    "id": "plat-nexus-mod",
+    "category": "platform",
+    "platform": "nexusmods",
+    "url": "https://www.nexusmods.com/skyrimspecialedition/mods/30379",
+    "expectation": "Cloudflare 403"
+  },
+  {
+    "id": "plat-modio-game",
+    "category": "platform",
+    "platform": "modio",
+    "url": "https://mod.io/g/cities-skylines-ii",
+    "expectation": "JS shell; API needs key"
+  },
+  {
+    "id": "plat-gamebanana-game",
+    "category": "platform",
+    "platform": "gamebanana",
+    "url": "https://gamebanana.com/games/4254",
+    "expectation": "JS app"
+  },
+  {
+    "id": "plat-gamebanana-news",
+    "category": "platform",
+    "platform": "gamebanana",
+    "url": "https://gamebanana.com/news",
+    "expectation": ""
+  },
+  {
+    "id": "plat-discourse-latest",
+    "category": "platform",
+    "platform": "discourse",
+    "url": "https://meta.discourse.org/latest",
+    "nativeFeed": "https://meta.discourse.org/latest.rss",
+    "expectation": "Discourse: append .rss"
+  },
+  {
+    "id": "plat-discourse-category",
+    "category": "platform",
+    "platform": "discourse",
+    "url": "https://meta.discourse.org/c/news-and-events/announcements/67",
+    "nativeFeed": "https://meta.discourse.org/c/news-and-events/announcements/67.rss",
+    "expectation": ""
+  },
+  {
+    "id": "plat-phpbb",
+    "category": "platform",
+    "platform": "phpbb",
+    "url": "https://www.phpbb.com/community/",
+    "nativeFeed": "https://www.phpbb.com/community/app.php/feed",
+    "expectation": "phpBB app.php/feed; 403 to bots"
+  },
+  {
+    "id": "plat-xenforo",
+    "category": "platform",
+    "platform": "xenforo",
+    "url": "https://xenforo.com/community/",
+    "nativeFeed": "https://xenforo.com/community/forums/-/index.rss",
+    "expectation": "XenForo forums/-/index.rss"
+  },
+  {
+    "id": "plat-flarum",
+    "category": "platform",
+    "platform": "flarum",
+    "url": "https://discuss.flarum.org/",
+    "expectation": "Flarum: feeds only via extension"
+  },
+  {
+    "id": "plat-nodebb",
+    "category": "platform",
+    "platform": "nodebb",
+    "url": "https://community.nodebb.org/",
+    "nativeFeed": "https://community.nodebb.org/recent.rss",
+    "expectation": "NodeBB /recent.rss"
+  },
+  {
+    "id": "plat-mybb",
+    "category": "platform",
+    "platform": "mybb",
+    "url": "https://community.mybb.com/",
+    "nativeFeed": "https://community.mybb.com/syndication.php",
+    "expectation": "MyBB syndication.php"
+  },
+  {
+    "id": "plat-blizzard-forum",
+    "category": "platform",
+    "platform": "blizzard",
+    "url": "https://us.forums.blizzard.com/en/wow/",
+    "nativeFeed": "https://us.forums.blizzard.com/en/wow/latest.rss",
+    "expectation": "Discourse"
+  },
+  {
+    "id": "plat-blizzard-blue",
+    "category": "platform",
+    "platform": "blizzard",
+    "url": "https://us.forums.blizzard.com/en/wow/groups/blizzard-tracker/posts",
+    "nativeFeed": "https://us.forums.blizzard.com/en/wow/groups/blizzard-tracker/posts.rss",
+    "expectation": "blue posts = Discourse group posts"
+  },
+  {
+    "id": "plat-blizzard-news",
+    "category": "platform",
+    "platform": "blizzard",
+    "url": "https://news.blizzard.com/en-us",
+    "expectation": "news site, 2.6 MB"
+  }
+]

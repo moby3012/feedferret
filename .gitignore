@@ -57,3 +57,6 @@ next-env.d.ts
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# scripts/bench-opml.mjs output + raw HTML/feed cache (may contain private feed URLs)
+bench-out/
