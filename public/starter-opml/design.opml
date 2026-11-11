@@ -8,6 +8,7 @@
       <outline type="rss" text="A List Apart" xmlUrl="https://alistapart.com/main/feed/" htmlUrl="https://alistapart.com"/>
       <outline type="rss" text="UX Collective" xmlUrl="https://uxdesign.cc/feed" htmlUrl="https://uxdesign.cc"/>
       <outline type="rss" text="Nielsen Norman Group" xmlUrl="https://www.nngroup.com/feed/rss/" htmlUrl="https://www.nngroup.com"/>
+      <outline type="rss" text="Sidebar" xmlUrl="https://sidebar.io/feed.xml" htmlUrl="https://sidebar.io"/>
     </outline>
   </body>
 </opml>
