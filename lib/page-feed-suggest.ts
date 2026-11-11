@@ -11,7 +11,8 @@
 // Candidates` takes HTML and does no network I/O.
 
 import { JSDOM } from "jsdom";
-import { buildXPathArticles, type FetchedFeedArticle } from "./feed-fetcher";
+import { buildXPathArticlesFromDocument, type FetchedFeedArticle } from "./feed-fetcher";
+import { assessPreviewQuality, classifyItem, isPlaceholderTitle, normalizeTitle, type ItemIssue, type PreviewQuality, type PreviewRejectReason, type PreviewReviewReason } from "./page-feed-quality";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { stripStyleBlocks } from "./html-utils";
 import { renderViaSidecar } from "./render-sidecar";
@@ -25,12 +26,29 @@ export type SuggestedFieldConfig = {
   xPathItemThumbnail?: string;
 };
 
+export type CandidateQuality = {
+  /** "ok" = plausible entry list; "review" = offered, but the UI must ask the user to check. */
+  verdict: "ok" | "review";
+  reasons: PreviewReviewReason[];
+  /** Distinct items that look like real entries (≥ 3 by construction). */
+  plausibleItems: number;
+};
+
 export type FeedCandidate = {
   config: SuggestedFieldConfig;
   score: number;
   itemCount: number;
   sampleTitles: string[];
   previewArticles: FetchedFeedArticle[];
+  /** Per preview item: why it looks like a non-entry (null = plausible), aligned with previewArticles. */
+  previewIssues: Array<ItemIssue | null>;
+  quality: CandidateQuality;
+};
+
+export type SuggestionResult = {
+  candidates: FeedCandidate[];
+  /** Structurally valid candidates dropped by the preview quality gate. */
+  rejected: { count: number; reasons: Partial<Record<PreviewRejectReason, number>> };
 };
 
 // A repeating item must appear at least this many times to be a candidate —
@@ -143,32 +161,121 @@ function anyItemHas(items: Element[], selector: string): number {
   return count / items.length;
 }
 
-function firstHeadingTag(items: Element[]): string | null {
-  for (const tag of ["h1", "h2", "h3", "h4"]) {
-    if (anyItemHas(items, tag) >= 0.5) return tag;
+// Title field options, in preference order: [CSS probe, XPath used by the engine].
+const TITLE_OPTIONS: Array<[string, string]> = [
+  ["h1", ".//h1"],
+  ["h2", ".//h2"],
+  ["h3", ".//h3"],
+  ["h4", ".//h4"],
+  ["h5", ".//h5"],
+  ["h6", ".//h6"],
+  ['[class*="title"]', ".//*[contains(@class, 'title')]"],
+  ['[class*="headline"]', ".//*[contains(@class, 'headline')]"],
+  // Mixed heading levels across cards (a lead story in <h2>, the rest in <h3>):
+  // the first heading of any level, so no card is dropped as "untitled".
+  ["h1, h2, h3, h4, h5, h6", ".//*[self::h1 or self::h2 or self::h3 or self::h4 or self::h5 or self::h6]"],
+  ["a", ".//a"],
+];
+
+/**
+ * Pick the title field that yields the most distinct, non-placeholder titles
+ * (ties keep the earlier, more semantic option). Lever's job board has only an
+ * "Apply" link before the `<h5>` vacancy name; a first-heading rule limited to
+ * h1–h4 fell back to that link and titled every vacancy "Apply".
+ */
+function pickTitleXPath(items: Element[]): { css: string; xpath: string } | null {
+  let best: { css: string; xpath: string; distinct: number } | null = null;
+  for (const [css, xpath] of TITLE_OPTIONS) {
+    let present = 0;
+    const distinct = new Set<string>();
+    for (const item of items) {
+      const el = item.querySelector(css);
+      if (!el) continue;
+      present++;
+      const text = el.textContent?.trim() ?? "";
+      if (!isPlaceholderTitle(text)) distinct.add(normalizeTitle(text));
+    }
+    if (present / items.length < 0.5 && css !== "a") continue;
+    if (present === 0) continue;
+    if (!best || distinct.size > best.distinct) best = { css, xpath, distinct: distinct.size };
   }
-  return null;
+  return best ? { css: best.css, xpath: best.xpath } : null;
 }
 
+/**
+ * Pick the link that belongs to the title: the title element itself, an
+ * anchor inside it, or an anchor wrapping it. A card's FIRST link is often a
+ * section kicker ("/sections/economy" on NPR) or an "Apply" button, not the
+ * entry. Falls back to the first link in the item.
+ */
+function pickLinkXPath(items: Element[], title: { css: string; xpath: string } | null): string | null {
+  if (anyItemHas(items, "a[href]") === 0) return null;
+  if (title && title.css !== "a") {
+    let own = 0;
+    let inner = 0;
+    let wrapping = 0;
+    for (const item of items) {
+      const el = item.querySelector(title.css);
+      if (!el) continue;
+      if (el.matches("a[href]")) own++;
+      else if (el.querySelector("a[href]")) inner++;
+      else {
+        const anchor = el.closest("a[href]");
+        if (anchor && item.contains(anchor)) wrapping++;
+      }
+    }
+    const half = items.length / 2;
+    if (own >= half) return `${title.xpath}/@href`;
+    if (inner >= half) return `${title.xpath}//a/@href`;
+    if (wrapping >= half) return `.//a[${title.xpath}]/@href`;
+  }
+  return ".//a/@href";
+}
+
+const CHROME_TAGS = new Set(["nav", "header", "footer"]);
+const CHROME_TOKEN = /^(nav|navi|navigation|navbar|menu|menus|megamenu|submenu|flyout|footer|breadcrumb|breadcrumbs|sitemap|social|share|sharing|toolbar|skiplinks|skip)$/i;
+const CHROME_ROLES = new Set(["navigation", "menu", "menubar", "contentinfo", "banner"]);
+
+/**
+ * Item sits in site chrome: a nav/header/footer element, an ARIA navigation
+ * landmark, or a container whose class/id names a menu/footer/social block
+ * (`bpa-footer-social-media-item`). Stops at <main>/<article> and never reads
+ * <body>/<html> classes, which often carry layout flags like "has-navbar".
+ */
 function isInsideChrome(el: Element): boolean {
   let node: Element | null = el;
   while (node) {
     const tag = node.tagName.toLowerCase();
-    if (tag === "nav" || tag === "header" || tag === "footer") return true;
+    if (tag === "main" || (tag === "article" && node !== el) || tag === "body" || tag === "html") return false;
+    if (CHROME_TAGS.has(tag)) return true;
+    const role = node.getAttribute("role");
+    if (role && CHROME_ROLES.has(role.toLowerCase())) return true;
+    const tokens = `${node.getAttribute("class") ?? ""} ${node.getAttribute("id") ?? ""}`.split(/[\s_-]+/);
+    if (tokens.some((t) => CHROME_TOKEN.test(t))) return true;
     node = node.parentElement;
   }
   return false;
+}
+
+/** Average number of distinct link targets per item: a container of many entries, not an entry. */
+function averageDistinctLinks(items: Element[]): number {
+  if (items.length === 0) return 0;
+  let total = 0;
+  for (const item of items) {
+    total += new Set(Array.from(item.querySelectorAll("a[href]")).map((a) => a.getAttribute("href"))).size;
+  }
+  return total / items.length;
 }
 
 function buildFieldConfig(group: Group, xPathItem: string): SuggestedFieldConfig {
   const { items } = group;
   const config: SuggestedFieldConfig = { xPathItem };
 
-  if (anyItemHas(items, "a[href]") > 0) config.xPathItemUri = ".//a/@href";
+  const title = pickTitleXPath(items);
+  if (title) config.xPathItemTitle = title.xpath;
 
-  const heading = firstHeadingTag(items);
-  if (heading) config.xPathItemTitle = `.//${heading}`;
-  else if (anyItemHas(items, "a") > 0) config.xPathItemTitle = ".//a";
+  const link = pickLinkXPath(items, title);
+  if (link) config.xPathItemUri = link;
 
   if (anyItemHas(items, "time[datetime]") >= 0.5) config.xPathItemTimestamp = ".//time/@datetime";
   else if (anyItemHas(items, "time") >= 0.5) config.xPathItemTimestamp = ".//time";
@@ -186,76 +293,201 @@ function averageTextLength(items: Element[]): number {
   return total / items.length;
 }
 
-/**
- * Proposes ranked scraping configs for the repeating items on a page. Returns
- * `[]` (never throws) when nothing qualifies.
- */
-export function suggestFeedCandidates(rawHtml: string, url: string): FeedCandidate[] {
-  const dom = new JSDOM(stripStyleBlocks(rawHtml), { url });
-  const groups = collectGroups(dom.window.document);
-
-  const candidates: FeedCandidate[] = [];
-  const seenSelectors = new Set<string>();
-
-  for (const group of groups) {
-    const xPathItem = buildItemXPath(group);
-    if (!xPathItem || seenSelectors.has(xPathItem)) continue;
-    seenSelectors.add(xPathItem);
-
-    const config = buildFieldConfig(group, xPathItem);
-
-    // Validate through the REAL engine — a candidate only counts if the engine
-    // parses it into linked items.
-    let parsed;
-    try {
-      const xpath: Record<string, string> = {};
-      for (const [key, value] of Object.entries(config)) {
-        if (value) xpath[key] = value;
-      }
-      parsed = buildXPathArticles(rawHtml, url, { xpath }, "text/html");
-    } catch {
-      continue;
-    }
-    const articles = parsed.articles;
-    if (articles.length < MIN_REPEAT) continue;
-    const linked = articles.filter((a) => a.link && a.link.trim().length > 0);
-    if (linked.length === 0) continue;
-
-    const linkFraction = linked.length / articles.length;
-    // Synthesized (content-derived) titles say nothing about title quality.
-    const realTitles = articles.filter((a) => !a.titleSynthetic).map((a) => a.title).filter((t) => t && t !== "Untitled");
-    const avgTitleLen = realTitles.length
-      ? realTitles.reduce((s, t) => s + t.length, 0) / realTitles.length
-      : 0;
-    const avgTextLen = averageTextLength(group.items);
-
-    let score = 0;
-    score += Math.min(articles.length, 20) * 2; // repetition (damped)
-    score += linkFraction * 20;
-    score += Math.min(avgTitleLen, 40); // title quality
-    if (config.xPathItemTimestamp) score += 10;
-    if (config.xPathItemContent) score += 10;
-    if (config.xPathItemThumbnail) score += 5;
-    if (isInsideChrome(group.items[0])) score -= 40; // nav/header/footer
-    if (avgTextLen < 20) score -= 30; // tiny items → likely a menu
-
-    candidates.push({
-      config,
-      score,
-      itemCount: articles.length,
-      sampleTitles: realTitles.slice(0, 5),
-      previewArticles: articles.slice(0, PREVIEW_CAP),
-    });
+function runConfig(document: Document, xpath: XPathEvaluator, url: string, config: SuggestedFieldConfig): FetchedFeedArticle[] | null {
+  const settings: Record<string, string> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (value) settings[key] = value;
   }
+  try {
+    return buildXPathArticlesFromDocument(document, xpath, url, { xpath: settings }).articles;
+  } catch {
+    return null;
+  }
+}
 
-  return candidates
-    .filter((c) => c.score >= MIN_CANDIDATE_SCORE)
-    .sort((a, b) => b.score - a.score);
+/**
+ * Narrow the item selector when a MINORITY of items is unusable in a way the
+ * selector itself can exclude: image-only twin cards without a title (Spiegel,
+ * NPR, Le Monde) and ad-click teasers (heise's DoubleClick card). The repaired
+ * config is what gets saved, so the feed itself is cleaner — not just the
+ * preview. Returns null when no repair applies or it would drop below 3 items.
+ */
+function repairConfig(
+  document: Document,
+  xpath: XPathEvaluator,
+  url: string,
+  config: SuggestedFieldConfig,
+  articles: FetchedFeedArticle[],
+): { config: SuggestedFieldConfig; articles: FetchedFeedArticle[] } | null {
+  const predicates: string[] = [];
+  const untitled = articles.filter((a) => a.titleSynthetic || !a.title || a.title === "Untitled").length;
+  if (config.xPathItemTitle && untitled > 0 && untitled < articles.length) {
+    predicates.push(`[normalize-space(${config.xPathItemTitle})]`);
+  }
+  if (config.xPathItemUri) {
+    const page = new URL(url);
+    const adHosts = new Set<string>();
+    for (const a of articles) {
+      if (a.link && classifyItem(a, page) === "ad") {
+        try {
+          adHosts.add(new URL(a.link).hostname.toLowerCase());
+        } catch {
+          /* unparsable links are not ad-filterable */
+        }
+      }
+    }
+    if (adHosts.size > 0 && adHosts.size <= 5) {
+      const conditions = [...adHosts].map((host) => `contains(${config.xPathItemUri}, ${xpathLiteral(host)})`);
+      predicates.push(`[not(${conditions.join(" or ")})]`);
+    }
+  }
+  if (predicates.length === 0) return null;
+  const repaired = { ...config, xPathItem: `(${config.xPathItem})${predicates.join("")}` };
+  const repairedArticles = runConfig(document, xpath, url, repaired);
+  if (!repairedArticles || repairedArticles.length < MIN_REPEAT) return null;
+  return { config: repaired, articles: repairedArticles };
+}
+
+/**
+ * Proposes ranked scraping configs for the repeating items on a page, each
+ * passed through the preview quality gate (lib/page-feed-quality.ts): obvious
+ * navigation/login/map/ad/placeholder lists are rejected, borderline ones are
+ * returned with review reasons. Never throws.
+ */
+export function suggestFeedCandidatesDetailed(rawHtml: string, url: string): SuggestionResult {
+  const rejected: SuggestionResult["rejected"] = { count: 0, reasons: {} };
+  let dom: JSDOM;
+  try {
+    dom = new JSDOM(stripStyleBlocks(rawHtml), { url });
+  } catch {
+    return { candidates: [], rejected };
+  }
+  try {
+    const document = dom.window.document;
+    const xpath = new dom.window.XPathEvaluator();
+    const pageUrl = new URL(url);
+    const groups = collectGroups(document);
+
+    const scored: Array<{ group: Group; candidate: FeedCandidate }> = [];
+    const seenSelectors = new Set<string>();
+
+    for (const group of groups) {
+      const xPathItem = buildItemXPath(group);
+      if (!xPathItem || seenSelectors.has(xPathItem)) continue;
+      seenSelectors.add(xPathItem);
+
+      let config = buildFieldConfig(group, xPathItem);
+
+      // Validate through the REAL engine — a candidate only counts if the
+      // engine parses it into linked items.
+      let articles = runConfig(document, xpath, url, config);
+      if (!articles || articles.length < MIN_REPEAT) continue;
+      if (!articles.some((a) => a.link && a.link.trim().length > 0)) continue;
+
+      const repaired = repairConfig(document, xpath, url, config, articles);
+      if (repaired) ({ config, articles } = repaired);
+
+      const linked = articles.filter((a) => a.link && a.link.trim().length > 0);
+      const linkFraction = linked.length / articles.length;
+      // Synthesized (content-derived) titles say nothing about title quality.
+      const realTitles = articles.filter((a) => !a.titleSynthetic).map((a) => a.title).filter((t) => t && t !== "Untitled");
+      const avgTitleLen = realTitles.length
+        ? realTitles.reduce((s, t) => s + t.length, 0) / realTitles.length
+        : 0;
+      const avgTextLen = averageTextLength(group.items);
+      const insideChrome = isInsideChrome(group.items[0]);
+
+      let score = 0;
+      score += Math.min(articles.length, 20) * 2; // repetition (damped)
+      score += linkFraction * 20;
+      score += Math.min(avgTitleLen, 40); // title quality
+      if (config.xPathItemTimestamp) score += 10;
+      if (config.xPathItemContent) score += 10;
+      if (config.xPathItemThumbnail) score += 5;
+      if (insideChrome) score -= 40; // nav/header/footer/menu
+      if (avgTextLen < 20) score -= 30; // tiny items → likely a menu
+      if (averageDistinctLinks(group.items) > 4) score -= 25; // a block of many entries, not one entry
+      if (score < MIN_CANDIDATE_SCORE) continue;
+
+      const quality: PreviewQuality = assessPreviewQuality(articles, { pageUrl: url, insideChrome });
+      if (quality.verdict === "reject") {
+        rejected.count++;
+        if (quality.rejectReason) rejected.reasons[quality.rejectReason] = (rejected.reasons[quality.rejectReason] ?? 0) + 1;
+        continue;
+      }
+
+      scored.push({ group, candidate: {
+        config,
+        score: score + quality.scoreAdjustment,
+        itemCount: articles.length,
+        sampleTitles: realTitles.slice(0, 5),
+        previewArticles: articles.slice(0, PREVIEW_CAP),
+        previewIssues: articles.slice(0, PREVIEW_CAP).map((a) => classifyItem(a, pageUrl)),
+        quality: { verdict: quality.verdict, reasons: quality.reasons, plausibleItems: quality.plausibleItems },
+      } });
+    }
+
+    // A candidate whose items each wrap several items of another candidate is
+    // a grouping block (Lever's per-team "postings-group"), and the engine
+    // would only take the FIRST entry of each group. Prefer the inner list.
+    // Compare the nodes the saved selectors actually match page-wide (not just
+    // the sibling group the selector was derived from).
+    const matched = new Map<FeedCandidate, Element[]>();
+    for (const { candidate } of scored) {
+      const nodes: Element[] = [];
+      try {
+        const snapshot = xpath.evaluate(candidate.config.xPathItem, document, null, 7, null);
+        for (let i = 0; i < snapshot.snapshotLength; i++) {
+          const node = snapshot.snapshotItem(i);
+          if (node && node.nodeType === 1) nodes.push(node as Element);
+        }
+      } catch {
+        /* validated above; an evaluation failure just skips the nesting check */
+      }
+      matched.set(candidate, nodes);
+    }
+    for (const outer of scored) {
+      const outerNodes = matched.get(outer.candidate) ?? [];
+      for (const inner of scored) {
+        const innerNodes = matched.get(inner.candidate) ?? [];
+        if (inner === outer || outerNodes.length === 0 || innerNodes.length < outerNodes.length * 1.5) continue;
+        const contained = innerNodes.filter((el) => outerNodes.some((o) => o !== el && o.contains(el))).length;
+        if (contained >= innerNodes.length * 0.8) {
+          outer.candidate.score -= 40;
+          break;
+        }
+      }
+    }
+
+    const candidates = scored.map((s) => s.candidate).sort((a, b) => b.score - a.score);
+    return { candidates, rejected };
+  } catch {
+    return { candidates: [], rejected };
+  } finally {
+    dom.window.close();
+  }
+}
+
+/** Ranked candidates that passed the preview quality gate (see `suggestFeedCandidatesDetailed`). */
+export function suggestFeedCandidates(rawHtml: string, url: string): FeedCandidate[] {
+  return suggestFeedCandidatesDetailed(rawHtml, url).candidates;
 }
 
 /** SSRF-safe wrapper: fetch the URL, then suggest candidates. Fetch errors propagate. */
 export async function fetchAndSuggestFeedCandidates(url: string): Promise<FeedCandidate[]> {
+  return (await fetchAndSuggestFeedCandidatesDetailed(url)).candidates;
+}
+
+/** Like `fetchAndSuggestFeedCandidates`, plus how many candidates the quality gate dropped. */
+export async function fetchAndSuggestFeedCandidatesDetailed(url: string): Promise<SuggestionResult> {
   let directError: unknown = null;
+  const rejected: SuggestionResult["rejected"] = { count: 0, reasons: {} };
+  const mergeRejected = (other: SuggestionResult["rejected"]) => {
+    rejected.count += other.count;
+    for (const [reason, n] of Object.entries(other.reasons) as Array<[PreviewRejectReason, number]>) {
+      rejected.reasons[reason] = (rejected.reasons[reason] ?? 0) + n;
+    }
+  };
   try {
     const html = await fetchTextWithSsrfProtection(
       url,
@@ -269,8 +501,9 @@ export async function fetchAndSuggestFeedCandidates(url: string): Promise<FeedCa
         timeoutMs: 12_000,
       },
     );
-    const candidates = suggestFeedCandidates(html, url);
-    if (candidates.length > 0) return candidates;
+    const result = suggestFeedCandidatesDetailed(html, url);
+    if (result.candidates.length > 0) return result;
+    mergeRejected(result.rejected);
   } catch (error) {
     directError = error; // hard block — the sidecar may still succeed.
   }
@@ -281,10 +514,11 @@ export async function fetchAndSuggestFeedCandidates(url: string): Promise<FeedCa
   // heuristic on the rendered DOM.
   const rendered = await renderViaSidecar(url, { context: "Page feed" });
   if (rendered) {
-    const candidates = suggestFeedCandidates(rendered, url);
-    if (candidates.length > 0) return candidates;
+    const result = suggestFeedCandidatesDetailed(rendered, url);
+    if (result.candidates.length > 0) return result;
+    mergeRejected(result.rejected);
   }
 
   if (directError) throw directError;
-  return [];
+  return { candidates: [], rejected };
 }

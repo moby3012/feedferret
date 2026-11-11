@@ -68,3 +68,15 @@ snapshots; this runner does not create remote watches or use paid APIs.
 Results are network-, region-, time-, deployment-, and URL-dependent. Use the
 category expectations and manual semantic review alongside extraction rates.
 Newsletter inbox ingestion is not implemented and is outside this public-URL run.
+
+## Offline selector fixtures
+
+`capture-page-fixtures.mts --live <id…>` fetches the given benchmark sites once
+through the same SSRF-safe page transport as “Von Webseite”, trims the HTML to
+what the selector heuristic reads (tags with class/id, links,
+dates, image sources, text) and writes `tests/fixtures/page-feed/<id>.html`.
+`tests/lib/page-feed-quality.test.ts` runs the preview quality gate against
+those files fully offline. Re-capturing changes expectations; review the
+fixture diff and the test table together. Selector results in the benchmark
+output now carry the gate verdict (`selected.quality`: `ok`/`review` + reasons);
+lists the gate rejects no longer appear as `selector` results at all.

@@ -91,7 +91,7 @@ async function main() {
           if (suggestions.length) {
             const best = suggestions[0];
             articles = best.previewArticles; itemCount = best.itemCount; selectorConfig = best.config;
-            selected = { score: best.score, alternatives: suggestions.length };
+            selected = { score: best.score, alternatives: suggestions.length, quality: best.quality };
             method = 'selector';
           }
         } catch (e) { errors.push(cleanError(e)); }

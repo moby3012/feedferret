@@ -410,6 +410,7 @@ async function suggestPageFeed(_user: ApiUser, request: Request) {
       score: c.score,
       itemCount: c.itemCount,
       sampleTitles: c.sampleTitles,
+      quality: c.quality,
     })),
   });
 }

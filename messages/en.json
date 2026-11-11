@@ -844,7 +844,21 @@
       "aiBadge": "AI",
       "aiSuggestFailed": "AI couldn't set this up. Try again or use Find items.",
       "aiFullTextTitle": "This looks like a single article, not a listing",
-      "aiFullTextHint": "Add the site's own feed instead, then turn on automatic full-text extraction in that feed's settings."
+      "aiFullTextHint": "Add the site's own feed instead, then turn on automatic full-text extraction in that feed's settings.",
+      "rejectedHint": "{count, plural, one {One list was skipped} other {# lists were skipped}} because it only contained menu, login, map or placeholder links — that wouldn't make a useful feed.",
+      "previewLabel": "Preview of the first items",
+      "previewNoDate": "no date",
+      "previewFlagged": "looks like navigation",
+      "review": {
+        "badge": "Review needed",
+        "okBadge": "Preview looks plausible",
+        "missingDates": "Most items have no date — new items will be ordered by fetch time.",
+        "duplicates": "Items repeat (same link or title).",
+        "mixedItems": "Some items look like navigation, ads or placeholders.",
+        "fewItems": "Only a few distinct items were found.",
+        "outsideSection": "Items link outside the section of the URL you entered.",
+        "otherSites": "Most items link to other websites."
+      }
     },
     "rsshub": {
       "tabLabel": "From platform",

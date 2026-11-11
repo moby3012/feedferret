@@ -245,8 +245,20 @@ export function buildXPathArticles(raw: string, feedUrl: string, config: FeedExt
   // have no style blocks, so leave those untouched.
   const source = contentType === "text/html" ? stripStyleBlocks(raw) : raw;
   const dom = new JSDOM(source, { url: feedUrl, contentType });
-  const document = dom.window.document;
-  const xpath = new dom.window.XPathEvaluator();
+  try {
+    return buildXPathArticlesFromDocument(dom.window.document, new dom.window.XPathEvaluator(), feedUrl, config);
+  } finally {
+    dom.window.close();
+  }
+}
+
+/**
+ * The XPath extraction engine over an already-parsed document. The page →
+ * feed suggester validates many candidate configs against one page; parsing
+ * the (up to 2 MiB) HTML once per candidate instead exhausted memory on large
+ * news homepages. `buildXPathArticles` is the single-config entry point.
+ */
+export function buildXPathArticlesFromDocument(document: Document, xpath: XPathEvaluator, feedUrl: string, config: FeedExtractionConfig): FetchedFeed {
   const settings = config.xpath ?? {};
   const itemExpression = settings.xPathItem || settings.item;
   if (!itemExpression) return { articles: [] };

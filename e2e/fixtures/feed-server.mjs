@@ -59,6 +59,41 @@ function handleGoogleNews(req, res, url) {
   return false;
 }
 
+// --- "Von Webseite" listing pages (selector quality gate) --------------------
+// Fetched by the page → feed suggester only while a spec has explicitly
+// enabled the admin "allow internal feed URLs" switch (127.0.0.1 is private).
+const POSTS = [
+  "Lighthouse keepers and their long winters",
+  "How Fresnel lenses changed night navigation",
+  "Automation arrives at the last manned stations",
+  "Preservation societies rescue historic towers",
+  "A field guide to coastal signal colours",
+];
+const slug = (title) => title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+function listingPage({ dated }) {
+  const items = POSTS.map((title, i) => {
+    const date = dated ? `<time datetime="2026-11-0${i + 1}T09:00:00Z">Nov ${i + 1}, 2026</time>` : "";
+    return `<article class="post"><h2><a href="/pages/posts/${slug(title)}">${title}</a></h2>${date}<p>${title} — a short teaser paragraph that gives the reader enough context to decide.</p></article>`;
+  }).join("");
+  return `<!doctype html><html><head><title>Lighthouse log</title></head><body><nav><a href="/">Home</a><a href="/about">About</a><a href="/contact">Contact</a></nav><main><div class="posts">${items}</div></main></body></html>`;
+}
+const MENU_ONLY = `<!doctype html><html><head><title>App</title></head><body><main><div id="app"></div>
+<ul class="promo-links">
+<li class="promo-link"><a href="/login">Log in to your workspace now</a></li>
+<li class="promo-link"><a href="/signup">Sign up for a free account today</a></li>
+<li class="promo-link"><a href="https://www.instagram.com/example/">Follow the team on Instagram</a></li>
+<li class="promo-link"><a href="https://www.bing.com/maps?where=Berlin">Visit our Berlin office location</a></li>
+<li class="promo-link"><a href="/pricing">Read more</a></li>
+</ul></main></body></html>`;
+
+function handleListingPages(res, url) {
+  const pages = { "/pages/undated": () => listingPage({ dated: false }), "/pages/dated": () => listingPage({ dated: true }), "/pages/menu-only": () => MENU_ONLY };
+  const render = pages[url.pathname];
+  if (!render) return false;
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(render());
+  return true;
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url ?? "/", baseUrl);
   if (url.pathname === "/healthz") {
@@ -79,6 +114,7 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (handleGoogleNews(req, res, url)) return;
+  if (handleListingPages(res, url)) return;
   const m = /^\/feeds\/([a-z0-9-]+)\.xml$/.exec(url.pathname);
   const feed = m && FEEDS.find((f) => f.slug === m[1]);
   if (!feed) {
