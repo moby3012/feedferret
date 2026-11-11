@@ -62,10 +62,19 @@ jobs:
           AUTH_URL: http://localhost:3000
           NEXTAUTH_URL: http://localhost:3000
 
-  e2e:
-    name: E2E (seeded, authenticated)
+  # The suite (~540 tests, serial on one worker) takes 25+ min on one runner, so
+  # it is split with Playwright's `--shard`. Every shard runs on its OWN runner:
+  # its own checkout, build, seeded SQLite DB (.e2e/), fixture feed server,
+  # `next start` and e2e/.auth -- no state or ports are shared between shards.
+  e2e-shard:
+    name: E2E shard ${{ matrix.shard }}/${{ matrix.total }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+        total: [4]
     steps:
       - uses: actions/checkout@v4
 
@@ -101,14 +110,14 @@ jobs:
         # PLAYWRIGHT_BROWSERS_PATH points at a pre-installed Chromium.
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E tests
+      - name: Run E2E tests (shard ${{ matrix.shard }}/${{ matrix.total }})
         # playwright.config.ts seeds a fresh SQLite DB (scripts/e2e-seed.mjs),
         # starts a local fixture feed server + `next start`, logs in once per
         # seeded user (global setup) and runs: public a11y, authenticated
         # characterization specs (desktop + mobile) and authenticated axe
         # (non-blocking; violations land in the job summary). No external
         # services or internet required.
-        run: pnpm run test:e2e
+        run: pnpm run test:e2e --shard=${{ matrix.shard }}/${{ matrix.total }}
         env:
           CI: true
 
@@ -116,10 +125,75 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload blob report (for the merged report)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-blob-shard-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 3
+          if-no-files-found: ignore
+
+  # Stable required check: branch protection / the PR UI keep seeing the old job
+  # name "E2E (seeded, authenticated)". It passes only if every shard passed
+  # (a failed, cancelled or skipped shard fails it) and, on failure, merges the
+  # per-shard blob reports into a single HTML report.
+  e2e:
+    name: E2E (seeded, authenticated)
+    runs-on: ubuntu-latest
+    needs: e2e-shard
+    if: always()
+    timeout-minutes: 10
+    steps:
+      - name: All shards passed
+        run: |
+          echo "shards: ${{ needs.e2e-shard.result }}"
+          test "${{ needs.e2e-shard.result }}" = "success"
+
+      - uses: actions/checkout@v4
+        if: failure()
+
+      - uses: pnpm/action-setup@v4
+        if: failure()
+        with:
+          version: 9.14.2
+
+      - uses: actions/setup-node@v4
+        if: failure()
+        with:
+          node-version: 22.23.4
+          cache: pnpm
+
+      - name: Install dependencies
+        if: failure()
+        run: pnpm install --frozen-lockfile
+
+      - name: Download blob reports
+        if: failure()
+        uses: actions/download-artifact@v4
+        with:
+          pattern: playwright-blob-shard-*
+          path: all-blob-reports
+          merge-multiple: true
+
+      - name: Merge Playwright reports
+        if: failure()
+        run: npx playwright merge-reports --reporter html ./all-blob-reports
+        continue-on-error: true
+
+      - name: Upload merged report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-merged
+          path: playwright-report/
           retention-days: 7
           if-no-files-found: ignore
 

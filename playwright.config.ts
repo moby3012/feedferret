@@ -36,7 +36,9 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
+  // CI shards the run (ci.yml `e2e-shard`): the blob report lets the aggregating
+  // job merge the per-shard results into one HTML report on failure.
+  reporter: process.env.CI ? [["list"], ["html", { open: "never" }], ["blob"]] : "list",
   use: {
     baseURL: BASE_URL,
     locale: "en-US",

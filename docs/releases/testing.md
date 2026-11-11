@@ -2,7 +2,7 @@
 
 ## Running the E2E harness locally (seeded, authenticated)
 
-Everything below runs **offline**: a fresh SQLite database is seeded, a tiny local feed server and a production `next start` are booted by Playwright, and no external service is needed. The same commands run in GitHub Actions (`.github/workflows/ci.yml`, job `E2E (seeded, authenticated)`).
+Everything below runs **offline**: a fresh SQLite database is seeded, a tiny local feed server and a production `next start` are booted by Playwright, and no external service is needed. The same commands run in GitHub Actions (`.github/workflows/ci.yml`, jobs `E2E shard i/4` — the suite split with `--shard`, each shard on its own runner with its own seeded DB — and the aggregating required check `E2E (seeded, authenticated)`).
 
 ```bash
 pnpm install
