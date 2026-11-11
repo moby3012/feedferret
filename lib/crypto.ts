@@ -1,8 +1,8 @@
-// v1 secret format (sha256(AUTH_SECRET), `iv:tag:ct`). Writers still use it in
-// this release; reads go through lib/secret-box.ts, which also understands
-// the v2 `ff2.` format (security audit #2, M8 PR 4: read new, write old).
+// Compat shim for the secret helpers (security audit #2, M8). Writers seal the
+// v2 `ff2.` format (lib/secret-box.ts); reads accept v2, legacy v1
+// (sha256(AUTH_SECRET), `iv:tag:ct`) and, per column, legacy plaintext.
 import { createCipheriv, createHash, randomBytes } from "crypto";
-import { openSecret, warnSecretOnce } from "@/lib/secret-box";
+import { openSecret, sealSecret, warnSecretOnce } from "@/lib/secret-box";
 
 const ALGORITHM = "aes-256-gcm";
 
@@ -18,6 +18,7 @@ function getKey(): Buffer {
   return createHash("sha256").update(secret).digest();
 }
 
+/** Legacy v1 encryption. No writer uses it any more; kept for tests and v1 fixtures. */
 export function encrypt(plaintext: string): string {
   const key = getKey();
   const iv = randomBytes(16);
@@ -27,9 +28,14 @@ export function encrypt(plaintext: string): string {
   return [iv.toString("base64"), authTag.toString("base64"), encrypted.toString("base64")].join(":");
 }
 
-export function encryptIfValue(value: string | null | undefined): string | null {
+/**
+ * Seal a secret for storage (v2, current key). `purpose` is the column's
+ * registry purpose (`lib/secret-box-core.mjs` SECRET_COLUMNS), e.g.
+ * "user.aiApiKey": it binds the ciphertext to that column (AAD).
+ */
+export function encryptIfValue(value: string | null | undefined, purpose: string): string | null {
   if (!value) return null;
-  return encrypt(value);
+  return sealSecret(purpose, value);
 }
 
 /**

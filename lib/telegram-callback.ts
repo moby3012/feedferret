@@ -1,8 +1,8 @@
-import { hmacHex, legacyMacSecret, verifyMac } from "@/lib/secret-box";
+import { currentMacKey, hmacHex, verifyMac } from "@/lib/secret-box";
 
-// Signed mark-read links (security audit #2, M8): still signed with the raw
-// AUTH_SECRET so a rollback keeps sent buttons working; verification also
-// accepts the domain-separated HKDF key the next release signs with.
+// Signed mark-read links (security audit #2, M8): signed with the
+// domain-separated HKDF key (M8 PR 5); verification still accepts buttons
+// signed with the raw AUTH_SECRET by older releases.
 const TELEGRAM_MAC_PURPOSE = "telegram-callback";
 
 function sign(key: string | Buffer, payload: string) {
@@ -12,7 +12,7 @@ function sign(key: string | Buffer, payload: string) {
 export function generateMarkReadUrl(articleId: string, userId: string, baseUrl: string): string {
   const expiry = Math.floor(Date.now() / 1000) + 7 * 86400; // 7 days
   const payload = `${articleId}:${userId}:${expiry}`;
-  const sig = sign(legacyMacSecret(), payload);
+  const sig = sign(currentMacKey(TELEGRAM_MAC_PURPOSE), payload);
   const params = new URLSearchParams({ id: articleId, uid: userId, exp: String(expiry), sig });
   return `${baseUrl}/api/telegram/callback?${params}`;
 }

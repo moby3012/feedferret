@@ -1969,6 +1969,23 @@
       "failedToGenerateKeys": "Could not generate keys",
       "copied": "Copied {label}",
       "couldNotCopy": "Could not copy {label}"
+    },
+    "secrets": {
+      "title": "Stored secrets",
+      "description": "Passwords, tokens and API keys are stored encrypted. Key ids only; keys and values are never shown.",
+      "currentKey": "Current key",
+      "oldKeys": "Old keys (decrypt only)",
+      "none": "none",
+      "lastPass": "Last re-seal pass",
+      "running": "running…",
+      "disabled": "disabled (FEEDFERRET_SECRET_MIGRATION=0)",
+      "notYet": "not run yet",
+      "lastPassResult": "{resealed} re-sealed, {undecryptable} undecryptable",
+      "authSecretHint": "Stored secrets use a key derived from AUTH_SECRET. Set FEEDFERRET_ENCRYPTION_KEY so rotating AUTH_SECRET never makes them unreadable (docs/security.md).",
+      "undecryptableHint": "{count} stored secret(s) cannot be decrypted with the configured keys. Add the missing key to FEEDFERRET_ENCRYPTION_KEYS_OLD, or re-enter the secret.",
+      "passFailed": "The last re-seal pass failed; see the server log.",
+      "loadFailed": "Could not load the encryption status.",
+      "rerun": "Re-seal now"
     }
   },
   "accessibility": {

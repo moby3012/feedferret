@@ -1969,6 +1969,23 @@
       "failedToGenerateKeys": "Schlüssel konnten nicht generiert werden",
       "copied": "{label} kopiert",
       "couldNotCopy": "{label} konnte nicht kopiert werden"
+    },
+    "secrets": {
+      "title": "Gespeicherte Geheimnisse",
+      "description": "Passwörter, Tokens und API-Keys werden verschlüsselt gespeichert. Angezeigt werden nur Schlüssel-IDs, nie Schlüssel oder Werte.",
+      "currentKey": "Aktueller Schlüssel",
+      "oldKeys": "Alte Schlüssel (nur Entschlüsseln)",
+      "none": "keine",
+      "lastPass": "Letzter Neuverschlüsselungs-Lauf",
+      "running": "läuft…",
+      "disabled": "deaktiviert (FEEDFERRET_SECRET_MIGRATION=0)",
+      "notYet": "noch nicht gelaufen",
+      "lastPassResult": "{resealed} neu verschlüsselt, {undecryptable} nicht entschlüsselbar",
+      "authSecretHint": "Gespeicherte Geheimnisse nutzen einen aus AUTH_SECRET abgeleiteten Schlüssel. Setze FEEDFERRET_ENCRYPTION_KEY, damit ein Wechsel von AUTH_SECRET sie nie unlesbar macht (docs/security.md).",
+      "undecryptableHint": "{count} gespeicherte(s) Geheimnis(se) lassen sich mit den konfigurierten Schlüsseln nicht entschlüsseln. Fehlenden Schlüssel in FEEDFERRET_ENCRYPTION_KEYS_OLD eintragen oder das Geheimnis neu eingeben.",
+      "passFailed": "Der letzte Lauf ist fehlgeschlagen; siehe Server-Log.",
+      "loadFailed": "Verschlüsselungsstatus konnte nicht geladen werden.",
+      "rerun": "Jetzt neu verschlüsseln"
     }
   },
   "accessibility": {

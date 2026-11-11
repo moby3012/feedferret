@@ -304,4 +304,10 @@ if ! docker exec "$APP2" node scripts/secrets-cli.mjs status >/dev/null; then
   exit 1
 fi
 log "secrets-cli status runs inside the image"
+if ! docker exec "$APP2" node scripts/secrets-cli.mjs migrate --dry-run >/dev/null; then
+  fail "secrets-cli migrate --dry-run failed inside the image"
+  docker exec "$APP2" node scripts/secrets-cli.mjs migrate --dry-run >&2 || true
+  exit 1
+fi
+log "secrets-cli migrate --dry-run runs inside the image"
 log "OK"

@@ -80,13 +80,13 @@ export async function updateExportSettings(data: {
   if (data.clearWallabagClientSecret) {
     updateData.exportWallabagClientSecret = null;
   } else if (data.wallabagClientSecret) {
-    updateData.exportWallabagClientSecret = encryptIfValue(data.wallabagClientSecret);
+    updateData.exportWallabagClientSecret = encryptIfValue(data.wallabagClientSecret, "user.exportWallabagClientSecret");
   }
 
   if (data.clearWallabagPassword) {
     updateData.exportWallabagPassword = null;
   } else if (data.wallabagPassword) {
-    updateData.exportWallabagPassword = encryptIfValue(data.wallabagPassword);
+    updateData.exportWallabagPassword = encryptIfValue(data.wallabagPassword, "user.exportWallabagPassword");
   }
 
   await db.user.update({ where: { id: session.user.id }, data: updateData });

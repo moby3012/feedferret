@@ -37,6 +37,15 @@ export async function register() {
         if (getDatabaseProvider() === "postgresql") await setup;
     }
 
+    // Security audit #2 M8 PR 5: re-seal legacy (plaintext / v1) and old-key
+    // secrets with the current key. Background, CAS, never fails startup; an
+    // undecryptable row is logged (column + short id) and shown to admins.
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+        void import("./lib/secret-migration")
+            .then((m) => m.startSecretMigration())
+            .catch((error) => console.error("[secrets] re-seal pass could not start", error));
+    }
+
     if (process.env.NEXT_PHASE !== "phase-production-build") {
         void (async () => {
             const { db } = await import("./lib/db");

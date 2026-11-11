@@ -1,18 +1,24 @@
 #!/usr/bin/env node
 // Stored-secret maintenance (security audit #2, M8).
 //
-//   node scripts/secrets-cli.mjs status [--json]
-//   (also: pnpm cli secrets:status)
+//   node scripts/secrets-cli.mjs status  [--json]
+//   node scripts/secrets-cli.mjs migrate [--dry-run] [--batch N] [--json]
+//   node scripts/secrets-cli.mjs rotate  [--dry-run] [--batch N] [--json]
+//   (also: pnpm cli secrets:status | secrets:migrate | secrets:rotate)
 //
-// Counts every secret column by stored format and key id. It never prints a
-// secret value, and it only reads (decrypts in memory to tell "readable" from
-// "undecryptable"). Exit code 2 when any value cannot be decrypted with the
-// configured FEEDFERRET_ENCRYPTION_KEY / AUTH_SECRET / FEEDFERRET_ENCRYPTION_KEYS_OLD.
-// `secrets:rotate` arrives with the next release (M8 PR 5), together with v2 writes.
+// status:  counts every secret column by stored format and key id (read-only).
+// migrate: re-seals legacy plaintext / v1 values with the current key (v2).
+// rotate:  re-seals everything not sealed with the current key, including v2
+//          values under a key listed in FEEDFERRET_ENCRYPTION_KEYS_OLD.
+// migrate/rotate are idempotent and batched, compare-and-swap every row (a
+// concurrent app write wins) and keep updatedAt. None of the commands ever
+// prints a secret value. Exit code 2 when any value cannot be decrypted with
+// the configured FEEDFERRET_ENCRYPTION_KEY / AUTH_SECRET / FEEDFERRET_ENCRYPTION_KEYS_OLD.
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { SECRET_COLUMNS, classifySecret, classifyWebhookJson, loadKeyring } from "../lib/secret-box-core.mjs";
+import { DEFAULT_BATCH_SIZE, migrateSecrets } from "../lib/secret-migration-core.mjs";
 
 const BATCH = 500;
 
@@ -121,11 +127,53 @@ function printStatus(status) {
     ...Object.fromEntries(Object.entries(c.counts).sort(([a], [b]) => a.localeCompare(b))),
   }));
   console.table(rows);
-  console.log("Buckets: plaintext / v1 = legacy formats (still written by this release);");
+  console.log("Buckets: plaintext / v1 = legacy formats (re-sealed by `secrets:migrate` and at app start);");
   console.log("v2:<kid>:current|old = new format; undecryptable / malformed / :unknown = cannot be read with the configured keys.");
   if (status.undecryptable > 0) {
     console.error(`\n${status.undecryptable} stored secret(s) cannot be decrypted with the configured keys.`);
   }
+}
+
+function printMigration(report) {
+  const verb = report.dryRun ? "would re-seal" : "re-sealed";
+  console.log(`secrets:${report.mode}${report.dryRun ? " (dry run, nothing written)" : ""}`);
+  console.log(`Current key id: ${report.keys.current} (from ${report.keys.source}); old key ids: ${report.keys.old.join(", ") || "none"}`);
+  console.log("");
+  console.table(report.columns.map((c) => ({
+    column: c.column,
+    scanned: c.scanned,
+    current: c.current,
+    [verb]: c.resealed,
+    ...(report.mode === "migrate" ? { "old key (rotate)": c.oldKey } : {}),
+    undecryptable: c.undecryptable,
+    conflicts: c.conflicts,
+  })));
+  const t = report.totals;
+  console.log(`Total: ${t.scanned} scanned, ${t.current} already current, ${t.resealed} ${verb}, ${t.undecryptable} undecryptable, ${t.conflicts} changed concurrently (skipped).`);
+  if (report.mode === "migrate" && t.oldKey) console.log(`${t.oldKey} value(s) are sealed with an old key: run secrets:rotate to move them to the current key.`);
+  console.log(`OAuth account tokens ${report.dryRun ? "to clear" : "cleared"}: ${report.oauthTokensCleared}`);
+  for (const p of report.problems) console.error(`  undecryptable: ${p.column} row ${p.id} (${p.reason})`);
+  if (report.problemsTruncated) console.error("  … more rows (list truncated)");
+  if (report.mode === "rotate" && !report.dryRun && t.undecryptable === 0 && report.keys.old.length) {
+    console.log("\nNo value needs an old key any more once `secrets:status` shows no `:old` bucket: remove FEEDFERRET_ENCRYPTION_KEYS_OLD then.");
+  }
+}
+
+/** @param {string[]} rest */
+function parseFlags(rest) {
+  const flags = { json: false, dryRun: false, batchSize: DEFAULT_BATCH_SIZE };
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    if (arg === "--json") flags.json = true;
+    else if (arg === "--dry-run") flags.dryRun = true;
+    else if (arg === "--batch" || arg.startsWith("--batch=")) {
+      const raw = arg.includes("=") ? arg.split("=")[1] : rest[++i];
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1 || n > 10_000) throw new Error("--batch must be an integer between 1 and 10000");
+      flags.batchSize = n;
+    } else throw new Error(`Unknown option: ${arg}`);
+  }
+  return flags;
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -142,7 +190,29 @@ export async function main(argv = process.argv.slice(2)) {
       await prisma.$disconnect();
     }
   }
-  console.log("FeedFerret secrets CLI\n\nCommands:\n  status [--json]   counts per stored format and key id (never prints values)\n");
+  if (cmd === "migrate" || cmd === "rotate") {
+    const flags = parseFlags(rest);
+    const keyring = loadKeyring(process.env);
+    if (keyring.current.source === "build") throw new Error("Set FEEDFERRET_ENCRYPTION_KEY or AUTH_SECRET.");
+    const prisma = await createPrisma();
+    try {
+      const report = await migrateSecrets(prisma, { keyring, mode: cmd, dryRun: flags.dryRun, batchSize: flags.batchSize });
+      if (flags.json) console.log(JSON.stringify(report, null, 2));
+      else printMigration(report);
+      return report.totals.undecryptable > 0 ? 2 : 0;
+    } finally {
+      await prisma.$disconnect();
+    }
+  }
+  console.log([
+    "FeedFerret secrets CLI",
+    "",
+    "Commands:",
+    "  status  [--json]                      counts per stored format and key id (never prints values)",
+    "  migrate [--dry-run] [--batch N] [--json]  re-seal legacy plaintext / v1 values with the current key",
+    "  rotate  [--dry-run] [--batch N] [--json]  re-seal everything not sealed with the current key",
+    "",
+  ].join("\n"));
   return cmd === "help" ? 0 : 1;
 }
 

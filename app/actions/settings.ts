@@ -794,7 +794,7 @@ export async function updateAiSettings(data: {
   if (data.clearApiKey) {
     updateData.aiApiKey = null;
   } else if (data.apiKey) {
-    updateData.aiApiKey = encryptIfValue(data.apiKey);
+    updateData.aiApiKey = encryptIfValue(data.apiKey, "user.aiApiKey");
   }
   if ("model" in data) updateData.aiModel = data.model;
   if ("ollamaBaseUrl" in data) updateData.aiOllamaBaseUrl = data.ollamaBaseUrl;
@@ -918,7 +918,7 @@ export async function updateContentFetchSettings(data: {
   if (data.clearApiKey) {
     updateData.contentFetchApiKey = null;
   } else if (data.apiKey) {
-    updateData.contentFetchApiKey = encryptIfValue(data.apiKey);
+    updateData.contentFetchApiKey = encryptIfValue(data.apiKey, "user.contentFetchApiKey");
   }
   if ("autoUse" in data) updateData.contentFetchAutoUse = data.autoUse;
   await db.user.update({ where: { id: session.user.id }, data: updateData });
@@ -1035,8 +1035,7 @@ export async function updateNotificationChannels(data: {
     const patch = textPatch(input[key]);
     if (patch.set) sanitized[key] = patch.value;
   }
-  // Tokens are still stored in the legacy (plaintext) format in this release;
-  // M8 PR 5 seals them on write.
+  // Tokens are sealed (v2) on write by the db layer (lib/secret-sealing.ts).
   for (const key of ["telegramBotToken", "gotifyToken", "ntfyToken"] as const) {
     const patch = tokenPatch(input[key]);
     if (patch.set) sanitized[key] = patch.value;

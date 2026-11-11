@@ -1,8 +1,9 @@
 // Typed app-side wrapper around lib/secret-box-core.mjs (security audit #2, M8).
 //
-// M8 rollout: this release READS the v2 `ff2.` format everywhere but every
-// writer still stores v1/plaintext, so rolling back one image is safe. The
-// next release (M8 PR 5) switches writers to `sealSecret` and re-seals lazily.
+// M8 rollout: PR 4 taught every reader the v2 `ff2.` format; PR 5 (this
+// release) seals every write with the current key (`sealSecret`, plus the
+// db write extension in lib/secret-sealing.ts) and re-seals stored legacy /
+// old-key values in the background (lib/secret-migration.ts).
 import { createHmac, timingSafeEqual } from "crypto";
 import {
   SECRET_COLUMNS,
@@ -41,7 +42,7 @@ export function openSecret(purpose: string, stored: string, legacy: LegacyFormat
   return openSecretCore(purpose, stored, { legacy, keyring: getKeyring }) as OpenedSecret;
 }
 
-/** Seal with the current key (v2). Not used by writers in this release — see header. */
+/** Seal with the current key (v2). `purpose` = registry purpose, e.g. "feed.authPassword" (AAD). */
 export function sealSecret(purpose: string, plaintext: string): string {
   return sealV2(purpose, plaintext, getKeyring());
 }
@@ -91,10 +92,11 @@ export function readPlainColumnOrNull(purpose: string, stored: string | null | u
 }
 
 /**
- * HMAC with domain separation: the current signature uses the raw AUTH_SECRET
- * (legacy, still issued in this release so an older image keeps verifying),
- * and `verifyMac` additionally accepts HKDF-derived per-purpose keys
- * (current + old masters), which the next release starts to issue.
+ * HMAC with domain separation: signatures are issued with an HKDF-derived
+ * per-purpose key of the current master key (`currentMacKey`). `verifyMac`
+ * accepts that key, the derived keys of every old master key and, until
+ * FEEDFERRET_LEGACY_MAC_UNTIL (ISO date, optional) has passed, the legacy raw
+ * AUTH_SECRET signature that releases before M8 PR 5 issued.
  */
 export function legacyMacSecret(): string {
   const value = process.env.AUTH_SECRET;
@@ -103,9 +105,28 @@ export function legacyMacSecret(): string {
   throw new Error("AUTH_SECRET must be set.");
 }
 
+export function legacyMacAccepted(now = Date.now()): boolean {
+  const until = process.env.FEEDFERRET_LEGACY_MAC_UNTIL?.trim();
+  if (!until) return true;
+  const cutoff = Date.parse(until);
+  return Number.isNaN(cutoff) || now < cutoff;
+}
+
+export function currentMacKey(purpose: string): Buffer {
+  return deriveMacKey(getKeyring().current.master, purpose);
+}
+
 export function macCandidates(purpose: string): Array<string | Buffer> {
   const keyring = getKeyring();
-  return [legacyMacSecret(), ...[keyring.current, ...keyring.old].map((k) => deriveMacKey(k.master, purpose))];
+  const derived = [keyring.current, ...keyring.old].map((k) => deriveMacKey(k.master, purpose));
+  if (!legacyMacAccepted()) return derived;
+  let legacy: string | null = null;
+  try {
+    legacy = legacyMacSecret();
+  } catch {
+    legacy = null; // FEEDFERRET_ENCRYPTION_KEY without AUTH_SECRET: no legacy signatures to accept
+  }
+  return legacy ? [...derived, legacy] : derived;
 }
 
 /** Constant-time compare of `actual` against `sign(key)` for every candidate key. */

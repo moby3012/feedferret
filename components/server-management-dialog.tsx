@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useTranslations, useFormatter } from "next-intl";
+import { SecretHealthCard } from "@/components/secret-health-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -959,6 +960,7 @@ export function ServerManagementDialog({
                       </Button>
                     </div>
                   </div>
+                  <div className="mt-6"><SecretHealthCard /></div>
                     </div>
                   </ScrollArea>
                 </TabsContent>
@@ -1627,7 +1629,7 @@ export function ServerManagementDialog({
                   <div className="px-6 sm:px-8 flex flex-col h-full">
                     <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex flex-wrap gap-2">
-                        {([undefined, "mail", "digest", "sync"] as const).map((cat) => (
+                        {([undefined, "mail", "digest", "sync", "security"] as const).map((cat) => (
                           <Button
                             key={cat ?? "all"}
                             size="sm"

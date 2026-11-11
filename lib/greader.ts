@@ -1,7 +1,7 @@
 import { decimalExternalId, storedExternalId } from "./external-ids";
 import { hashApiToken } from "@/lib/token";
 import { Prisma, type User } from "@prisma/client";
-import { hmacHex, legacyMacSecret, verifyMac } from "@/lib/secret-box";
+import { currentMacKey, hmacHex, verifyMac } from "@/lib/secret-box";
 import { checkRateLimit, peekRateLimit, releaseRateLimit, getClientIdentifier, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
 import { reserveLoginAttempt, releaseLoginAttempt } from "@/lib/account-lockout";
 import bcrypt from "bcryptjs";
@@ -21,14 +21,14 @@ export const GREADER_BROADCAST = "user/-/state/com.google/broadcast";
 export const GREADER_LIKE = "user/-/state/com.google/like";
 export const GREADER_LABEL_PREFIX = "user/-/label/";
 
-// HMAC keys (security audit #2, M8): tokens are still issued with the raw
-// AUTH_SECRET so a rollback keeps them valid; verification also accepts the
-// domain-separated HKDF key "greader-token" that the next release issues.
+// HMAC keys (security audit #2, M8): tokens are issued with the
+// domain-separated HKDF key "greader-token" (M8 PR 5); verification still
+// accepts tokens signed with the raw AUTH_SECRET by older releases.
 const GREADER_MAC_PURPOSE = "greader-token";
 
 export function createGReaderToken(userId: string, version = 0) {
   const payload = `${userId}:${version}`;
-  const sig = hmacHex(legacyMacSecret(), payload);
+  const sig = hmacHex(currentMacKey(GREADER_MAC_PURPOSE), payload);
   return `${userId}.${version}.${sig}`;
 }
 

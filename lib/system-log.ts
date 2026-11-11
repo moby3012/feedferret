@@ -20,7 +20,7 @@ export function redactLogMetadata(value: unknown): unknown {
 
 export async function writeSystemLog(
   level: "info" | "warn" | "error",
-  category: "mail" | "digest" | "sync",
+  category: "mail" | "digest" | "sync" | "security",
   message: string,
   metadata?: Record<string, unknown>,
 ) {
