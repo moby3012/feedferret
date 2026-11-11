@@ -92,6 +92,7 @@ In-memory sliding window rate limiter (`lib/rate-limit.ts`) protects against bru
 | Read/star/read-later toggle batches (`applyArticleStateOps`), per user | 300 calls | 1 minute |
 | Bulk mark read: GReader `mark-all-as-read`, Fever `mark=feed\|group`, REST v1 mark-all, per user (shared) | 300 calls | 10 minutes |
 | AI "Test connection", per user | 10 tests | 10 minutes |
+| "Defekte Feeds" re-test / repair (`retestBrokenFeed`, `applyFeedRepair`), per user | 150 calls | 10 minutes |
 | FreshRSS migration upload / OPML import, per user | 6 / 10 | 10 minutes / 1 minute |
 | Imported articles (FreshRSS migration), per user | 200 000 rows | 1 day |
 

@@ -686,3 +686,89 @@ export function categoryExists(id: string): boolean {
     db.close();
   }
 }
+
+/** Prisma's SQLite text format ("…+00:00", not "…Z"): DateTime filters compare as text. */
+const sqliteIso = (d: Date) => d.toISOString().replace("Z", "+00:00");
+
+/**
+ * "Defekte Feeds" fixtures: inserts a failing/muted feed for the user (deleted again by `cleanup`,
+ * which also removes any articles a re-test synced into it).
+ */
+export function insertBrokenFeed(
+  userKey: string,
+  opts: { name: string; url: string; htmlUrl?: string; autoMuted?: boolean; failures?: number; lastError?: string; failingDays?: number },
+): { id: string; cleanup: () => void } {
+  const { userId } = manifest().users[userKey];
+  const id = `e2e-broken-${userKey}-${opts.name.replace(/\W+/g, "-")}-${Date.now()}`;
+  const db = open();
+  try {
+    const now = new Date();
+    db.prepare(
+      `INSERT INTO "Feed" (id, url, htmlUrl, name, userId, updatedAt, autoMuted, consecutiveFailureCount, lastStatus, lastError, lastFetchedAt, failingSince)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'error', ?, ?, ?)`,
+    ).run(
+      id,
+      opts.url,
+      opts.htmlUrl ?? null,
+      opts.name,
+      userId,
+      sqliteIso(now),
+      opts.autoMuted ? 1 : 0,
+      opts.failures ?? 3,
+      opts.lastError ?? "Error: Fetch failed: 404",
+      sqliteIso(new Date(now.getTime() - 3_600_000)),
+      opts.failingDays != null ? sqliteIso(new Date(now.getTime() - opts.failingDays * 86_400_000)) : null,
+    );
+  } finally {
+    db.close();
+  }
+  return {
+    id,
+    cleanup: () => {
+      const c = open();
+      try {
+        c.prepare(`DELETE FROM "Article" WHERE feedId = ?`).run(id);
+        c.prepare(`DELETE FROM "Feed" WHERE id = ?`).run(id);
+      } finally {
+        c.close();
+      }
+    },
+  };
+}
+
+export function brokenFeedState(feedId: string): { exists: boolean; url: string; autoMuted: boolean; consecutiveFailureCount: number } {
+  const db = open();
+  try {
+    const r = db.prepare(`SELECT url, autoMuted, consecutiveFailureCount FROM "Feed" WHERE id = ?`).get(feedId) as
+      | { url: string; autoMuted: number; consecutiveFailureCount: number }
+      | undefined;
+    return r ? { exists: true, url: r.url, autoMuted: !!r.autoMuted, consecutiveFailureCount: r.consecutiveFailureCount } : { exists: false, url: "", autoMuted: false, consecutiveFailureCount: 0 };
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Turns on the instance "allow internal feed URLs" switch (the fixture server is on 127.0.0.1) and returns
+ * the function that restores the exact previous value. Workers: 1, so no other spec observes it meanwhile.
+ */
+export function allowInternalFeedUrls(): () => void {
+  const db = open();
+  let old: { allowInternalFeedUrls: number } | undefined;
+  try {
+    old = db.prepare(`SELECT allowInternalFeedUrls FROM "GlobalSettings" WHERE id = ?`).get("global") as typeof old;
+    if (old) db.prepare(`UPDATE "GlobalSettings" SET allowInternalFeedUrls = 1 WHERE id = ?`).run("global");
+    else db.prepare(`INSERT INTO "GlobalSettings" (id, updatedAt, allowInternalFeedUrls) VALUES (?, ?, 1)`).run("global", new Date().toISOString());
+  } finally {
+    db.close();
+  }
+  return () => {
+    const c = open();
+    try {
+      if (old) c.prepare(`UPDATE "GlobalSettings" SET allowInternalFeedUrls = ? WHERE id = ?`).run(old.allowInternalFeedUrls, "global");
+      else c.prepare(`DELETE FROM "GlobalSettings" WHERE id = ?`).run("global");
+    } finally {
+      c.close();
+    }
+  };
+}

@@ -922,7 +922,10 @@
     "savedSearchFallback": "Gespeicherte Suche",
     "feedNavigation": "Feed-Navigation",
     "feedActions": "Feed-Aktionen",
-    "recentlyRead": "Zuletzt gelesen"
+    "recentlyRead": "Zuletzt gelesen",
+    "brokenFeeds": "Defekte Feeds",
+    "brokenFeedsCount": "Defekte Feeds ({count})",
+    "viewAllBrokenFeeds": "Alle defekten Feeds ansehen"
   },
   "articleList": {
     "newItems": "{count} neu",
@@ -1441,7 +1444,8 @@
       "titleAlert": "Alarm löschen?",
       "titleSavedSearch": "Gespeicherte Suche löschen?",
       "description": "„{name}“ wird entfernt. Dies kann nicht rückgängig gemacht werden."
-    }
+    },
+    "brokenTab": "Defekte Feeds"
   },
   "feedEdit": {
     "authTab": "Authentifizierung",
@@ -2159,7 +2163,8 @@
     "notificationsUnread": "Benachrichtigungen ({count} neu)",
     "gesturesHelp": "Gesten & Hilfe",
     "more": "Mehr",
-    "moreWithNotifications": "Mehr, {count} neue Benachrichtigungen"
+    "moreWithNotifications": "Mehr, {count} neue Benachrichtigungen",
+    "brokenFeeds": "Defekte Feeds"
   },
   "googleNews": {
     "tabLabel": "Google News",
@@ -2383,5 +2388,92 @@
     "newTab": "(öffnet in neuem Tab)",
     "confirmDestination": "Ziel: {host}",
     "unsubscribeRateLimited": "Zu viele Abmeldungen in kurzer Zeit. Bitte gleich noch einmal versuchen."
+  },
+  "brokenFeeds": {
+    "title": "Defekte Feeds",
+    "description": "Feeds, die stummgeschaltet wurden oder wiederholt fehlschlagen. Teste sie erneut, repariere die Adresse oder entferne sie.",
+    "summary": "{count, plural, one {# defekter Feed} other {# defekte Feeds}}",
+    "summaryMuted": "{count} davon stummgeschaltet",
+    "empty": "Keine defekten Feeds",
+    "emptyDescription": "Alle deine Feeds werden gerade erfolgreich abgerufen.",
+    "loadError": "Die Liste konnte nicht geladen werden.",
+    "retry": "Erneut laden",
+    "muted": "Stummgeschaltet",
+    "failures": "{count, plural, one {# Fehlversuch in Folge} other {# Fehlversuche in Folge}}",
+    "failingSince": "Fehlerhaft seit {date}",
+    "failingSinceUnknown": "Fehlerhaft seit unbekannt",
+    "lastSuccess": "Letzter Erfolg: {date}",
+    "lastSuccessUnknown": "Letzter Erfolg: unbekannt",
+    "technicalDetail": "Technische Details",
+    "categories": {
+      "access": "Zugriff verweigert – evtl. Login/Bot-Schutz",
+      "not-found": "Nicht gefunden – Feed umgezogen?",
+      "rate-limited": "Zu viele Anfragen – der Server bremst uns aus",
+      "server": "Server-Fehler",
+      "unreachable": "Nicht erreichbar",
+      "invalid-feed": "Kein gültiger Feed",
+      "rsshub": "Braucht RSSHub",
+      "unsafe-target": "Adresse nicht erlaubt (interne Adresse)",
+      "unknown": "Unbekannter Fehler"
+    },
+    "actions": {
+      "retest": "Erneut testen",
+      "retesting": "Teste …",
+      "repair": "Reparieren",
+      "edit": "Bearbeiten",
+      "unmute": "Stummschaltung aufheben",
+      "remove": "Entfernen"
+    },
+    "retest": {
+      "recovered": "„{name}“ läuft wieder und ist reaktiviert.",
+      "stillBroken": "Immer noch fehlerhaft: {category}",
+      "rateLimited": "Zu viele Tests. Bitte in {seconds} s erneut versuchen.",
+      "failed": "Der Test ist fehlgeschlagen."
+    },
+    "unmuted": "Stummschaltung von „{name}“ aufgehoben.",
+    "unmuteFailed": "Stummschaltung konnte nicht aufgehoben werden.",
+    "repair": {
+      "title": "Neue Adresse für „{name}“",
+      "searching": "Suche nach Feeds auf {site} …",
+      "none": "Auf der Seite wurde kein anderer Feed gefunden.",
+      "noneHint": {
+        "needs-rsshub": "Für diese Seite wird RSSHub benötigt.",
+        "rate-limited": "Die Seite bremst automatische Zugriffe aus.",
+        "blocked": "Die Seite blockiert automatische Zugriffe."
+      },
+      "use": "Übernehmen",
+      "close": "Schließen",
+      "applied": "Neue Adresse für „{name}“ übernommen.",
+      "appliedStillBroken": "Neue Adresse übernommen, der erste Abruf ist aber noch fehlgeschlagen.",
+      "unsupported": "Dieser Feed-Typ kann nicht automatisch repariert werden.",
+      "rateLimited": "Zu viele Anfragen. Bitte gleich noch einmal versuchen.",
+      "errors": {
+        "invalid-url": "Diese Adresse ist nicht zulässig.",
+        "duplicate": "Diesen Feed hast du schon abonniert.",
+        "not-a-feed": "Unter dieser Adresse liegt kein lesbarer Feed.",
+        "unsupported": "Dieser Feed-Typ kann nicht automatisch repariert werden.",
+        "rate-limited": "Zu viele Anfragen. Bitte gleich noch einmal versuchen."
+      },
+      "failed": "Die Suche ist fehlgeschlagen."
+    },
+    "bulk": {
+      "retestAll": "Alle erneut testen",
+      "retestProgress": "Teste {done} von {total} …",
+      "cancel": "Abbrechen",
+      "retestDone": "{recovered} laufen wieder, {failed} weiterhin fehlerhaft.",
+      "removeStale": "Alle entfernen, die seit mehr als 30 Tagen fehlschlagen",
+      "removeStaleCount": "Seit > 30 Tagen defekt entfernen ({count})",
+      "removeStaleTitle": "{count, plural, one {# Feed} other {# Feeds}} entfernen?",
+      "removeStaleDescription": "Diese Feeds schlagen seit mehr als 30 Tagen fehl. Sie werden samt ihren Artikeln gelöscht. Das lässt sich nicht rückgängig machen.",
+      "removeStaleConfirm": "{count, plural, one {# Feed} other {# Feeds}} entfernen",
+      "removeStaleDone": "{count, plural, one {# Feed entfernt} other {# Feeds entfernt}}.",
+      "removeStaleFailed": "Die Feeds konnten nicht entfernt werden."
+    },
+    "removeTitle": "„{name}“ entfernen?",
+    "removeDescription": "Der Feed wird samt seinen Artikeln gelöscht. Das lässt sich nicht rückgängig machen.",
+    "removeConfirm": "Feed entfernen",
+    "removed": "„{name}“ entfernt.",
+    "removeFailed": "Der Feed konnte nicht entfernt werden.",
+    "cancel": "Abbrechen"
   }
 }

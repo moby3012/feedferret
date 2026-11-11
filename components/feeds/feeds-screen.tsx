@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import {
   Activity,
   AlertCircle,
+  AlertTriangle,
   Bell,
   Bookmark,
   CheckCheck,
@@ -71,6 +72,7 @@ import { useSignOut } from "@/components/shell/use-sign-out";
 import { isDeletableEmptyCategory } from "@/lib/empty-category";
 import { DeleteEmptyCategoryDialog } from "@/components/delete-empty-category-dialog";
 import { cn } from "@/lib/utils";
+import { countBrokenFeeds } from "@/lib/broken-feeds";
 
 // Compact Feeds screen (Feeds tab root, audit-ux-2 A-03 / R3): a Reeder-style
 // list — smart views and labels on top (owner decision 2026-11-10: kept, but
@@ -177,6 +179,7 @@ export function FeedsScreen() {
       })),
     [feeds, counts.byFeed],
   );
+  const brokenCount = useMemo(() => countBrokenFeeds(feeds as any[]), [feeds]);
   const visible = hideEmptyFeeds ? items.filter((f) => f.unread > 0) : items;
   const visibleLabels = (labels as any[]).filter((l) => !hideEmptyLabels || (counts.byLabel[l.id] ?? l._count?.articles ?? 0) > 0);
 
@@ -305,6 +308,20 @@ export function FeedsScreen() {
             </li>
           ))}
         </ul>
+
+        {brokenCount > 0 && (
+          <ul className="ff-feeds-group mt-5" aria-label={t("brokenFeeds")} data-testid="feeds-broken">
+            <li>
+              <RowButton
+                icon={AlertTriangle}
+                iconColor="var(--warning)"
+                label={t("brokenFeeds")}
+                count={brokenCount}
+                onClick={() => goRoute("/manage-feeds?tab=broken")}
+              />
+            </li>
+          </ul>
+        )}
 
         {savedSearches.length > 0 && (
           <Section title={tSidebar("savedSearches")}>
@@ -699,6 +716,8 @@ function FeedsHeaderMenu() {
   const isOpen = useNav((s) => s.overlay === "feeds-menu");
   const { data: session } = useSession();
   const { data: notifications = [] } = useNotifications();
+  const { feeds } = useShellData();
+  const brokenCount = countBrokenFeeds(feeds as any[]);
   const unreadNotifications = useCountsQuery(true).data?.notifications ?? 0;
   const markNotificationRead = useMarkNotificationRead();
   const markAllNotificationsRead = useMarkAllNotificationsRead();
@@ -721,12 +740,18 @@ function FeedsHeaderMenu() {
         if (n.articleId) void nav.openArticle(n.articleId);
       },
     })),
+    ...(brokenCount > 0
+      ? [{ id: "notifications-broken", label: tSidebar("viewAllBrokenFeeds"), icon: AlertTriangle, separated: (notifications as any[]).length > 0, onSelect: go("/manage-feeds?tab=broken") }]
+      : []),
     ...(unreadNotifications > 0
       ? [{ id: "notifications-read", label: tSidebar("markAllRead"), icon: CheckCheck, separated: (notifications as any[]).length > 0, onSelect: () => markAllNotificationsRead.mutate() }]
       : []),
   ];
   const items: OverlayMenuItem[] = [
     { id: "manage", label: tSidebar("manageFeeds"), icon: Pencil, onSelect: go("/manage-feeds") },
+    ...(brokenCount > 0
+      ? [{ id: "broken", label: tSidebar("brokenFeedsCount", { count: brokenCount }), icon: AlertTriangle, onSelect: go("/manage-feeds?tab=broken") }]
+      : []),
     ...(session?.user?.role === "ADMIN" ? [{ id: "server", label: tSidebar("serverSettings"), icon: Cog, onSelect: go("/server-settings") }] : []),
     {
       id: "notifications",

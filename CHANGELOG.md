@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added — "Defekte Feeds" overview
+
+- **One place to triage failing feeds** (Manage feeds → *Defekte Feeds*, `/manage-feeds?tab=broken`): every feed that is auto-muted or has failed syncs, muted first, then by failure streak. Each card shows the host, the reason in plain language (access denied / not found / server error / unreachable / not a valid feed / needs RSSHub), since when it fails and its last success; the redacted technical error stays one click away. Newsletter feeds are excluded.
+- **Per feed:** *Re-test* (a real sync of that one feed; on success it is unmuted and its counters reset), *Repair* (feed discovery on the feed's site proposes new URLs, you accept one), *Edit*, *Unmute*, *Remove* (with confirmation). **Bulk:** *Re-test all* (three at a time, with progress) and *Remove failing > 30 days* (confirmed with the count; each id is re-checked on the server).
+- Entry points: a "Broken feeds (N)" row on the Feeds screen and its menu, a warning button in the sidebar footer, and a "View all broken feeds" link in the notifications popover — all only while N > 0.
+- `Feed.failingSince` / `Feed.lastSuccessAt` (additive migration, both providers) record the start of a failure streak and the last successful sync. Older rows fall back to their last attempt, so the 30-day removal can only understate how long a feed has been failing.
+
 ### Added — newsletter inbox via an existing mailbox (N1, IMAP)
 
 - **Admin: Server settings → Newsletter.** A three-step wizard connects one mailbox (e-mail address + app password). Gmail, Outlook/Hotmail, iCloud, GMX, WEB.DE, Posteo, mailbox.org, Fastmail and Yahoo are detected from the address (with an "App-Passwort erstellen" link); other domains are found via DNS SRV `_imaps._tcp`, a known provider MX or `imap.<domain>`, or entered under "Erweitert". "Verbindung testen" answers within 10 s with a clear message (app password needed, IMAP switched off, TLS, timeout, host blocked). Step 3 sends a test mail (or tells you where to send one) and shows live when it arrived. A status card shows last mail, error count, pause and disconnect. The password is sealed (`ff2.`) and never sent to the browser.

@@ -770,7 +770,7 @@ export async function updateFeed(feedId: string, data: {
             // F6: a user manually unmuting a feed resets the failure counter and
             // gives it one more chance, rather than resuming right at the
             // threshold (see lib/feed-auto-mute.ts's applyManualUnmute).
-            ...(data.autoMuted === false ? { consecutiveFailureCount: 0 } : {}),
+            ...(data.autoMuted === false ? { consecutiveFailureCount: 0, failingSince: null } : {}),
         },
     });
 

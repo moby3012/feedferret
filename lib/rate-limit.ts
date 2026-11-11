@@ -307,6 +307,15 @@ export const RATE_LIMITS = {
     prefix: "api-bulk-mark",
   } satisfies RateLimitConfig,
 
+  // "Defekte Feeds": a manual re-test runs a real sync of one feed (outbound
+  // fetch + article upsert). The bulk "Alle erneut testen" walks the list with
+  // a few in flight, so allow a full list per 10 minutes but stop scripted loops.
+  feedRetest: {
+    limit: 150,
+    windowSecs: 10 * 60,
+    prefix: "feed-retest",
+  } satisfies RateLimitConfig,
+
   // "Test connection" in AI settings: a real provider round-trip.
   aiConnectionTest: {
     limit: 10,

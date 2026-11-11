@@ -28,6 +28,7 @@ export const ROUTE_ONLY_NAMESPACES = [
   // /manage-feeds (feed-management.tsx, feed-edit-dialog.tsx, freshrss-migration.tsx)
   "feedManagement",
   "feedEdit",
+  "brokenFeeds", // components/broken-feeds.tsx (manage-feeds "Defekte Feeds" tab)
   // /server-settings (server-management-dialog.tsx)
   "serverManagement",
   "newsletterInbound", // components/newsletter/inbound-wizard.tsx (server-settings tab)
