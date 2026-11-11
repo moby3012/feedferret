@@ -32,7 +32,12 @@ import {
   Mail,
   BellOff,
   X,
+  MailX,
+  Ban,
 } from "lucide-react";
+import { NewsletterIcon } from "@/components/list/feed-favicon";
+import { useNewsletterDialogs, useNewsletterFeedActions } from "@/components/newsletter/newsletter-actions";
+import { isNewsletterFeed } from "@/lib/newsletter-constants";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1071,7 +1076,9 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
       )}
     >
       <div className="w-5 h-5 shrink-0 rounded-control overflow-hidden bg-muted flex items-center justify-center">
-        {feed.url ? (() => {
+        {isNewsletterFeed(feed) ? (
+          <NewsletterIcon size={20} />
+        ) : feed.url ? (() => {
           try {
             const hostname = new URL(feed.url).hostname;
             return (
@@ -1120,9 +1127,13 @@ function FeedQuickActions({
   onDelete: () => void;
 }) {
   const t = useTranslations();
+  const tNl = useTranslations("newsletterReader");
+  const newsletter = isNewsletterFeed(feed);
   const websiteUrl = (() => {
     try {
-      return new URL(feed.url).origin;
+      // Newsletter feeds have no fetchable URL ("newsletter:…"); their site is htmlUrl.
+      const origin = new URL(newsletter ? feed.htmlUrl ?? "" : feed.url).origin;
+      return /^https?:/.test(origin) ? origin : null;
     } catch {
       return null;
     }
@@ -1135,13 +1146,34 @@ function FeedQuickActions({
   // Act once the menu's history entry is gone: "Bearbeiten" / "Feed-Zustand"
   // push another route, which must not race the overlay's history.back().
   const afterClose = (fn: () => void) => () => void nav.closeOverlay("feed-menu").then(fn);
+  // Dialogs mount once the menu is gone (a vaul sheet unmounting under it would leave <body> inert).
+  const confirmAfterClose = (fn: () => void) => afterClose(() => window.requestAnimationFrame(() => window.setTimeout(fn, 0)));
+  const newsletterDialogs = useNewsletterDialogs();
+  const newsletterActions = useNewsletterFeedActions(feed.id, open && newsletter);
+  const nlInfo = newsletterActions.data ?? null;
   const items: OverlayMenuItem[] = [
-    { id: "refresh", label: t("sidebar.refreshFeed"), icon: RefreshCw, onSelect: onRefresh },
+    // Newsletter feeds are filled by mail: nothing to refresh, no fetch health.
+    ...(newsletter ? [] : [{ id: "refresh", label: t("sidebar.refreshFeed"), icon: RefreshCw, onSelect: onRefresh }]),
     // "…": it asks first. Opened once the menu (a sheet in the tablet drawer on touch) is gone.
     { id: "mark-read", label: `${t("sidebar.markAllAsRead")}…`, icon: CheckCheck, disabled: !(feed.unreadCount > 0), onSelect: afterClose(onMarkRead) },
     ...(websiteUrl ? [{ id: "website", label: t("sidebar.openWebsite"), icon: ExternalLink, onSelect: () => window.open(websiteUrl, "_blank", "noopener,noreferrer") }] : []),
     { id: "edit", label: t("sidebar.editFeed"), icon: Pencil, separated: true, onSelect: afterClose(onEdit) },
-    { id: "health", label: t("sidebar.feedHealth"), icon: Activity, onSelect: afterClose(onShowHealth) },
+    ...(newsletter ? [] : [{ id: "health", label: t("sidebar.feedHealth"), icon: Activity, onSelect: afterClose(onShowHealth) }]),
+    ...(newsletter
+      ? [
+          {
+            id: "newsletter-unsubscribe",
+            label: tNl("menuUnsubscribe"),
+            icon: MailX,
+            separated: true,
+            disabled: !nlInfo,
+            onSelect: confirmAfterClose(() => nlInfo && newsletterDialogs.openUnsubscribe({ feedId: feed.id }, nlInfo)),
+          },
+          ...(nlInfo?.blockAddress
+            ? [{ id: "newsletter-block", label: tNl("menuBlock"), icon: Ban, onSelect: confirmAfterClose(() => newsletterDialogs.openBlock({ feedId: feed.id }, nlInfo)) }]
+            : []),
+        ]
+      : []),
     { id: "delete", label: t("sidebar.deleteFeed"), icon: Trash2, separated: true, danger: true, onSelect: afterClose(onDelete) },
   ];
 
@@ -1179,6 +1211,7 @@ function FeedQuickActions({
           returnFocus={() => triggerRef.current}
         />
       )}
+      {newsletter && newsletterDialogs.element}
     </>
   );
 }

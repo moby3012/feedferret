@@ -26,6 +26,8 @@ import {
   Star,
   Tag,
   Trash2,
+  MailX,
+  Ban,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -44,6 +46,8 @@ import { ResponsiveMenu, type OverlayMenuItem } from "@/components/ui/responsive
 import { UnreadCount } from "@/components/ui/unread-count";
 import { SpoilerIcon } from "@/components/icons/spoiler-icon";
 import { FeedFavicon } from "@/components/list/feed-favicon";
+import { useNewsletterDialogs, useNewsletterFeedActions } from "@/components/newsletter/newsletter-actions";
+import { isNewsletterFeed } from "@/lib/newsletter-constants";
 import { useShellActions, useShellData } from "@/components/shell/shell-context";
 import { useCountsQuery } from "@/features/bootstrap/queries";
 import { EMPTY_COUNTS } from "@/features/bootstrap/types";
@@ -123,6 +127,8 @@ interface FeedItem {
   categoryId?: string | null;
   lastStatus?: string | null;
   lastError?: string | null;
+  /** Newsletter feed (envelope icon; no refresh / health actions). */
+  newsletter: boolean;
   unread: number;
 }
 
@@ -136,6 +142,7 @@ export function FeedsScreen() {
   const t = useTranslations("feedsScreen");
   const tCommon = useTranslations("common");
   const tSidebar = useTranslations("sidebar");
+  const tNl = useTranslations("newsletterReader");
   const router = useRouter();
   const { feeds, feedsLoaded, categories, labels, savedSearches, prefs } = useShellData();
   const shell = useShellActions();
@@ -165,6 +172,7 @@ export function FeedsScreen() {
         categoryId: f.categoryId ?? null,
         lastStatus: f.lastStatus,
         lastError: f.lastError,
+        newsletter: isNewsletterFeed(f),
         unread: counts.byFeed[f.id] ?? 0,
       })),
     [feeds, counts.byFeed],
@@ -182,6 +190,7 @@ export function FeedsScreen() {
   const refreshFeed = useRefreshFeed();
   const deleteFeed = useDeleteFeed();
   const { markViewRead } = useArticleActions();
+  const newsletterDialogs = useNewsletterDialogs();
 
   const openMenu = useCallback(
     (target: MenuTarget) => {
@@ -203,6 +212,8 @@ export function FeedsScreen() {
     router.push(href);
   };
 
+  const menuNewsletterFeed = menu?.kind === "feed" && menu.feed.newsletter ? menu.feed.id : null;
+  const newsletterActions = useNewsletterFeedActions(menuNewsletterFeed ?? "", menuOpen && menuNewsletterFeed !== null);
   const menuItems: OverlayMenuItem[] = !menu
     ? []
     : menu.kind === "feed"
@@ -222,13 +233,17 @@ export function FeedsScreen() {
   function feedMenuItems(feed: FeedItem): OverlayMenuItem[] {
     const website = (() => {
       try {
-        return new URL(feed.siteUrl || feed.url || "").origin;
+        // A newsletter's url is "newsletter:…" (origin "null"): only its site link counts.
+        const origin = new URL((feed.newsletter ? feed.siteUrl : feed.siteUrl || feed.url) || "").origin;
+        return /^https?:/.test(origin) ? origin : null;
       } catch {
         return null;
       }
     })();
+    const nlInfo = feed.newsletter ? (newsletterActions.data ?? null) : null;
     return [
-      { id: "refresh", label: tSidebar("refreshFeed"), icon: RefreshCw, onSelect: () => refreshFeed.mutate(feed.id) },
+      // Newsletter feeds are filled by mail: nothing to refresh, no fetch health.
+      ...(feed.newsletter ? [] : [{ id: "refresh", label: tSidebar("refreshFeed"), icon: RefreshCw, onSelect: () => refreshFeed.mutate(feed.id) }]),
       {
         id: "mark-read",
         // "…": it asks first (owner decision: never a one-tap / gesture mark-all).
@@ -239,7 +254,22 @@ export function FeedsScreen() {
       },
       ...(website ? [{ id: "website", label: tSidebar("openWebsite"), icon: ExternalLink, onSelect: () => window.open(website, "_blank", "noopener,noreferrer") }] : []),
       { id: "edit", label: tSidebar("editFeed"), icon: Pencil, separated: true, onSelect: afterClose(() => goRoute(`/manage-feeds?feedId=${encodeURIComponent(feed.id)}`)) },
-      { id: "health", label: tSidebar("feedHealth"), icon: Activity, onSelect: afterClose(() => goRoute("/manage-feeds?tab=health")) },
+      ...(feed.newsletter ? [] : [{ id: "health", label: tSidebar("feedHealth"), icon: Activity, onSelect: afterClose(() => goRoute("/manage-feeds?tab=health")) }]),
+      ...(feed.newsletter
+        ? [
+            {
+              id: "newsletter-unsubscribe",
+              label: tNl("menuUnsubscribe"),
+              icon: MailX,
+              separated: true,
+              disabled: !nlInfo,
+              onSelect: confirmAfterClose(() => nlInfo && newsletterDialogs.openUnsubscribe({ feedId: feed.id }, nlInfo)),
+            },
+            ...(nlInfo?.blockAddress
+              ? [{ id: "newsletter-block", label: tNl("menuBlock"), icon: Ban, onSelect: confirmAfterClose(() => newsletterDialogs.openBlock({ feedId: feed.id }, nlInfo)) }]
+              : []),
+          ]
+        : []),
       { id: "delete", label: tSidebar("deleteFeed"), icon: Trash2, separated: true, danger: true, onSelect: confirmAfterClose(() => setFeedToDelete({ id: feed.id, name: feed.name })) },
     ];
   }
@@ -416,6 +446,7 @@ export function FeedsScreen() {
       </AlertDialog>
 
       <DeleteEmptyCategoryDialog category={categoryToDelete} onClose={() => setCategoryToDelete(null)} />
+      {newsletterDialogs.element}
 
       <AlertDialog open={feedToDelete !== null} onOpenChange={(o) => !o && setFeedToDelete(null)}>
         <AlertDialogContent>
@@ -602,7 +633,7 @@ function FeedRow({
         onKeyDown={onKeyDown}
       >
         <span className="ff-feeds-icon">
-          <FeedFavicon icon={feed.icon} name={feed.name} size={20} articleLink={feed.siteUrl || feed.url || undefined} />
+          <FeedFavicon icon={feed.icon} name={feed.name} size={20} articleLink={feed.siteUrl || feed.url || undefined} newsletter={feed.newsletter} />
         </span>
         <span className="min-w-0 flex-1 truncate text-start">{feed.name}</span>
         {feed.lastStatus === "error" && (

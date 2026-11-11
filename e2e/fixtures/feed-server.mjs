@@ -106,12 +106,52 @@ function handleListingPages(res, url) {
   return true;
 }
 
+// N1 PR D: newsletter reader. One-click unsubscribe endpoint (RFC 8058 POST)
+// and a double-opt-in confirmation page; both record what reached them, so the
+// spec can prove the POST body and that nothing is fetched before a click.
+const newsletterHits = new Map();
+function newsletterLog(id) {
+  if (!newsletterHits.has(id)) newsletterHits.set(id, { posts: [], gets: [], confirms: 0 });
+  return newsletterHits.get(id);
+}
+function handleNewsletter(req, res, url) {
+  const unsub = /^\/newsletter\/unsubscribe\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
+  if (unsub) {
+    const log = newsletterLog(unsub[1]);
+    if (req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        log.posts.push({ body, contentType: req.headers["content-type"] ?? null, cookie: req.headers.cookie ?? null });
+        res.writeHead(200, { "content-type": "text/plain" }).end("unsubscribed");
+      });
+    } else {
+      log.gets.push(url.search);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end("<!doctype html><title>Unsubscribe</title><p>Unsubscribe page</p>");
+    }
+    return true;
+  }
+  const confirm = /^\/newsletter\/confirm\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
+  if (confirm) {
+    newsletterLog(confirm[1]).confirms += 1;
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end("<!doctype html><title>Confirmed</title><p>Subscription confirmed</p>");
+    return true;
+  }
+  const hits = /^\/newsletter\/log\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
+  if (hits) {
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(newsletterLog(hits[1])));
+    return true;
+  }
+  return false;
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url ?? "/", baseUrl);
   if (url.pathname === "/healthz") {
     res.writeHead(200, { "content-type": "text/plain" }).end("ok");
     return;
   }
+  if (url.pathname.startsWith("/newsletter/") && handleNewsletter(req, res, url)) return;
   if (url.pathname === "/h4/feed") {
     res.writeHead(200, { "content-type": "application/rss+xml" }).end(
       `<?xml version="1.0"?><rss version="2.0"><channel><title>H4 fixture</title><link>${baseUrl}</link><description>Offline transport fixture</description><item><title>H4 article</title><guid>h4-article</guid><link>${baseUrl}/h4/article</link><description>Short excerpt.</description></item></channel></rss>`,

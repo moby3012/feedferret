@@ -59,6 +59,27 @@ export interface ClusterDetail {
   members: ArticleListItem[];
 }
 
+/** N1 PR D: how "Newsletter abbestellen" works for one newsletter (server-checked URLs only). */
+export interface NewsletterUnsubscribe {
+  /** "one-click": RFC 8058 POST by the server; "link": open the https page; "mailto": write the sender. */
+  method: "one-click" | "link" | "mailto";
+  url: string | null;
+  mailto: string | null;
+}
+
+/** N1 PR D: reader / feed-menu view of a newsletter (null for web feed articles). */
+export interface NewsletterArticleMeta {
+  /** Normalized From address. */
+  sender: string | null;
+  /** Double-opt-in link: shown as a banner, opened only on a user click, never fetched. */
+  confirmationUrl: string | null;
+  /** Verified receiver verdict; "none" shows nothing. */
+  auth: "pass" | "fail" | "none";
+  unsubscribe: NewsletterUnsubscribe | null;
+  /** The dedicated (non-primary, active) address that delivered it — "Adresse sperren". */
+  blockAddress: { id: string; address: string } | null;
+}
+
 export interface ArticleDetail extends ArticleListItem {
   /**
    * Render-ready, sanitized HTML: stored HTML as is (sanitized at sync) or
@@ -75,6 +96,8 @@ export interface ArticleDetail extends ArticleListItem {
   entities?: string[];
   /** K3: the original headline when `displayTitle` replaced it (else null). */
   originalTitle?: string | null;
+  /** N1 PR D: newsletter metadata (null/absent for web feed articles). */
+  newsletter?: NewsletterArticleMeta | null;
 }
 
 /** `GET /api/app/articles/head` — rows of a list created after its snapshot (spec §2.1). */

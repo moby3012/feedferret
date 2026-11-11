@@ -1,14 +1,29 @@
 "use client";
 
 import { memo, useState } from "react";
+import { Mail } from "lucide-react";
 
 /**
  * Feed icon with a Google-favicon fallback and a letter tile as last resort.
  * Fixed box (`size`×`size`) in every state, so a failing icon never shifts the row.
  */
-export const FeedFavicon = memo(function FeedFavicon({ icon, name, size = 16, articleLink }: { icon?: string | null; name?: string; size?: number; articleLink?: string }) {
+export const FeedFavicon = memo(function FeedFavicon({
+  icon,
+  name,
+  size = 16,
+  articleLink,
+  newsletter = false,
+}: {
+  icon?: string | null;
+  name?: string;
+  size?: number;
+  articleLink?: string;
+  /** Newsletter feed: an envelope instead of a favicon lookup (no web origin to ask). */
+  newsletter?: boolean;
+}) {
   const [failed, setFailed] = useState(false);
   const isUrl = icon ? icon.startsWith("http") || icon.startsWith("/") || icon.startsWith("data:") : false;
+  if (newsletter && !(isUrl && !failed)) return <NewsletterIcon size={size} />;
   let src: string | null = null;
   if (isUrl && icon) {
     src = icon;
@@ -51,3 +66,17 @@ export const FeedFavicon = memo(function FeedFavicon({ icon, name, size = 16, ar
     </span>
   );
 });
+
+/** Envelope tile for newsletter feeds; same fixed box as a favicon. */
+export function NewsletterIcon({ size = 16 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-newsletter-icon=""
+      style={{ width: size, height: size }}
+      className="inline-flex shrink-0 items-center justify-center rounded-chip bg-accent-subtle text-brand"
+    >
+      <Mail style={{ width: Math.round(size * 0.7), height: Math.round(size * 0.7) }} strokeWidth={2} />
+    </span>
+  );
+}

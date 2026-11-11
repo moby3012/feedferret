@@ -1,3 +1,5 @@
+import type { NewsletterArticleMeta } from "@/features/articles/types"
+
 export interface FeedSource {
   id: string
   name: string
@@ -43,6 +45,10 @@ export interface Article {
   canonicalFeedName?: string | null
   aiSummary?: string | null
   aiSummarizedAt?: string | Date | null
+  /** N1 PR D: newsletter metadata from the article detail (absent until it loads; null for web articles). */
+  newsletter?: NewsletterArticleMeta | null
+  /** Feed is a newsletter (envelope icon in rows / reader). */
+  feedIsNewsletter?: boolean
   labels?: Array<{
     label: {
       id: string
