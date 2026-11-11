@@ -57,7 +57,7 @@ export function pageFetchErrorCode(error: unknown): AddFeedErrorCode {
 }
 
 /** The client-safe subset of a discovery result row. */
-export type ClientDiscoveredFeed = Pick<DiscoveredFeed, "url" | "title" | "type" | "source" | "kind" | "platform">;
+export type ClientDiscoveredFeed = Pick<DiscoveredFeed, "url" | "title" | "type" | "source" | "kind" | "platform" | "via">;
 
 export function discoveredFeedForClient(feed: DiscoveredFeed): ClientDiscoveredFeed {
   return {
@@ -67,6 +67,7 @@ export function discoveredFeedForClient(feed: DiscoveredFeed): ClientDiscoveredF
     ...(feed.source ? { source: feed.source } : {}),
     ...(feed.kind ? { kind: feed.kind } : {}),
     ...(feed.platform ? { platform: feed.platform } : {}),
+    ...(feed.via ? { via: feed.via } : {}),
   };
 }
 

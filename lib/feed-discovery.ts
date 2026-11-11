@@ -2,22 +2,32 @@ import { JSDOM } from "jsdom";
 import { fetchTextWithSsrfProtection, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { parseHttpLinkHeader } from "./http-link-header";
 import { hintForFetchError } from "./fetch-error-hint";
-import { buildTopicFeeds, parseSourceInput, resolveSource, type ResolvedFeed } from "./smart-url-resolver";
+import { buildTopicFeeds, parseSourceInput, platformLabel, resolveSource, type ResolvedFeed } from "./smart-url-resolver";
+import { detectSoftwareFeeds, matchPlatformAdapters, rsshubOnlyPlatform, type AdapterCandidate } from "./feed-adapters/engine";
+import type { AdapterFamily } from "./feed-adapters/registry";
 import { cleanUrlInput, httpFallbackUrl, isConnectError, isTlsError, normalizeUrlInput } from "./url-input";
+import { withTransportFallback } from "./transport-fallback";
 
 export type DiscoveredFeed = {
   url: string;
   title: string;
   type: "rss" | "atom" | "json" | "unknown";
   /** Which stage produced it. Absent on legacy callers' data. */
-  source?: "resolver" | "topic" | "radar" | "html" | "common-path" | "curated";
+  source?: "resolver" | "topic" | "radar" | "html" | "software" | "common-path" | "curated";
   /** Resolver/topic/radar candidates only: variant of the feed (releases, commits, hot, …). */
   kind?: string;
   /** Platform / engine slug ("youtube", "github", "google-news", "rsshub", …). */
   platform?: string;
   /** 0–1 — how sure the stage is that this is what the user meant. */
   confidence?: number;
+  /**
+   * The adapter that produced it, for the UI ("Reddit-Feed", "Discourse-Forum",
+   * "über RSSHub"). Absent for plain page discovery.
+   */
+  via?: FeedVia;
 };
+
+export type FeedVia = { family: AdapterFamily | "rsshub"; name: string };
 
 export type DiscoveryHint = "needs-rsshub" | "rate-limited" | "blocked" | "tls-error";
 
@@ -26,6 +36,8 @@ export type DiscoveryResult = {
   mode: "url" | "topic" | "empty";
   feeds: DiscoveredFeed[];
   hint?: DiscoveryHint;
+  /** With `needs-rsshub`: the platform that has no native feed ("X/Twitter"). */
+  hintPlatform?: string;
   /** URL mode: the page address actually read (after redirects / http fallback). */
   pageUrl?: string;
 };
@@ -232,12 +244,15 @@ async function verifyFeedCandidate(
   preferOwnTitle = false,
 ): Promise<VerifiedCandidate | null> {
   try {
-    const text = await fetchTextWithSsrfProtection(url, {}, {
-      maxBytes: FEED_SNIFF_BYTES,
-      readPrefix: true,
-      timeoutMs: 12_000,
-      allowInternal: await isTrustedFeedFetchingAllowed(),
-    });
+    const allowInternal = await isTrustedFeedFetchingAllowed();
+    const text = await withTransportFallback(url, (impersonate) =>
+      fetchTextWithSsrfProtection(url, {}, {
+        maxBytes: FEED_SNIFF_BYTES,
+        readPrefix: true,
+        timeoutMs: 12_000,
+        allowInternal,
+        impersonate,
+      }));
     const sniff = sniffFeedPrefix(text);
     if (!sniff) return null;
     const ownTitle = sniff.title;
@@ -261,7 +276,29 @@ function toDiscovered(f: ResolvedFeed, source: "resolver" | "topic" | "curated")
     kind: f.kind,
     platform: f.platform,
     confidence: f.confidence,
+    ...(source === "resolver" ? { via: { family: "platform" as const, name: platformLabel(f.platform) } } : {}),
   };
+}
+
+/** Registry platform candidates are guesses until the endpoint answers with a feed. */
+async function verifyPlatformAdapterCandidates(candidates: AdapterCandidate[]): Promise<DiscoveredFeed[]> {
+  const checked = await Promise.all(
+    candidates.map(async (c, i): Promise<DiscoveredFeed | null> => {
+      const ok = await verifyFeedCandidate(c.url, c.title, "unknown", true);
+      if (!ok) return null;
+      return {
+        url: c.url,
+        title: ok.title,
+        type: ok.type,
+        source: "resolver",
+        kind: c.kind,
+        platform: c.adapterId,
+        confidence: c.scope === "route" ? 0.9 - i * 0.01 : 0.8 - i * 0.01,
+        via: c.via,
+      };
+    }),
+  );
+  return checked.filter((f): f is DiscoveredFeed => f !== null);
 }
 
 /** SSRF-protected text fetch handed to the pure resolver for its one-step lookups. */
@@ -286,7 +323,13 @@ const resolverFetchText = async (url: string, init?: { headers?: Record<string, 
  */
 async function resolveWithPlatformRules(input: string): Promise<{ matched: boolean; feeds: DiscoveredFeed[]; curated: ResolvedFeed[] }> {
   const { matched, feeds } = await resolveSource(input, { fetchText: resolverFetchText });
-  if (!feeds.length) return { matched, feeds: [], curated: [] };
+  if (!feeds.length) {
+    // Registry platform adapters (lib/feed-adapters/registry.ts): URL pattern → native endpoints, verified.
+    const parsed = parseSourceInput(input);
+    const candidates = parsed.type === "url" ? matchPlatformAdapters(parsed.url) : [];
+    if (!candidates.length) return { matched, feeds: [], curated: [] };
+    return { matched: true, feeds: await verifyPlatformAdapterCandidates(candidates), curated: [] };
+  }
   const curated = feeds.filter((f) => f.curated);
   const checked = await Promise.all(
     feeds.filter((f) => !f.curated).map(async (f) => {
@@ -337,6 +380,7 @@ async function resolveWithRadarRules(pageUrl: string): Promise<{ feeds: Discover
           kind: "rsshub",
           platform: "rsshub",
           confidence: 0.7,
+          via: { family: "rsshub", name: "RSSHub" },
         };
       }),
     ).finally(() => clearTimeout(timer));
@@ -386,8 +430,15 @@ export function headAdvertisesFeed(headHtml: string): boolean {
     /^application\/(?:rss\+xml|atom\+xml|feed\+json)\b/i.test((el.getAttribute("type") || "").trim()));
 }
 
-type CandidateOrigin = "self" | "link" | "header" | "anchor" | "common";
-type Candidate = { title: string; type: DiscoveredFeed["type"]; score: number; origin: CandidateOrigin };
+type CandidateOrigin = "self" | "link" | "header" | "software" | "anchor" | "common";
+type Candidate = {
+  title: string;
+  type: DiscoveredFeed["type"];
+  score: number;
+  origin: CandidateOrigin;
+  /** Software adapter that proposes (or recognises) this URL. */
+  adapter?: Pick<AdapterCandidate, "adapterId" | "kind" | "via">;
+};
 
 const FEED_WORDS = /\b(?:rss|atom|feeds?|newsfeed|web ?feed|abonnieren|subscribe|syndication)\b/i;
 const COMMENT_WORDS = /comment|kommentar/i;
@@ -472,6 +523,7 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
     score: number,
     resolveAgainst: URL = base,
     labelSaysFeed = false,
+    adapter?: Candidate["adapter"],
   ) => {
     if (!href) return;
     try {
@@ -483,27 +535,41 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
       if (!strong && !looksLikeFeedUrl(feedUrl)) return;
       const existing = candidateLinks.get(feedUrl);
       if (!existing) {
-        candidateLinks.set(feedUrl, { title: title || feedUrl, type, origin, score });
-      } else if (score > existing.score) {
-        candidateLinks.set(feedUrl, { ...existing, score });
+        candidateLinks.set(feedUrl, { title: title || feedUrl, type, origin, score, adapter });
+      } else {
+        // Same URL from two stages: the better score wins, the adapter label sticks.
+        candidateLinks.set(feedUrl, {
+          ...existing,
+          score: Math.max(score, existing.score),
+          adapter: existing.adapter ?? adapter,
+        });
       }
     } catch {
       // invalid URL
     }
   };
 
+  // Refused (401/402/403/429) or empty with the plain client → once more with
+  // the browser-fingerprint client (lib/transport-fallback.ts).
   const fetchPage = (url: string) =>
-    fetchWithSsrfProtection(url, {}, {
-      maxBytes: 1024 * 1024,
-      timeoutMs: 12_000,
-      // Large pages: read a bounded prefix (never fail on size). Stop at the
-      // end of <head> only when it already advertises a feed; otherwise keep
-      // reading so feed anchors in the body are still found.
-      untilHead: headAdvertisesFeed,
-      allowInternal,
-    });
+    withTransportFallback(
+      url,
+      (impersonate) =>
+        fetchWithSsrfProtection(url, {}, {
+          maxBytes: 1024 * 1024,
+          timeoutMs: 12_000,
+          // Large pages: read a bounded prefix (never fail on size). Stop at the
+          // end of <head> only when it already advertises a feed; otherwise keep
+          // reading so feed anchors in the body are still found.
+          untilHead: headAdvertisesFeed,
+          allowInternal,
+          impersonate,
+        }),
+      { isEmpty: (r) => !r.notModified && !r.text.trim() },
+    );
 
   let selfSniff: FeedSniff | null = null;
+  let pageHeaders: Headers | null = null;
   try {
     let result;
     try {
@@ -519,6 +585,7 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
     if (result.url) base = responseUrl = new URL(result.url);
     if (!result.notModified) {
       html = result.text;
+      pageHeaders = result.headers ?? null;
       selfSniff = sniffFeedPrefix(html);
       for (const entry of parseHttpLinkHeader(result.headers?.get("link") ?? null)) {
         const type = linkHeaderFeedType(entry);
@@ -541,7 +608,8 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
       url: v.url,
       title: v.title,
       type: v.type,
-      source: c.origin === "common" ? "common-path" : "html",
+      source: c.origin === "common" ? "common-path" : c.origin === "software" ? "software" : "html",
+      ...(c.adapter ? { kind: c.adapter.kind, platform: c.adapter.adapterId, via: c.adapter.via } : {}),
       score: c.score,
     });
   };
@@ -589,6 +657,14 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
     addCandidate(href, text, "unknown", "anchor", scoreFeedAnchor(el, absolute), base, anchorSaysFeed(el));
   }
 
+  // Forum / blog software recognised on the page (generator meta, markup
+  // fingerprints, headers) → its native endpoints (lib/feed-adapters).
+  if (html) {
+    for (const c of detectSoftwareFeeds({ html, headers: pageHeaders, url: responseUrl })) {
+      addCandidate(c.url, c.title, "unknown", "software", c.scope === "route" ? 92 : 85, responseUrl, false, c);
+    }
+  }
+
   for (const commonPath of COMMON_FEED_PATHS) {
     // Root-relative on purpose ("/?feed=rss2" must stay at the site root).
     addCandidate(commonPath, `${responseUrl.hostname} feed`, "unknown", "common", 15, responseUrl);
@@ -607,7 +683,8 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
     for (let i = 0; i < entries.length && discovered.size < 10; i += BATCH) {
       const batch = entries.slice(i, i + BATCH);
       const verified = await Promise.all(
-        batch.map(([url, c]) => verifyFeedCandidate(url, c.title, c.type, c.origin === "anchor" || c.origin === "common")),
+        batch.map(([url, c]) =>
+          verifyFeedCandidate(url, c.title, c.type, c.origin === "anchor" || c.origin === "common" || c.origin === "software")),
       );
       verified.forEach((v, idx) => {
         if (v) accept(v, batch[idx][1]);
@@ -630,10 +707,16 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
  * deterministic stage first:
  *   - plain phrase → search-engine topic feeds (Google News locale-aware, Bing
  *     News, hnrss, arXiv) for the user to pick from;
- *   - URL/handle → platform rules (URL-scheme converters, no scraping, no AI)
- *     → otherwise the page's own feeds (HTML discovery + common feed paths)
- *     → curated publisher routes only when the page yielded nothing → bundled
- *     RSSHub Radar rules on the configured RSSHub instance (if any).
+ *   - URL/handle → (a) platform rules: URL-scheme converters in
+ *     smart-url-resolver.ts plus the PLATFORM_ADAPTERS registry (verified)
+ *     → otherwise the page itself: (b) software adapters recognised on it
+ *     (Discourse, phpBB, XenForo, WordPress, …), its advertised feeds and
+ *     anchors, then common feed paths — every candidate (c) prefix-verified;
+ *     the page fetch falls back to the other HTTP transport when refused
+ *     → curated publisher routes only when the page yielded nothing → (d)
+ *     bundled RSSHub Radar rules on the configured RSSHub instance (if any;
+ *     else the `needs-rsshub` hint names the platform).
+ *   See lib/feed-adapters/registry.ts for the adapter list.
  * Never throws.
  */
 export async function discoverFeeds(input: string, options: DiscoverOptions = {}): Promise<DiscoveryResult> {
@@ -662,15 +745,23 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
   for (const f of [...native.feeds, ...html.feeds, ...curated, ...radar.feeds]) if (!merged.has(f.url)) merged.set(f.url, f);
 
   let hint: DiscoveryHint | undefined;
+  let hintPlatform: string | undefined;
   if (merged.size === 0) {
     if (radar.needsRsshub) {
       hint = "needs-rsshub";
+      hintPlatform = rsshubOnlyPlatform(parsed.url) ?? undefined;
     } else if (html.hint) {
       hint = html.hint;
     }
   }
 
-  return { mode: "url", feeds: [...merged.values()], hint, pageUrl: html.pageUrl ?? pageUrl };
+  return {
+    mode: "url",
+    feeds: [...merged.values()],
+    hint,
+    ...(hintPlatform ? { hintPlatform } : {}),
+    pageUrl: html.pageUrl ?? pageUrl,
+  };
 }
 
 /** Back-compat wrapper: feeds for a page URL (or any input `discoverFeeds` understands). */

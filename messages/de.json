@@ -761,7 +761,8 @@
       "needsRsshub": "Braucht RSSHub – unter Einstellungen › Server einrichten",
       "rateLimited": "Später erneut versuchen",
       "blocked": "Seite blockiert automatischen Abruf – probier stattdessen einen direkten Feed des Anbieters",
-      "tlsError": "Zertifikatsfehler: Die sichere Verbindung (HTTPS) zu dieser Website ist fehlgeschlagen. Aus Sicherheitsgründen wechseln wir nicht automatisch auf unverschlüsseltes http – wenn du der Seite vertraust, gib die Adresse mit http:// ein."
+      "tlsError": "Zertifikatsfehler: Die sichere Verbindung (HTTPS) zu dieser Website ist fehlgeschlagen. Aus Sicherheitsgründen wechseln wir nicht automatisch auf unverschlüsseltes http – wenn du der Seite vertraust, gib die Adresse mit http:// ein.",
+      "needsRsshubFor": "{platform} bietet keinen eigenen Feed – braucht RSSHub (unter Einstellungen › Server einrichten)"
     },
     "kinds": {
       "videos": "Videos",
@@ -782,7 +783,22 @@
       "news": "News",
       "diary": "Tagebuch & Kritiken",
       "topic": "Thema",
-      "rsshub": "über RSSHub"
+      "rsshub": "über RSSHub",
+      "latest": "Neueste",
+      "category": "Kategorie",
+      "thread": "Thema",
+      "downloads": "Downloads",
+      "announcements": "Ankündigungen"
+    },
+    "feedSource": {
+      "platform": "{name}-Feed",
+      "forum": "{name}-Forum",
+      "blog": "{name}-Blog",
+      "wiki": "{name}-Wiki",
+      "rsshub": "über RSSHub",
+      "html": "Von der Seite angeboten",
+      "commonPath": "Übliche Feed-Adresse",
+      "curated": "Bekannte Quelle"
     },
     "starterPacks": "Starter-Pakete",
     "deleteConfirmTitle": "Feed löschen?",

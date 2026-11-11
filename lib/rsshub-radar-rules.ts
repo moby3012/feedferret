@@ -9,7 +9,9 @@
 //   also AGPL-3.0, so this derived data is distributed under the same terms.
 //
 // Local deviations from upstream rules: Mixcloud `/:username` (upstream
-// `/:username/:type`), Twitch `/:login` and t.me `/:username` sources.
+// `/:username/:type`), Twitch `/:login` and t.me `/:username` sources;
+// Instagram profile and Blizzard news rules are local (P-PLAT: platforms
+// without a native feed), validated against the instance like every rule.
 //
 // Only high-value rules with a plain-string `target` are bundled (generated
 // from the upstream JSON and checked against it at generation time; titles,
@@ -95,6 +97,8 @@ export const RADAR_RULES: RadarRule[] = [
   { hosts: ["patreon.com"], title: "Creator posts", source: ["/:creator","/cw/:creator"], target: "/patreon/:creator", reserved: ["home","login","signup","c","user","explore","pricing","about","policy","product","apps","posts","join","settings"] },
   { hosts: ["www.facebook.com"], title: "Page", source: ["/:id","/people/:name/:id"], target: "/facebook/page/:id", reserved: ["groups","watch","marketplace","events","gaming","pages","people","photo","photos","reel","reels","stories","login","help","policies","share","sharer","dialog","hashtag","profile.php","story.php","permalink.php","friends","bookmarks","settings","public","login.php","business","ads","plugins"] },
   { hosts: ["www.facebook.com"], title: "Group", source: ["/groups/:id"], target: "/facebook/group/:id" },
+  { hosts: ["www.instagram.com"], title: "Profile", source: ["/:id"], target: "/instagram/user/:id", reserved: ["p","reel","reels","explore","stories","accounts","direct","about","legal","developer","tv","web","challenge","emails","directory"] },
+  { hosts: ["news.blizzard.com"], title: "News", source: ["/:language","/:language/:category"], target: "/blizzard/news/:language/:category?", where: {"language":"^[a-z]{2}-[a-z]{2}$"} },
   { hosts: ["dribbble.com"], title: "User shots", source: ["/:name"], target: "/dribbble/user/:name", reserved: ["shots","designers","tags","jobs","stories","following","pro","search","teams","hiring","learn","session","signup","about","colors","following","podcast","places"] },
   { hosts: ["dribbble.com"], title: "Popular", source: ["/"], target: "/dribbble/popular" },
   { hosts: ["www.artstation.com"], title: "Portfolio", source: ["/:handle"], target: "/artstation/:handle", reserved: ["artwork","marketplace","learning","jobs","blogs","contests","channels","search","prints","magazine","sessions","users","about","studios","contact","terms","privacy","pro"] },

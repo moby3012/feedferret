@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
+import { feedSourceLabel, type FeedSourceFields } from "@/lib/feed-source-label";
 import { useSuggestFeedFromUrl, useCreateFeedFromPage, useProposeAiFeedConfig, useAiSettings, useAddFeed } from "@/hooks/use-rss-data";
 import { toast } from "sonner";
 import type { CandidateQuality, SuggestedFieldConfig } from "@/lib/page-feed-suggest";
@@ -32,7 +33,7 @@ function dominantRejectReason(rejected: RejectedSummary): PreviewRejectReason | 
   return best;
 }
 
-type FoundFeed = { url: string; title: string; type: string; kind?: string };
+type FoundFeed = { url: string; title: string; type: string; kind?: string } & FeedSourceFields;
 
 /** Localised text for an action result: its stable `errorCode` when we know it, else the server text. */
 function useActionErrorText() {
@@ -94,6 +95,7 @@ function deriveNameFromUrl(url: string): string {
 
 export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPanelProps) {
   const t = useTranslations("sidebar.webpage");
+  const tSidebar = useTranslations("sidebar");
   const [url, setUrl] = useState(initialUrl ?? "");
   const format = useFormatter();
   const [candidates, setCandidates] = useState<PageFeedCandidate[] | null>(null);
@@ -291,23 +293,31 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
           </p>
           <p className="text-caption text-muted-foreground">{t("feedFoundHint")}</p>
           <ul className="space-y-1">
-            {foundFeeds.map((feed) => (
-              <li key={feed.url} className="flex items-center gap-1.5 rounded-row bg-background px-2 py-1.5" data-testid="page-feed-found-item">
-                <Rss className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-footnote text-foreground" title={feed.title}>{feed.title}</span>
-                  <span className="block truncate text-caption text-muted-foreground" title={feed.url}>{shortLink(feed.url)}</span>
-                </span>
-                <Button
-                  size="sm"
-                  className="h-7 shrink-0 px-2 text-footnote"
-                  disabled={subscribingUrl !== null}
-                  onClick={() => handleSubscribe(feed)}
-                >
-                  {subscribingUrl === feed.url ? <Loader2 className="size-4 animate-spin" /> : t("subscribe")}
-                </Button>
-              </li>
-            ))}
+            {foundFeeds.map((feed) => {
+              const sourceLabel = feedSourceLabel(feed);
+              return (
+                <li key={feed.url} className="flex items-center gap-1.5 rounded-row bg-background px-2 py-1.5" data-testid="page-feed-found-item">
+                  <Rss className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-footnote text-foreground" title={feed.title}>{feed.title}</span>
+                    <span className="block truncate text-caption text-muted-foreground" title={feed.url}>
+                      {sourceLabel && (
+                        <span data-testid="page-feed-found-source">{tSidebar(sourceLabel.key, sourceLabel.values)} · </span>
+                      )}
+                      {shortLink(feed.url)}
+                    </span>
+                  </span>
+                  <Button
+                    size="sm"
+                    className="h-7 shrink-0 px-2 text-footnote"
+                    disabled={subscribingUrl !== null}
+                    onClick={() => handleSubscribe(feed)}
+                  >
+                    {subscribingUrl === feed.url ? <Loader2 className="size-4 animate-spin" /> : t("subscribe")}
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
           <div className="flex flex-wrap gap-1.5 pt-0.5">
             <Button variant="ghost" size="sm" className="h-8 px-2 text-footnote" disabled={isBusy} onClick={() => handleFindItems(true)}>

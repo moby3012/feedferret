@@ -47,7 +47,12 @@ export type FeedKind =
   | "podcast"
   | "news"
   | "diary"
-  | "topic";
+  | "topic"
+  | "latest"
+  | "category"
+  | "thread"
+  | "downloads"
+  | "announcements";
 
 export type ResolvedFeed = {
   url: string;

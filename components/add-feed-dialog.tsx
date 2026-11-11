@@ -15,6 +15,7 @@ import { useAddFeed, useCategories, useChangedetectionStatus, useImportOpml, use
 import { DEFAULT_STARTER_PACKS, starterPackToOpml, type StarterPack } from "@/lib/starter-packs";
 import { cn } from "@/lib/utils";
 import { isGoogleNewsRssUrl } from "@/lib/google-news-url";
+import { feedSourceLabel, type FeedSourceFields } from "@/lib/feed-source-label";
 
 // Lazy-loaded: only rendered inside the "Add feed → Discover" tab, so it doesn't
 // need to be in the initial sidebar bundle.
@@ -108,7 +109,9 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
   const [newFeedUrl, setNewFeedUrl] = useState("");
   const [newFeedCategoryId, setNewFeedCategoryId] = useState<string>("none");
   const [isAddingFeed, setIsAddingFeed] = useState(false);
-  const [discoveredFeeds, setDiscoveredFeeds] = useState<{ url: string; title: string; type: string; kind?: string }[]>([]);
+  const [discoveredFeeds, setDiscoveredFeeds] = useState<
+    Array<{ url: string; title: string; type: string; kind?: string } & FeedSourceFields>
+  >([]);
   // "topic" = the input was a plain phrase; the list holds news/search feeds to pick from.
   const [discoveryMode, setDiscoveryMode] = useState<"url" | "topic">("url");
   const [discoveryMessage, setDiscoveryMessage] = useState<string | null>(null);
@@ -199,7 +202,9 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
       if (feeds.length === 0) {
         let message = t("sidebar.resolverNoResult");
         if (data.hint === "needs-rsshub") {
-          message = t("sidebar.hints.needsRsshub");
+          message = typeof data.hintPlatform === "string" && data.hintPlatform
+            ? t("sidebar.hints.needsRsshubFor", { platform: data.hintPlatform })
+            : t("sidebar.hints.needsRsshub");
         } else if (data.hint === "rate-limited") {
           message = t("sidebar.hints.rateLimited");
         } else if (data.hint === "blocked") {
@@ -356,39 +361,49 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
                 <p className="text-footnote text-muted-foreground font-medium px-0.5">
                   {discoveryMode === "topic" ? t("sidebar.topicFeeds") : t("sidebar.foundFeeds")}
                 </p>
-                {discoveredFeeds.map((f) => (
-                  <div key={f.url} className="flex items-center gap-1.5 rounded-panel bg-muted px-2 py-1.5">
-                    <Rss className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-footnote truncate flex-1 text-foreground" title={f.url}>{f.title}</span>
-                    {f.kind && (
-                      <span className="shrink-0 rounded-chip bg-background px-1.5 py-0.5 text-caption text-muted-foreground">
-                        {t.has(`sidebar.kinds.${f.kind}`) ? t(`sidebar.kinds.${f.kind}`) : f.kind}
+                {discoveredFeeds.map((f) => {
+                  const sourceLabel = discoveryMode === "url" ? feedSourceLabel(f) : null;
+                  return (
+                    <div key={f.url} className="flex items-center gap-1.5 rounded-panel bg-muted px-2 py-1.5" data-testid="discovered-feed">
+                      <Rss className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-footnote truncate text-foreground" title={f.url}>{f.title}</span>
+                        {sourceLabel && (
+                          <span className="block truncate text-caption text-muted-foreground" data-testid="discovered-feed-source">
+                            {t(`sidebar.${sourceLabel.key}`, sourceLabel.values)}
+                          </span>
+                        )}
                       </span>
-                    )}
-                    {discoveryMode === "topic" && isGoogleNewsRssUrl(f.url) && (
+                      {f.kind && f.kind !== "rsshub" && (
+                        <span className="shrink-0 rounded-chip bg-background px-1.5 py-0.5 text-caption text-muted-foreground">
+                          {t.has(`sidebar.kinds.${f.kind}`) ? t(`sidebar.kinds.${f.kind}`) : f.kind}
+                        </span>
+                      )}
+                      {discoveryMode === "topic" && isGoogleNewsRssUrl(f.url) && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-footnote shrink-0"
+                          onClick={() => {
+                            setGoogleNewsQuery(newFeedUrl.trim());
+                            setMoreSource("news");
+                            setAddFeedTab("more");
+                          }}
+                        >
+                          {t("googleNews.customize")}
+                        </Button>
+                      )}
                       <Button
                         size="sm"
-                        variant="ghost"
                         className="h-6 px-2 text-footnote shrink-0"
-                        onClick={() => {
-                          setGoogleNewsQuery(newFeedUrl.trim());
-                          setMoreSource("news");
-                          setAddFeedTab("more");
-                        }}
+                        onClick={() => handleAddFeed(f.url, f.title)}
+                        disabled={isAddingFeed}
                       >
-                        {t("googleNews.customize")}
+                        {t("common.add")}
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      className="h-6 px-2 text-footnote shrink-0"
-                      onClick={() => handleAddFeed(f.url, f.title)}
-                      disabled={isAddingFeed}
-                    >
-                      {t("common.add")}
-                    </Button>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             )}
 

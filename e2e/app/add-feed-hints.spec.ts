@@ -39,3 +39,16 @@ for (const { hint, url, message } of [
     expect(requested).toEqual([url]);
   });
 }
+
+test("the needs-rsshub hint names the platform that has no native feed", async ({ app }) => {
+  await app.page.route("**/api/discover?**", async (route) => {
+    await route.fulfill({ json: { feeds: [], mode: "url", hint: "needs-rsshub", hintPlatform: "X/Twitter" } });
+  });
+  const dialog = await openAddFeed(app);
+  const input = dialog.getByPlaceholder(INPUT);
+  await input.fill("https://social.invalid/EA");
+  await input.press("Enter");
+  await expect(dialog.getByText("X/Twitter has no feed of its own – requires RSSHub (configure under Settings › Server)")).toBeVisible({
+    timeout: 10_000,
+  });
+});
