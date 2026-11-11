@@ -797,6 +797,7 @@
     "clearNotificationsDescription": "Entfernt alle Benachrichtigungen aus der Liste. Feeds behalten ihren Status (stummgeschaltete Feeds bleiben stumm).",
     "clearNotificationsConfirm": "Alle löschen",
     "dismissNotification": "Benachrichtigung entfernen",
+    "notificationsDeleteFailed": "Benachrichtigungen konnten nicht gelöscht werden",
     "addFeedTitle": "Feed hinzufügen",
     "addDirectUrl": "URL direkt hinzufügen",
     "categoryPlaceholder": "Kategorie",

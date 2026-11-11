@@ -797,6 +797,7 @@
     "clearNotificationsDescription": "This removes every notification from the list. Feeds keep their current state (muted feeds stay muted).",
     "clearNotificationsConfirm": "Delete all",
     "dismissNotification": "Dismiss notification",
+    "notificationsDeleteFailed": "Could not delete notifications",
     "addFeedTitle": "Add Feed",
     "addDirectUrl": "Add direct URL",
     "categoryPlaceholder": "Category",

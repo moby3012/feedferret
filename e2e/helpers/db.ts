@@ -564,24 +564,71 @@ export function notificationCountInDb(userKey: string): number {
   }
 }
 
-export function deleteNotificationsInDb(userKey: string) {
+/** Exact raw rows of a user's notifications (snapshot to restore after a spec that clears them). */
+export type NotificationRow = Record<string, unknown>;
+export function snapshotNotificationRows(userKey: string): NotificationRow[] {
   const { userId } = manifest().users[userKey];
   const db = open();
   try {
-    db.prepare(`DELETE FROM "Notification" WHERE userId = ?`).run(userId);
+    return db.prepare(`SELECT * FROM "Notification" WHERE userId = ?`).all(userId) as NotificationRow[];
   } finally {
     db.close();
   }
 }
 
-/** Auto-mute the user's first feed (as the sync would) and return its id. */
-export function autoMuteFirstFeed(userKey: string): string {
+/** Put a user's notifications back exactly as `snapshotNotificationRows` saw them (removes anything else). */
+export function restoreNotificationRows(userKey: string, rows: NotificationRow[]) {
   const { userId } = manifest().users[userKey];
   const db = open();
   try {
-    const feed = db.prepare(`SELECT id FROM "Feed" WHERE userId = ? ORDER BY id LIMIT 1`).get(userId) as { id: string };
+    db.exec("BEGIN");
+    try {
+      db.prepare(`DELETE FROM "Notification" WHERE userId = ?`).run(userId);
+      for (const row of rows) {
+        const cols = Object.keys(row);
+        db.prepare(`INSERT INTO "Notification" (${cols.map((c) => `"${c}"`).join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).run(...Object.values(row));
+      }
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  } finally {
+    db.close();
+  }
+}
+
+/** Delete exactly these notification ids (fixture rows a spec created itself). */
+export function deleteNotificationsById(ids: string[]) {
+  const db = open();
+  try {
+    const del = db.prepare(`DELETE FROM "Notification" WHERE id = ?`);
+    for (const id of ids) del.run(id);
+  } finally {
+    db.close();
+  }
+}
+
+export function countNotificationsById(ids: string[]): number {
+  const db = open();
+  try {
+    const q = db.prepare(`SELECT COUNT(*) AS n FROM "Notification" WHERE id = ?`);
+    return ids.reduce((n, id) => n + (q.get(id) as { n: number }).n, 0);
+  } finally {
+    db.close();
+  }
+}
+
+export type FeedMuteRow = { autoMuted: number; consecutiveFailureCount: number; lastError: string | null };
+
+/** Auto-mute the user's first feed (as the sync would); returns its id and the exact prior fields to restore. */
+export function autoMuteFirstFeed(userKey: string): { id: string; prior: FeedMuteRow } {
+  const { userId } = manifest().users[userKey];
+  const db = open();
+  try {
+    const feed = db.prepare(`SELECT id, autoMuted, consecutiveFailureCount, lastError FROM "Feed" WHERE userId = ? ORDER BY id LIMIT 1`).get(userId) as { id: string } & FeedMuteRow;
     db.prepare(`UPDATE "Feed" SET autoMuted = 1, consecutiveFailureCount = 10, lastError = 'boom' WHERE id = ?`).run(feed.id);
-    return feed.id;
+    return { id: feed.id, prior: { autoMuted: feed.autoMuted, consecutiveFailureCount: feed.consecutiveFailureCount, lastError: feed.lastError } };
   } finally {
     db.close();
   }
@@ -590,22 +637,18 @@ export function autoMuteFirstFeed(userKey: string): string {
 export function feedMuteState(feedId: string): { autoMuted: boolean; consecutiveFailureCount: number; lastError: string | null } {
   const db = open();
   try {
-    const r = db.prepare(`SELECT autoMuted, consecutiveFailureCount, lastError FROM "Feed" WHERE id = ?`).get(feedId) as {
-      autoMuted: number;
-      consecutiveFailureCount: number;
-      lastError: string | null;
-    };
+    const r = db.prepare(`SELECT autoMuted, consecutiveFailureCount, lastError FROM "Feed" WHERE id = ?`).get(feedId) as FeedMuteRow;
     return { autoMuted: !!r.autoMuted, consecutiveFailureCount: r.consecutiveFailureCount, lastError: r.lastError };
   } finally {
     db.close();
   }
 }
 
-/** Undo `autoMuteFirstFeed`. */
-export function unmuteFeedInDb(feedId: string) {
+/** Restore the exact fields `autoMuteFirstFeed` captured. */
+export function restoreFeedMuteState(feedId: string, prior: FeedMuteRow) {
   const db = open();
   try {
-    db.prepare(`UPDATE "Feed" SET autoMuted = 0, consecutiveFailureCount = 0, lastError = NULL WHERE id = ?`).run(feedId);
+    db.prepare(`UPDATE "Feed" SET autoMuted = ?, consecutiveFailureCount = ?, lastError = ? WHERE id = ?`).run(prior.autoMuted, prior.consecutiveFailureCount, prior.lastError, feedId);
   } finally {
     db.close();
   }

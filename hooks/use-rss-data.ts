@@ -765,6 +765,7 @@ export function useMarkAllNotificationsRead() {
 /** Drops notifications from the cached list at once; the server call settles it (rollback on error). */
 function useNotificationRemoval<V>(mutationFn: (v: V) => Promise<unknown>, remove: (list: Array<{ id: string }>, v: V) => Array<{ id: string }>) {
     const queryClient = useQueryClient()
+    const t = useTranslations("sidebar")
     return useMutation({
         mutationFn,
         onMutate: async (v: V) => {
@@ -775,7 +776,7 @@ function useNotificationRemoval<V>(mutationFn: (v: V) => Promise<unknown>, remov
         },
         onError: (_err, _v, ctx) => {
             if (ctx?.previous) queryClient.setQueryData(["notifications"], ctx.previous)
-            toast.error("Failed to delete notifications")
+            toast.error(t("notificationsDeleteFailed"))
         },
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ["notifications"] })

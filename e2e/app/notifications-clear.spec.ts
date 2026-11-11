@@ -1,4 +1,16 @@
-import { autoMuteFirstFeed, deleteNotificationsInDb, feedMuteState, notificationCountInDb, seedNotifications, unmuteFeedInDb } from "../helpers/db";
+import {
+  autoMuteFirstFeed,
+  countNotificationsById,
+  deleteNotificationsById,
+  feedMuteState,
+  notificationCountInDb,
+  restoreFeedMuteState,
+  restoreNotificationRows,
+  seedNotifications,
+  snapshotNotificationRows,
+  type FeedMuteRow,
+  type NotificationRow,
+} from "../helpers/db";
 import { test, expect } from "../helpers/test";
 
 /**
@@ -10,23 +22,29 @@ import { test, expect } from "../helpers/test";
 test.use({ viewport: { width: 2000, height: 950 } });
 
 test.describe("notifications popover", () => {
+  // Shared seeded state is snapshotted and restored EXACTLY; the other user's
+  // rows are only ever our own fixture ids (never a blanket delete).
   let mutedFeedId = "";
+  let priorFeed: FeedMuteRow;
+  let priorRows: NotificationRow[] = [];
+  let otherUserIds: string[] = [];
   test.beforeEach(({ app }) => {
     test.skip(app.isMobile, "desktop bell popover (mobile uses the Feeds header sheet)");
-    deleteNotificationsInDb("desktop");
-    deleteNotificationsInDb("mobile");
-    mutedFeedId = autoMuteFirstFeed("desktop");
+    priorRows = snapshotNotificationRows("desktop");
+    restoreNotificationRows("desktop", []); // deterministic start: "Clear all" wipes the user's whole list
+    ({ id: mutedFeedId, prior: priorFeed } = autoMuteFirstFeed("desktop"));
+    otherUserIds = [];
   });
   test.afterEach(({ app }) => {
     if (app.isMobile) return;
-    deleteNotificationsInDb("desktop");
-    deleteNotificationsInDb("mobile");
-    if (mutedFeedId) unmuteFeedInDb(mutedFeedId);
+    restoreNotificationRows("desktop", priorRows);
+    deleteNotificationsById(otherUserIds);
+    restoreFeedMuteState(mutedFeedId, priorFeed);
   });
 
   test("dismiss one, clear all (confirm), feed stays muted, other user untouched, stays gone after reload", async ({ app, page }) => {
     seedNotifications("desktop", 3);
-    seedNotifications("mobile", 2);
+    otherUserIds = seedNotifications("mobile", 2);
     await app.open();
     const bell = page.getByRole("button", { name: "Notifications" });
     await bell.click();
@@ -63,7 +81,7 @@ test.describe("notifications popover", () => {
     await expect.poll(() => notificationCountInDb("desktop")).toBe(0);
 
     // Scoped to the session user; feed state untouched.
-    expect(notificationCountInDb("mobile")).toBe(2);
+    expect(countNotificationsById(otherUserIds)).toBe(2);
     expect(feedMuteState(mutedFeedId)).toMatchObject({ autoMuted: true, consecutiveFailureCount: 10, lastError: "boom" });
 
     // Empty state; nothing comes back after a reload.
