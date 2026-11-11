@@ -21,6 +21,8 @@ const h = vi.hoisted(() => {
       findMany: vi.fn(async () => [source]),
       findUnique: vi.fn(async () => source),
     },
+    newsletterAddress: { findMany: vi.fn(async (_args: unknown): Promise<{ token: string; userId: string }[]> => []) },
+    newsletterQuota: { findMany: vi.fn(async (_args: unknown): Promise<{ userId: string; count: number }[]> => []) },
   };
   return { source, db, hooks: { autoRead: vi.fn(async () => ({ applied: 0 })), alerts: vi.fn(async () => undefined), push: vi.fn(async () => undefined) } };
 });
@@ -37,7 +39,9 @@ vi.mock("@/lib/keyword-alerts", () => ({ applyKeywordAlerts: h.hooks.alerts }));
 vi.mock("@/lib/notifications", () => ({ queueNewArticleNotifications: h.hooks.push }));
 
 import {
+  alreadyProcessed,
   classifyImapError,
+  POLL_LEASE_MS,
   discoverImapServer,
   mailboxRecipients,
   parseHeaderBlock,
@@ -57,10 +61,11 @@ const publicLookup = async () => [{ address: "142.250.1.108", family: 4 }];
 
 type FakeMsg = { uid: number; headers: string; flags?: string[]; size?: number; source?: string };
 
-function fakeClient(messages: FakeMsg[], opts: { moveFails?: boolean | "throw"; folders?: string[]; connectError?: unknown } = {}) {
+function fakeClient(messages: FakeMsg[], opts: { moveFails?: boolean | "throw"; folders?: string[]; connectError?: unknown; permanentFlags?: string[]; slowFetchMs?: number } = {}) {
   const calls = { moved: [] as number[][], flagged: [] as { uids: number[]; flags: string[] }[], created: [] as string[], fetchedSource: [] as number[], options: null as unknown };
   const folders = [...(opts.folders ?? ["INBOX"])];
   const client: ImapClientLike = {
+    mailbox: opts.permanentFlags ? { permanentFlags: new Set(opts.permanentFlags) } : undefined,
     connect: vi.fn(async () => {
       if (opts.connectError) throw opts.connectError;
     }),
@@ -74,6 +79,7 @@ function fakeClient(messages: FakeMsg[], opts: { moveFails?: boolean | "throw"; 
         }
       })(),
     fetchOne: vi.fn(async (uid: string) => {
+      if (opts.slowFetchMs) await new Promise((r) => setTimeout(r, opts.slowFetchMs));
       calls.fetchedSource.push(Number(uid));
       const m = messages.find((x) => x.uid === Number(uid));
       return m ? { uid: m.uid, source: Buffer.from(m.source ?? `${m.headers}\r\n\r\nbody`) } : false;
@@ -105,6 +111,8 @@ function fakeClient(messages: FakeMsg[], opts: { moveFails?: boolean | "throw"; 
 beforeEach(() => {
   vi.clearAllMocks();
   h.db.inboundMailSource.updateMany.mockResolvedValue({ count: 1 });
+  h.db.newsletterAddress.findMany.mockResolvedValue([]);
+  h.db.newsletterQuota.findMany.mockResolvedValue([]);
 });
 
 describe("recipient filtering", () => {
@@ -282,8 +290,14 @@ describe("pollImapSource", () => {
     const { factory } = fakeClient([]);
     const now = new Date("2026-11-11T10:00:00Z");
     await pollImapSource({ ...h.source, errorCount: 3 }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, now: () => now });
-    const where = (h.db.inboundMailSource.updateMany.mock.calls[0] as unknown as [{ where: { OR: [unknown, { lastCheckedAt: { lt: Date } }] } }])[0].where;
-    expect(where.OR[1].lastCheckedAt.lt.getTime()).toBe(now.getTime() - 8 * 60_000);
+    const call = (h.db.inboundMailSource.updateMany.mock.calls[0] as unknown as [{ where: { OR: [unknown, { lastCheckedAt: { lt: Date } }] }; data: { lastCheckedAt: Date } }])[0];
+    expect(call.where.OR[1].lastCheckedAt.lt.getTime()).toBe(now.getTime() - 8 * 60_000);
+    // The claim holds a lease that covers the whole poll (a forced live-test poll cannot overlap it) …
+    expect(call.data.lastCheckedAt.getTime()).toBe(now.getTime() + POLL_LEASE_MS);
+    expect(POLL_LEASE_MS).toBeGreaterThan(60_000);
+    // … and the finish writes the real time back.
+    const done = (h.db.inboundMailSource.update.mock.calls.at(-1) as unknown as [{ data: { lastCheckedAt: Date } }])[0].data;
+    expect(done.lastCheckedAt.getTime()).toBe(now.getTime());
   });
 
   it("counts errors and stores a redacted message; never throws", async () => {
@@ -294,6 +308,89 @@ describe("pollImapSource", () => {
     expect(data.errorCount).toEqual({ increment: 1 });
     expect(data.lastError.startsWith("auth-failed")).toBe(true);
     expect(data.lastError).not.toContain("hunter2");
+  });
+
+  it("an over-quota user cannot starve others: skipped before download, no poll slots used", async () => {
+    const msgs: FakeMsg[] = [];
+    for (let uid = 1; uid <= 60; uid++) msgs.push({ uid, headers: hdr(`news.box+ff-${TOKEN_A}@gmail.com`) });
+    msgs.push({ uid: 61, headers: hdr(`news.box+ff-${TOKEN_B}@gmail.com`) });
+    h.db.newsletterAddress.findMany.mockResolvedValue([{ token: TOKEN_A, userId: "uA" }, { token: TOKEN_B, userId: "uB" }]);
+    h.db.newsletterQuota.findMany.mockResolvedValue([{ userId: "uA", count: 100 }]);
+    const { factory, calls } = fakeClient(msgs, { folders: ["INBOX", "FeedFerret"] });
+    const ingest = vi.fn(async () => ({ status: "created" as const, userId: "uB", articleId: "b1" }));
+    const summary = await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, ingest });
+    expect(calls.fetchedSource).toEqual([61]);
+    expect(ingest).toHaveBeenCalledTimes(1);
+    expect(summary).toMatchObject({ status: "ok", matched: 61, created: 1, moved: 1, deferred: 60 });
+    expect(calls.moved).toEqual([[61]]);
+  });
+
+  it("a quota that fills up DURING the poll stops that user's downloads; others still get through", async () => {
+    const msgs: FakeMsg[] = [];
+    for (let uid = 1; uid <= 60; uid++) msgs.push({ uid, headers: hdr(`news.box+ff-${TOKEN_A}@gmail.com`) });
+    msgs.push({ uid: 61, headers: hdr(`news.box+ff-${TOKEN_B}@gmail.com`) });
+    h.db.newsletterAddress.findMany.mockResolvedValue([{ token: TOKEN_A, userId: "uA" }, { token: TOKEN_B, userId: "uB" }]);
+    const { factory, calls } = fakeClient(msgs, { folders: ["INBOX", "FeedFerret"] });
+    const ingest = vi.fn(async (_raw: Buffer, o: { recipients: string[] }) =>
+      o.recipients[0].includes(TOKEN_A) ? { status: "rate-limited" as const, userId: "uA" } : { status: "created" as const, userId: "uB", articleId: "b1" },
+    );
+    const summary = await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, ingest });
+    expect(calls.fetchedSource).toEqual([1, 61]); // A's first mail revealed the full quota; the other 59 are not downloaded
+    expect(summary).toMatchObject({ created: 1, moved: 1, deferred: 60 });
+  });
+
+  it("caps mail per address and per poll", async () => {
+    const msgs: FakeMsg[] = [];
+    for (let uid = 1; uid <= 30; uid++) msgs.push({ uid, headers: hdr(`news.box+ff-${TOKEN_A}@gmail.com`) });
+    for (let uid = 31; uid <= 35; uid++) msgs.push({ uid, headers: hdr(`news.box+ff-${TOKEN_B}@gmail.com`) });
+    const { factory, calls } = fakeClient(msgs, { folders: ["INBOX", "FeedFerret"] });
+    const summary = await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, ingest: vi.fn(async () => ({ status: "duplicate" as const })) });
+    expect(calls.fetchedSource.filter((u) => u <= 30)).toHaveLength(20);
+    expect(calls.fetchedSource.filter((u) => u > 30)).toHaveLength(5);
+    expect(summary.deferred).toBe(10);
+  });
+
+  it("excludes processed mail server-side and reports mail outside the scan window", async () => {
+    const msgs: FakeMsg[] = [];
+    for (let uid = 1; uid <= 310; uid++) msgs.push({ uid, headers: hdr("news.box@gmail.com") });
+    const { factory, client } = fakeClient(msgs);
+    const summary = await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false });
+    expect((client.search as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ deleted: false, unKeyword: "$FeedFerret" });
+    expect(summary).toMatchObject({ scanned: 300, outOfWindow: 10 });
+  });
+
+  it("treats plain \\Seen+\\Flagged as processed only on servers that refuse keywords, and remembers that", async () => {
+    expect(alreadyProcessed(new Set(["\\Seen", "\\Flagged"]))).toBe(false);
+    expect(alreadyProcessed(new Set(["$FeedFerret"]))).toBe(true);
+    expect(alreadyProcessed(new Set(["\\Seen", "\\Flagged"]), true)).toBe(true);
+
+    const { factory, calls } = fakeClient([{ uid: 3, headers: hdr(`news.box+ff-${TOKEN_A}@gmail.com`) }], { moveFails: true, folders: ["INBOX", "FeedFerret"], permanentFlags: ["\\Seen", "\\Flagged", "\\Deleted"] });
+    await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, ingest: vi.fn(async () => ({ status: "duplicate" as const })) });
+    expect(calls.flagged).toEqual([{ uids: [3], flags: ["\\Seen", "\\Flagged"] }]);
+    const data = (h.db.inboundMailSource.update.mock.calls.at(-1) as unknown as [{ data: { settings: string } }])[0].data;
+    expect(JSON.parse(data.settings)).toMatchObject({ keywordsUnsupported: true });
+
+    // With the remembered setting the search excludes \Seen+\Flagged mail instead.
+    const remembered = { ...h.source, settings: data.settings };
+    const second = fakeClient([]);
+    await pollImapSource(remembered, { clientFactory: second.factory, lookup: publicLookup, allowInternal: false });
+    expect((second.client.search as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({ or: [{ seen: false }, { flagged: false }] });
+  });
+
+  it("a timeout stops before the next ingest, keeps what was done, runs the hooks and does not back off", async () => {
+    const msgs: FakeMsg[] = [1, 2, 3, 4].map((uid) => ({ uid, headers: hdr(`news.box+ff-${TOKEN_A}@gmail.com`) }));
+    const { factory, calls } = fakeClient(msgs, { folders: ["INBOX", "FeedFerret"], slowFetchMs: 40 });
+    let n = 0;
+    const ingest = vi.fn(async () => ({ status: "created" as const, userId: "u1", articleId: `a${++n}` }));
+    const summary = await pollImapSource({ ...h.source }, { clientFactory: factory, lookup: publicLookup, allowInternal: false, ingest, totalTimeoutMs: 60, graceMs: 1000 });
+    expect(summary.partial).toBe(true);
+    expect(summary.status).toBe("ok");
+    expect(ingest.mock.calls.length).toBeGreaterThan(0);
+    expect(ingest.mock.calls.length).toBeLessThan(4);
+    expect(calls.moved[0]).toHaveLength(ingest.mock.calls.length);
+    expect(h.hooks.autoRead).toHaveBeenCalledWith("u1", { onlyArticleIds: ingest.mock.results.map((_, i) => `a${i + 1}`) });
+    const data = (h.db.inboundMailSource.update.mock.calls.at(-1) as unknown as [{ data: { errorCount: unknown } }])[0].data;
+    expect(data.errorCount).toBe(0);
   });
 
   it("skips paused sources and blocked hosts", async () => {

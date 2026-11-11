@@ -2236,7 +2236,7 @@
     "testTitle": "Ende-zu-Ende-Test",
     "testIntro": "Eine Mail an deine eigene Newsletter-Adresse zeigt, ob alles funktioniert.",
     "testIdle": "Bereit für den Test.",
-    "manualTest": "Es ist kein Mailversand eingerichtet. Schick dir selbst eine Mail an diese Adresse:",
+    "manualTest": "Es ist kein Mailversand eingerichtet. Schick dir selbst eine Mail – mit genau diesem Betreff:",
     "sendTestMail": "Testmail schicken",
     "sendingTestMail": "Sendet …",
     "startWaiting": "Ich habe sie geschickt",
@@ -2266,8 +2266,8 @@
     "pause": "Pausieren",
     "resume": "Fortsetzen",
     "disconnect": "Trennen",
-    "disconnectTitle": "Postfach trennen?",
-    "disconnectBody": "FeedFerret liest dann keine Newsletter mehr und löscht die gespeicherten Zugangsdaten. Die Adressen der Nutzer bleiben erhalten und funktionieren wieder, sobald dasselbe Postfach erneut verbunden wird.",
+    "disconnectTitle": "Postfach trennen? Alle Nutzer-Adressen ändern sich",
+    "disconnectBody": "FeedFerret liest dann keine Newsletter mehr und löscht die gespeicherten Zugangsdaten. Wird danach ein anderes Postfach verbunden, ändern sich alle Nutzer-Adressen; nur mit demselben Postfach funktionieren die bisherigen Adressen wieder.",
     "cancel": "Abbrechen",
     "errors": {
       "invalid-email": "Bitte eine gültige E-Mail-Adresse ohne „+“ eingeben.",
@@ -2286,8 +2286,15 @@
       "credentials-unreadable": "Das gespeicherte Passwort kann nicht mehr gelesen werden (Schlüssel geändert?). Bitte neu eingeben.",
       "no-source": "Noch kein Postfach verbunden.",
       "send-failed": "Die Testmail konnte nicht gesendet werden. Prüfe die Einstellungen unter „E-Mail“.",
-      "unknown": "Unbekannter Fehler. Versuch es noch einmal."
-    }
+      "unknown": "Unbekannter Fehler. Versuch es noch einmal.",
+      "confirm-address-change": "Bitte bestätige, dass sich alle Nutzer-Adressen ändern."
+    },
+    "confirmChangeTitle": "Alle Nutzer-Adressen ändern sich",
+    "confirmChangeBody": "Mit diesem Postfach bekommt jede Person eine neue Newsletter-Adresse. Die bisherigen Adressen empfangen danach nichts mehr – alle müssen ihre Newsletter auf die neue Adresse umstellen.",
+    "confirmChangeOk": "Ja, Adressen ändern",
+    "manualTo": "An",
+    "manualSubject": "Betreff",
+    "testFailed": "Der Test wurde abgebrochen: Mit diesen Zugangsdaten kann FeedFerret das Postfach nicht lesen. Ändere die Zugangsdaten und teste erneut."
   },
   "newsletterSettings": {
     "title": "Deine Newsletter-Adresse",

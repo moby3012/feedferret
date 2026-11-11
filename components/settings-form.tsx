@@ -66,12 +66,16 @@ function setSectionUrl(section: SettingsSection | null, mode: "push" | "replace"
 
 const sectionFromLocation = () => parseSettingsSection(new URLSearchParams(window.location.search).get("tab"));
 
-export function SettingsForm({ initialTab }: { initialTab?: string } = {}) {
+export function SettingsForm({ initialTab, hiddenSections = [] }: { initialTab?: string; hiddenSections?: readonly SettingsSection[] } = {}) {
   const t = useTranslations();
   const router = useRouter();
+  const sections = SETTINGS_SECTIONS.filter((s) => !hiddenSections.includes(s));
+  const visibleSection = (s: SettingsSection | null) => (s && !hiddenSections.includes(s) ? s : null);
+  const hiddenRef = useRef(hiddenSections);
+  hiddenRef.current = hiddenSections;
   // The URL is the source of truth: seeded from the server's searchParams, then
   // kept in sync on our own history writes and on Back / Forward (popstate).
-  const [active, setActive] = useState<SettingsSection | null>(() => parseSettingsSection(initialTab));
+  const [active, setActive] = useState<SettingsSection | null>(() => visibleSection(parseSettingsSection(initialTab)));
   const shown: SettingsSection = active ?? "appearance";
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const focusAfterNav = useRef<"detail" | SettingsSection | null>(null);
@@ -94,7 +98,8 @@ export function SettingsForm({ initialTab }: { initialTab?: string } = {}) {
 
   useEffect(() => {
     const onPop = () => {
-      const section = sectionFromLocation();
+      const raw = sectionFromLocation();
+      const section = raw && !hiddenRef.current.includes(raw) ? raw : null;
       // Forward into a section re-enters the pushed level: in-app back may pop it again.
       drilled = section !== null && isCompact();
       setActive(section);
@@ -169,7 +174,7 @@ export function SettingsForm({ initialTab }: { initialTab?: string } = {}) {
         <div className="ff-settings-panes">
           <nav className="ff-settings-nav" aria-label={t("settings.sectionsNav")}>
             <ul className="ff-settings-nav-list">
-              {SETTINGS_SECTIONS.map((s) => {
+              {sections.map((s) => {
                 const Icon = SECTION_ICON[s];
                 const current = s === shown;
                 return (

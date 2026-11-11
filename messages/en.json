@@ -2236,7 +2236,7 @@
     "testTitle": "End-to-end test",
     "testIntro": "A mail to your own newsletter address shows whether everything works.",
     "testIdle": "Ready to test.",
-    "manualTest": "No outgoing mail is set up. Send yourself a mail to this address:",
+    "manualTest": "No outgoing mail is set up. Send yourself a mail – with exactly this subject:",
     "sendTestMail": "Send test mail",
     "sendingTestMail": "Sending …",
     "startWaiting": "I sent it",
@@ -2266,8 +2266,8 @@
     "pause": "Pause",
     "resume": "Resume",
     "disconnect": "Disconnect",
-    "disconnectTitle": "Disconnect mailbox?",
-    "disconnectBody": "FeedFerret stops reading newsletters and deletes the stored credentials. User addresses are kept and work again once the same mailbox is connected again.",
+    "disconnectTitle": "Disconnect mailbox? Every user's address changes",
+    "disconnectBody": "FeedFerret stops reading newsletters and deletes the stored credentials. If a different mailbox is connected afterwards, every user's address changes; only the same mailbox makes the old addresses work again.",
     "cancel": "Cancel",
     "errors": {
       "invalid-email": "Please enter a valid e-mail address without “+”.",
@@ -2286,8 +2286,15 @@
       "credentials-unreadable": "The stored password can no longer be read (key changed?). Please enter it again.",
       "no-source": "No mailbox connected yet.",
       "send-failed": "The test mail could not be sent. Check the settings under “E-mail”.",
-      "unknown": "Unknown error. Please try again."
-    }
+      "unknown": "Unknown error. Please try again.",
+      "confirm-address-change": "Please confirm that every user's address changes."
+    },
+    "confirmChangeTitle": "Every user's address changes",
+    "confirmChangeBody": "With this mailbox everyone gets a new newsletter address. The old addresses stop receiving mail – everyone has to move their newsletters to the new address.",
+    "confirmChangeOk": "Yes, change addresses",
+    "manualTo": "To",
+    "manualSubject": "Subject",
+    "testFailed": "Test stopped: FeedFerret cannot read the mailbox with these credentials. Change them and test again."
   },
   "newsletterSettings": {
     "title": "Your newsletter address",

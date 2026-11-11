@@ -15,7 +15,8 @@ function resetNewsletterState(userId: string) {
   db.pragma("busy_timeout = 5000");
   try {
     db.prepare('DELETE FROM "InboundMailSource"').run();
-    db.prepare('DELETE FROM "NewsletterAddress" WHERE userId = ?').run(userId);
+    // Instance-wide: addresses of every user (they decide whether a mailbox change needs confirmation).
+    db.prepare('DELETE FROM "NewsletterAddress"').run();
     db.prepare('DELETE FROM "NewsletterQuota" WHERE userId = ?').run(userId);
     // Newsletter items are not part of the seed: other specs reset seeded article state.
     db.prepare(`DELETE FROM "Article" WHERE feedId IN (SELECT id FROM "Feed" WHERE userId = ? AND sourceType = 'newsletter')`).run(userId);
@@ -94,10 +95,17 @@ test.describe("newsletter inbox", () => {
     await expect(step).toBeVisible();
     const address = (await step.getByTestId("nl-test-address").textContent())!.trim();
     expect(address).toMatch(/^e2e\.box\+ff-[a-z2-7]{26}@gmail\.com$/);
+    const marker = (await step.getByTestId("nl-test-marker").textContent())!.trim();
+    expect(marker).toMatch(/^FF-TEST-[A-Z2-7]{8}$/);
 
     deliver(1, address, "Ferret Weekly #1");
     deliver(2, "e2e.box@gmail.com", "A private mail"); // not ours: must stay untouched
     await step.getByTestId("nl-manual-sent").click();
+    // Another newsletter arriving is not the test mail: only the marker counts.
+    await expect(step.getByTestId("nl-test-status")).toContainText("Waiting for the mail");
+    await page.waitForTimeout(9_000);
+    await expect(step.getByTestId("nl-test-arrived")).toHaveCount(0);
+    deliver(3, address, `Test ${marker}`);
     await expect(step.getByTestId("nl-test-arrived")).toBeVisible({ timeout: 45_000 });
 
     expect(fs.existsSync(path.join(spool(), "FeedFerret", "1.eml"))).toBe(true);
@@ -139,5 +147,24 @@ test.describe("newsletter inbox", () => {
     await rows.nth(1).getByTestId("newsletter-toggle").click();
     await expect(rows.nth(1)).toHaveAttribute("data-active", "0");
     await expect(rows.nth(1)).toContainText("Deactivated");
+
+    // A different mailbox changes every address: the server insists on a confirmation.
+    await page.goto("/server-settings?tab=newsletter");
+    const card = page.getByTestId("nl-status-card");
+    await card.getByTestId("nl-status-edit").click();
+    await wizard.getByLabel("Mailbox e-mail address").fill("e2e.other@gmail.com");
+    await wizard.getByLabel("App password").fill("e2e-app-pass");
+    await wizard.getByTestId("nl-save").click();
+    const confirm = page.getByTestId("nl-confirm-change");
+    await expect(confirm).toContainText("Every user's address changes");
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(wizard.getByTestId("nl-test-step")).toHaveCount(0);
+
+    // Disconnect warns the same way.
+    await wizard.getByRole("button", { name: "Back" }).click();
+    await card.getByTestId("nl-status-disconnect").click();
+    await expect(page.getByRole("alertdialog")).toContainText("Every user's address changes");
+    await page.getByTestId("nl-disconnect-confirm").click();
+    await expect(wizard.getByTestId("nl-path-imap")).toBeVisible();
   });
 });

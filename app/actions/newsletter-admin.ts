@@ -5,6 +5,7 @@
 // never returned; the client sees `hasPassword` and sends "__keep__" (or "")
 // to reuse the stored password.
 
+import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin, logAdminAction } from "@/lib/admin-auth";
@@ -28,7 +29,14 @@ import {
 const KEEP = "__keep__";
 const HOST_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$|^\[?[0-9a-f:.]+\]?$/i;
 
-export type WizardErrorCode = ImapErrorCode | "invalid-email" | "no-server" | "password-required" | "invalid-server" | "no-source";
+export type WizardErrorCode = ImapErrorCode | "invalid-email" | "no-server" | "password-required" | "invalid-server" | "no-source" | "confirm-address-change";
+
+/** Subject marker of the end-to-end test mail ("FF-TEST-XXXXXX"). */
+const TEST_MARKER_RE = /^FF-TEST-[A-Z2-7]{8}$/;
+function newTestMarker(): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  return `FF-TEST-${Array.from(randomBytes(8), (b) => alphabet[b & 31]).join("")}`;
+}
 
 export interface PresetView {
   id: string;
@@ -110,7 +118,8 @@ function toView(row: SourceRow): InboundSourceView {
     paused: row.paused,
     hasPassword: !!row.credentials,
     lastReceivedAt: row.lastReceivedAt?.toISOString() ?? null,
-    lastCheckedAt: row.lastCheckedAt?.toISOString() ?? null,
+    // While a poll runs, lastCheckedAt holds the end of its lease (future): show "now".
+    lastCheckedAt: row.lastCheckedAt ? new Date(Math.min(row.lastCheckedAt.getTime(), Date.now())).toISOString() : null,
     errorCount: row.errorCount,
     lastErrorCode: code,
     lastErrorDetail: row.lastError && code ? row.lastError.slice(code.length + 1).trim() || null : null,
@@ -152,8 +161,8 @@ export async function detectNewsletterImapServer(input: unknown): Promise<{ ok: 
   return { ok: true, server: found, preset: presetView(found.presetId) };
 }
 
-type ConnectInput = { email?: unknown; password?: unknown; host?: unknown; port?: unknown; secure?: unknown };
-const CONNECT_FIELDS = ["email", "password", "host", "port", "secure"] as const;
+type ConnectInput = { email?: unknown; password?: unknown; host?: unknown; port?: unknown; secure?: unknown; confirmAddressChange?: unknown };
+const CONNECT_FIELDS = ["email", "password", "host", "port", "secure", "confirmAddressChange"] as const;
 
 type Resolved =
   | { ok: true; mailbox: string; settings: ImapSourceSettings; server: ServerView; password: string; existing: SourceRow | null }
@@ -229,8 +238,18 @@ export async function saveNewsletterImap(input: unknown): Promise<TestResult & {
   const session = await requireAdmin();
   const resolved = await resolveConnectInput(input);
   if (!resolved.ok) return resolved;
-  const result = await testImapConnection({ host: resolved.server.host, port: resolved.server.port, secure: resolved.server.secure, user: resolved.mailbox, pass: resolved.password });
   const preset = presetView(resolved.server.presetId);
+  // Every user address derives from the base mailbox: a different mailbox (or
+  // a new one after a disconnect while addresses exist) changes all of them.
+  // Enforced here, not only in the UI.
+  const { confirmAddressChange } = pickFields((input ?? {}) as ConnectInput, ["confirmAddressChange"]);
+  const changesAddresses = resolved.existing
+    ? resolved.existing.address !== resolved.mailbox
+    : (await db.newsletterAddress.count()) > 0;
+  if (changesAddresses && confirmAddressChange !== true) {
+    return { ok: false, code: "confirm-address-change", server: resolved.server, preset };
+  }
+  const result = await testImapConnection({ host: resolved.server.host, port: resolved.server.port, secure: resolved.server.secure, user: resolved.mailbox, pass: resolved.password });
   if (!result.ok) return { ok: false, code: result.code, detail: result.detail, server: resolved.server, preset };
 
   const data = {
@@ -242,8 +261,8 @@ export async function saveNewsletterImap(input: unknown): Promise<TestResult & {
     paused: false,
     errorCount: 0,
     lastError: null,
-    lastCheckedAt: null,
   };
+  // lastCheckedAt is left alone on update: it may hold a running poll's lease.
   const row = resolved.existing
     ? await db.inboundMailSource.update({ where: { id: resolved.existing.id }, data, select: SOURCE_SELECT })
     : await db.inboundMailSource.create({ data, select: SOURCE_SELECT });
@@ -251,43 +270,61 @@ export async function saveNewsletterImap(input: unknown): Promise<TestResult & {
   return { ok: true, server: resolved.server, preset, folderCount: result.folders.length, processedFolderExists: result.processedFolderExists, source: toView(row) };
 }
 
-/** Step 3: send a test mail to the admin's own address via the instance mailer (if any). */
-export async function sendNewsletterTestMail(): Promise<{ ok: true; address: string; sent: boolean; startedAt: string } | { ok: false; code: WizardErrorCode | "send-failed"; address?: string; startedAt?: string }> {
+export type TestStart =
+  | { ok: true; address: string; marker: string; sent: boolean; startedAt: string }
+  | { ok: false; code: WizardErrorCode | "send-failed"; address?: string; marker?: string; startedAt?: string };
+
+/**
+ * Step 3: a unique subject marker for this test, plus — when the instance can
+ * send mail and `send` is true — the test mail itself. Without a mailer the
+ * admin sends one manually with the marker as subject.
+ */
+export async function startNewsletterTest(input: unknown): Promise<TestStart> {
   const session = await requireAdmin();
+  const { send } = pickFields((input ?? {}) as { send?: unknown }, ["send"]);
   const address = await adminTestAddress(session.user.id);
   const startedAt = new Date(Date.now() - 1000).toISOString();
   if (!address) return { ok: false, code: "no-source" };
-  if (!(await isMailServiceEnabled())) return { ok: true, address, sent: false, startedAt };
+  const marker = newTestMarker();
+  if (send !== true || !(await isMailServiceEnabled())) return { ok: true, address, marker, sent: false, startedAt };
   try {
     await sendSystemEmail({
       to: address,
-      subject: "FeedFerret – Testmail für den Newsletter-Eingang",
+      subject: `FeedFerret Testmail ${marker}`,
       text: "Wenn du diese Mail in FeedFerret im Ordner „Newsletter“ siehst, funktioniert der Newsletter-Eingang.\n\nIf you can read this in FeedFerret's \"Newsletter\" folder, the newsletter inbox works.",
       html: "<p>Wenn du diese Mail in FeedFerret im Ordner „Newsletter“ siehst, funktioniert der Newsletter-Eingang.</p><p>If you can read this in FeedFerret's “Newsletter” folder, the newsletter inbox works.</p>",
     });
-    return { ok: true, address, sent: true, startedAt };
+    return { ok: true, address, marker, sent: true, startedAt };
   } catch (error) {
     logger.warn("[newsletter-admin] test mail failed", { error: error instanceof Error ? error.name : "error" });
-    return { ok: false, code: "send-failed", address, startedAt };
+    return { ok: false, code: "send-failed", address, marker, startedAt };
   }
 }
 
-/** Step 3 live status: polls the mailbox now (short forced gap) and reports arrival. */
+/**
+ * Step 3 live status: polls the mailbox now (short forced gap) and reports
+ * whether an article whose title carries THIS test's marker arrived for the
+ * admin — never "any mail since …".
+ */
 export async function checkNewsletterTestMail(input: unknown): Promise<{ arrived: boolean; seconds: number | null; errorCode: string | null }> {
   const session = await requireAdmin();
-  const { since } = pickFields((input ?? {}) as { since?: unknown }, ["since"]);
+  const { since, marker } = pickFields((input ?? {}) as { since?: unknown; marker?: unknown }, ["since", "marker"]);
   const sinceDate = typeof since === "string" ? new Date(since) : null;
-  if (!sinceDate || Number.isNaN(sinceDate.getTime())) return { arrived: false, seconds: null, errorCode: null };
+  if (!sinceDate || Number.isNaN(sinceDate.getTime()) || typeof marker !== "string" || !TEST_MARKER_RE.test(marker)) {
+    return { arrived: false, seconds: null, errorCode: null };
+  }
   const source = await imapSourceRow();
   if (!source) return { arrived: false, seconds: null, errorCode: "no-source" };
   if (!source.paused) await pollInboundSourceNow(source.id).catch(() => null);
-  const primary = await ensurePrimaryNewsletterAddress(session.user.id);
-  const row = await db.newsletterAddress.findUnique({ where: { id: primary.id }, select: { lastReceivedAt: true } });
+  const article = await db.article.findFirst({
+    where: { userId: session.user.id, title: { contains: marker }, createdAt: { gte: new Date(sinceDate.getTime() - 15 * 60_000) } },
+    orderBy: { createdAt: "asc" },
+    select: { createdAt: true },
+  });
   const fresh = await imapSourceRow();
-  const arrivedAt = row?.lastReceivedAt && row.lastReceivedAt.getTime() >= sinceDate.getTime() ? row.lastReceivedAt : null;
   return {
-    arrived: !!arrivedAt,
-    seconds: arrivedAt ? Math.max(0, Math.round((arrivedAt.getTime() - sinceDate.getTime()) / 1000)) : null,
+    arrived: !!article,
+    seconds: article ? Math.max(0, Math.round((article.createdAt.getTime() - sinceDate.getTime()) / 1000)) : null,
     errorCode: storedErrorCode(fresh?.lastError),
   };
 }
@@ -301,16 +338,22 @@ export async function setNewsletterInboundPaused(input: unknown): Promise<{ ok: 
   const row = await db.inboundMailSource.update({
     where: { id: existing.id },
     // Resuming starts fresh: no stale backoff from the paused period.
-    data: paused ? { paused: true } : { paused: false, errorCount: 0, lastError: null, lastCheckedAt: null },
+    data: paused ? { paused: true } : { paused: false, errorCount: 0, lastError: null },
     select: SOURCE_SELECT,
   });
   await logAdminAction(session.user.id, paused ? "newsletter.inbound.pause" : "newsletter.inbound.resume");
   return { ok: true, source: toView(row) };
 }
 
-/** Removes the source (and its sealed credentials). User addresses stay, but receive nothing until a new source exists. */
-export async function disconnectNewsletterInbound(): Promise<{ ok: boolean }> {
+/**
+ * Removes the source (and its sealed credentials). User addresses stay, but
+ * receive nothing until a source exists again — and connecting a different
+ * mailbox later changes all of them, so this needs `{ confirm: true }`.
+ */
+export async function disconnectNewsletterInbound(input?: unknown): Promise<{ ok: boolean; code?: "confirm-required" }> {
   const session = await requireAdmin();
+  const { confirm } = pickFields((input ?? {}) as { confirm?: unknown }, ["confirm"]);
+  if (confirm !== true) return { ok: false, code: "confirm-required" };
   const existing = await imapSourceRow();
   if (!existing) return { ok: true };
   await db.inboundMailSource.delete({ where: { id: existing.id } });

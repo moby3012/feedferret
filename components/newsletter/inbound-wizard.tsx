@@ -31,7 +31,7 @@ import {
   disconnectNewsletterInbound,
   getNewsletterInboundState,
   saveNewsletterImap,
-  sendNewsletterTestMail,
+  startNewsletterTest,
   setNewsletterInboundPaused,
   testNewsletterImap,
   type InboundSourceView,
@@ -42,8 +42,10 @@ import {
 const KEEP = "__keep__";
 const POLL_EVERY_MS = 5_000;
 const POLL_FOR_MS = 3 * 60_000;
+/** A live test that hits one of these will not succeed by waiting longer. */
+const FATAL_POLL_ERRORS = new Set(["auth-failed", "app-password-required", "imap-disabled", "credentials-unreadable", "host-blocked", "tls"]);
 const ERROR_CODES = [
-  "invalid-email", "no-server", "password-required", "invalid-server", "auth-failed", "app-password-required", "imap-disabled",
+  "confirm-address-change", "invalid-email", "no-server", "password-required", "invalid-server", "auth-failed", "app-password-required", "imap-disabled",
   "tls", "timeout", "host-blocked", "host-not-found", "unreachable", "folder", "credentials-unreadable", "no-source", "send-failed", "unknown",
 ] as const;
 
@@ -113,7 +115,6 @@ export function NewsletterInboundPanel() {
           {current === "test" && (
             <TestStep
               mailAvailable={state.mailAvailable}
-              testAddress={state.testAddress}
               onDone={async () => {
                 await reload();
                 setStep(null);
@@ -248,6 +249,7 @@ function ConnectStep({ source, onBack, onSaved }: { source: InboundSourceView | 
   const [notDetected, setNotDetected] = useState(false);
   const [busy, setBusy] = useState<"test" | "save" | null>(null);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [confirmChange, setConfirmChange] = useState(false);
   const detectSeq = useRef(0);
 
   // Auto-detect the server shortly after the address stops changing.
@@ -287,11 +289,15 @@ function ConnectStep({ source, onBack, onSaved }: { source: InboundSourceView | 
     ...(advancedOpen && host.trim() ? { host: host.trim(), port: Number(port) || 993, secure } : {}),
   });
 
-  const run = async (kind: "test" | "save") => {
+  const run = async (kind: "test" | "save", confirmAddressChange = false) => {
     setBusy(kind);
     setResult(null);
     try {
-      const res = kind === "test" ? await testNewsletterImap(payload()) : await saveNewsletterImap(payload());
+      const res = kind === "test" ? await testNewsletterImap(payload()) : await saveNewsletterImap({ ...payload(), confirmAddressChange });
+      if (!res.ok && res.code === "confirm-address-change") {
+        setConfirmChange(true);
+        return;
+      }
       if (res.server) setDetected({ server: res.server, preset: res.preset ?? null });
       if (res.ok) {
         setResult({ ok: true, text: t("testOk", { count: res.folderCount }) });
@@ -403,6 +409,27 @@ function ConnectStep({ source, onBack, onSaved }: { source: InboundSourceView | 
         </p>
       )}
 
+      <AlertDialog open={confirmChange} onOpenChange={setConfirmChange}>
+        <AlertDialogContent data-testid="nl-confirm-change">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("confirmChangeTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("confirmChangeBody")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="nl-confirm-change-ok"
+              onClick={() => {
+                setConfirmChange(false);
+                void run("save", true);
+              }}
+            >
+              {t("confirmChangeOk")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex flex-wrap justify-between gap-2">
         <Button variant="ghost" onClick={onBack} disabled={busy !== null}>{t("back")}</Button>
         <div className="flex flex-wrap gap-2">
@@ -444,32 +471,58 @@ function CopyButton({ value, testId }: { value: string; testId?: string }) {
   );
 }
 
-function TestStep({ mailAvailable, testAddress, onDone }: { mailAvailable: boolean; testAddress: string | null; onDone: () => void | Promise<void> }) {
+function TestStep({ mailAvailable, onDone }: { mailAvailable: boolean; onDone: () => void | Promise<void> }) {
   const t = useTranslations("newsletterInbound");
   const errorText = useErrorText();
-  const [phase, setPhase] = useState<"idle" | "sending" | "waiting" | "arrived" | "timeout">("idle");
-  const [address, setAddress] = useState(testAddress);
+  const [phase, setPhase] = useState<"idle" | "sending" | "waiting" | "arrived" | "timeout" | "failed">("idle");
+  const [address, setAddress] = useState<string | null>(null);
+  const [marker, setMarker] = useState<string | null>(null);
   const [since, setSince] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [arrivedIn, setArrivedIn] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastPollError, setLastPollError] = useState<string | null>(null);
 
-  // Live status: poll the mailbox every few seconds until the mail arrives.
+  // Without a mailer: fetch the address + this test's subject marker right away.
   useEffect(() => {
-    if (phase !== "waiting" || !since) return;
+    if (mailAvailable) return;
+    let cancelled = false;
+    void startNewsletterTest({ send: false })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          setAddress(res.address);
+          setMarker(res.marker);
+          setSince(res.startedAt);
+        } else setError(errorText(res.code));
+      })
+      .catch(() => !cancelled && setError(errorText("unknown")));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mailAvailable]);
+
+  // Live status: poll the mailbox every few seconds until the marked mail arrives.
+  useEffect(() => {
+    if (phase !== "waiting" || !since || !marker) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
     const tick = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000);
     const poll = async () => {
       try {
-        const res = await checkNewsletterTestMail({ since });
+        const res = await checkNewsletterTestMail({ since, marker });
         if (cancelled) return;
         setLastPollError(res.errorCode);
         if (res.arrived) {
           setArrivedIn(res.seconds ?? Math.round((Date.now() - started) / 1000));
           setPhase("arrived");
+          return;
+        }
+        // Waiting longer will not fix a wrong password or a disabled IMAP.
+        if (res.errorCode && FATAL_POLL_ERRORS.has(res.errorCode)) {
+          setPhase("failed");
           return;
         }
       } catch {
@@ -488,20 +541,21 @@ function TestStep({ mailAvailable, testAddress, onDone }: { mailAvailable: boole
       clearInterval(tick);
       if (timer) clearTimeout(timer);
     };
-  }, [phase, since]);
+  }, [phase, since, marker]);
 
   const send = async () => {
     setError(null);
+    setLastPollError(null);
     setPhase("sending");
     try {
-      const res = await sendNewsletterTestMail();
+      const res = await startNewsletterTest({ send: true });
+      if (res.address) setAddress(res.address);
       if (!res.ok) {
         setError(errorText(res.code));
-        if (res.address) setAddress(res.address);
         setPhase("idle");
         return;
       }
-      setAddress(res.address);
+      setMarker(res.marker);
       setSince(res.startedAt);
       setElapsed(0);
       setPhase("waiting");
@@ -513,8 +567,7 @@ function TestStep({ mailAvailable, testAddress, onDone }: { mailAvailable: boole
 
   const startManual = () => {
     setError(null);
-    // The admin may have sent it a moment before clicking: allow 10 min back.
-    setSince(new Date(Date.now() - 10 * 60_000).toISOString());
+    setLastPollError(null);
     setElapsed(0);
     setPhase("waiting");
   };
@@ -526,13 +579,21 @@ function TestStep({ mailAvailable, testAddress, onDone }: { mailAvailable: boole
         <p className="text-body-sm text-muted-foreground">{t("testIntro")}</p>
       </div>
 
-      {!mailAvailable && address && (
-        <div className="space-y-2 rounded-panel border border-border/60 p-4">
+      {!mailAvailable && address && marker && (
+        <div className="space-y-3 rounded-panel border border-border/60 p-4">
           <p className="text-body-sm">{t("manualTest")}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <code className="min-w-0 break-all rounded-control bg-surface-sunken px-2 py-1 text-body-sm" data-testid="nl-test-address">{address}</code>
-            <CopyButton value={address} />
-          </div>
+          <dl className="grid gap-2 text-body-sm sm:grid-cols-[auto_1fr] sm:items-center">
+            <dt className="text-muted-foreground">{t("manualTo")}</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              <code className="min-w-0 break-all rounded-control bg-surface-sunken px-2 py-1 text-body-sm" data-testid="nl-test-address">{address}</code>
+              <CopyButton value={address} />
+            </dd>
+            <dt className="text-muted-foreground">{t("manualSubject")}</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              <code className="rounded-control bg-surface-sunken px-2 py-1 text-body-sm" data-testid="nl-test-marker">{marker}</code>
+              <CopyButton value={marker} />
+            </dd>
+          </dl>
         </div>
       )}
 
@@ -552,6 +613,7 @@ function TestStep({ mailAvailable, testAddress, onDone }: { mailAvailable: boole
           </p>
         )}
         {phase === "timeout" && <p className="text-body-sm text-warning">{t("waitingLong")}</p>}
+        {phase === "failed" && <p className="text-body-sm text-danger" data-testid="nl-test-failed">{t("testFailed")}</p>}
         {lastPollError && phase !== "arrived" && <p className="mt-2 text-footnote text-danger">{errorText(lastPollError)}</p>}
         {error && <p role="alert" className="mt-2 text-footnote text-danger">{error}</p>}
       </div>
@@ -565,7 +627,7 @@ function TestStep({ mailAvailable, testAddress, onDone }: { mailAvailable: boole
               {t("sendTestMail")}
             </Button>
           ) : (
-            <Button onClick={startManual} disabled={phase === "waiting" || !address} data-testid="nl-manual-sent">
+            <Button onClick={startManual} disabled={phase === "waiting" || !marker} data-testid="nl-manual-sent">
               <Mail className="size-4" aria-hidden />
               {t("startWaiting")}
             </Button>
@@ -651,7 +713,7 @@ function StatusCard({ source, onEdit, onTest, onChanged, onDisconnected }: {
             <AlertDialogAction
               data-testid="nl-disconnect-confirm"
               onClick={async () => {
-                const res = await disconnectNewsletterInbound();
+                const res = await disconnectNewsletterInbound({ confirm: true });
                 if (res.ok) await onDisconnected();
               }}
             >

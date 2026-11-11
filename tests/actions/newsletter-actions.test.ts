@@ -18,7 +18,7 @@ const h = vi.hoisted(() => {
   };
   const pick = (row: Record<string, unknown>, select?: Record<string, boolean>) =>
     select ? Object.fromEntries(Object.keys(select).map((k) => [k, row[k]])) : row;
-  const addrMatch = (a: Address, where: any) =>
+  const addrMatch = (a: Address, where: any = {}) =>
     (where.userId === undefined || a.userId === where.userId) &&
     (where.isActive === undefined || a.isActive === where.isActive) &&
     (where.id === undefined || (typeof where.id === "string" ? a.id === where.id : a.id !== where.id.not)) &&
@@ -26,6 +26,12 @@ const h = vi.hoisted(() => {
   const db = {
     user: { findUnique: vi.fn(async ({ where }: any) => store.users[where.id] ?? null) },
     globalSettings: { findUnique: vi.fn(async () => ({ require2FAForAdmins: false })) },
+    article: {
+      rows: [] as { userId: string; title: string; createdAt: Date }[],
+      findFirst: vi.fn(async ({ where }: any) =>
+        db.article.rows.find((r) => r.userId === where.userId && r.title.includes(where.title.contains) && r.createdAt >= where.createdAt.gte) ?? null,
+      ),
+    },
     adminAuditLog: { create: vi.fn(async () => ({})) },
     inboundMailSource: {
       findFirst: vi.fn(async ({ select }: any) => (store.source ? pick(store.source, select) : null)),
@@ -47,8 +53,9 @@ const h = vi.hoisted(() => {
       findFirst: vi.fn(async ({ where }: any) => store.addresses.find((a) => addrMatch(a, where)) ?? null),
       findMany: vi.fn(async ({ where }: any) => store.addresses.filter((a) => addrMatch(a, where))),
       findUnique: vi.fn(async ({ where }: any) => store.addresses.find((a) => a.id === where.id) ?? null),
-      count: vi.fn(async ({ where }: any) => store.addresses.filter((a) => addrMatch(a, where)).length),
+      count: vi.fn(async (args?: any) => store.addresses.filter((a) => addrMatch(a, args?.where)).length),
       create: vi.fn(async ({ data }: any) => {
+        if (data.id && store.addresses.some((a) => a.id === data.id)) throw new Error("Unique constraint failed on id");
         const row: Address = { id: `addr${++store.seq}`, description: null, isActive: true, lastReceivedAt: null, createdAt: new Date(Date.now() + store.seq), ...data };
         store.addresses.push(row);
         return { id: row.id, token: row.token };
@@ -99,6 +106,7 @@ beforeEach(() => {
   h.store.source = null;
   h.store.addresses = [];
   h.store.seq = 0;
+  h.db.article.rows = [];
   h.store.users.admin.role = "ADMIN";
   as("admin");
 });
@@ -109,10 +117,10 @@ describe("admin wizard actions", () => {
     ["detectNewsletterImapServer", () => admin.detectNewsletterImapServer({ email: "a@gmail.com" })],
     ["testNewsletterImap", () => admin.testNewsletterImap({ email: "a@gmail.com", password: "x" })],
     ["saveNewsletterImap", () => admin.saveNewsletterImap({ email: "a@gmail.com", password: "x" })],
-    ["sendNewsletterTestMail", () => admin.sendNewsletterTestMail()],
-    ["checkNewsletterTestMail", () => admin.checkNewsletterTestMail({ since: new Date().toISOString() })],
+    ["startNewsletterTest", () => admin.startNewsletterTest({ send: true })],
+    ["checkNewsletterTestMail", () => admin.checkNewsletterTestMail({ since: new Date().toISOString(), marker: "FF-TEST-AAAAAAAA" })],
     ["setNewsletterInboundPaused", () => admin.setNewsletterInboundPaused({ paused: true })],
-    ["disconnectNewsletterInbound", () => admin.disconnectNewsletterInbound()],
+    ["disconnectNewsletterInbound", () => admin.disconnectNewsletterInbound({ confirm: true })],
   ];
 
   it.each(calls)("%s rejects non-admins and anonymous callers", async (_name, call) => {
@@ -171,21 +179,55 @@ describe("admin wizard actions", () => {
     expect(h.poller.testImapConnection).toHaveBeenLastCalledWith(expect.objectContaining({ host: "mail.unknown.example", port: 143, secure: false }));
   });
 
-  it("without a mailer the test step hands out the admin's own address", async () => {
+  it("without a mailer the test step hands out the admin's own address and a unique subject marker", async () => {
     await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p" });
-    const res = await admin.sendNewsletterTestMail();
+    const res = await admin.startNewsletterTest({ send: true });
     expect(res).toMatchObject({ ok: true, sent: false });
-    expect((res as { address: string }).address).toMatch(/^box\+ff-[a-z2-7]{26}@gmail\.com$/);
+    const ok = res as { address: string; marker: string };
+    expect(ok.address).toMatch(/^box\+ff-[a-z2-7]{26}@gmail\.com$/);
+    expect(ok.marker).toMatch(/^FF-TEST-[A-Z2-7]{8}$/);
+    expect(((await admin.startNewsletterTest({})) as { marker: string }).marker).not.toBe(ok.marker);
     expect(h.store.addresses.every((a) => a.userId === "admin")).toBe(true);
   });
 
-  it("reports arrival once the admin's address received mail after `since`", async () => {
+  it("detects arrival by this test's marker only — not by any other mail", async () => {
     await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p" });
-    const { startedAt } = (await admin.sendNewsletterTestMail()) as { startedAt: string };
-    expect((await admin.checkNewsletterTestMail({ since: startedAt })).arrived).toBe(false);
+    const { startedAt, marker } = (await admin.startNewsletterTest({})) as { startedAt: string; marker: string };
+    const at = (s: number) => new Date(new Date(startedAt).getTime() + s * 1000);
+    // Some other newsletter (or an older test) arriving meanwhile does not count.
+    h.db.article.rows.push({ userId: "admin", title: "Morning Brew", createdAt: at(3) }, { userId: "admin", title: "FeedFerret Testmail FF-TEST-OLDOLDOL", createdAt: at(4) });
+    h.store.addresses[0].lastReceivedAt = at(5);
+    expect((await admin.checkNewsletterTestMail({ since: startedAt, marker })).arrived).toBe(false);
     expect(h.poller.pollInboundSourceNow).toHaveBeenCalledWith("src1");
-    h.store.addresses[0].lastReceivedAt = new Date(new Date(startedAt).getTime() + 12_000);
-    expect(await admin.checkNewsletterTestMail({ since: startedAt })).toMatchObject({ arrived: true, seconds: 12 });
+    // Another user's article with the marker does not count either.
+    h.db.article.rows.push({ userId: "bob", title: `x ${marker}`, createdAt: at(6) });
+    expect((await admin.checkNewsletterTestMail({ since: startedAt, marker })).arrived).toBe(false);
+    h.db.article.rows.push({ userId: "admin", title: `FeedFerret Testmail ${marker}`, createdAt: at(12) });
+    expect(await admin.checkNewsletterTestMail({ since: startedAt, marker })).toMatchObject({ arrived: true, seconds: 12 });
+    expect(await admin.checkNewsletterTestMail({ since: startedAt, marker: "nope" })).toMatchObject({ arrived: false });
+  });
+
+  it("requires an explicit confirmation before every user address changes (server-side)", async () => {
+    await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p" });
+    as("bob");
+    await user.getMyNewsletterInbox(); // bob now has an address
+    as("admin");
+    h.poller.testImapConnection.mockClear();
+    const other = await admin.saveNewsletterImap({ email: "other@gmail.com", password: "p2" });
+    expect(other).toMatchObject({ ok: false, code: "confirm-address-change" });
+    expect(h.poller.testImapConnection).not.toHaveBeenCalled();
+    expect(h.store.source!.address).toBe("box@gmail.com");
+    // Same mailbox: no confirmation needed (e.g. new app password).
+    expect((await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p3" })).ok).toBe(true);
+    expect((await admin.saveNewsletterImap({ email: "other@gmail.com", password: "p2", confirmAddressChange: true })).ok).toBe(true);
+    expect(h.store.source!.address).toBe("other@gmail.com");
+
+    // Disconnect needs confirm; a fresh connect while addresses exist needs it too.
+    expect(await admin.disconnectNewsletterInbound()).toEqual({ ok: false, code: "confirm-required" });
+    expect(h.store.source).not.toBeNull();
+    expect(await admin.disconnectNewsletterInbound({ confirm: true })).toEqual({ ok: true });
+    expect(await admin.saveNewsletterImap({ email: "third@gmail.com", password: "p" })).toMatchObject({ ok: false, code: "confirm-address-change" });
+    expect((await admin.saveNewsletterImap({ email: "third@gmail.com", password: "p", confirmAddressChange: true })).ok).toBe(true);
   });
 
   it("pauses, resumes (clearing backoff) and disconnects", async () => {
@@ -195,7 +237,7 @@ describe("admin wizard actions", () => {
     const resumed = await admin.setNewsletterInboundPaused({ paused: false });
     expect(resumed.source).toMatchObject({ paused: false, errorCount: 0 });
     expect(await admin.setNewsletterInboundPaused({ paused: "yes" })).toEqual({ ok: false });
-    expect(await admin.disconnectNewsletterInbound()).toEqual({ ok: true });
+    expect(await admin.disconnectNewsletterInbound({ confirm: true })).toEqual({ ok: true });
     expect(h.store.source).toBeNull();
   });
 });
@@ -242,6 +284,23 @@ describe("user newsletter actions", () => {
     for (let i = 0; i < 30; i++) await user.createMyNewsletterAddress({});
     expect(h.store.addresses.filter((a) => a.userId === "bob").length).toBe(25);
     expect(await user.createMyNewsletterAddress({})).toEqual({ ok: false, error: "limit" });
+  });
+
+  it("first-address creation is idempotent under concurrent first loads", async () => {
+    await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p" });
+    as("bob");
+    const [a, b] = await Promise.all([user.getMyNewsletterInbox(), user.getMyNewsletterInbox()]);
+    expect(h.store.addresses.filter((x) => x.userId === "bob")).toHaveLength(1);
+    expect(a.addresses[0].address).toBe(b.addresses[0].address);
+    expect(h.store.addresses.find((x) => x.userId === "bob")?.id).toBe("nl-primary-bob");
+  });
+
+  it("hides the settings section for non-admins until an inbox exists", async () => {
+    const { isNewsletterSectionVisible } = await import("@/lib/newsletter-addresses");
+    expect(await isNewsletterSectionVisible(true)).toBe(true);
+    expect(await isNewsletterSectionVisible(false)).toBe(false);
+    await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p" });
+    expect(await isNewsletterSectionVisible(false)).toBe(true);
   });
 
   it("requires a session", async () => {
