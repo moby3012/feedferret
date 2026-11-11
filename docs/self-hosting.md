@@ -463,6 +463,18 @@ Point FeedFerret's changedetection.io base URL at `http://changedetection:3000/`
 - The connector's own base URL is treated as trusted admin configuration. Because the recommended setup runs each connector on the **same private Docker network** as FeedFerret (so its base URL is a private hostname like `http://rsshub:3000/`), FeedFerret automatically allows internal/private fetches **to that specific configured host only** — both when validating a route and on every ongoing background sync of the resulting feed. You do **not** need to turn on the instance-wide "Allow internal feed URLs" switch just to use a connector, and doing so is not recommended (it would let any user point any feed at internal addresses). Only the exact host of a configured connector is trusted; arbitrary internal addresses stay blocked.
 - Keep each connector on the same private Docker network as FeedFerret and do not expose its port publicly (changedetection.io's own web UI is the one exception — you need to reach it once to copy its API key and RSS access token; route a domain to it temporarily or use a port-forward, then you can lock it back down). There is no reason for RSSHub's own web UI to be reachable from outside your server.
 
+## Content Security Policy rollout (`FEEDFERRET_CSP`)
+
+- `report` (default): the existing CSP stays enforced; a stricter per-request nonce
+  policy is sent as `Content-Security-Policy-Report-Only`, and browsers POST would-be
+  violations to `/api/csp-report` (no session needed, rate-limited, logged only as
+  per-directive counts once a minute: look for `CSP report counts` in the logs).
+- `legacy`: rollback to the previous behaviour (no nonce, no reports). Restart to apply.
+- Do not cache application HTML at the reverse proxy/CDN: every page carries a fresh
+  nonce. Keep Next's `Cache-Control: private, no-store` intact. Static assets and the
+  offline shell cache as before.
+- Details: [`docs/security.md`](./security.md#csp-nonce-rollout-l3).
+
 ---
 
 ## Further Documentation

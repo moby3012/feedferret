@@ -93,7 +93,9 @@ Response on limit exceeded: HTTP 429 with `Retry-After`, `X-RateLimit-Remaining`
 
 ### Security Headers ✅
 
-Set via `next.config.mjs` `headers()` — applied to all routes:
+Set via `next.config.mjs` `headers()` — applied to all routes (`/api/*` and
+`/offline.html` get stricter policies, and pages additionally carry a report-only
+nonce policy; see [CSP nonce rollout (L3)](#csp-nonce-rollout-l3)):
 
 ```
 X-Frame-Options: DENY
@@ -115,7 +117,8 @@ Content-Security-Policy:
 
 HSTS (`Strict-Transport-Security`) should be set at the reverse proxy (Nginx/Caddy/Traefik) level — not in Next.js to avoid conflicts with local development.
 
-Note: `unsafe-inline` and `unsafe-eval` in `script-src` are required by Next.js App Router's runtime. Removing them requires nonce-based CSP configuration — planned as a future hardening step.
+Note: `unsafe-inline` and `unsafe-eval` in the enforced `script-src` remain until the
+nonce policy below is enforced (L3, PR 7).
 
 ### Startup Environment Validation ✅
 
@@ -298,3 +301,101 @@ redirects discard the request body and all custom headers except `accept*`,
 `user-agent` and `if-*`; 303 and POST 301/302 redirects become GET. One-hop API
 clients refuse automatic redirects. ESLint bans bare outbound `fetch` calls in
 `lib/**` and `app/api/**` outside `lib/ssrf.ts`.
+
+## CSP nonce rollout (L3)
+
+**Mode switch:** `FEEDFERRET_CSP` (read per request; restart to change).
+
+| Value | Pages (proxied routes) |
+|---|---|
+| `report` (default; also any unknown value) | old static policy **enforced** + per-request nonce policy as `Content-Security-Policy-Report-Only` + `Reporting-Endpoints` |
+| `legacy` | old static policy only (rollback: no nonce, no report-only policy, no reports) |
+
+Report mode changes no behaviour: the browser still enforces the old policy and only
+*reports* what the nonce policy would block. Enforcing the nonce policy is a separate
+release (PR 7) after a clean report window.
+
+**Nonce policy** (`lib/csp.ts`, built in `proxy.ts` for every proxied request):
+
+```
+default-src 'self'; script-src 'self' 'nonce-<n>' 'strict-dynamic'; style-src 'self' 'unsafe-inline';
+img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; worker-src 'self';
+manifest-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';
+report-to csp; report-uri /api/csp-report
+```
+
+`<n>` is 128 random bits per request. Dev mode adds `'unsafe-eval'` (React refresh).
+Client-sent `content-security-policy*` / `x-nonce` request headers are dropped.
+
+**How the nonce reaches the HTML.** The proxy sets the nonce policy as the *request's*
+`content-security-policy` header; Next 16 reads the nonce from it and stamps it on
+every framework, chunk and Flight script — including the cold-start bootstrap data,
+which travels in the Flight payload. The root layout reads `x-nonce` and passes it to
+next-themes' anti-flash script. There are no other inline scripts (`next/script` is
+not used). `'strict-dynamic'` then trusts the chunks those scripts load.
+
+**Why the enforced policy stays in `next.config.mjs`.** Next copies every header of
+a proxy *response* onto the request as well (`router-utils/resolve-routes.js`). An
+enforced `Content-Security-Policy` set by the proxy would therefore replace the nonce
+policy Next reads, and pages would render without nonces. The proxy only adds the
+report-only header; the enforced header comes from `next.config.mjs`, which touches
+the response only. For the same header key the last matching `headers()` entry wins,
+so every response carries exactly one enforced policy:
+
+| Path | Enforced policy |
+|---|---|
+| `/api/*` (JSON + tiny HTML pages: digest unsubscribe, Telegram callback, Auth.js) | `default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'` |
+| `/offline.html` | `script-src 'self'` (no inline script; the retry button is bound in `offline-reader.js`) |
+| everything else (pages, `sw.js`, static files) | the old static policy above |
+
+These static headers are baked in at build time, so `FEEDFERRET_CSP=legacy` does not
+change them. PR 7 has to move the enforced page policy into the proxy and make it
+carry the nonce (the request-header copy above).
+
+**Rendering and caching.** The root layout was already dynamic (session and locale
+reads), so the nonce adds no new rendering boundary and loses no HTML cache. The
+build fails (`scripts/check-csp-build.mjs`) if any app HTML route is prerendered; only
+`robots.txt`, `sitemap.xml` and Next's synthetic `/_global-error` are allowed. Never
+cache application HTML at a CDN or reverse proxy (Traefik included) and do not enable
+`cacheComponents`/PPR without redesigning nonce handling: a cached nonce is a reusable
+nonce. Dynamic HTML is sent as `private, no-cache, no-store`.
+
+**Known gap before enforcement (PR 7).** Next 16 always builds a static
+`/_global-error` (and `pages/500.html`) fallback, served only on a catastrophic render
+failure. It has no nonce; under report mode it still works (and may report), under an
+enforced nonce policy its scripts would be blocked. Give it a script-free strategy
+before enforcing.
+
+**Service worker / offline.** The service worker never caches navigations or `/api/*`;
+the only cached HTML is the public offline shell, which needs no nonce. The precache
+version moved to `feedferret-pwa-v5`, so installed workers fetch the new offline HTML
+(without the inline `onclick`) and handler together. The sandboxed article `srcdoc`
+keeps its own meta CSP.
+
+**Bookmarklet.** Clicking the `javascript:` bookmarklet link *on FeedFerret's own page*
+is reported in report mode and blocked once enforced; dragging it to the bookmarks bar
+(what the UI asks for) is unaffected.
+
+**Report endpoint.** `POST /api/csp-report` needs no session (browsers send reports
+without cookies). It is rate-limited to 30 requests per minute per client IP (behind
+`TRUSTED_PROXY_COUNT`), caps the streamed body at 16 KiB (413 above), accepts both the
+legacy `application/csp-report` and the Reporting API format, and answers 204 with an
+empty body. It logs at most one line per minute per process: counts per allowlisted
+directive (`CSP report counts (untrusted telemetry) { "script-src-elem": 3 }`). It
+deliberately logs no URLs (document paths can carry share tokens), IPs, samples,
+policies or nonces — stricter than the spec's origin/path sampling. Reports are
+attacker-controllable telemetry, never security evidence. The last partial minute is
+lost on restart.
+
+**Tests.** `tests/lib/csp*.test.ts` cover the header builder, mode switch and report
+ingestion. Every Playwright spec runs under an auto fixture (`e2e/helpers/csp-test.ts`)
+that records `securitypolicyviolation` events (enforced and report-only) and report
+POSTs and fails the test on any; `e2e/csp.spec.ts` checks headers, fresh nonces per
+load, that every served `<script>` carries the nonce, the static paths, and the offline
+page.
+
+**Performance of `/`** (production build, local, seeded desktop session, 5 warm-up +
+60 sequential requests, full HTML read, two alternating runs per mode): report mode
+median 20.5–20.6 ms / p90 22.9–23.4 ms, legacy 20.9–21.1 ms / p90 22.6–22.8 ms — no
+measurable difference. HTML grows from 311,989 to 314,614 bytes (+0.8 %, repeated
+nonce attributes, before compression).
