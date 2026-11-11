@@ -23,6 +23,7 @@ model User {
   twoFactorLastAcceptedStep Int?
   twoFactorSecret  String?
   sessionVersion   Int     @default(0)
+  emailChangeRequest EmailChangeRequest?
   accounts      Account[]
   sessions      Session[]
   loginAttempts LoginAttempt[]
@@ -804,4 +805,16 @@ model NewsletterQuota {
   day    String // server UTC date "YYYY-MM-DD" at reservation time
   count  Int    @default(0)
   @@id([userId, day])
+}
+
+model EmailChangeRequest {
+  id String @id @default(cuid())
+  userId String @unique
+  oldEmail String?
+  newEmail String
+  tokenHash String @unique
+  cancelHash String @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

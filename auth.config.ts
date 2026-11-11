@@ -53,7 +53,7 @@ export default {
       const isAuthPage = ["/login", "/register"].includes(nextUrl.pathname);
       const isSharedRoute = nextUrl.pathname.startsWith("/shared/search/");
 
-      if (isApiAuthRoute || isSetupRoute || isSharedRoute) return true;
+      if (nextUrl.pathname === "/account/confirm-email" || isApiAuthRoute || isSetupRoute || isSharedRoute) return true;
 
       if (isAuthPage) {
         if (isLoggedIn) return Response.redirect(new URL("/", nextUrl));

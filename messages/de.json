@@ -198,7 +198,10 @@
     "invalidEmail": "Gib eine gültige E-Mail-Adresse ein.",
     "emailTaken": "Diese E-Mail-Adresse ist bereits vergeben.",
     "emailChangeNoMail": "Auf diesem Server ist kein E-Mail-Versand eingerichtet: Es wird keine Bestätigung an die neue Adresse und keine Benachrichtigung an die alte Adresse geschickt. Prüf die neue Adresse deshalb genau.",
-    "emailChangeNoticeFailed": "E-Mail-Adresse geändert, aber die Benachrichtigungs-Mails konnten nicht gesendet werden."
+    "emailChangeNoticeFailed": "E-Mail-Adresse geändert, aber die Benachrichtigungs-Mails konnten nicht gesendet werden.",
+    "emailPending": "Bestätigung an {email} gesendet",
+    "emailResend": "Erneut senden (Authentifizierung erforderlich)",
+    "emailCancel": "Änderung abbrechen"
   },
   "twoFactor": {
     "title": "Zwei-Faktor-Authentifizierung",

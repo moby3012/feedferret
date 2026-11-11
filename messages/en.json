@@ -198,7 +198,10 @@
     "invalidEmail": "Enter a valid email address.",
     "emailTaken": "This email address is already in use.",
     "emailChangeNoMail": "This server has no email delivery configured: no confirmation will be sent to the new address and no notice to the old one. Double-check the new address.",
-    "emailChangeNoticeFailed": "Email changed, but the notification emails could not be sent."
+    "emailChangeNoticeFailed": "Email changed, but the notification emails could not be sent.",
+    "emailPending": "Confirmation sent to {email}",
+    "emailResend": "Resend (authentication required)",
+    "emailCancel": "Cancel email change"
   },
   "twoFactor": {
     "title": "Two-factor authentication",

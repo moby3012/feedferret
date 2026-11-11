@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useUpdateProfile, useEmailChangeMailStatus } from "@/hooks/use-rss-data";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import { cancelPendingEmailChange } from "@/app/actions/settings";
 import { toast } from "sonner";
 
 export function EmailSection({ currentEmail }: { currentEmail: string | null }) {
@@ -17,15 +18,16 @@ export function EmailSection({ currentEmail }: { currentEmail: string | null }) 
   const [email, setEmail] = useState("");
   const [proof, setProof] = useState("");
 
-  const handleSubmit = async () => {
-    const next = email.trim().toLowerCase();
+  const handleSubmit = async (address = email) => {
+    const next = address.trim().toLowerCase();
     if (!next || next === currentEmail) return;
     try {
       // The proof field takes the current login password or a TOTP code; the
       // server tries both (passwordless accounts: a sign-in < 10 min ago).
       const result = await updateProfile.mutateAsync({ email: next, currentPassword: proof, totp: proof });
       if (result.success) {
-        toast.success(t("profile.emailChanged"));
+        toast.success(result.emailPending ? t("profile.emailPending", { email: result.emailPending }) : t("profile.emailChanged"));
+        await mailStatus.refetch();
         if (result.emailNotice === "failed") toast.warning(t("profile.emailChangeNoticeFailed"));
         setEmail("");
         setProof("");
@@ -58,6 +60,11 @@ export function EmailSection({ currentEmail }: { currentEmail: string | null }) 
       </div>
 
       <div className="grid gap-4 sm:max-w-sm">
+        {mailStatus.data?.emailPending ? <div role="status" className="space-y-2 text-body-sm">
+          <p>{t("profile.emailPending", { email: mailStatus.data.emailPending })}</p>
+          <Button variant="outline" disabled={updateProfile.isPending} onClick={() => handleSubmit(mailStatus.data!.emailPending!)}>{t("profile.emailResend")}</Button>
+          <Button variant="outline" onClick={async () => { await cancelPendingEmailChange(); await mailStatus.refetch(); }}>{t("profile.emailCancel")}</Button>
+        </div> : null}
         <div className="grid gap-1.5">
           <label className="text-body-sm font-medium" htmlFor="new-email-input">{t("profile.newEmail")}</label>
           <Input
@@ -91,7 +98,7 @@ export function EmailSection({ currentEmail }: { currentEmail: string | null }) 
         ) : null}
         <Button
           type="button"
-          onClick={handleSubmit}
+          onClick={() => handleSubmit()}
           disabled={updateProfile.isPending || !email.trim() || email.trim().toLowerCase() === currentEmail}
           className="h-11 w-fit rounded-panel px-5"
         >

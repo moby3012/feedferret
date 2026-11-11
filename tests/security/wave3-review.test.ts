@@ -33,6 +33,7 @@ vi.mock("@/lib/feed-fetcher", async (importOriginal) => {
 vi.mock("@/lib/mail", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/mail")>()),
   isMailServiceEnabled: async () => state.mailEnabled,
+  sendSystemEmail: async () => undefined,
   sendEmailChangeNotices: async (args: { oldEmail: string; newEmail: string }) => {
     state.notices.push({ oldEmail: args.oldEmail, newEmail: args.newEmail });
     return true;
@@ -180,23 +181,23 @@ describe("N3 review: secrets stay out of stored article links and feed errors", 
 });
 
 describe("email change review: normalization, duplicates, notices", () => {
-  it("stores the trimmed lower-case address and notifies old + new when mail is configured", async () => {
+  it("keeps the current address and stores a normalized pending request when mail is configured", async () => {
     state.mailEnabled = true;
     const result = await updateProfile({ email: "  Alice.New@Test.COM ", currentPassword: "correct horse" });
-    expect(result).toMatchObject({ success: true, emailChanged: true, emailNotice: "sent" });
-    expect((await state.db.user.findUniqueOrThrow({ where: { id: ids.alice } })).email).toBe("alice.new@test.com");
-    expect(state.notices).toEqual([{ oldEmail: "alice@test", newEmail: "alice.new@test.com" }]);
+    expect(result).toMatchObject({ success: true, emailChanged: false, emailPending: "alice.new@test.com", emailNotice: "sent" });
+    expect((await state.db.user.findUniqueOrThrow({ where: { id: ids.alice } })).email).toBe("alice@test");
+    expect((await state.db.emailChangeRequest.findUniqueOrThrow({ where: { userId: ids.alice } })).newEmail).toBe("alice.new@test.com");
   });
 
   it("reports a taken address as emailTaken (any case), not a server error", async () => {
     expect(await updateProfile({ email: "BOB@test", currentPassword: "correct horse" })).toEqual({ success: false, code: "emailTaken" });
-    expect((await state.db.user.findUniqueOrThrow({ where: { id: ids.alice } })).email).toBe("alice.new@test.com");
+    expect((await state.db.user.findUniqueOrThrow({ where: { id: ids.alice } })).email).toBe("alice@test");
   });
 
   it("treats a legacy mixed-case address of another user as taken (case-insensitive lookup)", async () => {
     await state.db.user.create({ data: { email: "Carol@Legacy.Test", name: "Carol" } });
     expect(await updateProfile({ email: "carol@legacy.test", currentPassword: "correct horse" })).toEqual({ success: false, code: "emailTaken" });
-    expect((await state.db.user.findUniqueOrThrow({ where: { id: ids.alice } })).email).toBe("alice.new@test.com");
+    expect((await state.db.user.findUniqueOrThrow({ where: { id: ids.alice } })).email).toBe("alice@test");
   });
 
   it("flags that no notice was sent when mail delivery is not configured", async () => {
