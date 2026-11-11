@@ -70,11 +70,18 @@ const POSTS = [
   "A field guide to coastal signal colours",
 ];
 const slug = (title) => title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-function listingPage({ dated }) {
-  const items = POSTS.map((title, i) => {
+// "mixed": the real posts interleaved with three "Read more" promo cards.
+function listingPage({ dated, mixed = false }) {
+  const posts = POSTS.map((title, i) => {
     const date = dated ? `<time datetime="2026-11-0${i + 1}T09:00:00Z">Nov ${i + 1}, 2026</time>` : "";
     return `<article class="post"><h2><a href="/pages/posts/${slug(title)}">${title}</a></h2>${date}<p>${title} — a short teaser paragraph that gives the reader enough context to decide.</p></article>`;
-  }).join("");
+  });
+  if (mixed) {
+    for (const [i, at] of [0, 2, 4].entries()) {
+      posts.splice(at + i, 0, `<article class="post"><h2><a href="/pages/promo-${i}">Read more</a></h2><p>Sponsored placement in the middle of the list for testing.</p></article>`);
+    }
+  }
+  const items = posts.join("");
   return `<!doctype html><html><head><title>Lighthouse log</title></head><body><nav><a href="/">Home</a><a href="/about">About</a><a href="/contact">Contact</a></nav><main><div class="posts">${items}</div></main></body></html>`;
 }
 const MENU_ONLY = `<!doctype html><html><head><title>App</title></head><body><main><div id="app"></div>
@@ -87,7 +94,12 @@ const MENU_ONLY = `<!doctype html><html><head><title>App</title></head><body><ma
 </ul></main></body></html>`;
 
 function handleListingPages(res, url) {
-  const pages = { "/pages/undated": () => listingPage({ dated: false }), "/pages/dated": () => listingPage({ dated: true }), "/pages/menu-only": () => MENU_ONLY };
+  const pages = {
+    "/pages/undated": () => listingPage({ dated: false }),
+    "/pages/dated": () => listingPage({ dated: true }),
+    "/pages/mixed": () => listingPage({ dated: true, mixed: true }),
+    "/pages/menu-only": () => MENU_ONLY,
+  };
   const render = pages[url.pathname];
   if (!render) return false;
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(render());

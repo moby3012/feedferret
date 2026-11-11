@@ -12,7 +12,17 @@
 
 import { JSDOM } from "jsdom";
 import { buildXPathArticlesFromDocument, type FetchedFeedArticle } from "./feed-fetcher";
-import { assessPreviewQuality, classifyItem, isPlaceholderTitle, normalizeTitle, type ItemIssue, type PreviewQuality, type PreviewRejectReason, type PreviewReviewReason } from "./page-feed-quality";
+import {
+  assessPreviewQuality,
+  classifyItem,
+  isPlaceholderTitle,
+  normalizeTitle,
+  type ItemIssue,
+  type PreviewNote,
+  type PreviewQuality,
+  type PreviewRejectReason,
+  type PreviewReviewReason,
+} from "./page-feed-quality";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { stripStyleBlocks } from "./html-utils";
 import { renderViaSidecar } from "./render-sidecar";
@@ -30,6 +40,8 @@ export type CandidateQuality = {
   /** "ok" = plausible entry list; "review" = offered, but the UI must ask the user to check. */
   verdict: "ok" | "review";
   reasons: PreviewReviewReason[];
+  /** Informational (e.g. "missingDates"): shown in the preview, never a review label. */
+  notes: PreviewNote[];
   /** Distinct items that look like real entries (≥ 3 by construction). */
   plausibleItems: number;
 };
@@ -55,6 +67,24 @@ export type SuggestionResult = {
 // fewer than this is more likely a one-off layout block than a feed list.
 const MIN_REPEAT = 3;
 const PREVIEW_CAP = 10;
+// Work bounds for pathological pages (hundreds of repeating blocks): only the
+// largest groups are validated, within a wall-clock budget.
+const MAX_GROUPS = 40;
+const SUGGEST_TIME_BUDGET_MS = 1_500;
+
+/** Largest repeating groups first, one per derived item selector, capped. */
+function limitGroups(groups: Group[]): Group[] {
+  const seen = new Set<string>();
+  const out: Group[] = [];
+  for (const group of [...groups].sort((a, b) => b.items.length - a.items.length)) {
+    const xPathItem = buildItemXPath(group);
+    if (!xPathItem || seen.has(xPathItem)) continue;
+    seen.add(xPathItem);
+    out.push(group);
+    if (out.length >= MAX_GROUPS) break;
+  }
+  return out;
+}
 
 // Below this score a "candidate" is almost always navigation/footer chrome
 // or an unrelated repeating widget, not a real item list — most commonly
@@ -293,13 +323,19 @@ function averageTextLength(items: Element[]): number {
   return total / items.length;
 }
 
-function runConfig(document: Document, xpath: XPathEvaluator, url: string, config: SuggestedFieldConfig): FetchedFeedArticle[] | null {
+function runConfig(
+  document: Document,
+  xpath: XPathEvaluator,
+  url: string,
+  config: SuggestedFieldConfig,
+  itemNodes?: Node[],
+): FetchedFeedArticle[] | null {
   const settings: Record<string, string> = {};
   for (const [key, value] of Object.entries(config)) {
     if (value) settings[key] = value;
   }
   try {
-    return buildXPathArticlesFromDocument(document, xpath, url, { xpath: settings }).articles;
+    return buildXPathArticlesFromDocument(document, xpath, url, { xpath: settings }, itemNodes).articles;
   } catch {
     return null;
   }
@@ -307,7 +343,7 @@ function runConfig(document: Document, xpath: XPathEvaluator, url: string, confi
 
 /**
  * Narrow the item selector when a MINORITY of items is unusable in a way the
- * selector itself can exclude: image-only twin cards without a title (Spiegel,
+ * selector itself can exclude: cards without a link, image-only twin cards without a title (Spiegel,
  * NPR, Le Monde) and ad-click teasers (heise's DoubleClick card). The repaired
  * config is what gets saved, so the feed itself is cleaner — not just the
  * preview. Returns null when no repair applies or it would drop below 3 items.
@@ -318,11 +354,16 @@ function repairConfig(
   url: string,
   config: SuggestedFieldConfig,
   articles: FetchedFeedArticle[],
-): { config: SuggestedFieldConfig; articles: FetchedFeedArticle[] } | null {
+): { config: SuggestedFieldConfig; articles: FetchedFeedArticle[]; nodes: Node[] } | null {
   const predicates: string[] = [];
   const untitled = articles.filter((a) => a.titleSynthetic || !a.title || a.title === "Untitled").length;
   if (config.xPathItemTitle && untitled > 0 && untitled < articles.length) {
     predicates.push(`[normalize-space(${config.xPathItemTitle})]`);
+  }
+  // Cards without a link would become link-less feed items.
+  const unlinked = articles.filter((a) => !a.link || !a.link.trim()).length;
+  if (config.xPathItemUri && unlinked > 0 && unlinked < articles.length) {
+    predicates.push(`[${config.xPathItemUri}]`);
   }
   if (config.xPathItemUri) {
     const page = new URL(url);
@@ -343,9 +384,10 @@ function repairConfig(
   }
   if (predicates.length === 0) return null;
   const repaired = { ...config, xPathItem: `(${config.xPathItem})${predicates.join("")}` };
-  const repairedArticles = runConfig(document, xpath, url, repaired);
+  const nodes: Node[] = [];
+  const repairedArticles = runConfig(document, xpath, url, repaired, nodes);
   if (!repairedArticles || repairedArticles.length < MIN_REPEAT) return null;
-  return { config: repaired, articles: repairedArticles };
+  return { config: repaired, articles: repairedArticles, nodes };
 }
 
 /**
@@ -365,13 +407,16 @@ export function suggestFeedCandidatesDetailed(rawHtml: string, url: string): Sug
   try {
     const document = dom.window.document;
     const xpath = new dom.window.XPathEvaluator();
-    const pageUrl = new URL(url);
-    const groups = collectGroups(document);
+    const groups = limitGroups(collectGroups(document));
+    const deadline = Date.now() + SUGGEST_TIME_BUDGET_MS;
 
-    const scored: Array<{ group: Group; candidate: FeedCandidate }> = [];
+    const scored: Array<{ group: Group; candidate: FeedCandidate; nodes: Element[] }> = [];
     const seenSelectors = new Set<string>();
 
     for (const group of groups) {
+      // Bounded work on huge pages: stop validating more groups once the
+      // budget is spent (groups are ordered largest first).
+      if (Date.now() > deadline) break;
       const xPathItem = buildItemXPath(group);
       if (!xPathItem || seenSelectors.has(xPathItem)) continue;
       seenSelectors.add(xPathItem);
@@ -380,12 +425,13 @@ export function suggestFeedCandidatesDetailed(rawHtml: string, url: string): Sug
 
       // Validate through the REAL engine — a candidate only counts if the
       // engine parses it into linked items.
-      let articles = runConfig(document, xpath, url, config);
+      let nodes: Node[] = [];
+      let articles = runConfig(document, xpath, url, config, nodes);
       if (!articles || articles.length < MIN_REPEAT) continue;
       if (!articles.some((a) => a.link && a.link.trim().length > 0)) continue;
 
       const repaired = repairConfig(document, xpath, url, config, articles);
-      if (repaired) ({ config, articles } = repaired);
+      if (repaired) ({ config, articles, nodes } = repaired);
 
       const linked = articles.filter((a) => a.link && a.link.trim().length > 0);
       const linkFraction = linked.length / articles.length;
@@ -405,51 +451,41 @@ export function suggestFeedCandidatesDetailed(rawHtml: string, url: string): Sug
       if (config.xPathItemContent) score += 10;
       if (config.xPathItemThumbnail) score += 5;
       if (insideChrome) score -= 40; // nav/header/footer/menu
-      if (avgTextLen < 20) score -= 30; // tiny items → likely a menu
+      // Tiny items lean towards a menu; the preview gate makes the real call
+      // (short titles like "Go" or "新闻" are legitimate entries).
+      if (avgTextLen < 20) score -= 15;
       if (averageDistinctLinks(group.items) > 4) score -= 25; // a block of many entries, not one entry
-      if (score < MIN_CANDIDATE_SCORE) continue;
-
+      // The gate runs first so its verdict (not only the structural score)
+      // decides: short titles/teasers are not by themselves a menu signal.
       const quality: PreviewQuality = assessPreviewQuality(articles, { pageUrl: url, insideChrome });
       if (quality.verdict === "reject") {
         rejected.count++;
         if (quality.rejectReason) rejected.reasons[quality.rejectReason] = (rejected.reasons[quality.rejectReason] ?? 0) + 1;
         continue;
       }
+      if (score + quality.scoreAdjustment < MIN_CANDIDATE_SCORE) continue;
 
-      scored.push({ group, candidate: {
+      scored.push({ group, nodes: nodes.filter((n): n is Element => n.nodeType === 1), candidate: {
         config,
         score: score + quality.scoreAdjustment,
         itemCount: articles.length,
         sampleTitles: realTitles.slice(0, 5),
         previewArticles: articles.slice(0, PREVIEW_CAP),
-        previewIssues: articles.slice(0, PREVIEW_CAP).map((a) => classifyItem(a, pageUrl)),
-        quality: { verdict: quality.verdict, reasons: quality.reasons, plausibleItems: quality.plausibleItems },
+        previewIssues: quality.itemIssues.slice(0, PREVIEW_CAP),
+        quality: { verdict: quality.verdict, reasons: quality.reasons, notes: quality.notes, plausibleItems: quality.plausibleItems },
       } });
     }
 
     // A candidate whose items each wrap several items of another candidate is
     // a grouping block (Lever's per-team "postings-group"), and the engine
     // would only take the FIRST entry of each group. Prefer the inner list.
-    // Compare the nodes the saved selectors actually match page-wide (not just
-    // the sibling group the selector was derived from).
-    const matched = new Map<FeedCandidate, Element[]>();
-    for (const { candidate } of scored) {
-      const nodes: Element[] = [];
-      try {
-        const snapshot = xpath.evaluate(candidate.config.xPathItem, document, null, 7, null);
-        for (let i = 0; i < snapshot.snapshotLength; i++) {
-          const node = snapshot.snapshotItem(i);
-          if (node && node.nodeType === 1) nodes.push(node as Element);
-        }
-      } catch {
-        /* validated above; an evaluation failure just skips the nesting check */
-      }
-      matched.set(candidate, nodes);
-    }
+    // Compares the nodes the saved selectors match page-wide (captured from
+    // the engine run, not just the sibling group the selector came from).
+    // At most MAX_GROUPS candidates, so the pairwise check stays bounded.
     for (const outer of scored) {
-      const outerNodes = matched.get(outer.candidate) ?? [];
+      const outerNodes = outer.nodes;
       for (const inner of scored) {
-        const innerNodes = matched.get(inner.candidate) ?? [];
+        const innerNodes = inner.nodes;
         if (inner === outer || outerNodes.length === 0 || innerNodes.length < outerNodes.length * 1.5) continue;
         const contained = innerNodes.filter((el) => outerNodes.some((o) => o !== el && o.contains(el))).length;
         if (contained >= innerNodes.length * 0.8) {

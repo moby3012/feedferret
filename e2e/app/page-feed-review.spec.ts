@@ -53,17 +53,29 @@ async function suggestFrom(page: Page, isMobile: boolean, path: string) {
   return dialog;
 }
 
-test("an undated listing is offered with a 'Review needed' label, reason and preview", async ({ app, page }) => {
-  const dialog = await suggestFrom(page, app.isMobile, "/pages/undated");
-  await expect(dialog.getByText("5 items found")).toBeVisible({ timeout: 30_000 });
+test("a listing with interleaved promo cards gets 'Review needed', its reason and marked preview items", async ({ app, page }) => {
+  const dialog = await suggestFrom(page, app.isMobile, "/pages/mixed");
+  await expect(dialog.getByText("8 items found")).toBeVisible({ timeout: 30_000 });
   await expect(dialog.getByTestId("page-feed-review-badge")).toHaveText("Review needed");
-  await expect(dialog.getByTestId("page-feed-review-reasons")).toContainText("Most items have no date");
+  await expect(dialog.getByTestId("page-feed-review-reasons")).toContainText("Some items look like navigation, ads or placeholders.");
   const preview = dialog.getByTestId("page-feed-preview-item");
   await expect(preview).toHaveCount(4);
-  await expect(preview.first()).toContainText("Lighthouse keepers and their long winters");
-  await expect(preview.first()).toContainText("127.0.0.1/pages/posts/lighthouse-keepers-and-their-long-winters");
-  await expect(preview.first()).toContainText("no date");
+  await expect(preview.first()).toContainText("Read more");
+  await expect(preview.first()).toContainText("looks like navigation");
+  await expect(preview.nth(1)).toContainText("Lighthouse keepers and their long winters");
+  await expect(preview.nth(1)).toContainText("127.0.0.1/pages/posts/lighthouse-keepers-and-their-long-winters");
+  await expect(preview.nth(1)).toContainText("Nov 1, 2026");
+  // The radio is labelled by the card heading.
+  await expect(dialog.getByRole("radio", { name: "8 items found" })).toBeChecked();
   await expect(dialog.getByRole("button", { name: "Create feed" })).toBeEnabled();
+});
+
+test("an undated listing is not labelled for review; the preview says 'no date'", async ({ app, page }) => {
+  const dialog = await suggestFrom(page, app.isMobile, "/pages/undated");
+  await expect(dialog.getByText("5 items found")).toBeVisible({ timeout: 30_000 });
+  await expect(dialog.getByText("Preview looks plausible")).toBeVisible();
+  await expect(dialog.getByTestId("page-feed-review-badge")).toHaveCount(0);
+  await expect(dialog.getByTestId("page-feed-preview-item").first()).toContainText("no date");
 });
 
 test("a dated listing passes the gate without a review label", async ({ app, page }) => {
@@ -77,6 +89,6 @@ test("a dated listing passes the gate without a review label", async ({ app, pag
 test("a page with only login/social/map links is not presented as a found feed", async ({ app, page }) => {
   const dialog = await suggestFrom(page, app.isMobile, "/pages/menu-only");
   await expect(dialog.getByText("No structured items found")).toBeVisible({ timeout: 30_000 });
-  await expect(dialog.getByTestId("page-feed-rejected")).toContainText("only contained menu, login, map or placeholder links");
+  await expect(dialog.getByTestId("page-feed-rejected")).toContainText("too few real entries — mostly menu, login, map or placeholder links");
   await expect(dialog.getByRole("button", { name: "Create feed" })).toHaveCount(0);
 });

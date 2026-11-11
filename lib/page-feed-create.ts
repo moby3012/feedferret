@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { syncFeed } from "@/lib/rss-sync";
-import { fetchAndSuggestFeedCandidates, type SuggestedFieldConfig } from "@/lib/page-feed-suggest";
+import { fetchAndSuggestFeedCandidatesDetailed, type CandidateQuality, type SuggestedFieldConfig, type SuggestionResult } from "@/lib/page-feed-suggest";
 
 /**
  * Page→feed creation shared by the Server Action (`createFeedFromPage`) and the
@@ -19,13 +19,27 @@ export function buildPageFeedScraperConfig(config: SuggestedFieldConfig): string
 }
 
 /**
- * Fetch a page and return the highest-scoring feed-candidate config the
- * heuristic finds, or null when nothing on the page looks like a repeating
- * item list. Used to let callers create a page-feed from just a URL.
+ * Fetch a page and return the highest-scoring gated candidate config, or null
+ * plus why nothing was picked (the preview quality gate may have dropped
+ * every list as navigation/login/maps…). Lets callers create a page-feed from
+ * just a URL.
  */
-export async function suggestTopPageFeedConfig(url: string): Promise<SuggestedFieldConfig | null> {
-    const candidates = await fetchAndSuggestFeedCandidates(url);
-    return candidates.length ? candidates[0].config : null;
+export async function suggestTopPageFeed(url: string): Promise<{
+    config: SuggestedFieldConfig | null;
+    quality: CandidateQuality | null;
+    rejected: SuggestionResult["rejected"];
+}> {
+    const { candidates, rejected } = await fetchAndSuggestFeedCandidatesDetailed(url);
+    const top = candidates[0];
+    return { config: top?.config ?? null, quality: top?.quality ?? null, rejected };
+}
+
+/** Human-readable API error when no candidate survived (REST/MCP). */
+export function noPageFeedCandidateMessage(rejected: SuggestionResult["rejected"]): string {
+    const base = "No feed-like repeating items found on that page; provide an explicit config with xPathItem";
+    if (!rejected.count) return base;
+    const reasons = Object.entries(rejected.reasons).map(([reason, n]) => `${reason}: ${n}`).join(", ");
+    return `${base}. ${rejected.count} candidate list(s) were rejected by the preview quality gate (${reasons}).`;
 }
 
 /**

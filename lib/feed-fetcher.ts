@@ -258,7 +258,14 @@ export function buildXPathArticles(raw: string, feedUrl: string, config: FeedExt
  * the (up to 2 MiB) HTML once per candidate instead exhausted memory on large
  * news homepages. `buildXPathArticles` is the single-config entry point.
  */
-export function buildXPathArticlesFromDocument(document: Document, xpath: XPathEvaluator, feedUrl: string, config: FeedExtractionConfig): FetchedFeed {
+export function buildXPathArticlesFromDocument(
+  document: Document,
+  xpath: XPathEvaluator,
+  feedUrl: string,
+  config: FeedExtractionConfig,
+  /** Optional out-param: receives the matched item nodes (saves the caller a second evaluation). */
+  itemNodes?: Node[],
+): FetchedFeed {
   const settings = config.xpath ?? {};
   const itemExpression = settings.xPathItem || settings.item;
   if (!itemExpression) return { articles: [] };
@@ -268,6 +275,7 @@ export function buildXPathArticlesFromDocument(document: Document, xpath: XPathE
   for (let i = 0; i < result.snapshotLength; i++) {
     const node = result.snapshotItem(i);
     if (!node) continue;
+    itemNodes?.push(node);
     const rawLink = evaluateString(xpath, settings.xPathItemUri || settings.itemUri, node);
     const link = rawLink ? new URL(rawLink, feedUrl).toString() : "";
     const rawImage = evaluateString(xpath, settings.xPathItemThumbnail || settings.itemThumbnail, node);

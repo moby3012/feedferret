@@ -340,9 +340,9 @@ export async function suggestFeedFromUrl(url: string) {
                     flagged: candidate.previewIssues[i] != null,
                 })),
             })),
-            // Lists the gate dropped (navigation, login, maps, placeholders…),
-            // so an empty result can say "only menus found" instead of "nothing".
-            rejectedCount: rejected.count,
+            // Lists the gate dropped (navigation, login, maps, placeholders…)
+            // and why, so an empty result can explain itself.
+            rejected: { count: rejected.count, reasons: rejected.reasons },
         };
     } catch (error) {
         logger.error("Failed to suggest feed candidates from page:", error);

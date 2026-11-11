@@ -15,18 +15,21 @@ import type { FetchedFeedArticle } from "./feed-fetcher";
 
 /** Why a candidate that is still offered needs a human look (UI-translated). */
 export type PreviewReviewReason =
-  | "missingDates" // fewer than half of the items carry a date
   | "duplicates" // the same link/title repeats across items
   | "mixedItems" // some items look like navigation, ads, login or placeholders
   | "fewItems" // only 3–4 distinct plausible items
   | "outsideSection" // the URL names a section (/news, /blog…) but items link elsewhere
   | "otherSites"; // most items leave the site
 
+/** Informational, not a review reason: shown in the preview, not as "please review". */
+export type PreviewNote = "missingDates"; // fewer than half of the items carry a date
+
 /** Why a candidate is not offered at all (logs/bench/tests; never shown raw). */
 export type PreviewRejectReason =
   | "tooFewPlausibleItems"
   | "mostlyJunk"
-  | "navigationChrome";
+  | "navigationChrome"
+  | "navigationList";
 
 /** Per-item problem; `null` = a plausible feed item. */
 export type ItemIssue =
@@ -43,12 +46,15 @@ export type ItemIssue =
 export type PreviewQuality = {
   verdict: "ok" | "review" | "reject";
   reasons: PreviewReviewReason[];
+  notes: PreviewNote[];
   rejectReason?: PreviewRejectReason;
   /** Distinct (by link and title) items that look like real entries. */
   plausibleItems: number;
   /** Ranking adjustment added to the structural score. */
   scoreAdjustment: number;
   issues: Partial<Record<ItemIssue, number>>;
+  /** Per input item, aligned with `articles`: why it is not an entry (null = plausible). */
+  itemIssues: Array<ItemIssue | null>;
 };
 
 export type QualityContext = {
@@ -69,6 +75,10 @@ const PLACEHOLDER_TITLES = new Set([
   "next", "previous", "zurück", "newsletter", "kontakt", "contact", "impressum", "datenschutz",
   "privacy", "cookies", "get directions", "route", "download", "play", "abspielen", "anhören",
   "listen", "watch", "ansehen", "video", "audio", "jobs", "careers", "karriere",
+  // fr / es / it
+  "lire la suite", "lire plus", "en savoir plus", "voir plus", "plus", "suite", "postuler",
+  "leer más", "leer mas", "ver más", "ver mas", "más información", "seguir leyendo", "más",
+  "leggi di più", "leggi tutto", "scopri di più", "continua a leggere", "altro", "candidati",
 ]);
 
 // Hosts whose links are ad clicks, trackers or URL shorteners — never an entry.
@@ -85,12 +95,17 @@ const MAP_PATH_HOSTS = /(^|\.)(google\.[a-z.]+|bing\.com)$/; // …/maps on thes
 
 const SOCIAL_HOST = /(^|\.)(facebook\.com|instagram\.com|twitter\.com|x\.com|whatsapp\.com|linkedin\.com|tiktok\.com|threads\.net|threads\.com|pinterest\.[a-z.]+|xing\.com|t\.me|telegram\.me|bsky\.app|youtube\.com|flickr\.com|soundcloud\.com|social\.bund\.de|mastodon\.social)$/;
 
-const LOGIN_SEGMENT = /^(login|log-in|logon|signin|sign-in|signup|sign-up|register|registration|registrieren|anmelden|anmeldung|auth|oauth|sso|account|accounts|my-account|mein-konto|join|session|sessions|password|passwort|checkout|cart|warenkorb)$/i;
+// Auth/commerce flows. Matched only as the FIRST segment of a short path
+// ("/login", "/auth/signin", "/cart") or as the exact LAST segment
+// ("/u/login") — never anywhere in a path: "/sessions/opening-keynote" and
+// "/join/weekly-meetup-berlin" are conference/event entries.
+const LOGIN_FIRST_SEGMENT = /^(login|log-in|logon|logout|signin|sign-in|signup|sign-up|register|registration|registrieren|anmelden|anmeldung|abmelden|oauth|sso|auth|my-account|mein-konto|password|passwort|checkout|cart|warenkorb)$/i;
+const LOGIN_LAST_SEGMENT = /^(login|log-in|logon|logout|signin|sign-in|signup|sign-up|register|registrieren|anmelden|abmelden)$/i;
 const LOGIN_HOST = /^(login|accounts?|auth|signin|sso|id|my)\./;
 
 // Path segments that introduce a taxonomy listing (category/tag/section page),
 // not an entry: discourse /c/<slug>/<id>, WordPress /category/…, /tag/…
-const TAXONOMY_SEGMENT = /^(c|category|categories|kategorie|kategorien|tag|tags|topic-tag|label|labels|rubrik|rubriken|ressort|ressorts|section|sections|schlagwort|schlagworte|archive|archiv|author|authors|autor|autoren|users?|u|profile)$/i;
+const TAXONOMY_SEGMENT = /^(c|category|categories|kategorie|kategorien|tag|tags|topic-tag|topic|topics|label|labels|rubrik|rubriken|ressort|ressorts|section|sections|schlagwort|schlagworte|archive|archiv|author|authors|autor|autoren|users?|u|profile|collections?)$/i;
 
 // Section names whose items are expected to stay inside that section.
 const CONTENT_SECTION = /^(news|blog|blogs|aktuelles|aktuell|nachrichten|presse|press|pressemitteilungen|press-releases|newsroom|changelog|releases|articles|artikel|posts|stories|updates|meldungen|magazin|magazine|journal|insights|research)$/i;
@@ -101,6 +116,9 @@ const MEDIA_TOKEN = /^(video|videos|tv|sendung|sendungen|mediathek|livestream|li
 
 // Not » or ›: French/German quotes close titles with them.
 const CTA_ARROW = /[→↗➔➜⟶]\s*$/;
+// Call-to-action phrasing at the start of a short title ("Learn more about
+// your rights", "Mehr erfahren über …"): a button, not an entry title.
+const CTA_PREFIX = /^(learn more|read more|find out more|see more|view more|click here|mehr erfahren|mehr lesen|jetzt mehr|hier klicken|en savoir plus|lire la suite|leer más|leggi di più|scopri di più)\b/i;
 
 /** Collapse whitespace, strip trailing CTA arrows/punctuation, lowercase. */
 export function normalizeTitle(title: string): string {
@@ -111,12 +129,35 @@ export function normalizeTitle(title: string): string {
     .toLowerCase();
 }
 
-export function isPlaceholderTitle(title: string | null | undefined): boolean {
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/**
+ * Placeholder/action title ("Apply", "Read more", "Lire la suite"…). Very
+ * short titles are placeholders only for alphabetic scripts and only when the
+ * link does not itself look like an entry: "新闻" or "Go" → `/2026/11/go-1-30`
+ * are real titles.
+ */
+export function isPlaceholderTitle(title: string | null | undefined, opts: { articleLikeLink?: boolean } = {}): boolean {
   if (!title) return true;
   const norm = normalizeTitle(title);
-  if (norm.length < 3) return true;
+  if (!norm) return true;
   if (!/\p{L}/u.test(norm)) return true; // only digits/punctuation
-  return PLACEHOLDER_TITLES.has(norm);
+  if (PLACEHOLDER_TITLES.has(norm)) return true;
+  if (CTA_PREFIX.test(norm) && norm.split(" ").length <= 12) return true;
+  if (norm.length < 3 && !CJK.test(norm) && !opts.articleLikeLink) return true;
+  return false;
+}
+
+/** Strong evidence of an individual entry: a date, a long numeric id or a uuid in the URL. */
+export function hasEntryIdOrDate(link: string): boolean {
+  try {
+    const u = new URL(link);
+    const path = u.pathname;
+    if (/\d{4}[/-]\d{1,2}([/-]\d{1,2})?/.test(path) || /[0-9a-f]{8}-[0-9a-f]{4}-/i.test(path)) return true;
+    return /(^|\D)\d{5,}(\D|$)/.test(path) || [...u.searchParams].some(([k, v]) => /^(id|p|article|story|post|item|nid|aid)$/i.test(k) && /\d/.test(v));
+  } catch {
+    return false;
+  }
 }
 
 /** Registrable-ish site label: "www.faz.net" → "faz", "bbc.co.uk" → "bbc". */
@@ -192,7 +233,20 @@ function hasPrefix(segments: string[], prefix: string[]): boolean {
 }
 
 /** Classify a single extracted item; `null` means it looks like a real entry. */
-export function classifyItem(article: Pick<FetchedFeedArticle, "title" | "link" | "titleSynthetic">, page: URL): ItemIssue | null {
+export type ClassifyContext = {
+  /**
+   * linkKeys of non-entry-like links that several items of the SAME list
+   * point to (a section kicker repeated on every card, "/blog/product").
+   * A short slug on its own is never a hub signal.
+   */
+  repeatedHubs?: Set<string>;
+};
+
+export function classifyItem(
+  article: Pick<FetchedFeedArticle, "title" | "link" | "titleSynthetic">,
+  page: URL,
+  ctx: ClassifyContext = {},
+): ItemIssue | null {
   const link = article.link?.trim();
   if (!link) return "noLink";
   let u: URL;
@@ -207,7 +261,11 @@ export function classifyItem(article: Pick<FetchedFeedArticle, "title" | "link" 
   if (MAP_HOST.test(host) || (MAP_PATH_HOSTS.test(host) && /^\/maps\b/.test(u.pathname))) return "map";
 
   const segments = pathSegments(u.pathname);
-  if (LOGIN_HOST.test(host) || segments.some((s) => LOGIN_SEGMENT.test(s))) return "login";
+  if (
+    LOGIN_HOST.test(host) ||
+    (segments.length > 0 && segments.length <= 2 && LOGIN_FIRST_SEGMENT.test(segments[0])) ||
+    (segments.length > 0 && LOGIN_LAST_SEGMENT.test(segments[segments.length - 1]))
+  ) return "login";
 
   const sameSite = siteLabel(host) === siteLabel(page.hostname);
   // Profile/channel links to social networks (footer "follow us" lists);
@@ -216,12 +274,17 @@ export function classifyItem(article: Pick<FetchedFeedArticle, "title" | "link" 
 
   // A title synthesized from the item's content (no real title on the page)
   // counts as missing: it says nothing about whether this is an entry.
-  if (article.titleSynthetic || isPlaceholderTitle(article.title) || CTA_ARROW.test(article.title.trim())) return "placeholderTitle";
-
   const articleLike = isArticleLikeLink(link);
+  if (article.titleSynthetic || isPlaceholderTitle(article.title, { articleLikeLink: articleLike }) || CTA_ARROW.test(article.title.trim())) {
+    return "placeholderTitle";
+  }
+
   const pageSegments = pathSegments(page.pathname);
-  // The page itself, the site root, or an ancestor of the page.
-  if (segments.length === 0) return "navigation";
+  const norm = normalizeTitle(article.title);
+  const words = norm.split(" ").length;
+  // The site root (or another site's homepage under a short label, like the
+  // Wikipedia portal's sister projects), the page itself, or an ancestor of it.
+  if (segments.length === 0 && (sameSite || words <= 4)) return "navigation";
   if (sameSite && segments.length <= pageSegments.length && hasPrefix(pageSegments, segments)) return "navigation";
   // Taxonomy listing (category/tag/author page).
   const taxonomyAt = segments.findIndex((s) => TAXONOMY_SEGMENT.test(s));
@@ -230,20 +293,33 @@ export function classifyItem(article: Pick<FetchedFeedArticle, "title" | "link" 
     const tail = segments.slice(taxonomyAt + 1);
     if (!tail.some((s) => s.split(/[-_]+/).length >= 4)) return "navigation";
   }
-  // Single-word hub one or two levels deep ("/accessibility", "/blog/product",
-  // "/sections/economy") — "/news/s1-sec" style short slugs stay entries.
-  if (!articleLike && segments.length <= 2) {
-    const last = segments[segments.length - 1];
-    if (last.split(/[-_+.]+/).filter(Boolean).length <= 1) return "navigation";
-    // Short label + short hub link ("Engineer jobs" → /jobs/engineer-jobs).
-    if (normalizeTitle(article.title).split(" ").length <= 3) return "navigation";
-  }
+  // A sibling of the entered page (same parent, same depth, short name, no
+  // id/date): peer profiles/categories — "/company/github" listed on
+  // "/company/microsoft", "/c/ideas" on "/c/help".
+  if (
+    sameSite &&
+    pageSegments.length > 0 &&
+    segments.length === pageSegments.length &&
+    hasPrefix(segments, pageSegments.slice(0, -1)) &&
+    !hasEntryIdOrDate(link) &&
+    segments[segments.length - 1].split(/[-_]+/).length <= 2
+  ) return "navigation";
 
-  // Brand/show navigation: very short title naming the site itself
-  // ("tagesschau in 100 Sekunden", "Work at Apple").
+  // The same non-entry link repeated across the list's cards: a section
+  // kicker ("/blog/product" on every Stripe card), not the entry. A short
+  // slug alone ("/blog/regex", "/essays/the-gap") is a normal entry.
+  if (!articleLike && ctx.repeatedHubs?.has(linkKey(link))) return "navigation";
+
+  // Brand/show navigation: a very short title that starts or ends with the
+  // site's own name ("tagesschau in 100 Sekunden", "Work at Apple"), unless
+  // the link carries a date/id ("Acme opens Berlin office" →
+  // /newsroom/2024/05/…). "Introducing Stripe Tax" is not brand navigation.
   const brand = siteLabel(page.hostname);
-  const norm = normalizeTitle(article.title);
-  if (brand.length >= 4 && norm.split(" ").length <= 4 && norm.includes(brand)) return "brandNavigation";
+  if (brand.length >= 4 && words <= 4 && !hasEntryIdOrDate(link)) {
+    const first = norm.split(" ")[0];
+    const last = norm.split(" ")[words - 1];
+    if (first.startsWith(brand) || last === brand) return "brandNavigation";
+  }
 
   // A general news front page whose items are TV/video/audio programmes.
   // Whole directory segments ("/multimedia/…", "/video/…") or a leading file
@@ -256,6 +332,24 @@ export function classifyItem(article: Pick<FetchedFeedArticle, "title" | "link" 
   }
 
   return null;
+}
+
+/**
+ * A short label pointing at a short, id-less path ("Accessibility" →
+ * /accessibility, "Engineer jobs" → /jobs/engineer-jobs, "@handle" →
+ * /handle). One such item is a normal entry ("Regex" → /blog/regex); a whole
+ * undated, text-less list of them is a menu or facet list.
+ */
+function isHubLike(article: FetchedFeedArticle, page: URL): boolean {
+  try {
+    const u = new URL(article.link);
+    // Links to other sites (an "awesome list" of repos) are not this site's menu.
+    if (siteLabel(u.hostname) !== siteLabel(page.hostname)) return false;
+    if (hasEntryIdOrDate(article.link)) return false;
+    return pathSegments(u.pathname).length <= 2 && normalizeTitle(article.title).split(" ").length <= 3;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -276,6 +370,9 @@ export function assessPreviewQuality(articles: FetchedFeedArticle[], ctx: Qualit
   const allLinks = new Set<string>();
   const allTitles = new Set<string>();
   let plausible = 0;
+  let hubLike = 0;
+  let hubLikeLeaving = 0;
+  let withText = 0;
   let articleLike = 0;
   let dated = 0;
   let withImage = 0;
@@ -285,24 +382,53 @@ export function assessPreviewQuality(articles: FetchedFeedArticle[], ctx: Qualit
   const pageSegments = pathSegments(page.pathname);
   const section = pageSegments[0] && CONTENT_SECTION.test(pageSegments[0]) ? pageSegments[0].toLowerCase() : null;
 
+  // Non-entry links that ≥2 items share (and that are not the majority link
+  // of a duplicated list) are hubs/kickers.
+  const hubCounts = new Map<string, number>();
+  for (const article of articles) {
+    if (!article.link || isArticleLikeLink(article.link)) continue;
+    const key = linkKey(article.link);
+    hubCounts.set(key, (hubCounts.get(key) ?? 0) + 1);
+  }
+  const repeatedHubs = new Set([...hubCounts].filter(([, n]) => n >= 2).map(([k]) => k));
+  const offsiteHosts = new Set<string>();
+  const itemIssues: Array<ItemIssue | null> = [];
+
   for (const article of articles) {
     const key = article.link ? linkKey(article.link) : "";
     if (key) allLinks.add(key);
     allTitles.add(normalizeTitle(article.title || ""));
     if (article.publishedAt) dated++;
     if (article.imageUrl) withImage++;
-    const issue = classifyItem(article, page);
+    const issue = classifyItem(article, page, { repeatedHubs });
+    itemIssues.push(issue);
     if (issue) {
       issues[issue] = (issues[issue] ?? 0) + 1;
       continue;
     }
     plausible++;
+    if (isHubLike(article, page)) {
+      hubLike++;
+      // …and leaves the entered page's own path (Apple /careers/us/ → /accessibility,
+      // LinkedIn /company/x → /jobs/engineer-jobs): site navigation, not entries.
+      try {
+        const u = new URL(article.link);
+        const first = pathSegments(u.pathname)[0]?.toLowerCase();
+        if (pageSegments.length > 0 && siteLabel(u.hostname) === siteLabel(page.hostname) && first !== pageSegments[0].toLowerCase()) hubLikeLeaving++;
+      } catch {
+        /* classified above */
+      }
+    }
+    if ((article.content ?? "").replace(/<[^>]*>/g, " ").trim().length >= 40) withText++;
     plausibleLinks.add(key);
     plausibleTitles.add(normalizeTitle(article.title));
     if (isArticleLikeLink(article.link)) articleLike++;
     try {
       const u = new URL(article.link);
-      if (siteLabel(u.hostname) !== siteLabel(page.hostname)) offsite++;
+      if (siteLabel(u.hostname) !== siteLabel(page.hostname)) {
+        offsite++;
+        offsiteHosts.add(siteLabel(u.hostname));
+      }
       else if (section && pathSegments(u.pathname)[0]?.toLowerCase() === section) inSection++;
     } catch {
       /* classified above */
@@ -324,25 +450,45 @@ export function assessPreviewQuality(articles: FetchedFeedArticle[], ctx: Qualit
     duplicateFraction * 40 +
     Math.min(distinctPlausible, 10);
 
-  const base = { plausibleItems: distinctPlausible, scoreAdjustment, issues };
+  const base = { plausibleItems: distinctPlausible, scoreAdjustment, issues, itemIssues };
 
   if (distinctPlausible < 3) {
-    return { ...base, verdict: "reject", reasons: [], rejectReason: "tooFewPlausibleItems" };
+    return { ...base, verdict: "reject", reasons: [], notes: [], rejectReason: "tooFewPlausibleItems" };
   }
-  if (junkFraction > 0.5) {
-    return { ...base, verdict: "reject", reasons: [], rejectReason: "mostlyJunk" };
+  // ≥40 % non-entries: a wrong block (LinkedIn's office list: 45 Bing Maps
+  // "Get directions" links among 107 items), not a feed with a few strays.
+  if (junkFraction >= 0.4) {
+    return { ...base, verdict: "reject", reasons: [], notes: [], rejectReason: "mostlyJunk" };
   }
   if (ctx.insideChrome && articleLikeFraction < 0.5) {
-    return { ...base, verdict: "reject", reasons: [], rejectReason: "navigationChrome" };
+    return { ...base, verdict: "reject", reasons: [], notes: [], rejectReason: "navigationChrome" };
+  }
+  // A list made almost entirely of short labels → short paths, with neither
+  // dates nor teaser text: a menu/facet list (Apple's "Accessibility,
+  // Education…", LinkedIn's "Engineer jobs", a profile's @handles).
+  if (
+    plausible &&
+    dateFraction < 0.3 &&
+    (hubLikeLeaving / plausible >= 0.7 || (hubLike / plausible >= 0.7 && withText / plausible < 0.5))
+  ) {
+    return { ...base, verdict: "reject", reasons: [], notes: [], rejectReason: "navigationList" };
   }
 
+  // Missing dates alone is NOT a review reason (most listing pages carry
+  // none; the preview shows "no date" per item instead) — it is reported
+  // separately in `notes`. Review reasons need several affected items so
+  // one stray card in a 40-item list doesn't label a good feed.
+  const junk = total - plausible;
+  const duplicates = total - Math.min(allLinks.size, allTitles.size);
   const reasons: PreviewReviewReason[] = [];
-  if (dateFraction < 0.5) reasons.push("missingDates");
-  if (duplicateFraction >= 0.2) reasons.push("duplicates");
-  if (junkFraction >= 0.15) reasons.push("mixedItems");
+  if (duplicateFraction >= 0.2 && duplicates >= 3) reasons.push("duplicates");
+  if (junkFraction >= 0.25 && junk >= 3) reasons.push("mixedItems");
   if (distinctPlausible < 5) reasons.push("fewItems");
-  if (plausible && offsite / plausible >= 0.5) reasons.push("otherSites");
+  // Aggregators link to many different sites (fine); a list that mostly
+  // leaves for ONE or two other sites is likely the wrong block.
+  if (plausible && offsite / plausible >= 0.5 && offsiteHosts.size <= 2) reasons.push("otherSites");
   else if (section && plausible && inSection / plausible < 0.5) reasons.push("outsideSection");
+  const notes: PreviewNote[] = dateFraction < 0.5 ? ["missingDates"] : [];
 
-  return { ...base, verdict: reasons.length ? "review" : "ok", reasons };
+  return { ...base, verdict: reasons.length ? "review" : "ok", reasons, notes };
 }

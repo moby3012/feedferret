@@ -845,19 +845,23 @@
       "aiSuggestFailed": "Die KI konnte das nicht einrichten. Versuche es erneut oder nutze „Einträge finden“.",
       "aiFullTextTitle": "Das sieht nach einem einzelnen Artikel aus, nicht nach einer Liste",
       "aiFullTextHint": "Füge stattdessen den eigenen Feed der Website hinzu und aktiviere dort in den Feed-Einstellungen die automatische Volltext-Extraktion.",
-      "rejectedHint": "{count, plural, one {Eine Liste wurde verworfen} other {# Listen wurden verworfen}}, weil sie nur aus Menü-, Login-, Karten- oder Platzhalter-Links bestand – das wäre kein brauchbarer Feed.",
       "previewLabel": "Vorschau der ersten Einträge",
       "previewNoDate": "ohne Datum",
       "previewFlagged": "wirkt wie Navigation",
       "review": {
         "badge": "Bitte prüfen",
         "okBadge": "Vorschau plausibel",
-        "missingDates": "Die meisten Einträge haben kein Datum – neue Einträge werden nach Abrufzeit sortiert.",
         "duplicates": "Einträge wiederholen sich (gleicher Link oder Titel).",
         "mixedItems": "Einige Einträge wirken wie Navigation, Werbung oder Platzhalter.",
         "fewItems": "Nur wenige eindeutige Einträge gefunden.",
         "outsideSection": "Die Einträge verlinken außerhalb des Bereichs der eingegebenen URL.",
         "otherSites": "Die meisten Einträge verlinken auf andere Websites."
+      },
+      "rejected": {
+        "tooFewPlausibleItems": "{count, plural, one {Eine Liste wurde verworfen} other {# Listen wurden verworfen}}: zu wenige echte Einträge – meist Menü-, Login-, Karten- oder Platzhalter-Links.",
+        "mostlyJunk": "{count, plural, one {Eine Liste wurde verworfen} other {# Listen wurden verworfen}}: überwiegend Navigations-, Werbe- oder Login-Links statt Einträgen.",
+        "navigationChrome": "{count, plural, one {Eine Liste wurde verworfen} other {# Listen wurden verworfen}}: sie gehört zur Navigation oder Fußzeile der Seite.",
+        "navigationList": "{count, plural, one {Eine Liste wurde verworfen} other {# Listen wurden verworfen}}: sie besteht nur aus kurzen Menü- oder Filter-Links ohne Datum oder Text."
       }
     },
     "rsshub": {

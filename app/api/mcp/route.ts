@@ -14,8 +14,8 @@ import { connectorFeedUrlError, getConnectorSecretRules, redactArticleWith, reda
 import { stripFeedSecrets } from "@/lib/feed-secrets";
 import { discoverFeeds } from "@/lib/feed-discovery";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } from "@/lib/changedetection";
-import { fetchAndSuggestFeedCandidates } from "@/lib/page-feed-suggest";
-import { createPageFeedForUser, suggestTopPageFeedConfig } from "@/lib/page-feed-create";
+import { fetchAndSuggestFeedCandidatesDetailed } from "@/lib/page-feed-suggest";
+import { createPageFeedForUser, noPageFeedCandidateMessage, suggestTopPageFeed } from "@/lib/page-feed-create";
 import { importOpmlXml, OpmlImportInputError } from "@/lib/import/opml-import";
 import { OpmlParseError } from "@/lib/opml";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactWebhookConfigs } from "@/lib/webhooks";
@@ -598,8 +598,9 @@ async function callTool(user: ApiUser, name: string, args: any) {
     case "feedferret.suggest_page_feed": {
       const url = typeof args.url === "string" ? args.url.trim() : "";
       if (!url) throw new Error("url is required");
-      const candidates = await fetchAndSuggestFeedCandidates(url);
+      const { candidates, rejected } = await fetchAndSuggestFeedCandidatesDetailed(url);
       return {
+        rejected,
         candidates: candidates.map((c) => ({ config: c.config, score: c.score, itemCount: c.itemCount, sampleTitles: c.sampleTitles, quality: c.quality })),
       };
     }
@@ -608,8 +609,9 @@ async function callTool(user: ApiUser, name: string, args: any) {
       if (!url) throw new Error("url is required");
       let config = args.config;
       if (!config || typeof config !== "object" || typeof config.xPathItem !== "string" || !config.xPathItem.trim()) {
-        config = await suggestTopPageFeedConfig(url);
-        if (!config) throw new Error("No feed-like repeating items found on that page; provide an explicit config with xPathItem");
+        const top = await suggestTopPageFeed(url);
+        config = top.config;
+        if (!config) throw new Error(noPageFeedCandidateMessage(top.rejected));
       }
       const feed = await createPageFeedForUser(user.id, {
         url,
