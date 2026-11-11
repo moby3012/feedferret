@@ -61,7 +61,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSession } from "next-auth/react";
-import { signOut } from "@/lib/logout";
+import { useSignOut } from "@/components/shell/use-sign-out";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { categoryKey } from "@/features/reader/nav/sidebar-keys";
@@ -215,6 +215,7 @@ export function RssSidebar({
   const [feedToDelete, setFeedToDelete] = useState<{ id: string; name: string } | null>(null);
   // "Mark all as read" of a feed always asks first (owner decision 2026-11-10; same as the compact Feeds screen).
   const [markAllFeed, setMarkAllFeed] = useState<{ id: string; name: string; unread: number } | null>(null);
+  const signOut = useSignOut();
   const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   // Bell menu: a nav overlay (system Back closes it, not the Feeds screen).
   const [notificationsOpen, setNotificationsOpen] = useOwnedOverlay("notifications");

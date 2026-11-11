@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { signOut } from "@/lib/logout";
+import { useSignOut } from "@/components/shell/use-sign-out";
 import { useRouter } from "next/navigation";
 import { Trash2, AlertTriangle } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 export function DeleteAccountSection() {
   const t = useTranslations();
+  const signOut = useSignOut();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -33,7 +34,8 @@ export function DeleteAccountSection() {
         return;
       }
       toast.success(t("deleteAccount.accountDeleted"));
-      await signOut({ callbackUrl: "/login" });
+      // The account is gone; if the sign-out cannot reach the server the user is told (toast) and stays.
+      if (!(await signOut({ callbackUrl: "/login" }))) setLoading(false);
     } catch {
       toast.error(t("deleteAccount.deletionFailed"));
       setLoading(false);

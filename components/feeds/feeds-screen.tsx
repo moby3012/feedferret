@@ -63,7 +63,7 @@ import {
 import { parseCountDisplay, showsCount, type CountDisplay } from "@/lib/count-display";
 import { completeFeedsHint, createSwipeRow, documentDir, useFeedsHintDue, useTouchRows, type LongPressPoint } from "@/lib/gestures";
 import { markInAppNavigation } from "@/lib/in-app-back";
-import { signOut } from "@/lib/logout";
+import { useSignOut } from "@/components/shell/use-sign-out";
 import { cn } from "@/lib/utils";
 
 // Compact Feeds screen (Feeds tab root, audit-ux-2 A-03 / R3): a Reeder-style
@@ -649,6 +649,7 @@ function FeedsHeaderMenu() {
   const unreadNotifications = useCountsQuery(true).data?.notifications ?? 0;
   const markNotificationRead = useMarkNotificationRead();
   const markAllNotificationsRead = useMarkAllNotificationsRead();
+  const signOut = useSignOut();
   const [signOutOpen, setSignOutOpen] = useState(false);
   const afterClose = (fn: () => void) => () => void nav.closeOverlay("feeds-menu").then(fn);
   const go = (href: string) =>

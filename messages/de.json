@@ -1073,6 +1073,8 @@
     "feedsInCategory": "{count} Feeds"
   },
   "common": {
+    "signOutNeedsConnection": "Abmelden erfordert eine Verbindung",
+    "signOutFailed": "Abmelden fehlgeschlagen – bitte erneut versuchen",
     "save": "Speichern",
     "cancel": "Abbrechen",
     "close": "Schließen",
