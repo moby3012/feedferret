@@ -3,8 +3,10 @@ import type { ResolvedFeed } from "./smart-url-resolver";
 /**
  * Curated publisher → native feed rules.
  *
- * Scope rules (a publisher match short-circuits normal discovery, so it must
- * never broaden what the user asked for):
+ * Fallback data only: discovery always reads the page's own feed
+ * advertisements first and offers these routes only when that finds nothing
+ * (owner principle — no per-site data as the primary path). Scope rules (a
+ * match must never broaden what the user asked for):
  * - Only exact, listed hosts match (after stripping `www.`/`m.`/`mobile.`).
  *   Unlisted subdomains (`sport.example`, `feeds.example`, …) are no match.
  * - A URL that is itself a feed (feed-looking path or a known feed host) is
@@ -280,6 +282,7 @@ export function resolvePublisherFeeds(url: URL): ResolvedFeed[] {
       confidence: 0.95,
       format: route.format ?? "rss",
       verify: true,
+      curated: true,
     },
   ];
 }

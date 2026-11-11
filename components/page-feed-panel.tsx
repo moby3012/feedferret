@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { Loader2, FileSearch, CircleAlert, CircleCheck } from "lucide-react";
+import { Loader2, FileSearch, CircleAlert, CircleCheck, Rss } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
-import { useSuggestFeedFromUrl, useCreateFeedFromPage, useProposeAiFeedConfig, useAiSettings } from "@/hooks/use-rss-data";
+import { useSuggestFeedFromUrl, useCreateFeedFromPage, useProposeAiFeedConfig, useAiSettings, useAddFeed } from "@/hooks/use-rss-data";
 import { toast } from "sonner";
 import type { CandidateQuality, SuggestedFieldConfig } from "@/lib/page-feed-suggest";
 import type { PreviewRejectReason, PreviewReviewReason } from "@/lib/page-feed-quality";
@@ -30,6 +30,15 @@ function dominantRejectReason(rejected: RejectedSummary): PreviewRejectReason | 
     if (n > 0 && (best === null || n > (rejected.reasons[best] ?? 0))) best = reason;
   }
   return best;
+}
+
+type FoundFeed = { url: string; title: string; type: string; kind?: string };
+
+/** Localised text for an action result: its stable `errorCode` when we know it, else the server text. */
+function useActionErrorText() {
+  const t = useTranslations("sidebar");
+  return (result: { error?: string; errorCode?: string }, fallback: string) =>
+    result.errorCode && t.has(`addErrors.${result.errorCode}`) ? t(`addErrors.${result.errorCode}`) : result.error || fallback;
 }
 
 type PreviewItem = { title: string; link: string; publishedAt: string | null; imageUrl: string | null; flagged?: boolean };
@@ -94,6 +103,12 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
   const [name, setName] = useState("");
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [fullTextInfo, setFullTextInfo] = useState<{ notes: string | null } | null>(null);
+  // Discovery-first: the page already publishes feeds → offered before scraping/AI.
+  const [foundFeeds, setFoundFeeds] = useState<FoundFeed[] | null>(null);
+  // The address the server actually read (normalised, redirects / http fallback applied).
+  const [pageUrl, setPageUrl] = useState<string | null>(null);
+  const [subscribingUrl, setSubscribingUrl] = useState<string | null>(null);
+  const errorText = useActionErrorText();
 
   // Deep-link URL can arrive after this panel already mounted (it's rendered
   // lazily inside the Add-Feed dialog's "From web page" tab).
@@ -104,53 +119,67 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
   const suggest = useSuggestFeedFromUrl();
   const create = useCreateFeedFromPage();
   const ai = useProposeAiFeedConfig();
+  const addFeed = useAddFeed();
   const { data: aiSettings } = useAiSettings();
   const aiConfigured = Boolean(aiSettings?.provider);
   const isBusy = suggest.isPending || ai.isPending;
 
-  const handleFindItems = async () => {
-    const trimmedUrl = url.trim();
-    if (!trimmedUrl) return;
+  const resetResults = () => {
     setSuggestError(null);
     setCandidates(null);
     setFullTextInfo(null);
+    setFoundFeeds(null);
+  };
+
+  const fail = (message: string) => {
+    setSuggestError(message);
+    toast.error(message);
+  };
+
+  const handleFindItems = async (skipDiscovery = false) => {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) return;
+    resetResults();
     try {
-      const result = await suggest.mutateAsync(trimmedUrl);
+      const result = await suggest.mutateAsync({ url: trimmedUrl, skipDiscovery });
       if (!result.success) {
-        const message = result.error || t("suggestFailed");
-        setSuggestError(message);
-        toast.error(message);
+        fail(errorText(result, t("suggestFailed")));
+        return;
+      }
+      setPageUrl(result.pageUrl ?? null);
+      if (result.kind === "existing-feed") {
+        setFoundFeeds(result.feeds);
         return;
       }
       setCandidates(result.candidates as PageFeedCandidate[]);
       setRejected(result.rejected ?? { count: 0, reasons: {} });
       setSelectedIndex(0);
-      setName(deriveNameFromUrl(trimmedUrl));
+      setName(deriveNameFromUrl(result.pageUrl ?? trimmedUrl));
     } catch (err) {
-      const message = err instanceof Error ? err.message : t("suggestFailed");
-      setSuggestError(message);
-      toast.error(message);
+      fail(err instanceof Error ? err.message : t("suggestFailed"));
     }
   };
 
-  const handleAiSetup = async () => {
+  const handleAiSetup = async (skipDiscovery = false) => {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) return;
-    setSuggestError(null);
-    setCandidates(null);
-    setFullTextInfo(null);
+    resetResults();
     try {
-      const result = await ai.mutateAsync(trimmedUrl);
+      const result = await ai.mutateAsync({ url: trimmedUrl, skipDiscovery });
       if (!result.success) {
-        const message = result.error || t("aiSuggestFailed");
-        setSuggestError(message);
-        toast.error(message);
+        fail(errorText(result, t("aiSuggestFailed")));
+        return;
+      }
+      if (result.mode === "existing-feed") {
+        setPageUrl(result.pageUrl ?? null);
+        setFoundFeeds(result.feeds);
         return;
       }
       if (result.mode === "fulltext") {
         setFullTextInfo({ notes: result.notes ?? null });
         return;
       }
+      setPageUrl(result.pageUrl ?? null);
       setCandidates([
         {
           config: result.config,
@@ -163,11 +192,28 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
         },
       ]);
       setSelectedIndex(0);
-      setName(deriveNameFromUrl(trimmedUrl));
+      setName(deriveNameFromUrl(result.pageUrl ?? trimmedUrl));
     } catch (err) {
-      const message = err instanceof Error ? err.message : t("aiSuggestFailed");
-      setSuggestError(message);
-      toast.error(message);
+      fail(err instanceof Error ? err.message : t("aiSuggestFailed"));
+    }
+  };
+
+  const handleSubscribe = async (feed: FoundFeed) => {
+    setSubscribingUrl(feed.url);
+    try {
+      const result = await addFeed.mutateAsync({
+        url: feed.url,
+        categoryId: categoryId && categoryId !== "none" ? categoryId : undefined,
+      });
+      if (!result.success || !result.feed) {
+        toast.error(errorText(result, t("createFailed")));
+        return;
+      }
+      onCreated({ name: (result.feed as { name?: string }).name || feed.title });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("createFailed"));
+    } finally {
+      setSubscribingUrl(null);
     }
   };
 
@@ -176,13 +222,13 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
     if (!selected) return;
     try {
       const result = await create.mutateAsync({
-        url: url.trim(),
+        url: pageUrl ?? url.trim(),
         config: selected.config,
         name: name.trim() || undefined,
         categoryId: categoryId && categoryId !== "none" ? categoryId : undefined,
       });
       if (!result.success || !result.feed) {
-        toast.error(result.error || t("createFailed"));
+        toast.error(errorText(result, t("createFailed")));
         return;
       }
       onCreated(result.feed);
@@ -201,9 +247,8 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
         value={url}
         onChange={(e) => {
           setUrl(e.target.value);
-          setCandidates(null);
-          setSuggestError(null);
-          setFullTextInfo(null);
+          setPageUrl(null);
+          resetResults();
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && url.trim()) handleFindItems();
@@ -215,7 +260,7 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
           size="sm"
           className="h-9 px-3"
           disabled={!url.trim() || isBusy}
-          onClick={handleFindItems}
+          onClick={() => handleFindItems()}
         >
           {suggest.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : t("findItems")}
         </Button>
@@ -225,7 +270,7 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
             size="sm"
             className="h-9 px-3"
             disabled={!url.trim() || isBusy}
-            onClick={handleAiSetup}
+            onClick={() => handleAiSetup()}
           >
             {ai.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `✨ ${t("aiButton")}`}
           </Button>
@@ -235,6 +280,45 @@ export function PageFeedPanel({ categoryId, onCreated, initialUrl }: PageFeedPan
       {suggestError && !candidates && (
         <div className="rounded-panel border border-warning/20 bg-warning/10 px-3 py-2 text-footnote text-warning">
           {suggestError}
+        </div>
+      )}
+
+      {foundFeeds && foundFeeds.length > 0 && (
+        <div className="space-y-2 rounded-panel border border-success/30 bg-success/10 px-3 py-2" data-testid="page-feed-found">
+          <p className="flex items-center gap-1.5 text-footnote font-medium text-foreground">
+            <CircleCheck className="size-4 text-success" aria-hidden />
+            {t("feedFound", { count: foundFeeds.length })}
+          </p>
+          <p className="text-caption text-muted-foreground">{t("feedFoundHint")}</p>
+          <ul className="space-y-1">
+            {foundFeeds.map((feed) => (
+              <li key={feed.url} className="flex items-center gap-1.5 rounded-row bg-background px-2 py-1.5" data-testid="page-feed-found-item">
+                <Rss className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-footnote text-foreground" title={feed.title}>{feed.title}</span>
+                  <span className="block truncate text-caption text-muted-foreground" title={feed.url}>{shortLink(feed.url)}</span>
+                </span>
+                <Button
+                  size="sm"
+                  className="h-7 shrink-0 px-2 text-footnote"
+                  disabled={subscribingUrl !== null}
+                  onClick={() => handleSubscribe(feed)}
+                >
+                  {subscribingUrl === feed.url ? <Loader2 className="size-4 animate-spin" /> : t("subscribe")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-footnote" disabled={isBusy} onClick={() => handleFindItems(true)}>
+              {t("scrapeAnyway")}
+            </Button>
+            {aiConfigured && (
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-footnote" disabled={isBusy} onClick={() => handleAiSetup(true)}>
+                {t("aiAnyway")}
+              </Button>
+            )}
+          </div>
         </div>
       )}
 

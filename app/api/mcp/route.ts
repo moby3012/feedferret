@@ -13,6 +13,7 @@ import { isRsshubConfigured, getRsshubConfig, buildRsshubPublicRouteUrl, validat
 import { connectorFeedUrlError, getConnectorSecretRules, redactArticleWith, redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
 import { stripFeedSecrets } from "@/lib/feed-secrets";
 import { discoverFeeds } from "@/lib/feed-discovery";
+import { normalizeActionUrl } from "@/lib/add-feed-input";
 import { isChangedetectionConfigured, getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } from "@/lib/changedetection";
 import { fetchAndSuggestFeedCandidatesDetailed } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser, noPageFeedCandidateMessage, suggestTopPageFeed } from "@/lib/page-feed-create";
@@ -56,6 +57,14 @@ function ruleForMcp(rule: any) {
 }
 
 // Feed config fields an MCP client may set via update_feed / add_feed.
+
+/** Bare domains / missing scheme / pasted junk → https URL (same normaliser as the web UI). */
+function mcpUrlArg(raw: unknown): string {
+  const normalized = normalizeActionUrl(raw);
+  if (!normalized.ok) throw new Error(normalized.errorCode === "url-empty" ? "url is required" : normalized.error);
+  return normalized.url;
+}
+
 const FEED_WRITABLE_KEYS = [
   "name", "icon", "categoryId", "updateFrequency", "retentionDays", "keepMinArticles", "priority",
   // Fetch / HTTP options
@@ -314,8 +323,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       return clientFeed(feed);
     }
     case "feedferret.add_feed": {
-      const url = typeof args.url === "string" ? args.url.trim() : "";
-      if (!url) throw new Error("url is required");
+      const url = mcpUrlArg(args.url);
       return createFeedForUser(user.id, url, { name: args.name, categoryId: args.categoryId, icon: args.icon, sync: args.sync !== false });
     }
     case "feedferret.sync_feeds":
@@ -588,8 +596,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       });
     }
     case "feedferret.create_changedetection_feed": {
-      const url = typeof args.url === "string" ? args.url.trim() : "";
-      if (!url) throw new Error("url is required");
+      const url = mcpUrlArg(args.url);
       const config = await getChangedetectionConfig();
       if (!config) throw new Error("changedetection.io is not configured on this server");
       const watch = await createWatch(config, { url });
@@ -603,8 +610,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       });
     }
     case "feedferret.suggest_page_feed": {
-      const url = typeof args.url === "string" ? args.url.trim() : "";
-      if (!url) throw new Error("url is required");
+      const url = mcpUrlArg(args.url);
       const { candidates, rejected } = await fetchAndSuggestFeedCandidatesDetailed(url);
       return {
         rejected,
@@ -612,8 +618,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       };
     }
     case "feedferret.create_page_feed": {
-      const url = typeof args.url === "string" ? args.url.trim() : "";
-      if (!url) throw new Error("url is required");
+      const url = mcpUrlArg(args.url);
       let config = args.config;
       if (!config || typeof config !== "object" || typeof config.xPathItem !== "string" || !config.xPathItem.trim()) {
         const top = await suggestTopPageFeed(url);

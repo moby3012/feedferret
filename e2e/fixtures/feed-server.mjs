@@ -106,6 +106,29 @@ function handleListingPages(res, url) {
   return true;
 }
 
+// --- Discovery-first (add feed from a bare domain) -----------------------------
+// A site whose only feed link is an RSS icon anchor deep in the footer, behind
+// a large <head> — the owner's "bare domain + let AI set it up" case. Served
+// over plain http, so a scheme-less input exercises the https → http retry.
+const DISC_POSTS = ["Harbour lights at dusk", "Repairing an old foghorn", "Tide tables explained", "The keeper's logbook"];
+function discoverySitePage() {
+  const head = Array.from({ length: 120 }, (_, i) => `<link rel="preload" href="/_static/font-${i}.woff2" as="font">`).join("");
+  const posts = DISC_POSTS.map((t) => `<article class="post"><h2><a href="/disc/site/posts/${slug(t)}">${t}</a></h2><time datetime="2026-11-01T09:00:00Z">Nov 1, 2026</time><p>${t} — teaser.</p></article>`).join("");
+  return `<!doctype html><html><head><title>Harbour Notes</title>${head}</head><body><main><div class="posts">${posts}</div></main><footer><a href="/disc/site/about">About</a> <a href="/disc/site/feed.xml" aria-label="RSS feed"><svg viewBox="0 0 8 8"></svg></a></footer></body></html>`;
+}
+function handleDiscoverySite(res, url) {
+  if (url.pathname === "/disc/site" || url.pathname === "/disc/site/") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(discoverySitePage());
+    return true;
+  }
+  if (url.pathname === "/disc/site/feed.xml") {
+    const items = DISC_POSTS.map((t, i) => `<item><title>${t}</title><guid>disc-${i}</guid><link>${baseUrl}/disc/site/posts/${slug(t)}</link><description>${t}</description></item>`).join("");
+    res.writeHead(200, { "content-type": "application/rss+xml" }).end(`<?xml version="1.0"?><rss version="2.0"><channel><title>Harbour Notes</title><link>${baseUrl}/disc/site/</link><description>Discovery fixture</description>${items}</channel></rss>`);
+    return true;
+  }
+  return false;
+}
+
 // N1 PR D: newsletter reader. One-click unsubscribe endpoint (RFC 8058 POST)
 // and a double-opt-in confirmation page; both record what reached them, so the
 // spec can prove the POST body and that nothing is fetched before a click.
@@ -218,6 +241,7 @@ const server = http.createServer((req, res) => {
   if (handleBrokenFeeds(res, url)) return;
   if (handleGoogleNews(req, res, url)) return;
   if (handleListingPages(res, url)) return;
+  if (handleDiscoverySite(res, url)) return;
   const m = /^\/feeds\/([a-z0-9-]+)\.xml$/.exec(url.pathname);
   const feed = m && FEEDS.find((f) => f.slug === m[1]);
   if (!feed) {
