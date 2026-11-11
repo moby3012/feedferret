@@ -198,9 +198,11 @@ export type WebhookConfigUi = {
   method: "POST" | "GET" | "PUT" | "PATCH" | "DELETE";
   headers?: Record<string, string>;
   bodyTemplate?: string;
-  /** A new secret typed by the user (the stored one is never sent to the client). */
-  secret?: string;
-  /** Index of the stored config whose secret is kept when `secret` is empty. */
+  /** A new secret typed by the user (the stored one is never sent to the client); `null` removes it. */
+  secret?: string | null;
+  /** A secret is stored for this webhook (write-only; shown as "saved"). */
+  hasSecret?: boolean;
+  /** Index of the stored config; the server keeps its secret / masked header values. */
   secretRef?: number;
 };
 
@@ -562,17 +564,17 @@ function WebhookActionConfig({
                 id="webhook-hmac-secret"
                 type="password"
                 autoComplete="off"
-                placeholder={value.secretRef !== undefined && !value.secret ? t("webhooks.secretSavedPlaceholder") : t("webhooks.secretUsage")}
+                placeholder={value.hasSecret && value.secret !== null && !value.secret ? t("webhooks.secretSavedPlaceholder") : t("webhooks.secretUsage")}
                 value={value.secret ?? ""}
                 onChange={(e) => onChange({ secret: e.target.value })}
                 className="rounded-panel h-9 text-footnote"
               />
-              {value.secretRef !== undefined && !value.secret && (
+              {value.hasSecret && value.secret !== null && !value.secret && (
                 <Button
                   type="button"
                   size="sm"
                   variant="ghost"
-                  onClick={() => onChange({ secretRef: undefined })}
+                  onClick={() => onChange({ secret: null })}
                   className="h-9 shrink-0 rounded-panel text-footnote"
                 >
                   {t("webhooks.removeSecret")}
@@ -2185,7 +2187,8 @@ export function FeedManagement({
                                             headers: c.headers ?? undefined,
                                             bodyTemplate: typeof c.bodyTemplate === "string" ? c.bodyTemplate : undefined,
                                             // Secrets are write-only: keep the stored one by reference.
-                                            secretRef: c.hasSecret === true && Number.isInteger(c.secretRef) ? c.secretRef : undefined,
+                                            hasSecret: c.hasSecret === true,
+                                            secretRef: Number.isInteger(c.secretRef) ? c.secretRef : undefined,
                                           }));
                                       }
                                     } catch {}

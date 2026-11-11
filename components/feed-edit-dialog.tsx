@@ -119,6 +119,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const [unicityCriteriaForced, setUnicityCriteriaForced] = useState(false);
   const [scraperConfig, setScraperConfig] = useState("");
   const [httpOptions, setHttpOptions] = useState("");
+  // Option names whose stored values are write-only (shown as "__keep__").
+  const [maskedHttpOptions, setMaskedHttpOptions] = useState<string[]>([]);
   const [filtersActionRead, setFiltersActionRead] = useState("");
   const [retentionDays, setRetentionDays] = useState("");
   const [keepMinArticles, setKeepMinArticles] = useState("");
@@ -237,6 +239,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
         setHasStoredPassword(config.hasAuthPassword);
         setScraperConfig(config.scraperConfig || "");
         setHttpOptions(config.httpOptions || "");
+        setMaskedHttpOptions(config.maskedHttpOptions ?? []);
         setEditConfigLoaded(true);
         setHydrationTick((tick) => tick + 1);
       })
@@ -961,6 +964,11 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   placeholder='{\"CURLOPT_HTTPHEADER\":\"Accept: application/json\",\"CURLOPT_USERAGENT\":\"FeedFerret\"}'
                   className="min-h-24 rounded-panel border-border/70 bg-background/70 font-mono text-footnote"
                 />
+                {maskedHttpOptions.length > 0 && (
+                  <p className="text-footnote text-muted-foreground" data-testid="http-options-masked-hint">
+                    {t("scout.httpOptionsMaskedHint", { names: maskedHttpOptions.join(", ") })}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">

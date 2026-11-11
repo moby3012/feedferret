@@ -97,7 +97,7 @@ export async function collectSecretStatus(prisma, keyring) {
   }
   const undecryptable = columns.reduce(
     (sum, c) => sum + Object.entries(c.counts)
-      .filter(([bucket]) => bucket === "undecryptable" || bucket.endsWith(":unknown") || bucket === "invalid-json")
+      .filter(([bucket]) => bucket === "undecryptable" || bucket === "malformed" || bucket.endsWith(":unknown") || bucket === "invalid-json")
       .reduce((s, [, n]) => s + n, 0),
     0,
   );
@@ -122,7 +122,7 @@ function printStatus(status) {
   }));
   console.table(rows);
   console.log("Buckets: plaintext / v1 = legacy formats (still written by this release);");
-  console.log("v2:<kid>:current|old = new format; undecryptable or :unknown = cannot be read with the configured keys.");
+  console.log("v2:<kid>:current|old = new format; undecryptable / malformed / :unknown = cannot be read with the configured keys.");
   if (status.undecryptable > 0) {
     console.error(`\n${status.undecryptable} stored secret(s) cannot be decrypted with the configured keys.`);
   }

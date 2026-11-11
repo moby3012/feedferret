@@ -10,6 +10,7 @@ import { buildOtpAuthUri, generateTotpSecret, verifyTotpToken } from "@/lib/totp
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import { readTotpSecret } from "@/lib/totp-consume";
 import { readPlainColumnOrNull } from "@/lib/secret-box";
+import { readChannelTokens } from "@/lib/user-secrets";
 import { ChangePasswordSchema } from "@/lib/validation";
 import type { AiProvider } from "@/lib/ai-summary";
 import { fetchViaHostedApiDetailed, type HostedFetchProvider } from "@/lib/hosted-fetch";
@@ -1056,8 +1057,11 @@ export async function testNotificationChannel(
     } else if (channel === "ntfy") {
       if (!user?.ntfyUrl)
         return { success: false, error: "Topic URL is required" };
+      const ntfyToken = readChannelTokens(user);
+      if (ntfyToken.unreadable.ntfy)
+        return { success: false, error: "The saved ntfy token cannot be decrypted with the configured key" };
       result = await sendNtfyNotification(
-        { url: user.ntfyUrl, token: readPlainColumnOrNull("user.ntfyToken", user.ntfyToken) ?? undefined },
+        { url: user.ntfyUrl, token: ntfyToken.ntfyToken ?? undefined },
         testPayload,
       );
     } else {

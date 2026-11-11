@@ -97,3 +97,65 @@ export function readFeedCredentials<T extends FeedCredentialColumns>(feed: T): T
   if ("httpOptions" in feed) out.httpOptions = readPlainColumn("feed.httpOptions", feed.httpOptions);
   return out;
 }
+
+// ─── httpOptions for the settings dialog (write-only secrets) ─────────────
+// Cookies, request headers (Authorization …), POST bodies, proxy URLs with
+// credentials and any unknown cURL option are secrets. The dialog only sees
+// them as "__keep__"; saving that placeholder keeps the stored value, a
+// removed key clears it, a new value replaces it.
+
+export const HTTP_OPTION_KEEP = "__keep__";
+
+/** Options that never carry credentials and are shown as-is. Everything else is masked. */
+const PUBLIC_HTTP_OPTIONS = new Set([
+  "CURLOPT_FOLLOWLOCATION",
+  "CURLOPT_MAXREDIRS",
+  "CURLOPT_POST",
+  "CURLOPT_PROXYTYPE",
+  "CURLOPT_USERAGENT",
+]);
+
+function parseOptionsObject(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value || !value.trim()) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Mask every non-public option of a decrypted httpOptions JSON. `masked` lists the masked option names. */
+export function redactHttpOptions(plain: string | null | undefined): { httpOptions: string | null; masked: string[] } {
+  const options = parseOptionsObject(plain);
+  if (!options) return { httpOptions: null, masked: [] };
+  const masked: string[] = [];
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(options)) {
+    if (PUBLIC_HTTP_OPTIONS.has(key)) out[key] = value;
+    else {
+      out[key] = HTTP_OPTION_KEEP;
+      masked.push(key);
+    }
+  }
+  return { httpOptions: Object.keys(out).length ? JSON.stringify(out) : null, masked };
+}
+
+/**
+ * Resolve "__keep__" placeholders in an incoming httpOptions JSON against the
+ * stored (decrypted) value. Keys sent as "__keep__" keep their stored value
+ * (dropped if nothing is stored); input without placeholders is returned as-is.
+ */
+export function mergeHttpOptions(incoming: string, storedPlain: string | null): string | null {
+  if (!incoming.includes(HTTP_OPTION_KEEP)) return incoming;
+  const next = parseOptionsObject(incoming);
+  if (!next) return incoming;
+  const stored = parseOptionsObject(storedPlain) ?? {};
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(next)) {
+    if (value === HTTP_OPTION_KEEP) {
+      if (Object.prototype.hasOwnProperty.call(stored, key)) out[key] = stored[key];
+    } else out[key] = value;
+  }
+  return Object.keys(out).length ? JSON.stringify(out) : null;
+}

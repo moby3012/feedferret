@@ -66,6 +66,20 @@ export function readPlainColumn(purpose: string, stored: string | null | undefin
   return openSecret(purpose, stored, "plaintext").value;
 }
 
+/**
+ * Like `readPlainColumn`, but never throws: `unreadable` is true when a value
+ * is stored but the configured keys cannot open it (logged once, no value).
+ * Callers must not treat an unreadable secret like an absent one.
+ */
+export function readPlainColumnState(purpose: string, stored: string | null | undefined): { value: string | null; unreadable: boolean } {
+  try {
+    return { value: readPlainColumn(purpose, stored), unreadable: false };
+  } catch (error) {
+    warnSecretOnce(error, purpose);
+    return { value: null, unreadable: true };
+  }
+}
+
 /** Like `readPlainColumn`, but logs once and returns null instead of throwing (optional secrets). */
 export function readPlainColumnOrNull(purpose: string, stored: string | null | undefined): string | null {
   try {

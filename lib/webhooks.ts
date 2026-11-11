@@ -160,14 +160,24 @@ export type SanitizedWebhookConfig = {
  * `valid: false` means at least one entry was malformed and the whole set
  * should be rejected. Shared by every write surface so validation is identical.
  */
+/**
+ * Sentinel the read surfaces put in place of every stored header value (and
+ * that clients send back unchanged): "keep the stored value".
+ */
+export const WEBHOOK_KEEP = "__keep__";
+
 export function sanitizeWebhookConfigs(
   input: unknown,
   options: { existing?: string | null } = {},
 ): { configs: SanitizedWebhookConfig[]; valid: boolean } {
   if (!Array.isArray(input)) return { configs: [], valid: true };
-  // Keep-if-unchanged: an entry without a new secret but with the `secretRef`
-  // it was loaded with keeps the stored secret verbatim (only when the caller
-  // passes the rule's current stored JSON).
+  // Keep-if-unchanged (only when the caller passes the rule's current stored
+  // JSON): an entry carrying the `secretRef` it was read with keeps
+  //  - the stored signing secret when `secret` is omitted, "" or "__keep__"
+  //    (an explicit `null` removes it), and
+  //  - the stored value of every header sent as "" or "__keep__" (a header
+  //    sent as `null`, or left out, is removed).
+  // Kept values are copied verbatim (they may be stored encrypted).
   const stored = options.existing !== undefined ? parseStoredConfigs(options.existing) : null;
   const out: SanitizedWebhookConfig[] = [];
   for (const raw of input as IncomingWebhookConfig[]) {
@@ -183,17 +193,29 @@ export function sanitizeWebhookConfigs(
     const method = typeof raw.method === "string" && ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(raw.method.toUpperCase())
       ? raw.method.toUpperCase()
       : "POST";
-    const headers = raw.headers && typeof raw.headers === "object" && !Array.isArray(raw.headers)
-      ? Object.fromEntries(
-        Object.entries(raw.headers as Record<string, unknown>)
-          .filter(([k, v]) => typeof k === "string" && typeof v === "string")
-          .map(([k, v]) => [k.slice(0, 200), String(v).slice(0, 1000)]),
-      )
+    const ref = stored && typeof raw.secretRef === "number" && Number.isInteger(raw.secretRef)
+      ? stored.find((c) => c.secretRef === raw.secretRef)
       : undefined;
+    let headers: Record<string, string> | undefined;
+    if (raw.headers && typeof raw.headers === "object" && !Array.isArray(raw.headers)) {
+      headers = {};
+      for (const [rawName, value] of Object.entries(raw.headers as Record<string, unknown>)) {
+        if (typeof value !== "string") continue; // null (or junk) removes the header
+        const name = rawName.slice(0, 200);
+        if (value === WEBHOOK_KEEP || (value === "" && ref)) {
+          const kept = ref?.headers?.[rawName];
+          if (typeof kept === "string") headers[name] = kept;
+          continue; // nothing stored to keep: drop the placeholder
+        }
+        headers[name] = value.slice(0, 1000);
+      }
+    }
     const bodyTemplate = typeof raw.bodyTemplate === "string" ? raw.bodyTemplate : undefined;
-    let secret = typeof raw.secret === "string" && raw.secret ? raw.secret : undefined;
-    if (!secret && stored && typeof raw.secretRef === "number" && Number.isInteger(raw.secretRef)) {
-      secret = stored.find((c) => c.secretRef === raw.secretRef)?.secret;
+    let secret: string | undefined;
+    if (typeof raw.secret === "string" && raw.secret && raw.secret !== WEBHOOK_KEEP) {
+      secret = raw.secret;
+    } else if (raw.secret !== null && ref) {
+      secret = ref.secret;
     }
     out.push({ url, method, headers, bodyTemplate, secret });
   }
@@ -211,39 +233,33 @@ export function actionsReferenceConfigs(actions: string[], configCount: number):
 }
 
 /**
- * Parse a stored `webhookConfigs` JSON string for API/MCP output, replacing the
- * secret with a boolean `hasSecret` flag. The HMAC signing secret must never
- * leave the server, so read surfaces expose everything about a webhook except
- * its secret value.
+ * Parse a stored `webhookConfigs` JSON string for client / REST / MCP output.
+ * Write-only: the signing secret becomes `hasSecret`, every header value is
+ * masked as "__keep__" (header names stay visible). Send the entry back with
+ * its `secretRef` to keep what is stored.
  */
 export type RedactedWebhookConfig = {
   url: string;
   method: string;
+  /** Header names with the masked value "__keep__"; the stored values never leave the server. */
   headers?: Record<string, string>;
   bodyTemplate?: string;
   hasSecret: boolean;
-  /** Index in the stored list; send it back with an empty secret to keep the stored one. */
+  /** Index in the stored list; send it back to keep the stored secret / header values. */
   secretRef: number;
 };
 
 export function redactWebhookConfigs(raw: string | null | undefined): RedactedWebhookConfig[] {
-  return parseStoredConfigs(raw).map((c) => {
-    let headers: Record<string, string> | undefined;
-    try {
-      headers = openHeaders(c.headers);
-    } catch (error) {
-      warnSecretOnce(error, "autoReadRule.webhookConfigs");
-      headers = undefined;
-    }
-    return {
-      url: c.url,
-      method: c.method ?? "POST",
-      headers,
-      bodyTemplate: c.bodyTemplate,
-      hasSecret: Boolean(c.secret),
-      secretRef: c.secretRef,
-    };
-  });
+  return parseStoredConfigs(raw).map((c) => ({
+    url: c.url,
+    method: c.method ?? "POST",
+    headers: c.headers
+      ? Object.fromEntries(Object.keys(c.headers).filter((k) => typeof c.headers![k] === "string").map((k) => [k, WEBHOOK_KEEP]))
+      : undefined,
+    bodyTemplate: c.bodyTemplate,
+    hasSecret: Boolean(c.secret),
+    secretRef: c.secretRef,
+  }));
 }
 
 /** An auto-read rule for the client: `webhookConfigs` carries redacted JSON (no secrets). */

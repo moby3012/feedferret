@@ -1557,6 +1557,7 @@
       "forced": "Forced",
       "scraperConfig": "Scraper config JSON",
       "httpOptions": "HTTP / cURL options JSON",
+      "httpOptionsMaskedHint": "Saved secrets ({names}) are shown as \"__keep__\": leave them to keep the stored value, replace to change it, remove the key to delete it.",
       "fullContentConditions": "Full-content conditions",
       "autoReadFilters": "Auto-read filters",
       "autoReadFiltersDescription": "One keyword per line. New articles that contain any of these words (in the title, summary, or body) are marked read automatically — they won't count as unread or trigger notifications.",

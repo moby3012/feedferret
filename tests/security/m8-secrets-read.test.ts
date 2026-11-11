@@ -44,7 +44,10 @@ import {
   testNotificationChannel,
   updateNotificationChannels,
 } from "../../app/actions/settings";
-import { createAutoReadRule, getAutoReadRules, getFeedEditConfig, updateAutoReadRule } from "../../app/actions/feeds";
+import { createAutoReadRule, getAutoReadRules, getFeedEditConfig, updateAutoReadRule, updateFeed } from "../../app/actions/feeds";
+import { applyFeedErrorRules } from "../../lib/auto-read-rules";
+import { readChannelTokens } from "../../lib/user-secrets";
+import { openSecret } from "../../lib/secret-box";
 import { collectSecretStatus } from "../../scripts/secrets-cli.mjs";
 
 const AUTH = "m8-test-auth-secret-with-plenty-of-random-chars-42";
@@ -229,8 +232,9 @@ describe("webhook secrets", () => {
     expect(JSON.stringify(created)).not.toContain(S.webhook);
     const [rule] = (await getAutoReadRules()).filter((r) => r.id === created.id);
     expect(JSON.stringify(rule)).not.toContain(S.webhook);
+    expect(JSON.stringify(rule)).not.toContain(S.header);
     const ui = JSON.parse(rule.webhookConfigs!);
-    expect(ui[0]).toMatchObject({ hasSecret: true, secretRef: 0 });
+    expect(ui[0]).toMatchObject({ hasSecret: true, secretRef: 0, headers: { Authorization: "__keep__" } });
 
     // the UI re-saves with an added webhook in front: the kept secret follows its secretRef
     await updateAutoReadRule(created.id, {
@@ -258,7 +262,9 @@ describe("webhook secrets", () => {
     const redacted = redactWebhookConfigs(raw);
     expect(JSON.stringify(redacted)).not.toContain(S.webhook);
     expect(JSON.stringify(redacted)).not.toMatch(/ff2\./);
-    expect(redacted[0]).toMatchObject({ hasSecret: true, headers: { Authorization: S.header } });
+    // header values are write-only as well: names only, masked
+    expect(redacted[0]).toMatchObject({ hasSecret: true, headers: { Authorization: "__keep__" } });
+    expect(JSON.stringify(redacted)).not.toContain("S3CRET");
   });
 
   it("an undecryptable webhook is skipped, never fired unsigned", () => {
@@ -274,8 +280,11 @@ describe("feed credentials", () => {
   it.each(["feedPlain", "feedSealed"] as const)("%s: owner edit config is decrypted, the password stays write-only", async (which) => {
     state.session = { user: { id: ids.sealedUser } };
     const config = await getFeedEditConfig(ids[which]);
-    expect(config).toEqual({ authUsername: "u", hasAuthPassword: true, scraperConfig: null, httpOptions: JSON.stringify({ CURLOPT_COOKIE: S.cookie }) });
-    expect(JSON.stringify(config)).not.toContain(S.password);
+    expect(config).toEqual({
+      authUsername: "u", hasAuthPassword: true, scraperConfig: null,
+      httpOptions: JSON.stringify({ CURLOPT_COOKIE: "__keep__" }), maskedHttpOptions: ["CURLOPT_COOKIE"],
+    });
+    expectNoSecrets(config);
   });
 
   it("readFeedCredentials opens both formats and fails loudly (no silent empty password) with the wrong key", async () => {
@@ -315,5 +324,113 @@ describe("secrets:status", () => {
     const rotatedBy = Object.fromEntries(rotated.columns.map((c: { column: string; counts: Record<string, number> }) => [c.column, c.counts]));
     expect(rotatedBy["user.telegramBotToken"]).toEqual({ plaintext: 1, [`v2:${kid}:unknown`]: 1 });
     expect(rotated.undecryptable).toBeGreaterThan(1);
+  });
+});
+
+describe("review fixes (M8 PR 4)", () => {
+  const OTHER = "a-completely-different-auth-secret-value-xyz";
+
+  it("webhook: explicit null removes the secret, omitted / \"\" / __keep__ keep it; headers keep, replace, clear", async () => {
+    state.session = { user: { id: ids.plainUser } };
+    const created = await createAutoReadRule({
+      name: "hook2", query: "x", actions: ["webhook_call:0"],
+      webhookConfigs: [{ url: "https://hook.example/z", secret: S.webhook, headers: { Authorization: S.header, "X-Trace": "S3CRET-trace" } }],
+    });
+    const stored = async () => JSON.parse((await state.db.autoReadRule.findUniqueOrThrow({ where: { id: created.id } })).webhookConfigs!)[0];
+
+    for (const secret of [undefined, "", "__keep__"]) {
+      await updateAutoReadRule(created.id, { webhookConfigs: [{ url: "https://hook.example/z", secretRef: 0, secret, headers: { Authorization: "__keep__", "X-Trace": "__keep__" } }] });
+      expect(await stored()).toMatchObject({ secret: S.webhook, headers: { Authorization: S.header, "X-Trace": "S3CRET-trace" } });
+    }
+    // replace one header, clear the other (null), remove the secret (null)
+    await updateAutoReadRule(created.id, { webhookConfigs: [{ url: "https://hook.example/z", secretRef: 0, secret: null, headers: { Authorization: "Bearer new", "X-Trace": null } }] });
+    const after = await stored();
+    expect(after.secret).toBeUndefined();
+    expect(after.headers).toEqual({ Authorization: "Bearer new" });
+    // a header left out is removed as well; __keep__ without a stored value is dropped
+    await updateAutoReadRule(created.id, { webhookConfigs: [{ url: "https://hook.example/z", secretRef: 0, headers: { "X-New": "__keep__" } }] });
+    expect((await stored()).headers).toEqual({});
+  });
+
+  it("feed edit: masked httpOptions keep their stored value on save, removed keys clear, new values replace", async () => {
+    state.session = { user: { id: ids.sealedUser } };
+    const feed = await state.db.feed.create({
+      data: {
+        name: "Opts", url: "https://opts.example/feed", userId: ids.sealedUser,
+        httpOptions: sealSecret("feed.httpOptions", JSON.stringify({
+          CURLOPT_COOKIE: S.cookie, CURLOPT_HTTPHEADER: `Authorization: ${S.header}`, CURLOPT_USERPWD: "u:S3CRET-pwd",
+          CURLOPT_PROXY: "http://pu:S3CRET-proxy@93.184.216.34:8080", CURLOPT_USERAGENT: "UA/1", CURLOPT_MAXREDIRS: 3,
+        })),
+      },
+    });
+    const config = await getFeedEditConfig(feed.id);
+    expectNoSecrets(config);
+    const shown = JSON.parse(config.httpOptions!);
+    expect(shown).toEqual({
+      CURLOPT_COOKIE: "__keep__", CURLOPT_HTTPHEADER: "__keep__", CURLOPT_USERPWD: "__keep__",
+      CURLOPT_PROXY: "__keep__", CURLOPT_USERAGENT: "UA/1", CURLOPT_MAXREDIRS: 3,
+    });
+    expect(config.maskedHttpOptions).toEqual(["CURLOPT_COOKIE", "CURLOPT_HTTPHEADER", "CURLOPT_USERPWD", "CURLOPT_PROXY"]);
+
+    // the dialog sends it back: drop USERPWD, change the user agent, keep the rest
+    const { CURLOPT_USERPWD: _drop, ...rest } = shown;
+    await updateFeed(feed.id, { httpOptions: JSON.stringify({ ...rest, CURLOPT_USERAGENT: "UA/2" }) });
+    const row = await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } });
+    expect(row.httpOptions!.startsWith("ff2.")).toBe(false); // PR 4 writes the legacy format
+    expect(JSON.parse(row.httpOptions!)).toEqual({
+      CURLOPT_COOKIE: S.cookie, CURLOPT_HTTPHEADER: `Authorization: ${S.header}`,
+      CURLOPT_PROXY: "http://pu:S3CRET-proxy@93.184.216.34:8080", CURLOPT_USERAGENT: "UA/2", CURLOPT_MAXREDIRS: 3,
+    });
+
+    // a kept proxy is still SSRF-checked (merge happens before validation)
+    await state.db.feed.update({ where: { id: feed.id }, data: { httpOptions: JSON.stringify({ CURLOPT_PROXY: "http://10.0.0.1:3128" }) } });
+    await expect(updateFeed(feed.id, { httpOptions: JSON.stringify({ CURLOPT_PROXY: "__keep__" }) })).rejects.toThrow(/proxy|private/i);
+    await state.db.feed.delete({ where: { id: feed.id } });
+  });
+
+  it("unreadable channel tokens are not treated as absent: the channel is skipped", async () => {
+    const stored = sealSecret("user.ntfyToken", S.ntfy);
+    process.env.AUTH_SECRET = OTHER;
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      expect(readChannelTokens({ ntfyToken: stored, gotifyToken: null })).toMatchObject({
+        ntfyToken: null, gotifyToken: null, unreadable: { ntfy: true, gotify: false, telegram: false },
+      });
+      // settings test send refuses instead of sending without Authorization
+      state.session = { user: { id: ids.sealedUser } };
+      await state.db.user.update({ where: { id: ids.sealedUser }, data: { ntfyEnabled: true, ntfyUrl: "https://ntfy.example/t", ntfyToken: stored } });
+      const res = await testNotificationChannel("ntfy");
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/cannot be decrypted/);
+      expect(state.sent).toEqual([]);
+
+      // rule notifications (feed_error trigger) skip the channel
+      const rule = await state.db.autoReadRule.create({
+        data: { userId: ids.sealedUser, name: "err", query: "", action: "notify_ntfy", actions: JSON.stringify(["notify_ntfy"]), trigger: "feed_error" },
+      });
+      const payload = { feedId: ids.feedSealed, feedName: "Sealed", feedUrl: "https://b.example/feed", error: "boom" };
+      expect(await applyFeedErrorRules(ids.sealedUser, payload)).toEqual({ fired: 0 });
+      expect(state.sent).toEqual([]);
+      // with the right key the same rule sends with the token
+      process.env.AUTH_SECRET = AUTH;
+      expect(await applyFeedErrorRules(ids.sealedUser, payload)).toEqual({ fired: 1 });
+      expect(state.sent).toEqual([{ channel: "ntfy", config: { url: "https://ntfy.example/t", token: S.ntfy } }]);
+      await state.db.autoReadRule.delete({ where: { id: rule.id } });
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("a value with the reserved ff2. prefix that is not valid v2 is malformed, never plaintext", async () => {
+    for (const bad of ["ff2.", "ff2.deadbeef.short", `ff2.zzzzzzzz.${"A".repeat(16)}.${"B".repeat(30)}`]) {
+      expect(() => openSecret("feed.httpOptions", bad, "plaintext")).toThrow(SecretKeyError);
+      expect(() => readFeedCredentials({ httpOptions: bad })).toThrow(/invalid encrypted format/);
+    }
+    const feed = await state.db.feed.create({ data: { name: "Bad", url: "https://bad.example/feed", userId: ids.plainUser, httpOptions: "ff2.truncated" } });
+    const status = await collectSecretStatus(state.db, loadKeyring(process.env));
+    const counts = status.columns.find((c: { column: string }) => c.column === "feed.httpOptions")!.counts;
+    expect(counts.malformed).toBe(1);
+    expect(status.undecryptable).toBeGreaterThanOrEqual(1);
+    await state.db.feed.delete({ where: { id: feed.id } });
   });
 });

@@ -99,3 +99,69 @@ test("notification settings: tokens are write-only (presence only), keep on save
     restore();
   }
 });
+
+test("rules: webhook secret and header values never reach the browser; editing keeps them", async ({ app, page }) => {
+  const db = new Database(manifest().dbPath);
+  db.pragma("busy_timeout = 5000");
+  const ruleId = `e2e-m8-rule-${app.userKey}-${Date.now().toString(36)}`;
+  const secret = `E2E-WEBHOOK-SECRET-${app.userKey}`;
+  const header = `Bearer E2E-WEBHOOK-HEADER-${app.userKey}`;
+  const stored = JSON.stringify([{ url: "https://hook.e2e.test/x", method: "POST", headers: { Authorization: sealForE2e("autoReadRule.webhookConfigs.header", header) }, secret }]);
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO "AutoReadRule" (id, userId, name, query, action, actions, webhookConfigs, enabled, "order", trigger, createdAt, updatedAt)
+              VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, 'article', ?, ?)`).run(
+    ruleId, app.user.userId, "E2E webhook rule", "e2e-never-matches-xyz", "webhook_call:0", JSON.stringify(["webhook_call:0"]), stored, now, now,
+  );
+  try {
+    const bodies: string[] = [];
+    page.on("response", async (response) => {
+      if (response.request().method() === "POST" && response.request().headers()["next-action"]) bodies.push(await response.text().catch(() => ""));
+    });
+    await page.goto("/manage-feeds?tab=rules");
+    const ruleRow = page.getByText("E2E webhook rule").first();
+    await expect(ruleRow).toBeVisible({ timeout: 20_000 });
+    const forbidden = [secret, header, "E2E-WEBHOOK-HEADER", "ff2."];
+    for (const text of [await page.content(), ...bodies]) for (const value of forbidden) expect(text).not.toContain(value);
+
+    // Edit and save without touching the webhook: secret and header stay as stored.
+    await page.getByTitle("Edit rule").first().click();
+    await page.getByRole("button", { name: "Save changes" }).first().click();
+    await expect.poll(() => (db.prepare('SELECT updatedAt FROM "AutoReadRule" WHERE id = ?').get(ruleId) as { updatedAt: string }).updatedAt).not.toBe(now);
+    const after = JSON.parse((db.prepare('SELECT webhookConfigs FROM "AutoReadRule" WHERE id = ?').get(ruleId) as { webhookConfigs: string }).webhookConfigs);
+    expect(after).toEqual(JSON.parse(stored));
+    for (const body of bodies) for (const value of forbidden) expect(body).not.toContain(value);
+  } finally {
+    db.prepare('DELETE FROM "AutoReadRule" WHERE id = ?').run(ruleId);
+    db.close();
+  }
+});
+
+test("feed edit dialog: fetch options with credentials are masked; saving keeps them", async ({ app, page }) => {
+  const db = new Database(manifest().dbPath);
+  db.pragma("busy_timeout = 5000");
+  const feed = db.prepare('SELECT id, name, httpOptions FROM "Feed" WHERE userId = ? AND name = ?').get(app.user.userId, "Solo Blog") as { id: string; name: string; httpOptions: string | null };
+  const cookie = `sid=E2E-COOKIE-${app.userKey}`;
+  const options = { CURLOPT_COOKIE: cookie, CURLOPT_HTTPHEADER: "Authorization: Bearer E2E-OPT-HEADER", CURLOPT_USERAGENT: "E2E-UA" };
+  db.prepare('UPDATE "Feed" SET httpOptions = ? WHERE id = ?').run(sealForE2e("feed.httpOptions", JSON.stringify(options)), feed.id);
+  try {
+    await page.goto("/manage-feeds");
+    const row = page.getByText("http://127.0.0.1:" + (process.env.E2E_FIXTURE_PORT || 4010) + "/feeds/solo-blog.xml").locator("xpath=ancestor::*[.//button[normalize-space()='Settings']][1]");
+    await app.activate(row.getByRole("button", { name: "Settings" }));
+    const dialog = page.getByRole("dialog");
+    await app.activate(dialog.getByRole("tab", { name: "Scout Studio" }));
+    await expect(dialog.getByTestId("http-options-masked-hint")).toContainText("CURLOPT_COOKIE, CURLOPT_HTTPHEADER");
+    const textarea = dialog.getByPlaceholder(/CURLOPT_HTTPHEADER/);
+    await expect(textarea).toHaveValue(JSON.stringify({ CURLOPT_COOKIE: "__keep__", CURLOPT_HTTPHEADER: "__keep__", CURLOPT_USERAGENT: "E2E-UA" }));
+    const dom = await page.content();
+    for (const value of ["E2E-COOKIE", "E2E-OPT-HEADER", "ff2."]) expect(dom).not.toContain(value);
+
+    await app.activate(dialog.getByRole("button", { name: "Save settings" }));
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(() => (db.prepare('SELECT httpOptions FROM "Feed" WHERE id = ?').get(feed.id) as { httpOptions: string }).httpOptions.startsWith("ff2.")).toBe(false);
+    const saved = JSON.parse((db.prepare('SELECT httpOptions FROM "Feed" WHERE id = ?').get(feed.id) as { httpOptions: string }).httpOptions);
+    expect(saved).toEqual(options); // kept server-side; written in the legacy format by this release
+  } finally {
+    db.prepare('UPDATE "Feed" SET httpOptions = ? WHERE id = ?').run(feed.httpOptions, feed.id);
+    db.close();
+  }
+});

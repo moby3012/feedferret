@@ -118,9 +118,11 @@ describe("N4: feed secrets never reach list / bootstrap payloads", () => {
       authUsername: SECRETS.username,
       hasAuthPassword: true,
       scraperConfig: JSON.stringify({ marker: SECRETS.scraper }),
-      httpOptions: JSON.stringify({ CURLOPT_COOKIE: SECRETS.cookie, CURLOPT_PROXY: SECRETS.proxy }),
+      // Cookies / proxy credentials are write-only too (M8 review): masked as "__keep__".
+      httpOptions: JSON.stringify({ CURLOPT_COOKIE: "__keep__", CURLOPT_PROXY: "__keep__" }),
+      maskedHttpOptions: ["CURLOPT_COOKIE", "CURLOPT_PROXY"],
     });
-    expect(JSON.stringify(config)).not.toContain(SECRETS.password);
+    for (const secret of [SECRETS.password, SECRETS.cookie, SECRETS.proxy]) expect(JSON.stringify(config)).not.toContain(secret);
     state.session = { user: { id: ids.bob } };
     await expect(getFeedEditConfig(ids.feed)).rejects.toThrow("Feed not found");
   });

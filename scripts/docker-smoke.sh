@@ -210,9 +210,12 @@ echo "$before" | sed 's/^/    /'
 # ── second start (same database, new container — a redeploy) ─────────────────
 docker stop -t 20 "$APP1" >/dev/null
 start_and_wait_healthy "$APP2"
-if ! docker logs "$APP2" 2>&1 | grep -q "already in sync with the Prisma schema"; then
+# Capture first: with pipefail, `docker logs | grep -q` can fail when grep exits
+# early and docker logs gets SIGPIPE (a false "schema changed" failure).
+app2_logs=$(docker logs "$APP2" 2>&1 || true)
+if ! grep -q "already in sync with the Prisma schema" <<<"$app2_logs"; then
   fail "2nd start: prisma db push changed the schema of an up-to-date database (expected 'already in sync')"
-  docker logs "$APP2" 2>&1 | sed -n '/Running database sync/,/Database is ready/p' >&2
+  sed -n '/Running database sync/,/Database is ready/p' <<<"$app2_logs" >&2
   exit 1
 fi
 log "2nd start: db push found the database already in sync"

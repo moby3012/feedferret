@@ -199,7 +199,7 @@ const tools = [
       required: ["name", "query"],
     },
   },
-  { name: "feedferret.update_auto_read_rule", description: "Update an auto-read rule (all fields optional). Passing webhookConfigs replaces the full list. Secrets are write-only.", inputSchema: { type: "object", properties: { ruleId: { type: "string" }, name: { type: "string" }, query: { type: "string" }, actions: { type: "array", items: { type: "string" } }, scope: { type: "string" }, trigger: { type: "string" }, enabled: { type: "boolean" }, order: { type: "number" }, webhookConfigs: { type: "array", items: { type: "object", properties: { url: { type: "string" }, method: { type: "string" }, headers: { type: "object" }, bodyTemplate: { type: "string" }, secret: { type: "string" } }, required: ["url"] } } }, required: ["ruleId"] } },
+  { name: "feedferret.update_auto_read_rule", description: "Update an auto-read rule (all fields optional). Passing webhookConfigs replaces the full list. Secrets are write-only.", inputSchema: { type: "object", properties: { ruleId: { type: "string" }, name: { type: "string" }, query: { type: "string" }, actions: { type: "array", items: { type: "string" } }, scope: { type: "string" }, trigger: { type: "string" }, enabled: { type: "boolean" }, order: { type: "number" }, webhookConfigs: { type: "array", items: { type: "object", properties: { url: { type: "string" }, method: { type: "string" }, headers: { type: "object" }, bodyTemplate: { type: "string" }, secret: { type: ["string", "null"], description: "Write-only. On update: omit or \"\" keeps the stored secret of the entry named by secretRef, null removes it." }, secretRef: { type: "number", description: "Index from the redacted output; keeps the stored secret and every header sent as \"__keep__\"." } }, required: ["url"] } } }, required: ["ruleId"] } },
   { name: "feedferret.delete_auto_read_rule", description: "Delete an auto-read rule.", inputSchema: { type: "object", properties: { ruleId: { type: "string" } }, required: ["ruleId"] } },
   // Notifications & stats
   { name: "feedferret.list_notifications", description: "List user notifications ordered by newest first.", inputSchema: { type: "object", properties: { isRead: { type: "boolean" }, limit: { type: "number", minimum: 1, maximum: 100 } } } },
@@ -526,7 +526,10 @@ async function callTool(user: ApiUser, name: string, args: any) {
         }
       }
       if (args.webhookConfigs !== undefined) {
-        const { configs, valid } = sanitizeWebhookConfigs(args.webhookConfigs);
+        // Keep-if-unchanged: entries sent back with their `secretRef` keep the stored secret / masked headers.
+        const stored = await db.autoReadRule.findFirst({ where: { id: String(args.ruleId), userId: user.id }, select: { webhookConfigs: true } });
+        if (!stored) throw new Error("Rule not found");
+        const { configs, valid } = sanitizeWebhookConfigs(args.webhookConfigs, { existing: stored.webhookConfigs });
         if (!valid) throw new Error("Each webhook needs a valid http(s) URL");
         if (nextActions && !actionsReferenceConfigs(nextActions, configs.length)) throw new Error("A webhook_call action references a missing webhook config");
         data.webhookConfigs = configs.length ? JSON.stringify(configs) : null;

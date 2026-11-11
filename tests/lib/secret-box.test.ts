@@ -164,6 +164,9 @@ describe("secret box v2 format", () => {
     expect(classifySecret(sealSecret("user.aiApiKey", "k"), column, ring)).toBe(`v2:${ring.current.kid}:current`);
     expect(classifySecret("garbage", column, ring)).toBe("undecryptable");
     expect(classifySecret("plain", { purpose: "feed.authPassword", legacy: "plaintext" }, ring)).toBe("plaintext");
+    // the ff2. prefix is reserved: never counted as plaintext / v1
+    expect(classifySecret("ff2.broken", { purpose: "feed.authPassword", legacy: "plaintext" }, ring)).toBe("malformed");
+    expect(classifySecret("ff2.broken", column, ring)).toBe("malformed");
     const other = loadKeyring({ AUTH_SECRET: AUTH_B });
     expect(classifySecret(sealSecret("user.aiApiKey", "k"), column, other)).toMatch(/^v2:[0-9a-f]{8}:unknown$/);
   });

@@ -38,7 +38,8 @@ import { pickFields } from "@/lib/pick-fields";
 import { clampFeedLimits } from "@/lib/feed-limits";
 import { assertOwnedCategories, MAX_REORDER_ITEMS } from "@/lib/owned-categories";
 import { connectorFeedUrlError, redactArticleForClient, redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
-import { FEED_CLIENT_SELECT, readFeedCredentials, stripFeedSecrets } from "@/lib/feed-secrets";
+import { FEED_CLIENT_SELECT, HTTP_OPTION_KEEP, mergeHttpOptions, readFeedCredentials, redactHttpOptions, stripFeedSecrets } from "@/lib/feed-secrets";
+import { readPlainColumn } from "@/lib/secret-box";
 import { parseGoogleNewsFeedUrl } from "@/lib/google-news";
 import { googleNewsFeedName } from "@/lib/google-news-url";
 
@@ -727,6 +728,12 @@ export async function updateFeed(feedId: string, data: {
         if (!category) throw new Error("Invalid category");
     }
 
+    if (typeof data.httpOptions === "string" && data.httpOptions.includes(HTTP_OPTION_KEEP)) {
+        // The dialog sends masked secrets back as "__keep__": resolve them against the stored value.
+        const stored = await db.feed.findFirst({ where: { id: feedId, userId: session.user.id }, select: { httpOptions: true } });
+        if (!stored) throw new Error("Feed not found");
+        data = { ...data, httpOptions: mergeHttpOptions(data.httpOptions, readPlainColumn("feed.httpOptions", stored.httpOptions)) };
+    }
     if (data.httpOptions) await assertSafeHttpOptionsProxy(data.httpOptions);
 
     const READER_FONT_SIZES = new Set(["small", "medium", "large", "xl"]);
@@ -846,11 +853,14 @@ export async function getFeedEditConfig(feedId: string) {
     // Owner-only: decrypts v2-sealed values (M8). An undecryptable value throws,
     // so the dialog keeps the stored value instead of saving an empty one.
     const opened = readFeedCredentials({ authUsername: feed.authUsername, httpOptions: feed.httpOptions });
+    // Cookies, headers, POST bodies, proxy credentials … are write-only: masked as "__keep__".
+    const { httpOptions, masked } = redactHttpOptions(opened.httpOptions);
     return {
         authUsername: opened.authUsername ?? null,
         hasAuthPassword: Boolean(feed.authPassword),
         scraperConfig: feed.scraperConfig ?? null,
-        httpOptions: opened.httpOptions ?? null,
+        httpOptions,
+        maskedHttpOptions: masked,
     };
 }
 

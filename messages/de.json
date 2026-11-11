@@ -1557,6 +1557,7 @@
       "forced": "Erzwungen",
       "scraperConfig": "Scraper-Konfigurations-JSON",
       "httpOptions": "HTTP / cURL-Optionen JSON",
+      "httpOptionsMaskedHint": "Gespeicherte Geheimnisse ({names}) erscheinen als „__keep__“: so lassen, um den gespeicherten Wert zu behalten, ersetzen zum Ändern, Schlüssel entfernen zum Löschen.",
       "fullContentConditions": "Vollinhalt-Bedingungen",
       "autoReadFilters": "Auto-Lesen-Filter",
       "autoReadFiltersDescription": "Ein Stichwort pro Zeile. Neue Artikel, die eines dieser Wörter enthalten (in Titel, Zusammenfassung oder Text), werden automatisch als gelesen markiert – sie zählen nicht als ungelesen und lösen keine Benachrichtigungen aus.",

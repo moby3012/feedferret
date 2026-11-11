@@ -60,9 +60,9 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
     });
     const tokens = readChannelTokens(u);
     channelConfig = {
-      telegram: { enabled: u?.telegramEnabled ?? false, botToken: tokens.telegramBotToken, chatId: u?.telegramChatId ?? null },
-      gotify: { enabled: u?.gotifyEnabled ?? false, url: u?.gotifyUrl ?? null, token: tokens.gotifyToken },
-      ntfy: { enabled: u?.ntfyEnabled ?? false, url: u?.ntfyUrl ?? null, token: tokens.ntfyToken },
+      telegram: { enabled: (u?.telegramEnabled ?? false) && !tokens.unreadable.telegram, botToken: tokens.telegramBotToken, chatId: u?.telegramChatId ?? null },
+      gotify: { enabled: (u?.gotifyEnabled ?? false) && !tokens.unreadable.gotify, url: u?.gotifyUrl ?? null, token: tokens.gotifyToken },
+      ntfy: { enabled: (u?.ntfyEnabled ?? false) && !tokens.unreadable.ntfy, url: u?.ntfyUrl ?? null, token: tokens.ntfyToken },
     };
     return channelConfig;
   }
