@@ -376,6 +376,10 @@ test.describe("desktop", () => {
     await page.reload();
     await expect(app.row(1)).toBeVisible({ timeout: 30_000 });
     await expect(shell).toHaveAttribute("data-sources", "rail");
+    // The SSR markup is visible long before hydration attaches the global key
+    // handler: a `[` pressed now is silently dropped (the flake this guards).
+    // `data-nav-ready` is set by the boot effect, after the shell's own effects.
+    await app.navReady();
     const xs = await page.evaluate(() => (window as unknown as { __xs: number[] }).__xs);
     expect(xs.length).toBeGreaterThan(0);
     expect(new Set(xs).size).toBe(1);
