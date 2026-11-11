@@ -760,7 +760,8 @@
     "hints": {
       "needsRsshub": "Requires RSSHub – configure under Settings › Server",
       "rateLimited": "Try again later",
-      "blocked": "This site blocked automated access – try a native feed from the publisher"
+      "blocked": "This site blocked automated access – try a native feed from the publisher",
+      "tlsError": "The secure (HTTPS) connection to this site failed (certificate error). For your safety we don't switch to unencrypted http automatically — if you trust the site, enter the address with http://."
     },
     "kinds": {
       "videos": "Videos",
@@ -949,7 +950,8 @@
       "ai-rate-limited": "Too many AI requests. Wait a bit and try again.",
       "ai-unreadable": "The AI gave an answer we couldn't understand. Try again.",
       "ai-no-config": "The AI couldn't find a working setup for this page. Try “Find items”.",
-      "ai-failed": "The AI request failed. Check the AI settings and try again."
+      "ai-failed": "The AI request failed. Check the AI settings and try again.",
+      "page-tls-error": "The secure (HTTPS) connection to this site failed (certificate error). For your safety we don't switch to unencrypted http automatically — if you trust the site, enter the address with http://."
     },
     "notAFeedHint": "That address is a web page, not a feed. These feeds are linked on it:"
   },
@@ -2465,7 +2467,8 @@
       "noneHint": {
         "needs-rsshub": "This site needs RSSHub.",
         "rate-limited": "The site throttles automated access.",
-        "blocked": "The site blocks automated access."
+        "blocked": "The site blocks automated access.",
+        "tls-error": "The site's HTTPS certificate failed, so it wasn't read (no automatic switch to http)."
       },
       "use": "Use this",
       "close": "Close",

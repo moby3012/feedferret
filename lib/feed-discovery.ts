@@ -3,7 +3,7 @@ import { fetchTextWithSsrfProtection, fetchWithSsrfProtection, isTrustedFeedFetc
 import { parseHttpLinkHeader } from "./http-link-header";
 import { hintForFetchError } from "./fetch-error-hint";
 import { buildTopicFeeds, parseSourceInput, resolveSource, type ResolvedFeed } from "./smart-url-resolver";
-import { cleanUrlInput, httpFallbackUrl, isConnectError, normalizeUrlInput } from "./url-input";
+import { cleanUrlInput, httpFallbackUrl, isConnectError, isTlsError, normalizeUrlInput } from "./url-input";
 
 export type DiscoveredFeed = {
   url: string;
@@ -19,7 +19,7 @@ export type DiscoveredFeed = {
   confidence?: number;
 };
 
-export type DiscoveryHint = "needs-rsshub" | "rate-limited" | "blocked";
+export type DiscoveryHint = "needs-rsshub" | "rate-limited" | "blocked" | "tls-error";
 
 export type DiscoveryResult = {
   /** "topic" = the input was a plain phrase and `feeds` are search-engine feeds to pick from. */
@@ -526,7 +526,7 @@ async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boole
       }
     }
   } catch (err) {
-    hint = hintForFetchError(err);
+    hint = isTlsError(err) ? "tls-error" : hintForFetchError(err);
   }
 
   const discovered = new Map<string, DiscoveredFeed & { score: number }>();

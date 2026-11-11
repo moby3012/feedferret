@@ -146,8 +146,30 @@ describe("discovery fixtures", () => {
     expect(r.feeds[0].url).toBe("https://dup.example/feed");
   });
 
+  const connectRefused = () => new TypeError("fetch failed", { cause: Object.assign(new Error("connect ECONNREFUSED 1.2.3.4:443"), { code: "ECONNREFUSED" }) });
+
+  it.each([
+    ["wrapped self-signed", () => new TypeError("fetch failed", { cause: Object.assign(new Error("self-signed certificate"), { code: "DEPTH_ZERO_SELF_SIGNED_CERT" }) })],
+    ["wrapped expired", () => new TypeError("fetch failed", { cause: Object.assign(new Error("certificate has expired"), { code: "CERT_HAS_EXPIRED" }) })],
+    ["unwrapped altname", () => Object.assign(new Error("Hostname/IP does not match certificate's altnames"), { code: "ERR_TLS_CERT_ALTNAME_INVALID" })],
+    ["http server on the https port", () => new TypeError("fetch failed", { cause: Object.assign(new Error("ssl3_get_record:wrong version number"), { code: "ERR_SSL_WRONG_VERSION_NUMBER" }) })],
+    ["unknown error", () => new TypeError("fetch failed")],
+  ])("%s: no http request is ever made (no MITM downgrade)", async (_label, makeError) => {
+    const err = makeError();
+    mocks.routes.set("https://tls.example/", err);
+    for (const p of ["/feed", "/feed/", "/rss", "/rss/", "/rss.xml", "/atom.xml", "/feed.xml", "/index.xml", "/feed.json", "/?feed=rss2", "/api/feeds/posts"]) {
+      mocks.routes.set(`https://tls.example${p}`, err);
+    }
+    mocks.routes.set("http://tls.example/", '<link rel="alternate" type="application/rss+xml" href="/rss.xml">');
+    mocks.routes.set("http://tls.example/rss.xml", rss("Downgraded"));
+    const r = await discoverFeeds("tls.example");
+    expect(r.feeds).toEqual([]);
+    expect(mocks.calls.some((c) => c.url.startsWith("http://"))).toBe(false);
+    if (_label !== "unknown error") expect(r.hint).toBe("tls-error");
+  });
+
   it("a scheme-less address retries over http only when https cannot connect", async () => {
-    mocks.routes.set("https://plain.example/", new TypeError("fetch failed"));
+    mocks.routes.set("https://plain.example/", connectRefused());
     mocks.routes.set("http://plain.example/", '<html><head><link rel="alternate" type="application/atom+xml" href="/atom.xml"></head></html>');
     mocks.routes.set("http://plain.example/atom.xml", '<feed xmlns="http://www.w3.org/2005/Atom"><title>Plain</title></feed>');
     const r = await discoverFeeds("plain.example");

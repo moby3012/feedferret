@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanUrlInput, httpFallbackUrl, isConnectError, normalizeUrlInput } from "../../lib/url-input";
+import { classifyFetchFailure, cleanUrlInput, httpFallbackUrl, isConnectError, isTlsError, normalizeUrlInput } from "../../lib/url-input";
 import { normalizeActionUrl, pageFetchErrorCode, sameFeedAddress } from "../../lib/add-feed-input";
 
 describe("normalizeUrlInput", () => {
@@ -59,11 +59,50 @@ describe("http fallback helpers", () => {
     expect(httpFallbackUrl("http://a.example/x")).toBeNull();
   });
 
-  it("retries only on connect-level failures", () => {
-    expect(isConnectError(new Error("fetch failed"))).toBe(true);
+  /** undici's shape: `TypeError: fetch failed` with the real error in `cause`. */
+  const wrapped = (code: string, message: string) => new TypeError("fetch failed", { cause: Object.assign(new Error(message), { code }) });
+  const bare = (code: string, message: string) => Object.assign(new Error(message), { code });
+
+  it.each([
+    ["ECONNREFUSED", "connect ECONNREFUSED 1.2.3.4:443"],
+    ["EHOSTUNREACH", "connect EHOSTUNREACH"],
+    ["ENETUNREACH", "connect ENETUNREACH"],
+    ["ETIMEDOUT", "connect ETIMEDOUT"],
+    ["UND_ERR_CONNECT_TIMEOUT", "Connect Timeout Error"],
+  ])("allows the http retry only for connection-level %s (wrapped and bare)", (code, message) => {
+    expect(isConnectError(wrapped(code, message))).toBe(true);
+    expect(isConnectError(bare(code, message))).toBe(true);
+  });
+
+  it.each([
+    ["DEPTH_ZERO_SELF_SIGNED_CERT", "self-signed certificate"],
+    ["SELF_SIGNED_CERT_IN_CHAIN", "self-signed certificate in certificate chain"],
+    ["CERT_HAS_EXPIRED", "certificate has expired"],
+    ["ERR_TLS_CERT_ALTNAME_INVALID", "Hostname/IP does not match certificate's altnames"],
+    ["UNABLE_TO_VERIFY_LEAF_SIGNATURE", "unable to verify the first certificate"],
+    ["UNABLE_TO_GET_ISSUER_CERT_LOCALLY", "unable to get local issuer certificate"],
+    ["ERR_SSL_WRONG_VERSION_NUMBER", "error:0A00010B:SSL routines::wrong version number"],
+    ["EPROTO", "write EPROTO"],
+    ["ECONNRESET", "Client network socket disconnected before secure TLS connection was established"],
+  ])("never retries over http after a TLS/certificate failure: %s", (code, message) => {
+    for (const err of [wrapped(code, message), bare(code, message), new AggregateError([wrapped(code, message)], "x")]) {
+      expect(classifyFetchFailure(err)).toBe("tls");
+      expect(isConnectError(err)).toBe(false);
+      expect(isTlsError(err)).toBe(true);
+    }
+    // TLS wins even when a connect code is also somewhere in the chain.
+    const mixed = new TypeError("fetch failed", { cause: Object.assign(new Error("connect ETIMEDOUT"), { code: "ETIMEDOUT", cause: bare(code, message) }) });
+    expect(isConnectError(mixed)).toBe(false);
+  });
+
+  it("unknown errors, status errors, SSRF refusals, DNS and resets never qualify", () => {
+    expect(isConnectError(new TypeError("fetch failed"))).toBe(false);
+    expect(isConnectError(new Error("something odd"))).toBe(false);
     expect(isConnectError(new Error("Fetch failed: 403"))).toBe(false);
     expect(isConnectError(new Error("Feed hostname resolves to a private IP"))).toBe(false);
-    expect(isConnectError(new Error("Response too large (5 bytes > 1 bytes)"))).toBe(false);
+    expect(isConnectError(wrapped("ENOTFOUND", "getaddrinfo ENOTFOUND x.example"))).toBe(false);
+    expect(isConnectError(wrapped("ECONNRESET", "read ECONNRESET"))).toBe(false);
+    expect(isConnectError(Object.assign(new Error("aborted"), { name: "AbortError" }))).toBe(false);
   });
 });
 
@@ -83,6 +122,7 @@ describe("add-feed input plumbing", () => {
     expect(pageFetchErrorCode(new Error("Fetch failed: 500"))).toBe("page-http-error");
     expect(pageFetchErrorCode(new Error("AI feed config hostname resolves to a private IP"))).toBe("page-private-address");
     expect(pageFetchErrorCode(new Error("getaddrinfo ENOTFOUND"))).toBe("page-unreachable");
+    expect(pageFetchErrorCode(new TypeError("fetch failed", { cause: Object.assign(new Error("certificate has expired"), { code: "CERT_HAS_EXPIRED" }) }))).toBe("page-tls-error");
   });
 
   it("sameFeedAddress ignores scheme, host case and trailing slash", () => {

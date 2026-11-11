@@ -16,6 +16,7 @@
 
 import { JSDOM } from "jsdom";
 import { suggestFeedCandidates } from "./page-feed-suggest";
+import { redactUrlForPrompt } from "./prompt-url";
 
 export const PAGE_DIGEST_MAX_CHARS = 12_000;
 
@@ -37,13 +38,14 @@ function clip(text: string, max: number): string {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 
+/** Link sample for the prompt: credentials/userinfo/fragment redacted (lib/prompt-url). */
 function shortHref(href: string, base: URL): string {
   try {
-    const u = new URL(href, base);
+    const u = new URL(redactUrlForPrompt(href, base));
     const s = u.origin === base.origin ? `${u.pathname}${u.search}` : `${u.host}${u.pathname}${u.search}`;
     return clip(s, 90);
   } catch {
-    return clip(href, 90);
+    return clip(redactUrlForPrompt(href), 90);
   }
 }
 
@@ -171,7 +173,7 @@ function feedLinks(document: Document, base: URL): string[] {
     if (!href) return;
     let abs: string;
     try {
-      abs = new URL(href, base).toString();
+      abs = redactUrlForPrompt(new URL(href, base).toString());
     } catch {
       return;
     }
@@ -226,7 +228,7 @@ export function buildPageDigest(html: string, url: string, opts: PageDigestOptio
   } catch {
     base = new URL("https://invalid.example/");
   }
-  out.push(`URL: ${url}`);
+  out.push(`URL: ${redactUrlForPrompt(url)}`);
 
   let document: Document;
   try {

@@ -760,7 +760,8 @@
     "hints": {
       "needsRsshub": "Braucht RSSHub – unter Einstellungen › Server einrichten",
       "rateLimited": "Später erneut versuchen",
-      "blocked": "Seite blockiert automatischen Abruf – probier stattdessen einen direkten Feed des Anbieters"
+      "blocked": "Seite blockiert automatischen Abruf – probier stattdessen einen direkten Feed des Anbieters",
+      "tlsError": "Zertifikatsfehler: Die sichere Verbindung (HTTPS) zu dieser Website ist fehlgeschlagen. Aus Sicherheitsgründen wechseln wir nicht automatisch auf unverschlüsseltes http – wenn du der Seite vertraust, gib die Adresse mit http:// ein."
     },
     "kinds": {
       "videos": "Videos",
@@ -949,7 +950,8 @@
       "ai-rate-limited": "Zu viele KI-Anfragen. Warte kurz und versuche es erneut.",
       "ai-unreadable": "Die Antwort der KI war nicht verständlich. Versuche es erneut.",
       "ai-no-config": "Die KI hat für diese Seite keine funktionierende Einrichtung gefunden. Versuche „Einträge finden“.",
-      "ai-failed": "Die KI-Anfrage ist fehlgeschlagen. Prüfe die KI-Einstellungen und versuche es erneut."
+      "ai-failed": "Die KI-Anfrage ist fehlgeschlagen. Prüfe die KI-Einstellungen und versuche es erneut.",
+      "page-tls-error": "Zertifikatsfehler: Die sichere Verbindung (HTTPS) zu dieser Website ist fehlgeschlagen. Aus Sicherheitsgründen wechseln wir nicht automatisch auf unverschlüsseltes http – wenn du der Seite vertraust, gib die Adresse mit http:// ein."
     },
     "notAFeedHint": "Diese Adresse ist eine Webseite, kein Feed. Darauf verlinkte Feeds:"
   },
@@ -2465,7 +2467,8 @@
       "noneHint": {
         "needs-rsshub": "Für diese Seite wird RSSHub benötigt.",
         "rate-limited": "Die Seite bremst automatische Zugriffe aus.",
-        "blocked": "Die Seite blockiert automatische Zugriffe."
+        "blocked": "Die Seite blockiert automatische Zugriffe.",
+        "tls-error": "Das HTTPS-Zertifikat der Website ist fehlerhaft, daher wurde sie nicht gelesen (kein automatischer Wechsel auf http)."
       },
       "use": "Übernehmen",
       "close": "Schließen",

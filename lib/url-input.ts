@@ -157,14 +157,64 @@ export function httpFallbackUrl(url: string): string | null {
   return url.startsWith("https://") ? `http://${url.slice("https://".length)}` : null;
 }
 
+export type FetchFailureKind = "connect" | "tls" | "other";
+
+// Connection-level failures where nothing was spoken with the server at all
+// (refused, no route, connect timeout). Deliberately NOT here: ECONNRESET
+// (can happen mid-handshake), DNS errors (http would fail the same way) and
+// anything unknown — those never trigger the http retry.
+const CONNECT_CODES = new Set(["ECONNREFUSED", "EHOSTUNREACH", "ENETUNREACH", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"]);
+const TLS_CODE = /^(?:CERT_|ERR_TLS_|ERR_SSL_|ERR_OSSL_|SSL_|UNABLE_TO_(?:GET|VERIFY|DECRYPT)|DEPTH_ZERO_SELF_SIGNED_CERT$|SELF_SIGNED_CERT_IN_CHAIN$|HOSTNAME_MISMATCH$|INVALID_CA$|INVALID_PURPOSE$|EPROTO$)/;
+const TLS_MESSAGE = /certificate|\bssl\b|\btls\b|handshake|self[- ]signed|wrong version number|secure TLS connection/i;
+
+/** Codes and messages of an error and its whole `cause` / AggregateError chain. */
+function errorChain(error: unknown): Array<{ code: string; message: string }> {
+  const out: Array<{ code: string; message: string }> = [];
+  const seen = new Set<unknown>();
+  const visit = (e: unknown, depth: number) => {
+    if (e == null || depth > 10 || seen.has(e)) return;
+    seen.add(e);
+    if (typeof e !== "object") {
+      out.push({ code: "", message: String(e) });
+      return;
+    }
+    const rec = e as { code?: unknown; message?: unknown; cause?: unknown; errors?: unknown };
+    out.push({ code: typeof rec.code === "string" ? rec.code : "", message: typeof rec.message === "string" ? rec.message : "" });
+    visit(rec.cause, depth + 1);
+    if (Array.isArray(rec.errors)) rec.errors.forEach((x) => visit(x, depth + 1));
+  };
+  visit(error, 0);
+  return out;
+}
+
 /**
- * A fetch error that means "could not talk to the server at all" (DNS, TLS,
- * refused, reset, timeout) — the only case where retrying an assumed-https
- * address over http makes sense. HTTP status errors and SSRF refusals don't.
+ * Classifies a failed fetch by walking the whole cause chain (undici wraps
+ * everything as `TypeError: fetch failed`):
+ * - "tls": any certificate / TLS / handshake indication anywhere in the chain
+ *   (CERT_*, ERR_TLS_*, ERR_SSL_*, self-signed, wrong version number, …).
+ *   The server (or someone in between) answered — this must never be
+ *   "fixed" by retrying over plain http (that would be a MITM downgrade).
+ * - "connect": a genuine connection-level failure from the allowlist.
+ * - "other": everything else, including unknown errors.
+ */
+export function classifyFetchFailure(error: unknown): FetchFailureKind {
+  const chain = errorChain(error);
+  if (chain.some((e) => TLS_CODE.test(e.code) || TLS_MESSAGE.test(e.message))) return "tls";
+  if (chain.some((e) => CONNECT_CODES.has(e.code))) return "connect";
+  return "other";
+}
+
+/**
+ * The only case where retrying an assumed-https address over http is
+ * allowed: the https connection could not be opened at all (allowlisted
+ * connection-level codes). TLS/certificate failures, HTTP status errors,
+ * SSRF refusals and unknown errors never qualify.
  */
 export function isConnectError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  if (/^Fetch failed: \d+/.test(message)) return false;
-  if (/private IP|localhost|only supports http|URL is invalid|too large|redirect/i.test(message)) return false;
-  return true;
+  return classifyFetchFailure(error) === "connect";
+}
+
+/** A certificate / TLS handshake failure (shown to the user as such). */
+export function isTlsError(error: unknown): boolean {
+  return classifyFetchFailure(error) === "tls";
 }

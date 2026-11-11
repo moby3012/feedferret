@@ -204,6 +204,8 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
           message = t("sidebar.hints.rateLimited");
         } else if (data.hint === "blocked") {
           message = t("sidebar.hints.blocked");
+        } else if (data.hint === "tls-error") {
+          message = t("sidebar.hints.tlsError");
         }
         setDiscoveryMessage(message);
         toast.info(message);

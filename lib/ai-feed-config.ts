@@ -16,6 +16,7 @@ import { JSDOM } from "jsdom";
 import { type MeteredAiConfig, runAiPrompt } from "./ai-summary";
 import { buildXPathArticles } from "./feed-fetcher";
 import { buildPageDigest } from "./page-digest";
+import { redactUrlForPrompt, redactUrlsInPromptText } from "./prompt-url";
 import { getSanitizer } from "./sanitize-html";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import type { SuggestedFieldConfig } from "./page-feed-suggest";
@@ -67,13 +68,14 @@ export function reduceHtmlForPrompt(html: string): string {
     }
   }
   const collapsed = withoutHead.slice(from).replace(/\s+/g, " ").trim();
-  return collapsed.slice(0, MAX_PROMPT_HTML_CHARS);
+  // Links in the markup may carry credentials (signed URLs, session ids…).
+  return redactUrlsInPromptText(collapsed).slice(0, MAX_PROMPT_HTML_CHARS);
 }
 
 /** Builds the strict-JSON prompt asking the model to propose a feed config. */
 export function buildFeedConfigPrompt(html: string, url: string): string {
   const digest = buildPageDigest(html, url);
-  return `You are configuring a web-scraping feed reader for the page at ${url}.
+  return `You are configuring a web-scraping feed reader for the page at ${redactUrlForPrompt(url)}.
 
 Decide whether this page is:
 - "fulltext": a single article page whose full body text is present on the page (possibly truncated by a paywall/teaser, but the reader body container is identifiable).

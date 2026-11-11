@@ -38,6 +38,7 @@ import {
     normalizeActionUrl,
     pageFetchErrorCode,
     sameFeedAddress,
+    TLS_ERROR_TEXT,
     type AddFeedErrorCode,
 } from "@/lib/add-feed-input";
 import { httpFallbackUrl, isConnectError } from "@/lib/url-input";
@@ -327,6 +328,9 @@ export async function addFeed(rawUrl: string, categoryId?: string) {
                 discovered: others,
             };
         }
+        if (pageFetchErrorCode(error) === "page-tls-error" || discovered.tlsError) {
+            return { success: false as const, errorCode: "page-tls-error" as AddFeedErrorCode, error: TLS_ERROR_TEXT };
+        }
         const hint = hintForFetchError(error);
         if (hint) return { success: false as const, error: hint };
         return { success: false as const, errorCode: "no-feed-found" as AddFeedErrorCode, error: "Invalid RSS/Atom feed URL" };
@@ -360,6 +364,7 @@ export async function suggestFeedFromUrl(rawUrl: string, options: { skipDiscover
         if (existing.feeds.length) {
             return { success: true as const, kind: "existing-feed" as const, feeds: existing.feeds, pageUrl: existing.pageUrl ?? pageUrl };
         }
+        if (existing.tlsError) return { success: false as const, errorCode: "page-tls-error" as const, error: TLS_ERROR_TEXT };
         if (existing.pageUrl) pageUrl = existing.pageUrl;
     }
 
@@ -479,6 +484,7 @@ export async function proposeAiFeedConfig(rawUrl: string, options: { skipDiscove
         if (existing.feeds.length) {
             return { success: true as const, mode: "existing-feed" as const, feeds: existing.feeds, pageUrl: existing.pageUrl ?? url };
         }
+        if (existing.tlsError) return { success: false as const, errorCode: "page-tls-error" as const, error: TLS_ERROR_TEXT };
         if (existing.pageUrl) url = existing.pageUrl;
     }
 
