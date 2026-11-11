@@ -41,9 +41,17 @@ export function isPostgresProvider(provider) {
  *   `schema` is resolved relative to the config file that returns this object.
  */
 export function buildPrismaCliConfig({ schema, env = process.env }) {
+  // Both entry-point configs resolve paths relative to themselves. Keep migrations
+  // beside the default schema even when a baseline schema override is supplied.
+  const schemaDir = schema.slice(0, schema.lastIndexOf("/") + 1);
+  const provider = isPostgresProvider(env.DATABASE_PROVIDER) ? "postgresql" : "sqlite";
   const config = {
-    schema,
-    datasource: { url: env.DATABASE_URL || "file:./dev.db" },
+    schema: env.PRISMA_SCHEMA_OVERRIDE || schema,
+    migrations: { path: `${schemaDir}migrations/${provider}` },
+    datasource: {
+      url: env.DATABASE_URL || "file:./dev.db",
+      ...(env.SHADOW_DATABASE_URL ? { shadowDatabaseUrl: env.SHADOW_DATABASE_URL } : {}),
+    },
   };
   // Postgres needs no external tables (pg_trgm indexes are declared in the schema, see
   // scripts/prepare-prisma-schema.mjs), and Prisma would require schema-qualified names there.

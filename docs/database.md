@@ -80,24 +80,71 @@ Supported `DATABASE_PROVIDER` values: `postgresql`, `postgres`, `sqlite`, `file`
 
 ---
 
-## Schema changes: `db push`, not `prisma/migrations`
+## Schema changes and migration groundwork
 
-Startup (`start.sh` in the Docker image, `pnpm run start` → `prisma:push`) runs
-`scripts/db-sync.sh`, which prepares the provider schema and applies it with
-`prisma db push --config prisma/startup.config.mjs --accept-data-loss`.
-The config (`prisma/cli-config.mjs`) declares the SQLite FTS tables as external
-tables, so `db push` never touches them; on Postgres the script creates the
-`pg_trgm` extension first, because the trigram search indexes are part of the
-Postgres schema variant (see [Full-text search](#full-text-search)).
-`prisma/schema.prisma` is therefore the **source of truth** for both SQLite and
-PostgreSQL, and every schema change must be **additive** (new nullable /
-defaulted columns, new tables) so `db push` never needs to drop data.
+**Container startup still uses `db push`.** `start.sh`, `scripts/db-sync.sh`,
+and `pnpm start` keep their existing behavior, including `--accept-data-loss`.
+This groundwork does not switch production to migrations. Schema changes must
+remain additive: nullable/defaulted columns, new tables or indexes.
 
-The SQL files under `prisma/migrations/` are an **archival, SQLite-flavoured
-change log** (what changed and when, handy for hand-written upgrades). They are
-**not executed** at startup or in CI and are not used for PostgreSQL. When you
-change `schema.prisma`, adding a matching migration file is nice for the
-history, but the schema file is what actually reaches users' databases.
+`prisma/migrations/{sqlite,postgresql}` contain independent provider histories
+with identical migration names and provider-specific lock files. The initial
+`00000000000000_init` baseline was generated from the current schema (including
+the Article user/feed/createdAt index). `prisma/baseline.schema.prisma` freezes
+that source. The old, incomplete SQLite SQL is in `prisma/migrations-archive`,
+unused by tooling and excluded from Docker images. Do not edit applied SQL or
+the frozen schema. To reproduce the baseline from its frozen source:
+`node scripts/generate-migration-baseline.mjs` (review only; do not commit changes
+to an already applied baseline).
+
+To add a schema change for **both** providers:
+
+1. Fetch `origin/main`, rebase your branch, then edit `prisma/schema.prisma`.
+2. Run `pnpm db:migration:new descriptive_snake_case_name`. It diffs the fetched
+   `origin/main` schema against your working schema, without a database, and
+   writes the same UTC timestamp/name in both provider directories. Generate
+   once per schema change; do not stack repeated diffs against the same base.
+3. Review both SQL files. Keep no-op SQL in the other provider if a change is
+   provider-specific. Use expand/contract; destructive SQL (including SQLite
+   `RedefineTables`) needs an explicit `-- ff:allow-destructive <reason>` line
+   and review. This marker documents intent, not permission to drop prod data.
+4. Run `pnpm db:migrations:check`, `node scripts/test-migrations.mjs sqlite`,
+   and `MIGRATION_TEST_ADMIN_URL=postgresql://... node scripts/test-migrations.mjs postgresql`
+   against a **throwaway Postgres 16 server**. The integration script creates
+   and removes unique databases/roles; the admin needs CREATEDB/CREATEROLE.
+   It verifies history-to-schema drift (a failure means run
+   `pnpm db:migration:new`), apply-from-empty, restricted extension privileges,
+   and baseline resolve/status on an old `db push` database with preserved rows.
+   CI runs both providers. After rebase, prepare and `pnpm exec prisma validate`
+   for each `DATABASE_PROVIDER=sqlite` and `DATABASE_PROVIDER=postgresql`.
+5. Commit both provider directories with the schema change; run normal checks
+   and Docker smoke for both providers. Startup continues using `db push` until
+   the separately approved production cut-over.
+
+The shared CLI config selects the migration directory for `DATABASE_PROVIDER`;
+`PRISMA_SCHEMA_OVERRIDE` may select another prepared schema (relative to the
+config file), and `SHADOW_DATABASE_URL` configures a disposable shadow DB for CI.
+Migration history paths stay relative to the selected config, independently
+of the override. `prisma.config.ts` and `prisma/startup.config.mjs` both work.
+
+Postgres migration SQL installs `pg_trgm` in a privilege/error-guarded DO block.
+An existence guard also avoids requiring database CREATE when the `public`
+schema already exists. All `gin_trgm_ops` indexes must be in a DO block that checks the extension is
+installed; the generator wraps them and CI rejects unguarded occurrences.
+Without extension privileges, tables still migrate and search uses its runtime
+fallback. `PRISMA_PG_TRGM=0` generates a comparison schema for the restricted-role
+drift test (startup also retains its existing privilege fallback).
+
+SQLite FTS virtual/shadow/bookkeeping tables stay **external**, created by
+`ensureSearchIndexes()`, and never belong in migration SQL. `migrate deploy`
+does not diff/drop them. SQLite's `RedefineTables` pattern can drop triggers on
+Article: `ensureSqliteFts` recreates those on the next boot, and
+`checkSqliteFtsAndRepair` repairs index consistency. Future migration startup
+must run immediately before app boot. This PR does not alter that boot path.
+
+**Production cut-over is PR 3**, requiring owner approval and a tested
+backup/restore drill before enabling migration startup on Coolify. Do not run
+`migrate deploy` or baseline resolve against production as part of this PR.
 
 ---
 
