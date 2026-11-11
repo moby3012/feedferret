@@ -29,7 +29,8 @@ export type AdapterCandidate = {
 const MAX_PER_ADAPTER = 4;
 const SAFE_TOKEN = /^[\w.~-]{1,100}$/;
 
-const stripWww = (host: string) => host.toLowerCase().replace(/^www\./, "");
+/** Lower-case, no leading "www.", no trailing root dot ("moddb.com." is moddb.com). */
+const stripWww = (host: string) => host.toLowerCase().replace(/\.+$/, "").replace(/^www\./, "");
 const hostMatches = (host: string, domains: string[]) => domains.some((d) => host === d || host.endsWith(`.${d}`));
 
 type ExpandCtx = { origin: string; base: string; domain: string; groups: string[]; query: URLSearchParams };
@@ -129,47 +130,98 @@ export function matchPlatformAdapters(url: URL, adapters: PlatformAdapter[] = PL
 /* (b) Software detection                                                      */
 /* -------------------------------------------------------------------------- */
 
-export type PageSignals = { html: string; headers?: Headers | null; url: URL };
+/**
+ * The page as discovery already parsed it. Detection only reads the DOM
+ * (selectors, attribute values) and short, capped strings — never regexes
+ * over raw page HTML (ReDoS on attacker-controlled pages).
+ */
+export type PageSignals = { document: Document; headers?: Headers | null; url: URL };
 
-/** All `<meta name="generator">` values in the page head. */
-export function generatorValues(html: string): string[] {
+/** Inline-script text budget for `scriptIncludes` / base `script` patterns. */
+export const SCRIPT_TEXT_CAP = 64 * 1024;
+const ATTR_CAP = 200;
+
+/** All `<meta name="generator">` values (each capped). */
+export function generatorValues(document: Document): string[] {
   const out: string[] = [];
-  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
-    if (!/\bname\s*=\s*["']?generator["']?/i.test(tag)) continue;
-    const content = /\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
-    const v = (content?.[1] ?? content?.[2] ?? "").trim();
+  for (const el of document.querySelectorAll("meta[name]")) {
+    if ((el.getAttribute("name") ?? "").trim().toLowerCase() !== "generator") continue;
+    const v = (el.getAttribute("content") ?? "").trim().slice(0, ATTR_CAP);
     if (v) out.push(v);
   }
   return out;
 }
 
+/** Concatenated inline-script text, capped at SCRIPT_TEXT_CAP. */
+function inlineScriptText(document: Document): string {
+  let out = "";
+  for (const el of document.querySelectorAll("script:not([src])")) {
+    out += `${el.textContent ?? ""}\n`;
+    if (out.length >= SCRIPT_TEXT_CAP) return out.slice(0, SCRIPT_TEXT_CAP);
+  }
+  return out;
+}
+
+function safeMatches(document: Document, selector: string): boolean {
+  try {
+    return document.querySelector(selector) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function detectSoftware(page: PageSignals, adapters: SoftwareAdapter[] = SOFTWARE_ADAPTERS): SoftwareAdapter[] {
-  const generators = generatorValues(page.html);
+  const generators = generatorValues(page.document);
+  let scripts: string | null = null;
+  const scriptText = () => (scripts ??= inlineScriptText(page.document));
   return adapters.filter(({ detect }) => {
     if (detect.generator && generators.some((g) => detect.generator!.test(g))) return true;
     if (detect.headers) {
       for (const [name, re] of Object.entries(detect.headers)) {
-        const v = page.headers?.get(name);
+        const v = page.headers?.get(name)?.slice(0, ATTR_CAP);
         if (v && re.test(v)) return true;
       }
     }
-    return detect.html?.some((re) => re.test(page.html)) ?? false;
+    if (detect.selectors?.some((sel) => safeMatches(page.document, sel))) return true;
+    return detect.scriptIncludes?.some((needle) => scriptText().includes(needle)) ?? false;
   });
 }
 
 /** Install path of the software on the page's host ("" = site root, else "/forum"). */
 export function resolveBasePath(adapter: SoftwareAdapter, page: PageSignals): string {
   const clean = (p: string) => p.replace(/\/+$/, "");
-  for (const re of adapter.base?.html ?? []) {
-    const raw = re.exec(page.html)?.[1];
-    if (raw === undefined) continue;
-    const value = raw.replace(/\\\//g, "/").trim();
+  const fromValue = (raw: string, stripSuffix?: string): string | null => {
+    const value = raw.replace(/\\\//g, "/").trim().slice(0, 500);
     try {
       const u = new URL(value || "/", page.url);
       // Only the page's own origin: a CDN / foreign base URL is ignored.
-      if (u.origin === page.url.origin) return clean(u.pathname);
+      if (u.origin !== page.url.origin) return null;
+      let path = clean(u.pathname);
+      if (stripSuffix && path.toLowerCase().endsWith(stripSuffix.toLowerCase())) path = clean(path.slice(0, -stripSuffix.length));
+      return path;
     } catch {
-      // try the next signal
+      return null;
+    }
+  };
+  for (const { selector, attr, stripSuffix } of adapter.base?.attrs ?? []) {
+    let el: Element | null = null;
+    try {
+      el = page.document.querySelector(selector);
+    } catch {
+      el = null;
+    }
+    const raw = el?.getAttribute(attr);
+    if (raw === null || raw === undefined) continue;
+    const path = fromValue(raw, stripSuffix);
+    if (path !== null) return path;
+  }
+  if (adapter.base?.script?.length) {
+    const text = inlineScriptText(page.document);
+    for (const re of adapter.base.script) {
+      const raw = re.exec(text)?.[1];
+      if (raw === undefined) continue;
+      const path = fromValue(raw);
+      if (path !== null) return path;
     }
   }
   const path = page.url.pathname.replace(/\/{2,}/g, "/");

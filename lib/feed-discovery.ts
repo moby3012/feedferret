@@ -130,10 +130,15 @@ export type FeedSniff = {
   signature: string | null;
 };
 
+// Everything below runs on a fetched prefix (attacker-controlled bytes):
+// linear scans only — literal anchors, indexOf, bounded or `[^<>]` classes —
+// never `[^>]*` / `[\s\S]*?` over the whole prefix from every start position.
+
 function decodeXmlText(raw: string): string {
   return raw
+    .slice(0, 4000)
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/<[^>]+>/g, "")
+    .replace(/<[^<>]*>/g, "")
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
     .replace(/&quot;/g, '"')
@@ -146,10 +151,16 @@ function decodeXmlText(raw: string): string {
     .slice(0, 200);
 }
 
+/** Text of the first `<tag …>…</tag>` element (single forward scan; null when it is not closed). */
 function firstTagText(xml: string, tag: string): string | null {
-  const m = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, "i").exec(xml);
-  if (!m) return null;
-  return decodeXmlText(m[1]) || null;
+  const open = new RegExp(`<${tag}(?=[\\s>/])`, "i").exec(xml);
+  if (!open) return null;
+  const gt = xml.indexOf(">", open.index + open[0].length);
+  if (gt < 0 || xml[gt - 1] === "/") return null;
+  const rest = xml.slice(gt + 1);
+  const close = new RegExp(`</${tag}\\s{0,16}>`, "i").exec(rest);
+  if (!close) return null;
+  return decodeXmlText(rest.slice(0, close.index)) || null;
 }
 
 /** The block of the first `<name …>…</name>` element (or the rest of the prefix if it is cut off). */
@@ -172,7 +183,7 @@ export function sniffFeedPrefix(text: string): FeedSniff | null {
   let s = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   for (;;) {
     s = s.replace(/^\s+/, "");
-    const skip = /^(?:<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>[]*(?:\[[\s\S]*?\])?\s*>)/i.exec(s);
+    const skip = /^(?:<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>[]*(?:\[[\s\S]*?\])?\s{0,64}>)/i.exec(s);
     if (!skip) break;
     s = s.slice(skip[0].length);
   }
@@ -208,7 +219,7 @@ export function sniffFeedPrefix(text: string): FeedSniff | null {
     const entryAt = s.search(/<(?:\w+:)?entry[\s>]/i);
     title = firstTagText(entryAt >= 0 ? s.slice(0, entryAt) : s, "(?:\\w+:)?title");
     const entry = firstBlock(s, "(?:\\w+:)?entry");
-    if (entry) firstId = firstTagText(entry, "(?:\\w+:)?id") ?? /<(?:\w+:)?link[^>]*href="([^"]+)"/i.exec(entry)?.[1] ?? null;
+    if (entry) firstId = firstTagText(entry, "(?:\\w+:)?id") ?? /<(?:\w+:)?link\b[^<>]{0,1000}?\bhref="([^"<>]{1,2000})"/i.exec(entry)?.[1] ?? null;
   } else {
     const channel = firstBlock(s, "(?:\\w+:)?channel") ?? s;
     const itemAt = channel.search(/<(?:\w+:)?item[\s>]/i);
@@ -239,8 +250,9 @@ type VerifiedCandidate = { url: string; title: string; type: DiscoveredFeed["typ
 /**
  * One budgeted request with the transport fallback: claims a request slot
  * (refused → DiscoveryBudgetRefusal, nothing is sent), shares the run's abort
- * signal, counts the retry and every redirect hop, and blocks the host on a
- * rate-limit response.
+ * signal, counts the retry and every redirect hop, starts with the transport
+ * that already worked for this host in this run, and blocks the host that
+ * actually answered (final hop) on a rate-limit response.
  */
 async function budgetedFetch<T>(
   budget: DiscoveryBudget,
@@ -249,10 +261,24 @@ async function budgetedFetch<T>(
   isEmpty?: (result: T) => boolean,
 ): Promise<T> {
   if (!budget.take(url)) throw new DiscoveryBudgetRefusal(url);
+  let tracker = budget.track(url);
   return withTransportFallback(
     url,
-    (impersonate) => attempt(impersonate, { signal: budget.signal, timeoutMs: budget.requestTimeoutMs(), redirectGuard: budget.redirectGuard }),
-    { isEmpty, beforeRetry: () => budget.take(url), onFailure: (err) => budget.noteFailure(url, err) },
+    async (impersonate) => {
+      tracker = budget.track(url);
+      const result = await attempt(impersonate, { signal: budget.signal, timeoutMs: budget.requestTimeoutMs(), redirectGuard: tracker.redirectGuard });
+      if (!isEmpty?.(result)) {
+        budget.noteWorkingTransport(url, impersonate);
+        budget.noteWorkingTransport(tracker.finalUrl(), impersonate);
+      }
+      return result;
+    },
+    {
+      primaryImpersonate: budget.preferredImpersonate(url) ?? false,
+      isEmpty,
+      beforeRetry: () => budget.take(url),
+      onFailure: (err) => budget.noteFailure(tracker.finalUrl(), err),
+    },
   );
 }
 
@@ -337,6 +363,7 @@ async function verifyPlatformAdapterCandidates(budget: DiscoveryBudget, candidat
 /** SSRF-protected, budgeted text fetch handed to the pure resolver for its one-step lookups. */
 const resolverFetchText = (budget: DiscoveryBudget) => async (url: string, init?: { headers?: Record<string, string> }) => {
   if (!budget.take(url)) throw new DiscoveryBudgetRefusal(url);
+  const tracker = budget.track(url);
   try {
     return await fetchTextWithSsrfProtection(
       url,
@@ -351,12 +378,12 @@ const resolverFetchText = (budget: DiscoveryBudget) => async (url: string, init?
       {
         maxBytes: 4 * 1024 * 1024,
         timeoutMs: budget.requestTimeoutMs(),
-        redirectGuard: budget.redirectGuard,
+        redirectGuard: tracker.redirectGuard,
         allowInternal: await isTrustedFeedFetchingAllowed(),
       },
     );
   } catch (err) {
-    budget.noteFailure(url, err);
+    budget.noteFailure(tracker.finalUrl(), err);
     throw err;
   }
 };
@@ -418,9 +445,13 @@ async function resolveWithRadarRules(pageUrl: string, budget: DiscoveryBudget): 
     const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.min(15_000, budget.remainingMs())); });
     const results = await Promise.all(
       matches.map(async (m): Promise<DiscoveredFeed | null> => {
-        // Each validation is one request against the RSSHub instance.
+        // Each validation is one request against the RSSHub instance; its
+        // redirect hops count too and the run's deadline aborts it.
         if (!budget.take(buildRsshubPublicRouteUrl(config, m.route))) return null;
-        const validation = await Promise.race([validateRsshubRoute(config, m.route), timeout]);
+        const validation = await Promise.race([
+          validateRsshubRoute(config, m.route, { signal: budget.signal, onRedirect: (next) => budget.take(next) }),
+          timeout,
+        ]);
         if (!validation || !validation.ok) return null;
         return {
           // Never the keyed URL: discovery results reach any session user and
@@ -719,7 +750,7 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
   // Forum / blog software recognised on the page (generator meta, markup
   // fingerprints, headers) → its native endpoints (lib/feed-adapters).
   if (html) {
-    for (const c of detectSoftwareFeeds({ html, headers: pageHeaders, url: responseUrl })) {
+    for (const c of detectSoftwareFeeds({ document, headers: pageHeaders, url: responseUrl })) {
       addCandidate(c.url, c.title, "unknown", "software", c.scope === "route" ? 92 : 85, responseUrl, false, c);
     }
   }

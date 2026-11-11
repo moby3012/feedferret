@@ -125,7 +125,7 @@ export type RsshubValidation =
 export async function validateRsshubRoute(
   config: RsshubConfig,
   routePath: string,
-  options: { includeErrorBody?: boolean } = {},
+  options: { includeErrorBody?: boolean; signal?: AbortSignal; onRedirect?: (nextUrl: string) => boolean } = {},
 ): Promise<RsshubValidation> {
   const routeError = rsshubRouteError(routePath);
   if (routeError) return { ok: false, reason: routeError };
@@ -153,7 +153,13 @@ export async function validateRsshubRoute(
     // configured", …) instead of a bare 503 — but only for the admin's own
     // connection test. User-supplied routes are fetched with allowInternal, so
     // echoing the upstream body would turn RSSHub into a read-SSRF oracle (N3).
-    const feed = await fetchFeedArticles({ url, allowInternal: true, includeErrorBody: options.includeErrorBody === true });
+    const feed = await fetchFeedArticles({
+      url,
+      allowInternal: true,
+      includeErrorBody: options.includeErrorBody === true,
+      signal: options.signal,
+      onRedirect: options.onRedirect,
+    });
     if (!feed.articles.length) {
       return { ok: false, reason: "RSSHub returned a feed with no items for this route" };
     }

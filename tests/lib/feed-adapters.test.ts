@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import {
   detectSoftware,
@@ -20,6 +21,13 @@ import { matchRadarRules } from "../../lib/rsshub-radar-rules";
 
 const fixture = (name: string) => readFileSync(path.join(__dirname, "../fixtures/adapters", `${name}.html`), "utf8");
 const urls = (list: Array<{ url: string }>) => list.map((c) => c.url);
+/** The page as discovery sees it: parsed once (lib/feed-discovery.ts builds the same JSDOM document). */
+const doc = (html: string) => new JSDOM(html).window.document;
+const pageOf = (html: string, url: string, headers?: Record<string, string>) => ({
+  document: doc(html),
+  headers: headers ? new Headers(headers) : null,
+  url: new URL(url),
+});
 
 type PlatformCase = { adapter: string; url: string; expect: string[] };
 
@@ -67,6 +75,20 @@ const PLATFORM_CASES: PlatformCase[] = [
 const PLATFORM_NON_MATCHES = [
   "https://www.nexusmods.com/users/12345",
   "https://www.nexusmods.com/",
+  // Nexus Mods' own site sections are not games.
+  "https://www.nexusmods.com/login",
+  "https://www.nexusmods.com/search?q=x",
+  "https://www.nexusmods.com/premium",
+  "https://www.nexusmods.com/games",
+  "https://www.nexusmods.com/games/",
+  "https://www.nexusmods.com/news/12345",
+  // Host confusion: only the real registrable domain (and its subdomains) match.
+  "https://moddb.com.evil.com/mods/mental-omega",
+  "https://evil.com/moddb.com/mods/mental-omega",
+  "https://moddb.com@evil.com/mods/mental-omega",
+  "https://notmoddb.com/mods/mental-omega",
+  "https://www.notindiedb.com/games/x",
+  "https://moddb.evil.com/mods/mental-omega",
   "https://gamebanana.com/news",
   "https://steamcommunity.com/app/1213210", // store/app hub: smart-url-resolver's Steam rule
   "https://www.moddb.com/search?q=x",
@@ -255,7 +277,7 @@ describe("platform adapters (URL patterns)", () => {
 
 describe("software adapters (page fixtures)", () => {
   it.each(SOFTWARE_CASES)("$adapter: $pageUrl ($fixture)", ({ adapter, fixture: name, pageUrl, headers, expect: expected }) => {
-    const page = { html: fixture(name), headers: headers ? new Headers(headers) : null, url: new URL(pageUrl) };
+    const page = pageOf(fixture(name), pageUrl, headers);
     expect(detectSoftware(page).map((a) => a.id)).toEqual([adapter]);
     const got = detectSoftwareFeeds(page);
     expect(urls(got)).toEqual(expected);
@@ -265,38 +287,41 @@ describe("software adapters (page fixtures)", () => {
   });
 
   it("a page that only mentions forum software is not detected as any of them", () => {
-    const page = { html: fixture("plain"), url: new URL("https://example.org/about") };
+    const page = pageOf(fixture("plain"), "https://example.org/about");
     expect(detectSoftware(page)).toEqual([]);
     expect(detectSoftwareFeeds(page)).toEqual([]);
   });
 
   it("a cross-origin install base (CDN) is ignored in favour of the path heuristic", () => {
     const html = fixture("discourse-subfolder").replace('data-base-uri="/en/wow"', 'data-base-uri="https://cdn.example.net/x"');
-    const got = detectSoftwareFeeds({ html, url: new URL("https://forums.example.com/en/wow/latest") });
+    const got = detectSoftwareFeeds(pageOf(html, "https://forums.example.com/en/wow/latest"));
     expect(urls(got)).toEqual(["https://forums.example.com/en/wow/latest.rss"]);
   });
 
   it("phpBB route feeds are skipped when the id parameter is missing or not a plain token", () => {
     const html = fixture("phpbb");
-    expect(urls(detectSoftwareFeeds({ html, url: new URL("https://f.example.com/viewforum.php") }))).toEqual([
+    expect(urls(detectSoftwareFeeds(pageOf(html, "https://f.example.com/viewforum.php")))).toEqual([
       "https://f.example.com/app.php/feed",
       "https://f.example.com/app.php/feed/topics",
       "https://f.example.com/feed.php",
     ]);
-    expect(urls(detectSoftwareFeeds({ html, url: new URL("https://f.example.com/viewforum.php?f=2%2F..%2Fx") }))).not.toContain(
+    expect(urls(detectSoftwareFeeds(pageOf(html, "https://f.example.com/viewforum.php?f=2%2F..%2Fx")))).not.toContain(
       "https://f.example.com/app.php/feed/forum/2/../x",
     );
   });
 
   it("candidate titles name the software", () => {
-    const [first] = detectSoftwareFeeds({ html: fixture("xenforo"), url: new URL("https://xf.example.com/community/") });
+    const [first] = detectSoftwareFeeds(pageOf(fixture("xenforo"), "https://xf.example.com/community/"));
     expect(first).toMatchObject({ title: "XenForo · latest threads", kind: "latest", via: { family: "forum", name: "XenForo" }, scope: "site" });
   });
 });
 
 describe("engine helpers", () => {
   it("generatorValues reads every generator meta, any attribute order / quoting", () => {
-    expect(generatorValues(`<meta content='blogger' name='generator'/><meta name="generator" content="WordPress 6.6">`)).toEqual(["blogger", "WordPress 6.6"]);
+    expect(generatorValues(doc(`<meta content='blogger' name='generator'/><meta name="Generator" content="WordPress 6.6">`))).toEqual([
+      "blogger",
+      "WordPress 6.6",
+    ]);
   });
 
   it("expandTemplate refuses non-http results and missing values", () => {
@@ -332,5 +357,55 @@ describe("RSSHub-only platforms", () => {
 
   it("other hosts are not RSSHub-only", () => {
     expect(rsshubOnlyPlatform(new URL("https://www.reddit.com/r/x"))).toBeNull();
+  });
+});
+
+describe("host matching", () => {
+  it("a trailing root dot is the same host and still builds the canonical endpoint", () => {
+    expect(urls(matchPlatformAdapters(new URL("https://www.moddb.com./mods/mental-omega")))).toEqual([
+      "https://rss.moddb.com/mods/mental-omega/articles/feed/rss.xml",
+      "https://rss.moddb.com/mods/mental-omega/downloads/feed/rss.xml",
+    ]);
+  });
+
+  it("endpoints are always on the platform's own domain, whatever the page host looked like", () => {
+    for (const raw of ["https://sub.moddb.com/mods/x", "https://WWW.MODDB.COM/mods/x"]) {
+      for (const c of matchPlatformAdapters(new URL(raw))) expect(new URL(c.url).hostname).toBe("rss.moddb.com");
+    }
+  });
+});
+
+describe("hostile pages (ReDoS guard: detection must stay linear on attacker HTML)", () => {
+  const timed = (fn: () => void) => {
+    const t0 = performance.now();
+    fn();
+    return performance.now() - t0;
+  };
+  // Parsing is measured separately: discovery parses the page once anyway.
+  const run = (html: string, url = "https://evil.example/forum/") => {
+    const page = pageOf(html, url);
+    return timed(() => {
+      detectSoftwareFeeds(page);
+      for (const a of SOFTWARE_ADAPTERS) detectSoftware(page, [a]);
+    });
+  };
+
+  it.each([
+    ["unterminated <meta ×100k", "<meta ".repeat(100_000)],
+    ["api.w.org link prefix ×100k", '<link rel="https://api.w.org/" '.repeat(100_000)],
+    ["unterminated <html / <body attributes", `<html ${"x ".repeat(100_000)}`],
+    ["generator meta with a huge content value", `<meta name="generator" content="${"WordPress ".repeat(50_000)}">`],
+    ["inline script full of near-miss base keys", `<body class="ipsApp"><script>${'baseURL: "'.repeat(50_000)}"relative_path":"${'"baseUrl": '.repeat(20_000)}</script>`],
+  ])("%s completes in < 200 ms", (_label, html) => {
+    expect(run(html)).toBeLessThan(200);
+  });
+
+  it("base-path script patterns are bounded (start with a literal, no unbounded quantifiers)", () => {
+    for (const a of SOFTWARE_ADAPTERS) {
+      for (const re of a.base?.script ?? []) {
+        expect(re.source, a.id).not.toMatch(/(?<!\\)[*+](?!\?)/);
+        expect(re.source, a.id).toMatch(/^["\w]/);
+      }
+    }
   });
 });

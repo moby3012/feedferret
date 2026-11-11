@@ -362,3 +362,33 @@ describe("run budget", () => {
     expect(result.partial).toBeUndefined();
   });
 });
+
+describe("shared host backoff accounting", () => {
+  it("three parallel 429s from one host record ONE failure (base window, no exponential inflation)", async () => {
+    const links = ["/a.xml", "/b.xml", "/c.xml"].map((h) => `<link rel="alternate" type="application/rss+xml" href="${h}">`).join("");
+    mocks.routes.set("https://burst.example.com/", `<html><head>${links}</head></html>`);
+    for (const f of ["a", "b", "c"]) mocks.routes.set(`https://burst.example.com/${f}.xml`, refused(429));
+    await discoverFeeds("https://burst.example.com/");
+    // Three candidates went out in one parallel batch and all answered 429.
+    expect(mocks.calls.filter((c) => c.url.endsWith(".xml"))).toHaveLength(3);
+    const remaining = hostBackoffRemainingMs("https://burst.example.com/x");
+    expect(remaining).toBeGreaterThan(0);
+    // host-backoff: 429 without Retry-After = 5 min base for the FIRST failure (2nd would be 10, 3rd 20).
+    expect(remaining).toBeLessThanOrEqual(5 * 60 * 1000);
+  });
+});
+
+describe("transport memory within a run", () => {
+  it("after the browser-like client got past a refusal, the host's next requests start with it", async () => {
+    mocks.routes.set("https://pick.example.com/", {
+      plain: refused(403),
+      impit: '<html><head><link rel="alternate" type="application/rss+xml" href="/feed.xml"></head></html>',
+    });
+    mocks.routes.set("https://pick.example.com/feed.xml", { plain: refused(403), impit: rss("Picked") });
+    const result = await discoverFeeds("https://pick.example.com/");
+    expect(result.feeds.map((f) => f.url)).toEqual(["https://pick.example.com/feed.xml"]);
+    expect(mocks.calls.filter((c) => c.url === "https://pick.example.com/feed.xml")).toEqual([
+      { url: "https://pick.example.com/feed.xml", impersonate: true },
+    ]);
+  });
+});

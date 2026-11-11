@@ -38,6 +38,8 @@ export class DiscoveryBudget {
   private used = 0;
   private stop: DiscoveryStopReason | null = null;
   private readonly blockedHosts = new Set<string>();
+  /** Transport that last worked per host in this run (true = browser-like impit). */
+  private readonly workingTransport = new Map<string, boolean>();
 
   constructor(
     readonly limits: { deadlineMs: number; maxRequests: number } = {
@@ -98,17 +100,47 @@ export class DiscoveryBudget {
     return true;
   }
 
-  /** Records a failed request: a rate-limit response blocks its host (both transports, shared backoff). */
+  /**
+   * Records a failed request at the URL that actually answered (the final
+   * redirect hop). A rate-limit response blocks its host for this run (both
+   * transports) and is written to the shared host backoff ONCE per host per
+   * run — parallel 429s from one batch must not inflate the exponential
+   * backoff that full-text syncs honour too.
+   */
   noteFailure(url: string, err: unknown): void {
     if (!isRateLimitResponse(err)) return;
     const host = hostOf(url);
-    if (!host) return;
+    if (!host || this.blockedHosts.has(host)) return;
     this.blockedHosts.add(host);
     recordHostFailure(url, err);
   }
 
-  /** Redirect hops count against the budget and may not land on a blocked host. */
-  readonly redirectGuard = (nextUrl: string): string | null => (this.take(nextUrl) ? nextUrl : null);
+  /** The transport that worked for this host earlier in the run, if any. */
+  preferredImpersonate(url: string): boolean | undefined {
+    const host = hostOf(url);
+    return host ? this.workingTransport.get(host) : undefined;
+  }
+
+  noteWorkingTransport(url: string, impersonate: boolean): void {
+    const host = hostOf(url);
+    if (host) this.workingTransport.set(host, impersonate);
+  }
+
+  /**
+   * Per-request redirect accounting: every hop claims budget (and may not go
+   * to a blocked host); `finalUrl()` is the last URL the request reached.
+   */
+  track(url: string): { redirectGuard: (next: string) => string | null; finalUrl: () => string } {
+    let final = url;
+    return {
+      redirectGuard: (next: string) => {
+        if (!this.take(next)) return null;
+        final = next;
+        return next;
+      },
+      finalUrl: () => final,
+    };
+  }
 
   dispose(): void {
     clearTimeout(this.timer);

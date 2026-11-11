@@ -847,7 +847,10 @@ export function parseYoutubePage(html: string): { channelId: string; title: stri
   const idRe = new RegExp(YT_CHANNEL_ID);
   let channelId: string | null = null;
 
-  for (const tag of html.match(/<(?:link|meta)\b[^>]*>/gi) ?? []) {
+  // `[^<>]` stops at the next tag start, so a page of unterminated `<meta `
+  // stays linear (an unbounded `[^>]*` here was quadratic on 1–4 MB pages).
+  const tags = html.match(/<(?:link|meta)\b[^<>]{0,4000}>/gi) ?? [];
+  for (const tag of tags) {
     if (/itemprop=["'](?:channelId|identifier)["']/i.test(tag)) {
       const c = /content=["'](UC[\w-]{22})["']/i.exec(tag);
       if (c) {
@@ -857,7 +860,8 @@ export function parseYoutubePage(html: string): { channelId: string; title: stri
     }
   }
   if (!channelId) {
-    for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
+    for (const tag of tags) {
+      if (!/^<link\b/i.test(tag)) continue;
       const rss = /feeds\/videos\.xml\?channel_id=(UC[\w-]{22})/i.exec(tag);
       if (rss) {
         channelId = rss[1];
@@ -873,14 +877,15 @@ export function parseYoutubePage(html: string): { channelId: string; title: stri
     }
   }
   if (!channelId) {
-    const json = /"(?:externalId|channelId)"\s*:\s*"(UC[\w-]{22})"/.exec(html);
+    const json = /"(?:externalId|channelId)"\s{0,8}:\s{0,8}"(UC[\w-]{22})"/.exec(html);
     if (json) channelId = json[1];
   }
   if (!channelId || !idRe.test(channelId)) return null;
 
-  const author = /<link\b[^>]*itemprop=["']name["'][^>]*content=["']([^"']{1,200})["']/i.exec(html);
-  const og = /<meta\b[^>]*property=["']og:title["'][^>]*content=["']([^"']{1,200})["']/i.exec(html);
-  const rawTitle = author?.[1] ?? og?.[1] ?? null;
+  const contentOf = (tag: string) => /content=["']([^"']{1,200})["']/i.exec(tag)?.[1] ?? null;
+  const author = tags.find((t) => /^<link\b/i.test(t) && /itemprop=["']name["']/i.test(t));
+  const og = tags.find((t) => /^<meta\b/i.test(t) && /property=["']og:title["']/i.test(t));
+  const rawTitle = (author && contentOf(author)) ?? (og && contentOf(og)) ?? null;
   return { channelId, title: rawTitle ? decodeEntities(rawTitle) : null };
 }
 

@@ -62,19 +62,32 @@ export type SoftwareAdapter = {
   id: string;
   name: string;
   family: AdapterFamily;
-  /** Any one signal identifies the software. */
+  /**
+   * Any one signal identifies the software. Signals are evaluated on the
+   * PARSED page (lib/feed-adapters/engine.ts) — never regexes over raw HTML,
+   * which an attacker-controlled page could turn into catastrophic
+   * backtracking.
+   */
   detect: {
-    /** `<meta name="generator" content=…>` */
+    /** Tested against each `<meta name="generator">` content (capped at 200 chars). */
     generator?: RegExp;
-    /** Structural HTML fingerprints (class names, script names, markup). */
-    html?: RegExp[];
-    /** Response headers (lower-case name → value pattern). */
+    /** CSS selectors; any match identifies the software. */
+    selectors?: string[];
+    /** Plain substrings of inline `<script>` text (first 64 KiB of all inline scripts). */
+    scriptIncludes?: string[];
+    /** Response headers (lower-case name → value pattern; header value capped at 200 chars). */
     headers?: Record<string, RegExp>;
   };
   /** Install path of the software on its host (forums often live in /forum/). */
   base?: {
-    /** Capture group 1 = absolute URL or path of the install root (JSON `\/` escapes allowed). */
-    html?: RegExp[];
+    /** Element attributes holding the install root (absolute URL or path); `stripSuffix` is cut off the path. */
+    attrs?: Array<{ selector: string; attr: string; stripSuffix?: string }>;
+    /**
+     * Inline-script patterns (capture group 1 = install root, JSON `\/` escapes
+     * allowed). Must start with a literal and use bounded quantifiers only —
+     * the guard test in tests/lib/feed-adapters.test.ts enforces linear time.
+     */
+    script?: RegExp[];
     /** Path segments the software's own routes start with; everything before the first one is the base. */
     before?: string[];
     /** Neither signal matched: "dir" = the page's directory (forums), default = site root. */
@@ -131,7 +144,9 @@ export const PLATFORM_ADAPTERS: PlatformAdapter[] = [
     hosts: ["nexusmods.com"],
     routes: [
       {
-        pattern: /^\/(?:games\/)?(?!users\b|games\b|about\b|news\b|mods\b)([\w-]+)(?:\/.*)?$/,
+        // First segment is a game domain name, except the site's own sections.
+        pattern:
+          /^\/(?:games\/)?(?!(?:users|games|about|news|mods|login|logout|register|search|premium|account|settings|support|help|contact|privacy|terms|rss|api|images|content|collections|media|members|messages|notifications|newsletter|careers|authors|discord|wiki|forums|docs)(?:\/|$))([\w-]+)(?:\/.*)?$/,
         feeds: [
           { url: "https://www.nexusmods.com/{$1}/rss/newtoday/", kind: "new", label: "new mods" },
           { url: "https://www.nexusmods.com/{$1}/rss/updatedtoday/", kind: "releases", label: "updated mods" },
@@ -187,11 +202,11 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     family: "forum",
     detect: {
       generator: /^Discourse\b/i,
-      html: [/<meta[^>]+id=["']data-discourse-setup["']/i, /<meta[^>]+name=["']discourse_theme_id["']/i],
+      selectors: ["meta#data-discourse-setup", 'meta[name="discourse_theme_id"]'],
     },
     base: {
       fallback: "dir",
-      html: [/<meta[^>]+data-base-uri=["']([^"']*)["']/i],
+      attrs: [{ selector: "meta#data-discourse-setup[data-base-uri]", attr: "data-base-uri" }],
       before: ["c", "t", "u", "g", "groups", "tag", "tags", "latest", "top", "new", "hot", "posts", "categories", "badges"],
     },
     routes: [
@@ -211,7 +226,7 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     family: "forum",
     detect: {
       generator: /phpBB/i,
-      html: [/\b(?:viewforum|viewtopic)\.php\?(?:[^"'\s]*&(?:amp;)?)?[ft]=\d/i, /\bucp\.php\?mode=(?:login|register)/i],
+      selectors: ['a[href*="viewforum.php?f="]', 'a[href*="viewtopic.php?t="]', 'a[href*="ucp.php?mode=login"]', "body#phpbb"],
     },
     base: { fallback: "dir" },
     routes: [
@@ -240,9 +255,7 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     id: "xenforo",
     name: "XenForo",
     family: "forum",
-    detect: {
-      html: [/<html[^>]+\bid=["']XF["']/i, /\bdata-xf-init=/i, /\bXenForo\.(?:init|activate)\b/],
-    },
+    detect: { selectors: ["html#XF", "[data-xf-init]"], scriptIncludes: ["XenForo.init", "XenForo.activate"] },
     base: { fallback: "dir", before: ["forums", "threads", "whats-new", "members", "search", "tags", "help"] },
     routes: [
       { pattern: /^\/forums\/([^/]+\.\d+)(?:\/.*)?$/, feeds: [{ url: "{base}/forums/{$1}/index.rss", kind: "category", label: "forum" }] },
@@ -253,7 +266,11 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     id: "vbulletin",
     name: "vBulletin",
     family: "forum",
-    detect: { generator: /vBulletin/i, html: [/\bvBulletin\.version\b/, /\bvb_login_username\b/, /\bvbmenu_/] },
+    detect: {
+      generator: /vBulletin/i,
+      selectors: ['input[name="vb_login_username"]', '[id^="vbmenu_"]'],
+      scriptIncludes: ["vBulletin.version", "vb_disable_ajax"],
+    },
     base: { fallback: "dir" },
     routes: [
       {
@@ -272,10 +289,10 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     id: "invision",
     name: "Invision Community",
     family: "forum",
-    detect: { html: [/<body[^>]+class=["'][^"']*\bipsApp\b/i, /\bipsSettings\s*=/, /\bdata-ipsquote\b/i] },
+    detect: { selectors: ["body.ipsApp", "[data-ipsquote]"], scriptIncludes: ["ipsSettings"] },
     base: {
       fallback: "dir",
-      html: [/\bbaseURL\s*:\s*["']([^"']+)["']/],
+      script: [/baseURL\s{0,10}:\s{0,10}["']([^"'\s]{1,300})["']/],
       before: ["forum", "topic", "discover", "profile", "search", "rss"],
     },
     routes: [
@@ -288,8 +305,8 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     id: "flarum",
     name: "Flarum",
     family: "forum",
-    detect: { html: [/\bid=["']flarum-loading["']/i, /\bflarum\.core\.app\b/, /\bflarum-loading\b/] },
-    base: { fallback: "dir", html: [/"baseUrl"\s*:\s*"([^"]+)"/], before: ["d", "t", "u", "tags", "all"] },
+    detect: { selectors: ["#flarum-loading", "script#flarum-json-payload"], scriptIncludes: ["flarum.core.app"] },
+    base: { fallback: "dir", script: [/"baseUrl"\s{0,10}:\s{0,10}"([^"\s]{1,300})"/], before: ["d", "t", "u", "tags", "all"] },
     routes: [
       { pattern: /^\/d\/(\d+)(?:-[^/]*)?(?:\/.*)?$/, feeds: [{ url: "{base}/atom/d/{$1}", kind: "thread", label: "discussion" }] },
       { pattern: /^\/t\/([^/]+)\/?$/, feeds: [{ url: "{base}/atom/t/{$1}", kind: "tag", label: "tag" }] },
@@ -305,9 +322,14 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     family: "forum",
     detect: {
       headers: { "x-powered-by": /NodeBB/i },
-      html: [/\/assets\/nodebb\.min\.js/i, /<meta[^>]+name=["']generator["'][^>]+NodeBB/i, /\bdata-nodebb\b/i],
+      generator: /NodeBB/i,
+      selectors: ['script[src*="/assets/nodebb.min.js"]', "[data-nodebb]"],
     },
-    base: { fallback: "dir", html: [/"relative_path"\s*:\s*"([^"]*)"/], before: ["category", "topic", "user", "tags", "recent", "popular", "unread"] },
+    base: {
+      fallback: "dir",
+      script: [/"relative_path"\s{0,10}:\s{0,10}"([^"\s]{0,300})"/],
+      before: ["category", "topic", "user", "tags", "recent", "popular", "unread"],
+    },
     routes: [
       { pattern: /^\/category\/(\d+)(?:\/.*)?$/, feeds: [{ url: "{base}/category/{$1}.rss", kind: "category", label: "category" }] },
       { pattern: /^\/topic\/(\d+)(?:\/.*)?$/, feeds: [{ url: "{base}/topic/{$1}.rss", kind: "thread", label: "topic" }] },
@@ -318,7 +340,7 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     id: "mybb",
     name: "MyBB",
     family: "forum",
-    detect: { generator: /MyBB/i, html: [/\bmy_post_key\b/, /\bforumdisplay\.php\?fid=\d/i] },
+    detect: { generator: /MyBB/i, selectors: ['a[href*="forumdisplay.php?fid="]'], scriptIncludes: ["my_post_key"] },
     base: { fallback: "dir" },
     routes: [{ pattern: /^\/forumdisplay\.php$/, feeds: [{ url: "{base}/syndication.php?fid={?fid}", kind: "category", label: "forum" }] }],
     site: [{ url: "{base}/syndication.php", kind: "latest", label: "latest threads" }],
@@ -327,7 +349,7 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     id: "smf",
     name: "Simple Machines Forum",
     family: "forum",
-    detect: { generator: /\bSMF\b|Simple Machines/i, html: [/\bsmf_scripturl\b/, /\bvar\s+smf_/] },
+    detect: { generator: /\bSMF\b|Simple Machines/i, scriptIncludes: ["smf_scripturl", "var smf_"] },
     base: { fallback: "dir" },
     routes: [],
     site: [{ url: "{base}/index.php?action=.xml;type=rss2", kind: "latest", label: "latest posts" }],
@@ -336,9 +358,12 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     id: "wordpress",
     name: "WordPress",
     family: "blog",
-    detect: { generator: /^WordPress\b/i, html: [/<link[^>]+rel=["']https:\/\/api\.w\.org\/["']/i, /\/wp-content\/(?:themes|plugins)\//i] },
+    detect: {
+      generator: /^WordPress\b/i,
+      selectors: ['link[rel="https://api.w.org/"]', 'link[href*="/wp-content/themes/"]', 'script[src*="/wp-content/"]', 'link[href*="/wp-content/plugins/"]'],
+    },
     base: {
-      html: [/<link[^>]+rel=["']https:\/\/api\.w\.org\/["'][^>]+href=["']([^"']+?)\/wp-json\/?["']/i],
+      attrs: [{ selector: 'link[rel="https://api.w.org/"][href]', attr: "href", stripSuffix: "/wp-json" }],
       before: ["category", "tag", "author", "page", "feed"],
     },
     routes: [
@@ -360,7 +385,7 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     id: "substack",
     name: "Substack",
     family: "blog",
-    detect: { generator: /^Substack\b/i, html: [/https:\/\/substackcdn\.com\//i] },
+    detect: { generator: /^Substack\b/i, selectors: ['link[href^="https://substackcdn.com/"]', 'script[src^="https://substackcdn.com/"]'] },
     base: { before: ["p", "archive", "about", "s"] },
     routes: [],
     site: [{ url: "{origin}/feed", kind: "posts", label: "posts" }],
@@ -378,7 +403,7 @@ export const SOFTWARE_ADAPTERS: SoftwareAdapter[] = [
     name: "MediaWiki",
     family: "wiki",
     detect: { generator: /^MediaWiki\b/i },
-    base: { html: [/<link[^>]+rel=["']EditURI["'][^>]+href=["']([^"']+?)\/api\.php/i], before: ["wiki", "index.php"] },
+    base: { attrs: [{ selector: 'link[rel="EditURI"][href]', attr: "href", stripSuffix: "/api.php" }], before: ["wiki", "index.php"] },
     routes: [],
     site: [{ url: "{base}/index.php?title=Special:RecentChanges&feed=atom", kind: "activity", label: "recent changes" }],
   },
