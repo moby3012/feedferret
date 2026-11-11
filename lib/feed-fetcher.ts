@@ -1,5 +1,7 @@
 import Parser from "rss-parser";
 import {
+  BLOCKED_REQUEST_HEADERS,
+  MAX_FEED_REDIRECTS,
   FeedHttpOptions,
   FeedExtractionConfig,
   normalizeSourceType,
@@ -160,6 +162,7 @@ function buildJsonArticles(json: unknown, config: FeedExtractionConfig): Fetched
         publishedAt: dateFrom(dotGet(item, settings.jsonItemTimestamp || settings.itemTimestamp || "date_published"), settings.jsonItemTimeFormat || settings.itemTimeFormat),
         imageUrl: firstString(dotGet(item, settings.jsonItemThumbnail || settings.itemThumbnail || "image")) || firstString(dotGet(item, "banner_image")),
         externalId: firstString(dotGet(item, settings.jsonItemUid || settings.itemUid || "id")),
+        guid: firstString(dotGet(item, settings.jsonItemUid || settings.itemUid || "id")) || null,
         categories: categoriesFrom(dotGet(item, settings.jsonItemCategories || settings.itemCategories || "tags")),
       };
     }),
@@ -181,7 +184,10 @@ function headersFromFeed(feed: FeedFetchConfig, http: FeedHttpOptions) {
   const headers: Record<string, string> = {};
   for (const header of splitHeaderLines(http.CURLOPT_HTTPHEADER)) {
     const idx = header.indexOf(":");
-    if (idx > 0) headers[header.slice(0, idx).trim()] = header.slice(idx + 1).trim();
+    if (idx <= 0) continue;
+    const name = header.slice(0, idx).trim();
+    if (BLOCKED_REQUEST_HEADERS.has(name.toLowerCase())) continue;
+    headers[name] = header.slice(idx + 1).trim();
   }
   const userAgent = String(http.CURLOPT_USERAGENT || feed.customUserAgent || "FeedFerret/1.0 (+https://github.com/moby3012/feedferret)");
   headers["User-Agent"] = userAgent;
@@ -201,7 +207,7 @@ async function fetchText(storedFeed: FeedFetchConfig, accept: string): Promise<C
   const http = parseHttpOptions(feed);
   const timeoutMs = (feed.fetchTimeoutSecs ?? 30) * 1000;
   const maxBytes = feed.maxSizeKb ? feed.maxSizeKb * 1024 : 5 * 1024 * 1024;
-  const maxRedirects = parseIntLike(String(http.CURLOPT_MAXREDIRS ?? "")) ?? 10;
+  const maxRedirects = Math.min(MAX_FEED_REDIRECTS, Math.max(0, parseIntLike(String(http.CURLOPT_MAXREDIRS ?? "")) ?? 10));
   const follow = http.CURLOPT_FOLLOWLOCATION === undefined ? true : parseBooleanLike(String(http.CURLOPT_FOLLOWLOCATION));
   const headers = headersFromFeed(feed, http);
   headers.Accept = accept;
@@ -333,6 +339,7 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
         publishedAt: pubDate ? dateFrom(pubDate) : null,
         imageUrl: extractImageFromHtml(content) || item.enclosure?.url || item["media:content"]?.$?.url || null,
         externalId: htmlText(item.guid) || htmlText(item.id) || htmlText(item.link) || null,
+        guid: htmlText(item.guid) || htmlText(item.id) || null,
         enclosures: item.enclosure?.url ? [{ href: item.enclosure.url, type: item.enclosure.type || "", ...(Number(item.enclosure.length) > 0 ? { length: Number(item.enclosure.length) } : {}) }] : [],
         ...mediaFromItem(item),
         categories: categoriesFrom(item.categories),

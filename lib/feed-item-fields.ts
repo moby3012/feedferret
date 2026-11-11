@@ -12,6 +12,8 @@ export type FetchedFeedArticle = {
    * dedupe-key input for title-based unicityCriteria. Defaults to `title`.
    */
   identityTitle?: string;
+  /** Title exactly as supplied by the feed ("" when none); FreshRSS `sha1:*title*` criteria hash it. */
+  rawTitle?: string;
   link: string;
   content: string;
   summary?: string | null;
@@ -24,6 +26,8 @@ export type FetchedFeedArticle = {
   /** `itunes:duration` / `media:content@duration`, in seconds. */
   durationSecs?: number | null;
   externalId?: string | null;
+  /** The item's own guid/id as published (no link fallback); FreshRSS `sha1:*` unicity needs it. */
+  guid?: string | null;
   categories?: string[];
   /** RSS `<source>` element text (publisher name on aggregators like Google News). */
   sourceName?: string | null;

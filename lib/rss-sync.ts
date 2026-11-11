@@ -8,7 +8,7 @@ import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { computeContentHash, normalizeLinkForComparison } from "./content-hash";
-import { buildDedupeKey } from "./dedupe-key";
+import { buildDedupeKey, isFreshRssHashedCriteria, legacyDedupeKeys } from "./dedupe-key";
 import { decryptIfValue } from "./crypto";
 import type { AiConfig, MeteredAiConfig } from "./ai-summary";
 import { logger, urlForLog } from "./logger";
@@ -18,6 +18,7 @@ import { isHtmlWorkerError, runInHtmlWorker } from "./html-worker";
 import { runAsBackgroundHtmlWork } from "./html-worker/pool";
 import type { SelectorExtractOutput } from "./selector-extract";
 import { resolveFullTextMode } from "./full-text-mode";
+import { filterByFullTextConditions } from "./full-text-conditions";
 import { EscalationBudgetExhaustedError, fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
 import { decideFullText } from "./extraction-quality";
 import { classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
@@ -57,6 +58,11 @@ export interface ArticleSyncInput {
     link: string;
     externalId: string | null;
     dedupeKey: string;
+    /**
+     * Keys this article may still be stored under from an older identity algorithm
+     * (`legacyDedupeKeys`). A row found only under one of them is re-keyed in place.
+     */
+    legacyDedupeKeys?: string[];
     contentHash: string | null;
     content: string;
     excerpt: string;
@@ -163,6 +169,74 @@ function enrichFields(article: ArticleSyncInput) {
     };
 }
 
+const EXISTING_ROW_SELECT = {
+    id: true,
+    dedupeKey: true,
+    title: true,
+    link: true,
+    externalId: true,
+    content: true,
+    excerpt: true,
+    author: true,
+    publishedAt: true,
+    imageUrl: true,
+    enclosures: true,
+    updatedAt: true,
+    feedContent: true,
+    fullTextStatus: true,
+    fullTextAttempts: true,
+    fullTextFetchedAt: true,
+} as const;
+
+type ExistingArticleRow = { id: string; dedupeKey: string | null; updatedAt: Date };
+
+/**
+ * Identity upgrade (FreshRSS `sha1:*` unicity): an article not found under its
+ * current key but stored under one of its `legacyDedupeKeys` is the same article.
+ * Its row is re-keyed in place, keeping id, read/star state and labels, and
+ * `updatedAt` (re-keying is not a content change; GReader ot/nt clocks rely on it).
+ * The update is conditional on the old key and `updatedAt`, so a concurrent sync
+ * that already moved or changed the row wins and nothing is duplicated by us.
+ * Returns the re-keyed rows (with their new key) for the regular change check.
+ */
+async function rekeyLegacyRows<Row extends ExistingArticleRow>(
+    userId: string,
+    feedId: string,
+    articles: ArticleSyncInput[],
+    found: Row[],
+): Promise<Row[]> {
+    const foundKeys = new Set(found.map((row) => row.dedupeKey));
+    const pending = articles.filter((article) => article.legacyDedupeKeys?.length && !foundKeys.has(article.dedupeKey));
+    if (!pending.length) return [];
+
+    const legacyKeys = [...new Set(pending.flatMap((article) => article.legacyDedupeKeys!))];
+    const legacyRows = (await db.article.findMany({
+        where: { userId, feedId, dedupeKey: { in: legacyKeys } },
+        select: EXISTING_ROW_SELECT,
+    })) as unknown as Row[];
+    if (!legacyRows.length) return [];
+
+    const byKey = new Map(legacyRows.map((row) => [row.dedupeKey as string, row]));
+    const claimed = new Set<string>();
+    const rekeyed: Row[] = [];
+    for (const article of pending) {
+        const row = article.legacyDedupeKeys!.map((key) => byKey.get(key)).find((candidate) => candidate && !claimed.has(candidate.id));
+        if (!row) continue;
+        claimed.add(row.id);
+        try {
+            const result = await db.article.updateMany({
+                where: { id: row.id, userId, dedupeKey: row.dedupeKey, updatedAt: row.updatedAt },
+                data: { dedupeKey: article.dedupeKey, updatedAt: row.updatedAt },
+            });
+            if (result.count === 1) rekeyed.push({ ...row, dedupeKey: article.dedupeKey });
+        } catch (error) {
+            // Unique (userId, feedId, dedupeKey) race: another sync stored the new key first.
+            logger.warn("[rss-sync] re-keying a legacy article row failed:", error);
+        }
+    }
+    return rekeyed;
+}
+
 /**
  * Folds articles that share a dedupe key within the same batch down to one entry,
  * mirroring what a sequential `upsert` loop over the same array would leave in the
@@ -250,25 +324,9 @@ export async function upsertArticleBatch(
 
     const existingRows = await db.article.findMany({
         where: { userId, feedId, dedupeKey: { in: dedupeKeys } },
-        select: {
-            id: true,
-            dedupeKey: true,
-            title: true,
-            link: true,
-            externalId: true,
-            content: true,
-            excerpt: true,
-            author: true,
-            publishedAt: true,
-            imageUrl: true,
-            enclosures: true,
-            updatedAt: true,
-            feedContent: true,
-            fullTextStatus: true,
-            fullTextAttempts: true,
-            fullTextFetchedAt: true,
-        },
+        select: EXISTING_ROW_SELECT,
     });
+    existingRows.push(...(await rekeyLegacyRows(userId, feedId, articles, existingRows)));
     const existingByDedupeKey = new Map(
         existingRows
             .filter((row) => row.dedupeKey !== null)
@@ -605,8 +663,10 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             return maxChars && content.length > maxChars ? content.slice(0, maxChars) : content;
         });
         // Item bodies are attacker-controlled HTML: sanitized in the HTML
-        // worker pool on bounded input, never on the main thread.
-        const sanitizedItems = await sanitizeFeedItemBodies(itemContents);
+        // worker pool on bounded input, never on the main thread. The feed's
+        // remove-selectors (FreshRSS `cssContentFilter`) run in the same worker
+        // task, on the feed's own content too — not only on downloaded full text.
+        const sanitizedItems = await sanitizeFeedItemBodies(itemContents, { removeSelectors: feed.fullTextRemoveSelectors });
 
         const articles = remoteFeed.articles.map((item, index) => {
             const content = itemContents[index];
@@ -619,8 +679,19 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             // (`identityTitle`), so a synthesized display title never changes
             // a title-based dedupe key of an existing row.
             const identityItem = { ...item, title: item.identityTitle ?? item.title };
-            const dedupeKey = (item as GoogleNewsPreparedArticle).dedupeKey
-                ?? (isGoogleNews ? googleNewsStableKey(identityItem) : buildDedupeKey(feed, identityItem, externalId));
+            const preparedKey = (item as GoogleNewsPreparedArticle).dedupeKey;
+            const hashedCriteria = !preparedKey && !isGoogleNews && isFreshRssHashedCriteria(feed.unicityCriteria);
+            // FreshRSS hashes the title as published ("" when absent, never "Untitled",
+            // or every title-less item would collide) and the unmodified content.
+            // `item.content` is still the body as published: remove-selectors and the size
+            // cap only apply to the copy sanitized in the HTML worker.
+            const hashedItem = hashedCriteria ? { ...item, title: item.rawTitle ?? item.title, content: item.content || item.summary || "" } : identityItem;
+            const dedupeKey = preparedKey
+                ?? (isGoogleNews ? googleNewsStableKey(identityItem) : buildDedupeKey(feed, hashedItem, externalId));
+            // Once a feed has been re-keyed for its criterion (marker), no legacy lookups.
+            const legacyKeys = hashedCriteria && feed.dedupeRekeyedFor !== feed.unicityCriteria
+                ? legacyDedupeKeys(feed, hashedItem, externalId, { ...identityItem, content: (item.content || item.summary || "") })
+                : [];
             // Linkless items get a synthetic link from the feed URL — without
             // connector secrets (legacy rows may still carry the RSSHub key).
             const link = item.link || `${publicFeedUrl}#${encodeURIComponent(dedupeKey)}`;
@@ -651,6 +722,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 ...((item as GoogleNewsPreparedArticle).linkCosmetic ? { linkCosmetic: true } : {}),
                 externalId,
                 dedupeKey,
+                ...(legacyKeys.length ? { legacyDedupeKeys: legacyKeys } : {}),
                 contentHash: computeContentHash(link),
                 content: sanitizedContent,
                 excerpt: excerpt,
@@ -673,6 +745,10 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         const { createdArticleIds, fullTextCandidateIds } = await upsertArticleBatch(articles, {
             fullTextActive: fullTextMode !== "off",
         });
+        // Every item of this fetch went through rekeyLegacyRows: later syncs skip the lookup.
+        if (isFreshRssHashedCriteria(feed.unicityCriteria) && feed.dedupeRekeyedFor !== feed.unicityCriteria) {
+            feedPatch.dedupeRekeyedFor = feed.unicityCriteria;
+        }
 
         await db.feed.update({
             where: { id: feed.id },
@@ -686,7 +762,12 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         // so it can't be trusted alone — resolveFullTextMode() falls back to the
         // legacy `autoFetchFullText` boolean.
         if (fullTextCandidateIds.length > 0 && fullTextMode !== "off") {
-            const candidates = fullTextCandidateIds.slice(0, MAX_FULL_TEXT_FETCHES_PER_SYNC);
+            // FreshRSS `cssFullContentConditions`: only matching articles get full text.
+            const eligible = await filterByFullTextConditions(userId, fullTextCandidateIds, feed.fullTextConditions).catch((e) => {
+                logger.warn("[rss-sync] full-text conditions failed, fetching all candidates:", e);
+                return fullTextCandidateIds;
+            });
+            const candidates = eligible.slice(0, MAX_FULL_TEXT_FETCHES_PER_SYNC);
             if (fullTextMode === "selector") {
                 await autoFetchFullTextForArticles(userId, candidates, feed);
             } else if (fullTextMode === "auto" || fullTextMode === "ai") {

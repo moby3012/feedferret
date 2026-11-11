@@ -789,6 +789,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
 
               <div className="space-y-1.5">
                 <Label className="text-body-sm font-medium">{t("fulltext.removeSelectors")}</Label>
+                <p className="text-footnote text-muted-foreground">{t("fulltext.removeSelectorsDescription")}</p>
                 <Input
                   value={fullTextRemoveSelectors}
                   onChange={(e) => setFullTextRemoveSelectors(e.target.value)}
@@ -973,10 +974,11 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
 
               <div className="space-y-1.5">
                 <Label className="text-body-sm font-medium">{t("scout.fullContentConditions")}</Label>
+                <p className="text-footnote text-muted-foreground">{t("scout.fullContentConditionsDescription")}</p>
                 <Textarea
                   value={fullTextConditions}
                   onChange={(e) => setFullTextConditions(e.target.value)}
-                  placeholder="cssFullContentConditions, one per line"
+                  placeholder={t("scout.fullContentConditionsPlaceholder")}
                   className="min-h-20 rounded-panel border-border/70 bg-background/70 font-mono text-footnote"
                 />
               </div>

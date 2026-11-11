@@ -383,7 +383,7 @@ export async function importFreshRssArticles(
       (item) => byFeedUrl(item).id,
       (item, feedId) => {
         const feed = byFeedUrl(item);
-        return buildDedupeKey(feed, { link: item.link, title: item.title, author: item.author, publishedAt: item.publishedAt }, item.guid || item.link || null) || feedId;
+        return buildDedupeKey(feed, { link: item.link, title: item.title, author: item.author, publishedAt: item.publishedAt, content: item.content }, item.guid || item.link || null) || feedId;
       },
     );
     await resolveLabels(Array.from(new Set(folded.flatMap((item) => item.labels))));

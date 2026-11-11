@@ -1072,7 +1072,9 @@ export async function getViewUnreadCount(feedId?: string | null, category?: stri
     return db.article.count({ where });
 }
 
-export async function exportOpml(selectedFeedIds?: string[]) {
+export async function exportOpml(selectedFeedIds?: string[], options?: { includeCredentials?: boolean }) {
+    // Opt-in only: cookies, headers, POST bodies, proxy and URL credentials (PM decision, #280).
+    const includeCredentials = options?.includeCredentials === true;
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -1081,7 +1083,7 @@ export async function exportOpml(selectedFeedIds?: string[]) {
         where.id = { in: selectedFeedIds };
     }
 
-    const [feeds, categories] = await Promise.all([
+    const [feeds, categories, user] = await Promise.all([
         db.feed.findMany({
             where,
             include: { category: { select: { id: true, name: true, parentId: true, opmlUrl: true } } },
@@ -1091,11 +1093,15 @@ export async function exportOpml(selectedFeedIds?: string[]) {
             where: { userId: session.user.id },
             orderBy: [{ order: "asc" }, { name: "asc" }],
         }),
+        db.user.findUnique({ where: { id: session.user.id }, select: { defaultUpdateFrequency: true } }),
     ]);
 
-    // Connector secrets are not the user's to export (N3); the user's own feed
-    // options (Scout Studio extension attributes) still are.
-    return generateOpml(await redactFeedsForClient(feeds), selectedFeedIds?.length ? [] : categories);
+    // Connector secrets are never exported (N3); the user's own feed credentials
+    // (cookies, headers, proxy, URL userinfo) only with the explicit opt-in.
+    return generateOpml(await redactFeedsForClient(feeds), selectedFeedIds?.length ? [] : categories, {
+        defaultUpdateFrequency: user?.defaultUpdateFrequency,
+        includeCredentials,
+    });
 }
 
 export async function exportUserData() {

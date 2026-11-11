@@ -148,7 +148,8 @@ export function useImportOpml() {
 
 export function useExportOpml() {
     return useMutation({
-        mutationFn: (selectedFeedIds?: string[]) => exportOpml(selectedFeedIds),
+        mutationFn: ({ ids, includeCredentials }: { ids?: string[]; includeCredentials?: boolean } = {}) =>
+            exportOpml(ids, { includeCredentials: includeCredentials === true }),
     })
 }
 

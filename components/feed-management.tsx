@@ -809,6 +809,7 @@ export function FeedManagement({
   const updateCategoryOrder = useUpdateCategoryOrder();
   const importOpml = useImportOpml();
   const exportOpml = useExportOpml();
+  const [exportCredentials, setExportCredentials] = useState(false);
   const exportUserData = useExportUserData();
   const createLabel = useCreateLabel();
   const deleteLabel = useDeleteLabel();
@@ -978,7 +979,7 @@ export function FeedManagement({
 
   const handleExport = () => {
     const ids = selectedExportIds.size > 0 ? Array.from(selectedExportIds) : undefined;
-    exportOpml.mutate(ids, {
+    exportOpml.mutate({ ids, includeCredentials: exportCredentials }, {
       onSuccess: (xml) => {
         const blob = new Blob([xml], { type: "text/xml" });
         const url = URL.createObjectURL(blob);
@@ -1684,6 +1685,21 @@ export function FeedManagement({
                       </label>
                     ))}
                   </div>
+                  <label className="flex items-start gap-3 rounded-row bg-muted px-3 py-2">
+                    <input
+                      type="checkbox"
+                      className="mt-1 rounded-chip"
+                      checked={exportCredentials}
+                      onChange={(e) => setExportCredentials(e.target.checked)}
+                      data-testid="export-include-credentials"
+                    />
+                    <span className="space-y-0.5">
+                      <span className="block text-body-sm font-medium">{t("importExport.includeCredentials")}</span>
+                      <span className={`block text-footnote ${exportCredentials ? "text-destructive" : "text-muted-foreground"}`}>
+                        {t("importExport.includeCredentialsWarning")}
+                      </span>
+                    </span>
+                  </label>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <Button
                       onClick={handleExport}

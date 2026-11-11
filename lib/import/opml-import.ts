@@ -18,12 +18,15 @@
 import { db } from "@/lib/db";
 import {
   httpOptionsFromOutline,
+  MAX_UPDATE_MINUTES,
+  MIN_UPDATE_MINUTES,
   parseOpml,
   scraperConfigFromOutline,
+  ttlToMinutes,
   unknownExtensions,
   type OpmlOutline,
 } from "@/lib/opml";
-import { EXTRACTION_SOURCE_TYPES, normalizeSourceType, stringifyNonEmpty } from "@/lib/feed-extraction";
+import { BLOCKED_REQUEST_HEADERS, EXTRACTION_SOURCE_TYPES, JSON_ATTRS, MAX_FEED_REDIRECTS, XPATH_ATTRS, normalizeSourceType, stringifyNonEmpty, type FeedExtractionConfig } from "@/lib/feed-extraction";
 import { MAX_SEARCH_QUERY, validateFeedUrl, validateOpml } from "@/lib/validation";
 import { translateFreshRssReadFilters } from "./frss-filters";
 import { assertSafeHttpOptionsProxy, proxyFromHttpOptions } from "@/lib/ssrf";
@@ -61,6 +64,8 @@ export interface FeedWriteData {
   fullTextConditions?: string;
   fullTextRemoveSelectors?: string;
   enableSelectorMode?: boolean;
+  /** FreshRSS priorities below "main" keep the feed out of the main stream ("All feeds"). */
+  hideFromAllFeeds?: boolean;
   updateFrequency?: number;
   mute?: boolean;
   customUserAgent?: string;
@@ -120,10 +125,31 @@ const REMOTE_BLOCKED_HTTP = [
   "CURLOPT_POSTFIELDS",
   "CURLOPT_PROXY",
   "CURLOPT_PROXYTYPE",
+  "CURLOPT_USERAGENT",
+  "CURLOPT_FOLLOWLOCATION",
+  "CURLOPT_MAXREDIRS",
 ] as const;
 
-const MIN_UPDATE_MINUTES = 5;
-const MAX_UPDATE_MINUTES = 10_080;
+// Selector / XPath / JSON-path expressions run on every fetch. They are evaluated in
+// the HTML worker pool under a time limit (lib/html-worker), but a cheap expression
+// can still burn a full task timeout per sync on a crafted page (`:has(* * * *)`,
+// `//*[contains(., …)]`). A third party who controls a remote (dynamic) OPML must not
+// be able to plant them in another user's feeds on a shared instance.
+let remoteBlockedExpressions: string[] | null = null;
+const getRemoteBlockedExpressions = () =>
+  (remoteBlockedExpressions ??= [
+    "cssFullContent", "cssContentFilter", "cssFullContentFilter", "cssFullContentConditions",
+    "xPathToJson", ...XPATH_ATTRS, ...JSON_ATTRS,
+  ]);
+
+// FreshRSS' importer check plus digits: its own `sha1:*` values need them (upstream
+// `^[a-z:_-]{2,64}$` silently drops every `sha1:` criterion). `link:title` also passes.
+const UNICITY_PATTERN = /^[a-z0-9:_-]{2,64}$/;
+
+/** Per attribute: one selector / XPath / JSON path / header list / proxy URL. */
+export const MAX_EXPRESSION_LENGTH = 2_000;
+/** Per attribute: newline-separated search expressions (read filters, full-text conditions). */
+export const MAX_FILTER_LIST_LENGTH = 10_000;
 
 function emptyReport(dryRun: boolean): OpmlImportReport {
   return {
@@ -152,10 +178,27 @@ export function mapOutlineToFeed(
     issues.push({ kind: "unsupported", code: "feed-url-invalid", subject, attribute: "xmlUrl", detail: urlError ?? "missing" });
     return null;
   }
+  const feedUrl = outline.xmlUrl;
 
-  const extensions = outline.extensions ?? {};
   const issue = (kind: ImportIssue["kind"], code: string, attribute?: string, detail?: string) =>
     issues.push({ kind, code, subject, attribute, detail });
+  // Oversized selectors / XPath / search expressions are refused at the door: they only
+  // make the worker's per-task time limit (lib/html-worker) the common case.
+  const extensions: Record<string, string> = {};
+  for (const [name, value] of Object.entries(outline.extensions ?? {})) {
+    const limit = name === "filtersActionRead" || name === "cssFullContentConditions" ? MAX_FILTER_LIST_LENGTH : MAX_EXPRESSION_LENGTH;
+    if (value.length > limit) {
+      issue("unsupported", "expression-too-long", name, `${value.length} characters (max ${limit}) — not imported`);
+      continue;
+    }
+    extensions[name] = value;
+  }
+  if (trust === "remote") {
+    const dropped = getRemoteBlockedExpressions().filter((name) => extensions[name] !== undefined);
+    for (const name of dropped) delete extensions[name];
+    if (dropped.length) issue("unsupported", "expression-remote-dropped", dropped.join(", "), "selectors and XPath/JSON expressions are not accepted from remote OPML");
+  }
+  outline = { ...outline, extensions };
 
   const sourceType = normalizeSourceType(outline.type);
   if (outline.type && !isKnownType(outline.type)) {
@@ -170,17 +213,53 @@ export function mapOutlineToFeed(
 
   let priority = "main";
   if (extensions.priority) {
-    if (PRIORITIES.has(extensions.priority)) priority = extensions.priority;
+    const given = extensions.priority.toLowerCase();
+    if (PRIORITIES.has(given)) priority = given;
     else issue("adapted", "priority-invalid", "priority", `'${extensions.priority}' replaced by 'main'`);
   }
+  if (priority === "feed" || priority === "hidden") {
+    issue("adapted", "priority-hidden-approximated", "priority", `'${priority}': hidden from "All feeds", still listed in its category`);
+  }
 
-  const scraper = scraperConfigFromOutline(outline);
+  let unicityCriteria = "id";
+  if (extensions.unicityCriteria) {
+    if (UNICITY_PATTERN.test(extensions.unicityCriteria)) unicityCriteria = extensions.unicityCriteria;
+    else issue("adapted", "unicity-invalid", "unicityCriteria", "invalid value replaced by 'id'");
+  }
+
+  const scraper: FeedExtractionConfig = scraperConfigFromOutline(outline);
+  const preserved: NonNullable<FeedExtractionConfig["preserved"]> = {};
   const unknown = unknownExtensions(extensions);
   if (unknown.length) {
     issue("preserved", "unknown-extension", unknown.map((name) => `frss:${name}`).join(", "), "kept on the feed and written back on export; no effect on fetching");
   }
 
   const http = httpOptionsFromOutline(outline);
+  if (typeof http.CURLOPT_HTTPHEADER === "string") {
+    const kept: string[] = [];
+    const dropped: string[] = [];
+    for (const line of http.CURLOPT_HTTPHEADER.split(/\r?\n|\r/).map((value) => value.trim()).filter(Boolean)) {
+      const colon = line.indexOf(":");
+      const name = colon > 0 ? line.slice(0, colon).trim() : "";
+      // Only the header name goes into the report: values may be credentials.
+      if (!/^[!#$%&'*+.^`|~\w-]+$/.test(name)) dropped.push(name ? "(invalid header)" : "(line without name)");
+      else if (BLOCKED_REQUEST_HEADERS.has(name.toLowerCase())) dropped.push(name);
+      else kept.push(line);
+    }
+    if (kept.length) http.CURLOPT_HTTPHEADER = kept.join("\n");
+    else delete http.CURLOPT_HTTPHEADER;
+    if (dropped.length) issue("unsupported", "http-header-dropped", "CURLOPT_HTTPHEADER", dropped.join(", "));
+  }
+  if (http.CURLOPT_MAXREDIRS !== undefined) {
+    const redirects = Number(http.CURLOPT_MAXREDIRS);
+    if (!Number.isInteger(redirects)) {
+      delete http.CURLOPT_MAXREDIRS;
+      issue("adapted", "maxredirs-invalid", "CURLOPT_MAXREDIRS", "ignored; default redirect limit applies");
+    } else if (redirects < 0 || redirects > MAX_FEED_REDIRECTS) {
+      http.CURLOPT_MAXREDIRS = Math.min(MAX_FEED_REDIRECTS, Math.max(0, redirects));
+      issue("adapted", "maxredirs-clamped", "CURLOPT_MAXREDIRS", `${redirects} stored as ${http.CURLOPT_MAXREDIRS} (allowed 0–${MAX_FEED_REDIRECTS})`);
+    }
+  }
   if (http.CURLOPT_COOKIEFILE !== undefined) {
     delete http.CURLOPT_COOKIEFILE;
     issue("unsupported", "cookiefile-server-local", "CURLOPT_COOKIEFILE", "path on the FreshRSS server, not transferable");
@@ -199,23 +278,27 @@ export function mapOutlineToFeed(
     htmlUrl: outline.htmlUrl || null,
     description: outline.description || null,
     priority,
-    priorityGiven: priority !== "main" || extensions.priority === "main",
-    unicityCriteria: extensions.unicityCriteria || "id",
-    unicityCriteriaForced: extensions.unicityCriteriaForced === "true" || extensions.unicityCriteriaForced === "1",
-    scraperConfig: stringifyNonEmpty(scraper),
+    priorityGiven: priority !== "main" || extensions.priority?.toLowerCase() === "main",
+    unicityCriteria,
+    unicityCriteriaForced: /^(true|1|yes|on)$/i.test(extensions.unicityCriteriaForced ?? ""),
+    scraperConfig: null,
     httpOptions: stringifyNonEmpty(http),
   };
+  if (data.priorityGiven) data.hideFromAllFeeds = priority !== "main" && priority !== "important";
   if (typeof http.CURLOPT_USERAGENT === "string") data.customUserAgent = http.CURLOPT_USERAGENT;
 
   if (extensions.ttl !== undefined) {
     const seconds = Number(extensions.ttl);
-    if (!Number.isFinite(seconds)) {
+    if (!/^\s*-?\d+\s*$/.test(extensions.ttl) || !Number.isSafeInteger(seconds)) {
       issue("adapted", "ttl-invalid", "ttl", `'${extensions.ttl}' ignored`);
     } else if (seconds !== 0) {
-      const minutes = Math.ceil(Math.abs(seconds) / 60);
-      const clamped = Math.min(MAX_UPDATE_MINUTES, Math.max(MIN_UPDATE_MINUTES, minutes));
-      data.updateFrequency = clamped;
-      if (clamped !== minutes) issue("adapted", "ttl-clamped", "ttl", `${Math.abs(seconds)}s stored as ${clamped} min (allowed ${MIN_UPDATE_MINUTES}–${MAX_UPDATE_MINUTES})`);
+      const { minutes, exact } = ttlToMinutes(seconds);
+      data.updateFrequency = minutes;
+      if (!exact) {
+        // Written back unchanged on export while the feed keeps this interval.
+        preserved.ttl = String(seconds);
+        issue("adapted", "ttl-clamped", "ttl", `${Math.abs(seconds)}s stored as ${minutes} min (allowed ${MIN_UPDATE_MINUTES}–${MAX_UPDATE_MINUTES} min)`);
+      }
       if (seconds < 0) data.mute = true;
     }
   }
@@ -228,16 +311,34 @@ export function mapOutlineToFeed(
   if (remove) data.fullTextRemoveSelectors = remove;
   if (extensions.cssFullContentConditions) {
     data.fullTextConditions = extensions.cssFullContentConditions;
-    issue("adapted", "css-conditions-not-evaluated", "cssFullContentConditions", "stored, but full-text extraction runs for every article of this feed");
+    const conditions = translateFreshRssReadFilters(extensions.cssFullContentConditions);
+    if (conditions.unsupported.length) {
+      issue(
+        "adapted",
+        "css-conditions-partial",
+        "cssFullContentConditions",
+        `${conditions.unsupported.map(({ line }) => line).join(" | ")} — cannot be evaluated, so full text is fetched for every article`,
+      );
+    }
   }
-  if ((remove || extensions.cssFullContentConditions) && !extensions.cssFullContent) {
-    issue("adapted", "css-without-selector", "cssFullContent", "removal/condition settings stored, but no content selector: full-text stays off");
+  // cssContentFilter alone is fine (it cleans the feed's own content); conditions only
+  // gate a full-text download, which needs a content selector.
+  if (extensions.cssFullContentConditions && !extensions.cssFullContent) {
+    issue("adapted", "css-without-selector", "cssFullContentConditions", "conditions stored, but without a content selector there is no full-text download to gate");
   }
 
   let ruleQuery: string | null = null;
   if (extensions.filtersActionRead !== undefined) {
     const translation = translateFreshRssReadFilters(extensions.filtersActionRead);
     data.filtersActionRead = translation.keywordLines.join("\n") || null;
+    // Every line that is not a plain keyword (rule-translated or not translatable) is kept
+    // verbatim so an export to FreshRSS carries the original filter text.
+    const keywords = new Set(translation.keywordLines);
+    const otherLines = extensions.filtersActionRead
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !keywords.has(line) && !keywords.has(line.replace(/^"(.*)"$|^'(.*)'$/, "$1$2")));
+    if (otherLines.length) preserved.filtersActionRead = [...new Set(otherLines)].join("\n");
     for (const { line, reason } of translation.unsupported) {
       issue("unsupported", "filter-untranslatable", "filtersActionRead", `${line} — ${reason}`);
     }
@@ -254,7 +355,10 @@ export function mapOutlineToFeed(
     }
   }
 
-  return { url: outline.xmlUrl, name: outline.text, data, ruleQuery };
+  if (Object.keys(preserved).length) scraper.preserved = preserved;
+  data.scraperConfig = stringifyNonEmpty(scraper);
+
+  return { url: feedUrl, name: outline.text, data, ruleQuery };
 }
 
 export function planOpmlImport(outlines: OpmlOutline[], options: { trust?: ImportTrust } = {}): OpmlImportPlan {
@@ -417,6 +521,7 @@ export async function applyOpmlImportPlan(
       ...(d.fullTextSelector !== undefined ? { fullTextSelector: d.fullTextSelector } : {}),
       ...(d.fullTextConditions !== undefined ? { fullTextConditions: d.fullTextConditions } : {}),
       ...(d.fullTextRemoveSelectors !== undefined ? { fullTextRemoveSelectors: d.fullTextRemoveSelectors } : {}),
+      ...(d.hideFromAllFeeds !== undefined ? { hideFromAllFeeds: d.hideFromAllFeeds } : {}),
       ...(d.updateFrequency !== undefined ? { updateFrequency: d.updateFrequency } : {}),
       ...(d.mute ? { autoMuted: true } : {}),
       ...(d.customUserAgent ? { customUserAgent: d.customUserAgent } : {}),

@@ -81,11 +81,13 @@ describe("FreshRSS management contracts on SQLite", () => {
     expect((await call("subscription/import", "<!DOCTYPE x [<!ENTITY a 'x'>]><opml/>" )).status).toBe(400);
     expect(await (await call("subscription/export")).text()).toContain("科学");
   });
-  it("retains FreshRSS scraper extensions through both OPML URL bases", async () => {
+  it("imports FreshRSS files as untrusted (no selectors) and exports scraper settings through both OPML URL bases", async () => {
     const xml = readFileSync(join(__dirname, "../fixtures/freshrss/feeds_2026-11-09.opml.xml"), "utf8");
     expect((await call("subscription/import", xml)).status).toBe(200);
     const feed = await db.feed.findFirstOrThrow({ where: { userId: "u", name: "Ars Technica" } });
-    expect(feed.fullTextSelector).toBe("article .article-content");
+    // GReader imports are `trust: "remote"`: CPU-heavy expressions are refused (#280 security review).
+    expect(feed.fullTextSelector).toBeNull();
+    await db.feed.update({ where: { id: feed.id }, data: { fullTextSelector: "article .article-content", fullTextMode: "selector" } });
     const { GET: canonical } = await import("@/app/api/greader/[...path]/route");
     const response = await canonical(new Request("http://localhost/api/greader/reader/api/0/subscription/export", { headers: { Authorization: auth } }), { params: Promise.resolve({ path: ["reader", "api", "0", "subscription", "export"] }) });
     expect(response.headers.get("content-type")).toContain("opml");
@@ -203,7 +205,7 @@ it("shares Fever failures with Basic and stops before credential lookup", async 
 });
 it("redacts both API OPML exports for read-scope bearer tokens", async () => {
   await db.apiToken.create({ data: { userId: "u", name: "read", tokenHash: hashApiToken("export-read"), scope: "read" } });
-  await db.feed.create({ data: { userId: "u", name: "Public", url: "https://user:feed-password@example.org/rss", httpOptions: JSON.stringify({ CURLOPT_COOKIE: "cookie-secret", CURLOPT_HTTPHEADER: "header-secret", CURLOPT_POSTFIELDS: "post-secret", CURLOPT_PROXY: "http://user:proxy-password@proxy.org" }), scraperConfig: JSON.stringify({ extensions: { password: "extension-secret" } }), fullTextSelector: "article" } });
+  await db.feed.create({ data: { userId: "u", name: "Public", url: "https://user:feed-password@example.org/rss", httpOptions: JSON.stringify({ CURLOPT_COOKIE: "cookie-secret", CURLOPT_HTTPHEADER: "header-secret", CURLOPT_POSTFIELDS: "post-secret", CURLOPT_PROXY: "http://user:proxy-password@proxy.org" }), scraperConfig: JSON.stringify({ extensions: { password: "extension-secret" } }), fullTextSelector: "article", fullTextMode: "selector" } });
   const { GET: v1 } = await import("@/app/api/v1/[...path]/route");
   state.session = ""; // Exercise v1 bearer authentication rather than session fallback.
   const outputs = [await call("subscription/export", undefined, "Bearer export-read"), await v1(new Request("http://localhost/api/v1/opml", { headers: { Authorization: "Bearer export-read" } }), { params: Promise.resolve({ path: ["opml"] }) })];

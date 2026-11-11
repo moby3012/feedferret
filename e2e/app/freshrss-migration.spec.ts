@@ -63,3 +63,41 @@ test("FreshRSS migration reports unreadable and hostile uploads instead of impor
   await expect(card.getByRole("alert")).toContainText("unsafe path", { timeout: 30_000 });
   await expect(card.getByTestId("freshrss-confirm")).toBeHidden();
 });
+
+test("FreshRSS OPML with scraping, full-text and unicity attributes previews cleanly (nothing unsupported)", async ({ page, isMobile }) => {
+  const card = await openImportTab(page, isMobile);
+
+  await card.getByTestId("freshrss-file").setInputFiles({
+    name: "freshrss_feeds_2026-11-11.opml.xml",
+    mimeType: "text/xml",
+    buffer: fixture("synthetic-export.opml.xml"),
+  });
+
+  await expect(card.getByText("Preview – nothing has been imported yet")).toBeVisible({ timeout: 30_000 });
+  await expect(card.getByText("New subscriptions").locator("xpath=..")).toContainText("13");
+  // Every frss: attribute of a real export maps to a FeedFerret setting.
+  await expect(card.getByRole("region", { name: "Not supported – not imported" })).toHaveCount(0);
+  await expect(card.getByRole("region", { name: "Stored, but inactive" })).toHaveCount(0);
+  await expect(card.getByTestId("freshrss-confirm")).toBeVisible();
+
+  await card.getByRole("button", { name: "Cancel" }).click();
+  await expect(card.getByTestId("freshrss-confirm")).toBeHidden();
+});
+
+test("OPML export is credential-free by default; credentials only via the explicit, warned opt-in", async ({ page, isMobile }) => {
+  await openImportTab(page, isMobile);
+  const optIn = page.getByTestId("export-include-credentials");
+  await optIn.scrollIntoViewIfNeeded();
+  await expect(optIn).not.toBeChecked();
+  await expect(page.getByText("Include credentials (FreshRSS-compatible)")).toBeVisible();
+  await expect(page.getByText(/Contains cookies, HTTP headers/)).toBeVisible();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export all feeds" }).click(),
+  ]);
+  const xml = fs.readFileSync((await download.path())!, "utf8");
+  expect(xml).toContain('xmlns:frss="https://freshrss.org/opml"');
+  expect(xml).not.toMatch(/frss:CURLOPT_(COOKIE|HTTPHEADER|POSTFIELDS|PROXY)=/);
+  expect(xml).not.toMatch(/(xmlUrl|htmlUrl)="https?:\/\/[^"/@]+@/);
+});

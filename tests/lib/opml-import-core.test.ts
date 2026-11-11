@@ -51,7 +51,8 @@ describe("FreshRSS OPML golden fixture → plan", () => {
       fullTextConditions: "title=Review\nurl~/gadgets/",
       enableSelectorMode: true,
     });
-    expect(codes(await issuesFor("Ars Technica"))).toEqual(["css-conditions-not-evaluated"]);
+    // Both condition lines are plain keywords, so they are evaluated: nothing to report.
+    expect(codes(await issuesFor("Ars Technica"))).toEqual([]);
   });
 
   it("translates Hacker News read-filters and reports what has no equivalent", async () => {
@@ -117,7 +118,10 @@ describe("FreshRSS OPML golden fixture → plan", () => {
     const f = await feed("Lone Feed");
     expect(f.data).toMatchObject({ priority: "hidden", updateFrequency: 10_080 });
     expect(f.data.mute).toBeUndefined();
-    expect(codes(await issuesFor("Lone Feed"))).toEqual(["ttl-clamped"]);
+    expect(codes(await issuesFor("Lone Feed"))).toEqual(["priority-hidden-approximated", "ttl-clamped"]);
+    expect(f.data.hideFromAllFeeds).toBe(true);
+    // The original TTL is kept for the export back to FreshRSS.
+    expect(JSON.parse(f.data.scraperConfig!).preserved).toEqual({ ttl: "86400000" });
   });
 
   it("never drops a frss attribute silently: every attribute is mapped, reported or preserved", async () => {
@@ -133,10 +137,12 @@ describe("FreshRSS OPML golden fixture → plan", () => {
 describe("trust policy for remote (dynamic) OPML", () => {
   it("drops cookies, headers, proxy, POST options and rule creation from remote files, and says so", async () => {
     const blog = await feed("Example Blog", "remote");
-    const http = JSON.parse(blog.data.httpOptions!);
-    for (const key of ["CURLOPT_COOKIE", "CURLOPT_HTTPHEADER", "CURLOPT_PROXY", "CURLOPT_PROXYTYPE", "CURLOPT_POST", "CURLOPT_POSTFIELDS"]) expect(http).not.toHaveProperty(key);
-    expect(http.CURLOPT_FOLLOWLOCATION).toBe(true);
-    expect(codes(await issuesFor("Example Blog", "remote"))).toContain("http-option-remote-dropped");
+    // Every cURL option is refused from remote files, incl. user agent and redirect policy.
+    expect(blog.data.httpOptions).toBeNull();
+    expect(blog.data.customUserAgent).toBeUndefined();
+    expect(codes(await issuesFor("Example Blog", "remote"))).toEqual(expect.arrayContaining(["http-option-remote-dropped", "expression-remote-dropped"]));
+    expect(blog.data.scraperConfig === null || !JSON.parse(blog.data.scraperConfig).xpath).toBe(true);
+    expect(blog.data.fullTextSelector).toBeUndefined();
 
     const hn = await feed("Hacker News", "remote");
     expect(hn.ruleQuery).toBeNull();
@@ -178,7 +184,7 @@ describe("FeedFerret's own export still round-trips (incl. ttl and unknown attri
   it("round-trips ttl/mute and unknown extension attributes", async () => {
     const xml = generateOpml([
       { name: "Round", url: "https://r.example/feed", sourceType: "rss", updateFrequency: 30, autoMuted: true, scraperConfig: JSON.stringify({ extensions: { futureFlag: "yes" } }) },
-    ]);
+    ], [], { includeCredentials: true });
     const p = planOpmlImport(await parseOpml(xml));
     const f = p.feeds[0];
     expect(f.data).toMatchObject({ updateFrequency: 30, mute: true });

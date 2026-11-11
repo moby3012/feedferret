@@ -33,21 +33,23 @@ orchestration `lib/import/freshrss-migration.ts`.
 
 ## Mapping
 
+Full attribute matrix incl. export and round trip: [freshrss-compat.md](freshrss-compat.md).
+
 | FreshRSS | FeedFerret | Status |
 |---|---|---|
 | `text`/`title`, `xmlUrl`, `htmlUrl`, `description` | feed name, URL, website, description | supported |
 | `type` rss / HTML+XPath / XML+XPath / JSON+DotNotation / JSON+DotPath / JSONFeed / HTML+XPath+JSON+DotNotation | `sourceType` | supported; unknown type → RSS, reported |
 | `frss:xPathItem*`, `frss:jsonItem*`, `frss:xPathToJson` | `scraperConfig` | supported (execution fidelity gaps: PHP time formats, JSON concatenation — see research §3) |
-| `frss:priority` important/main/category/feed/hidden | `priority` | supported (stored; limited runtime effect) |
-| `frss:ttl` (seconds, negative = muted) | `updateFrequency` (5–10080 min), `autoMuted` | supported; clamped values reported |
-| `frss:unicityCriteria`, `unicityCriteriaForced` | same | supported (stored; forced flag has no runtime consumer yet) |
+| `frss:priority` important/main/category/feed/hidden | `priority`; category/feed/hidden also `hideFromAllFeeds` | supported; feed/hidden approximated, reported |
+| `frss:ttl` (seconds, negative = muted) | `updateFrequency` (5–10080 min), `autoMuted` | supported; rounded/clamped values reported (original kept for export) |
+| `frss:unicityCriteria` (id, link, all `sha1:*`), `unicityCriteriaForced` | same | supported (`sha1:*` hashed like FreshRSS; FeedFerret never degrades, i.e. always "forced") |
 | `frss:cssFullContent` | `fullTextSelector` + `fullTextMode=selector` | supported (turned on; never downgrades `auto`/`ai`) |
-| `frss:cssContentFilter` | `fullTextRemoveSelectors` | supported |
-| `frss:cssFullContentConditions` | `fullTextConditions` | stored, **not evaluated** — reported |
+| `frss:cssContentFilter` | `fullTextRemoveSelectors` | supported (feed content and full text) |
+| `frss:cssFullContentConditions` | `fullTextConditions` | supported (full text only for matching articles; untranslatable line → all articles, reported) |
 | `frss:filtersActionRead`: plain word / `"phrase"` | literal keyword in `filtersActionRead` | supported (same title+body substring semantics) |
 | …: `intitle:` `intext:` `author:` `inurl:`, negated words `-x`/`!x`, `OR` between those terms | feed-scoped auto-read rule (mark read) | supported (exact, never looser) |
 | …: regex, `#tag`, parentheses, `date:`/`pubdate:`, `f:` `c:` `e:` `L:` `S:`, multi-word field values, negated phrases, plain words next to other terms (FeedFerret free text also matches author/link/feed name), any value containing `:` `"` `'` outside a single quoted phrase | — | **not imported, reported** (never translated partially or approximately) |
-| `frss:CURLOPT_COOKIE/HTTPHEADER/PROXY/POST/POSTFIELDS/USERAGENT/FOLLOWLOCATION/MAXREDIRS` | `httpOptions`, `customUserAgent` | supported for your own file; dropped for remote OPML |
+| `frss:CURLOPT_COOKIE/HTTPHEADER/PROXY/POST/POSTFIELDS/USERAGENT/FOLLOWLOCATION/MAXREDIRS` | `httpOptions`, `customUserAgent` | supported for your own file (`Host`/framing headers dropped, redirects ≤ 20); dropped for remote OPML (dynamic categories, GReader import), which also cannot set selectors or XPath/JSON expressions |
 | `frss:CURLOPT_COOKIEFILE` | — | **not imported, reported** (path on the FreshRSS server) |
 | `frss:CURLOPT_PROXYTYPE` | `httpOptions` | stored; scheme comes from the proxy URL — reported |
 | `frss:opmlUrl` (dynamic category) | `Category.opmlUrl` | supported for your own file; not followed from remote OPML |

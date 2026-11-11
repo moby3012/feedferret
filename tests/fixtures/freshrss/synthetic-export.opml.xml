@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic FreshRSS export: generic sites and markup, shaped like a real export
+     (attribute set, value shapes, empty categories, multi-line XPath, query strings). -->
+<opml xmlns:frss="https://freshrss.org/opml" version="2.0">
+  <head>
+    <title>FreshRSS</title>
+    <dateCreated>Wed, 11 Nov 2026 21:25:10 +0100</dateCreated>
+  </head>
+  <body>
+    <outline text="Alpha">
+      <outline text="Example Weekly" type="rss" xmlUrl="https://alpha.example.com/feed.xml" htmlUrl="https://alpha.example.com/" description="Weekly notes from Example"/>
+      <outline text="Plain Blog" type="rss" xmlUrl="https://plain.example.org/rss/" htmlUrl="https://plain.example.org"/>
+    </outline>
+    <outline text="Empty One"/>
+    <outline text="Beta">
+      <outline text="Scraped List" type="HTML+XPath" xmlUrl="https://list.example.net" htmlUrl="https://list.example.net/" description="Scraped list page" frss:unicityCriteria="link" frss:xPathItem="//li[contains(@class, 'entry row')]" frss:xPathItemTitle=".//span[@class='name']/a/text()" frss:xPathItemContent="string(./div[@class='teaser']/div[@class='text']/p)" frss:xPathItemUri=".//span[@class='name']/a/@href" frss:xPathItemTimestamp=".//time/text()" frss:xPathItemTimeFormat="F d, Y" frss:xPathItemThumbnail="concat('https://list.example.net', .//figure//img/@src)" frss:xPathItemUid="concat(&#13;&#10;  substring-after(.//span[@class='name']/a/@href, '/item/'),&#13;&#10;  '-',&#13;&#10;  translate(.//time, ' ', '-')&#13;&#10;)"/>
+      <outline text="Scraped Cards" type="HTML+XPath" xmlUrl="https://cards.example.com/section/updates" htmlUrl="https://cards.example.com/section/updates" description="Scraped card grid" frss:xPathItem="//x-card" frss:xPathItemTitle=".//h4/text()" frss:xPathItemUri=".//x-link/a/@href" frss:xPathItemTimestamp=".//p[following-sibling::x-link]/text()" frss:xPathItemTimeFormat="d.m.Y" frss:xPathItemThumbnail="./@image" frss:xPathItemUid="substring-after(.//h4[@class='card-title']/a/@href, '/updates/')"/>
+      <outline text="Tools &amp; Tips" type="rss" xmlUrl="https://tips.example.org/api/feed" htmlUrl="https://tips.example.org/" description="Tools &amp; tips"/>
+      <outline text="Release Notes" type="rss" xmlUrl="https://releases.example.com/app/feed/" htmlUrl="https://releases.example.com/app/" description="Release notes" frss:cssFullContent=".notes"/>
+      <outline text="Mirror Blog" type="rss" xmlUrl="https://www.blog.example/feeds/42/posts/default" htmlUrl="http://mirror.blog.example/" description="A blog that republishes posts and it's sometimes duplicated" frss:unicityCriteria="link" frss:unicityCriteriaForced="true"/>
+    </outline>
+    <outline text="Gamma">
+      <outline text="Articles One" type="rss" xmlUrl="https://rss.articles.example/one/feed/rss.xml" htmlUrl="https://www.articles.example/one" description="Article feed one" frss:cssFullContent=".article-body"/>
+      <outline text="Articles Two" type="rss" xmlUrl="https://rss.articles.example/two/feed/rss.xml" htmlUrl="https://www.articles.example/two" description="Article feed two" frss:cssFullContent=".article-body"/>
+      <outline text="Forum Announcements" type="rss" xmlUrl="https://forum.example.net/rss/announcements.xml/" htmlUrl="https://forum.example.net/rss/announcements.xml/" description="Announcements" frss:cssFullContent=".post-contents"/>
+      <outline text="Project News" type="rss" xmlUrl="https://project.example.org/news/atom/" htmlUrl="https://project.example.org/" description="News of an open source project &amp; its community."/>
+    </outline>
+    <outline text="Delta">
+      <outline text="Search Results" type="rss" xmlUrl="https://search.example.com/results?q=widgets&amp;sort=new&amp;page=1&amp;format=rss" htmlUrl="https://search.example.com/" description="Saved search"/>
+      <outline text="Tag Feed" type="rss" xmlUrl="https://tags.example.org/tag/sample/feed" htmlUrl="https://tags.example.org"/>
+    </outline>
+    <outline text="Empty Two"/>
+  </body>
+</opml>

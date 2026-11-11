@@ -1,5 +1,10 @@
 export const OPML_EXTENSION_NAMESPACE = "https://fresh" + "rss.org/opml";
-export const OPML_EXTENSION_PREFIX = "ffx";
+// FreshRSS reads its attributes by qualified name (`frss:cssFullContent`, lib_opml
+// uses DOM `nodeName`), not by namespace URI: any other prefix is silently ignored
+// there, so exports must use exactly this one.
+export const OPML_EXTENSION_PREFIX = "frss";
+/** Prefix used by FeedFerret exports before the FreshRSS-compatible one (still read on import). */
+export const LEGACY_OPML_EXTENSION_PREFIXES = ["ffx"] as const;
 
 export const EXTRACTION_SOURCE_TYPES = new Set([
   "rss",
@@ -50,12 +55,30 @@ export const HTTP_ATTRS = [
   "CURLOPT_USERAGENT",
 ] as const;
 
+/**
+ * Request headers a feed's `CURLOPT_HTTPHEADER` may never set: they would re-target or
+ * desync the request (virtual host, framing, connection reuse) instead of describing it.
+ * Enforced by the fetcher for every source (import, feed dialog, REST/MCP).
+ */
+export const BLOCKED_REQUEST_HEADERS: ReadonlySet<string> = new Set([
+  "host", "content-length", "transfer-encoding", "connection", "keep-alive", "upgrade",
+  "te", "trailer", "expect", "proxy-connection",
+]);
+/** Upper bound for `CURLOPT_MAXREDIRS`. */
+export const MAX_FEED_REDIRECTS = 20;
+
 export type FeedExtractionConfig = {
   xpath?: Record<string, string>;
   json?: Record<string, string>;
   xPathToJson?: string;
   /** Source-specific extension attributes (e.g. unknown `frss:*` OPML attributes) preserved verbatim. */
   extensions?: Record<string, string>;
+  /**
+   * Known `frss:*` values that FeedFerret cannot represent exactly in its own fields
+   * (e.g. read filters it cannot evaluate, a refresh interval outside its range). Kept
+   * only so an export writes the original value back; never used for fetching.
+   */
+  preserved?: Partial<Record<"filtersActionRead" | "ttl", string>>;
 };
 
 export type FeedHttpOptions = Record<string, string | number | boolean>;
