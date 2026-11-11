@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
@@ -110,10 +111,7 @@ export function ResponsiveMenu(p: ResponsiveMenuProps) {
 
   return (
     <DropdownMenu open={p.open} onOpenChange={p.onOpenChange}>
-      <DropdownMenuTrigger asChild>
-        {/* Invisible anchor at the pointer; the menu positions against it. */}
-        <span aria-hidden tabIndex={-1} className="pointer-events-none fixed size-px" style={{ left: p.anchor.x, top: p.anchor.y }} />
-      </DropdownMenuTrigger>
+      <MenuAnchor x={p.anchor.x} y={p.anchor.y} />
       <DropdownMenuContent
         data-testid={p.testId}
         align="start"
@@ -132,6 +130,25 @@ export function ResponsiveMenu(p: ResponsiveMenuProps) {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * Invisible anchor at a VIEWPORT point; the dropdown positions against it.
+ * Portaled to <body>: `position: fixed` is relative to the nearest ancestor with
+ * a transform / filter / backdrop-filter (the reader and list top bars have a
+ * backdrop-filter), so inline the anchor drifted by that bar's offset and the
+ * menu opened off-screen / under the article on wide layouts.
+ */
+function MenuAnchor({ x, y }: { x: number; y: number }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+  return createPortal(
+    <DropdownMenuTrigger asChild>
+      <span aria-hidden tabIndex={-1} className="pointer-events-none fixed size-px" style={{ left: x, top: y }} />
+    </DropdownMenuTrigger>,
+    document.body,
   );
 }
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslations } from "next-intl"
-import { getFeeds, getCategories, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, updateCategoryOrder, updateFeedOrder, getLabels, createLabel, updateLabel, deleteLabel, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, markNotificationRead, markAllNotificationsRead, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers, suggestFeedFromUrl, createFeedFromPage, proposeAiFeedConfig, proposeAiFullTextSelector, getRsshubStatus, previewRsshubFeed, getChangedetectionStatus, createChangedetectionFeed } from "@/app/actions/feeds"
+import { getFeeds, getCategories, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, updateCategoryOrder, updateFeedOrder, getLabels, createLabel, updateLabel, deleteLabel, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, markNotificationRead, markAllNotificationsRead, dismissNotification, clearAllNotifications, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers, suggestFeedFromUrl, createFeedFromPage, proposeAiFeedConfig, proposeAiFullTextSelector, getRsshubStatus, previewRsshubFeed, getChangedetectionStatus, createChangedetectionFeed } from "@/app/actions/feeds"
 import { previewGoogleNewsFeed, addGoogleNewsFeed, updateGoogleNewsFeedQuery, getGoogleNewsFeedSearch } from "@/app/actions/google-news"
 import { updateProfile, getEmailChangeMailStatus, changePassword, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, previewDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getContentFetchSettings, updateContentFetchSettings, testContentFetchConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
 import { getExportSettings, updateExportSettings, testWallabagExportConnection, buildObsidianExportLink, exportArticleToWallabag } from "@/app/actions/export"
@@ -760,6 +760,37 @@ export function useMarkAllNotificationsRead() {
             invalidateCounts(queryClient)
         },
     })
+}
+
+/** Drops notifications from the cached list at once; the server call settles it (rollback on error). */
+function useNotificationRemoval<V>(mutationFn: (v: V) => Promise<unknown>, remove: (list: Array<{ id: string }>, v: V) => Array<{ id: string }>) {
+    const queryClient = useQueryClient()
+    const t = useTranslations("sidebar")
+    return useMutation({
+        mutationFn,
+        onMutate: async (v: V) => {
+            await queryClient.cancelQueries({ queryKey: ["notifications"], exact: true })
+            const previous = queryClient.getQueryData<Array<{ id: string }>>(["notifications"])
+            if (previous) queryClient.setQueryData(["notifications"], remove(previous, v))
+            return { previous }
+        },
+        onError: (_err, _v, ctx) => {
+            if (ctx?.previous) queryClient.setQueryData(["notifications"], ctx.previous)
+            toast.error(t("notificationsDeleteFailed"))
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ["notifications"] })
+            invalidateCounts(queryClient)
+        },
+    })
+}
+
+export function useDismissNotification() {
+    return useNotificationRemoval((id: string) => dismissNotification(id), (list, id) => list.filter((n) => n.id !== id))
+}
+
+export function useClearAllNotifications() {
+    return useNotificationRemoval<void>(() => clearAllNotifications(), () => [])
 }
 
 export function useCreateSavedSearch() {
