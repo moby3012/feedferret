@@ -1,3 +1,5 @@
+import { readPlainColumn } from "@/lib/secret-box";
+
 // Feed columns that must never leave the server in list/bootstrap payloads
 // (security audit #2, N4). The per-feed Basic-Auth credentials and the
 // Scout-Studio fetch options (cookies, headers, proxy user:pass) are only
@@ -73,4 +75,25 @@ export function stripFeedSecrets<T>(value: T): T {
   const out: Record<string, unknown> = { ...record };
   for (const field of FEED_SECRET_FIELDS) delete out[field];
   return out as T;
+}
+
+// ─── Encrypted-at-rest reads (security audit #2, M8) ───────────────────────
+// `authUsername`, `authPassword` and `httpOptions` may be stored as legacy
+// plaintext or as v2 `ff2.` ciphertext. This release only reads v2; writers
+// still store plaintext (M8 PR 5 switches them). A value the configured keys
+// cannot open throws `SecretKeyError`, so a fetch ends in an error status
+// instead of being sent without its credentials.
+
+type FeedCredentialColumns = {
+  authUsername?: string | null;
+  authPassword?: string | null;
+  httpOptions?: string | null;
+};
+
+export function readFeedCredentials<T extends FeedCredentialColumns>(feed: T): T {
+  const out = { ...feed };
+  if ("authUsername" in feed) out.authUsername = readPlainColumn("feed.authUsername", feed.authUsername);
+  if ("authPassword" in feed) out.authPassword = readPlainColumn("feed.authPassword", feed.authPassword);
+  if ("httpOptions" in feed) out.httpOptions = readPlainColumn("feed.httpOptions", feed.httpOptions);
+  return out;
 }

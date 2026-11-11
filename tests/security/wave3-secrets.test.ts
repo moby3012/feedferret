@@ -23,8 +23,9 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => state.session) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }));
 
-import { getFeedEditConfig, getFeedHealth, getFeeds, updateFeed } from "../../app/actions/feeds";
-import { updateProfile } from "../../app/actions/settings";
+import { getAutoReadRules, getFeedEditConfig, getFeedHealth, getFeeds, updateFeed } from "../../app/actions/feeds";
+import { getNotificationChannels, updateProfile } from "../../app/actions/settings";
+import { sealSecret } from "../../lib/secret-box";
 import { getBootstrap } from "../../server/bootstrap";
 import { migrateConnectorFeedUrls, resetConnectorSecretRulesCache } from "../../lib/connector-secrets";
 
@@ -129,6 +130,46 @@ describe("N4: feed secrets never reach list / bootstrap payloads", () => {
     const row = await state.db.feed.findUniqueOrThrow({ where: { id: ids.feed } });
     expect(row.authPassword).toBe(SECRETS.password);
     expect(row.name).toBe("Private 2");
+  });
+});
+
+describe("M8: v2-sealed secrets and notification/webhook secrets stay off client payloads", () => {
+  it("sealed feed credentials and ciphertexts never reach list / bootstrap payloads", async () => {
+    const savedAuth = process.env.AUTH_SECRET;
+    process.env.AUTH_SECRET = "wave3-payload-test-auth-secret-with-enough-chars";
+    try {
+      const sealed = await state.db.feed.create({
+        data: {
+          name: "Sealed", url: "https://sealed.example/feed", userId: ids.alice, authType: "basic",
+          authUsername: sealSecret("feed.authUsername", SECRETS.username),
+          authPassword: sealSecret("feed.authPassword", SECRETS.password),
+          httpOptions: sealSecret("feed.httpOptions", JSON.stringify({ CURLOPT_COOKIE: SECRETS.cookie })),
+        },
+      });
+      for (const payload of [await getBootstrap(ids.alice), await getFeeds(), await getFeedHealth()]) {
+        expectNoSecrets(payload);
+        expect(JSON.stringify(payload)).not.toContain("ff2.");
+      }
+      await state.db.feed.delete({ where: { id: sealed.id } });
+    } finally {
+      if (savedAuth === undefined) delete process.env.AUTH_SECRET;
+      else process.env.AUTH_SECRET = savedAuth;
+    }
+  });
+
+  it("notification settings and rules carry presence flags, not tokens or webhook secrets", async () => {
+    await state.db.user.update({
+      where: { id: ids.alice },
+      data: { telegramBotToken: "1:S3CRET-tg", gotifyToken: "S3CRET-gotify", ntfyToken: "S3CRET-ntfy" },
+    });
+    const rule = await state.db.autoReadRule.create({
+      data: { userId: ids.alice, name: "hook", query: "x", action: "webhook_call:0", webhookConfigs: JSON.stringify([{ url: "https://hook.example", secret: "S3CRET-hmac" }]) },
+    });
+    const channels = await getNotificationChannels();
+    expectNoSecrets(channels);
+    expect(channels).toMatchObject({ hasTelegramBotToken: true, hasGotifyToken: true, hasNtfyToken: true });
+    expectNoSecrets(await getAutoReadRules());
+    await state.db.autoReadRule.delete({ where: { id: rule.id } });
   });
 });
 

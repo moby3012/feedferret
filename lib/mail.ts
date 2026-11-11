@@ -51,29 +51,29 @@ const PROVIDER_OPTIONS: Record<MailProviderId, MailProviderOption> = {
 };
 
 // Resolve effective API key: DB (decrypted) takes priority, ENV is fallback
-function resolveKey(dbValue: string | null | undefined, envValue: string | undefined): string | undefined {
-  const decrypted = decryptIfValue(dbValue);
+function resolveKey(dbValue: string | null | undefined, envValue: string | undefined, purpose: string): string | undefined {
+  const decrypted = decryptIfValue(dbValue, purpose);
   return decrypted || envValue || undefined;
 }
 
 function hasResend(s?: Partial<GlobalSettings> | null): boolean {
-  return !!(resolveKey(s?.resendApiKey, process.env.RESEND_API_KEY) &&
+  return !!(resolveKey(s?.resendApiKey, process.env.RESEND_API_KEY, "globalSettings.resendApiKey") &&
     (s?.resendFromEmail || process.env.RESEND_FROM_EMAIL));
 }
 
 function hasPostmark(s?: Partial<GlobalSettings> | null): boolean {
-  return !!(resolveKey(s?.postmarkServerToken, process.env.POSTMARK_SERVER_TOKEN) &&
+  return !!(resolveKey(s?.postmarkServerToken, process.env.POSTMARK_SERVER_TOKEN, "globalSettings.postmarkServerToken") &&
     (s?.postmarkFromEmail || process.env.POSTMARK_FROM_EMAIL));
 }
 
 function hasMailgun(s?: Partial<GlobalSettings> | null): boolean {
-  return !!(resolveKey(s?.mailgunApiKey, process.env.MAILGUN_API_KEY) &&
+  return !!(resolveKey(s?.mailgunApiKey, process.env.MAILGUN_API_KEY, "globalSettings.mailgunApiKey") &&
     (s?.mailgunDomain || process.env.MAILGUN_DOMAIN) &&
     (s?.mailgunFromEmail || process.env.MAILGUN_FROM_EMAIL));
 }
 
 function hasSendgrid(s?: Partial<GlobalSettings> | null): boolean {
-  return !!(resolveKey(s?.sendgridApiKey, process.env.SENDGRID_API_KEY) &&
+  return !!(resolveKey(s?.sendgridApiKey, process.env.SENDGRID_API_KEY, "globalSettings.sendgridApiKey") &&
     (s?.sendgridFromEmail || process.env.SENDGRID_FROM_EMAIL));
 }
 
@@ -174,7 +174,7 @@ async function sendWithSmtp({
     throw new Error("SMTP is not fully configured");
   }
 
-  const smtpPassword = decryptIfValue(settings.smtpPassword);
+  const smtpPassword = decryptIfValue(settings.smtpPassword, "globalSettings.smtpPassword");
   const tlsOpts = resolveSmtpTransportOptions(settings.smtpPort, settings.smtpSecure, settings.smtpRejectUnauthorized);
   const transporter = nodemailer.createTransport({
     host: settings.smtpHost,
@@ -386,10 +386,10 @@ export async function sendSystemEmail({
     if (provider === "smtp") {
       await sendWithSmtp({ settings: settings as GlobalSettings, to, subject, html, text, extraHeaders });
     } else if (provider === "resend") {
-      const apiKey = resolveKey(settings?.resendApiKey, process.env.RESEND_API_KEY)!;
+      const apiKey = resolveKey(settings?.resendApiKey, process.env.RESEND_API_KEY, "globalSettings.resendApiKey")!;
       await sendWithResend({ to, subject, html, text, from, apiKey, extraHeaders });
     } else if (provider === "postmark") {
-      const token = resolveKey(settings?.postmarkServerToken, process.env.POSTMARK_SERVER_TOKEN)!;
+      const token = resolveKey(settings?.postmarkServerToken, process.env.POSTMARK_SERVER_TOKEN, "globalSettings.postmarkServerToken")!;
       await sendWithPostmark({
         to,
         subject,
@@ -401,7 +401,7 @@ export async function sendSystemEmail({
         extraHeaders,
       });
     } else if (provider === "mailgun") {
-      const apiKey = resolveKey(settings?.mailgunApiKey, process.env.MAILGUN_API_KEY)!;
+      const apiKey = resolveKey(settings?.mailgunApiKey, process.env.MAILGUN_API_KEY, "globalSettings.mailgunApiKey")!;
       const domain = settings?.mailgunDomain || process.env.MAILGUN_DOMAIN!;
       await sendWithMailgun({
         to,
@@ -416,7 +416,7 @@ export async function sendSystemEmail({
       });
     } else {
       // sendgrid
-      const apiKey = resolveKey(settings?.sendgridApiKey, process.env.SENDGRID_API_KEY)!;
+      const apiKey = resolveKey(settings?.sendgridApiKey, process.env.SENDGRID_API_KEY, "globalSettings.sendgridApiKey")!;
       await sendWithSendgrid({ to, subject, html, text, from, apiKey, extraHeaders });
     }
     await writeSystemLog("info", "mail", "Email sent", { to, subject, provider });

@@ -77,8 +77,8 @@ export async function loadChangedetectionConfig(): Promise<ChangedetectionConfig
     },
   });
   if (!settings?.changedetectionEnabled || !settings.changedetectionBaseUrl?.trim()) return null;
-  const apiKey = decryptIfValue(settings.changedetectionApiKey);
-  const rssToken = decryptIfValue(settings.changedetectionRssToken);
+  const apiKey = decryptIfValue(settings.changedetectionApiKey, "globalSettings.changedetectionApiKey");
+  const rssToken = decryptIfValue(settings.changedetectionRssToken, "globalSettings.changedetectionRssToken");
   if (!apiKey || !rssToken) return null;
   return { baseUrl: settings.changedetectionBaseUrl.trim(), apiKey, rssToken };
 }

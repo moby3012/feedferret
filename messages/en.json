@@ -507,7 +507,10 @@
     "saveChannels": "Save channels",
     "saving": "Saving…",
     "successTitle": "Test notification sent successfully",
-    "errorTitle": "Failed to send test notification"
+    "errorTitle": "Failed to send test notification",
+    "tokenSavedPlaceholder": "Saved — leave empty to keep it",
+    "removeToken": "Remove",
+    "tokenRemovedOnSave": "The saved token will be removed when you save."
   },
   "syncReaders": {
     "title": "Sync with external readers",
@@ -1292,6 +1295,8 @@
       "defaultJsonPayload": "Leave empty for the default JSON payload.",
       "hmacSecret": "HMAC secret (optional)",
       "secretUsage": "Used to sign the body via X-FeedFerret-Signature",
+      "secretSavedPlaceholder": "Secret saved — leave empty to keep it",
+      "removeSecret": "Remove",
       "variables": "Variables",
       "event": "rule_match or feed_error",
       "ruleName": "rule name",

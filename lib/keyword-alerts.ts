@@ -1,3 +1,4 @@
+import { readChannelTokens } from "@/lib/user-secrets";
 import { db } from "@/lib/db";
 import { redactArticlesForClient } from "@/lib/connector-secrets";
 import { buildAdvancedSearchWhere } from "@/lib/search";
@@ -57,10 +58,11 @@ export async function applyKeywordAlerts(userId: string, articleIds: string[]) {
         ntfyEnabled: true, ntfyUrl: true, ntfyToken: true,
       },
     });
+    const tokens = readChannelTokens(u);
     channelConfig = {
-      telegram: { enabled: u?.telegramEnabled ?? false, botToken: u?.telegramBotToken ?? null, chatId: u?.telegramChatId ?? null },
-      gotify: { enabled: u?.gotifyEnabled ?? false, url: u?.gotifyUrl ?? null, token: u?.gotifyToken ?? null },
-      ntfy: { enabled: u?.ntfyEnabled ?? false, url: u?.ntfyUrl ?? null, token: u?.ntfyToken ?? null },
+      telegram: { enabled: u?.telegramEnabled ?? false, botToken: tokens.telegramBotToken, chatId: u?.telegramChatId ?? null },
+      gotify: { enabled: u?.gotifyEnabled ?? false, url: u?.gotifyUrl ?? null, token: tokens.gotifyToken },
+      ntfy: { enabled: u?.ntfyEnabled ?? false, url: u?.ntfyUrl ?? null, token: tokens.ntfyToken },
     };
     return channelConfig;
   }

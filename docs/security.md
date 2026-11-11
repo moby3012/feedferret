@@ -55,7 +55,7 @@ The database admin setting is preferred — it can be changed without redeployin
 
 | Area | Implementation |
 |---|---|
-| Credentials encryption | Selected API keys, email provider credentials and AI keys use AES-256-GCM derived from `AUTH_SECRET`; TOTP seeds, feed passwords and some notification/webhook secrets remain plaintext |
+| Credentials encryption | Selected API keys, email provider credentials and AI keys use AES-256-GCM derived from `AUTH_SECRET` (v1). The v2 format (per-column HKDF keys, key ids, see "Stored secrets") can already be read for every secret column; TOTP seeds, feed passwords, notification tokens and webhook secrets are still written as plaintext until the next release switches writes to v2 |
 | Password hashing | bcrypt via Auth.js |
 | Sessions | Signed JWT tokens — no server-side session state |
 | CSRF | Next.js Server Actions have built-in CSRF protection |
@@ -271,6 +271,11 @@ When enabled, any admin without 2FA active receives an error on every admin serv
 - Keep stable across deploys — changing it invalidates all sessions and makes stored encrypted credentials unreadable.
 - Generate: `openssl rand -base64 32`
 
+**`FEEDFERRET_ENCRYPTION_KEY`** (optional, recommended for production)
+- Master key for secrets stored in the database. Base64 of ≥ 32 random bytes (`openssl rand -base64 32`); production refuses to start with a shorter or non-base64 value.
+- Falls back to `AUTH_SECRET`. Setting it decouples stored secrets from `AUTH_SECRET`, so rotating `AUTH_SECRET` no longer touches them (once values are stored in v2).
+- `FEEDFERRET_ENCRYPTION_KEYS_OLD`: comma-separated, decrypt-only keys (previous `FEEDFERRET_ENCRYPTION_KEY` values or an old `AUTH_SECRET`). A value is used verbatim, so moving it between the variables keeps its key id.
+
 **`POSTGRES_PASSWORD`**
 - Must be changed before first deploy.
 - `feedferret-change-me` in `docker-compose.yaml` is an example placeholder — never use in production.
@@ -415,3 +420,37 @@ page.
 median 20.5–20.6 ms / p90 22.9–23.4 ms, legacy 20.9–21.1 ms / p90 22.6–22.8 ms — no
 measurable difference. HTML grows from 311,989 to 314,614 bytes (+0.8 %, repeated
 nonce attributes, before compression).
+
+## Stored secrets (encryption at rest)
+
+Formats (`lib/secret-box-core.mjs`):
+
+| Format | Shape | Key |
+|---|---|---|
+| v2 | `ff2.<kid>.<iv>.<ciphertext+tag>` | AES-256-GCM, key = HKDF-SHA256(master, salt `feedferret/v2`, info = column purpose such as `feed.authPassword`); the purpose is also the GCM AAD, so a value cannot be moved to another column. `kid` = first 4 bytes of HKDF(master, info `kid`) |
+| v1 | `iv:tag:ct` (base64) | AES-256-GCM, key = sha256(`AUTH_SECRET`) — API keys, mail credentials, connector tokens |
+| plaintext | — | TOTP seeds, feed Basic-Auth and fetch options, notification tokens, webhook secret/header values |
+
+Rollout (two releases, so a rollback never locks anyone out):
+
+1. **This release reads v2 everywhere and still writes v1/plaintext.** An image from before this release cannot read `ff2.` values, so nothing writes them yet.
+2. The next release writes v2, re-seals legacy values lazily and in the background, and adds `secrets:rotate`.
+
+A value that cannot be decrypted with the configured keys is never used silently: TOTP login fails closed, a feed fetch ends with an error status naming the column (never the value), a notification channel or webhook is skipped, and the column is logged once.
+
+Check the state at any time (counts per column, format and key id; never prints a value; exit code 2 if anything is undecryptable):
+
+```bash
+node scripts/secrets-cli.mjs status          # inside the Docker image
+pnpm cli secrets:status                      # from a source checkout
+```
+
+Key rotation (effective once the next release writes v2):
+
+1. Set the new `FEEDFERRET_ENCRYPTION_KEY` and put the old value (or the old `AUTH_SECRET`) into `FEEDFERRET_ENCRYPTION_KEYS_OLD`.
+2. Restart. `secrets:status` shows values under the old key id as `v2:<kid>:old`.
+3. Once no value uses the old key id, remove it from `FEEDFERRET_ENCRYPTION_KEYS_OLD`.
+
+Signed tokens use domain-separated HMAC keys derived from the master key (`greader-token`, `telegram-callback`). This release verifies both the derived and the legacy `AUTH_SECRET` MAC and still issues the legacy one; GReader logins and Telegram buttons keep working across the switch.
+
+Settings payloads never contain stored secrets: notification channels report `hasTelegramBotToken` / `hasGotifyToken` / `hasNtfyToken` (an empty field keeps the token, "Remove" clears it), and webhook configs report `hasSecret` plus a `secretRef` that keeps the stored secret on save.

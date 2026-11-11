@@ -795,7 +795,7 @@ async function autoFetchFullTextViaEngine(
         mode === "ai" && user?.aiProvider
             ? {
                   provider: user.aiProvider as AiConfig["provider"],
-                  apiKey: decryptIfValue(user.aiApiKey),
+                  apiKey: decryptIfValue(user.aiApiKey, "user.aiApiKey"),
                   model: user.aiModel,
                   ollamaBaseUrl: user.aiOllamaBaseUrl,
                   usage: { userId, feature: "extraction" },
@@ -879,7 +879,7 @@ async function autoSummarizeNewArticles(userId: string, articleIds: string[]) {
         try {
             const summary = await generateSummary(content, {
                 provider: user.aiProvider as AiConfig["provider"],
-                apiKey: decryptIfValue(user.aiApiKey),
+                apiKey: decryptIfValue(user.aiApiKey, "user.aiApiKey"),
                 model: user.aiModel,
                 ollamaBaseUrl: user.aiOllamaBaseUrl,
                 language: user.aiSummaryLanguage,
@@ -947,7 +947,7 @@ export async function autoTagNewArticles(
 
     const aiConfig: AiConfig = {
         provider: user.aiProvider as AiConfig["provider"],
-        apiKey: decryptIfValue(user.aiApiKey),
+        apiKey: decryptIfValue(user.aiApiKey, "user.aiApiKey"),
         model: user.aiModel,
         ollamaBaseUrl: user.aiOllamaBaseUrl,
         usage: { userId, feature: "tagging" },

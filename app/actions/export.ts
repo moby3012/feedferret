@@ -115,9 +115,9 @@ export async function testWallabagExportConnection(overrides?: {
   // persisted — mirrors testAiConnection/testContentFetchConnection.
   const baseUrl = overrides?.wallabagUrl || user?.exportWallabagUrl;
   const clientId = overrides?.wallabagClientId || user?.exportWallabagClientId;
-  const clientSecret = overrides?.wallabagClientSecret || decryptIfValue(user?.exportWallabagClientSecret);
+  const clientSecret = overrides?.wallabagClientSecret || decryptIfValue(user?.exportWallabagClientSecret, "user.exportWallabagClientSecret");
   const username = overrides?.wallabagUsername || user?.exportWallabagUsername;
-  const password = overrides?.wallabagPassword || decryptIfValue(user?.exportWallabagPassword);
+  const password = overrides?.wallabagPassword || decryptIfValue(user?.exportWallabagPassword, "user.exportWallabagPassword");
 
   if (!baseUrl || !clientId || !clientSecret || !username || !password) {
     return { success: false, error: "Fill in the instance URL, client ID/secret, and username/password first" };
@@ -187,8 +187,8 @@ export async function exportArticleToWallabag(
     },
   });
 
-  const clientSecret = decryptIfValue(user?.exportWallabagClientSecret);
-  const password = decryptIfValue(user?.exportWallabagPassword);
+  const clientSecret = decryptIfValue(user?.exportWallabagClientSecret, "user.exportWallabagClientSecret");
+  const password = decryptIfValue(user?.exportWallabagPassword, "user.exportWallabagPassword");
   if (!user?.exportWallabagUrl || !user.exportWallabagClientId || !clientSecret || !user.exportWallabagUsername || !password) {
     return { success: false, error: "Wallabag is not fully configured" };
   }

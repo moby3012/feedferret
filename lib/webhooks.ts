@@ -1,6 +1,7 @@
 import { createHmac, randomBytes } from "crypto";
 import { FetchRedirectError, safeFetch, assertSafeFetchUrl, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { urlForLog } from "@/lib/logger";
+import { WEBHOOK_HEADER_PURPOSE, WEBHOOK_SECRET_PURPOSE, openSecret, warnSecretOnce } from "@/lib/secret-box";
 
 export type WebhookConfig = {
   url: string;
@@ -66,14 +67,21 @@ export function interpolate(
 /** Webhook URL for logs: origin only — Discord/Slack-style URLs carry their token in the path (N15). */
 export const redactWebhookUrl = urlForLog;
 
-function parseConfigs(raw: string | null | undefined): WebhookConfig[] {
+type StoredWebhookConfig = WebhookConfig & { secretRef: number };
+
+/**
+ * Parse stored configs without decrypting anything. `secretRef` is the entry's
+ * index in the stored array (the settings UI sends it back to keep a secret).
+ */
+function parseStoredConfigs(raw: string | null | undefined): StoredWebhookConfig[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item) => item && typeof item === "object" && typeof item.url === "string")
-      .map((item) => ({
+    const out: StoredWebhookConfig[] = [];
+    parsed.forEach((item, index) => {
+      if (!item || typeof item !== "object" || typeof item.url !== "string") return;
+      out.push({
         url: String(item.url),
         method: item.method && ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(item.method)
           ? item.method
@@ -81,10 +89,43 @@ function parseConfigs(raw: string | null | undefined): WebhookConfig[] {
         headers: item.headers && typeof item.headers === "object" ? item.headers : undefined,
         bodyTemplate: typeof item.bodyTemplate === "string" ? item.bodyTemplate : undefined,
         secret: typeof item.secret === "string" && item.secret ? item.secret : undefined,
-      }));
+        secretRef: index,
+      });
+    });
+    return out;
   } catch {
     return [];
   }
+}
+
+/**
+ * Header values and the signing secret may be stored as plaintext or as v2
+ * `ff2.` ciphertext (security audit #2, M8; writers still store plaintext in
+ * this release). Throws `SecretKeyError` if the configured keys cannot open them.
+ */
+function openHeaders(headers: Record<string, unknown> | undefined): Record<string, string> | undefined {
+  if (!headers) return undefined;
+  return Object.fromEntries(
+    Object.entries(headers)
+      .filter(([, v]) => typeof v === "string")
+      .map(([k, v]) => [k, v ? openSecret(WEBHOOK_HEADER_PURPOSE, v as string, "plaintext").value : ""]),
+  );
+}
+
+function parseConfigs(raw: string | null | undefined): Array<WebhookConfig | null> {
+  return parseStoredConfigs(raw).map(({ secretRef: _ref, ...config }) => {
+    try {
+      return {
+        ...config,
+        headers: openHeaders(config.headers),
+        secret: config.secret ? openSecret(WEBHOOK_SECRET_PURPOSE, config.secret, "plaintext").value : undefined,
+      };
+    } catch (error) {
+      // Never fire a webhook without its (unreadable) signature or auth headers.
+      warnSecretOnce(error, "autoReadRule.webhookConfigs");
+      return null;
+    }
+  });
 }
 
 export function getWebhookConfig(
@@ -101,6 +142,8 @@ type IncomingWebhookConfig = {
   headers?: unknown;
   bodyTemplate?: unknown;
   secret?: unknown;
+  /** Settings UI only: index of the stored config whose secret to keep (the client never sees it). */
+  secretRef?: unknown;
 };
 
 export type SanitizedWebhookConfig = {
@@ -117,8 +160,15 @@ export type SanitizedWebhookConfig = {
  * `valid: false` means at least one entry was malformed and the whole set
  * should be rejected. Shared by every write surface so validation is identical.
  */
-export function sanitizeWebhookConfigs(input: unknown): { configs: SanitizedWebhookConfig[]; valid: boolean } {
+export function sanitizeWebhookConfigs(
+  input: unknown,
+  options: { existing?: string | null } = {},
+): { configs: SanitizedWebhookConfig[]; valid: boolean } {
   if (!Array.isArray(input)) return { configs: [], valid: true };
+  // Keep-if-unchanged: an entry without a new secret but with the `secretRef`
+  // it was loaded with keeps the stored secret verbatim (only when the caller
+  // passes the rule's current stored JSON).
+  const stored = options.existing !== undefined ? parseStoredConfigs(options.existing) : null;
   const out: SanitizedWebhookConfig[] = [];
   for (const raw of input as IncomingWebhookConfig[]) {
     if (!raw || typeof raw !== "object") continue;
@@ -141,7 +191,10 @@ export function sanitizeWebhookConfigs(input: unknown): { configs: SanitizedWebh
       )
       : undefined;
     const bodyTemplate = typeof raw.bodyTemplate === "string" ? raw.bodyTemplate : undefined;
-    const secret = typeof raw.secret === "string" && raw.secret ? raw.secret : undefined;
+    let secret = typeof raw.secret === "string" && raw.secret ? raw.secret : undefined;
+    if (!secret && stored && typeof raw.secretRef === "number" && Number.isInteger(raw.secretRef)) {
+      secret = stored.find((c) => c.secretRef === raw.secretRef)?.secret;
+    }
     out.push({ url, method, headers, bodyTemplate, secret });
   }
   return { configs: out, valid: true };
@@ -163,16 +216,40 @@ export function actionsReferenceConfigs(actions: string[], configCount: number):
  * leave the server, so read surfaces expose everything about a webhook except
  * its secret value.
  */
-export function redactWebhookConfigs(
-  raw: string | null | undefined,
-): Array<{ url: string; method: string; headers?: Record<string, string>; bodyTemplate?: string; hasSecret: boolean }> {
-  return parseConfigs(raw).map((c) => ({
-    url: c.url,
-    method: c.method ?? "POST",
-    headers: c.headers,
-    bodyTemplate: c.bodyTemplate,
-    hasSecret: Boolean(c.secret),
-  }));
+export type RedactedWebhookConfig = {
+  url: string;
+  method: string;
+  headers?: Record<string, string>;
+  bodyTemplate?: string;
+  hasSecret: boolean;
+  /** Index in the stored list; send it back with an empty secret to keep the stored one. */
+  secretRef: number;
+};
+
+export function redactWebhookConfigs(raw: string | null | undefined): RedactedWebhookConfig[] {
+  return parseStoredConfigs(raw).map((c) => {
+    let headers: Record<string, string> | undefined;
+    try {
+      headers = openHeaders(c.headers);
+    } catch (error) {
+      warnSecretOnce(error, "autoReadRule.webhookConfigs");
+      headers = undefined;
+    }
+    return {
+      url: c.url,
+      method: c.method ?? "POST",
+      headers,
+      bodyTemplate: c.bodyTemplate,
+      hasSecret: Boolean(c.secret),
+      secretRef: c.secretRef,
+    };
+  });
+}
+
+/** An auto-read rule for the client: `webhookConfigs` carries redacted JSON (no secrets). */
+export function redactRuleForClient<T extends { webhookConfigs?: string | null }>(rule: T): T {
+  if (!rule.webhookConfigs) return rule;
+  return { ...rule, webhookConfigs: JSON.stringify(redactWebhookConfigs(rule.webhookConfigs)) };
 }
 
 /** Default payload, built as an object and serialized once — never by string concatenation (N5). */

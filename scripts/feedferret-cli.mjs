@@ -4,6 +4,17 @@ import bcrypt from 'bcryptjs';
 import Parser from 'rss-parser';
 
 if (!process.env.DATABASE_URL) process.env.DATABASE_URL = 'file:./prisma/dev.db';
+
+// `secrets:*` commands live in scripts/secrets-cli.mjs (standalone, also shipped in the Docker image).
+{
+  const raw = process.argv.slice(2);
+  const [first, ...rest] = raw[0] === '--' ? raw.slice(1) : raw;
+  if (first?.startsWith('secrets:')) {
+    const { main } = await import('./secrets-cli.mjs');
+    process.exit(await main([first.slice('secrets:'.length), ...rest]));
+  }
+}
+
 const { PrismaClient } = await import('@prisma/client');
 const prisma = new PrismaClient();
 const parser = new Parser();
@@ -16,7 +27,7 @@ function arg(name, fallback = undefined) {
   return idx >= 0 ? args[idx + 1] : fallback;
 }
 function usage() {
-  console.log(`FeedFerret CLI\n\nCommands:\n  list-users\n  create-user --email EMAIL --password PASS [--name NAME] [--admin true]\n  sync [--user EMAIL]\n  import-opml --user EMAIL --file subscriptions.opml\n  export-opml --user EMAIL --file subscriptions.opml\n  purge [--user EMAIL]\n`);
+  console.log(`FeedFerret CLI\n\nCommands:\n  list-users\n  create-user --email EMAIL --password PASS [--name NAME] [--admin true]\n  sync [--user EMAIL]\n  import-opml --user EMAIL --file subscriptions.opml\n  export-opml --user EMAIL --file subscriptions.opml\n  purge [--user EMAIL]\n  secrets:status [--json]\n`);
 }
 
 async function findUser() {

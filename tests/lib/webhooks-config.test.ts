@@ -47,8 +47,8 @@ describe("redactWebhookConfigs", () => {
     ]);
     const redacted = redactWebhookConfigs(raw);
     expect(redacted).toEqual([
-      { url: "https://e.com/a", method: "POST", headers: undefined, bodyTemplate: undefined, hasSecret: true },
-      { url: "https://e.com/b", method: "GET", headers: undefined, bodyTemplate: undefined, hasSecret: false },
+      { url: "https://e.com/a", method: "POST", headers: undefined, bodyTemplate: undefined, hasSecret: true, secretRef: 0 },
+      { url: "https://e.com/b", method: "GET", headers: undefined, bodyTemplate: undefined, hasSecret: false, secretRef: 1 },
     ]);
     expect(JSON.stringify(redacted)).not.toContain("supersecret");
   });

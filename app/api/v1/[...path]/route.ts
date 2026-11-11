@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { assertSafeHttpOptionsProxy } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { readPlainColumnOrNull } from "@/lib/secret-box";
 import { apiError, clampInt, parseBool, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
 import { checkRateLimit, getClientIdentifier, rateLimitHeaders, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildAdvancedSearchWhere } from "@/lib/search";
@@ -94,7 +95,7 @@ function feedPayload(rawFeed: any, rules: Awaited<ReturnType<typeof getConnector
     maxSizeKb: feed.maxSizeKb,
     // Per-feed auth: type/username are exposed; the password never is.
     authType: feed.authType,
-    authUsername: feed.authUsername,
+    authUsername: readPlainColumnOrNull("feed.authUsername", feed.authUsername),
     // Full-text / Feed Intelligence
     fullTextMode: feed.fullTextMode,
     fullTextSelector: feed.fullTextSelector,

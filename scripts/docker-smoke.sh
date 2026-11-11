@@ -224,4 +224,12 @@ if [ "$before" != "$after" ]; then
   exit 1
 fi
 log "search indexes survived the restart unchanged"
+
+# Stored-secret status CLI (M8) must run inside the image against the live DB.
+if ! docker exec "$APP2" node scripts/secrets-cli.mjs status >/dev/null; then
+  fail "secrets-cli status failed inside the image"
+  docker exec "$APP2" node scripts/secrets-cli.mjs status >&2 || true
+  exit 1
+fi
+log "secrets-cli status runs inside the image"
 log "OK"

@@ -10,6 +10,7 @@ import {
 } from "./feed-extraction";
 import { assertSafeProxyUrl, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed, type ConditionalFetchResult } from "./ssrf";
 import { logger } from "./logger";
+import { readFeedCredentials } from "./feed-secrets";
 import { isTrustedGoogleNewsOverrideUrl } from "./google-news";
 import { stripStyleBlocks } from "./html-utils";
 import { parseDurationSecs } from "./article-kind";
@@ -326,7 +327,9 @@ function headersFromFeed(feed: FeedFetchConfig, http: FeedHttpOptions) {
   return headers;
 }
 
-async function fetchText(feed: FeedFetchConfig, accept: string): Promise<ConditionalFetchResult> {
+async function fetchText(storedFeed: FeedFetchConfig, accept: string): Promise<ConditionalFetchResult> {
+  // Decrypts v2-sealed credentials; an undecryptable value throws (fetch error status, M8).
+  const feed = readFeedCredentials(storedFeed);
   const http = parseHttpOptions(feed);
   const timeoutMs = (feed.fetchTimeoutSecs ?? 30) * 1000;
   const maxBytes = feed.maxSizeKb ? feed.maxSizeKb * 1024 : 5 * 1024 * 1024;

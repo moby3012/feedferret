@@ -1,3 +1,4 @@
+import { readPlainColumnOrNull } from "@/lib/secret-box";
 import {
     OPML_EXTENSION_NAMESPACE,
     OPML_EXTENSION_PREFIX,
@@ -127,7 +128,8 @@ function extensionsAttr(name: string, value: unknown) {
 
 function feedExtensionAttributes(feed: any) {
     const scraper = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
-    const httpOptions = parseJsonObject<FeedHttpOptions>(feed.httpOptions);
+    // httpOptions may be v2-sealed (M8); unreadable values are left out of the export.
+    const httpOptions = parseJsonObject<FeedHttpOptions>(readPlainColumnOrNull("feed.httpOptions", feed.httpOptions));
     let out = "";
 
     out += extensionsAttr("priority", feed.priority && feed.priority !== "main" ? feed.priority : undefined);

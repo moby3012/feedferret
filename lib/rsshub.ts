@@ -59,7 +59,7 @@ export async function loadRsshubConfig(): Promise<RsshubConfig | null> {
   if (!settings?.rsshubEnabled || !settings.rsshubBaseUrl?.trim()) return null;
   return {
     baseUrl: settings.rsshubBaseUrl.trim(),
-    apiKey: decryptIfValue(settings.rsshubApiKey) || null,
+    apiKey: decryptIfValue(settings.rsshubApiKey, "globalSettings.rsshubApiKey") || null,
   };
 }
 
