@@ -59,6 +59,45 @@ type Phase = "idle" | "pending" | "locked" | "settling";
  */
 export const CLICK_SUPPRESS_MS = 400;
 
+/**
+ * iOS keeps the long-press going after our menu opened under the finger and
+ * starts its own text selection on whatever is now there (the menu sheet).
+ * Block `selectstart` and drop any selection until the finger lifts.
+ */
+function blockSelectionUntilRelease() {
+  if (typeof document === "undefined") return;
+  const clear = () => {
+    try {
+      const sel = document.getSelection();
+      if (sel && sel.rangeCount > 0) sel.removeAllRanges();
+    } catch {
+      /* ignore */
+    }
+  };
+  const onSelectStart = (e: Event) => e.preventDefault();
+  let done = false;
+  // pointercancel / touchcancel are NOT release signals: iOS cancels the
+  // pointer exactly when its own selection gesture takes over. Only the real
+  // lift (or a safety timeout) ends the block.
+  const release = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(safety);
+    document.removeEventListener("selectstart", onSelectStart, true);
+    document.removeEventListener("selectionchange", clear, true);
+    document.removeEventListener("pointerup", release, true);
+    document.removeEventListener("touchend", release, true);
+    // Selection that iOS commits on lift is cleared once more.
+    setTimeout(clear, 0);
+  };
+  const safety = setTimeout(release, 4000);
+  clear();
+  document.addEventListener("selectstart", onSelectStart, true);
+  document.addEventListener("selectionchange", clear, true);
+  document.addEventListener("pointerup", release, true);
+  document.addEventListener("touchend", release, true);
+}
+
 export function createSwipeRow(el: HTMLElement, o: SwipeRowOptions): () => void {
   let phase: Phase = "idle";
   let pointerId = -1;
@@ -231,6 +270,7 @@ export function createSwipeRow(el: HTMLElement, o: SwipeRowOptions): () => void 
         phase = "idle";
         haptic("tick");
         suppressNextClick();
+        blockSelectionUntilRelease();
         o.onLongPress?.(point);
       }, LONG_PRESS_MS);
     }

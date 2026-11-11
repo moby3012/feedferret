@@ -147,7 +147,9 @@ function MenuSheet(p: ResponsiveMenuProps & { select(item: OverlayMenuItem): voi
   const row = "flex min-h-12 w-full items-center gap-3 rounded-control px-3 text-start text-body font-medium active:bg-surface-sunken disabled:opacity-50";
   return (
     <Drawer open={p.open} onOpenChange={p.onOpenChange}>
-      <DrawerContent data-testid={p.testId} onCloseAutoFocus={p.restoreFocus}>
+      {/* select-none + no callout: the sheet opens under a still-pressed finger (long-press);
+          iOS would otherwise start its text selection on the sheet's title / items. */}
+      <DrawerContent data-testid={p.testId} onCloseAutoFocus={p.restoreFocus} className="select-none [-webkit-touch-callout:none]">
         <DrawerHeader className="text-start">
           <DrawerTitle className="line-clamp-2">{p.title}</DrawerTitle>
           {p.description ? <DrawerDescription className="line-clamp-2">{p.description}</DrawerDescription> : <DrawerDescription className="sr-only">{p.title}</DrawerDescription>}
