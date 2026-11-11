@@ -216,6 +216,14 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
         }
         setDiscoveryMessage(message);
         toast.info(message);
+      } else if (data.pageBlocked) {
+        // The page refused us, but a platform rule / known source / direct probe found its feed.
+        const label = feedSourceLabel(feeds[0]);
+        setDiscoveryMessage(
+          label
+            ? t("sidebar.hints.blockedButFound", { via: t(`sidebar.${label.key}`, label.values) })
+            : t("sidebar.hints.blockedButFoundPlain"),
+        );
       }
     } catch {
       setDiscoveryMessage(t("sidebar.errors.discoveryFailedHint"));

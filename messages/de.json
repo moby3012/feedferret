@@ -763,7 +763,9 @@
       "blocked": "Seite blockiert automatischen Abruf – probier stattdessen einen direkten Feed des Anbieters",
       "tlsError": "Zertifikatsfehler: Die sichere Verbindung (HTTPS) zu dieser Website ist fehlgeschlagen. Aus Sicherheitsgründen wechseln wir nicht automatisch auf unverschlüsseltes http – wenn du der Seite vertraust, gib die Adresse mit http:// ein.",
       "needsRsshubFor": "{platform} bietet keinen eigenen Feed – braucht RSSHub (unter Einstellungen › Server einrichten)",
-      "partial": "Die Suche wurde vorzeitig beendet (Zeit- oder Anfragelimit), bevor ein Feed gefunden wurde. Versuche es später erneut oder gib die Feed-Adresse direkt ein."
+      "partial": "Die Suche wurde vorzeitig beendet (Zeit- oder Anfragelimit), bevor ein Feed gefunden wurde. Versuche es später erneut oder gib die Feed-Adresse direkt ein.",
+      "blockedButFound": "Die Seite blockiert den automatischen Abruf – Feed trotzdem gefunden: {via}",
+      "blockedButFoundPlain": "Die Seite blockiert den automatischen Abruf – Feed trotzdem gefunden."
     },
     "kinds": {
       "videos": "Videos",

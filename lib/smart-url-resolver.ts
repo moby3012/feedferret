@@ -250,9 +250,11 @@ const YOUTUBE: PlatformResolver = {
       build: (c) => ({ feeds: youtubeChannelFeeds(c.m[1], c.m[1]) }),
     },
     {
-      path: /^\/@([\w.-]{3,30})(?:\/.*)?$/,
+      // Handles: 3–30 chars today, but legacy 1–2 char handles (`@EA`) and
+      // percent-encoded non-ASCII handles exist too.
+      path: /^\/@((?:[\w.-]|%[0-9A-Fa-f]{2}){1,100})(?:\/.*)?$/,
       build: (c) => ({
-        lookup: { type: "youtube-page", url: `https://www.youtube.com/@${c.m[1]}`, fallbackTitle: `@${c.m[1]}` },
+        lookup: { type: "youtube-page", url: `https://www.youtube.com/@${c.m[1]}`, fallbackTitle: `@${safeDecode(c.m[1])}` },
       }),
     },
     {
@@ -873,6 +875,17 @@ export function parseYoutubePage(html: string): { channelId: string; title: stri
           channelId = canon[1];
           break;
         }
+      }
+    }
+  }
+  if (!channelId) {
+    // og:url / twitter:url carry the canonical /channel/UC… address too.
+    for (const tag of tags) {
+      if (!/^<meta\b/i.test(tag) || !/(?:property|name)=["'](?:og:url|twitter:url)["']/i.test(tag)) continue;
+      const og = /youtube\.com\/channel\/(UC[\w-]{22})/i.exec(tag);
+      if (og) {
+        channelId = og[1];
+        break;
       }
     }
   }
