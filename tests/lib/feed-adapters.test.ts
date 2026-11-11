@@ -63,11 +63,6 @@ const PLATFORM_CASES: PlatformCase[] = [
     url: "https://www.nexusmods.com/games/stardewvalley",
     expect: ["https://www.nexusmods.com/stardewvalley/rss/newtoday/", "https://www.nexusmods.com/stardewvalley/rss/updatedtoday/"],
   },
-  {
-    adapter: "gamebanana",
-    url: "https://gamebanana.com/games/4254",
-    expect: ["https://api.gamebanana.com/Rss/New?gameid=4254", "https://api.gamebanana.com/Rss/Featured?gameid=4254"],
-  },
   { adapter: "steam-community", url: "https://steamcommunity.com/groups/cncnet", expect: ["https://steamcommunity.com/groups/cncnet/rss/"] },
   { adapter: "steam-community", url: "https://steamcommunity.com/games/1213210/announcements", expect: ["https://steamcommunity.com/games/1213210/rss/"] },
 ];
@@ -90,6 +85,8 @@ const PLATFORM_NON_MATCHES = [
   "https://www.notindiedb.com/games/x",
   "https://moddb.evil.com/mods/mental-omega",
   "https://gamebanana.com/news",
+  // No adapter: its API "RSS" (`<rss><items>…`, no <channel>) is no readable feed → page discovery.
+  "https://gamebanana.com/games/4254",
   "https://steamcommunity.com/app/1213210", // store/app hub: smart-url-resolver's Steam rule
   "https://www.moddb.com/search?q=x",
   "https://example.com/mods/mental-omega", // same path, other host

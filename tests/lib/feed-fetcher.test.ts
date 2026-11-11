@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { htmlText, categoriesFrom } from "../../lib/feed-fetcher";
+import { htmlText, categoriesFrom, parseRssOrAtom } from "../../lib/feed-fetcher";
 
 // xml2js (via rss-parser) represents an element that has BOTH attributes and
 // text content as a null-prototype `{ _: text, $: attrs }` object — e.g. from
@@ -52,5 +52,19 @@ describe("categoriesFrom", () => {
   it("returns an empty array for null/undefined", () => {
     expect(categoriesFrom(null)).toEqual([]);
     expect(categoriesFrom(undefined)).toEqual([]);
+  });
+});
+
+describe("parseRssOrAtom", () => {
+  it("fails gracefully on a well-formed but non-standard <rss><items> document (no <channel>)", async () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0"><items><title>API RSS</title><item><title>A</title><link>https://x.example/a</link></item></items></rss>`;
+    await expect(parseRssOrAtom(xml)).rejects.toThrow(/Unsupported feed structure/);
+    await expect(parseRssOrAtom(xml)).rejects.not.toThrow(/Cannot read properties/);
+  });
+
+  it("still parses a normal RSS feed", async () => {
+    const parsed = await parseRssOrAtom(`<rss version="2.0"><channel><title>T</title><item><title>A</title><link>https://x.example/a</link></item></channel></rss>`);
+    expect(parsed.title).toBe("T");
+    expect(parsed.items).toHaveLength(1);
   });
 });

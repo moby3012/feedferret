@@ -155,21 +155,6 @@ export const PLATFORM_ADAPTERS: PlatformAdapter[] = [
     ],
   },
   {
-    id: "gamebanana",
-    name: "GameBanana",
-    family: "platform",
-    hosts: ["gamebanana.com"],
-    routes: [
-      {
-        pattern: /^\/games\/(\d+)(?:\/.*)?$/,
-        feeds: [
-          { url: "https://api.gamebanana.com/Rss/New?gameid={$1}", kind: "new", label: "new submissions" },
-          { url: "https://api.gamebanana.com/Rss/Featured?gameid={$1}", kind: "top", label: "featured" },
-        ],
-      },
-    ],
-  },
-  {
     // Community side of Steam (the store / app hub routes live in
     // smart-url-resolver.ts): groups and per-game announcement hubs.
     id: "steam-community",

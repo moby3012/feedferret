@@ -422,11 +422,32 @@ function notModifiedResult(result: Extract<ConditionalFetchResult, { notModified
   return { ...NOT_MODIFIED_FEED, etag: result.etag, lastModifiedHeader: result.lastModified };
 }
 
+/**
+ * rss-parser on untrusted XML. It indexes into the structure it expects
+ * (`rss.channel[0]`, `feed.entry`, …) and throws a raw TypeError ("Cannot
+ * read properties of undefined") on a well-formed document of another shape
+ * — e.g. `<rss><items>…` without a `<channel>`. Any such failure becomes one
+ * clear "not a readable RSS/Atom feed" error; `items` is always an array.
+ */
+type ParsedRss = Awaited<ReturnType<typeof parser.parseString>>;
+
+export async function parseRssOrAtom(xml: string): Promise<ParsedRss> {
+  let parsed: ParsedRss;
+  try {
+    parsed = await parser.parseString(xml);
+  } catch (err) {
+    if (err instanceof TypeError) throw new Error("Unsupported feed structure: not a readable RSS/Atom feed");
+    throw err;
+  }
+  if (!parsed || typeof parsed !== "object") throw new Error("Unsupported feed structure: not a readable RSS/Atom feed");
+  return { ...parsed, items: Array.isArray(parsed.items) ? parsed.items : [] };
+}
+
 async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
   const result = await fetchText(feed, "application/rss+xml,application/atom+xml,application/xml,text/xml,*/*");
   if (result.notModified) return notModifiedResult(result);
 
-  const parsed = await parser.parseString(result.text);
+  const parsed = await parseRssOrAtom(result.text);
   return {
     title: parsed.title,
     description: parsed.description,

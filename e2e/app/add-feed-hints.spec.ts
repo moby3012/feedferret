@@ -52,3 +52,21 @@ test("the needs-rsshub hint names the platform that has no native feed", async (
     timeout: 10_000,
   });
 });
+
+test("a blocked page whose feed was still found shows the candidates plus where the feed came from", async ({ app }) => {
+  await app.page.route("**/api/discover?**", async (route) => {
+    await route.fulfill({
+      json: {
+        mode: "url",
+        pageBlocked: true,
+        feeds: [{ url: "https://feeds.walled.invalid/home.xml", title: "Walled · Home", type: "rss", source: "curated" }],
+      },
+    });
+  });
+  const dialog = await openAddFeed(app);
+  const input = dialog.getByPlaceholder(INPUT);
+  await input.fill("walled.invalid");
+  await input.press("Enter");
+  await expect(dialog.getByText("Walled · Home")).toBeVisible({ timeout: 10_000 });
+  await expect(dialog.getByText("The page blocks automated access – feed found anyway: Known source")).toBeVisible();
+});

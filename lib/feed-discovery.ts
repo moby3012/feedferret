@@ -1,9 +1,9 @@
 import { fetchTextWithSsrfProtection, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { parseHttpLinkHeader } from "./http-link-header";
 import { hintForFetchError } from "./fetch-error-hint";
-import { buildTopicFeeds, parseSourceInput, platformLabel, resolveSource, type ResolvedFeed } from "./smart-url-resolver";
+import { buildTopicFeeds, matchSource, parseSourceInput, platformLabel, resolveSource, type ResolvedFeed } from "./smart-url-resolver";
 import { detectSoftwareFeeds, matchPlatformAdapters, rsshubOnlyPlatform, scanForAdapters, type AdapterCandidate } from "./feed-adapters/engine";
-import { scanHtml, type ScannedAnchor } from "./html-scan";
+import { HTML_SCAN_MAX_CHARS, scanHtml, type ScannedAnchor, type ScannedElement } from "./html-scan";
 import type { AdapterFamily } from "./feed-adapters/registry";
 import { cleanUrlInput, httpFallbackUrl, isConnectError, isTlsError, normalizeUrlInput, trimTrailing } from "./url-input";
 import { withTransportFallback } from "./transport-fallback";
@@ -43,6 +43,12 @@ export type DiscoveryResult = {
   pageUrl?: string;
   /** Set when the run hit its deadline or request budget: `feeds` may be incomplete. */
   partial?: DiscoveryStopReason;
+  /**
+   * The page itself refused us (401/402/403, bot wall) but other stages
+   * (platform rules, curated routes, RSSHub, feed URLs probed directly) still
+   * found feeds — the UI says so instead of failing.
+   */
+  pageBlocked?: true;
 };
 
 export type DiscoverOptions = {
@@ -221,6 +227,9 @@ export function sniffFeedPrefix(text: string): FeedSniff | null {
     const entry = firstBlock(s, "(?:\\w+:)?entry");
     if (entry) firstId = firstTagText(entry, "(?:\\w+:)?id") ?? /<(?:\w+:)?link\b[^<>]{0,1000}?\bhref="([^"<>]{1,2000})"/i.exec(entry)?.[1] ?? null;
   } else {
+    // RSS 2.0 and RDF both carry a <channel>; a `<rss><items>…` look-alike
+    // (seen on some APIs) is no feed our parser can read.
+    if (!/<(?:\w+:)?channel[\s>]/i.test(s)) return null;
     const channel = firstBlock(s, "(?:\\w+:)?channel") ?? s;
     const itemAt = channel.search(/<(?:\w+:)?item[\s>]/i);
     title = firstTagText(itemAt >= 0 ? channel.slice(0, itemAt) : channel, "(?:\\w+:)?title");
@@ -283,10 +292,29 @@ async function budgetedFetch<T>(
 }
 
 /**
+ * Bytes read from a candidate whose address looks like a feed INDEX page
+ * (`/rss`, `/feeds/`, `/rss.html`): enough to be a feed's prefix, or to
+ * reach the list of feeds when it is an HTML page that links them.
+ */
+export const FEED_INDEX_BYTES = 256 * 1024;
+
+/** `/rss`, `/feeds/`, `/rss.html`, `/newsfeeds`, … — a path that is either a feed or a page listing feeds. */
+export function looksLikeFeedIndexPath(url: string): boolean {
+  try {
+    const last = new URL(url).pathname.split("/").filter(Boolean).pop() ?? "";
+    return /^(?:rss|feeds?|atom|newsfeeds?|rss-?feeds?|syndication)(?:\.(?:html?|php|aspx?))?$/i.test(last);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fetch-verifies a candidate from its first FEED_SNIFF_BYTES (stream cut off
  * there) — the size of the whole feed never matters here; the full-size
  * limits apply when the feed is actually synced. `preferOwnTitle`: replace
  * the candidate's label (anchor text, "host feed") with the feed's own title.
+ * `onIndexPage`: a feed-index-looking address that answered with HTML
+ * instead of a feed hands its prefix over (the caller may follow it once).
  */
 async function verifyFeedCandidate(
   budget: DiscoveryBudget,
@@ -294,15 +322,17 @@ async function verifyFeedCandidate(
   title: string,
   fallbackType: DiscoveredFeed["type"],
   preferOwnTitle = false,
+  onIndexPage?: (html: string, url: string) => void,
 ): Promise<VerifiedCandidate | null> {
   try {
     const allowInternal = await isTrustedFeedFetchingAllowed();
+    const indexLike = onIndexPage !== undefined && looksLikeFeedIndexPath(url);
     const text = await budgetedFetch(
       budget,
       url,
       (impersonate, req) =>
         fetchTextWithSsrfProtection(url, { signal: req.signal }, {
-          maxBytes: FEED_SNIFF_BYTES,
+          maxBytes: indexLike ? FEED_INDEX_BYTES : FEED_SNIFF_BYTES,
           readPrefix: true,
           timeoutMs: req.timeoutMs,
           redirectGuard: req.redirectGuard,
@@ -313,7 +343,10 @@ async function verifyFeedCandidate(
       (t) => !t.trim(),
     );
     const sniff = sniffFeedPrefix(text);
-    if (!sniff) return null;
+    if (!sniff) {
+      if (indexLike && /<html[\s>]|<!doctype html/i.test(text.slice(0, 4096))) onIndexPage(text, url);
+      return null;
+    }
     const ownTitle = sniff.title;
     return {
       url,
@@ -324,6 +357,82 @@ async function verifyFeedCandidate(
   } catch {
     return null;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Section affinity                                                            */
+/* -------------------------------------------------------------------------- */
+
+const GENERIC_SEGMENTS = new Set(["index", "home", "start", "startseite", "news", "nachrichten", "de", "en", "www"]);
+
+/**
+ * The meaningful path segments of the address the user typed — a section
+ * page `/aktuell/politik/` → ["aktuell", "politik"] (lower-case, file
+ * extensions, numeric ids and generic words dropped). Empty for a homepage.
+ */
+export function sectionSegments(url: URL): string[] {
+  const out: string[] = [];
+  for (const raw of url.pathname.split("/").slice(0, 8)) {
+    let seg = raw.toLowerCase();
+    try {
+      seg = decodeURIComponent(seg);
+    } catch {
+      // keep raw
+    }
+    seg = seg.replace(/\.(?:html?|php|aspx?|jsp)$/, "");
+    if (seg.length < 2 || seg.length > 60 || /^\d+$/.test(seg) || GENERIC_SEGMENTS.has(seg)) continue;
+    out.push(seg);
+  }
+  return out;
+}
+
+function affinityTokens(text: string): Set<string> {
+  return new Set(text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+}
+
+/**
+ * 0–1: how much a feed belongs to the section the user typed — its address
+ * or title contains the section's path segments (the last, most specific
+ * segment counts double). A site-wide feed scores 0 (or partially for a
+ * shared parent like `/aktuell/`); 0 when the input has no section.
+ */
+export function sectionAffinity(segments: string[], feedUrl: string, title = ""): number {
+  if (!segments.length) return 0;
+  let path = feedUrl;
+  try {
+    const u = new URL(feedUrl);
+    path = `${u.hostname} ${u.pathname} ${u.search}`;
+  } catch {
+    // tokenise the raw string
+  }
+  const tokens = affinityTokens(`${path} ${title.slice(0, 300)}`);
+  const pathSegs = new Set(path.toLowerCase().split(/[/?&=\s]+/).filter(Boolean));
+  let total = 0;
+  let hit = 0;
+  segments.forEach((seg, i) => {
+    const weight = i === segments.length - 1 ? 2 : 1;
+    total += weight;
+    const parts = seg.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    if (pathSegs.has(seg) || (parts.length > 0 && parts.every((p) => tokens.has(p)))) hit += weight;
+  });
+  return total ? hit / total : 0;
+}
+
+/**
+ * Section-relative variants of the usual feed paths for a section page
+ * (`/inland` → `/inland/feed`, `/inland/rss`, `/rss/inland`, `/feed/inland`).
+ * Only for shallow section-like paths (not a deep, dated or slugged article address).
+ */
+export function sectionFeedPaths(url: URL): string[] {
+  const segs = url.pathname.split("/").filter(Boolean);
+  if (!segs.length || segs.length > 3) return [];
+  const last = segs[segs.length - 1];
+  if (/\.[a-z0-9]{1,5}$/i.test(last)) return [];
+  // Date/ID segments or a long slug: an article, not a section.
+  if (segs.some((seg) => /^\d+$/.test(seg)) || last.split("-").length >= 4) return [];
+  if (looksLikeFeedIndexPath(url.toString())) return [];
+  const section = `/${segs.join("/")}`;
+  return [`${section}/feed`, `${section}/rss`, `/rss${section}`, `/feed${section}`];
 }
 
 function toDiscovered(f: ResolvedFeed, source: "resolver" | "topic" | "curated"): DiscoveredFeed {
@@ -360,6 +469,9 @@ async function verifyPlatformAdapterCandidates(budget: DiscoveryBudget, candidat
   return checked.filter((f): f is DiscoveredFeed => f !== null);
 }
 
+/** Bytes a resolver lookup reads at most (prefix; never fails on a larger page). */
+export const RESOLVER_PAGE_BYTES = 4 * 1024 * 1024;
+
 /** SSRF-protected, budgeted text fetch handed to the pure resolver for its one-step lookups. */
 const resolverFetchText = (budget: DiscoveryBudget) => async (url: string, init?: { headers?: Record<string, string> }) => {
   if (!budget.take(url)) throw new DiscoveryBudgetRefusal(url);
@@ -374,9 +486,12 @@ const resolverFetchText = (budget: DiscoveryBudget) => async (url: string, init?
         },
         signal: budget.signal,
       },
-      // YouTube channel/watch pages are ~1–3 MB of HTML.
+      // YouTube channel/watch pages are ~1–3 MB of HTML; a larger page is
+      // read as a bounded prefix (the channel meta sits in the first MiBs)
+      // instead of failing the lookup on its size.
       {
-        maxBytes: 4 * 1024 * 1024,
+        maxBytes: RESOLVER_PAGE_BYTES,
+        readPrefix: true,
         timeoutMs: budget.requestTimeoutMs(),
         redirectGuard: tracker.redirectGuard,
         allowInternal: await isTrustedFeedFetchingAllowed(),
@@ -520,7 +635,7 @@ function relTokens(rel: string | undefined): string[] {
   return (rel ?? "").toLowerCase().split(/[\t\n\f\r ]/).filter(Boolean);
 }
 
-type CandidateOrigin = "self" | "link" | "header" | "software" | "anchor" | "common";
+type CandidateOrigin = "self" | "link" | "header" | "software" | "anchor" | "common" | "index";
 type Candidate = {
   title: string;
   type: DiscoveredFeed["type"];
@@ -528,6 +643,8 @@ type Candidate = {
   origin: CandidateOrigin;
   /** Software adapter that proposes (or recognises) this URL. */
   adapter?: Pick<AdapterCandidate, "adapterId" | "kind" | "via">;
+  /** Common path built from the section the user typed (`/inland/feed`, `/rss/inland`). */
+  section?: boolean;
 };
 
 const FEED_WORDS = /\b(?:rss|atom|feeds?|newsfeed|web ?feed|abonnieren|subscribe|syndication)\b/i;
@@ -580,7 +697,38 @@ function feedUrlKey(url: string): string {
 /** Candidate addresses longer than this (from the page or built by adapters) are dropped. */
 export const MAX_CANDIDATE_URL_LENGTH = 2048;
 
-type HtmlDiscovery = { feeds: DiscoveredFeed[]; hint?: DiscoveryHint; pageUrl: string };
+type HtmlDiscovery = {
+  feeds: DiscoveredFeed[];
+  hint?: DiscoveryHint;
+  pageUrl: string;
+  /** At least one feed belongs to the section the user typed (see sectionAffinity). */
+  sectionHit?: boolean;
+};
+
+/** Max. `<link>` tags recovered from the part of a page beyond the scanner's cap. */
+const LATE_LINK_TAGS = 200;
+
+/**
+ * `<link>` elements past HTML_SCAN_MAX_CHARS (huge inline-script heads push a
+ * page's `<link rel=alternate>` beyond the scanner's cap): one forward
+ * indexOf pass collects at most LATE_LINK_TAGS bounded `<link …>` tags, which
+ * are then parsed by the same linear scanner.
+ */
+export function lateLinkElements(html: string): ScannedElement[] {
+  if (html.length <= HTML_SCAN_MAX_CHARS) return [];
+  const lower = html.toLowerCase();
+  const tags: string[] = [];
+  let pos = HTML_SCAN_MAX_CHARS;
+  while (tags.length < LATE_LINK_TAGS) {
+    const at = lower.indexOf("<link", pos);
+    if (at < 0) break;
+    const end = lower.indexOf(">", at);
+    if (end < 0) break;
+    if (end - at <= 4000) tags.push(html.slice(at, end + 1));
+    pos = end + 1;
+  }
+  return tags.length ? scanHtml(tags.join("\n")).links : [];
+}
 
 /**
  * Stage 2 — classic HTML discovery: the page itself (when it already is a
@@ -592,6 +740,8 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
   let html = "";
   let hint: DiscoveryHint | undefined;
   const allowInternal = await isTrustedFeedFetchingAllowed();
+  const inputUrl = new URL(pageUrl);
+  const segments = sectionSegments(inputUrl);
   // Relative references resolve against the FINAL URL after redirects (and
   // a document `<base href>`), not the URL the user typed.
   let base = new URL(pageUrl);
@@ -607,6 +757,7 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
     resolveAgainst: URL = base,
     labelSaysFeed = false,
     adapter?: Candidate["adapter"],
+    section = false,
   ) => {
     // Page-supplied: an absurdly long address is never a feed we want to probe.
     if (!href || href.length > MAX_CANDIDATE_URL_LENGTH) return;
@@ -620,7 +771,7 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
       if (!strong && !looksLikeFeedUrl(feedUrl)) return;
       const existing = candidateLinks.get(feedUrl);
       if (!existing) {
-        candidateLinks.set(feedUrl, { title: title || feedUrl, type, origin, score, adapter });
+        candidateLinks.set(feedUrl, { title: title || feedUrl, type, origin, score, adapter, ...(section ? { section } : {}) });
       } else {
         // Same URL from two stages: the better score wins, the adapter label sticks.
         candidateLinks.set(feedUrl, {
@@ -728,7 +879,7 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
     }
   }
 
-  for (const el of page.links) {
+  for (const el of [...page.links, ...lateLinkElements(html)]) {
     if (!relTokens(el.attrs.rel).includes("alternate")) continue;
     const type = (el.attrs.type || "").toLowerCase().trim();
     const isFeedMime = type.length > 0 && FEED_MIME_TYPES.some((t) => type.startsWith(t) || t.startsWith(type.split("+")[0]));
@@ -760,16 +911,35 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
     }
   }
 
+  // Section page (`/inland`, `/aktuell/politik/`): the section-relative
+  // variants of the usual paths first, then the site-wide ones.
+  for (const sectionPath of sectionFeedPaths(inputUrl)) {
+    addCandidate(sectionPath, `${responseUrl.hostname} feed`, "unknown", "common", 20, responseUrl, false, undefined, true);
+  }
   for (const commonPath of COMMON_FEED_PATHS) {
     // Root-relative on purpose ("/?feed=rss2" must stay at the site root).
     addCandidate(commonPath, `${responseUrl.hostname} feed`, "unknown", "common", 15, responseUrl);
   }
 
+  // A feed-index-looking candidate (`/rss`, `/feeds/`) that answered with an
+  // HTML page listing feeds: kept (the first one only) and followed once below.
+  let indexPage: { html: string; url: string } | null = null;
+  const onIndexPage = (text: string, url: string) => {
+    indexPage ??= { html: text, url };
+  };
+  // A comment feed never gets the section bonus: on an article address its
+  // own comments feed would otherwise outrank the site's feed.
+  const affinityOf = (url: string, title: string) => (COMMENT_WORDS.test(url) || COMMENT_WORDS.test(title) ? 0 : sectionAffinity(segments, url, title));
+  const hasSectionHit = () => [...discovered.values()].some((f) => affinityOf(f.url, f.title) > 0);
+
   // Verify in small parallel batches (each probe can take up to the timeout),
   // best-scored first so they win the 10 slots. Bounded fan-out: at most 25
   // advertised/anchor candidates, then the common paths — which are skipped
   // entirely once the page's own advertisement verified (no blind guessing
-  // when the site told us where its feed is).
+  // when the site told us where its feed is), except the section-relative
+  // ones when the input is a section page and nothing section-specific
+  // verified yet. A blocked page (401/403/bot wall) gets one batch of blind
+  // probes at most: the same host usually refuses those too.
   const byScore = [...candidateLinks.entries()].sort((a, b) => b[1].score - a[1].score);
   const advertised = byScore.filter(([, c]) => c.origin !== "common").slice(0, 25);
   const common = byScore.filter(([, c]) => c.origin === "common");
@@ -779,7 +949,14 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
       const batch = entries.slice(i, i + BATCH);
       const verified = await Promise.all(
         batch.map(([url, c]) =>
-          verifyFeedCandidate(budget, url, c.title, c.type, c.origin === "anchor" || c.origin === "common" || c.origin === "software")),
+          verifyFeedCandidate(
+            budget,
+            url,
+            c.title,
+            c.type,
+            c.origin === "anchor" || c.origin === "common" || c.origin === "software" || c.origin === "index",
+            c.origin === "anchor" || c.origin === "common" ? onIndexPage : undefined,
+          )),
       );
       verified.forEach((v, idx) => {
         if (v) accept(v, batch[idx][1]);
@@ -788,13 +965,51 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
   };
   await runBatches(advertised);
   const hasAdvertised = [...discovered.values()].some((f) => f.score >= 70);
-  if (!hasAdvertised) await runBatches(common);
+  if (!hasAdvertised) await runBatches(hint === "blocked" ? common.slice(0, BATCH) : common);
+  else if (segments.length && !hasSectionHit()) await runBatches(common.filter(([, c]) => c.section));
 
-  const feeds = [...discovered.values()]
-    .sort((a, b) => b.score - a.score)
+  // Follow ONE feed index page one level: its listed feeds (page `<link>`s
+  // and feed-looking anchors), best section match first — when nothing was
+  // found yet, or the input is a section and only site-wide feeds verified.
+  const followIndex = indexPage as { html: string; url: string } | null;
+  if (followIndex && !budget.stopReason && (discovered.size === 0 || (segments.length > 0 && !hasSectionHit()))) {
+    const indexBase = new URL(followIndex.url);
+    const listed = scanHtml(followIndex.html);
+    const entries: Array<[string, Candidate]> = [];
+    const seen = new Set<string>();
+    const consider = (href: string | undefined, label: string, score: number) => {
+      if (!href || href.length > MAX_CANDIDATE_URL_LENGTH) return;
+      let abs: string;
+      try {
+        abs = new URL(href, indexBase).toString();
+      } catch {
+        return;
+      }
+      if (!/^https?:/i.test(abs) || abs.length > MAX_CANDIDATE_URL_LENGTH || seen.has(abs) || candidateLinks.has(abs)) return;
+      seen.add(abs);
+      entries.push([abs, { title: label || abs, type: "unknown", origin: "index", score: score + 40 * affinityOf(abs, label) }]);
+    };
+    for (const l of listed.links) {
+      if (relTokens(l.attrs.rel).includes("alternate") && /^application\/(?:rss\+xml|atom\+xml|feed\+json)\b/i.test((l.attrs.type || "").trim())) {
+        consider(l.attrs.href, l.attrs.title ?? "", 60);
+      }
+    }
+    for (const a of listed.anchors) {
+      if (!a.href || !(looksLikeFeedUrl(a.href) || anchorSaysFeed(a))) continue;
+      consider(a.href, a.text || a.title || a.ariaLabel, 50);
+    }
+    entries.sort((a, b) => b[1].score - a[1].score);
+    await runBatches(entries.slice(0, BATCH + 1));
+  }
+
+  // Final order: stage score, plus how well the feed matches the section the
+  // user typed — a section page ranks its own feed above the site-wide one.
+  const ranked = [...discovered.values()].map((f) => ({ f, rank: f.score + 40 * affinityOf(f.url, f.title) }));
+  const feeds = ranked
+    .sort((a, b) => b.rank - a.rank)
     .slice(0, 10)
-    .map(({ score: _score, ...feed }) => feed);
-  return { feeds, hint, pageUrl: responseUrl.toString() };
+    .map(({ f: { score: _score, ...feed } }) => feed);
+  return { feeds, hint, pageUrl: responseUrl.toString(), sectionHit: segments.length > 0 && feeds.some((f) => affinityOf(f.url, f.title) > 0) };
 }
 
 /**
@@ -806,9 +1021,13 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
  *     smart-url-resolver.ts plus the PLATFORM_ADAPTERS registry (verified)
  *     → otherwise the page itself: (b) software adapters recognised on it
  *     (Discourse, phpBB, XenForo, WordPress, …), its advertised feeds and
- *     anchors, then common feed paths — every candidate (c) prefix-verified;
+ *     anchors, then common feed paths (section-relative ones first for a
+ *     section page; a feed INDEX page found there is followed one level) —
+ *     every candidate (c) prefix-verified and ranked by section affinity;
  *     the page fetch falls back to the other HTTP transport when refused
- *     → curated publisher routes only when the page yielded nothing → (d)
+ *     → curated publisher routes only as a fallback (page found nothing,
+ *     a section page found only site-wide feeds, or only blind
+ *     common-path guesses; also when the page itself is blocked) → (d)
  *     bundled RSSHub Radar rules on the configured RSSHub instance (if any;
  *     else the `needs-rsshub` hint names the platform).
  *   See lib/feed-adapters/registry.ts for the adapter list.
@@ -837,17 +1056,47 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
 }
 
 async function discoverUrl(cleaned: string, url: URL, pageUrl: string, httpFallback: boolean, budget: DiscoveryBudget): Promise<DiscoveryResult> {
-  const [native, radar] = await Promise.all([
-    resolveWithPlatformRules(cleaned, budget).catch(() => ({ matched: false, feeds: [] as DiscoveredFeed[], curated: [] as ResolvedFeed[] })),
-    resolveWithRadarRules(pageUrl, budget),
-  ]);
+  // Must a platform rule answer before the page is read (one-step lookups,
+  // resolver feeds, registry platform adapters)? Otherwise the page fetch
+  // starts right away, in parallel with the resolver, RSSHub radar and the
+  // curated routes — no avoidable sequential round trip.
+  const sync = matchSource(cleaned);
+  const platformFirst = sync.lookups.length > 0 || sync.feeds.some((f) => !f.curated) || matchPlatformAdapters(url).length > 0;
+  const noNative = { matched: false, feeds: [] as DiscoveredFeed[], curated: [] as ResolvedFeed[] };
+  const nativeP = resolveWithPlatformRules(cleaned, budget).catch(() => noNative);
+  const radarP = resolveWithRadarRules(pageUrl, budget);
+  // Curated publisher routes are verified up front (one request each, so a
+  // blocked page's blind probes cannot starve them of budget) but OFFERED
+  // only as a fallback below.
+  const curatedRoutes = sync.feeds.filter((f) => f.curated);
+  const curatedP = curatedRoutes.length ? verifyCurated(curatedRoutes, budget).catch(() => [] as DiscoveredFeed[]) : Promise.resolve([] as DiscoveredFeed[]);
+  const readPage = () => discoverFeedsInHtml(pageUrl, budget, { httpFallback }).catch((): HtmlDiscovery | { feeds: DiscoveredFeed[] } => ({ feeds: [] }));
 
-  const html: Partial<HtmlDiscovery> & { feeds: DiscoveredFeed[] } = native.feeds.length
-    ? { feeds: [] }
-    : await discoverFeedsInHtml(pageUrl, budget, { httpFallback }).catch(() => ({ feeds: [] }));
-  const curated = !native.feeds.length && !html.feeds.length && native.curated.length ? await verifyCurated(native.curated, budget) : [];
+  let native: Awaited<typeof nativeP>;
+  let html: Partial<HtmlDiscovery> & { feeds: DiscoveredFeed[] };
+  if (platformFirst) {
+    native = await nativeP;
+    html = native.feeds.length ? { feeds: [] } : await readPage();
+  } else {
+    [native, html] = await Promise.all([nativeP, readPage()]);
+  }
+  const [radar, curatedVerified] = await Promise.all([radarP, curatedP]);
+
+  // Curated routes are the fallback: offered when the page found nothing,
+  // when a SECTION page only yielded site-wide feeds (the curated route is
+  // the section's own feed → ranked first), or when the only page hits are
+  // blind common-path guesses (curated ranked after them).
+  const sectionInput = sectionSegments(url).length > 0;
+  let curatedFirst: DiscoveredFeed[] = [];
+  let curatedLast: DiscoveredFeed[] = [];
+  if (!native.feeds.length && curatedVerified.length) {
+    if (!html.feeds.length) curatedLast = curatedVerified;
+    else if (sectionInput && !html.sectionHit) curatedFirst = curatedVerified;
+    else if (html.feeds.every((f) => f.source === "common-path")) curatedLast = curatedVerified;
+  }
+
   const merged = new Map<string, DiscoveredFeed>();
-  for (const f of [...native.feeds, ...html.feeds, ...curated, ...radar.feeds]) if (!merged.has(f.url)) merged.set(f.url, f);
+  for (const f of [...native.feeds, ...curatedFirst, ...html.feeds, ...curatedLast, ...radar.feeds]) if (!merged.has(f.url)) merged.set(f.url, f);
 
   let hint: DiscoveryHint | undefined;
   let hintPlatform: string | undefined;
@@ -868,6 +1117,7 @@ async function discoverUrl(cleaned: string, url: URL, pageUrl: string, httpFallb
     pageUrl: html.pageUrl ?? pageUrl,
     // Deadline / request budget hit: whatever verified so far, plus the reason.
     ...(budget.stopReason ? { partial: budget.stopReason } : {}),
+    ...(merged.size > 0 && html.hint === "blocked" ? { pageBlocked: true as const } : {}),
   };
 }
 
