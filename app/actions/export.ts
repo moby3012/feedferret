@@ -10,7 +10,8 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
-import { htmlToMarkdown } from "@/lib/html-to-markdown";
+import { guardHtml } from "@/lib/html-guard";
+import { runHtmlTask } from "@/lib/html-worker/pool";
 import {
   buildObsidianUrl,
   sendToWallabag,
@@ -136,10 +137,11 @@ async function loadArticleForExport(userId: string, articleId: string) {
   return redactArticleForClient(article);
 }
 
-function articleAsMarkdown(article: { content: string; contentFormat: string | null }): string {
+/** HTML → Markdown (turndown parses the HTML) in the HTML worker pool; the stored HTML on any failure. */
+async function articleAsMarkdown(article: { content: string; contentFormat: string | null }): Promise<string> {
   if (article.contentFormat === "markdown") return article.content || "";
   try {
-    return htmlToMarkdown(article.content || "");
+    return await runHtmlTask("htmlToMarkdown", guardHtml(article.content || "").html);
   } catch {
     return article.content || "";
   }
@@ -166,7 +168,7 @@ export async function buildObsidianExportLink(
   const result = buildObsidianUrl({
     vault: user.exportObsidianVault,
     title: article.title,
-    content: articleAsMarkdown(article),
+    content: await articleAsMarkdown(article),
     sourceUrl: article.link,
   });
   return result.success ? { success: true, url: result.url } : { success: false, error: result.error };
@@ -204,7 +206,7 @@ export async function exportArticleToWallabag(
   return sendToWallabag(config, {
     url: article.link,
     title: article.title,
-    content: articleAsMarkdown(article),
+    content: await articleAsMarkdown(article),
     tags: ["feedferret"],
   });
 }

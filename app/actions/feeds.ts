@@ -18,7 +18,7 @@ import {
 import { fetchAndSuggestFeedCandidatesDetailed, type SuggestedFieldConfig } from "@/lib/page-feed-suggest";
 import { createPageFeedForUser } from "@/lib/page-feed-create";
 import { sanitizeWebhookConfigs, actionsReferenceConfigs, redactRuleForClient } from "@/lib/webhooks";
-import { buildXPathArticles } from "@/lib/feed-fetcher";
+import { scrapeXPathArticles } from "@/lib/feed-fetcher";
 import { createUndoToken, claimUndoToken, releaseUndoToken } from "@/lib/undo-tokens";
 import { isMarkAllAllowed } from "@/lib/view-scope";
 import { buildViewScope, legacyViewScopeInput } from "@/server/articles/view-scope";
@@ -31,7 +31,7 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { AI_OPERATOR_DELETE_ERROR, ruleHasAiDeleteConflict } from "@/lib/rule-ai-operators";
 import { parseRuleActions } from "@/lib/auto-read-rules";
-import { getSanitizer } from "@/lib/sanitize-html";
+import { isHtmlWorkerError, runInHtmlWorker } from "@/lib/html-worker";
 import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-fetch";
 import {
     discoverExistingFeeds,
@@ -561,7 +561,7 @@ export async function proposeAiFeedConfig(rawUrl: string, options: { skipDiscove
                 for (const [key, value] of Object.entries(proposal.itemConfig)) {
                     if (value) xpath[key] = value;
                 }
-                const { articles } = buildXPathArticles(fetchedHtml, url, { xpath }, "text/html");
+                const { articles } = await scrapeXPathArticles(fetchedHtml, url, { xpath }, "text/html");
                 preview = articles.slice(0, PAGE_FEED_PREVIEW_CAP).map((article) => ({
                     title: article.title,
                     link: article.link,
@@ -687,17 +687,13 @@ export async function proposeAiFullTextSelector(feedId: string) {
         let excerpt: string | null = null;
         if (fetchedHtml) {
             try {
-                const { JSDOM } = await import("jsdom");
-                const dom = new JSDOM(fetchedHtml, { url: article.link });
-                const element = dom.window.document.querySelector(proposal.fullTextSelector);
-                if (element) {
-                    const sanitizer = await getSanitizer();
-                    const plain = sanitizer
-                        .sanitize(element.innerHTML, { ALLOWED_TAGS: [] })
-                        .replace(/\s+/g, " ")
-                        .trim();
-                    excerpt = plain ? plain.slice(0, 500) : null;
-                }
+                const probe = await runInHtmlWorker({
+                    task: "cssProbe",
+                    html: fetchedHtml,
+                    url: article.link,
+                    selector: proposal.fullTextSelector,
+                });
+                if (probe.status === "ok") excerpt = probe.excerpt || null;
             } catch {
                 // Excerpt is a nice-to-have; the validated selector already proves it works.
             }
@@ -1719,95 +1715,27 @@ export async function previewFeedExtraction(feedId: string, articleUrl: string) 
             timeoutMs: 12_000,
         },
     );
-    const { JSDOM } = await import("jsdom");
-    const DOMPurify = await getSanitizer();
-    const dom = new JSDOM(html, { url: articleUrl });
-    const document = dom.window.document;
-
-    const removeSelectors = [
-        "script", "style", "nav", "footer", "header", "aside", "form", "iframe", "noscript", "svg",
-        ...(feed.fullTextRemoveSelectors
-            ? feed.fullTextRemoveSelectors.split(",").map((s) => s.trim()).filter(Boolean)
-            : []),
-    ];
-    document.querySelectorAll(removeSelectors.join(",")).forEach((n) => n.remove());
-
-    document.querySelectorAll("a[href], img[src]").forEach((node) => {
-        const attr = node instanceof dom.window.HTMLImageElement ? "src" : "href";
-        const value = node.getAttribute(attr);
-        if (!value) return;
-        try { node.setAttribute(attr, new URL(value, articleUrl).toString()); } catch { /* ignore */ }
+    // The page is attacker-controlled: parsed + evaluated in the HTML worker
+    // pool on bounded input (a too-complex page rejects with HtmlWorkerError).
+    const extracted = await runInHtmlWorker({
+        task: "css",
+        html,
+        url: articleUrl,
+        selector: feed.fullTextSelector,
+        removeSelectors: feed.fullTextRemoveSelectors,
+        mode: "preview",
+    }).catch((error: unknown) => {
+        if (isHtmlWorkerError(error)) throw new Error(describePageFetchError(error));
+        throw error;
     });
-
-    const cssEscape = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, (char) => `\\${char}`);
-    const selectorFor = (element: Element) => {
-        const tag = element.tagName.toLowerCase();
-        const id = element.getAttribute("id");
-        if (id) return `${tag}#${cssEscape(id)}`;
-        const classes = Array.from(element.classList).slice(0, 3);
-        if (classes.length > 0) return `${tag}.${classes.map(cssEscape).join(".")}`;
-        const parent = element.parentElement;
-        if (!parent) return tag;
-        const siblings = Array.from(parent.children).filter((child) => child.tagName === element.tagName);
-        const index = siblings.indexOf(element);
-        return siblings.length > 1 ? `${tag}:nth-of-type(${index + 1})` : tag;
-    };
-    const plainText = (element: Element) => (element.textContent || "").replace(/\s+/g, " ").trim();
-    const scoredCandidates = [
-        "article",
-        "main",
-        "[role='main']",
-        ".post-content",
-        ".entry-content",
-        ".article-content",
-        ".content",
-        ".post",
-        ".entry",
-    ]
-        .flatMap((s) => Array.from<Element>(document.querySelectorAll(s)))
-        .concat(Array.from<Element>(document.body.children))
-        .map((el: Element) => {
-            const text = plainText(el);
-            return {
-                el,
-                selector: selectorFor(el),
-                charCount: text.length,
-                paragraphCount: el.querySelectorAll("p").length,
-                linkCount: el.querySelectorAll("a").length,
-                sample: text.slice(0, 220),
-                score: text.length + el.querySelectorAll("p").length * 250 - el.querySelectorAll("a").length * 20,
-            };
-        })
-        .filter((candidate, index, all) => (
-            candidate.charCount > 80 &&
-            all.findIndex((other) => other.selector === candidate.selector) === index
-        ))
-        .sort((a, b) => b.score - a.score);
-
-    let best: Element | undefined;
-    if (feed.fullTextSelector) {
-        best = document.querySelector(feed.fullTextSelector) ?? undefined;
-    }
-    if (!best) {
-        best = scoredCandidates[0]?.el;
-    }
-
-    if (!best) throw new Error("Could not find article content");
-
-    const sanitized = DOMPurify.sanitize(best.innerHTML, { ADD_ATTR: ["target", "rel"] }).trim();
-    const plain = DOMPurify.sanitize(sanitized, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
+    if (!extracted.html) throw new Error("Could not find article content");
+    const sanitized = extracted.html;
 
     return {
         html: sanitized.slice(0, 50_000),
-        charCount: plain.length,
+        charCount: extracted.plainLength,
         selectorUsed: feed.fullTextSelector || "(auto-detect)",
-        candidates: scoredCandidates.slice(0, 5).map(({ selector, charCount, paragraphCount, linkCount, sample }) => ({
-            selector,
-            charCount,
-            paragraphCount,
-            linkCount,
-            sample,
-        })),
+        candidates: extracted.candidates,
     };
 }
 

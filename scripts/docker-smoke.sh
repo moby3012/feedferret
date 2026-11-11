@@ -74,7 +74,7 @@ findings=$(docker run --rm --user 0 --entrypoint sh "$IMAGE" -c '
   find . \( -path ./node_modules -o -path ./.next/node_modules \) -prune -o -type f \
       \( -name "*.ts" -o -name "*.tsx" \) ! -name "*.d.ts" -print | head -n 20
   # startup migration files (scripts/db-migrate.sh) must ship
-  for f in scripts/db-migrate.sh scripts/db-migrate.mjs scripts/db-common.sh scripts/db-sync.sh scripts/db-state.mjs scripts/migration-utils.mjs \
+  for f in build/html-worker/worker.mjs scripts/db-migrate.sh scripts/db-migrate.mjs scripts/db-common.sh scripts/db-sync.sh scripts/db-state.mjs scripts/migration-utils.mjs \
       prisma/baseline.schema.prisma prisma/migrations/sqlite/migration_lock.toml prisma/migrations/postgresql/migration_lock.toml \
       prisma/migrations/sqlite/00000000000000_init/migration.sql prisma/migrations/postgresql/00000000000000_init/migration.sql; do
     [ -f "$f" ] || echo "missing: $f"
@@ -167,6 +167,52 @@ start_and_wait_healthy() {
     200|307|308) log "$APP /login -> $page" ;;
     *) fail "$APP /login returned $page"; exit 1 ;;
   esac
+
+  # The HTML parsing worker (lib/html-worker) must load inside the image: its
+  # bundle resolves jsdom from the standalone node_modules at runtime, which a
+  # tracing change could silently break (full-text / page feeds would then fall
+  # back to main-thread parsing).
+  local worker_out
+  if ! worker_out=$(docker exec -w /app "$APP" node --input-type=module -e '
+    import { Worker } from "node:worker_threads";
+    const w = new Worker(process.env.FF_WORKER || "/app/build/html-worker/worker.mjs", { execArgv: [] });
+    const t = setTimeout(() => { console.error("html worker: no reply in 30s"); process.exit(1); }, 30000);
+    w.once("error", (e) => { console.error("html worker error:", e.message); process.exit(1); });
+    w.on("message", (m) => {
+      if (m.ready) return; // parsers loaded; the task posted below is processed next
+      clearTimeout(t);
+      if (!m.ok || !String(m.result.html).includes("smoke paragraph")) { console.error("html worker bad reply:", JSON.stringify(m).slice(0, 300)); process.exit(1); }
+      console.log("ok via " + m.result.extractedBy);
+      process.exit(0);
+    });
+    const p = "<p>smoke paragraph " + "lorem ipsum dolor sit amet ".repeat(40) + "</p>";
+    w.postMessage({ id: 1, task: "extractReadable", input: { html: "<html><body><article><h1>Smoke</h1>" + p.repeat(4) + "</article></body></html>", url: "https://example.com/a" } });
+  ' 2>&1); then
+    fail "$APP HTML worker failed: $worker_out"
+    exit 1
+  fi
+  log "$APP HTML worker: $worker_out"
+  local worker_logs
+  worker_logs=$(docker logs "$APP" 2>&1 || true) # capture first (pipefail + grep -q -> SIGPIPE)
+  if grep -qE "\[html-worker\] (worker bundle missing|warm-up failed|UNAVAILABLE)" <<<"$worker_logs"; then
+    fail "$APP logged an HTML worker start-up problem"
+    grep -F "[html-worker]" <<<"$worker_logs" >&2 || true
+    exit 1
+  fi
+
+  # The app's own view (fail-closed pool, warmed at boot): /api/health must report it ok.
+  local hw="" hw_deadline
+  hw_deadline=$(( $(date +%s) + 30 ))
+  while [ "$(date +%s)" -lt "$hw_deadline" ]; do
+    hw=$(docker exec "$APP" curl -s http://127.0.0.1:3000/api/health | grep -o '"htmlWorker":"[a-z]*"' || true)
+    [ "$hw" = '"htmlWorker":"ok"' ] && break
+    sleep 1
+  done
+  if [ "$hw" != '"htmlWorker":"ok"' ]; then
+    fail "$APP /api/health does not report the HTML worker ok (${hw:-no field})"
+    exit 1
+  fi
+  log "$APP /api/health htmlWorker ok"
 
   # Container must still be up (no crash right after the first request).
   sleep 3

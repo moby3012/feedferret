@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { suggestFeedCandidates } from "../../lib/page-feed-suggest";
+import { suggestFeedCandidates } from "../../lib/page-feed-suggest-core";
 
 const BLOG_INDEX = `
 <!DOCTYPE html>

@@ -2,7 +2,8 @@ import { safeFetch } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { JSDOM } from "jsdom";
+import { guardHtml } from "@/lib/html-guard";
+import { runHtmlTask } from "@/lib/html-worker/pool";
 import { logger } from "@/lib/logger";
 import { isSameOriginRequest } from "@/lib/same-origin";
 
@@ -142,44 +143,22 @@ interface ParsedFeed {
   category: string;
 }
 
-function extractFeedsFromOpml(xml: string, defaultCategory: string): ParsedFeed[] {
-  const feeds: ParsedFeed[] = [];
-
+async function extractFeedsFromOpml(xml: string, defaultCategory: string): Promise<ParsedFeed[]> {
   try {
-    // Use HTML mode - more lenient with malformed XML (some OPMLs have unclosed tags)
-    const dom = new JSDOM(xml);
-    const document = dom.window.document;
-    const body = document.querySelector("body");
-    if (!body) return feeds;
-
-    // Get all outlines and process them
-    const allOutlines = body.querySelectorAll("outline");
-
-    for (const element of allOutlines) {
-      // HTML mode lowercases attributes, check both variants
-      const xmlUrl = element.getAttribute("xmlurl") || element.getAttribute("xmlUrl");
-      if (!xmlUrl) continue; // Skip category outlines
-
-      const title = element.getAttribute("title") || element.getAttribute("text") || "";
-      const description = element.getAttribute("description") || undefined;
-
-      // Get category from parent outline
-      const parent = element.parentElement;
-      const parentTitle = parent?.getAttribute("title") || parent?.getAttribute("text") || "";
-      const category = parentTitle ? mapCategory(parentTitle) : defaultCategory;
-
-      feeds.push({
-        url: xmlUrl,
-        title: title || xmlUrl,
-        description,
-        category,
-      });
-    }
+    // Fetched remote document: bounded (lib/html-guard.ts), parsed in the HTML
+    // worker pool; a cut or too complex document is skipped.
+    if (guardHtml(xml, { maxChars: Number.MAX_SAFE_INTEGER }).truncatedBy) return [];
+    const entries = await runHtmlTask("catalogOpmlEntries", xml);
+    return entries.map((entry) => ({
+      url: entry.url,
+      title: entry.title || entry.url,
+      description: entry.description,
+      category: entry.parentTitle ? mapCategory(entry.parentTitle) : defaultCategory,
+    }));
   } catch (e) {
     logger.error("Error extracting feeds from OPML:", e);
+    return [];
   }
-
-  return feeds;
 }
 
 // Map category names to our standard categories
@@ -238,7 +217,7 @@ export async function POST(request: Request) {
       }
 
       const xml = await response.text();
-      const feeds = extractFeedsFromOpml(xml, source.defaultCategory);
+      const feeds = await extractFeedsFromOpml(xml, source.defaultCategory);
 
       let added = 0;
       for (const feed of feeds) {

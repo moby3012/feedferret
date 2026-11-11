@@ -46,6 +46,7 @@ import { importOpmlXml } from "../../lib/import/opml-import";
 import { importFreshRssArticles } from "../../lib/import/freshrss-json";
 import { syncFeed, upsertArticleBatch } from "../../lib/rss-sync";
 import { resetConnectorSecretRulesCache } from "../../lib/connector-secrets";
+import { resetHtmlWorkerPool } from "../../lib/html-worker/pool";
 
 const KEY = "S3CRET-rsshub-key";
 const dir = mkdtempSync(join(tmpdir(), "feedferret-wave3-review-"));
@@ -122,6 +123,46 @@ describe("N3 review: connector routes refused at create time", () => {
     // The keyed origin URL resolved to the existing keyless subscription.
     expect(feeds.filter((f) => f.url === "https://rsshub.test/youtube/channel/opml").length).toBe(1);
   });
+});
+
+describe("#281 review: FreshRSS import parses item HTML only in the worker pool", () => {
+  it("a crafted export (deeply nested item body) is sanitized off the main thread; the event loop keeps ticking", async () => {
+    process.env.FEEDFERRET_HTML_WORKER_INLINE = "0";
+    resetHtmlWorkerPool();
+    try {
+      const nested = "<div>".repeat(200_000) + "<script>alert(1)</script>deep";
+      const item = (id: string, body: string) => ({
+        id: `tag:google.com,2005:reader/item/frss-${id}`,
+        title: `Crafted ${id}`,
+        alternate: [{ href: `https://crafted.example/${id}` }],
+        published: 1_700_000_000,
+        origin: { streamId: "feed/crafted", feedUrl: "https://crafted.example/feed.xml", title: "Crafted" },
+        content: { content: body },
+      });
+      let ticks = 0;
+      let last = performance.now();
+      let maxGap = 0;
+      const interval = setInterval(() => {
+        const now = performance.now();
+        maxGap = Math.max(maxGap, now - last);
+        last = now;
+        ticks++;
+      }, 10);
+      const report = await importFreshRssArticles(ids.bob, [item("1", nested), item("2", "<p onclick=x>ok</p>")]);
+      clearInterval(interval);
+      expect(report.counts.created).toBe(2);
+      const rows = await state.db.article.findMany({ where: { userId: ids.bob, title: { startsWith: "Crafted" } }, orderBy: { title: "asc" }, select: { content: true, excerpt: true } });
+      expect(rows[0].content).not.toContain("<script");
+      expect(rows[0].content.length).toBeLessThan(10_000); // guard cut the nesting before jsdom
+      expect(rows[1].content).toBe("<p>ok</p>");
+      expect(rows[1].excerpt).toBe("ok");
+      expect(maxGap).toBeLessThan(250);
+      expect(ticks).toBeGreaterThan(0);
+    } finally {
+      process.env.FEEDFERRET_HTML_WORKER_INLINE = "1";
+      resetHtmlWorkerPool();
+    }
+  }, 60_000);
 });
 
 describe("N3 review: secrets stay out of stored article links and feed errors", () => {

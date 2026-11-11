@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_GROUPS, SUGGEST_TIME_BUDGET_MS, suggestFeedCandidatesDetailed } from "../../lib/page-feed-suggest";
+import { MAX_GROUPS, SUGGEST_TIME_BUDGET_MS, suggestFeedCandidatesDetailed } from "../../lib/page-feed-suggest-core";
 
 // Synthetic pages (not the T1 fixtures), so the gate's thresholds are checked
 // against shapes they were not tuned on: short slugs, short/CJK titles,

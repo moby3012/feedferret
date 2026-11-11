@@ -15,7 +15,12 @@ async function hits(tag: string): Promise<{ good: number; wall: number }> {
 }
 
 test("auto full text: reader shows extracted text, walls keep the teaser, re-sync does not refetch", async ({ app, page }) => {
+  // The reader's boot sync (POST /api/sync on load, components/shell/reader-shell.tsx)
+  // must finish before the feed exists: started late, it synced the new feed
+  // concurrently with the explicit sync below and fetched each page twice.
+  const bootSync = page.waitForResponse((res) => new URL(res.url()).pathname === "/api/sync", { timeout: 15_000 }).catch(() => null);
   await page.goto("/");
+  await bootSync;
   const origin = new URL(page.url()).origin;
   const headers = { Origin: origin };
   const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

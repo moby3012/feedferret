@@ -216,7 +216,8 @@ function startNewsletterPoller(state: SchedulerState) {
     state.newsletterTimer = setTimeout(function loop() {
         void runJob(state, "newsletter-imap", async () => {
             const { pollInboundSources } = await import("./inbound-email-poller");
-            await pollInboundSources();
+            const { runAsBackgroundHtmlWork } = await import("./html-worker/pool");
+            await runAsBackgroundHtmlWork(() => pollInboundSources());
         }).finally(() => {
             const s = getState();
             s.newsletterTimer = setTimeout(loop, intervalMs);

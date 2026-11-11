@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { HARD_BUDGET_FACTOR, SUGGEST_TIME_BUDGET_MS, suggestFeedCandidatesDetailed, type FeedCandidate } from "../../lib/page-feed-suggest";
+import { HARD_BUDGET_FACTOR, SUGGEST_TIME_BUDGET_MS, suggestFeedCandidatesDetailed, type FeedCandidate } from "../../lib/page-feed-suggest-core";
 import {
   assessPreviewQuality,
   classifyItem,

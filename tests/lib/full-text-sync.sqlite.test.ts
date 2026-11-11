@@ -58,6 +58,7 @@ import { FULL_TEXT_STATE_SELECT, recordFullTextMiss } from "../../lib/full-text-
 import { HttpStatusError } from "../../lib/ssrf";
 import { resetHostBackoff } from "../../lib/host-backoff";
 import { resetTransportMemory } from "../../lib/readability-extract";
+import { resetHtmlWorkerPool } from "../../lib/html-worker/pool";
 
 const dir = mkdtempSync(join(tmpdir(), "feedferret-fulltext-sync-"));
 let userId = "";
@@ -508,5 +509,55 @@ describe("full text: review round 2", () => {
     }
     expect(results.slice(0, 10).some((r) => r.startsWith("Too many"))).toBe(false);
     expect(results[10]).toMatch(/^Too many full-text requests/);
+  });
+
+  it("a page too complex to parse in budget is recorded as failed/too_complex; the sync and the event loop keep going", async () => {
+    // Real worker pool with a tight budget (the rest of this file runs the tasks in-process).
+    process.env.FEEDFERRET_HTML_WORKER_INLINE = "0";
+    process.env.FEEDFERRET_HTML_WORKER_TIMEOUT_MS = "2000";
+    resetHtmlWorkerPool();
+    try {
+      const feed = await autoFeed();
+      // Inside the guard's limits, but far more than 2 s of extractor work (normal pages: ~40 ms).
+      state.page = async (url) =>
+        url.endsWith("2") ? `<html><body>${"<div>".repeat(120)}${"<p>x</p>".repeat(4_000)}</body></html>` : fullPage(url.slice(-1));
+      let ticks = 0;
+      const interval = setInterval(() => ticks++, 10);
+      const started = Date.now();
+      await syncFeed(userId, feed.id);
+      clearInterval(interval);
+      const current = await rows(feed.id);
+      expect(current.map((r) => r.fullTextStatus)).toEqual(["ok", "failed", "ok"]);
+      expect(current[1].fullTextReason).toBe("too_complex");
+      expect(current[1].fullTextAttempts).toBe(1);
+      expect(current[1].content).toBe(teaser("2"));
+      // The other transport is not tried for an aborted parse (one fetch per article).
+      expect(state.pageFetches).toHaveLength(3);
+      expect(ticks).toBeGreaterThan((Date.now() - started) / 10 / 4);
+    } finally {
+      process.env.FEEDFERRET_HTML_WORKER_INLINE = "1";
+      delete process.env.FEEDFERRET_HTML_WORKER_TIMEOUT_MS;
+      resetHtmlWorkerPool();
+    }
+  }, 60_000);
+
+  it("without a worker bundle (fail closed) a sync stores nothing unsanitized and does not count as a feed failure", async () => {
+    process.env.FEEDFERRET_HTML_WORKER_INLINE = "0";
+    process.env.FEEDFERRET_HTML_WORKER_PATH = join(dir, "missing-worker.mjs");
+    resetHtmlWorkerPool();
+    try {
+      const feed = await autoFeed();
+      const result = await syncFeed(userId, feed.id);
+      expect(result).toMatchObject({ success: true, skipped: true, deferred: true });
+      expect(await rows(feed.id)).toEqual([]);
+      const row = await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } });
+      expect(row.consecutiveFailureCount).toBe(0);
+      expect(row.lastStatus).not.toBe("error");
+      expect(state.pageFetches).toEqual([]);
+    } finally {
+      delete process.env.FEEDFERRET_HTML_WORKER_PATH;
+      process.env.FEEDFERRET_HTML_WORKER_INLINE = "1";
+      resetHtmlWorkerPool();
+    }
   });
 });

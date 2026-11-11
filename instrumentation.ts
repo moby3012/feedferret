@@ -65,12 +65,19 @@ export async function register() {
         })().catch((error) => console.error("[connector-secrets] startup cleanup failed; secrets stay redacted on output", error));
     }
 
-    // Pay the sanitizer's one-time ~300 ms JSDOM window creation at boot, not inside the first sync
-    // tick / first article open (audit R5: longest single event-loop stall of a cold tick).
+    // Untrusted HTML (and the jsdom-backed sanitizer) lives only in the HTML
+    // worker pool (lib/html-worker): start one worker and load its parsers
+    // before traffic. The pool fails closed, so an unavailable worker is loud.
     if (process.env.NEXT_PHASE !== "phase-production-build") {
-        void import("./lib/sanitize-html")
-            .then((m) => m.warmSanitizer())
-            .catch((error) => console.error("[sanitizer] warm-up failed (will initialise on first use)", error));
+        void (async () => {
+            const { warmHtmlWorker } = await import("./lib/html-worker/pool");
+            const status = await warmHtmlWorker();
+            if (status === "ok") return;
+            // Fail closed: nothing is parsed on the main thread. Make it loud.
+            console.error("[html-worker] UNAVAILABLE: full text, page feeds, newsletters and feed-item sanitizing are disabled until the worker bundle is fixed (see /api/health).");
+            const { writeSystemLog } = await import("./lib/system-log");
+            await writeSystemLog("error", "sync", "HTML worker unavailable: full text, page feeds, newsletters and feed-item sanitizing are disabled (fail closed). Check build/html-worker/worker.mjs in the deployment.");
+        })().catch((error) => console.error("[html-worker] warm-up failed", error));
     }
 
     const { startBackgroundSync } = await import("./lib/background-sync");

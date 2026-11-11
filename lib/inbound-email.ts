@@ -16,10 +16,15 @@
 // - Logs carry metadata only (ids, status) — never subject, sender or body.
 
 import { createHash, randomBytes } from "crypto";
-import { JSDOM } from "jsdom";
 import PostalMime from "postal-mime";
 import { db } from "./db";
-import { getSanitizer } from "./sanitize-html";
+import { guardHtml } from "./html-guard";
+import { runHtmlTask } from "./html-worker/pool";
+import { MAX_HTML_CHARS, MAX_TEXT_CHARS, stripTrackingParams, type InlineImage, type LinkInfo } from "./newsletter-hygiene";
+
+// HTML hygiene (tracking params / pixels, the jsdom pre-sanitize pass, link
+// collection) lives in lib/newsletter-html.ts and runs in the HTML worker pool.
+export { isTrackingImage, stripTrackingParams } from "./newsletter-hygiene";
 import { computeArticleMeta, htmlToPlainText } from "./article-kind";
 import { computeContentHash } from "./content-hash";
 import { logger } from "./logger";
@@ -31,12 +36,6 @@ export { NEWSLETTER_CATEGORY_NAME, NEWSLETTER_FEED_URL_PREFIX, NEWSLETTER_SOURCE
 
 /** Spec §6.2: larger raw mails are rejected (webhook answers 413). */
 export const MAX_RAW_EMAIL_BYTES = 10 * 1024 * 1024;
-/** HTML bodies are cut before sanitizing (DOMPurify re-balances the markup). */
-const MAX_HTML_CHARS = 2_000_000;
-const MAX_TEXT_CHARS = 500_000;
-/** Inline (`cid:`) raster images become data: URIs up to these caps; others are dropped. */
-const MAX_INLINE_IMAGE_BYTES = 512 * 1024;
-const MAX_INLINE_TOTAL_BYTES = 2 * 1024 * 1024;
 const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"]);
 /** Spec §6.3: mailbombing guard, newsletter mails per user and UTC day (any target feed). */
 export const MAX_NEWSLETTER_MAILS_PER_DAY = 100;
@@ -197,68 +196,6 @@ export function senderIdentity(input: { listId: string | null; fromName: string 
 // ---------------------------------------------------------------------------
 // HTML hygiene
 
-const TRACKING_PARAM_RE = /^(?:utm_[a-z_]+|mc_cid|mc_eid|_hsenc|_hsmi|__hssc|__hstc|__hsfp|hsctatracking|mkt_tok|ck_subscriber_id|vero_id|vero_conv|oly_enc_id|oly_anon_id|rb_clickid|s_cid|ml_subscriber|ml_subscriber_hash|ss_source|ss_campaign_id|ss_email_id|fbclid|gclid|msclkid|yclid|igshid|_bhlid|r_lang)$/i;
-
-/** Drops known tracking query params from an http(s) URL; returns the input unchanged otherwise. */
-export function stripTrackingParams(href: string): string {
-  let url: URL;
-  try {
-    url = new URL(href);
-  } catch {
-    return href;
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") return href;
-  let changed = false;
-  for (const key of [...url.searchParams.keys()]) {
-    if (TRACKING_PARAM_RE.test(key)) {
-      url.searchParams.delete(key);
-      changed = true;
-    }
-  }
-  return changed ? url.toString() : href;
-}
-
-const TRACKER_IMAGE_HOST_RE = /(?:^|\.)(?:eotrx\.substackcdn\.com|open\.substack\.com|list-manage\.com|mailchimpapp\.net|open\.convertkit-mail\d*\.com|convertkit-mail\d*\.com|email\.mg\.[^/]+|sendgrid\.net|ct\.sendgrid\.net|track\.hubspot\.com|t\.hubspotemail\.net|mailtrack\.io|pixel\.mailerlite\.com|trk\.klclick\d*\.com|links\.mail\.beehiiv\.com|link\.mail\.beehiiv\.com|mandrillapp\.com|mcsv\.net|exct\.net|cmail\d+\.com|createsend\d*\.com)$/i;
-const TRACKER_IMAGE_PATH_RE = /(?:^|\/)(?:track\/open(?:\.php)?|wf\/open|open\.(?:php|gif|png|aspx)|ss\/o|e\/o|o|open|pixel(?:\.gif|\.png)?|beacon|trk)(?:\/|$|\?)/i;
-
-function isTinyDimension(value: string | null | undefined): boolean {
-  if (value == null || value === "") return false;
-  const n = parseFloat(value);
-  return Number.isFinite(n) && n <= 1;
-}
-
-function styleValue(style: string, prop: string): string | null {
-  const m = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, "i").exec(style);
-  return m ? m[1].trim().toLowerCase() : null;
-}
-
-/** 1×1 / invisible / known open-tracking images. */
-export function isTrackingImage(img: { src: string; width?: string | null; height?: string | null; style?: string | null }): boolean {
-  const style = img.style ?? "";
-  if (isTinyDimension(img.width) || isTinyDimension(img.height)) return true;
-  const sw = styleValue(style, "width");
-  const sh = styleValue(style, "height");
-  if ((sw && /^[\d.]+(?:px)?$/.test(sw) && isTinyDimension(sw)) || (sh && /^[\d.]+(?:px)?$/.test(sh) && isTinyDimension(sh))) return true;
-  if (styleValue(style, "opacity") === "0" || styleValue(style, "visibility") === "hidden") return true;
-  let url: URL;
-  try {
-    url = new URL(img.src);
-  } catch {
-    return false;
-  }
-  if (TRACKER_IMAGE_HOST_RE.test(url.hostname)) return true;
-  return /(?:^|\.)(?:email|mail|click|track|trk|link|links|open|t)\./i.test(url.hostname) && TRACKER_IMAGE_PATH_RE.test(url.pathname);
-}
-
-const HIDDEN_STYLE_RE = /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden|mso-hide\s*:\s*all)/i;
-const DROP_TAGS = "script, style, link, meta, title, head, template, noscript, form, input, button, textarea, select, iframe, frame, frameset, object, embed, svg, math, base";
-
-interface InlineImage {
-  contentId: string;
-  mimeType: string;
-  base64: string;
-  bytes: number;
-}
 
 function inlineImageMap(email: ParsedEmail): Map<string, InlineImage> {
   const map = new Map<string, InlineImage>();
@@ -273,70 +210,6 @@ function inlineImageMap(email: ParsedEmail): Map<string, InlineImage> {
   return map;
 }
 
-/**
- * Pre-sanitize pass on the raw newsletter HTML (jsdom without scripts or
- * resource loading), then the shared DOMPurify pipeline. Returns safe HTML.
- */
-export async function sanitizeNewsletterHtml(html: string, inlineImages: Map<string, InlineImage> = new Map()): Promise<string> {
-  const dom = new JSDOM(html.slice(0, MAX_HTML_CHARS));
-  const doc = dom.window.document;
-  try {
-    doc.querySelectorAll(DROP_TAGS).forEach((el) => el.remove());
-    doc.querySelectorAll("[hidden], [style]").forEach((el) => {
-      if (el.hasAttribute("hidden") || HIDDEN_STYLE_RE.test(el.getAttribute("style") ?? "")) el.remove();
-    });
-
-    let inlineBudget = MAX_INLINE_TOTAL_BYTES;
-    doc.querySelectorAll("img").forEach((img) => {
-      const src = (img.getAttribute("src") ?? "").trim();
-      if (/^cid:/i.test(src)) {
-        let cid: string;
-        try {
-          cid = decodeURIComponent(src.slice(4));
-        } catch {
-          img.remove(); // malformed percent-encoding (`cid:%`)
-          return;
-        }
-        const image = inlineImages.get(cid.replace(/^<|>$/g, "").trim().toLowerCase());
-        if (!image || image.bytes > MAX_INLINE_IMAGE_BYTES || image.bytes > inlineBudget) {
-          img.remove();
-          return;
-        }
-        inlineBudget -= image.bytes;
-        img.setAttribute("src", `data:${image.mimeType};base64,${image.base64}`);
-        img.removeAttribute("srcset");
-        return;
-      }
-      // Only http(s) images from the mail itself; foreign data:/javascript: etc. go.
-      if (!/^https?:\/\//i.test(src)) {
-        img.remove();
-        return;
-      }
-      if (isTrackingImage({ src, width: img.getAttribute("width"), height: img.getAttribute("height"), style: img.getAttribute("style") })) {
-        img.remove();
-      }
-    });
-
-    doc.querySelectorAll("a[href]").forEach((a) => {
-      const href = a.getAttribute("href") ?? "";
-      const cleaned = stripTrackingParams(href.trim());
-      if (cleaned !== href) a.setAttribute("href", cleaned);
-    });
-
-    // Newsletter layout tables: drop fixed pixel widths/bgcolor attributes the
-    // global sanitizer hook does not cover (it handles `width` + inline style).
-    doc.querySelectorAll("[bgcolor], [background]").forEach((el) => {
-      el.removeAttribute("bgcolor");
-      el.removeAttribute("background");
-    });
-
-    const body = doc.body?.innerHTML ?? "";
-    const DOMPurify = await getSanitizer();
-    return DOMPurify.sanitize(body, { FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select", "svg", "math"], FORBID_ATTR: ["srcset"] }).trim();
-  } finally {
-    dom.window.close();
-  }
-}
 
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -369,28 +242,6 @@ const CONFIRM_LINK_RE = /(?:confirm|verify|activate|bestätig|bestaetig|verifizi
 const UNSUBSCRIBE_RE = /(?:unsubscribe|abbestell|abmeld|opt[-_]?out|austragen)/i;
 const VIEW_ONLINE_RE = /(?:view (?:it |this (?:email |post )?)?(?:in (?:your |a )?browser|online)|read (?:it |this )?online|web ?version|open in browser|im browser (?:ansehen|anzeigen|öffnen|lesen)|online (?:ansehen|lesen|anzeigen)|webversion)/i;
 
-interface LinkInfo {
-  href: string;
-  text: string;
-}
-
-function collectLinks(html: string | undefined, text: string | undefined): LinkInfo[] {
-  const links: LinkInfo[] = [];
-  if (html) {
-    const dom = new JSDOM(html.slice(0, MAX_HTML_CHARS));
-    try {
-      dom.window.document.querySelectorAll("a[href]").forEach((a) => {
-        const href = (a.getAttribute("href") ?? "").trim();
-        if (/^https:\/\//i.test(href)) links.push({ href, text: (a.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 200) });
-      });
-    } finally {
-      dom.window.close();
-    }
-  } else if (text) {
-    for (const m of text.slice(0, MAX_TEXT_CHARS).matchAll(/https:\/\/[^\s<>"']+/g)) links.push({ href: m[0], text: "" });
-  }
-  return links;
-}
 
 /** Spec §5.3: a confirmation link, or null. Stored for the user to click — never followed. */
 export function detectConfirmationUrl(subject: string, bodyText: string, links: LinkInfo[]): string | null {
@@ -814,10 +665,15 @@ export async function ingestRawEmail(raw: Buffer | string, options: IngestOption
     const from = mailbox(email.from);
     const sender = senderIdentity({ listId: header(email, "list-id"), fromName: from?.name ?? null, fromAddress: from?.address ?? null });
     const subject = (email.subject ?? "").replace(/\s+/g, " ").trim();
-    const links = collectLinks(email.html, email.text);
-    const content = email.html
-      ? await sanitizeNewsletterHtml(email.html, inlineImageMap(email))
-      : await sanitizeNewsletterHtml(textToHtml(email.text ?? ""));
+    // Parsing + sanitizing the (attacker-controlled) mail HTML runs off the
+    // main thread on guarded input; a too-complex body drops the mail like any
+    // other malformed one (catch below).
+    const { content, links } = await runHtmlTask("newsletterBody", {
+      html: email.html ? guardHtml(email.html, { maxChars: MAX_HTML_CHARS }).html : null,
+      text: email.text ?? null,
+      fallbackHtml: email.html ? null : textToHtml(email.text ?? ""),
+      inlineImages: email.html ? [...inlineImageMap(email).values()] : [],
+    });
     const plain = htmlToPlainText(content);
     prepared = {
       from,

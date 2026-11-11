@@ -89,6 +89,11 @@ export interface ArticleDetail extends ArticleListItem {
   html: string;
   /** Format the body is stored in (`html` is always HTML). */
   contentFormat: "html" | "markdown";
+  /**
+   * Markdown could not be rendered right now (HTML worker busy / unavailable /
+   * too complex): `html` is the escaped plain text of the markdown instead.
+   */
+  htmlFallback?: boolean;
   aiSummary: string | null;
   aiSummarizedAt: string | null;
   readAt: string | null;
