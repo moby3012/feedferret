@@ -26,6 +26,31 @@ export function normalizeArticleUrl(url: string): string {
   }
 }
 
+// Extra query parameters that never select a different page: session ids and
+// campaign/click trackers beyond TRACKING_PARAMS (whose exact set feeds
+// contentHash and therefore stays unchanged).
+const VOLATILE_PARAM = /^(?:utm_.*|_hs[a-z]+|mkt_tok|oly_.*|vero_.*|ck_subscriber_id|sid|sessionid|session_id|phpsessid|jsessionid|aspsessionid.*|cfid|cftoken|_+ga|_gl)$/i;
+
+/**
+ * Normalised form of an article link for "is this the same page?" checks:
+ * scheme-insensitive, lower-case host without www., no fragment, no trailing
+ * slash, tracking/session params removed, remaining params sorted. Only for
+ * comparison — never stored.
+ */
+export function normalizeLinkForComparison(url: string): string {
+  try {
+    const u = new URL(normalizeArticleUrl(url));
+    for (const key of [...u.searchParams.keys()]) {
+      if (VOLATILE_PARAM.test(key)) u.searchParams.delete(key);
+    }
+    u.searchParams.sort();
+    const query = u.searchParams.toString();
+    return `${u.hostname}${u.port ? `:${u.port}` : ""}${u.pathname.replace(/\/+$/, "") || "/"}${query ? `?${query}` : ""}`;
+  } catch {
+    return url.trim().toLowerCase().replace(/#.*$/, "").replace(/\/+$/, "");
+  }
+}
+
 export function computeContentHash(link: string): string {
   return createHash("sha256")
     .update(normalizeArticleUrl(link))

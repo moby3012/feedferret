@@ -152,4 +152,11 @@ describe("normalizeLazyMedia", () => {
     expect(out).toContain('src="https://cdn.example/t.jpg"');
     expect(out.match(/<img/g)).toHaveLength(1);
   });
+
+  it("keeps only http(s)/relative srcset candidates", () => {
+    const out = run(`<img src="/blank.gif" data-srcset="javascript:alert(1) 1x, data:image/png;base64,AA 2x, /ok.jpg 3x, blob:https://x/y 4x">`);
+    expect(out).toContain('srcset="https://site.example/ok.jpg 3x"');
+    const srcset = / srcset="([^"]*)"/.exec(out)?.[1] ?? "";
+    expect(srcset).not.toMatch(/javascript:|blob:|data:/);
+  });
 });

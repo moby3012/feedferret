@@ -127,6 +127,14 @@ export function consumeRateLimit(identifier: string, config: RateLimitConfig, am
 
 // Presets for different API endpoints
 export const RATE_LIMITS = {
+  // Manual "Fetch full text" (server action, REST v1, MCP): each call may
+  // escalate to the render sidecar / hosted API, so keep it human-paced.
+  fullTextFetch: {
+    limit: 10,
+    windowSecs: 60,
+    prefix: "full-text-fetch",
+  } satisfies RateLimitConfig,
+
   // Feedsearch.dev: be respectful, 10 req/min per user
   discoverySearch: {
     limit: 10,

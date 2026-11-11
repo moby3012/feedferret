@@ -394,8 +394,117 @@ describe("full text: AI escalation is bounded per sync", () => {
       const feed = await state.db.feed.create({ data: { userId, name: "AI", url: "https://ai2.example/feed.xml", fullTextMode: "ai" } });
       await syncFeed(userId, feed.id);
       expect(state.aiCalls).toBe(5);
+      // Articles whose escalation was cut short by the budget are deferred, not rejected…
+      const statuses = (await state.db.article.findMany({ where: { feedId: feed.id }, select: { fullTextStatus: true, fullTextReason: true } }))
+        .map((r) => `${r.fullTextStatus}:${r.fullTextReason}`)
+        .sort();
+      expect(statuses).toEqual([...Array(5).fill("rejected:consent_wall"), ...Array(3).fill("deferred:budget")].sort());
+      // …and retried by the next sync (which has a fresh budget).
+      await syncFeed(userId, feed.id);
+      expect(state.aiCalls).toBe(8);
     } finally {
       await state.db.user.update({ where: { id: userId }, data: { aiProvider: null } });
     }
+  });
+
+});
+
+describe("full text: review round 2", () => {
+  it("rotating tracking params / scheme / trailing slash on the source link are cosmetic: link stored, no refetch, updatedAt kept", async () => {
+    const feed = await autoFeed();
+    await syncFeed(userId, feed.id);
+    const before = await rows(feed.id);
+    for (const variant of [
+      "https://news1.example/story-1?utm_source=rss&utm_campaign=a",
+      "http://NEWS1.example/story-1/?utm_source=rss&utm_campaign=b&fbclid=x#top",
+      "https://www.news1.example/story-1?gclid=1&sessionid=abc",
+    ]) {
+      state.pageFetches = [];
+      state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items({}, { "1": variant }) }));
+      await syncFeed(userId, feed.id);
+      expect(state.pageFetches, variant).toEqual([]);
+      const row = await state.db.article.findFirstOrThrow({ where: { feedId: feed.id, externalId: "guid-1" } });
+      expect(row.link).toBe(variant);
+      expect(row.fullTextStatus).toBe("ok");
+      expect(row.updatedAt.getTime()).toBe(before[0].updatedAt.getTime());
+    }
+  });
+
+  it("a deferred row is not rewritten each sync while its host keeps backing off", async () => {
+    const feed = await autoFeed();
+    state.page = async () => {
+      throw new HttpStatusError(429, "Fetch failed: 429", 60 * 60 * 1000);
+    };
+    await syncFeed(userId, feed.id); // failed + host backoff
+    await syncFeed(userId, feed.id); // deferred
+    const first = await rows(feed.id);
+    const fetchedAt1 = await state.db.article.findMany({ where: { feedId: feed.id }, select: { fullTextFetchedAt: true }, orderBy: { externalId: "asc" } });
+    expect(first.map((r) => r.fullTextStatus)).toEqual(["deferred", "deferred", "deferred"]);
+    await tick();
+    await syncFeed(userId, feed.id);
+    const fetchedAt2 = await state.db.article.findMany({ where: { feedId: feed.id }, select: { fullTextFetchedAt: true }, orderBy: { externalId: "asc" } });
+    expect(fetchedAt2).toEqual(fetchedAt1);
+  });
+
+  it("orders retry candidates least-recently-tried first, after new items", async () => {
+    const feed = await state.db.feed.create({ data: { userId, name: "Order", url: "https://order.example/feed.xml" } });
+    await syncFeed(userId, feed.id);
+    const all = await state.db.article.findMany({ where: { feedId: feed.id }, orderBy: { externalId: "asc" } });
+    const at = (m: number) => new Date(Date.UTC(2026, 10, 1, 0, m));
+    await state.db.article.update({ where: { id: all[0].id }, data: { fullTextStatus: "failed", fullTextAttempts: 1, fullTextFetchedAt: at(30) } });
+    await state.db.article.update({ where: { id: all[1].id }, data: { fullTextStatus: "failed", fullTextAttempts: 1, fullTextFetchedAt: at(10) } });
+    await state.db.article.update({ where: { id: all[2].id }, data: { fullTextStatus: "deferred", fullTextFetchedAt: at(20) } });
+    const input = (row: (typeof all)[number]) => ({
+      feedId: feed.id,
+      userId,
+      title: row.title,
+      link: row.link,
+      externalId: row.externalId,
+      dedupeKey: row.dedupeKey!,
+      contentHash: row.contentHash,
+      content: row.content,
+      excerpt: row.excerpt ?? "",
+      author: row.author,
+      publishedAt: row.publishedAt,
+      imageUrl: row.imageUrl,
+      enclosures: row.enclosures,
+    });
+    const fresh = { ...input(all[0]), title: "Brand new", link: "https://order.example/new", externalId: "new", dedupeKey: "new-key", contentHash: "new-hash" };
+    const result = await upsertArticleBatch([input(all[0]), input(all[1]), input(all[2]), fresh]);
+    expect(result.fullTextCandidateIds.slice(1)).toEqual([all[1].id, all[2].id, all[0].id]);
+    expect(result.fullTextCandidateIds[0]).toBe(result.createdArticleIds[0]);
+  });
+
+  it("an unrelated write (star/read) during extraction does not drop the result and keeps the current updatedAt", async () => {
+    const feed = await autoFeed();
+    state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items().slice(0, 1) }));
+    let starredAt: Date | null = null;
+    state.page = async (url) => {
+      const row = await state.db.article.findFirstOrThrow({ where: { link: url, feedId: feed.id } });
+      await tick();
+      const starred = await state.db.article.update({ where: { id: row.id }, data: { isStarred: true } });
+      starredAt = starred.updatedAt;
+      return fullPage("1");
+    };
+    await syncFeed(userId, feed.id);
+    const row = await state.db.article.findFirstOrThrow({ where: { feedId: feed.id } });
+    expect(row.fullTextStatus).toBe("ok");
+    expect(row.content).toContain("Full body paragraph 7");
+    expect(row.isStarred).toBe(true);
+    expect(row.updatedAt.getTime()).toBe(starredAt!.getTime());
+  });
+
+  it("manual full-text fetches are rate limited per user", async () => {
+    const feed = await state.db.feed.create({ data: { userId, name: "RL", url: "https://rl.example/feed.xml" } });
+    await syncFeed(userId, feed.id);
+    const target = await state.db.article.findFirstOrThrow({ where: { feedId: feed.id } });
+    const limited = await state.db.user.create({ data: { email: `rl-${Date.now()}@test`, name: "RL" } });
+    await state.db.article.update({ where: { id: target.id }, data: { userId: limited.id } });
+    const results: string[] = [];
+    for (let i = 0; i < 11; i++) {
+      results.push(await refetchArticleFullText(limited.id, target.id).then(() => "ok", (e: Error) => e.message));
+    }
+    expect(results.slice(0, 10).some((r) => r.startsWith("Too many"))).toBe(false);
+    expect(results[10]).toMatch(/^Too many full-text requests/);
   });
 });

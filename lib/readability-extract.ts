@@ -49,7 +49,18 @@ export type ExtractionResult = {
   extractedBy: "ftr" | "defuddle" | "readability" | "extractus" | "jsonld" | "ai" | "hosted" | "none";
   // Generic quality assessment of `html` (lib/extraction-quality.ts); null when nothing was extracted.
   quality: ExtractionQuality | null;
+  // Set by fetchAndExtractReadable when an escalation tier would have run but
+  // its per-sync budget was spent — the outcome is "not tried yet", not final.
+  budgetSkipped?: boolean;
 };
+
+/** Thrown when every tier failed AND a tier was skipped for budget (retry later, don't count as failure). */
+export class EscalationBudgetExhaustedError extends Error {
+  constructor(readonly cause: unknown) {
+    super("Full-text escalation budget for this sync is spent");
+    this.name = "EscalationBudgetExhaustedError";
+  }
+}
 
 // Below this many characters of plain text, Defuddle's result is treated as
 // too thin to be useful and we fall back to Readability instead.
@@ -480,9 +491,12 @@ export type FetchAndExtractReadableOptions = {
 export type EscalationBudget = { ai: number; render: number; hosted: number };
 
 /** Takes one unit of `tier` from the budget; true when the tier may run. */
-function takeBudget(budget: EscalationBudget | undefined, tier: keyof EscalationBudget): boolean {
+function takeBudget(budget: EscalationBudget | undefined, tier: keyof EscalationBudget, onSkip?: () => void): boolean {
   if (!budget) return true;
-  if (budget[tier] <= 0) return false;
+  if (budget[tier] <= 0) {
+    onSkip?.();
+    return false;
+  }
   budget[tier]--;
   return true;
 }
@@ -581,8 +595,16 @@ export async function fetchAndExtractReadable(
   const goodEnough = () => {
     const current = best as ExtractionResult | null;
     if (!current?.quality || current.quality.verdict !== "good") return false;
+    // Manual fetch: escalate only on wall/empty/thin — a good page that is
+    // merely not longer than what the reader shows won't improve by spending
+    // render/hosted calls on it.
+    if (options.gate === "manual") return true;
     if (options.baselineHtml === undefined || baselineLength >= SUBSTANTIAL_FEED_TEXT_LENGTH) return true;
     return decideFullText(current.quality, options.baselineHtml, options.gate ?? "auto").accept;
+  };
+  let budgetSkipped = false;
+  const skipped = () => {
+    budgetSkipped = true;
   };
 
   const transports = transportOrder(url);
@@ -601,7 +623,10 @@ export async function fetchAndExtractReadable(
       directError ??= error;
       // A permanent failure (404, SSRF refusal, oversized page) won't change
       // with a different TLS fingerprint — don't retry it.
-      if (classifyFetchFailure(error).kind === "permanent") break;
+      // Neither does an explicit rate limit: a second request right away
+      // (other transport) would only hammer the site — back off instead.
+      const failure = classifyFetchFailure(error);
+      if (failure.kind === "permanent" || failure.kind === "rate_limited" || failure.retryAfterMs !== null) break;
     }
   }
   if (anyFetchSucceeded) recordHostSuccess(url);
@@ -610,7 +635,7 @@ export async function fetchAndExtractReadable(
   // M6: per-feed opt-in AI-extraction, on the already-fetched HTML — before
   // falling to the (slower, whole-page-re-fetching) render sidecar.
   const aiSource = (bestFetchedHtml as string | null) ?? lastFetchedHtml;
-  if (!goodEnough() && options.aiExtraction && aiSource && takeBudget(options.escalationBudget, "ai")) {
+  if (!goodEnough() && options.aiExtraction && aiSource && takeBudget(options.escalationBudget, "ai", skipped)) {
     const aiResult = await extractArticleWithAi(aiSource, url, options.aiExtraction);
     if (aiResult) consider(await buildResultFromMarkdown(aiResult.content, aiResult.title, "ai"), null);
   }
@@ -618,7 +643,7 @@ export async function fetchAndExtractReadable(
   // Render sidecar (M7-T2, admin-configured): client-only pages, consent/bot
   // walls a real browser gets past, or a direct fetch that was blocked outright.
   // Every attempt counts against the per-sync budget (a no-op when no sidecar is configured).
-  if (!goodEnough() && takeBudget(options.escalationBudget, "render")) {
+  if (!goodEnough() && takeBudget(options.escalationBudget, "render", skipped)) {
     const rendered = await renderViaSidecar(url, { context: "Full-text" });
     if (rendered) consider(await extractReadableContent(rendered, url), rendered);
   }
@@ -628,7 +653,7 @@ export async function fetchAndExtractReadable(
   let hostedRateLimited = false;
   if (!goodEnough() && options.userId) {
     const hostedConfig = await getHostedFetchConfigForUser(options.userId);
-    if (hostedConfig && takeBudget(options.escalationBudget, "hosted")) {
+    if (hostedConfig && takeBudget(options.escalationBudget, "hosted", skipped)) {
       const outcome = await fetchViaHostedApiDetailed(url, hostedConfig);
       if (outcome.ok) consider(await buildResultFromMarkdown(outcome.result.content, outcome.result.title, "hosted"), null);
       else hostedRateLimited = outcome.rateLimited;
@@ -636,13 +661,14 @@ export async function fetchAndExtractReadable(
   }
 
   const finalBest = best as ExtractionResult | null;
-  if (finalBest) return finalBest;
+  if (finalBest) return budgetSkipped && !goodEnough() ? { ...finalBest, budgetSkipped: true } : finalBest;
   const empty = firstResult as ExtractionResult | null;
-  if (empty) return empty; // the (empty) in-process result
+  if (empty) return budgetSkipped ? { ...empty, budgetSkipped: true } : empty; // the (empty) in-process result
   // Rate-limiting on the last-resort tier is worth telling the caller apart
   // from an ordinary fetch failure (see fetchFullText in app/actions/feeds.ts),
   // since "try again later / add your own key" is actionable advice a plain
   // "couldn't fetch" message can't give.
   if (hostedRateLimited) throw new HostedFetchRateLimitedError();
+  if (budgetSkipped) throw new EscalationBudgetExhaustedError(directError);
   throw directError ?? new Error("Full-text fetch failed");
 }

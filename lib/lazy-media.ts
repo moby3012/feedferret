@@ -50,15 +50,28 @@ function absolutize(value: string, baseUrl: string | undefined): string {
     }
 }
 
+/** Candidates are separated by a comma + whitespace; a data: URL's own comma has none after it. */
+function splitSrcset(srcset: string): string[] {
+    return srcset.split(/,\s+/);
+}
+
+/** Only http(s) or scheme-less relative URLs (no data:, javascript:, blob:, …). */
+function isSafeImageUrl(value: string): boolean {
+    const v = value.trim();
+    if (/^https?:\/\//i.test(v) || v.startsWith("//")) return true;
+    return !/^[a-z][a-z0-9+.-]*:/i.test(v);
+}
+
 function absolutizeSrcset(srcset: string, baseUrl: string | undefined): string {
-    return srcset
-        .split(",")
+    return splitSrcset(srcset)
         .map((part) => {
             const trimmed = part.trim();
             if (!trimmed) return "";
             const [url, ...descriptor] = trimmed.split(/\s+/);
-            if (!url || /^data:/i.test(url)) return "";
-            return [absolutize(url, baseUrl), ...descriptor].join(" ");
+            if (!url || !isSafeImageUrl(url)) return "";
+            const absolute = absolutize(url, baseUrl);
+            if (!isSafeImageUrl(absolute)) return "";
+            return [absolute, ...descriptor].join(" ");
         })
         .filter(Boolean)
         .join(", ");
@@ -67,7 +80,7 @@ function absolutizeSrcset(srcset: string, baseUrl: string | undefined): string {
 /** Largest candidate from a srcset (by w/x descriptor), used when an <img> has no usable src at all. */
 function bestFromSrcset(srcset: string): string | null {
     let best: { url: string; weight: number } | null = null;
-    for (const part of srcset.split(",")) {
+    for (const part of splitSrcset(srcset)) {
         const [url, descriptor] = part.trim().split(/\s+/);
         if (!url || /^data:/i.test(url)) continue;
         const match = descriptor?.match(/^(\d+(?:\.\d+)?)([wx])$/);

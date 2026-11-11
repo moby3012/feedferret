@@ -13,6 +13,7 @@
 //    every write here keeps `updatedAt` (GReader `updated` / ot-nt clock).
 
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import { estimateReadMinutes, htmlToPlainText, markdownToPlainText } from "@/lib/article-kind";
 
 export type FullTextStatus = "ok" | "rejected" | "failed" | "deferred";
@@ -32,6 +33,7 @@ export const FULL_TEXT_STATE_SELECT = {
     feedContent: true,
     updatedAt: true,
     fullTextStatus: true,
+    fullTextReason: true,
     fullTextAttempts: true,
 } as const;
 
@@ -44,6 +46,7 @@ export type FullTextArticleState = {
     feedContent: string | null;
     updatedAt: Date;
     fullTextStatus: string | null;
+    fullTextReason: string | null;
     fullTextAttempts: number | null;
 };
 
@@ -65,51 +68,73 @@ function plainOf(content: string, format: string): string {
 }
 
 /**
- * Optimistic-concurrency guard: the row must still be exactly the version the
- * extraction started from (same content, same feed version, same updatedAt).
- * A sync that recorded an upstream change in the meantime (new content /
- * feedContent, advanced updatedAt), a concurrent manual fetch or another
- * worker storing full text all change at least one of these, so a stale result
- * matches zero rows and is discarded — it can never restore an old feed
- * version, mark an outdated version complete, or move updatedAt backwards
- * (updatedAt is only ever re-written with the value it currently has).
+ * Optimistic-concurrency write. The extraction result is only valid for the
+ * version it started from: the row's `content` and `feedContent` must still be
+ * what `article` captured. A sync that recorded an upstream change (new content
+ * / feedContent) or another fetch that stored full text first changes one of
+ * them, and the stale result is dropped (debug-logged) — it can never restore an
+ * old feed version or mark an outdated version complete.
+ *
+ * Unrelated writes in between (read/star state, summaries, tags) do NOT
+ * invalidate the result: the row is re-read and written compare-and-swap on the
+ * CURRENT `updatedAt` (and attempt counter), keeping that current `updatedAt`
+ * — never a value from the earlier snapshot. A concurrent write between re-read
+ * and write makes the CAS miss and the loop re-reads.
  */
-function snapshotWhere(article: FullTextArticleState) {
-    return {
-        id: article.id,
-        userId: article.userId,
-        updatedAt: article.updatedAt,
-        content: article.content,
-        feedContent: article.feedContent ?? null,
-    };
+const CAS_RETRIES = 6;
+
+async function casWrite(
+    article: FullTextArticleState,
+    kind: string,
+    buildData: (current: { updatedAt: Date; fullTextAttempts: number | null }) => Record<string, unknown>,
+): Promise<boolean> {
+    for (let attempt = 0; attempt < CAS_RETRIES; attempt++) {
+        const current = await db.article.findFirst({
+            where: { id: article.id, userId: article.userId },
+            select: { content: true, feedContent: true, updatedAt: true, fullTextAttempts: true },
+        });
+        if (!current || current.content !== article.content || (current.feedContent ?? null) !== (article.feedContent ?? null)) {
+            logger.debug(`[full-text] dropped stale ${kind} for article ${article.id} (changed during extraction)`);
+            return false;
+        }
+        const { count } = await db.article.updateMany({
+            where: {
+                id: article.id,
+                userId: article.userId,
+                content: current.content,
+                feedContent: current.feedContent ?? null,
+                updatedAt: current.updatedAt,
+                fullTextAttempts: current.fullTextAttempts ?? null,
+            },
+            data: { ...buildData(current), updatedAt: current.updatedAt },
+        });
+        if (count === 1) return true;
+    }
+    logger.debug(`[full-text] dropped ${kind} for article ${article.id} (row kept changing)`);
+    return false;
 }
 
 /**
  * Stores accepted full text in `content`, preserving the feed version in
- * `feedContent`. Returns false (and writes nothing) when the article changed
- * since `article` was read.
+ * `feedContent`. Returns false (and writes nothing) when the article's content
+ * changed since `article` was read.
  */
 export async function storeFullText(
     article: FullTextArticleState,
     result: { content: string; format: "html" | "markdown"; excerpt: string | null },
 ): Promise<boolean> {
     const plain = plainOf(result.content, result.format);
-    const { count } = await db.article.updateMany({
-        where: snapshotWhere(article),
-        data: {
-            content: result.content,
-            contentFormat: result.format,
-            excerpt: result.excerpt?.trim() || plain.slice(0, 240),
-            readMinutes: estimateReadMinutes(plain),
-            feedContent: feedBaseline(article),
-            fullTextStatus: "ok",
-            fullTextReason: null,
-            fullTextFetchedAt: new Date(),
-            fullTextAttempts: null,
-            updatedAt: article.updatedAt,
-        },
-    });
-    return count === 1;
+    return casWrite(article, "full text", () => ({
+        content: result.content,
+        contentFormat: result.format,
+        excerpt: result.excerpt?.trim() || plain.slice(0, 240),
+        readMinutes: estimateReadMinutes(plain),
+        feedContent: feedBaseline(article),
+        fullTextStatus: "ok",
+        fullTextReason: null,
+        fullTextFetchedAt: new Date(),
+        fullTextAttempts: null,
+    }));
 }
 
 /**
@@ -119,24 +144,28 @@ export async function storeFullText(
  * full text that the current feed content matches or beats is dropped in favour
  * of the feed content, so the best content stays in `content`.
  *
- * Guarded like storeFullText (stale outcomes are discarded, returns false);
- * failed attempts are counted with an atomic increment so concurrent attempts
- * never lose one.
+ * Same concurrency rules as storeFullText; failed attempts are counted
+ * compare-and-swap on the current counter, so concurrent attempts never lose
+ * an increment. A "deferred" row that is already deferred for the same reason
+ * is not rewritten (no write per sync while a host backs off).
  */
 export async function recordFullTextMiss(
     article: FullTextArticleState,
     status: Exclude<FullTextStatus, "ok">,
     reason: string,
 ): Promise<boolean> {
+    const shortReason = reason.slice(0, 64);
+    if (status === "deferred" && article.fullTextStatus === "deferred" && article.fullTextReason === shortReason) return true;
     const revert =
         status === "rejected" &&
         article.feedContent != null &&
         htmlToPlainText(article.feedContent).length >= plainOf(article.content, article.contentFormat).length;
     const feedPlain = revert ? htmlToPlainText(article.feedContent!) : "";
-    const data = {
+    return casWrite(article, `${status} outcome`, (current) => ({
         fullTextStatus: status,
-        fullTextReason: reason.slice(0, 64),
+        fullTextReason: shortReason,
         fullTextFetchedAt: new Date(),
+        ...(status === "failed" ? { fullTextAttempts: (current.fullTextAttempts ?? 0) + 1 } : {}),
         ...(revert
             ? {
                   content: article.feedContent!,
@@ -146,20 +175,5 @@ export async function recordFullTextMiss(
                   readMinutes: estimateReadMinutes(feedPlain),
               }
             : {}),
-        updatedAt: article.updatedAt,
-    };
-    const where = snapshotWhere(article);
-    if (status !== "failed") {
-        const { count } = await db.article.updateMany({ where, data });
-        return count === 1;
-    }
-    // `fullTextAttempts` is nullable (null = 0) and NULL + 1 is NULL in SQL, so
-    // the first failure sets 1 and later ones increment — each statement atomic.
-    const first = await db.article.updateMany({ where: { ...where, fullTextAttempts: null }, data: { ...data, fullTextAttempts: 1 } });
-    if (first.count === 1) return true;
-    const next = await db.article.updateMany({
-        where: { ...where, fullTextAttempts: { not: null } },
-        data: { ...data, fullTextAttempts: { increment: 1 } },
-    });
-    return next.count === 1;
+    }));
 }

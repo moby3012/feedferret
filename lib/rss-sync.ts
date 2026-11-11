@@ -7,7 +7,7 @@ import { applyFeedReadFilter } from "./feed-content-filter";
 import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
-import { computeContentHash } from "./content-hash";
+import { computeContentHash, normalizeLinkForComparison } from "./content-hash";
 import { buildDedupeKey } from "./dedupe-key";
 import { decryptIfValue } from "./crypto";
 import type { AiConfig, MeteredAiConfig } from "./ai-summary";
@@ -15,7 +15,7 @@ import { logger, urlForLog } from "./logger";
 import { getConnectorSecretRules, redactConnectorTextWith, stripConnectorSecretsWith } from "./connector-secrets";
 import { getSanitizer } from "./sanitize-html";
 import { resolveFullTextMode } from "./full-text-mode";
-import { fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
+import { EscalationBudgetExhaustedError, fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
 import { assessExtraction, decideFullText } from "./extraction-quality";
 import { classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
 import { normalizeLazyMedia } from "./lazy-media";
@@ -264,6 +264,7 @@ export async function upsertArticleBatch(
             feedContent: true,
             fullTextStatus: true,
             fullTextAttempts: true,
+            fullTextFetchedAt: true,
         },
     });
     const existingByDedupeKey = new Map(
@@ -273,7 +274,7 @@ export async function upsertArticleBatch(
     );
 
     const upsertedIds: string[] = [];
-    const retryFullTextIds: string[] = [];
+    const retryFullText: { id: string; lastTry: number }[] = [];
     const newArticles: ArticleSyncInput[] = [];
 
     for (let article of articles) {
@@ -347,7 +348,13 @@ export async function upsertArticleBatch(
         // different page) invalidates the previous full-text attempt, so it is
         // extracted again exactly once for the new version. Cosmetic link
         // rewrites (synthetic links, resolved Google News redirects) do not.
-        const cosmeticLink = article.linkSynthetic || article.linkCosmetic;
+        // Same page behind a different spelling (scheme, host case, fragment,
+        // trailing slash, rotating tracking/session params) is cosmetic too:
+        // store the new link, but no reset/refetch and no updatedAt bump.
+        const cosmeticLink =
+            article.linkSynthetic ||
+            article.linkCosmetic ||
+            (linkChanged && normalizeLinkForComparison(existing.link) === normalizeLinkForComparison(next.link));
         const sourceChanged = contentChanged || (linkChanged && !cosmeticLink);
         const fullTextReset = sourceChanged ? { fullTextStatus: null, fullTextReason: null, fullTextAttempts: null } : {};
         const legacyAdopt = legacyFullText ? { feedContent: next.content, fullTextStatus: "ok", fullTextReason: "legacy" } : {};
@@ -378,7 +385,9 @@ export async function upsertArticleBatch(
             sourceChanged ||
             (!legacyFullText && needsFullTextAttempt({ fullTextStatus: existing.fullTextStatus, fullTextAttempts: existing.fullTextAttempts }))
         ) {
-            retryFullTextIds.push(existing.id);
+            // Upstream changes first (never tried for this version), then the
+            // least recently tried retries, so no row starves behind others.
+            retryFullText.push({ id: existing.id, lastTry: sourceChanged ? -1 : existing.fullTextFetchedAt?.getTime() ?? -1 });
         }
     }
 
@@ -505,6 +514,7 @@ export async function upsertArticleBatch(
         }
     }
 
+    const retryFullTextIds = retryFullText.sort((a, b) => a.lastTry - b.lastTry).map((r) => r.id);
     return { upsertedIds, createdArticleIds, fullTextCandidateIds: [...createdArticleIds, ...retryFullTextIds] };
 }
 
@@ -965,11 +975,22 @@ async function autoFetchFullTextViaEngine(
                 result = await fetchAndExtractReadable(article.link, extractOptions);
             } catch (error) {
                 // Fetch failed on every tier: keep whatever content the article has.
+                if (error instanceof EscalationBudgetExhaustedError) {
+                    // Not a real failure: a tier was skipped for this sync's budget.
+                    await recordFullTextMiss(article, "deferred", "budget");
+                    continue;
+                }
                 await recordFullTextFetchError(article, error);
                 continue;
             }
 
             const decision = decideFullText(result.quality, baselineHtml, "auto");
+            if ((!decision.accept || !result.html) && result.budgetSkipped) {
+                // Escalation was cut short by the per-sync budget: retry next sync
+                // instead of recording a final "rejected".
+                await recordFullTextMiss(article, "deferred", "budget");
+                continue;
+            }
             if (!decision.accept || !result.html) {
                 await recordFullTextMiss(article, "rejected", decision.accept ? "empty" : decision.reason);
                 continue;

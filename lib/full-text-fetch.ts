@@ -1,7 +1,8 @@
 import { FEED_CLIENT_SELECT } from "@/lib/feed-secrets";
 import { db } from "@/lib/db";
 import { decideFullText } from "@/lib/extraction-quality";
-import { storeFullText } from "@/lib/full-text-store";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { FULL_TEXT_STATE_SELECT, storeFullText } from "@/lib/full-text-store";
 import { fetchAndExtractReadable } from "@/lib/readability-extract";
 import { HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
 import { looksLikeTruncatedFeed } from "@/lib/full-text-mode";
@@ -63,10 +64,17 @@ export function describePageFetchError(error: unknown): string {
 export async function refetchArticleFullText(userId: string, articleId: string) {
     const article = await db.article.findFirst({
         where: { id: articleId, userId },
-        select: { id: true, userId: true, link: true, content: true, contentFormat: true, feedContent: true, updatedAt: true, fullTextStatus: true, fullTextAttempts: true },
+        select: FULL_TEXT_STATE_SELECT,
     });
 
     if (!article) throw new Error("Article not found");
+
+    // One limit for every surface (action, REST v1, MCP): a manual fetch can
+    // escalate to the render sidecar / hosted API.
+    const limit = checkRateLimit(`user:${userId}`, RATE_LIMITS.fullTextFetch);
+    if (!limit.success) {
+        throw new Error(`Too many full-text requests. Try again in ${limit.retryAfterSecs ?? 60} seconds.`);
+    }
     if (!article.link) throw new Error("Article has no source link");
 
     let result: Awaited<ReturnType<typeof fetchAndExtractReadable>>;

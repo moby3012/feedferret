@@ -133,9 +133,18 @@ describe("fetchAndExtractReadable escalation", () => {
 
     state.calls = [];
     state.impit = fail(429);
-    state.plain = fail(429);
+    state.plain = ok(ARTICLE);
     await expect(fetchAndExtractReadable("https://busy.example/a")).rejects.toThrow("Fetch failed: 429");
+    // Rate limited: no immediate second request on the other transport.
+    expect(state.calls).toEqual(["impit", "sidecar"]);
     expect(hostBackoffRemainingMs("https://busy.example/other")).toBeGreaterThan(0);
+
+    state.calls = [];
+    state.impit = async () => {
+      throw new HttpStatusError(503, "Fetch failed: 503", 120_000);
+    };
+    await expect(fetchAndExtractReadable("https://maint.example/a")).rejects.toThrow("Fetch failed: 503");
+    expect(state.calls).toEqual(["impit", "sidecar"]);
   });
 
   it("bounds AI, render and hosted escalation by the shared per-sync budget", async () => {
@@ -149,5 +158,36 @@ describe("fetchAndExtractReadable escalation", () => {
     expect(state.aiCalls).toBe(1);
     expect(state.calls.filter((c) => c === "sidecar")).toHaveLength(2);
     expect(budget).toEqual({ ai: 0, render: 0, hosted: 0 });
+  });
+
+  it("manual mode escalates only on wall/empty/thin, not on a good page that is merely not longer", async () => {
+    const longCurrent = Array.from({ length: 12 }, (_, i) => P(i)).join("");
+    state.impit = ok(ARTICLE);
+    await fetchAndExtractReadable("https://manual-good.example/a", { userId: "u", baselineHtml: longCurrent, gate: "manual" });
+    expect(state.calls).toEqual(["impit"]);
+
+    state.calls = [];
+    state.impit = ok(WALL);
+    state.plain = ok(WALL);
+    await fetchAndExtractReadable("https://manual-wall.example/a", { userId: "u", baselineHtml: longCurrent, gate: "manual" });
+    expect(state.calls).toEqual(["impit", "plain", "sidecar"]);
+  });
+
+  it("flags budgetSkipped (or throws EscalationBudgetExhaustedError) when a tier was skipped for budget", async () => {
+    const { EscalationBudgetExhaustedError } = await import("../../lib/readability-extract");
+    state.impit = ok(WALL);
+    state.plain = ok(WALL);
+    const walled = await fetchAndExtractReadable("https://budget-wall.example/a", { escalationBudget: { ai: 0, render: 0, hosted: 0 } });
+    expect(walled.budgetSkipped).toBe(true);
+
+    state.impit = fail(403);
+    state.plain = fail(403);
+    await expect(
+      fetchAndExtractReadable("https://budget-blocked.example/a", { escalationBudget: { ai: 0, render: 0, hosted: 0 } }),
+    ).rejects.toBeInstanceOf(EscalationBudgetExhaustedError);
+
+    state.impit = ok(ARTICLE);
+    const good = await fetchAndExtractReadable("https://budget-good.example/a", { escalationBudget: { ai: 0, render: 0, hosted: 0 } });
+    expect(good.budgetSkipped).toBeUndefined();
   });
 });

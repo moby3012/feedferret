@@ -66,3 +66,20 @@ describe("host backoff", () => {
     expect(parseRetryAfterMs(null)).toBeNull();
   });
 });
+
+describe("normalizeLinkForComparison", () => {
+  it("treats scheme, host case, www, fragment, trailing slash and tracking/session params as cosmetic", async () => {
+    const { normalizeLinkForComparison: n } = await import("@/lib/content-hash");
+    const base = n("https://news.example/story/42?id=7");
+    for (const variant of [
+      "http://News.Example/story/42/?id=7#comments",
+      "https://www.news.example/story/42?utm_source=rss&utm_medium=feed&id=7",
+      "https://news.example/story/42?id=7&fbclid=abc&gclid=x&ref=home&sessionid=s1&_hsenc=q",
+      "https://news.example/story/42?utm_campaign=rotating-2&id=7&PHPSESSID=zz",
+    ]) {
+      expect(n(variant), variant).toBe(base);
+    }
+    expect(n("https://news.example/story/43?id=7")).not.toBe(base);
+    expect(n("https://news.example/story/42?id=8")).not.toBe(base);
+  });
+});

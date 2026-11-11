@@ -10,15 +10,15 @@ import { manifest } from "../helpers/db";
 
 const FIXTURE = `http://127.0.0.1:${process.env.E2E_FIXTURE_PORT || 4010}`;
 
-async function hits(): Promise<{ good: number; wall: number }> {
-  return (await fetch(`${FIXTURE}/ft/hits`)).json();
+async function hits(tag: string): Promise<{ good: number; wall: number }> {
+  return (await fetch(`${FIXTURE}/ft/hits?t=${tag}`)).json();
 }
 
 test("auto full text: reader shows extracted text, walls keep the teaser, re-sync does not refetch", async ({ app, page }) => {
   await page.goto("/");
   const origin = new URL(page.url()).origin;
   const headers = { Origin: origin };
-  const tag = Date.now().toString(36);
+  const tag = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const feedName = `FT auto ${tag}`;
   const db = new Database(manifest().dbPath);
   db.pragma("busy_timeout = 5000");
@@ -27,16 +27,16 @@ test("auto full text: reader shows extracted text, walls keep the teaser, re-syn
   let feedId: string | undefined;
   try {
     db.prepare('UPDATE "GlobalSettings" SET allowInternalFeedUrls = 1 WHERE id = ?').run("global");
-    const created = await page.request.post("/api/v1/feeds", { headers, data: { url: `${FIXTURE}/ft/feed?${tag}`, name: feedName, sync: false } });
+    const created = await page.request.post("/api/v1/feeds", { headers, data: { url: `${FIXTURE}/ft/feed?t=${tag}`, name: feedName, sync: false } });
     expect(created.status(), await created.text()).toBe(201);
     feedId = (await created.json()).id as string;
     const patched = await page.request.patch(`/api/v1/feeds/${feedId}`, { headers, data: { fullTextMode: "auto" } });
     expect(patched.ok(), await patched.text()).toBe(true);
 
-    const before = await hits();
+    const before = await hits(tag);
     const synced = await page.request.post(`/api/v1/feeds/${feedId}/sync`, { headers });
     expect(synced.ok(), await synced.text()).toBe(true);
-    const afterFirst = await hits();
+    const afterFirst = await hits(tag);
     expect(afterFirst.good - before.good).toBe(1);
     expect(afterFirst.wall - before.wall).toBe(1);
 
@@ -57,7 +57,7 @@ test("auto full text: reader shows extracted text, walls keep the teaser, re-syn
     // Unchanged feed: no page is fetched again and nothing is rewritten.
     const resynced = await page.request.post(`/api/v1/feeds/${feedId}/sync`, { headers });
     expect(resynced.ok()).toBe(true);
-    expect(await hits()).toEqual(afterFirst);
+    expect(await hits(tag)).toEqual(afterFirst);
     expect(rows()).toEqual([good, wall]);
 
     // The reader (and the REST API) serve the best content.

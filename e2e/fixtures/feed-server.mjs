@@ -207,21 +207,28 @@ function handleBrokenFeeds(res, url) {
 }
 
 // --- Full text (auto mode) ---------------------------------------------------
-const fullTextHits = { good: 0, wall: 0 };
+// Hits per run tag (`?t=` on the feed URL, propagated to the item links) so
+// parallel projects / reused servers never see each other's requests.
+const fullTextHits = new Map();
+const ftHits = (tag) => {
+  if (!fullTextHits.has(tag)) fullTextHits.set(tag, { good: 0, wall: 0 });
+  return fullTextHits.get(tag);
+};
 const FT_PARAGRAPH =
   "The ferret colony relocation project moved forty animals into the new enclosure, where keepers measured how quickly each group explored the tunnels and resting boxes. ";
 function handleFullText(res, url) {
+  const tag = encodeURIComponent(url.searchParams.get("t") || "default");
   if (url.pathname === "/ft/feed") {
     res.writeHead(200, { "content-type": "application/rss+xml" }).end(
       `<?xml version="1.0"?><rss version="2.0"><channel><title>Full text fixture</title><link>${baseUrl}</link><description>Auto full text</description>` +
-        `<item><title>FT good story</title><guid>ft-good</guid><link>${baseUrl}/ft/good</link><description>Teaser: the ferret colony moved.</description></item>` +
-        `<item><title>FT walled story</title><guid>ft-wall</guid><link>${baseUrl}/ft/wall</link><description>Teaser: a walled story stays a teaser.</description></item>` +
+        `<item><title>FT good story</title><guid>ft-good</guid><link>${baseUrl}/ft/good?t=${tag}</link><description>Teaser: the ferret colony moved.</description></item>` +
+        `<item><title>FT walled story</title><guid>ft-wall</guid><link>${baseUrl}/ft/wall?t=${tag}</link><description>Teaser: a walled story stays a teaser.</description></item>` +
         `</channel></rss>`,
     );
     return true;
   }
   if (url.pathname === "/ft/good") {
-    fullTextHits.good++;
+    ftHits(tag).good++;
     res.writeHead(200, { "content-type": "text/html" }).end(
       `<!doctype html><html><head><title>FT good story</title></head><body><nav><a href="/">Home</a> <a href="/news">News</a></nav><main><article><h1>FT good story</h1>` +
         Array.from({ length: 8 }, (_, i) => `<p>${FT_PARAGRAPH.repeat(2)}Observation ${i + 1} was logged.</p>`).join("") +
@@ -232,7 +239,7 @@ function handleFullText(res, url) {
     return true;
   }
   if (url.pathname === "/ft/wall") {
-    fullTextHits.wall++;
+    ftHits(tag).wall++;
     res.writeHead(200, { "content-type": "text/html" }).end(
       `<!doctype html><html><head><title>Consent</title></head><body><main><div><h2>Before you continue</h2>` +
         `<p>We and our 170 vendors use cookies and process personal data such as IP addresses and device identifiers for personalised ads and content, ad and content measurement, audience research and services development.</p>` +
@@ -242,7 +249,7 @@ function handleFullText(res, url) {
     return true;
   }
   if (url.pathname === "/ft/hits") {
-    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(fullTextHits));
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(ftHits(tag)));
     return true;
   }
   return false;
