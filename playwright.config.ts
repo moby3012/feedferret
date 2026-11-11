@@ -109,6 +109,9 @@ export default defineConfig({
         // Google (search RSS + link-decoding RPC) instead of the internet.
         // Test-only: never set this variable in a deployment.
         FEEDFERRET_GOOGLE_NEWS_BASE_URL: `http://127.0.0.1:${FIXTURE_PORT}`,
+        // N1: fake IMAP mailbox (lib/inbound-email-fake-imap.ts), a spool dir
+        // next to the e2e DB. Same harness-token gate as the fake AI provider.
+        FEEDFERRET_FAKE_IMAP: "1",
         NEXT_TELEMETRY_DISABLED: "1",
         NODE_ENV: "production",
       },

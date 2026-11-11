@@ -35,7 +35,7 @@ if (!dbPath.startsWith(e2eDir + path.sep)) {
   process.exit(1);
 }
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-for (const suffix of ["", "-journal", "-wal", "-shm", ".harness"]) fs.rmSync(dbPath + suffix, { force: true });
+for (const suffix of ["", "-journal", "-wal", "-shm", ".harness", ".imap-spool"]) fs.rmSync(dbPath + suffix, { force: true, recursive: true });
 
 // 1. Schema: same path as production start (`prisma db push`), SQLite only.
 const env = { ...process.env, DATABASE_PROVIDER: "sqlite", DATABASE_URL: `file:${dbPath}` };

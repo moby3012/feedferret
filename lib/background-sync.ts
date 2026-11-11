@@ -24,6 +24,8 @@ type SchedulerState = {
     inFlight: Set<string>;
     /** The off-tick lane (digest, notifications, retention) while it is running. */
     lane: Promise<void> | null;
+    /** N1: newsletter IMAP poll timer (own cadence, independent of the feed tick). */
+    newsletterTimer?: ReturnType<typeof setTimeout> | null;
 };
 
 const GLOBAL_KEY = "__feedferret_background_sync__";
@@ -191,6 +193,39 @@ async function tick() {
     }
 }
 
+const DEFAULT_NEWSLETTER_POLL_SECONDS = 120;
+
+/** Interval of the newsletter IMAP poll; override: NEWSLETTER_POLL_INTERVAL_SECONDS (min 30). */
+function newsletterPollIntervalMs() {
+    const n = Number(process.env.NEWSLETTER_POLL_INTERVAL_SECONDS);
+    return Math.max(30, Number.isFinite(n) && n > 0 ? n : DEFAULT_NEWSLETTER_POLL_SECONDS) * 1000;
+}
+
+/**
+ * N1: polls the admin's newsletter IMAP mailbox on its own timer, so mail
+ * arrives within ~2 min instead of waiting for the feed tick. Single-flight in
+ * this process (runJob); lib/inbound-email-poller.ts additionally claims each
+ * source with a conditional UPDATE so a second instance cannot poll it at the
+ * same time. The module is imported lazily: imapflow/postal-mime stay out of
+ * the startup graph, and an instance without an IMAP source only runs one
+ * cheap query per interval.
+ */
+function startNewsletterPoller(state: SchedulerState) {
+    if (state.newsletterTimer || process.env.DISABLE_NEWSLETTER_POLL === "true") return;
+    const intervalMs = newsletterPollIntervalMs();
+    state.newsletterTimer = setTimeout(function loop() {
+        void runJob(state, "newsletter-imap", async () => {
+            const { pollInboundSources } = await import("./inbound-email-poller");
+            await pollInboundSources();
+        }).finally(() => {
+            const s = getState();
+            s.newsletterTimer = setTimeout(loop, intervalMs);
+            s.newsletterTimer.unref?.();
+        });
+    }, 45_000);
+    state.newsletterTimer.unref?.();
+}
+
 export function startBackgroundSync() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return;
     if (process.env.DISABLE_BACKGROUND_SYNC === "true") {
@@ -218,6 +253,7 @@ export function startBackgroundSync() {
         });
     }, initialDelayMs);
     state.timer.unref?.();
+    startNewsletterPoller(state);
 }
 
 export function getBackgroundSyncStatus() {

@@ -2,6 +2,7 @@
 
 import { redact } from "@/lib/redact";
 import { auth } from "@/auth";
+import { requireAdmin } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
 import { getConfiguredMailProviders, sendTestSystemEmail, type MailProviderId } from "@/lib/mail";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
@@ -13,30 +14,9 @@ import { validateRsshubRoute } from "@/lib/rsshub";
 import { testChangedetectionConnection as runChangedetectionTest } from "@/lib/changedetection";
 import { logger } from "@/lib/logger";
 
+/** Single source of the admin gate: lib/admin-auth.ts (also used by the newsletter wizard). */
 async function checkAdmin() {
-  const session = await auth();
-  const currentUser = session?.user?.id ? await db.user.findUnique({
-    where: { id: session.user.id }, select: { role: true, isActive: true },
-  }) : null;
-  if (!session?.user?.id || !currentUser?.isActive || currentUser.role !== "ADMIN") {
-    throw new Error("Unauthorized: Admin access required");
-  }
-  const settings = await db.globalSettings.findUnique({
-    where: { id: "global" },
-    select: { require2FAForAdmins: true },
-  });
-  if (settings?.require2FAForAdmins) {
-    const user = await db.user.findUnique({
-      where: { id: session.user.id! },
-      select: { twoFactorEnabled: true },
-    });
-    if (!user?.twoFactorEnabled) {
-      throw new Error(
-        "This instance requires admins to have 2FA enabled. Please enable it in Settings → Security.",
-      );
-    }
-  }
-  return session;
+  return requireAdmin();
 }
 
 async function logAdminAction(
