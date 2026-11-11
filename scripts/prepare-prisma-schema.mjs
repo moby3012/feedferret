@@ -35,8 +35,14 @@ function main() {
     process.exit(1);
   }
 
-  const sourcePath = path.join('prisma', 'schema.prisma');
-  const targetPath = path.join('prisma', 'schema.generated.prisma');
+  // `--source`/`--target` let scripts/db-migrate.sh prepare the frozen baseline
+  // (prisma/baseline.schema.prisma) the same way as the live schema.
+  const arg = (name, fallback) => {
+    const i = process.argv.indexOf(name);
+    return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+  };
+  const sourcePath = arg('--source', path.join('prisma', 'schema.prisma'));
+  const targetPath = arg('--target', path.join('prisma', 'schema.generated.prisma'));
   const skipTrgm = provider === 'postgresql' && process.env.PRISMA_PG_TRGM === '0';
   fs.writeFileSync(targetPath, prepareSchema(fs.readFileSync(sourcePath, 'utf8'), provider, { skipTrgm }));
   console.log(`Prepared Prisma schema for ${provider}: ${targetPath}${skipTrgm ? ' (without pg_trgm indexes)' : ''}`);

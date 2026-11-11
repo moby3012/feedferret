@@ -157,7 +157,7 @@ jobs:
         run: pnpm db:migrations:check
         env:
           MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
-      - name: Drift, empty apply and db-push baseline upgrade
+      - name: Drift, empty apply, db-push baseline upgrade and startup (db-migrate.sh)
         run: node scripts/test-migrations.mjs ${{ matrix.provider }}
         env:
           MIGRATION_TEST_ADMIN_URL: postgresql://postgres:migration-test-only@localhost:5432/postgres
