@@ -108,6 +108,23 @@ export function releaseRateLimit(identifier: string, config: RateLimitConfig): v
   if (entry && entry.resetAt >= Date.now() && entry.count > 0) entry.count -= 1;
 }
 
+/**
+ * Adds `amount` units to a window without refusing (quota accounting after the
+ * work, e.g. imported article rows). Pair with `peekRateLimit` before the work.
+ */
+export function consumeRateLimit(identifier: string, config: RateLimitConfig, amount: number): void {
+  if (!(amount > 0)) return;
+  const key = `${config.prefix}:${identifier}`;
+  const now = Date.now();
+  let entry = store.get(key);
+  if (!entry || entry.resetAt < now) {
+    if (!entry) evictOldestIfAtCapacity();
+    entry = { count: 0, resetAt: now + config.windowSecs * 1000 };
+    store.set(key, entry);
+  }
+  entry.count += Math.trunc(amount);
+}
+
 // Presets for different API endpoints
 export const RATE_LIMITS = {
   // Feedsearch.dev: be respectful, 10 req/min per user
@@ -214,6 +231,15 @@ export const RATE_LIMITS = {
     prefix: "freshrss-import",
   } satisfies RateLimitConfig,
 
+  // N9: article rows one user may import per day (FreshRSS migration; sum of
+  // created + updated rows of real runs). A full FreshRSS history of a heavy
+  // user fits in one or two days; a loop cannot insert millions of rows.
+  importedArticles: {
+    limit: 200_000,
+    windowSecs: 24 * 60 * 60,
+    prefix: "imported-articles",
+  } satisfies RateLimitConfig,
+
   // Fever compatible API — 120 req/min per user
   fever: {
     limit: 120,
@@ -235,6 +261,57 @@ export const RATE_LIMITS = {
     limit: 30,
     windowSecs: 60,
     prefix: "head-probe",
+  } satisfies RateLimitConfig,
+
+  // N13 — expensive per-user reads/writes. Sized so normal use (incl. several
+  // tabs and sync clients such as Reeder / NetNewsWire) never hits them; they
+  // only stop scripted loops. See docs/security.md "Rate limits".
+  //
+  // Ad-hoc search (`q`, ILIKE over text columns): typing is debounced, one list
+  // page + one count per settled query — 60/min is several queries per second
+  // of sustained typing.
+  articleSearch: {
+    limit: 60,
+    windowSecs: 60,
+    prefix: "article-search",
+  } satisfies RateLimitConfig,
+
+  // `/api/app/articles/count` (saved searches and search only).
+  articleCount: {
+    limit: 120,
+    windowSecs: 60,
+    prefix: "article-count",
+  } satisfies RateLimitConfig,
+
+  // "Alles bis hier als gelesen" range (up to 20k rows in one transaction).
+  rangeMark: {
+    limit: 20,
+    windowSecs: 60,
+    prefix: "range-mark",
+  } satisfies RateLimitConfig,
+
+  // Hot toggle batches (`applyArticleStateOps`): the client batcher flushes at
+  // most every 400 ms–1 s, so normal use stays well below 150/min.
+  stateOps: {
+    limit: 300,
+    windowSecs: 60,
+    prefix: "state-ops",
+  } satisfies RateLimitConfig,
+
+  // Bulk "mark feed/folder/all read" over GReader (`mark-all-as-read`) and
+  // Fever (`mark=feed|group`). Generous burst (a client marking a folder may
+  // send one call per feed) but caps a sustained loop at 0.5/s. Shared bucket.
+  apiBulkMark: {
+    limit: 300,
+    windowSecs: 10 * 60,
+    prefix: "api-bulk-mark",
+  } satisfies RateLimitConfig,
+
+  // "Test connection" in AI settings: a real provider round-trip.
+  aiConnectionTest: {
+    limit: 10,
+    windowSecs: 10 * 60,
+    prefix: "ai-connection-test",
   } satisfies RateLimitConfig,
 } as const;
 

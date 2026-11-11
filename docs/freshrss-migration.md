@@ -67,8 +67,8 @@ the most recent 50 entries; for full history use FreshRSS's CLI/DB export.
 ## Security
 
 - Uploads are read as a bounded stream (64 MB); ZIPs are read in memory only, one entry
-  at a time (inflated, imported, released): ≤ 5 000 entries, ≤ 32 MB per entry, ≤ 256 MB
-  total (enforced on real inflated output), per-entry and whole-archive ratio cap
+  at a time (inflated asynchronously off the event loop, imported, released): ≤ 5 000
+  entries, ≤ 32 MB per entry, ≤ 128 MB total (enforced on real inflated output), per-entry and whole-archive ratio cap
   (declared total ÷ upload size ≤ 100), entries must not overlap, CRC checked, no
   encryption/ZIP64, traversal/absolute paths reject the archive. At most 500 000 articles
   per run; a file that would exceed it is reported and skipped.
@@ -81,4 +81,9 @@ the most recent 50 entries; for full history use FreshRSS's CLI/DB export.
   laughs); ≤ 20 000 outlines, nesting ≤ 16, text ≤ 5 MB.
 - All writes are scoped to the signed-in user; article HTML is sanitized like synced content.
 - Rate limits: 6 FreshRSS uploads / 10 min per user, 10 OPML imports / min per user;
-  one import at a time per user.
+  at most 200 000 imported articles per user per day (created + updated rows of real
+  runs; a dry run already reports a file that would exceed it).
+- Concurrency: one import at a time per instance (`FEEDFERRET_MAX_CONCURRENT_IMPORTS`,
+  default 1) and per user. A FreshRSS upload while another import runs gets
+  `429 Import busy, retry in a minute` (`Retry-After: 60`) before its body is read; an
+  OPML import waits up to 15 s for the slot. A second import of the same user gets `409`.

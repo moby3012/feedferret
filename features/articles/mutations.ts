@@ -231,6 +231,11 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
       return markAllAsRead(request.scope);
     },
     onSuccess: (result) => {
+      if ((result as { rateLimited?: true } | undefined)?.rateLimited) {
+        // Nothing changed: too many range marks in a short time (server limit).
+        toast.error(tRef.current.tList("markUpToHereRateLimited"));
+        return;
+      }
       const tooLarge = (result as { tooLarge?: { limit: number } } | undefined)?.tooLarge;
       if (tooLarge) {
         // Nothing changed: the range is above the server bound.

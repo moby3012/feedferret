@@ -49,9 +49,9 @@ export const MAX_ITEM_CHARS = 300;
 /**
  * Model text → plain text for rendering: HTML tags and markdown markers
  * stripped, URLs removed, control/bidi/zero-width characters removed,
- * whitespace collapsed, capped at 300 chars.
+ * whitespace collapsed, capped at `maxChars` (default 300).
  */
-export function sanitizeOutputText(text: string): string {
+export function sanitizeOutputText(text: string, maxChars = MAX_ITEM_CHARS): string {
   let out = text
     .replace(/<[^>]*>?/g, " ")
     .replace(/\bhttps?:\/\/\S+/gi, " ")
@@ -67,8 +67,59 @@ export function sanitizeOutputText(text: string): string {
     .replace(/^[-–—:;,.\s]+/, "")
     .replace(/\s+([.,;:!?])/g, "$1")
     .trim();
-  if (out.length > MAX_ITEM_CHARS) out = `${out.slice(0, MAX_ITEM_CHARS - 1).trimEnd()}…`;
+  if (out.length > maxChars) out = `${out.slice(0, maxChars - 1).trimEnd()}…`;
   return out;
+}
+
+/** Caps of the model output that reaches the digest mail. */
+export const DIGEST_SUMMARY_MAX_CHARS = 2_000;
+export const DIGEST_SUBJECT_MAX_CHARS = 120;
+
+// Removed outright: scheme URLs (`https://…`, `ftp://…`), e-mail addresses and `www.` tokens.
+const SCHEME_URL = /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi;
+const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
+const WWW = /\bwww\.\S+/gi;
+// Domain-like tokens (`evil-login.com`, `a.b.example`, `bank.xn--p1ai`): labels separated by dots,
+// ending in a TLD of 2+ letters (or punycode). Numbers such as `4.5` or `v1.2` never match.
+const LABEL = "[\\p{L}\\p{N}](?:[\\p{L}\\p{N}-]*[\\p{L}\\p{N}])?";
+// Dots include the full-width / ideographic forms some clients also accept as separators.
+const DOT = "[.\\u3002\\uFF0E\\uFF61]";
+const DOMAIN_LIKE = new RegExp(`(?<![\\p{L}\\p{N}_@.-])${LABEL}(?:${DOT}${LABEL})*${DOT}(?:\\p{L}{2,}|xn--[a-z0-9-]+)(?![\\p{L}\\p{N}_-])`, "giu");
+
+/**
+ * N14: makes model output safe for a mail client that auto-links anything
+ * that looks like an address. Scheme URLs, e-mail addresses and `www.` tokens
+ * are removed; every other domain-like token is DEFANGED (`evil-login[.]com`)
+ * rather than deleted, so ordinary text such as "Node.js/Deno" stays readable
+ * ("Node[.]js/Deno") and numbers ("rated 4.5/5") are untouched.
+ */
+export function neutralizeLinks(text: string): string {
+  return text
+    .replace(SCHEME_URL, " ")
+    .replace(EMAIL, " ")
+    .replace(WWW, " ")
+    .replace(DOMAIN_LIKE, (token) => token.replace(new RegExp(DOT, "gu"), "[.]"));
+}
+
+/**
+ * Model output → digest-mail-safe plain text (N14): links neutralised
+ * (`neutralizeLinks`), then per paragraph through `sanitizeOutputText` (no
+ * HTML/markdown, no control/bidi chars); paragraphs kept (the mail renders
+ * `pre-wrap`), total capped.
+ */
+export function sanitizeDigestSummary(text: string): string {
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map(neutralizeLinks)
+    .map((p) => sanitizeOutputText(p, DIGEST_SUMMARY_MAX_CHARS))
+    .filter(Boolean);
+  const out = paragraphs.join("\n\n");
+  return out.length > DIGEST_SUMMARY_MAX_CHARS ? `${out.slice(0, DIGEST_SUMMARY_MAX_CHARS - 1).trimEnd()}…` : out;
+}
+
+/** Model output → one-line subject: sanitised, quotes stripped, capped. */
+export function sanitizeDigestSubject(text: string): string {
+  return sanitizeOutputText(neutralizeLinks(text).replace(/["'«»“”„]/g, ""), DIGEST_SUBJECT_MAX_CHARS);
 }
 
 export type Section = "what" | "why" | "brief";

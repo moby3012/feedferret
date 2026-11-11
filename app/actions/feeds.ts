@@ -430,6 +430,7 @@ export async function proposeAiFeedConfig(url: string) {
                 apiKey: decryptIfValue(user.aiApiKey),
                 model: user.aiModel,
                 ollamaBaseUrl: user.aiOllamaBaseUrl,
+                usage: { userId: session.user.id, feature: "feed-config" },
             },
             {
                 fetchHtml: async (u: string) => {
@@ -562,6 +563,7 @@ export async function proposeAiFullTextSelector(feedId: string) {
                 apiKey: decryptIfValue(user.aiApiKey),
                 model: user.aiModel,
                 ollamaBaseUrl: user.aiOllamaBaseUrl,
+                usage: { userId: session.user.id, feature: "feed-config" },
             },
             {
                 fetchHtml: async (u: string) => {
@@ -1828,6 +1830,7 @@ export async function previewRsshubFeed(input: { routePath?: string; sourceDescr
             apiKey: decryptIfValue(user.aiApiKey),
             model: user.aiModel,
             ollamaBaseUrl: user.aiOllamaBaseUrl,
+            usage: { userId: session.user.id, feature: "rsshub" },
         },
         rsshubConfig,
     );
@@ -1907,6 +1910,7 @@ export async function createChangedetectionFeed(input: { url: string; useAiSelec
                     apiKey: decryptIfValue(user.aiApiKey),
                     model: user.aiModel,
                     ollamaBaseUrl: user.aiOllamaBaseUrl,
+                    usage: { userId: session.user.id, feature: "feed-config" },
                 });
                 if (proposal.mode === "fulltext" && validation.ok) {
                     includeFilters = [proposal.fullTextSelector];

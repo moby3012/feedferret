@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { apiError, clampInt, parseBool, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
 import { checkRateLimit, getClientIdentifier, rateLimitHeaders, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 import { buildAdvancedSearchWhere } from "@/lib/search";
+import { ImportBusyError, importBusyResponse } from "@/lib/import/import-slots";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { generateApiOpml, OpmlParseError } from "@/lib/opml";
@@ -129,6 +130,11 @@ async function listArticles(user: ApiUser, request: Request) {
   const limit = clampInt(url.searchParams.get("limit"), 50, 1, 200);
   const offset = clampInt(url.searchParams.get("offset"), 0, 0, 100_000);
   const q = url.searchParams.get("q") || url.searchParams.get("search") || undefined;
+  if (q?.trim()) {
+    // N13: text search is the expensive read — own per-user bucket on top of apiV1Read.
+    const rl = checkRateLimit(`user:${user.id}`, RATE_LIMITS.articleSearch);
+    if (!rl.success) return rateLimitResponse(rl);
+  }
   const where: any = { userId: user.id };
 
   const feedId = url.searchParams.get("feedId");
@@ -278,6 +284,9 @@ async function batchArticles(user: ApiUser, request: Request) {
 }
 
 async function markAllRead(user: ApiUser, request: Request) {
+  // N13: bulk update over a whole scope — same per-user bucket as GReader/Fever bulk marks.
+  const bulk = checkRateLimit(`user:${user.id}`, RATE_LIMITS.apiBulkMark);
+  if (!bulk.success) return rateLimitResponse(bulk);
   const body = (await readJson<any>(request)) || {};
   const where: any = { userId: user.id, isRead: false };
   if (typeof body.feedId === "string") where.feedId = body.feedId;
@@ -668,6 +677,7 @@ async function importOpml(user: ApiUser, request: Request) {
     return NextResponse.json(await importOpmlXml(user.id, xml, { dryRun: body?.dryRun === true }));
   } catch (error) {
     if (error instanceof OpmlImportInputError || error instanceof OpmlParseError) return apiError(error.message, 400);
+    if (error instanceof ImportBusyError) return importBusyResponse(error);
     throw error;
   }
 }

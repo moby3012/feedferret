@@ -66,7 +66,8 @@ async function loadAiContext(userId: string): Promise<AiContext> {
   if (provider !== "ollama" && provider !== "fake" && !apiKey) return { config: null, model: null, auto: false, capOff };
   const model = user.aiModel?.trim() || DEFAULT_MODELS[provider];
   return {
-    config: { provider, apiKey, model, ollamaBaseUrl: user.aiOllamaBaseUrl },
+    // usage: null — the briefing reserves/settles its own budget around the stream (generate below).
+    config: { provider, apiKey, model, ollamaBaseUrl: user.aiOllamaBaseUrl, usage: null },
     model,
     // PM default: auto-generate only for local (free) providers; cloud → explicit "Briefing erstellen".
     auto: user.briefingAuto && (isLocalProvider(provider) || (provider === "fake" && isFakeLocalModel(model))),

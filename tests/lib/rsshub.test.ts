@@ -21,7 +21,7 @@ import {
   type RsshubConfig,
 } from "../../lib/rsshub";
 import { fetchFeedArticles } from "../../lib/feed-fetcher";
-import type { AiConfig } from "../../lib/ai-summary";
+import type { MeteredAiConfig } from "../../lib/ai-summary";
 
 describe("buildRsshubRouteUrl", () => {
   it("joins the base URL and route path", () => {
@@ -109,7 +109,7 @@ describe("parseRouteProposal", () => {
 });
 
 describe("proposeAndValidateRoute", () => {
-  const aiConfig: AiConfig = { provider: "openai", apiKey: "test-key" };
+  const aiConfig: MeteredAiConfig = { provider: "openai", apiKey: "test-key", usage: { userId: "u-rsshub", feature: "rsshub" } };
   const rsshubConfig: RsshubConfig = { baseUrl: "http://rsshub.internal:1200", apiKey: null };
   const originalFetch = global.fetch;
 
@@ -145,7 +145,7 @@ describe("proposeAndValidateRoute", () => {
 });
 
 describe("bundled radar rules run before the LLM", () => {
-  const aiConfig: AiConfig = { provider: "openai", apiKey: "test-key" };
+  const aiConfig: MeteredAiConfig = { provider: "openai", apiKey: "test-key", usage: { userId: "u-rsshub", feature: "rsshub" } };
   const rsshubConfig: RsshubConfig = { baseUrl: "http://rsshub.internal:1200", apiKey: null };
   const originalFetch = global.fetch;
   const feedOk = { title: "Issues", articles: [{ title: "Issue 1", link: "https://x", content: "" }] } as any;

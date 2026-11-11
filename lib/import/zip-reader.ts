@@ -10,10 +10,15 @@
  * ACTUAL inflated output via `maxOutputLength`, never trusting declared sizes),
  * per-entry and whole-archive compression-ratio ceiling, entries must not overlap
  * (one deflate stream cannot be referenced by many entries), CRC32, no encryption,
- * no ZIP64, only stored/deflate.
+ * no ZIP64, only stored/deflate. Inflate runs asynchronously on the libuv thread
+ * pool, one entry at a time, so a big archive never blocks the event loop.
  */
 
-import { inflateRawSync } from "node:zlib";
+import { inflateRaw, type ZlibOptions } from "node:zlib";
+import { promisify } from "node:util";
+
+// Async (thread-pool) inflate: a large entry never blocks the event loop (N9).
+const inflateRawAsync = promisify(inflateRaw) as (buffer: Buffer, options: ZlibOptions) => Promise<Buffer>;
 
 export interface ZipLimits {
   maxEntries: number;
@@ -30,7 +35,9 @@ export interface ZipLimits {
 export const DEFAULT_ZIP_LIMITS: ZipLimits = {
   maxEntries: 5_000,
   maxEntryBytes: 32 * 1024 * 1024,
-  maxTotalBytes: 256 * 1024 * 1024,
+  // N9: 128 MB expanded per archive (a 64 MB upload of JSON compresses ~5–10×;
+  // real FreshRSS exports are far smaller).
+  maxTotalBytes: 128 * 1024 * 1024,
   maxRatio: 100,
   ratioFloorBytes: 1024 * 1024,
 };
@@ -201,7 +208,7 @@ export class ZipArchive {
   }
 
   /** Inflates one entry, enforcing the real (not the declared) output size. */
-  read(entry: ZipEntry): Buffer {
+  async read(entry: ZipEntry): Promise<Buffer> {
     if (entry.isDirectory) return Buffer.alloc(0);
     const buf = this.buffer;
     const at = entry.localOffset;
@@ -214,6 +221,9 @@ export class ZipArchive {
     if (this.totalRead + entry.size > this.limits.maxTotalBytes) {
       throw new ZipError("archive-too-large", `Archive would expand to more than ${this.limits.maxTotalBytes} bytes`);
     }
+    // Reserved before the (async) inflate so overlapping reads cannot both pass the total check;
+    // the output must equal the declared size below, so the reservation is exact.
+    this.totalRead += entry.size;
 
     const raw = buf.subarray(start, end);
     let data: Buffer;
@@ -222,7 +232,7 @@ export class ZipArchive {
       data = Buffer.from(raw);
     } else {
       try {
-        data = inflateRawSync(raw, { maxOutputLength: Math.max(1, entry.size) });
+        data = await inflateRawAsync(raw, { maxOutputLength: Math.max(1, entry.size) });
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE" || error instanceof RangeError) {
           throw new ZipError("size-mismatch", `Entry '${entry.name}' expands beyond its declared size`);
@@ -232,7 +242,6 @@ export class ZipArchive {
     }
     if (data.length !== entry.size) throw new ZipError("size-mismatch", `Entry '${entry.name}' size mismatch`);
     if (crc32(data) !== entry.crc32) throw new ZipError("crc-mismatch", `Entry '${entry.name}' failed its CRC check`);
-    this.totalRead += data.length;
     return data;
   }
 }

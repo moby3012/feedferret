@@ -1,18 +1,19 @@
 /**
  * HTTP glue for the FreshRSS migration: bounded body read, per-user rate limit and
- * single-flight lock. Used by the session route (`POST /api/import/freshrss`, the
- * settings UI) and REST v1 (`POST /api/v1/import/freshrss`, API tokens).
+ * an instance-wide import slot (N9: one import at a time per instance, one per user;
+ * a busy instance answers 429 before the body is read). Used by the session route
+ * (`POST /api/import/freshrss`, the settings UI) and REST v1
+ * (`POST /api/v1/import/freshrss`, API tokens).
  *
  * The body is the raw file (ZIP, OPML or article JSON), not multipart, so the size
  * cap is enforced while streaming instead of after the platform buffered it.
  */
 
 import { NextResponse } from "next/server";
-import { checkRateLimit, RATE_LIMITS, rateLimitHeaders } from "@/lib/rate-limit";
+import { checkRateLimit, RATE_LIMITS, rateLimitHeaders, releaseRateLimit } from "@/lib/rate-limit";
 import { FRESHRSS_UPLOAD_MAX_BYTES, MigrationInputError, runFreshRssMigration } from "./freshrss-migration";
 import { revalidatePath } from "next/cache";
-
-const inFlight = new Set<string>();
+import { acquireImportSlot, ImportBusyError, importBusyResponse, type ReleaseImportSlot } from "./import-slots";
 
 function fail(message: string, status: number, headers?: HeadersInit) {
   return NextResponse.json({ error: { message } }, { status, headers });
@@ -47,8 +48,17 @@ export async function handleFreshRssUpload(request: Request, userId: string, opt
   const limited = checkRateLimit(`user:${userId}`, RATE_LIMITS.freshrssImport);
   if (!limited.success) return fail("Too many import attempts, try again later", 429, rateLimitHeaders(limited));
 
-  if (inFlight.has(userId)) return fail("Another import is still running", 409);
-  inFlight.add(userId);
+  let release: ReleaseImportSlot;
+  try {
+    release = await acquireImportSlot(userId);
+  } catch (error) {
+    if (!(error instanceof ImportBusyError)) throw error;
+    // Nothing of the body was read; the client retries later. A refused attempt must not use
+    // up the per-user budget, or retrying while another import runs locks the user out.
+    releaseRateLimit(`user:${userId}`, RATE_LIMITS.freshrssImport);
+    await request.body?.cancel().catch(() => undefined);
+    return importBusyResponse(error);
+  }
   try {
     const body = await readBounded(request, options.maxBytes ?? FRESHRSS_UPLOAD_MAX_BYTES);
     if (body instanceof NextResponse) return body;
@@ -61,6 +71,6 @@ export async function handleFreshRssUpload(request: Request, userId: string, opt
     if (error instanceof MigrationInputError) return fail(error.message, error.status);
     throw error;
   } finally {
-    inFlight.delete(userId);
+    release();
   }
 }

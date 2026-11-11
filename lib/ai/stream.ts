@@ -249,7 +249,7 @@ export async function* streamAiPrompt(prompt: string, config: AiConfig, o: Strea
     if (error instanceof AiProviderError && error.code === "provider_auth") throw error;
     if (error instanceof Error && error.message.startsWith("Unknown AI provider")) throw error;
     // Error before the first chunk: one non-streaming attempt.
-    const text = await runAiPrompt(prompt, { ...config, usage: undefined }, o.maxTokens);
+    const text = await runAiPrompt(prompt, { ...config, usage: null }, o.maxTokens);
     yield { text };
   }
 }

@@ -13,7 +13,7 @@
 // `deps` in tests.
 
 import { JSDOM } from "jsdom";
-import { type AiConfig, runAiPrompt } from "./ai-summary";
+import { type MeteredAiConfig, runAiPrompt } from "./ai-summary";
 import { buildXPathArticles } from "./feed-fetcher";
 import { getSanitizer } from "./sanitize-html";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
@@ -210,7 +210,7 @@ export async function validateAiFeedProposal(
  */
 export async function proposeFeedConfig(
   url: string,
-  aiConfig: AiConfig,
+  aiConfig: MeteredAiConfig,
   deps?: { fetchHtml?: (u: string) => Promise<string>; runAi?: (prompt: string) => Promise<string> },
 ): Promise<AiFeedConfigResult> {
   const fetchHtml =

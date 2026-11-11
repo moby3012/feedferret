@@ -1,6 +1,7 @@
 import { sendSystemEmail } from "@/lib/mail";
 import { db } from "@/lib/db";
 import { createEmailTranslator } from "@/lib/email-i18n";
+import { sanitizeDigestSummary } from "@/lib/ai/citations";
 
 export interface DigestArticle {
   id: string;
@@ -37,8 +38,10 @@ function escapeHtml(value: string): string {
 }
 
 function renderArticleRow(a: DigestArticle, t: (k: string, v?: Record<string, string | number>) => string, locale: string | undefined): string {
-  const blurb = a.aiSummary
-    ? `<p style="margin:6px 0 0;font-size:14px;color:#374151;line-height:1.6;font-family:sans-serif;white-space:pre-wrap;">${escapeHtml(a.aiSummary)}</p><div style="margin-top:4px;font-size:11px;color:#9ca3af;font-family:sans-serif;">${escapeHtml(t("emailDigest.aiSummary"))}</div>`
+  // N14: stored per-article AI summaries are model output — same link/markup hygiene as the digest summary.
+  const aiSummary = a.aiSummary ? sanitizeDigestSummary(a.aiSummary) : "";
+  const blurb = aiSummary
+    ? `<p style="margin:6px 0 0;font-size:14px;color:#374151;line-height:1.6;font-family:sans-serif;white-space:pre-wrap;">${escapeHtml(aiSummary)}</p><div style="margin-top:4px;font-size:11px;color:#9ca3af;font-family:sans-serif;">${escapeHtml(t("emailDigest.aiSummary"))}</div>`
     : a.excerpt
       ? `<p style="margin:6px 0 0;font-size:14px;color:#6b7280;line-height:1.6;font-family:sans-serif;">${escapeHtml(a.excerpt.slice(0, 200))}${a.excerpt.length > 200 ? "…" : ""}</p>`
       : "";
@@ -213,8 +216,9 @@ function appendArticleLines(lines: string[], a: DigestArticle, _t: (k: string, v
   lines.push(a.title);
   lines.push(`${a.feedName} · ${new Intl.DateTimeFormat(locale ?? "en", { dateStyle: "medium" }).format(new Date(a.publishedAt))}`);
   lines.push(a.link);
-  if (a.aiSummary) {
-    lines.push(`[AI] ${a.aiSummary}`);
+  const aiSummary = a.aiSummary ? sanitizeDigestSummary(a.aiSummary) : "";
+  if (aiSummary) {
+    lines.push(`[AI] ${aiSummary}`);
   } else if (a.excerpt) {
     lines.push(a.excerpt.slice(0, 150) + (a.excerpt.length > 150 ? "…" : ""));
   }

@@ -28,6 +28,7 @@ import { MAX_SEARCH_QUERY, validateFeedUrl, validateOpml } from "@/lib/validatio
 import { translateFreshRssReadFilters } from "./frss-filters";
 import { assertSafeHttpOptionsProxy, proxyFromHttpOptions } from "@/lib/ssrf";
 import { connectorFeedUrlErrorWith, getConnectorSecretRules, stripConnectorSecretsWith } from "@/lib/connector-secrets";
+import { withImportSlot } from "./import-slots";
 
 /** `local`: a file the signed-in user uploaded. `remote`: fetched from a third-party URL (dynamic OPML). */
 export type ImportTrust = "local" | "remote";
@@ -533,6 +534,9 @@ async function upsertFeedRule(
 
 export class OpmlImportInputError extends Error {}
 
+/** How long a real OPML import waits for the shared import slot before `ImportBusyError`. */
+export const OPML_IMPORT_SLOT_WAIT_MS = 15_000;
+
 export async function importOpmlXml(
   userId: string,
   xml: string,
@@ -543,5 +547,7 @@ export async function importOpmlXml(
   const outlines = await parseOpml(xml);
   const plan = planOpmlImport(outlines, { trust: options.trust });
   if (options.maxFeeds !== undefined && countFeeds(plan) > options.maxFeeds) throw new OpmlImportInputError("Too many feeds");
-  return applyOpmlImportPlan(userId, plan, options);
+  // N9: shares the instance-wide import slot with the FreshRSS migration. OPML runs are
+  // short, so wait a little for a slot instead of failing at once.
+  return withImportSlot(userId, () => applyOpmlImportPlan(userId, plan, options), { waitMs: OPML_IMPORT_SLOT_WAIT_MS });
 }

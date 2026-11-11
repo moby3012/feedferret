@@ -230,6 +230,9 @@ WEB_PUSH_CONTACT="mailto:admin@example.com"
 # 2FA label in authenticator apps
 TOTP_ISSUER="FeedFerret"
 
+# Imports (FreshRSS migration, OPML) running at the same time per instance (default 1, max 16)
+FEEDFERRET_MAX_CONCURRENT_IMPORTS="1"
+
 # Feed sync protection (optional shared secret for the sync endpoint)
 SYNC_SECRET="random-string"
 
@@ -251,7 +254,9 @@ current UTC day before it runs and settles to the actual usage afterwards. If
 the server crashes or is restarted between the reservation and the settlement,
 that reservation is never settled: the estimate stays counted until the
 counter resets at 00:00 UTC. The effect is only ever a stricter cap for the
-rest of that day, never an overshoot.
+rest of that day, never an overshoot. Every AI feature counts against this cap,
+including the digest preview, full-text extraction, feed-config and RSSHub
+proposals and the "Test connection" button.
 
 ---
 

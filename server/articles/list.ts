@@ -4,6 +4,7 @@ import type { Scope, Show, Sort } from "@/features/articles/scope";
 import { showApplies } from "@/features/articles/scope";
 import type { ArticleListItem, ArticlePage } from "@/features/articles/types";
 import { buildViewScope, type KeysetField } from "./view-scope";
+import type { ArticleReader } from "@/lib/statement-timeout";
 
 export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 100;
@@ -216,9 +217,10 @@ export interface ListArticlesParams {
  * One page of a list. `show: "unread"` is filtered on the server (not for
  * smart views or search, where `show` does not apply). Keyset paging on the
  * view's order columns, so marking rows read while scrolling never shifts the
- * next page.
+ * next page. `client`: a transaction client when the caller runs the read
+ * under a statement timeout (search).
  */
-export async function listArticles(userId: string, params: ListArticlesParams): Promise<ArticlePage> {
+export async function listArticles(userId: string, params: ListArticlesParams, client: ArticleReader = db): Promise<ArticlePage> {
   const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.trunc(params.limit ?? DEFAULT_PAGE_SIZE)));
   const { where, keyset } = await buildViewScope(userId, params.scope);
   if (params.show === "unread" && showApplies(params.scope)) where.isRead = false;
@@ -232,7 +234,7 @@ export async function listArticles(userId: string, params: ListArticlesParams): 
   }
 
   const [rows, cleanTitles] = await Promise.all([
-    db.article.findMany({
+    client.article.findMany({
       where,
       select: LIST_SELECT,
       orderBy: keyset.map((field) => ({ [field]: direction })),
