@@ -40,7 +40,7 @@ describe("fetchAndExtractReadable — M6 AI-extraction fallback tier", () => {
   it("uses the AI-extraction result when every in-process tier fails and aiExtraction is provided", async () => {
     const { fetchAndExtractReadable } = await import("../../lib/readability-extract");
     const result = await fetchAndExtractReadable("https://example.com/thin-article", {
-      aiExtraction: { provider: "openai", apiKey: "test-key" },
+      aiExtraction: { provider: "openai", apiKey: "test-key", usage: { userId: "u-ai-tier", feature: "extraction" } },
     });
     expect(result.extractedBy).toBe("ai");
     expect(result.title).toBe("AI Extracted Title");

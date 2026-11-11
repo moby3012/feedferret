@@ -8,7 +8,7 @@
 // in-process fallback, before the (admin-configured, JS-rendering) render
 // sidecar and hosted-API tiers.
 
-import { type AiConfig, runAiPrompt } from "./ai-summary";
+import { type MeteredAiConfig, runAiPrompt } from "./ai-summary";
 import { reduceHtmlForPrompt } from "./ai-feed-config";
 
 const MIN_EXTRACTED_TEXT_LENGTH = 200;
@@ -74,7 +74,7 @@ function plainTextLength(markdown: string): number {
 export async function extractArticleWithAi(
   html: string,
   url: string,
-  config: AiConfig,
+  config: MeteredAiConfig,
 ): Promise<AiExtractionResult | null> {
   try {
     const prompt = buildExtractionPrompt(html, url);

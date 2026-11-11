@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { buildExtractionPrompt, parseAiExtraction, extractArticleWithAi } from "../../lib/ai-extraction";
-import type { AiConfig } from "../../lib/ai-summary";
+import type { MeteredAiConfig } from "../../lib/ai-summary";
 
 describe("buildExtractionPrompt", () => {
   it("includes the URL and the reduced page HTML, and asks for strict JSON", () => {
@@ -37,7 +37,7 @@ describe("parseAiExtraction", () => {
 });
 
 describe("extractArticleWithAi", () => {
-  const config: AiConfig = { provider: "openai", apiKey: "test-key" };
+  const config: MeteredAiConfig = { provider: "openai", apiKey: "test-key", usage: { userId: "u-ai-extraction", feature: "extraction" } };
 
   it("returns the parsed extraction when the model finds a real article", async () => {
     const originalFetch = global.fetch;

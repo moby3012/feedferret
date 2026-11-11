@@ -25,6 +25,7 @@ import {
   parseFreshRssArticleJson,
   type ArticleImportReport,
 } from "./freshrss-json";
+import { consumeRateLimit, peekRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { DEFAULT_ZIP_LIMITS, isZipBuffer, ZipArchive, ZipError, type ZipLimits } from "./zip-reader";
 
 /** Maximum accepted upload (compressed) size for the migration endpoint. */
@@ -72,7 +73,7 @@ export class MigrationInputError extends Error {
  * inflated (and released again) one file at a time so peak memory is one entry, not the
  * whole archive.
  */
-interface InputFile { name: string; load: () => Buffer }
+interface InputFile { name: string; load: () => Buffer | Promise<Buffer> }
 
 const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -175,7 +176,7 @@ export async function runFreshRssMigration(
     emit({ phase: "read", file: file.name, done: ++readIndex, total: totalFiles });
     await yieldToEventLoop();
     try {
-      const data = file.load();
+      const data = await file.load();
       if (data.length > MAX_OPML_BYTES) throw new OpmlParseError(`OPML file too large (max ${MAX_OPML_BYTES / 1024 / 1024} MB)`);
       const text = data.toString("utf8");
       if (!looksLikeOpml(text)) {
@@ -212,10 +213,19 @@ export async function runFreshRssMigration(
     await yieldToEventLoop();
     try {
       // Inflate, parse and import this one file; nothing of it is kept afterwards.
-      const { items } = parseFreshRssArticleJson(file.load().toString("utf8"));
+      const { items } = parseFreshRssArticleJson((await file.load()).toString("utf8"));
       if (totalItems + items.length > maxItems) {
         throw new FreshRssJsonError(
           `Import limit reached: more than ${maxItems.toLocaleString("en-US")} articles in one run. This file (${items.length.toLocaleString("en-US")} items) was not imported; split the export and import it in several runs.`,
+        );
+      }
+      // N9: per-user daily article quota (real runs consume it; a dry run only checks it,
+      // counting the files of this run it already accepted).
+      const quota = peekRateLimit(`user:${userId}`, RATE_LIMITS.importedArticles);
+      const pendingInRun = dryRun ? totalItems : 0;
+      if (items.length > quota.remaining - pendingInRun) {
+        throw new FreshRssJsonError(
+          `Daily import limit reached: at most ${RATE_LIMITS.importedArticles.limit.toLocaleString("en-US")} articles per day. This file (${items.length.toLocaleString("en-US")} items) was not imported; try again tomorrow or split the export.`,
         );
       }
       totalItems += items.length;
@@ -227,6 +237,7 @@ export async function runFreshRssMigration(
         fileName: file.name,
         onProgress: (p) => emit(p),
       });
+      if (!dryRun) consumeRateLimit(`user:${userId}`, RATE_LIMITS.importedArticles, result.counts.created + result.counts.updated);
       report.articles = report.articles ? mergeArticleReports(report.articles, result) : result;
       report.files.push({ name: file.name, kind: "articles", status: "ok", items: items.length });
     } catch (error) {

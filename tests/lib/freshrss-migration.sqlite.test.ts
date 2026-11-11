@@ -28,6 +28,9 @@ import { updateFeed } from "../../app/actions/feeds";
 import { POST as mcp } from "../../app/api/mcp/route";
 import { POST as uploadRoute } from "../../app/api/import/freshrss/route";
 import { handleFreshRssUpload } from "../../lib/import/freshrss-upload";
+import { acquireImportSlot } from "../../lib/import/import-slots";
+import { importOpmlXml } from "../../lib/import/opml-import";
+import { consumeRateLimit, RATE_LIMITS } from "../../lib/rate-limit";
 import { runFreshRssMigration } from "../../lib/import/freshrss-migration";
 import { syncDynamicOpmlCategories } from "../../lib/dynamic-opml";
 import { buildDedupeKey } from "../../lib/dedupe-key";
@@ -515,6 +518,42 @@ describe("upload endpoint: hostile input", () => {
     expect(second.status).toBe(409);
     expect((await first).status).toBe(200);
   });
+
+  it("N9: runs one import per instance — a parallel upload of another user gets 429 before its body is read", async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const first = post(buildZip([{ name: "feeds.opml.xml", data: OPML }]), a);
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        controller.enqueue(new Uint8Array(OPML));
+        controller.close();
+      },
+    });
+    const second = await handleFreshRssUpload(
+      new Request("https://example.test/api/import/freshrss", { method: "POST", body: stream, duplex: "half" } as RequestInit),
+      b,
+    );
+    expect(second.status).toBe(429);
+    expect(second.headers.get("Retry-After")).toBe("60");
+    expect((await second.json()).error.message).toMatch(/busy/);
+    expect(pulled).toBeLessThanOrEqual(1); // at most the stream's initial pull; never read by the handler
+    expect((await first).status).toBe(200);
+    // The slot is free again afterwards.
+    expect((await post(Buffer.from(OPML), b, { query: "?dryRun=1" })).status).toBe(200);
+  });
+
+  it("N9: OPML imports share the slot and wait for it instead of running in parallel", async () => {
+    const userId = await newUser();
+    const release = await acquireImportSlot(await newUser());
+    let settled = false;
+    const pending = importOpmlXml(userId, OPML.toString("utf8"), { dryRun: true }).finally(() => { settled = true; });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(settled).toBe(false);
+    release();
+    expect((await pending).dryRun).toBe(true);
+  });
 });
 
 // ── Review hardening ─────────────────────────────────────────────────────────
@@ -536,6 +575,24 @@ const withFeed = async (userId: string, data: Record<string, unknown> = {}) =>
   state.db.feed.create({ data: { userId, url: "https://rh.example.com/feed.xml", name: "RH", ...data } as never });
 
 describe("review hardening: limits, update semantics, identity", () => {
+  it("N9: enforces the per-user daily article quota (real runs consume it, dry runs only check it)", async () => {
+    const userId = await newUser();
+    // 2 rows left today.
+    consumeRateLimit(`user:${userId}`, RATE_LIMITS.importedArticles, RATE_LIMITS.importedArticles.limit - 2);
+    const three = itemsJson(frssItem({ guid: "q-1" }), frssItem({ guid: "q-2" }), frssItem({ guid: "q-3" }));
+    const dry = await runFreshRssMigration(userId, Buffer.from(three), { dryRun: true });
+    expect(dry.errors.join(" ")).toMatch(/Daily import limit/);
+    const report = await runFreshRssMigration(userId, Buffer.from(three));
+    expect(report.errors.join(" ")).toMatch(/Daily import limit/);
+    expect(await state.db.article.count({ where: { userId } })).toBe(0);
+    const two = itemsJson(frssItem({ guid: "q-1" }), frssItem({ guid: "q-2" }));
+    const ok = await runFreshRssMigration(userId, Buffer.from(two));
+    expect(ok.articles?.counts.created).toBe(2);
+    // Used up now.
+    const more = await runFreshRssMigration(userId, Buffer.from(itemsJson(frssItem({ guid: "q-9" }))));
+    expect(more.errors.join(" ")).toMatch(/Daily import limit/);
+  });
+
   it("caps the number of items per run and reports a clear error for the file that exceeds it", async () => {
     const userId = await newUser();
     const three = itemsJson(frssItem({ guid: "a1" }), frssItem({ guid: "a2" }), frssItem({ guid: "a3" }));

@@ -15,7 +15,8 @@ import { loadReadingPreferences } from "@/server/bootstrap";
 import { isCountDisplay, type CountDisplay } from "@/lib/count-display";
 import { pickFields } from "@/lib/pick-fields";
 import { verifyStepUp } from "@/lib/step-up";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { AiBudgetError } from "@/lib/ai/errors";
 
 async function requireUser() {
   const session = await auth();
@@ -534,6 +535,7 @@ export async function previewDigest() {
 }
 
 async function buildAiSummariesForTest(
+  userId: string,
   user: {
     aiProvider: string | null;
     aiApiKey: string | null;
@@ -559,6 +561,8 @@ async function buildAiSummariesForTest(
     model: user.aiModel,
     ollamaBaseUrl: user.aiOllamaBaseUrl,
     language: user.aiSummaryLanguage,
+    // N14: the preview spends real tokens too.
+    usage: { userId, feature: "digest" as const },
   };
 
   let overallSummary: string | null = null;
@@ -650,7 +654,7 @@ export async function sendTestDigest() {
   const baseUrl = process.env.AUTH_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
   const unsubscribeUrl = `${baseUrl}/api/digest/unsubscribe?token=${token}`;
 
-  const { overallSummary, feedSummaries, aiSubject } = await buildAiSummariesForTest(user, articles);
+  const { overallSummary, feedSummaries, aiSubject } = await buildAiSummariesForTest(session.user.id, user, articles);
 
   await sendDigestEmail({
     to: user.email,
@@ -813,6 +817,8 @@ export async function testAiConnection(overrides?: {
   const ollamaBaseUrl = overrides && "ollamaBaseUrl" in overrides ? overrides.ollamaBaseUrl : user?.aiOllamaBaseUrl;
 
   if (!provider) return { success: false, error: t("testErrorNoProvider") };
+  // N14: a real provider round-trip — rate-limited and metered like every other AI call.
+  if (!checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.aiConnectionTest).success) return { success: false, error: t("testErrorTooManyTests") };
   try {
     const { generateSummary } = await import("@/lib/ai-summary");
     await generateSummary("Short test content for connectivity verification.", {
@@ -820,9 +826,11 @@ export async function testAiConnection(overrides?: {
       apiKey,
       model: model ?? null,
       ollamaBaseUrl: ollamaBaseUrl ?? null,
+      usage: { userId: session.user.id, feature: "connection-test" },
     });
     return { success: true };
   } catch (err) {
+    if (err instanceof AiBudgetError) return { success: false, error: t("testErrorBudget") };
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, error: humanizeAiTestError(message, t) };
   }

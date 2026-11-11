@@ -4,9 +4,9 @@ import {
   proposeFeedConfig,
   type AiFeedProposal,
 } from "../../lib/ai-feed-config";
-import type { AiConfig } from "../../lib/ai-summary";
+import type { MeteredAiConfig } from "../../lib/ai-summary";
 
-const AI_CONFIG: AiConfig = { provider: "openai", apiKey: "test-key", model: "gpt-4o-mini" };
+const AI_CONFIG: MeteredAiConfig = { provider: "openai", apiKey: "test-key", model: "gpt-4o-mini", usage: { userId: "u-feed-config", feature: "feed-config" } };
 
 const BLOG_INDEX_HTML = `
 <!DOCTYPE html>

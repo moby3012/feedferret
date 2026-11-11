@@ -214,6 +214,10 @@ const tools = [
 ];
 
 async function searchArticles(user: ApiUser, args: any) {
+  // N13: same per-user search bucket as the web list and REST v1.
+  if (typeof args.query === "string" && args.query.trim() && !checkRateLimit(`user:${user.id}`, RATE_LIMITS.articleSearch).success) {
+    throw new Error("Rate limit exceeded for article search");
+  }
   const where: any = { userId: user.id };
   if (typeof args.feedId === "string") where.feedId = args.feedId;
   if (typeof args.categoryId === "string") where.feed = { categoryId: args.categoryId };

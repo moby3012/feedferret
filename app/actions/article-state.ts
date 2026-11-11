@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { applyArticleStateOps as applyOps, markIdsRead, parseMarkIds, parseStateOps, type StateOpsResult } from "@/server/articles/state";
 import { RangeTooLargeError, markRangeRead, parseMarkRange } from "@/server/articles/mark-range";
 import { createUndoToken } from "@/lib/undo-tokens";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /**
  * The one write path for hot article toggles (read / star / read-later): the
@@ -12,13 +13,18 @@ import { createUndoToken } from "@/lib/undo-tokens";
  * come back in `failed`; `cascades` (per originating story) / `affected` (flat)
  * list extra articles marked read by the story cascade (`clusterReadMode =
  * "story"`) so the client can patch / undo them. No `revalidatePath`: the
- * client cache is the owner.
+ * client cache is the owner. Rate-limited per user (`stateOps`, N13): above
+ * the limit nothing is written, every op comes back in `failed` (the client
+ * rolls them back) and `rateLimited` is set.
  */
-export async function applyArticleStateOps(ops: unknown): Promise<StateOpsResult> {
+export async function applyArticleStateOps(ops: unknown): Promise<StateOpsResult & { rateLimited?: true }> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   const parsed = parseStateOps(ops);
   if (!parsed.ok) throw new Error(`Invalid ops: ${parsed.error}`);
+  if (!checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.stateOps).success) {
+    return { failed: [...new Set(parsed.ops.map((op) => op.id))], affected: [], cascades: [], rateLimited: true };
+  }
   return applyOps(session.user.id, parsed.ops);
 }
 
@@ -42,13 +48,15 @@ export async function markArticleIdsRead(ids: unknown): Promise<{ ids: string[];
  * cap): every unread row of the bound list from its first loaded row down to
  * `toId`, plus folded story members (`extraIds`, capped). The scope is parsed
  * from the canonical list key with the list endpoint's own parser; user-scoped,
- * bounded; one undo token for everything it changed.
+ * bounded; one undo token for everything it changed. Rate-limited per user
+ * (`rangeMark`, N13): above the limit nothing changes and `rateLimited` is set.
  */
-export async function markListRangeRead(input: unknown): Promise<{ ids: string[]; undoToken: string | null; tooLarge?: { limit: number } }> {
+export async function markListRangeRead(input: unknown): Promise<{ ids: string[]; undoToken: string | null; tooLarge?: { limit: number }; rateLimited?: true }> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   const parsed = parseMarkRange(input);
   if (!parsed.ok) throw new Error(`Invalid range: ${parsed.error}`);
+  if (!checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.rangeMark).success) return { ids: [], undoToken: null, rateLimited: true };
   let changed: string[];
   try {
     changed = await markRangeRead(session.user.id, parsed.range);

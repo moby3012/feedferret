@@ -86,6 +86,22 @@ In-memory sliding window rate limiter (`lib/rate-limit.ts`) protects against bru
 | `POST /api/internal/*` | 30 requests | 1 minute |
 | `GET /api/v1/*` (read) | 200 requests | 1 minute |
 | `POST/PATCH/DELETE /api/v1/*` (write) | 60 requests | 1 minute |
+| Article search (`q` on `/api/app/articles`, REST v1 `GET /articles?q=`, MCP `search_articles`), per user | 60 queries | 1 minute |
+| `/api/app/articles/count` (saved searches, search), per user | 120 requests | 1 minute |
+| "Mark up to here" range (`markListRangeRead`), per user | 20 calls | 1 minute |
+| Read/star/read-later toggle batches (`applyArticleStateOps`), per user | 300 calls | 1 minute |
+| Bulk mark read: GReader `mark-all-as-read`, Fever `mark=feed\|group`, REST v1 mark-all, per user (shared) | 300 calls | 10 minutes |
+| AI "Test connection", per user | 10 tests | 10 minutes |
+| FreshRSS migration upload / OPML import, per user | 6 / 10 | 10 minutes / 1 minute |
+| Imported articles (FreshRSS migration), per user | 200 000 rows | 1 day |
+
+The per-user limits on search, counts and bulk state writes (N13) are sized so normal use never reaches them: the web client debounces search and sends toggles in batches (at most one call every 400 ms–1 s), and sync clients (Reeder, NetNewsWire, FeedMe, ReadKit) send item state through GReader `edit-tag` / Fever `mark=item`, which only count against the general GReader/Fever limit (120/min). The bulk-mark bucket allows a burst of 300 (a client marking a large folder feed by feed) but caps a sustained loop at one call every 2 s. Above a limit the web client shows a toast and changes nothing; toggles are rolled back.
+
+On PostgreSQL, search reads (ad-hoc `q` and saved searches, list and count) run in a transaction with `SET LOCAL statement_timeout = 8s`; a cancelled query answers `503` instead of holding a connection.
+
+Imports run one at a time per instance (`FEEDFERRET_MAX_CONCURRENT_IMPORTS`, default 1) and per user; see [FreshRSS migration](freshrss-migration.md#security).
+
+AI: digest prompts escape and delimit every feed-supplied field (titles, feed names, excerpts) like the briefing, and the generated subject and summary are stripped of HTML, markdown, URLs, e-mail addresses and bare `host/path` links before they reach the digest e-mail. Every AI call — summaries, tagging, briefing, digest (also the preview), full-text extraction, feed-config and RSSHub proposals, the connection test — reserves against the user's daily token cap (`AI_DAILY_TOKEN_CAP`, default 150 000) and is recorded in `AiUsage`.
 
 Limits are per process, not shared across replicas. MCP is limited by source IP. `TRUSTED_PROXY_COUNT=1` selects the right-most `X-Forwarded-For` entry for a single Nginx, Caddy or Traefik proxy. For Cloudflare → Traefik → FeedFerret, set `TRUSTED_PROXY_COUNT=2`. Restrict origin access to Cloudflare and app access to Traefik; only trust headers appended by this controlled chain.
 

@@ -43,6 +43,7 @@ import {
   MAX_GREADER_LABEL_NAME,
 } from "@/lib/greader";
 import { connectorFeedUrlError, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
+import { ImportBusyError, importBusyResponse } from "@/lib/import/import-slots";
 
 
 class UnauthorizedError extends Error {}
@@ -504,7 +505,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
       const importLimit = checkRateLimit(user.id, { prefix: "greader-import", limit: 5, windowSecs: 3600 });
       if (!importLimit.success) return rateLimitResponse(importLimit);
       try { return NextResponse.json(await importOpmlXml(user.id, raw, { trust: "remote", maxFeeds: 2000 })); }
-      catch { return textResponse("Invalid OPML", 400); }
+      catch (error) {
+        if (error instanceof ImportBusyError) return importBusyResponse(error);
+        return textResponse("Invalid OPML", 400);
+      }
     }
     const form = await new Request(request.url, { method: "POST", headers: request.headers, body: raw }).formData();
     const query = new URL(request.url).searchParams;
@@ -550,6 +554,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
     }
 
     if (path.endsWith("mark-all-as-read")) {
+      // N13: bulk update over a whole stream — own per-user bucket (shared with Fever).
+      const bulk = checkRateLimit(`user:${user.id}`, RATE_LIMITS.apiBulkMark);
+      if (!bulk.success) return rateLimitResponse(bulk);
       return await handleMarkAllAsRead(user.id, form);
     }
 

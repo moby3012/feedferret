@@ -49,9 +49,9 @@ export const MAX_ITEM_CHARS = 300;
 /**
  * Model text → plain text for rendering: HTML tags and markdown markers
  * stripped, URLs removed, control/bidi/zero-width characters removed,
- * whitespace collapsed, capped at 300 chars.
+ * whitespace collapsed, capped at `maxChars` (default 300).
  */
-export function sanitizeOutputText(text: string): string {
+export function sanitizeOutputText(text: string, maxChars = MAX_ITEM_CHARS): string {
   let out = text
     .replace(/<[^>]*>?/g, " ")
     .replace(/\bhttps?:\/\/\S+/gi, " ")
@@ -67,7 +67,7 @@ export function sanitizeOutputText(text: string): string {
     .replace(/^[-–—:;,.\s]+/, "")
     .replace(/\s+([.,;:!?])/g, "$1")
     .trim();
-  if (out.length > MAX_ITEM_CHARS) out = `${out.slice(0, MAX_ITEM_CHARS - 1).trimEnd()}…`;
+  if (out.length > maxChars) out = `${out.slice(0, maxChars - 1).trimEnd()}…`;
   return out;
 }
 

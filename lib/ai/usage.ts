@@ -20,7 +20,8 @@ import { AiBudgetError } from "./errors";
 export const DEFAULT_DAILY_TOKEN_CAP = 150_000;
 export const MAX_DAILY_TOKEN_CAP = 10_000_000;
 
-export type AiFeature = "briefing" | "tagging" | "summary" | "digest" | "extraction";
+/** N14: every AI call is metered under one of these (stored as `AiUsage.feature`, a free-form string). */
+export type AiFeature = "briefing" | "tagging" | "summary" | "digest" | "extraction" | "feed-config" | "rsshub" | "connection-test";
 export type UsageKind = "cloud" | "local";
 
 export function estimateTokens(text: string): number {

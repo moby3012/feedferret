@@ -12,7 +12,7 @@ import { db } from "@/lib/db";
 import { decryptIfValue } from "@/lib/crypto";
 import { assertSafeFetchUrl } from "@/lib/ssrf";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
-import { type AiConfig, runAiPrompt } from "@/lib/ai-summary";
+import { type MeteredAiConfig, runAiPrompt } from "@/lib/ai-summary";
 import { matchRadarRules, type RadarMatch } from "@/lib/rsshub-radar-rules";
 import { rsshubRouteError } from "@/lib/rsshub-route";
 
@@ -248,7 +248,7 @@ export async function resolveRadarRoute(
  */
 export async function proposeAndValidateRoute(
   sourceDescription: string,
-  aiConfig: AiConfig,
+  aiConfig: MeteredAiConfig,
   rsshubConfig: RsshubConfig,
 ): Promise<RouteProposalResult | null> {
   const fromRules = await resolveRadarRoute(sourceDescription, rsshubConfig);

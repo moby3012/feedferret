@@ -9,7 +9,7 @@ import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssr
 import { computeContentHash } from "./content-hash";
 import { buildDedupeKey } from "./dedupe-key";
 import { decryptIfValue } from "./crypto";
-import type { AiConfig } from "./ai-summary";
+import type { AiConfig, MeteredAiConfig } from "./ai-summary";
 import { logger, urlForLog } from "./logger";
 import { getConnectorSecretRules, redactConnectorTextWith, stripConnectorSecretsWith } from "./connector-secrets";
 import { getSanitizer } from "./sanitize-html";
@@ -791,13 +791,14 @@ async function autoFetchFullTextViaEngine(
     // in a single tick. Articles beyond the cap still get the free
     // deterministic tiers (just without this fallback) and aren't revisited
     // later, since `articleIds` only ever contains newly-arrived/changed rows.
-    const aiConfig: AiConfig | null =
+    const aiConfig: MeteredAiConfig | null =
         mode === "ai" && user?.aiProvider
             ? {
                   provider: user.aiProvider as AiConfig["provider"],
                   apiKey: decryptIfValue(user.aiApiKey),
                   model: user.aiModel,
                   ollamaBaseUrl: user.aiOllamaBaseUrl,
+                  usage: { userId, feature: "extraction" },
               }
             : null;
     let aiExtractionsUsed = 0;

@@ -25,7 +25,7 @@ import { findFtrConfigForUrl, applyFtrConfig } from "@/lib/ftr-site-config";
 import { renderViaSidecar } from "@/lib/render-sidecar";
 import { fetchViaHostedApiDetailed, getHostedFetchConfigForUser, HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
-import type { AiConfig } from "@/lib/ai-summary";
+import type { MeteredAiConfig } from "@/lib/ai-summary";
 import { extractArticleWithAi } from "@/lib/ai-extraction";
 
 export type ExtractionResult = {
@@ -401,7 +401,7 @@ export type FetchAndExtractReadableOptions = {
   // through to the (slower, whole-page-re-fetching) render sidecar. Callers
   // must only set this for feeds with `fullTextMode === "ai"` — it spends the
   // user's own AI tokens per article.
-  aiExtraction?: AiConfig;
+  aiExtraction?: MeteredAiConfig;
 };
 
 /**

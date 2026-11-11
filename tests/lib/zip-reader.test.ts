@@ -15,8 +15,18 @@ function codeOf(fn: () => unknown): string {
   return "no-error";
 }
 
+async function codeOfAsync(fn: () => Promise<unknown>): Promise<string> {
+  try {
+    await fn();
+  } catch (error) {
+    if (error instanceof ZipError) return error.code;
+    throw error;
+  }
+  return "no-error";
+}
+
 describe("ZipArchive — happy path", () => {
-  it("lists and reads stored and deflated entries, skipping directories", () => {
+  it("lists and reads stored and deflated entries, skipping directories", async () => {
     const zip = buildZip([
       { name: "export/", data: "", method: 0 },
       { name: "export/feeds.opml.xml", data: "<opml/>" },
@@ -29,8 +39,8 @@ describe("ZipArchive — happy path", () => {
       ["export/feeds.opml.xml", false],
       ["export/starred.json", false],
     ]);
-    expect(archive.read(archive.entries[1]).toString()).toBe("<opml/>");
-    expect(archive.read(archive.entries[2]).toString()).toBe('{"items":[]}');
+    expect((await archive.read(archive.entries[1])).toString()).toBe("<opml/>");
+    expect((await archive.read(archive.entries[2])).toString()).toBe('{"items":[]}');
   });
 
   it("is not fooled by a non-zip file", () => {
@@ -76,11 +86,11 @@ describe("ZipArchive — hostile archives", () => {
     expect(codeOf(() => new ZipArchive(buildZip([{ name: "bomb.json", data: zeros }]), limits))).toBe("ratio-exceeded");
   });
 
-  it("enforces the real output size when the header lies about it", () => {
+  it("enforces the real output size when the header lies about it", async () => {
     const real = Buffer.alloc(512 * 1024, 0x62);
     const zip = buildZip([{ name: "liar.json", data: real, declaredSize: 10, crc: crc32(real) }]);
     const archive = new ZipArchive(zip, small);
-    expect(codeOf(() => archive.read(archive.entries[0]))).toBe("size-mismatch");
+    expect(await codeOfAsync(() => archive.read(archive.entries[0]))).toBe("size-mismatch");
   });
 
   it("enforces the total uncompressed budget across entries (declared sizes sum)", () => {
@@ -89,15 +99,15 @@ describe("ZipArchive — hostile archives", () => {
     expect(codeOf(() => new ZipArchive(buildZip(entries), small))).toBe("archive-too-large");
   });
 
-  it("enforces the total budget while reading even when declared sizes are small", () => {
+  it("enforces the total budget while reading even when declared sizes are small", async () => {
     const limits: ZipLimits = { ...small, maxTotalBytes: 100 };
     const data = Buffer.from("y".repeat(60));
     const archive = new ZipArchive(buildZip([{ name: "a.json", data, method: 0 }, { name: "b.json", data, method: 0 }]), { ...limits, maxTotalBytes: 130 });
-    archive.read(archive.entries[0]);
-    archive.read(archive.entries[1]);
+    await archive.read(archive.entries[0]);
+    await archive.read(archive.entries[1]);
     const tight = new ZipArchive(buildZip([{ name: "a.json", data, method: 0 }]), { ...limits, maxTotalBytes: 60 });
-    tight.read(tight.entries[0]);
-    expect(codeOf(() => tight.read(tight.entries[0]))).toBe("archive-too-large");
+    await tight.read(tight.entries[0]);
+    expect(await codeOfAsync(() => tight.read(tight.entries[0]))).toBe("archive-too-large");
   });
 
   it("rejects encrypted entries, unsupported methods and ZIP64 markers", () => {
@@ -109,17 +119,17 @@ describe("ZipArchive — hostile archives", () => {
     expect(codeOf(() => new ZipArchive(z64))).toBe("zip64-unsupported");
   });
 
-  it("detects corrupted data via CRC and truncated archives", () => {
+  it("detects corrupted data via CRC and truncated archives", async () => {
     const data = Buffer.from('{"items":[]}');
     const bad = new ZipArchive(buildZip([{ name: "c.json", data, method: 0, crc: 1234 }]));
-    expect(codeOf(() => bad.read(bad.entries[0]))).toBe("crc-mismatch");
+    expect(await codeOfAsync(() => bad.read(bad.entries[0]))).toBe("crc-mismatch");
     const zip = buildZip([{ name: "t.json", data: "x".repeat(2000) }]);
     expect(codeOf(() => new ZipArchive(zip.subarray(0, zip.length - 30)))).toMatch(/not-a-zip|truncated|corrupt/);
   });
 
-  it("reports garbage deflate streams as corrupt, not as a crash", () => {
+  it("reports garbage deflate streams as corrupt, not as a crash", async () => {
     const archive = new ZipArchive(buildZip([{ name: "g.json", data: "abcdef", rawPayload: Buffer.from([0xff, 0xff, 0xff, 0xff]), declaredSize: 6 }]));
-    expect(codeOf(() => archive.read(archive.entries[0]))).toMatch(/corrupt|size-mismatch/);
+    expect(await codeOfAsync(() => archive.read(archive.entries[0]))).toMatch(/corrupt|size-mismatch/);
   });
 
   it("rejects entries that share bytes (one deflate stream referenced by many entries)", () => {
@@ -150,5 +160,35 @@ describe("ZipArchive — hostile archives", () => {
   it("ships sane defaults", () => {
     expect(DEFAULT_ZIP_LIMITS.maxEntries).toBeGreaterThanOrEqual(1000);
     expect(DEFAULT_ZIP_LIMITS.maxTotalBytes).toBeLessThanOrEqual(512 * 1024 * 1024);
+  });
+});
+
+describe("ZipArchive — N9 resource limits", () => {
+  it("caps the expanded archive at 128 MB by default", () => {
+    expect(DEFAULT_ZIP_LIMITS.maxTotalBytes).toBe(128 * 1024 * 1024);
+  });
+
+  it("inflates without blocking the event loop", async () => {
+    const data = Buffer.alloc(8 * 1024 * 1024, 0x61);
+    // A plain 8 MB entry of one byte compresses far beyond the ratio limit; relax it for this test.
+    const archive = new ZipArchive(buildZip([{ name: "big.json", data }]), { ...DEFAULT_ZIP_LIMITS, maxRatio: 100_000 });
+    let ticked = false;
+    const tick = new Promise<void>((resolve) => setImmediate(() => { ticked = true; resolve(); }));
+    const reading = archive.read(archive.entries[0]);
+    // A sync inflate would finish before any other callback could run.
+    await tick;
+    const out = await reading;
+    expect(ticked).toBe(true);
+    expect(out.length).toBe(data.length);
+  });
+
+  it("reserves the total budget before inflating, so overlapping reads cannot both pass it", async () => {
+    const data = Buffer.from("z".repeat(60));
+    const archive = new ZipArchive(buildZip([{ name: "a.json", data }]), { ...small, maxTotalBytes: 100 });
+    // The same entry twice at once (60 + 60 > 100): only one read may pass the budget.
+    const results = await Promise.allSettled([archive.read(archive.entries[0]), archive.read(archive.entries[0])]);
+    expect(results.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+    const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+    expect((rejected.reason as ZipError).code).toBe("archive-too-large");
   });
 });

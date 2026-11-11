@@ -11,6 +11,7 @@
 
 import { z } from "zod";
 import { type AiConfig, runAiPrompt, stripHtml } from "./ai-summary";
+import { escapeUntrusted } from "./ai/citations";
 
 const MAX_CONTENT_CHARS = 4_000;
 const MAX_TITLE_CHARS = 300;
@@ -25,10 +26,8 @@ export const TAGGING_MAX_TOKENS = 280;
 
 export const TAGGING_TASK_MARKER = "<!-- ff:task=tagging v2 -->";
 
-/** Neutralises markup so article text can never close the `<article>` wrapper or inject tags. */
-export function escapeUntrusted(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+// `escapeUntrusted` (lib/ai/citations) neutralises markup so article text can never
+// close the `<article>` wrapper or inject tags — one implementation for every prompt (N14).
 
 export function buildTaggingPrompt(title: string, content: string, existingLabels: string[] = []): string {
   const plain = escapeUntrusted(stripHtml(content).slice(0, MAX_CONTENT_CHARS));

@@ -314,6 +314,11 @@ async function handle(request: Request) {
     // Handle mark (write) operations
     if (params.has("mark") || body.mark) {
       if (!["write", "admin"].includes(user.tokenScope)) return NextResponse.json({ api_version: 3, auth: 1, error: "Insufficient token scope" }, { status: 403 });
+      // N13: feed/group marks update a whole stream — own per-user bucket (shared with GReader).
+      if ((params.get("mark") || body.mark) !== "item") {
+        const bulk = checkRateLimit(`user:${user.id}`, RATE_LIMITS.apiBulkMark);
+        if (!bulk.success) return rateLimitResponse(bulk);
+      }
       await handleMark(user.id, params, body);
       result.unread_item_ids = await getUnreadIds(user.id);
       result.saved_item_ids = await getSavedIds(user.id);
