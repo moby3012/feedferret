@@ -25,6 +25,7 @@ const ROUTE_SCOPED_FILES = new Set([
   "components/freshrss-migration.tsx",
   "app/server-settings/client.tsx",
   "components/server-management-dialog.tsx",
+  "components/newsletter/inbound-wizard.tsx", // rendered only by server-management-dialog (newsletter tab)
   "app/setup/page.tsx",
 ]);
 /** Directories rendered only inside a wrapped route (the settings sections, split out of settings-form). */

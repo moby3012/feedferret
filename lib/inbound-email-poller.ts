@@ -1,0 +1,706 @@
+// N1 PR B: IMAP transport for the newsletter inbox (spec §10).
+//
+// One shared mailbox (admin-configured InboundMailSource kind "imap") receives
+// `box+ff-<token>@provider` mail for every user. The poller only touches
+// messages whose delivery recipients carry a well-formed `+ff-<token>` for
+// THAT mailbox; everything else in the folder stays untouched. Processed
+// messages move to the IMAP folder "FeedFerret" (fallback: \Seen + \Flagged +
+// $FeedFerret keyword).
+//
+// Network policy: the IMAP socket follows the same rules as lib/ssrf — the
+// host is resolved once, every answer must be public (unless the admin's
+// "allow internal feed URLs" switch / TRUSTED_FEED_FETCHING is on), and the
+// socket connects to that pinned IP with SNI/cert check on the hostname, so a
+// DNS rebind between check and connect cannot reach an internal address.
+import dns from "node:dns/promises";
+import net from "node:net";
+import { ImapFlow, type ImapFlowOptions } from "imapflow";
+import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { isPrivateIp } from "@/lib/private-ip";
+import { isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
+import { readPlainColumnState, sealSecret } from "@/lib/secret-box";
+import { ingestRawEmail, isNewsletterToken, MAX_RAW_EMAIL_BYTES, type IngestResult } from "@/lib/inbound-email";
+import { applyAutoReadRules } from "@/lib/auto-read-rules";
+import { applyKeywordAlerts } from "@/lib/keyword-alerts";
+import { queueNewArticleNotifications } from "@/lib/notifications";
+import { detectImapPreset, emailDomain, getImapPreset, trustedAuthservIdForPreset, type ImapPreset } from "@/lib/newsletter-imap-presets";
+
+export const CREDENTIALS_PURPOSE = "inboundMailSource.credentials";
+export const PROCESSED_FOLDER = "FeedFerret";
+export const PROCESSED_KEYWORD = "$FeedFerret";
+
+/** Connect + greeting + TLS budget per attempt. */
+export const CONNECT_TIMEOUT_MS = 10_000;
+/** Socket inactivity per command. */
+export const COMMAND_TIMEOUT_MS = 30_000;
+/** Whole "Verbindung testen" round trip (spec: < 10 s answer to the admin). */
+export const TEST_TOTAL_TIMEOUT_MS = 10_000;
+/** Whole poll (stays below the background job timeout of 90 s). */
+export const POLL_TOTAL_TIMEOUT_MS = 60_000;
+/** Messages ingested per poll; the rest waits for the next one. */
+export const MAX_MESSAGES_PER_POLL = 50;
+/** Only look at this many recent UIDs / days in the folder. */
+const SCAN_UID_LIMIT = 300;
+const SCAN_DAYS = 14;
+/** Regular poll cadence (the timer in background-sync ticks at this pace). */
+export const POLL_INTERVAL_MS = 2 * 60_000;
+/** Minimum gap for a forced poll (wizard live test). */
+export const FORCED_POLL_GAP_MS = 8_000;
+const MAX_BACKOFF_MS = 60 * 60_000;
+
+// ---------------------------------------------------------------------------
+// Settings / credentials
+
+export interface ImapSourceSettings {
+  host: string;
+  port: number;
+  /** true: implicit TLS; false: STARTTLS is REQUIRED (doSTARTTLS) — never cleartext. */
+  secure: boolean;
+  folder: string;
+  presetId: string | null;
+  processedFolder: string;
+}
+
+export interface ImapCredentials {
+  user: string;
+  pass: string;
+}
+
+export function parseImapSettings(raw: string | null | undefined): ImapSourceSettings | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<ImapSourceSettings>;
+    if (typeof value.host !== "string" || !value.host) return null;
+    const port = Number(value.port);
+    return {
+      host: value.host,
+      port: Number.isInteger(port) && port > 0 && port < 65536 ? port : 993,
+      secure: value.secure !== false,
+      folder: typeof value.folder === "string" && value.folder ? value.folder : "INBOX",
+      presetId: typeof value.presetId === "string" ? value.presetId : null,
+      processedFolder: typeof value.processedFolder === "string" && value.processedFolder ? value.processedFolder : PROCESSED_FOLDER,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function sealImapCredentials(credentials: ImapCredentials): string {
+  return sealSecret(CREDENTIALS_PURPOSE, JSON.stringify({ user: credentials.user, pass: credentials.pass }));
+}
+
+/** Opened credentials, or null when absent/unreadable (wrong key: logged once, never the value). */
+export function openImapCredentials(stored: string | null | undefined): ImapCredentials | null {
+  const { value } = readPlainColumnState(CREDENTIALS_PURPOSE, stored);
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<ImapCredentials>;
+    if (typeof parsed.user !== "string" || typeof parsed.pass !== "string") return null;
+    return { user: parsed.user, pass: parsed.pass };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Errors (stable codes the wizard maps to German copy)
+
+export type ImapErrorCode =
+  | "auth-failed"
+  | "app-password-required"
+  | "imap-disabled"
+  | "tls"
+  | "timeout"
+  | "host-blocked"
+  | "host-not-found"
+  | "unreachable"
+  | "folder"
+  | "credentials-unreadable"
+  | "unknown";
+
+export class ImapPollError extends Error {
+  constructor(public readonly code: ImapErrorCode, message: string) {
+    super(message);
+    this.name = "ImapPollError";
+  }
+}
+
+const APP_PASSWORD_RE = /application-specific password|app(?:lication)?[- ]?passwor|anwendungsspezifisch|webloginrequired|\bweb login required\b/i;
+const IMAP_DISABLED_RE = /not enabled for imap|imap (?:access )?(?:is )?disabled|imap.*(?:nicht aktiviert|deaktiviert)|enable imap|imap use/i;
+
+export function classifyImapError(error: unknown): ImapErrorCode {
+  if (error instanceof ImapPollError) return error.code;
+  const e = (error ?? {}) as Record<string, unknown>;
+  const code = String(e.code ?? "");
+  const text = [e.responseText, e.message, e.serverResponseCode].filter((v) => typeof v === "string").join(" ");
+  if (code === "ERR_SSRF_PRIVATE_IP") return "host-blocked";
+  if (IMAP_DISABLED_RE.test(text)) return "imap-disabled";
+  if (APP_PASSWORD_RE.test(text)) return "app-password-required";
+  if (e.authenticationFailed || /AUTHENTICATIONFAILED|AUTHORIZATIONFAILED|invalid credentials|login failed|authentication failed/i.test(text)) return "auth-failed";
+  if (e.tlsFailed || /^ERR_TLS|^ERR_SSL|CERT|SELF_SIGNED|UNABLE_TO_VERIFY/i.test(code) || /certificate|ssl routines|tls/i.test(text)) return "tls";
+  if (/TIMEOUT|ETIMEDOUT/i.test(code) || /timed? ?out/i.test(text)) return "timeout";
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN" || code === "ENODATA") return "host-not-found";
+  if (["ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH", "NoConnection", "EConnectionClosed", "ClosedAfterConnectTLS", "ClosedAfterConnectText"].includes(code)) return "unreachable";
+  return "unknown";
+}
+
+const EMAIL_LIKE_RE = /[^\s<>"'(),;:]+@[^\s<>"'(),;:]+/g;
+const TOKEN_LIKE_RE = /\+ff-[a-z2-7]{6,}/gi;
+
+/**
+ * Error text that is safe to store in `InboundMailSource.lastError` and show
+ * in the admin panel: no password, user name, addresses or `+ff-` tokens.
+ */
+export function redactImapError(text: string, secrets: readonly (string | null | undefined)[] = []): string {
+  let out = String(text ?? "");
+  for (const secret of secrets) {
+    if (secret && secret.length >= 3) out = out.split(secret).join("[redacted]");
+  }
+  return out.replace(TOKEN_LIKE_RE, "+ff-[token]").replace(EMAIL_LIKE_RE, "[address]").replace(/\s+/g, " ").trim().slice(0, 300);
+}
+
+export function formatStoredError(code: ImapErrorCode, detail: string): string {
+  return detail ? `${code}: ${detail}`.slice(0, 400) : code;
+}
+
+/** Code of a stored `lastError` ("auth-failed: …" → "auth-failed"). */
+export function storedErrorCode(lastError: string | null | undefined): ImapErrorCode | null {
+  if (!lastError) return null;
+  const code = lastError.split(":")[0].trim();
+  return (code || "unknown") as ImapErrorCode;
+}
+
+// ---------------------------------------------------------------------------
+// Host policy (DNS pinning, SSRF rules)
+
+export type LookupFn = (hostname: string) => Promise<{ address: string; family: number }[]>;
+const defaultLookup: LookupFn = (hostname) => dns.lookup(hostname, { all: true, verbatim: false });
+
+const HOSTNAME_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+
+export interface PinnedHost {
+  /** What the socket connects to: the validated IP. */
+  address: string;
+  /** Hostname for SNI + certificate check (undefined for an IP literal). */
+  servername: string | undefined;
+}
+
+/**
+ * Resolve once and validate EVERY answer; connect to the first. Private,
+ * loopback, link-local and metadata addresses are refused unless internal
+ * targets are allowed by the instance policy.
+ */
+export async function pinImapHost(rawHost: string, options: { allowInternal: boolean; lookup?: LookupFn }): Promise<PinnedHost> {
+  const host = rawHost.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (net.isIP(host)) {
+    if (!options.allowInternal && isPrivateIp(host)) throw new ImapPollError("host-blocked", "IMAP host is a private IP");
+    return { address: host, servername: undefined };
+  }
+  if (!HOSTNAME_RE.test(host)) throw new ImapPollError("host-not-found", "IMAP host name is invalid");
+  if (!options.allowInternal && (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal") || host.endsWith(".local"))) {
+    throw new ImapPollError("host-blocked", "IMAP host points to the local network");
+  }
+  let answers: { address: string; family: number }[];
+  try {
+    answers = await (options.lookup ?? defaultLookup)(host);
+  } catch (error) {
+    throw new ImapPollError("host-not-found", `DNS lookup failed (${(error as { code?: string })?.code ?? "error"})`);
+  }
+  if (answers.length === 0) throw new ImapPollError("host-not-found", "IMAP host has no address");
+  if (!options.allowInternal && answers.some((a) => isPrivateIp(a.address))) {
+    throw new ImapPollError("host-blocked", "IMAP host resolves to a private IP");
+  }
+  return { address: answers[0].address, servername: host };
+}
+
+// ---------------------------------------------------------------------------
+// Autodiscovery
+
+export interface DiscoveredServer {
+  host: string;
+  port: number;
+  secure: boolean;
+  presetId: string | null;
+  source: "preset" | "srv" | "mx" | "guess";
+}
+
+export interface DiscoveryDeps {
+  resolveSrv?: (name: string) => Promise<{ name: string; port: number; priority: number; weight: number }[]>;
+  resolveMx?: (name: string) => Promise<{ exchange: string; priority: number }[]>;
+  lookup?: LookupFn;
+}
+
+const MX_PRESETS: readonly [RegExp, string][] = [
+  [/(?:^|\.)(?:google|googlemail)\.com$/, "gmail"],
+  [/\.mail\.protection\.outlook\.com$/, "outlook"],
+  [/(?:^|\.)messagingengine\.com$/, "fastmail"],
+  [/(?:^|\.)mail\.icloud\.com$/, "icloud"],
+  [/(?:^|\.)mailbox\.org$/, "mailboxorg"],
+  [/(?:^|\.)posteo\.de$/, "posteo"],
+];
+
+function presetServer(preset: ImapPreset, source: DiscoveredServer["source"]): DiscoveredServer {
+  return { host: preset.host, port: preset.port, secure: preset.secure, presetId: preset.id, source };
+}
+
+/**
+ * Server for a mailbox address: known provider preset → DNS SRV
+ * `_imaps._tcp` (RFC 6186) → MX of a known provider (custom domains on
+ * Google Workspace, Microsoft 365, Fastmail …) → `imap.<domain>` if it
+ * resolves. Null when nothing fits (the admin then uses "Erweitert").
+ */
+export async function discoverImapServer(email: string, deps: DiscoveryDeps = {}): Promise<DiscoveredServer | null> {
+  const preset = detectImapPreset(email);
+  if (preset) return presetServer(preset, "preset");
+  const domain = emailDomain(email);
+  if (!domain) return null;
+  const resolveSrv = deps.resolveSrv ?? ((name: string) => dns.resolveSrv(name));
+  const resolveMx = deps.resolveMx ?? ((name: string) => dns.resolveMx(name));
+  const lookup = deps.lookup ?? defaultLookup;
+
+  const srv = await resolveSrv(`_imaps._tcp.${domain}`).catch(() => []);
+  const best = srv.filter((r) => r.name && r.name !== "." && r.port > 0).sort((a, b) => a.priority - b.priority || b.weight - a.weight)[0];
+  if (best) return { host: best.name.replace(/\.$/, "").toLowerCase(), port: best.port, secure: true, presetId: null, source: "srv" };
+
+  const mx = await resolveMx(domain).catch(() => []);
+  for (const record of mx.sort((a, b) => a.priority - b.priority)) {
+    const exchange = record.exchange.replace(/\.$/, "").toLowerCase();
+    const hit = MX_PRESETS.find(([re]) => re.test(exchange));
+    const mxPreset = hit ? getImapPreset(hit[1]) : null;
+    if (mxPreset) return presetServer(mxPreset, "mx");
+  }
+
+  const guess = `imap.${domain}`;
+  const answers = await lookup(guess).catch(() => []);
+  if (answers.length > 0) return { host: guess, port: 993, secure: true, presetId: null, source: "guess" };
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Recipient filtering
+
+const RECIPIENT_HEADERS = ["delivered-to", "x-original-to", "envelope-to", "x-delivered-to", "x-forwarded-to", "to", "cc"] as const;
+
+/** Unfolded `name: value` pairs of a raw header block (keys lowercase). */
+export function parseHeaderBlock(raw: Buffer | string | undefined | null): { key: string; value: string }[] {
+  if (!raw) return [];
+  const text = (typeof raw === "string" ? raw : raw.toString("utf8")).split(/\r?\n\r?\n/)[0];
+  const out: { key: string; value: string }[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (/^[ \t]/.test(line) && out.length > 0) {
+      out[out.length - 1].value += ` ${line.trim()}`;
+      continue;
+    }
+    const colon = line.indexOf(":");
+    if (colon <= 0) continue;
+    out.push({ key: line.slice(0, colon).trim().toLowerCase(), value: line.slice(colon + 1).trim() });
+  }
+  return out;
+}
+
+export function recipientHeaderValues(raw: Buffer | string | undefined | null): string[] {
+  return parseHeaderBlock(raw)
+    .filter((h) => (RECIPIENT_HEADERS as readonly string[]).includes(h.key))
+    .map((h) => h.value);
+}
+
+const ADDRESS_RE = /[^\s<>"',;:()[\]]+@[^\s<>"',;:()[\]]+/g;
+
+function canonicalLocal(local: string, preset: ImapPreset | null): string {
+  return preset?.ignoreLocalDots ? local.replace(/\./g, "") : local;
+}
+
+/**
+ * Recipient addresses in `values` that are `<mailbox local>+ff-<token>@<mailbox
+ * domain>` (domain aliases of the preset allowed, Gmail dots ignored). Returns
+ * the matching addresses and their tokens; anything else is not ours.
+ */
+export function mailboxRecipients(values: readonly string[], mailbox: string, presetId?: string | null): { addresses: string[]; tokens: string[] } {
+  const base = mailbox.trim().toLowerCase();
+  const at = base.lastIndexOf("@");
+  if (at <= 0) return { addresses: [], tokens: [] };
+  const preset = getImapPreset(presetId) ?? detectImapPreset(base);
+  const baseLocal = canonicalLocal(base.slice(0, at).split("+")[0], preset);
+  const baseDomain = base.slice(at + 1);
+  const domains = new Set([baseDomain, ...(preset?.domains.includes(baseDomain) ? preset.domains : [])]);
+  const addresses: string[] = [];
+  const tokens: string[] = [];
+  for (const value of values) {
+    for (const address of String(value).toLowerCase().match(ADDRESS_RE) ?? []) {
+      const i = address.lastIndexOf("@");
+      const domain = address.slice(i + 1);
+      const local = address.slice(0, i);
+      const plus = local.indexOf("+");
+      if (plus <= 0 || !domains.has(domain)) continue;
+      if (canonicalLocal(local.slice(0, plus), preset) !== baseLocal) continue;
+      const tag = local.slice(plus + 1);
+      if (!tag.startsWith("ff-")) continue;
+      const token = tag.slice(3);
+      if (!isNewsletterToken(token)) continue;
+      if (!addresses.includes(address)) addresses.push(address);
+      if (!tokens.includes(token)) tokens.push(token);
+    }
+  }
+  return { addresses, tokens };
+}
+
+// ---------------------------------------------------------------------------
+// IMAP client boundary (injectable for tests)
+
+/** The subset of ImapFlow the poller uses. */
+export interface ImapClientLike {
+  connect(): Promise<void>;
+  list(): Promise<{ path: string; specialUse?: string }[]>;
+  getMailboxLock(path: string): Promise<{ release(): void }>;
+  search(query: Record<string, unknown>, options: { uid: true }): Promise<number[] | false>;
+  fetch(range: number[] | string, query: Record<string, unknown>, options: { uid: true }): AsyncIterable<{ uid: number; flags?: Set<string>; size?: number; headers?: Buffer }>;
+  fetchOne(range: string, query: Record<string, unknown>, options: { uid: true }): Promise<{ uid: number; source?: Buffer } | false>;
+  mailboxCreate(path: string): Promise<unknown>;
+  messageMove(range: number[] | string, destination: string, options: { uid: true }): Promise<unknown>;
+  messageFlagsAdd(range: number[] | string, flags: string[], options: { uid: true }): Promise<unknown>;
+  logout(): Promise<void>;
+  close(): void;
+}
+
+export type ImapClientFactory = (options: ImapFlowOptions) => ImapClientLike;
+const defaultFactory: ImapClientFactory = (options) => new ImapFlow(options) as unknown as ImapClientLike;
+
+export interface ConnectTarget {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+}
+
+export interface ImapDeps {
+  clientFactory?: ImapClientFactory;
+  lookup?: LookupFn;
+  allowInternal?: boolean;
+  now?: () => Date;
+}
+
+/** e2e harness only (see lib/inbound-email-fake-imap.ts); null everywhere else. */
+async function fakeDeps(): Promise<{ clientFactory: ImapClientFactory; lookup: LookupFn } | null> {
+  if (process.env.FEEDFERRET_FAKE_IMAP !== "1") return null;
+  const fake = await import("./inbound-email-fake-imap");
+  return fake.isFakeImapEnabled() ? fake.fakeImapDeps() : null;
+}
+
+async function connectClient(target: ConnectTarget, deps: ImapDeps): Promise<ImapClientLike> {
+  const fake = deps.clientFactory ? null : await fakeDeps();
+  const allowInternal = deps.allowInternal ?? (await isTrustedFeedFetchingAllowed());
+  const pinned = await pinImapHost(target.host, { allowInternal, lookup: fake?.lookup ?? deps.lookup });
+  const client = (fake?.clientFactory ?? deps.clientFactory ?? defaultFactory)({
+    host: pinned.address,
+    servername: pinned.servername,
+    port: target.port,
+    secure: target.secure,
+    // Credentials never cross the wire in cleartext: no STARTTLS → no login.
+    doSTARTTLS: target.secure ? undefined : true,
+    auth: { user: target.user, pass: target.pass },
+    logger: false,
+    disableAutoIdle: true,
+    disableCompression: true,
+    connectionTimeout: CONNECT_TIMEOUT_MS,
+    greetingTimeout: CONNECT_TIMEOUT_MS,
+    socketTimeout: COMMAND_TIMEOUT_MS,
+    maxLiteralSize: MAX_RAW_EMAIL_BYTES + 1024 * 1024,
+    maxResponseSize: MAX_RAW_EMAIL_BYTES + 4 * 1024 * 1024,
+    clientInfo: { name: "FeedFerret" },
+    tls: { servername: pinned.servername, rejectUnauthorized: true, minVersion: "TLSv1.2" },
+  });
+  await client.connect();
+  return client;
+}
+
+/** Race `work` against a deadline; on expiry the client is torn down. */
+async function withDeadline<T>(ms: number, client: () => ImapClientLike | null, work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      try {
+        client()?.close();
+      } catch {
+        /* already closed */
+      }
+      reject(new ImapPollError("timeout", `IMAP did not finish within ${Math.round(ms / 1000)} s`));
+    }, ms);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function closeQuietly(client: ImapClientLike | null) {
+  if (!client) return;
+  try {
+    await Promise.race([client.logout(), new Promise((resolve) => setTimeout(resolve, 2_000).unref?.())]);
+  } catch {
+    /* ignore */
+  }
+  try {
+    client.close();
+  } catch {
+    /* ignore */
+  }
+}
+
+// ---------------------------------------------------------------------------
+// "Verbindung testen"
+
+export type ImapTestResult =
+  | { ok: true; folders: string[]; processedFolderExists: boolean }
+  | { ok: false; code: ImapErrorCode; detail: string };
+
+export async function testImapConnection(target: ConnectTarget, deps: ImapDeps = {}): Promise<ImapTestResult> {
+  let client: ImapClientLike | null = null;
+  try {
+    return await withDeadline(
+      TEST_TOTAL_TIMEOUT_MS,
+      () => client,
+      (async () => {
+        client = await connectClient(target, deps);
+        const folders = (await client.list()).map((f) => f.path).slice(0, 200);
+        return { ok: true as const, folders, processedFolderExists: folders.some((f) => f.toLowerCase() === PROCESSED_FOLDER.toLowerCase()) };
+      })(),
+    );
+  } catch (error) {
+    const code = classifyImapError(error);
+    const detail = redactImapError(String((error as { responseText?: string })?.responseText || (error as Error)?.message || ""), [target.pass, target.user]);
+    return { ok: false, code, detail };
+  } finally {
+    await closeQuietly(client);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Poll
+
+export interface PollSummary {
+  sourceId: string;
+  status: "ok" | "skipped" | "error" | "paused";
+  scanned: number;
+  matched: number;
+  created: number;
+  moved: number;
+  errorCode?: ImapErrorCode;
+}
+
+type SourceRow = {
+  id: string;
+  kind: string;
+  address: string | null;
+  settings: string | null;
+  credentials: string | null;
+  paused: boolean;
+  errorCount: number;
+  lastCheckedAt: Date | null;
+};
+
+const SOURCE_SELECT = { id: true, kind: true, address: true, settings: true, credentials: true, paused: true, errorCount: true, lastCheckedAt: true } as const;
+
+/** Wait before the next regular poll: the interval, or exponential backoff after errors (2,4,8… min, max 60). */
+export function pollGapMs(errorCount: number): number {
+  if (errorCount <= 0) return POLL_INTERVAL_MS - 5_000;
+  return Math.min(MAX_BACKOFF_MS, 60_000 * 2 ** Math.min(errorCount, 10));
+}
+
+/**
+ * Cross-process lock: a conditional UPDATE claims the source by moving
+ * `lastCheckedAt` forward; only one caller wins within the gap.
+ */
+async function claimSource(source: SourceRow, force: boolean, now: Date): Promise<boolean> {
+  const gap = force ? FORCED_POLL_GAP_MS : pollGapMs(source.errorCount);
+  const claimed = await db.inboundMailSource.updateMany({
+    where: {
+      id: source.id,
+      paused: false,
+      OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: new Date(now.getTime() - gap) } }],
+    },
+    data: { lastCheckedAt: now },
+  });
+  return claimed.count === 1;
+}
+
+/** Auto-read rules, keyword alerts and push for newly ingested newsletter items (like rss-sync). */
+async function afterIngest(created: { userId: string; articleId: string }[]) {
+  const byUser = new Map<string, string[]>();
+  for (const c of created) byUser.set(c.userId, [...(byUser.get(c.userId) ?? []), c.articleId]);
+  for (const [userId, ids] of byUser) {
+    await applyAutoReadRules(userId, { onlyArticleIds: ids }).catch((e) => logger.error("[newsletter-imap] auto-read rules failed:", e));
+    await applyKeywordAlerts(userId, ids).catch((e) => logger.error("[newsletter-imap] keyword alerts failed:", e));
+    await queueNewArticleNotifications(userId, ids).catch((e) => logger.error("[newsletter-imap] push queue failed:", e));
+  }
+}
+
+async function markProcessed(client: ImapClientLike, uids: number[], processedFolder: string): Promise<"moved" | "flagged" | "failed"> {
+  if (uids.length === 0) return "moved";
+  const wanted = processedFolder.toLowerCase();
+  try {
+    // Servers with a personal namespace list it as e.g. "INBOX.FeedFerret";
+    // imapflow adds that prefix itself on CREATE / MOVE.
+    const folders = await client.list();
+    const exists = folders.some(({ path }) => {
+      const p = path.toLowerCase();
+      return p === wanted || p.endsWith(`.${wanted}`) || p.endsWith(`/${wanted}`);
+    });
+    if (!exists) {
+      await client.mailboxCreate(processedFolder).catch(() => undefined);
+    }
+    // imapflow reports a failed MOVE (or COPY+EXPUNGE fallback) as `false`, not as an exception.
+    if ((await client.messageMove(uids, processedFolder, { uid: true })) === false) throw new Error("MOVE failed");
+    return "moved";
+  } catch (error) {
+    logger.warn("[newsletter-imap] move failed, flagging instead", { code: classifyImapError(error) });
+  }
+  // Fallback: \Seen + \Flagged (+ our keyword where the server allows custom keywords).
+  const flagged =
+    (await client.messageFlagsAdd(uids, ["\\Seen", "\\Flagged", PROCESSED_KEYWORD], { uid: true }).catch(() => false)) !== false ||
+    (await client.messageFlagsAdd(uids, ["\\Seen", "\\Flagged"], { uid: true }).catch(() => false)) !== false;
+  if (!flagged) logger.warn("[newsletter-imap] could not mark processed mail; Message-ID dedupe keeps it from being stored twice");
+  return flagged ? "flagged" : "failed";
+}
+
+function alreadyProcessed(flags: Set<string> | undefined): boolean {
+  if (!flags) return false;
+  return flags.has(PROCESSED_KEYWORD) || (flags.has("\\Seen") && flags.has("\\Flagged"));
+}
+
+export interface PollOptions extends ImapDeps {
+  /** Wizard live test: ignore the regular interval/backoff (a short gap still applies). */
+  force?: boolean;
+  ingest?: (raw: Buffer, options: { recipients: string[]; trustedAuthservId: string | null }) => Promise<IngestResult>;
+}
+
+export async function pollImapSource(source: SourceRow, options: PollOptions = {}): Promise<PollSummary> {
+  const now = options.now?.() ?? new Date();
+  const summary: PollSummary = { sourceId: source.id, status: "skipped", scanned: 0, matched: 0, created: 0, moved: 0 };
+  if (source.kind !== "imap") return summary;
+  if (source.paused) return { ...summary, status: "paused" };
+  if (!(await claimSource(source, !!options.force, now))) return summary;
+
+  const settings = parseImapSettings(source.settings);
+  const credentials = openImapCredentials(source.credentials);
+  const created: { userId: string; articleId: string }[] = [];
+  let client: ImapClientLike | null = null;
+  try {
+    if (!settings || !source.address) throw new ImapPollError("unknown", "IMAP source is incomplete");
+    if (!credentials) throw new ImapPollError("credentials-unreadable", "IMAP credentials cannot be read (key changed?)");
+    const trustedAuthservId = trustedAuthservIdForPreset(settings.presetId);
+    const ingest = options.ingest ?? ((raw, o) => ingestRawEmail(raw, o));
+    const mailbox = source.address;
+
+    await withDeadline(
+      POLL_TOTAL_TIMEOUT_MS,
+      () => client,
+      (async () => {
+        client = await connectClient({ host: settings.host, port: settings.port, secure: settings.secure, user: credentials.user, pass: credentials.pass }, options);
+        let lock: { release(): void };
+        try {
+          lock = await client.getMailboxLock(settings.folder);
+        } catch (error) {
+          throw new ImapPollError("folder", `Folder cannot be opened (${classifyImapError(error)})`);
+        }
+        try {
+          const since = new Date(now.getTime() - SCAN_DAYS * 24 * 60 * 60_000);
+          const found = (await client.search({ since, deleted: false }, { uid: true })) || [];
+          const uids = found.sort((a, b) => a - b).slice(-SCAN_UID_LIMIT);
+          summary.scanned = uids.length;
+          if (uids.length === 0) return;
+
+          const candidates: { uid: number; size: number; recipients: string[] }[] = [];
+          for await (const msg of client.fetch(uids, { uid: true, flags: true, size: true, headers: [...RECIPIENT_HEADERS] }, { uid: true })) {
+            if (alreadyProcessed(msg.flags)) continue;
+            const { addresses } = mailboxRecipients(recipientHeaderValues(msg.headers), mailbox, settings.presetId);
+            if (addresses.length === 0) continue; // not ours: never touched
+            candidates.push({ uid: msg.uid, size: msg.size ?? 0, recipients: addresses });
+          }
+          summary.matched = candidates.length;
+
+          const done: number[] = [];
+          try {
+            for (const candidate of candidates.slice(0, MAX_MESSAGES_PER_POLL)) {
+              if (candidate.size > MAX_RAW_EMAIL_BYTES) {
+                logger.warn("[newsletter-imap] oversized mail skipped", { sourceId: source.id, bytes: candidate.size });
+                done.push(candidate.uid);
+                continue;
+              }
+              const message = await client.fetchOne(String(candidate.uid), { uid: true, source: true }, { uid: true });
+              if (!message || !message.source) continue;
+              // Throws only on infrastructure errors (DB down): stop, keep the rest for the next poll.
+              const result = await ingest(message.source, { recipients: candidate.recipients, trustedAuthservId });
+              // Over the user's daily quota: leave it in the inbox for tomorrow.
+              if (result.status === "rate-limited") continue;
+              done.push(candidate.uid);
+              if (result.status === "created" && result.userId && result.articleId) {
+                created.push({ userId: result.userId, articleId: result.articleId });
+              }
+            }
+          } finally {
+            if (done.length > 0) {
+              await markProcessed(client, done, settings.processedFolder);
+              summary.moved = done.length;
+            }
+          }
+        } finally {
+          lock.release();
+        }
+      })(),
+    );
+
+    summary.created = created.length;
+    summary.status = "ok";
+    await db.inboundMailSource.update({
+      where: { id: source.id },
+      data: { errorCount: 0, lastError: null, ...(created.length > 0 ? { lastReceivedAt: now } : {}) },
+    });
+  } catch (error) {
+    const code = classifyImapError(error);
+    const detail = redactImapError(String((error as { responseText?: string })?.responseText || (error as Error)?.message || ""), [credentials?.pass, credentials?.user]);
+    summary.status = "error";
+    summary.errorCode = code;
+    logger.warn("[newsletter-imap] poll failed", { sourceId: source.id, code });
+    await db.inboundMailSource
+      .update({
+        where: { id: source.id },
+        data: { errorCount: { increment: 1 }, lastError: formatStoredError(code, detail), ...(created.length > 0 ? { lastReceivedAt: now } : {}) },
+      })
+      .catch(() => undefined);
+  } finally {
+    await closeQuietly(client);
+  }
+
+  if (created.length > 0) await afterIngest(created);
+  if (summary.matched > 0 || summary.status === "error") {
+    logger.info("[newsletter-imap] poll", { sourceId: source.id, status: summary.status, matched: summary.matched, created: summary.created, moved: summary.moved });
+  }
+  return summary;
+}
+
+/** Poll every active IMAP source (background job). Never throws. */
+export async function pollInboundSources(options: PollOptions = {}): Promise<PollSummary[]> {
+  let sources: SourceRow[];
+  try {
+    sources = await db.inboundMailSource.findMany({ where: { kind: "imap", paused: false }, select: SOURCE_SELECT });
+  } catch (error) {
+    logger.error("[newsletter-imap] cannot load sources:", error);
+    return [];
+  }
+  const results: PollSummary[] = [];
+  for (const source of sources) {
+    results.push(await pollImapSource(source, options));
+  }
+  return results;
+}
+
+/** Poll one source now (wizard live test). */
+export async function pollInboundSourceNow(sourceId: string, options: PollOptions = {}): Promise<PollSummary | null> {
+  const source = await db.inboundMailSource.findUnique({ where: { id: sourceId }, select: SOURCE_SELECT });
+  if (!source) return null;
+  return pollImapSource(source, { ...options, force: true });
+}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bell, ChevronLeft, ChevronRight, Hand, Palette, Rss, ScrollText, User, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Bell, ChevronLeft, ChevronRight, Hand, Mail, Palette, Rss, ScrollText, User, type LucideIcon } from "lucide-react";
 import { backOrHome } from "@/lib/in-app-back";
 import { cn } from "@/lib/utils";
 import { AppearanceSettings } from "@/components/settings/sections/appearance";
@@ -12,6 +12,7 @@ import { GesturesHelpSettings } from "@/components/settings/sections/gestures-he
 import { AccountSettings } from "@/components/settings/sections/account";
 import { NotificationSettings } from "@/components/settings/sections/notifications";
 import { IntegrationSettings } from "@/components/settings/sections/integrations";
+import { NewsletterSettings } from "@/components/settings/sections/newsletter";
 
 // Settings shell (audit-ux-2 A-09 / R9). The section lives in the URL
 // (`/settings?tab=reading`): deep-linkable, reload keeps it, Back works.
@@ -22,7 +23,7 @@ import { IntegrationSettings } from "@/components/settings/sections/integrations
 // Layout is CSS (`data-section` + media queries), never matchMedia at render.
 // Each section is its own component under components/settings/sections/.
 
-export const SETTINGS_SECTIONS = ["appearance", "reading", "gestures", "account", "notifications", "integrations"] as const;
+export const SETTINGS_SECTIONS = ["appearance", "reading", "gestures", "account", "notifications", "newsletter", "integrations"] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 const SECTION_ICON: Record<SettingsSection, LucideIcon> = {
@@ -31,6 +32,7 @@ const SECTION_ICON: Record<SettingsSection, LucideIcon> = {
   gestures: Hand,
   account: User,
   notifications: Bell,
+  newsletter: Mail,
   integrations: Rss,
 };
 
@@ -40,6 +42,7 @@ const SECTION_BODY: Record<SettingsSection, () => React.ReactNode> = {
   gestures: () => <GesturesHelpSettings />,
   account: () => <AccountSettings />,
   notifications: () => <NotificationSettings />,
+  newsletter: () => <NewsletterSettings />,
   integrations: () => <IntegrationSettings />,
 };
 

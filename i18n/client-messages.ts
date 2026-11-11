@@ -24,11 +24,13 @@ export const ROUTE_ONLY_NAMESPACES = [
   "deleteAccount",
   "settingsBookmarklet",
   "apiPassword",
+  "newsletterSettings",
   // /manage-feeds (feed-management.tsx, feed-edit-dialog.tsx, freshrss-migration.tsx)
   "feedManagement",
   "feedEdit",
   // /server-settings (server-management-dialog.tsx)
   "serverManagement",
+  "newsletterInbound", // components/newsletter/inbound-wizard.tsx (server-settings tab)
   // /setup
   "setup",
   // server only (e-mails)

@@ -158,7 +158,7 @@ test.describe("settings shell", () => {
     // No <select> as navigation.
     await expect(page.getByRole("combobox")).toHaveCount(0);
     const links = nav.getByRole("link");
-    await expect(links).toHaveText(["Appearance", "Reading", "Gestures & help", "Account", "Notifications", "Integrations"]);
+    await expect(links).toHaveText(["Appearance", "Reading", "Gestures & help", "Account", "Notifications", "Newsletter", "Integrations"]);
     for (const box of await links.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height))) expect(box).toBeGreaterThanOrEqual(44);
     await nav.getByRole("link", { name: "Account" }).tap();
     await expect(page).toHaveURL(/\/settings\?tab=account$/);

@@ -20,7 +20,7 @@ const config = [
         message: "Use safeFetch from lib/ssrf, including instead of globalThis['fetch'].",
       }],
       "no-restricted-imports": ["error", {
-        paths: ["node:http", "node:https", "http", "https", "undici"].map(name => ({ name, message: "Use lib/ssrf; raw transports require a documented exception in eslint.config.mjs." })),
+        paths: ["node:http", "node:https", "http", "https", "undici", "imapflow"].map(name => ({ name, message: "Use lib/ssrf; raw transports require a documented exception in eslint.config.mjs." })),
       }],
     },
   },
@@ -30,6 +30,15 @@ const config = [
     // https.request; its shared agent uses safeLookup and checks IP literals.
     files: ["lib/ssrf.ts", "lib/safe-dispatcher.ts", "lib/egress-proxy.ts", "lib/push.ts"],
     rules: { "no-restricted-imports": "off" },
+  },
+  {
+    // N1 newsletter IMAP: the poller pins the IMAP host itself (pinImapHost:
+    // resolve once, refuse private answers, connect to the IP, SNI/cert on the
+    // name) and is the only module allowed to open an IMAP socket.
+    files: ["lib/inbound-email-poller.ts"],
+    rules: { "no-restricted-imports": ["error", {
+      paths: ["node:http", "node:https", "http", "https", "undici"].map(name => ({ name, message: "Use lib/ssrf; raw transports require a documented exception in eslint.config.mjs." })),
+    }] },
   },
   {
     rules: {

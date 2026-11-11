@@ -48,7 +48,9 @@ import {
   FileText,
   ChevronDown,
   BookOpen,
+  Inbox,
 } from "lucide-react";
+import { NewsletterInboundPanel } from "@/components/newsletter/inbound-wizard";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,14 +108,19 @@ const RENDER_SIDECAR_COMPOSE = `services:
     security_opt:
       - no-new-privileges:true`;
 
+const SERVER_TABS = ["users", "registrations", "email", "notifications", "instance", "starter-packs", "sync", "discovery", "newsletter", "audit", "storage", "logs"];
+
 export function ServerManagementDialog({
   open,
   onOpenChange,
   pageMode = false,
+  initialTab,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pageMode?: boolean;
+  /** `/server-settings?tab=newsletter` (e.g. the settings page's "Jetzt einrichten"). */
+  initialTab?: string;
 }) {
   const t = useTranslations("serverManagement");
   const format = useFormatter();
@@ -123,7 +130,7 @@ export function ServerManagementDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingDeleteUser, setPendingDeleteUser] = useState<AdminUser | null>(null);
-  const [activeTab, setActiveTab] = useState("users");
+  const [activeTab, setActiveTab] = useState(initialTab && SERVER_TABS.includes(initialTab) ? initialTab : "users");
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([]);
   const [auditLoaded, setAuditLoaded] = useState(false);
@@ -515,6 +522,7 @@ export function ServerManagementDialog({
     { value: "starter-packs", label: t("tabs.starterPacks"), icon: <PackagePlus className="w-4 h-4" /> },
     { value: "sync", label: t("tabs.sync"), icon: <Settings2 className="w-4 h-4" /> },
     { value: "discovery", label: t("tabs.discovery"), icon: <Compass className="w-4 h-4" /> },
+    { value: "newsletter", label: t("tabs.newsletter"), icon: <Inbox className="w-4 h-4" /> },
     { value: "audit", label: t("tabs.audit"), icon: <Shield className="w-4 h-4" />, onSelect: loadAuditData },
     { value: "storage", label: t("tabs.storage"), icon: <HardDrive className="w-4 h-4" />, onSelect: loadStorageStats },
     { value: "logs", label: t("tabs.logs"), icon: <FileText className="h-4 w-4" />, onSelect: () => loadSystemLogs(undefined) },
@@ -1415,6 +1423,13 @@ export function ServerManagementDialog({
                 {/* ── DISCOVERY CATALOG ── */}
                 <TabsContent value="discovery" className="animate-filter-swap h-full mt-0 focus-ring">
                   <DiscoveryCatalogTab />
+                </TabsContent>
+
+                {/* ── NEWSLETTER INBOX (N1) ── */}
+                <TabsContent value="newsletter" className="animate-filter-swap h-full mt-0 focus-ring">
+                  <ScrollArea className="h-full">
+                    <NewsletterInboundPanel />
+                  </ScrollArea>
                 </TabsContent>
 
                 {/* ── AUDIT LOG ── */}

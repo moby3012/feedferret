@@ -54,6 +54,15 @@ function harnessTokenMatches(): boolean {
   return ok;
 }
 
+/**
+ * True only inside the e2e harness (production build): the per-run env token
+ * matches the marker file next to the freshly seeded SQLite DB. Shared by
+ * other test-only fakes (N1 fake IMAP mailbox, lib/inbound-email-fake-imap.ts).
+ */
+export function isE2eHarness(): boolean {
+  return harnessTokenMatches();
+}
+
 export function isFakeAiEnabled(): boolean {
   if (process.env.FEEDFERRET_FAKE_AI !== "1") return false;
   if (process.env.NODE_ENV !== "production") return true;
