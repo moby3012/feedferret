@@ -6,7 +6,18 @@ const mocks = vi.hoisted(() => ({
   validateRsshubRoute: vi.fn(),
 }));
 
-vi.mock("../../lib/ssrf", () => ({ fetchTextWithSsrfProtection: mocks.fetchText }));
+vi.mock("../../lib/ssrf", async () => {
+  const actual = await vi.importActual<any>("../../lib/ssrf");
+  return {
+    ...actual,
+    fetchTextWithSsrfProtection: mocks.fetchText,
+    fetchWithSsrfProtection: vi.fn(async (url: string, init?: any, options?: any) => {
+      const text = await mocks.fetchText(url, init, options);
+      return { notModified: false, text, etag: null, lastModified: null, headers: new Headers() };
+    }),
+    isTrustedFeedFetchingAllowed: vi.fn().mockResolvedValue(false),
+  };
+});
 vi.mock("../../lib/rsshub", async () => {
   const { matchRadarRules } = await import("../../lib/rsshub-radar-rules");
   return {

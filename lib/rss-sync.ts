@@ -22,6 +22,7 @@ import { persistEnrichment } from "./article-enrichment";
 import { AiBudgetError } from "./ai/errors";
 import { warnBudgetOnce } from "./ai/usage";
 import { isGoogleNewsFeedUrl } from "./google-news";
+import { UNTITLED } from "./title-synthesis";
 import { googleNewsStableKey, prepareGoogleNewsArticles, type GoogleNewsPreparedArticle } from "./google-news-ingest";
 import { GOOGLE_NEWS_MIN_UPDATE_MINUTES } from "./google-news-url";
 import type { ResolveOptions } from "./google-news";
@@ -65,6 +66,18 @@ export interface ArticleSyncInput {
     // News redirect link was resolved to the publisher URL on a later sync
     // (lib/google-news-ingest.ts). Same rule: keep Article.updatedAt.
     linkCosmetic?: boolean;
+    // Not persisted: the feed supplied no title and `title` was synthesized
+    // from content (lib/title-synthesis.ts). An existing row keeps its stored
+    // title, except that the legacy "Untitled" placeholder is upgraded
+    // cosmetically — never touching Article.updatedAt (GReader ot/nt).
+    titleSynthetic?: boolean;
+    // Not persisted: the placeholder the pre-synthesis code stored for this
+    // item (`raw || "Untitled"`), used to recognise upgradable legacy rows.
+    identityTitle?: string;
+    // Not persisted: the item had no date and `publishedAt` is the sync time.
+    // An existing row keeps its stored date (otherwise every re-sync of a
+    // date-less feed would rewrite the row and bump Article.updatedAt).
+    publishedAtSynthetic?: boolean;
 }
 
 export interface ArticleSyncResult {
@@ -221,7 +234,7 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
     const upsertedIds: string[] = [];
     const newArticles: ArticleSyncInput[] = [];
 
-    for (const article of articles) {
+    for (let article of articles) {
         const existing = existingByDedupeKey.get(article.dedupeKey);
         if (!existing) {
             newArticles.push(article);
@@ -229,6 +242,20 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
         }
 
         upsertedIds.push(existing.id);
+
+        // A synthesized title is display-only provenance, never a content
+        // change: keep the stored title for the change check. A legacy
+        // placeholder row ("Untitled") is upgraded below as a cosmetic write.
+        let cosmeticTitle: string | null = null;
+        if (article.titleSynthetic) {
+            if (existing.title !== article.title && existing.title === (article.identityTitle ?? UNTITLED)) {
+                cosmeticTitle = article.title;
+            }
+            article = { ...article, title: existing.title };
+        }
+        if (article.publishedAtSynthetic) {
+            article = { ...article, publishedAt: existing.publishedAt };
+        }
 
         const next = updatableFields(article);
         const linkChanged = existing.link !== next.link;
@@ -244,15 +271,17 @@ export async function upsertArticleBatch(rawArticles: ArticleSyncInput[]): Promi
 
         const cosmeticLink = article.linkSynthetic || article.linkCosmetic;
         if (otherChanged || (linkChanged && !cosmeticLink)) {
-            await db.article.update({ where: { id: existing.id }, data: next });
+            await db.article.update({ where: { id: existing.id }, data: { ...next, ...(cosmeticTitle ? { title: cosmeticTitle } : {}) } });
             if (upsertedIds.length % 25 === 0) await yieldToLoop();
-        } else if (linkChanged) {
-            // Synthetic / resolved-redirect link rewrite only: store it, keep updatedAt.
+        } else if (linkChanged || cosmeticTitle) {
+            // Synthetic / resolved-redirect link rewrite and/or legacy
+            // placeholder title upgrade only: store it, keep updatedAt.
             await db.article.update({
                 where: { id: existing.id },
                 data: {
-                    link: next.link,
-                    ...(article.linkCosmetic && article.contentHash ? { contentHash: article.contentHash } : {}),
+                    ...(linkChanged ? { link: next.link } : {}),
+                    ...(linkChanged && article.linkCosmetic && article.contentHash ? { contentHash: article.contentHash } : {}),
+                    ...(cosmeticTitle ? { title: cosmeticTitle } : {}),
                     updatedAt: existing.updatedAt,
                 },
             });
@@ -471,14 +500,20 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             const externalId = item.externalId || item.link || null;
             // Google News: identity was fixed in the pre-pass from the raw item
             // (guid), so resolving the link / cleaning the title never changes it.
+            // Identity uses the title as the pre-synthesis code stored it
+            // (`identityTitle`), so a synthesized display title never changes
+            // a title-based dedupe key of an existing row.
+            const identityItem = { ...item, title: item.identityTitle ?? item.title };
             const dedupeKey = (item as GoogleNewsPreparedArticle).dedupeKey
-                ?? (isGoogleNews ? googleNewsStableKey(item) : buildDedupeKey(feed, item, externalId));
+                ?? (isGoogleNews ? googleNewsStableKey(identityItem) : buildDedupeKey(feed, identityItem, externalId));
             // Linkless items get a synthetic link from the feed URL — without
             // connector secrets (legacy rows may still carry the RSSHub key).
             const link = item.link || `${publicFeedUrl}#${encodeURIComponent(dedupeKey)}`;
 
             const sanitizedContent = DOMPurify.sanitize(content);
-            const title = item.title || "Untitled";
+            // Fetchers already synthesized a display title (with provenance)
+            // for title-less items — see resolveItemTitle().
+            const title = item.title || UNTITLED;
             const meta = computeArticleMeta({
                 content: sanitizedContent,
                 contentFormat: "html",
@@ -496,6 +531,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 feedId: feed.id,
                 userId: userId,
                 title,
+                ...(item.titleSynthetic ? { titleSynthetic: true, identityTitle: item.identityTitle ?? UNTITLED } : {}),
                 link,
                 ...(item.link ? {} : { linkSynthetic: true }),
                 ...((item as GoogleNewsPreparedArticle).linkCosmetic ? { linkCosmetic: true } : {}),
@@ -506,6 +542,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 excerpt: excerpt,
                 author: item.author || null,
                 publishedAt: item.publishedAt || new Date(),
+                ...(item.publishedAt ? {} : { publishedAtSynthetic: true }),
                 imageUrl: item.imageUrl,
                 enclosures: item.enclosures?.length ? JSON.stringify(item.enclosures) : null,
                 ...meta,

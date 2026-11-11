@@ -7,6 +7,7 @@ import { dispatcherFor } from "./safe-dispatcher";
 import net from "net";
 import { db } from "@/lib/db";
 import { getPinnedImpitFetch, getImpitFetch, type FetchResponseLike } from "./impit-fetch";
+import { readHtmlPrefix } from "./html-prefix";
 
 export type SsrfCheckOptions = {
   allowInternal?: boolean;
@@ -35,6 +36,13 @@ export type SafeFetchTextOptions = SsrfCheckOptions & {
   // trusted connector requests, whose internal-network allowance must not
   // carry over to an arbitrary redirect target.
   redirectGuard?: (nextUrl: string, currentUrl: string) => string | null;
+  /**
+   * HTML page prefix mode (feed discovery): read at most `maxBytes` (default
+   * 1 MiB) WITHOUT failing on larger pages, decode with the page's charset,
+   * and stop at the end of `<head>` when this is true or the predicate
+   * accepts the head (see lib/html-prefix.ts).
+   */
+  untilHead?: boolean | ((headHtml: string) => boolean);
 };
 
 function truthy(value?: string) {
@@ -159,8 +167,8 @@ async function errorBodySuffix(response: FetchResponseLike, include?: boolean): 
 }
 
 export type ConditionalFetchResult =
-  | { notModified: true; etag: string | null; lastModified: string | null }
-  | { notModified: false; text: string; etag: string | null; lastModified: string | null };
+  | { notModified: true; etag: string | null; lastModified: string | null; headers?: Headers; status?: number; url?: string }
+  | { notModified: false; text: string; etag: string | null; lastModified: string | null; headers?: Headers; status?: number; url?: string };
 
 /**
  * Same SSRF-protected fetch/redirect loop as `fetchTextWithSsrfProtection`, but surfaces
@@ -221,14 +229,17 @@ export async function fetchWithSsrfProtection(
       const lastModified = response.headers.get("last-modified");
 
       if (response.status === 304) {
-        return { notModified: true, etag, lastModified };
+        return { notModified: true, etag, lastModified, headers: response.headers, status: response.status, url: current };
       }
 
       if (!response.ok) {
         throw new Error(`Fetch failed: ${response.status}${await errorBodySuffix(response, options.includeErrorBody)}`);
       }
-      const text = await readTextWithLimit(response, options.maxBytes);
-      return { notModified: false, text, etag, lastModified };
+      const text = options.untilHead
+        ? await readHtmlPrefix(response, { maxBytes: options.maxBytes, contentType: response.headers.get("content-type"), stopAtHead: options.untilHead })
+        : await readTextWithLimit(response, options.maxBytes);
+      // `url`: the final URL after redirects (base for relative references).
+      return { notModified: false, text, etag, lastModified, headers: response.headers, status: response.status, url: current };
     } finally {
       clearTimeout(timer);
     }

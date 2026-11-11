@@ -742,6 +742,11 @@
     "foundFeeds": "Gefundene Feeds",
     "topicFeeds": "News- und Suchfeeds zu diesem Thema – such dir einen aus",
     "resolverNoResult": "Dazu wurde nichts gefunden. Probier die Adresse der Seite oder eine Feed-URL.",
+    "hints": {
+      "needsRsshub": "Braucht RSSHub – unter Einstellungen › Server einrichten",
+      "rateLimited": "Später erneut versuchen",
+      "blocked": "Seite blockiert automatischen Abruf – probier stattdessen einen direkten Feed des Anbieters"
+    },
     "kinds": {
       "videos": "Videos",
       "playlist": "Playlist",

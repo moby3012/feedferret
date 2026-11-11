@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { syncUserFeeds, syncFeed } from "@/lib/rss-sync";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
+import { hintForFetchError } from "@/lib/fetch-error-hint";
 import { assertSafeHttpOptionsProxy, fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { generateOpml } from "@/lib/opml";
 import { importOpmlXml } from "@/lib/import/opml-import";
@@ -294,6 +295,8 @@ export async function addFeed(url: string, categoryId?: string) {
         return { success: true, feed: await redactFeedForClient(stripFeedSecrets(feed)) };
     } catch (error) {
         logger.error("Failed to add feed:", error);
+        const hint = hintForFetchError(error);
+        if (hint) return { success: false, error: hint };
         return { success: false, error: "Invalid RSS/Atom feed URL" };
     }
 }

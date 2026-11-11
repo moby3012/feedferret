@@ -1,5 +1,7 @@
 // Smart source → feed resolver.
 
+import { resolvePublisherFeeds } from "./publisher-feeds";
+
 /** decodeURIComponent that never throws (malformed `%` sequences stay as-is). */
 function safeDecode(value: string): string {
   try {
@@ -92,6 +94,19 @@ const PLATFORM_LABEL: Record<string, string> = {
   letterboxd: "Letterboxd",
   "google-news": "Google News",
   "bing-news": "Bing News",
+  tagesschau: "Tagesschau",
+  heise: "Heise",
+  spiegel: "Spiegel",
+  bbc: "BBC News",
+  npr: "NPR",
+  nytimes: "The New York Times",
+  zeit: "ZEIT ONLINE",
+  sueddeutsche: "Süddeutsche Zeitung",
+  faz: "FAZ",
+  golem: "Golem.de",
+  t3n: "t3n",
+  netzpolitik: "netzpolitik.org",
+  derstandard: "Der Standard",
 };
 
 export function platformLabel(platform: string): string {
@@ -756,6 +771,11 @@ const RESOLVERS: PlatformResolver[] = [
  * candidates plus any one-step lookups the caller still has to run.
  */
 export function matchUrl(url: URL): SourceMatch {
+  const pubFeeds = resolvePublisherFeeds(url);
+  if (pubFeeds.length) {
+    return { feeds: pubFeeds, lookups: [], matched: true };
+  }
+
   const host = url.hostname.toLowerCase();
   const normalized = host.replace(/^(www|m|old|new|np|mobile)\./, "");
   const path = url.pathname.replace(/\/{2,}/g, "/");

@@ -183,6 +183,9 @@ importers:
       embla-carousel-react:
         specifier: 8.6.0
         version: 8.6.0(react@19.2.6)
+      entities:
+        specifier: 8.0.0
+        version: 8.0.0
       geist:
         specifier: ^1.7.0
         version: 1.7.0(next@16.4.2(@babel/core@7.29.7)(@playwright/test@1.64.1)(@types/node@25.9.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
