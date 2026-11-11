@@ -131,13 +131,21 @@ function fakeTagging(prompt: string): string {
     entities: words.map((w) => w.replace(/[^\p{L}\p{N}-]/gu, "")).filter((w) => /^[A-Z]{2,6}$/.test(w) || /\d/.test(w)),
     sponsored: /\bAnzeige\b/.test(body),
     clickbait,
-    cleanTitle: clickbait ? title.replace(/\s*\?!\s*$/, "") : null,
+    cleanTitle: clickbait ? title.trimEnd().slice(0, -2).trimEnd() : null,
   });
 }
 
 function fakeSummary(prompt: string): string {
   const text = prompt.split(/\n\n(?:Article|Articles|Titles):\n/)[1] ?? prompt;
-  return (text.match(/[^.!?]+[.!?]/g) ?? [text]).slice(0, 2).map((x) => x.trim()).join(" ");
+  const sentences: string[] = [];
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (".!?".includes(text[i])) {
+      if (i > start) sentences.push(text.slice(start, i + 1));
+      start = i + 1;
+    }
+  }
+  return (sentences.length > 0 ? sentences : [text]).slice(0, 2).map((x) => x.trim()).join(" ");
 }
 
 /** Full output text of the fake for a prompt (model-independent part). */

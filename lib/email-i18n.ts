@@ -24,10 +24,12 @@ function resolvePlural(
   params: Record<string, string | number>,
 ): string {
   // ICU plural: {count, plural, one {# text} other {# text}}
+  // eslint-disable-next-line regexp/no-super-linear-backtracking -- `template` is one of our own message-catalog strings, never user data
   const match = template.match(/^\{(\w+),\s*plural,\s*([\s\S]*)\}$/);
   if (!match) return interpolate(template, params);
   const cases: Record<string, string> = {};
   let rest = match[2];
+  // eslint-disable-next-line regexp/no-super-linear-move -- `rest` is one of our own message-catalog strings, never user data
   const caseRe = /(\w+)\s*\{([^}]*)\}/g;
   let m: RegExpExecArray | null;
   while ((m = caseRe.exec(rest)) !== null) {

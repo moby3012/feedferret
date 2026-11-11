@@ -405,7 +405,9 @@ describe("full text: AI escalation is bounded per sync", () => {
     } finally {
       await state.db.user.update({ where: { id: userId }, data: { aiProvider: null } });
     }
-  });
+    // Three real syncs over 8 pages, each running every extractor: CPU-bound and
+    // slow on shared CI runners under parallel load (timed out at the 5 s default).
+  }, 30_000);
 
 });
 

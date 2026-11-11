@@ -5,6 +5,7 @@ import { hashApiToken } from "@/lib/token";
 import { isSameOriginRequest } from "@/lib/same-origin";
 import { promisify } from "node:util";
 import { gzip as gzipCallback } from "node:zlib";
+import { matchBearerToken } from "@/lib/linear-text";
 
 const gzip = promisify(gzipCallback);
 
@@ -41,7 +42,7 @@ export async function resolveApiUser(request: Request): Promise<ApiUser | null> 
   }
 
   const authHeader = request.headers.get("authorization");
-  const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const token = (authHeader ? matchBearerToken(authHeader) : null)?.trim();
   if (!token) return null;
 
   const tokenRecord = await db.apiToken.findUnique({

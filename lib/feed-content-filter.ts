@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { stripTagsNonEmpty } from "@/lib/linear-text";
 
 /**
  * Per-feed keyword content filters.
@@ -33,7 +34,7 @@ export function articleMatchesContentFilter(
     terms: string[],
 ): boolean {
     if (terms.length === 0) return false;
-    const body = (article.content ?? "").replace(/<[^>]+>/g, " ");
+    const body = stripTagsNonEmpty(article.content ?? "");
     const haystack = `${article.title ?? ""}\n${article.excerpt ?? ""}\n${body}`.toLowerCase();
     return terms.some((term) => haystack.includes(term));
 }

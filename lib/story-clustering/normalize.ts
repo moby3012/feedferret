@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { normalizeArticleUrl } from "../content-hash";
 import { ENTITY_ALIASES, EXCLUDE_TITLE_RE, PREFIX_RE, STOPWORDS, STOPWORDS_DE, STOPWORDS_EN, SYNONYMS } from "./stopwords";
 import type { StorySig } from "./types";
+import { findLastPaddedSeparator } from "@/lib/linear-text";
 
 // Pure text normalization for story clustering: title → tokens / entities /
 // outbound-link hashes. No I/O, no clock, deterministic.
@@ -30,8 +31,6 @@ export function foldText(input: string): string {
 }
 
 // ------------------------------------------------------------- site suffix
-const SUFFIX_SPLIT_RE = /\s+[-|–—·:]\s+(?=[^-|–—·:]*$)/;
-
 function hostLabel(host: string | null | undefined): string {
   if (!host) return "";
   const parts = host.toLowerCase().replace(/^www\./, "").split(".");
@@ -57,10 +56,11 @@ export interface TitleContext {
  * Operates on the original-case title so entity extraction still sees case.
  */
 export function stripSiteSuffix(title: string, ctx: TitleContext = {}): string {
-  const m = SUFFIX_SPLIT_RE.exec(title);
+  // The whitespace-padded separator that is the LAST separator char (linear form of /\s+[-|–—·:]\s+(?=[^-|–—·:]*$)/).
+  const m = findLastPaddedSeparator(title);
   if (!m) return title.trim();
   const head = title.slice(0, m.index).trim();
-  const tail = title.slice(m.index + m[0].length).trim();
+  const tail = title.slice(m.index + m.length).trim();
   if (!head || !tail) return title.trim();
   const tailKey = squash(tail);
   if (!tailKey) return title.trim();

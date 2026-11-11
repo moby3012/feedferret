@@ -30,6 +30,7 @@ This CLA is required so the project can offer a commercial license to organizati
 - No comments unless the *why* is non-obvious.
 - Keep components focused; prefer small, composable functions.
 - Follow the existing file and folder conventions.
+- No super-linear regexes on untrusted text (feed/page HTML, mail headers, user or AI input): Node has one event loop, so a 1 MiB hostile string can freeze the instance. `eslint-plugin-regexp` enforces this; use `lib/linear-text.ts`, a DOM parser, or a bounded pattern, and disable a line only with a reason.
 
 ## Reporting Issues
 

@@ -30,6 +30,7 @@
 import { redact } from "./redact";
 import { logger } from "@/lib/logger";
 import { changedetectionRouteError, rsshubRouteError } from "@/lib/rsshub-route";
+import { trimTrailingSlashes } from "@/lib/linear-text";
 
 export type ConnectorKind = "rsshub" | "changedetection";
 
@@ -48,7 +49,7 @@ export type ConnectorSecretRule = {
 function ruleFor(kind: ConnectorKind, baseUrl: string, param: string, value: string | null): ConnectorSecretRule | null {
   try {
     const base = new URL(baseUrl);
-    return { kind, origin: base.origin, basePath: base.pathname.replace(/\/+$/, ""), param, value };
+    return { kind, origin: base.origin, basePath: trimTrailingSlashes(base.pathname), param, value };
   } catch {
     return null;
   }

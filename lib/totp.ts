@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { trimEndChars } from "@/lib/linear-text";
 
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const TOTP_PERIOD_SECONDS = 30;
@@ -35,7 +36,7 @@ export function encodeBase32(buffer: Buffer) {
 }
 
 export function decodeBase32(input: string) {
-  const clean = input.toUpperCase().replace(/=+$/g, "").replace(/[^A-Z2-7]/g, "");
+  const clean = trimEndChars(input.toUpperCase(), "=").replace(/[^A-Z2-7]/g, "");
   let bits = 0;
   let value = 0;
   const output: number[] = [];

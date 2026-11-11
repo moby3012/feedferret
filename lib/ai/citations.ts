@@ -5,6 +5,8 @@
 // citations (hallucinated, or ids injected by article text) are removed and
 // counted; a line left without a valid citation is dropped.
 
+import { matchListItemBody, removeSpaceBeforePunctuation, replaceEmailAddresses, replaceSchemeUrls } from "@/lib/linear-text";
+
 /** Removed from untrusted (feed) text before it enters a prompt. */
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
 const BIDI = /[‪-‮⁦-⁩‎‏؜]/g;
@@ -52,7 +54,8 @@ export const MAX_ITEM_CHARS = 300;
  * whitespace collapsed, capped at `maxChars` (default 300).
  */
 export function sanitizeOutputText(text: string, maxChars = MAX_ITEM_CHARS): string {
-  let out = text
+  let out = removeSpaceBeforePunctuation(
+    text
     .replace(/<[^>]*>?/g, " ")
     .replace(/\bhttps?:\/\/\S+/gi, " ")
     .replace(/\bwww\.\S+/gi, " ")
@@ -64,9 +67,8 @@ export function sanitizeOutputText(text: string, maxChars = MAX_ITEM_CHARS): str
     .replace(ZERO_WIDTH, "")
     .replace(/\s+/g, " ")
     .trim()
-    .replace(/^[-–—:;,.\s]+/, "")
-    .replace(/\s+([.,;:!?])/g, "$1")
-    .trim();
+    .replace(/^[-–—:;,.\s]+/, ""),
+  ).trim();
   if (out.length > maxChars) out = `${out.slice(0, maxChars - 1).trimEnd()}…`;
   return out;
 }
@@ -76,8 +78,6 @@ export const DIGEST_SUMMARY_MAX_CHARS = 2_000;
 export const DIGEST_SUBJECT_MAX_CHARS = 120;
 
 // Removed outright: scheme URLs (`https://…`, `ftp://…`), e-mail addresses and `www.` tokens.
-const SCHEME_URL = /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi;
-const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
 const WWW = /\bwww\.\S+/gi;
 // Domain-like tokens (`evil-login.com`, `a.b.example`, `bank.xn--p1ai`): labels separated by dots,
 // ending in a TLD of 2+ letters (or punycode). Numbers such as `4.5` or `v1.2` never match.
@@ -94,9 +94,9 @@ const DOMAIN_LIKE = new RegExp(`(?<![\\p{L}\\p{N}_@.-])${LABEL}(?:${DOT}${LABEL}
  * ("Node.js/Deno") and numbers ("rated 4.5/5") are untouched.
  */
 export function neutralizeLinks(text: string): string {
-  return text
-    .replace(SCHEME_URL, " ")
-    .replace(EMAIL, " ")
+  // Linear scans (lib/linear-text.ts) instead of the former SCHEME_URL / EMAIL regexes, which were
+  // O(n²) on long runs of scheme / local-part characters.
+  return replaceEmailAddresses(replaceSchemeUrls(text, " "), " ")
     .replace(WWW, " ")
     .replace(DOMAIN_LIKE, (token) => /^[a-z][a-z0-9]*\.js$/i.test(token) ? token : token.replace(new RegExp(DOT, "gu"), "[.]"));
 }
@@ -125,9 +125,8 @@ export function sanitizeDigestSubject(text: string): string {
 export type Section = "what" | "why" | "brief";
 export const SECTION_CAPS: Record<Section, number> = { what: 5, why: 3, brief: 6 };
 
-const HEADER = /^\s*(?:#{1,6}\s*|\*\*\s*)?(what|why|brief|was|warum|kurz)\b(?:\s*\*\*)?\s*:?\s*$/i;
+const HEADER = /^\s*(?:#{1,6}\s*|\*\*\s*)?(what|why|brief|was|warum|kurz)\b\s*(?:\*\*\s*)?(?::\s*)?$/i;
 const SECTION_OF: Record<string, Section> = { what: "what", was: "what", why: "why", warum: "why", brief: "brief", kurz: "brief" };
-const ITEM = /^\s*(?:[-*•–]|\d+[.)])\s+(.+)$/;
 /** `[[s3]]`, `[[ S3 ]]`, `[s3]`, `[[s1, s4]]` */
 const CITATION = /\[{1,2}\s*([sS]\d{1,3}(?:\s*,\s*[sS]\d{1,3})*)\s*\]{1,2}/g;
 /** Anything else in double brackets (forged ids, cuids, prose) is an unknown citation. */
@@ -142,9 +141,10 @@ export interface ValidatedLine<T> {
 
 /** One item line → validated text + resolved citations (deduped, in order). `null` = not an item line. */
 export function validateLine<T>(line: string, aliases: AliasMap<T>): ValidatedLine<T> | null {
-  const m = ITEM.exec(line);
-  if (!m) return null;
-  let body = m[1];
+  // Linear scanner: a regex here is quadratic on "- <spaces>x\u2028y" (U+2028/2029 end `.` but survive the "\n" split).
+  const itemBody = matchListItemBody(line);
+  if (itemBody === null) return null;
+  let body = itemBody;
   const cited: T[] = [];
   const seen = new Set<string>();
   let unknown = 0;

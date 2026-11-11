@@ -12,6 +12,7 @@
 // `isomorphic-dompurify` directly.
 
 import type { UponSanitizeAttributeHookEvent } from "isomorphic-dompurify";
+import { cssFunctionNames } from "@/lib/linear-text";
 
 let hookRegistered = false;
 
@@ -68,12 +69,12 @@ const ALLOWED_CSS_FUNCTIONS = new Set(["rgb", "rgba", "hsl", "hsla", "calc", "mi
 // are never needed by legitimate inline typography.
 const FORBIDDEN_VALUE_RE = /\\|\/\*|\*\/|[<>{}@]|!\s*important|javascript:|expression|behavior|-moz-binding/i;
 
-function isSafeStyleValue(value: string): boolean {
+export function isSafeStyleValue(value: string): boolean {
     if (!value || FORBIDDEN_VALUE_RE.test(value)) return false;
     // Only plain printable ASCII-ish values (no control chars that some parsers skip).
     if (/[\u0000-\u001f\u007f]/.test(value)) return false;
-    for (const match of value.matchAll(/([a-z0-9_-]*)\s*\(/gi)) {
-        if (!ALLOWED_CSS_FUNCTIONS.has(match[1].toLowerCase())) return false;
+    for (const name of cssFunctionNames(value)) {
+        if (!ALLOWED_CSS_FUNCTIONS.has(name.toLowerCase())) return false;
     }
     return true;
 }

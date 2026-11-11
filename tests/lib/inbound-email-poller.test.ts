@@ -460,3 +460,36 @@ describe("pollImapSource", () => {
     expect(factory).not.toHaveBeenCalled();
   });
 });
+
+describe("redactImapError: linear address scan ≡ original regex implementation", () => {
+  // Verbatim pre-sweep implementation (secrets + `+ff-` tokens + addresses), kept as the oracle.
+  const legacy = (text: string, secrets: readonly string[] = []) => {
+    let out = String(text ?? "");
+    for (const secret of secrets) if (secret && secret.length >= 3) out = out.split(secret).join("[redacted]");
+    return out
+      .replace(/(?:\+|%2B)ff-[a-z2-7]{6,}/gi, "+ff-[token]")
+      .replace(/[^\s<>"'(),;:]+@[^\s<>"'(),;:]+/g, "[address]")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 300);
+  };
+  const frags = ["a", "b.c", "@", "x@y", "box+ff-", "ABCDEF", "abcdef23", "%2Bff-", "+ff-", "ff-", " ", "\n", "<", ">", '"', "'", "(", ")", ",", ";", ":", "[", "]", "hunter2", "news.box@gmail.com", "=?", "é", "z"];
+  it("masks tokens, addresses and secrets exactly like the original", () => {
+    let s = 7;
+    const rand = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 0x100000000);
+    let changed = 0;
+    for (let i = 0; i < 20_000; i++) {
+      let str = "";
+      for (let k = 0, n = 1 + Math.floor(rand() * 14); k < n; k++) str += frags[Math.floor(rand() * frags.length)];
+      const secrets = ["hunter2", "news.box@gmail.com"];
+      const expected = legacy(str, secrets);
+      if (expected !== str.trim()) changed++;
+      expect(redactImapError(str, secrets), JSON.stringify(str)).toBe(expected);
+    }
+    expect(changed).toBeGreaterThan(1_000);
+    for (const v of ["LOGIN news.box@gmail.com failed for x+ff-abcdef23@gmail.com", "user%2Bff-abcdef23@host.test rejected", "no secret here"]) {
+      expect(redactImapError(v)).toBe(legacy(v));
+    }
+  });
+});
+

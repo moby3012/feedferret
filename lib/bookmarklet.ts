@@ -5,8 +5,9 @@
 // runs smart discovery on the page's URL.
 
 /** Returns the `javascript:` URL to drag to the bookmarks bar. `origin` must be this instance's origin. */
+import { trimTrailingSlashes } from "@/lib/linear-text";
 export function buildBookmarkletHref(origin: string): string {
-  const base = JSON.stringify(`${origin.replace(/\/+$/, "")}/?sharedUrl=`);
+  const base = JSON.stringify(`${trimTrailingSlashes(origin)}/?sharedUrl=`);
   return (
     "javascript:(function(){" +
     `var t=${base}+encodeURIComponent(location.href);` +

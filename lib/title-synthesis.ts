@@ -1,4 +1,10 @@
 import { decodeHTML } from "entities";
+import { replaceElements, replaceTagsNamed, stripTags } from "@/lib/linear-text";
+
+const BLOCK_TAGS: ReadonlySet<string> = new Set([
+  "p", "div", "li", "ul", "ol", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "td", "th",
+  "article", "section", "header", "footer", "figure", "figcaption", "pre",
+]);
 
 /**
  * Title synthesis for feed items without a title (Mastodon, Bluesky, micro-
@@ -17,17 +23,17 @@ export function synthesizeItemTitle(
 ): string | null {
   if (!contentOrSummary) return null;
 
-  const text = contentOrSummary
-    .replace(/<!--[\s\S]*?(?:-->|$)/g, " ")
-    .replace(/<(script|style|template|noscript)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, " ")
-    .replace(/<br\s*\/?>/gi, " ")
-    .replace(/<\/?(?:p|div|li|ul|ol|blockquote|h[1-6]|tr|td|th|article|section|header|footer|figure|figcaption|pre)\b[^>]*>/gi, " ")
-    .replace(/<[^>]*>/g, "");
-
+  const blockTagged = replaceElements(contentOrSummary.replace(/<!--[\s\S]*?(?:-->|$)/g, " "), ["script", "style", "template", "noscript"], " ", {
+    closeTagWhitespace: true,
+    unclosedToEnd: true,
+  })
+    .replace(/<br\s*\/?>/gi, " ");
+  const text = stripTags(replaceTagsNamed(blockTagged, BLOCK_TAGS, " "), "");
   const clean = decodeHTML(text).replace(/[\s ​]+/g, " ").trim();
   if (!clean) return null;
 
-  const graphemes = splitGraphemes(clean);
+  // Only the first maxChars + 1 graphemes matter; segmenting a megabyte of content just to cut it at 80 is wasted work.
+  const graphemes = splitGraphemes(clean, maxChars + 1);
   if (graphemes.length <= maxChars) return clean;
 
   const head = graphemes.slice(0, maxChars).join("");
@@ -40,14 +46,19 @@ export function synthesizeItemTitle(
 
 let segmenter: Intl.Segmenter | null | undefined;
 
-function splitGraphemes(text: string): string[] {
+function splitGraphemes(text: string, limit = Infinity): string[] {
   if (segmenter === undefined) {
     segmenter = typeof Intl !== "undefined" && "Segmenter" in Intl
       ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
       : null;
   }
-  if (segmenter) return Array.from(segmenter.segment(text), (s) => s.segment);
-  return Array.from(text); // code points: still never a lone surrogate
+  const out: string[] = [];
+  const parts: Iterable<string> = segmenter ? (function* () { for (const s of segmenter!.segment(text)) yield s.segment; })() : text; // code points: still never a lone surrogate
+  for (const part of parts) {
+    if (out.length >= limit) break;
+    out.push(part);
+  }
+  return out;
 }
 
 /** Placeholder the fetchers have always stored for title-less items. */
