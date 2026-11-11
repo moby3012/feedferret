@@ -649,6 +649,10 @@ export function restoreFeedMuteState(feedId: string, prior: FeedMuteRow) {
   const db = open();
   try {
     db.prepare(`UPDATE "Feed" SET autoMuted = ?, consecutiveFailureCount = ?, lastError = ? WHERE id = ?`).run(prior.autoMuted, prior.consecutiveFailureCount, prior.lastError, feedId);
+  } finally {
+    db.close();
+  }
+}
 
 /** An empty category (optionally nested) for the user; `cleanup` removes whatever is left of it. */
 export function insertEmptyCategory(userKey: string, name: string, parentId: string | null = null): { id: string; cleanup: () => void } {
