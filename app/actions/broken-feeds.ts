@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { syncFeed } from "@/lib/rss-sync";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
-import { discoverFeeds } from "@/lib/feed-discovery";
+import { discoverFeeds, type DiscoveryHint } from "@/lib/feed-discovery";
 import { validateFeedUrl } from "@/lib/validation";
 import { connectorFeedUrlError, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
@@ -202,7 +202,7 @@ export async function unmuteBrokenFeed(feedId: string): Promise<{ success: true 
 
 export type RepairCandidate = { url: string; title: string; type: string };
 export type RepairProposal =
-    | { status: "ok"; site: string; candidates: RepairCandidate[]; hint?: "needs-rsshub" | "rate-limited" | "blocked" }
+    | { status: "ok"; site: string; candidates: RepairCandidate[]; hint?: DiscoveryHint }
     | { status: "rate-limited"; retryAfterSecs: number }
     | { status: "unsupported" };
 

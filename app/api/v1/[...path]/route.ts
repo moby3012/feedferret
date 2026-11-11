@@ -15,7 +15,7 @@ import { syncFeed, syncUserFeeds } from "@/lib/rss-sync";
 import { generateApiOpml, OpmlParseError } from "@/lib/opml";
 import { handleFreshRssUpload } from "@/lib/import/freshrss-upload";
 import { importOpmlXml, OpmlImportInputError } from "@/lib/import/opml-import";
-import { validateFeedUrl } from "@/lib/validation";
+import { normalizeActionUrl } from "@/lib/add-feed-input";
 import { logger } from "@/lib/logger";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
@@ -350,10 +350,9 @@ async function createFeedFromUrl(
 
 async function createFeed(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
-  const url = allowedString(body?.url);
-  if (!url) return apiError("url is required", 400);
-  const urlError = validateFeedUrl(url);
-  if (urlError) return apiError(urlError, 400);
+  const normalized = normalizeActionUrl(allowedString(body?.url) ?? "");
+  if (!normalized.ok) return apiError(normalized.errorCode === "url-empty" ? "url is required" : normalized.error, 400);
+  const url = normalized.url;
 
   return createFeedFromUrl(user, url, {
     name: allowedString(body?.name),
@@ -385,10 +384,9 @@ async function createRsshubFeed(user: ApiUser, request: Request) {
 
 async function createChangedetectionFeed(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
-  const url = allowedString(body?.url);
-  if (!url) return apiError("url is required", 400);
-  const urlError = validateFeedUrl(url);
-  if (urlError) return apiError(urlError, 400);
+  const normalized = normalizeActionUrl(allowedString(body?.url) ?? "");
+  if (!normalized.ok) return apiError(normalized.errorCode === "url-empty" ? "url is required" : normalized.error, 400);
+  const url = normalized.url;
 
   const config = await getChangedetectionConfig();
   if (!config) return apiError("changedetection.io is not configured on this server", 400);
@@ -409,10 +407,9 @@ async function createChangedetectionFeed(user: ApiUser, request: Request) {
 
 async function suggestPageFeed(_user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
-  const url = allowedString(body?.url);
-  if (!url) return apiError("url is required", 400);
-  const urlError = validateFeedUrl(url);
-  if (urlError) return apiError(urlError, 400);
+  const normalized = normalizeActionUrl(allowedString(body?.url) ?? "");
+  if (!normalized.ok) return apiError(normalized.errorCode === "url-empty" ? "url is required" : normalized.error, 400);
+  const url = normalized.url;
 
   const { candidates, rejected } = await fetchAndSuggestFeedCandidatesDetailed(url);
   return NextResponse.json({
@@ -429,10 +426,9 @@ async function suggestPageFeed(_user: ApiUser, request: Request) {
 
 async function createPageFeed(user: ApiUser, request: Request) {
   const body = await readJson<any>(request);
-  const url = allowedString(body?.url);
-  if (!url) return apiError("url is required", 400);
-  const urlError = validateFeedUrl(url);
-  if (urlError) return apiError(urlError, 400);
+  const normalized = normalizeActionUrl(allowedString(body?.url) ?? "");
+  if (!normalized.ok) return apiError(normalized.errorCode === "url-empty" ? "url is required" : normalized.error, 400);
+  const url = normalized.url;
 
   // Use the caller's explicit config when given; otherwise auto-pick the
   // top-scoring candidate so a URL alone is enough to build a page-feed.

@@ -60,6 +60,11 @@ export type ResolvedFeed = {
   format?: "rss" | "atom" | "json";
   /** Candidate is a plausible guess — callers should fetch-verify it before showing it. */
   verify?: boolean;
+  /**
+   * Per-site curated data (publisher table), not a URL-scheme rule. Discovery
+   * uses it only as a fallback when the page's own feeds can't be found.
+   */
+  curated?: boolean;
 };
 
 export type Lookup =

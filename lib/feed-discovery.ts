@@ -3,13 +3,14 @@ import { fetchTextWithSsrfProtection, fetchWithSsrfProtection, isTrustedFeedFetc
 import { parseHttpLinkHeader } from "./http-link-header";
 import { hintForFetchError } from "./fetch-error-hint";
 import { buildTopicFeeds, parseSourceInput, resolveSource, type ResolvedFeed } from "./smart-url-resolver";
+import { cleanUrlInput, httpFallbackUrl, isConnectError, isTlsError, normalizeUrlInput } from "./url-input";
 
 export type DiscoveredFeed = {
   url: string;
   title: string;
   type: "rss" | "atom" | "json" | "unknown";
   /** Which stage produced it. Absent on legacy callers' data. */
-  source?: "resolver" | "topic" | "radar" | "html" | "common-path";
+  source?: "resolver" | "topic" | "radar" | "html" | "common-path" | "curated";
   /** Resolver/topic/radar candidates only: variant of the feed (releases, commits, hot, …). */
   kind?: string;
   /** Platform / engine slug ("youtube", "github", "google-news", "rsshub", …). */
@@ -18,13 +19,15 @@ export type DiscoveredFeed = {
   confidence?: number;
 };
 
-export type DiscoveryHint = "needs-rsshub" | "rate-limited" | "blocked";
+export type DiscoveryHint = "needs-rsshub" | "rate-limited" | "blocked" | "tls-error";
 
 export type DiscoveryResult = {
   /** "topic" = the input was a plain phrase and `feeds` are search-engine feeds to pick from. */
   mode: "url" | "topic" | "empty";
   feeds: DiscoveredFeed[];
   hint?: DiscoveryHint;
+  /** URL mode: the page address actually read (after redirects / http fallback). */
+  pageUrl?: string;
 };
 
 export type DiscoverOptions = {
@@ -95,21 +98,108 @@ function classifyFeedType(mimeType: string): DiscoveredFeed["type"] {
 }
 
 function looksLikeFeedUrl(url: string) {
+  if (/\.(?:css|js|mjs|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|pdf|zip)(?:[?#]|$)/i.test(url)) return false;
   return /(?:rss|atom|feed|feeds|xml|\.rss)(?:[/?#.]|$)/i.test(url);
 }
 
-function looksLikeFeedContent(text: string, contentType: string) {
-  const trimmed = text.trim().slice(0, 2000).toLowerCase();
-  return (
-    FEED_MIME_TYPES.some((type) => contentType.includes(type)) ||
-    trimmed.startsWith("<rss") ||
-    trimmed.includes("<rss ") ||
-    trimmed.startsWith("<feed") ||
-    trimmed.includes("<feed ") ||
-    trimmed.includes("<rdf:rdf") ||
-    trimmed.includes('"version":"https://jsonfeed.org/') ||
-    trimmed.includes('"version": "https://jsonfeed.org/')
-  );
+/** Bytes read to verify a candidate: enough for the root element + channel title + first item. */
+export const FEED_SNIFF_BYTES = 64 * 1024;
+
+export type FeedSniff = {
+  type: Exclude<DiscoveredFeed["type"], "unknown">;
+  /** The feed's own title (channel/feed title), when present in the prefix. */
+  title: string | null;
+  /** Content identity (type + title + first item id) for de-duplicating aliases. */
+  signature: string | null;
+};
+
+function decodeXmlText(raw: string): string {
+  return raw
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
+}
+
+function firstTagText(xml: string, tag: string): string | null {
+  const m = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, "i").exec(xml);
+  if (!m) return null;
+  return decodeXmlText(m[1]) || null;
+}
+
+/** The block of the first `<name …>…</name>` element (or the rest of the prefix if it is cut off). */
+function firstBlock(xml: string, name: string): string | null {
+  const open = new RegExp(`<${name}[\\s>]`, "i").exec(xml);
+  if (!open) return null;
+  const rest = xml.slice(open.index);
+  const close = rest.search(new RegExp(`</${name}>`, "i"));
+  return close >= 0 ? rest.slice(0, close) : rest;
+}
+
+/**
+ * Classifies the first bytes of a response as RSS / Atom / RDF / JSON Feed by
+ * its ROOT element (after the XML declaration, processing instructions such
+ * as an XSL stylesheet, comments and a doctype) — an HTML page that merely
+ * mentions `<rss` is not a feed. Works on a truncated prefix, so a 5 MB feed
+ * costs one 64 KiB read. Returns null when it is not a feed.
+ */
+export function sniffFeedPrefix(text: string): FeedSniff | null {
+  let s = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  for (;;) {
+    s = s.replace(/^\s+/, "");
+    const skip = /^(?:<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>[]*(?:\[[\s\S]*?\])?\s*>)/i.exec(s);
+    if (!skip) break;
+    s = s.slice(skip[0].length);
+  }
+
+  if (s.startsWith("{")) {
+    const head = s.slice(0, 4096);
+    if (!/"version"\s*:\s*"https?:\/\/jsonfeed\.org\/version\//i.test(head) && !/"version"\s*:\s*"https?:\/\/jsonfeed\.org\/version\//i.test(s)) return null;
+    const titleMatch = /"title"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(s.slice(0, s.search(/"items"\s*:/) >= 0 ? s.search(/"items"\s*:/) : s.length));
+    let title: string | null = null;
+    if (titleMatch) {
+      try {
+        title = (JSON.parse(`"${titleMatch[1]}"`) as string).trim().slice(0, 200) || null;
+      } catch {
+        title = null;
+      }
+    }
+    const itemsAt = s.search(/"items"\s*:/);
+    const firstId = itemsAt >= 0 ? /"(?:id|url)"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(s.slice(itemsAt))?.[1] ?? null : null;
+    return { type: "json", title, signature: firstId ? `json|${title ?? ""}|${firstId}` : null };
+  }
+
+  const root = /^<([A-Za-z][\w:.-]*)/.exec(s)?.[1].toLowerCase();
+  if (!root) return null;
+  const local = root.includes(":") ? root.slice(root.indexOf(":") + 1) : root;
+  let type: FeedSniff["type"];
+  if (local === "rss" || local === "rdf") type = "rss";
+  else if (local === "feed") type = "atom";
+  else return null;
+
+  let title: string | null;
+  let firstId: string | null = null;
+  if (type === "atom") {
+    const entryAt = s.search(/<(?:\w+:)?entry[\s>]/i);
+    title = firstTagText(entryAt >= 0 ? s.slice(0, entryAt) : s, "(?:\\w+:)?title");
+    const entry = firstBlock(s, "(?:\\w+:)?entry");
+    if (entry) firstId = firstTagText(entry, "(?:\\w+:)?id") ?? /<(?:\w+:)?link[^>]*href="([^"]+)"/i.exec(entry)?.[1] ?? null;
+  } else {
+    const channel = firstBlock(s, "(?:\\w+:)?channel") ?? s;
+    const itemAt = channel.search(/<(?:\w+:)?item[\s>]/i);
+    title = firstTagText(itemAt >= 0 ? channel.slice(0, itemAt) : channel, "(?:\\w+:)?title");
+    const item = firstBlock(s, "(?:\\w+:)?item");
+    if (item) firstId = firstTagText(item, "guid") ?? firstTagText(item, "link") ?? firstTagText(item, "title");
+  }
+  return { type, title, signature: firstId ? `${type}|${title ?? ""}|${firstId}` : null };
 }
 
 /** Well-known feed locations probed on every site that doesn't advertise one. */
@@ -127,29 +217,42 @@ export const COMMON_FEED_PATHS = [
   "/api/feeds/posts",
 ];
 
-async function verifyFeedCandidate(url: string, title: string, fallbackType: DiscoveredFeed["type"]) {
+type VerifiedCandidate = { url: string; title: string; type: DiscoveredFeed["type"]; signature: string | null };
+
+/**
+ * Fetch-verifies a candidate from its first FEED_SNIFF_BYTES (stream cut off
+ * there) — the size of the whole feed never matters here; the full-size
+ * limits apply when the feed is actually synced. `preferOwnTitle`: replace
+ * the candidate's label (anchor text, "host feed") with the feed's own title.
+ */
+async function verifyFeedCandidate(
+  url: string,
+  title: string,
+  fallbackType: DiscoveredFeed["type"],
+  preferOwnTitle = false,
+): Promise<VerifiedCandidate | null> {
   try {
     const text = await fetchTextWithSsrfProtection(url, {}, {
-      maxBytes: 512 * 1024,
+      maxBytes: FEED_SNIFF_BYTES,
+      readPrefix: true,
       timeoutMs: 12_000,
       allowInternal: await isTrustedFeedFetchingAllowed(),
     });
-    const lower = text.trim().slice(0, 1000).toLowerCase();
-    if (!looksLikeFeedContent(text, "")) return null;
-    const type: DiscoveredFeed["type"] = lower.includes("<feed")
-      ? "atom"
-      : lower.includes("<rss") || lower.includes("<rdf:rdf")
-        ? "rss"
-        : lower.includes("jsonfeed.org")
-          ? "json"
-          : fallbackType;
-    return { url, title, type };
+    const sniff = sniffFeedPrefix(text);
+    if (!sniff) return null;
+    const ownTitle = sniff.title;
+    return {
+      url,
+      title: (preferOwnTitle || !title || title === url) && ownTitle ? ownTitle : title || ownTitle || url,
+      type: sniff.type ?? fallbackType,
+      signature: sniff.signature,
+    };
   } catch {
     return null;
   }
 }
 
-function toDiscovered(f: ResolvedFeed, source: "resolver" | "topic"): DiscoveredFeed {
+function toDiscovered(f: ResolvedFeed, source: "resolver" | "topic" | "curated"): DiscoveredFeed {
   return {
     url: f.url,
     title: f.title,
@@ -179,18 +282,31 @@ const resolverFetchText = async (url: string, init?: { headers?: Record<string, 
  * Stage 1 — deterministic platform resolution (YouTube, Reddit, GitHub, …).
  * Candidates flagged `verify` are plausible guesses (e.g. any `/@user` on an
  * unknown host might be Mastodon) and are fetch-checked before being offered.
+ * Curated publisher-table hits come back separately: they are only a fallback.
  */
-async function resolveWithPlatformRules(input: string): Promise<{ matched: boolean; feeds: DiscoveredFeed[] }> {
+async function resolveWithPlatformRules(input: string): Promise<{ matched: boolean; feeds: DiscoveredFeed[]; curated: ResolvedFeed[] }> {
   const { matched, feeds } = await resolveSource(input, { fetchText: resolverFetchText });
-  if (!feeds.length) return { matched, feeds: [] };
+  if (!feeds.length) return { matched, feeds: [], curated: [] };
+  const curated = feeds.filter((f) => f.curated);
   const checked = await Promise.all(
-    feeds.map(async (f) => {
+    feeds.filter((f) => !f.curated).map(async (f) => {
       if (!f.verify) return toDiscovered(f, "resolver");
       const ok = await verifyFeedCandidate(f.url, f.title, f.format ?? "unknown");
       return ok ? { ...toDiscovered(f, "resolver"), type: ok.type } : null;
     }),
   );
-  return { matched, feeds: checked.filter((f): f is DiscoveredFeed => f !== null) };
+  return { matched, feeds: checked.filter((f): f is DiscoveredFeed => f !== null), curated };
+}
+
+/** Curated publisher routes, verified — only consulted when the page itself yields no feed. */
+async function verifyCurated(curated: ResolvedFeed[]): Promise<DiscoveredFeed[]> {
+  const checked = await Promise.all(
+    curated.map(async (f) => {
+      const ok = await verifyFeedCandidate(f.url, f.title, f.format ?? "unknown");
+      return ok ? { ...toDiscovered(f, "curated"), type: ok.type } : null;
+    }),
+  );
+  return checked.filter((f): f is DiscoveredFeed => f !== null);
 }
 
 /**
@@ -270,8 +386,75 @@ export function headAdvertisesFeed(headHtml: string): boolean {
     /^application\/(?:rss\+xml|atom\+xml|feed\+json)\b/i.test((el.getAttribute("type") || "").trim()));
 }
 
-/** Stage 2 — classic HTML discovery: `<link rel=alternate>`, feed-looking anchors, common feed paths. */
-async function discoverFeedsInHtml(pageUrl: string): Promise<{ feeds: DiscoveredFeed[]; hint?: DiscoveryHint }> {
+type CandidateOrigin = "self" | "link" | "header" | "anchor" | "common";
+type Candidate = { title: string; type: DiscoveredFeed["type"]; score: number; origin: CandidateOrigin };
+
+const FEED_WORDS = /\b(?:rss|atom|feeds?|newsfeed|web ?feed|abonnieren|subscribe|syndication)\b/i;
+const COMMENT_WORDS = /comment|kommentar/i;
+
+/**
+ * Generic score of an `<a>` that points at a feed-looking URL — no host
+ * lists: how strongly the element itself says "feed" (text, title,
+ * aria-label, class, icon alt), whether it sits in site chrome (header /
+ * footer / nav / aside, where sites put their RSS icon), and how canonical
+ * the URL looks (a plain `/feed.xml` beats `/feed.xml?filter=…` and comment
+ * feeds).
+ */
+export function scoreFeedAnchor(el: Element, absoluteUrl: string): number {
+  let score = 30;
+  const label = [
+    el.textContent ?? "",
+    el.getAttribute("title") ?? "",
+    el.getAttribute("aria-label") ?? "",
+    el.getAttribute("class") ?? "",
+    ...[...el.querySelectorAll("img[alt], svg title")].map((n) => n.getAttribute("alt") ?? n.textContent ?? ""),
+  ].join(" ");
+  if (FEED_WORDS.test(label)) score += 25;
+  if (el.closest("header, footer, nav, aside, [role=contentinfo], [role=banner]")) score += 10;
+  try {
+    const u = new URL(absoluteUrl);
+    const last = u.pathname.split("/").filter(Boolean).pop() ?? "";
+    if (/^(?:feed|rss|atom|index\.xml|feed\.json)$|\.(?:xml|rss|atom|rdf)$/i.test(last)) score += 10;
+    if (u.search) score -= 15;
+    if (COMMENT_WORDS.test(u.pathname) || COMMENT_WORDS.test(label)) score -= 25;
+  } catch {
+    // scored as-is
+  }
+  return score;
+}
+
+/** The element itself names a feed format (not just "subscribe", which is usually a newsletter). */
+function anchorSaysFeed(el: Element): boolean {
+  const label = [
+    el.textContent ?? "",
+    el.getAttribute("title") ?? "",
+    el.getAttribute("aria-label") ?? "",
+    ...[...el.querySelectorAll("img[alt]")].map((n) => n.getAttribute("alt") ?? ""),
+  ].join(" ");
+  return /\b(?:rss|atom)\b|\b(?:web|news)?feed\b/i.test(label) && !/^mailto:|^javascript:/i.test(el.getAttribute("href") ?? "");
+}
+
+/** URL identity for de-duplication: `/feed` and `/feed/`, case of the host, fragments. */
+function feedUrlKey(url: string): string {
+  try {
+    const u = new URL(url);
+    u.hash = "";
+    const path = u.pathname.length > 1 ? u.pathname.replace(/\/+$/, "") : u.pathname;
+    return `${u.protocol}//${u.host.toLowerCase()}${path}${u.search}`;
+  } catch {
+    return url;
+  }
+}
+
+type HtmlDiscovery = { feeds: DiscoveredFeed[]; hint?: DiscoveryHint; pageUrl: string };
+
+/**
+ * Stage 2 — classic HTML discovery: the page itself (when it already is a
+ * feed), HTTP `Link` header, `<link rel=alternate>`, feed-looking `<a>`
+ * anchors anywhere in the page (scored), then common feed paths — verified
+ * by a prefix sniff, ranked by score, de-duplicated by URL and content.
+ */
+async function discoverFeedsInHtml(pageUrl: string, opts: { httpFallback?: boolean } = {}): Promise<HtmlDiscovery> {
   let html = "";
   let hint: DiscoveryHint | undefined;
   const allowInternal = await isTrustedFeedFetchingAllowed();
@@ -279,24 +462,38 @@ async function discoverFeedsInHtml(pageUrl: string): Promise<{ feeds: Discovered
   // a document `<base href>`), not the URL the user typed.
   let base = new URL(pageUrl);
   let responseUrl = base;
-  const candidateLinks = new Map<string, { title: string; type: DiscoveredFeed["type"]; strong: boolean; commonPath: boolean }>();
+  const candidateLinks = new Map<string, Candidate>();
 
-  const addCandidate = (href: string | null, title: string | null, type: DiscoveredFeed["type"], strong = false, commonPath = false, resolveAgainst: URL = base) => {
+  const addCandidate = (
+    href: string | null,
+    title: string | null,
+    type: DiscoveredFeed["type"],
+    origin: CandidateOrigin,
+    score: number,
+    resolveAgainst: URL = base,
+    labelSaysFeed = false,
+  ) => {
     if (!href) return;
     try {
       const feedUrl = new URL(href, resolveAgainst).toString();
       if (!/^https?:$/.test(new URL(feedUrl).protocol)) return;
+      // An anchor counts when its URL looks like a feed, or when the element
+      // itself says so (RSS icon `alt`, `title`, `aria-label`) at any path.
+      const strong = origin !== "anchor" || labelSaysFeed;
       if (!strong && !looksLikeFeedUrl(feedUrl)) return;
-      if (!candidateLinks.has(feedUrl)) {
-        candidateLinks.set(feedUrl, { title: title || feedUrl, type, strong, commonPath });
+      const existing = candidateLinks.get(feedUrl);
+      if (!existing) {
+        candidateLinks.set(feedUrl, { title: title || feedUrl, type, origin, score });
+      } else if (score > existing.score) {
+        candidateLinks.set(feedUrl, { ...existing, score });
       }
     } catch {
       // invalid URL
     }
   };
 
-  try {
-    const result = await fetchWithSsrfProtection(pageUrl, {}, {
+  const fetchPage = (url: string) =>
+    fetchWithSsrfProtection(url, {}, {
       maxBytes: 1024 * 1024,
       timeoutMs: 12_000,
       // Large pages: read a bounded prefix (never fail on size). Stop at the
@@ -305,21 +502,61 @@ async function discoverFeedsInHtml(pageUrl: string): Promise<{ feeds: Discovered
       untilHead: headAdvertisesFeed,
       allowInternal,
     });
+
+  let selfSniff: FeedSniff | null = null;
+  try {
+    let result;
+    try {
+      result = await fetchPage(pageUrl);
+    } catch (err) {
+      // The user typed no scheme and https could not even connect: the one
+      // retry over plain http (never after an HTTP status or SSRF refusal).
+      const fallback = opts.httpFallback && isConnectError(err) ? httpFallbackUrl(pageUrl) : null;
+      if (!fallback) throw err;
+      result = await fetchPage(fallback);
+      base = responseUrl = new URL(fallback);
+    }
     if (result.url) base = responseUrl = new URL(result.url);
     if (!result.notModified) {
       html = result.text;
+      selfSniff = sniffFeedPrefix(html);
       for (const entry of parseHttpLinkHeader(result.headers?.get("link") ?? null)) {
         const type = linkHeaderFeedType(entry);
-        if (type) addCandidate(entry.url, entry.title || null, type, true);
+        if (type) addCandidate(entry.url, entry.title || null, type, "header", 95);
       }
     }
   } catch (err) {
-    hint = hintForFetchError(err);
+    hint = isTlsError(err) ? "tls-error" : hintForFetchError(err);
+  }
+
+  const discovered = new Map<string, DiscoveredFeed & { score: number }>();
+  const seenKeys = new Set<string>();
+  const seenSignatures = new Set<string>();
+  const accept = (v: VerifiedCandidate, c: Candidate) => {
+    const key = feedUrlKey(v.url);
+    if (seenKeys.has(key) || (v.signature && seenSignatures.has(v.signature))) return;
+    seenKeys.add(key);
+    if (v.signature) seenSignatures.add(v.signature);
+    discovered.set(v.url, {
+      url: v.url,
+      title: v.title,
+      type: v.type,
+      source: c.origin === "common" ? "common-path" : "html",
+      score: c.score,
+    });
+  };
+
+  // The address already is a feed (pasted feed URL in a "web page" flow).
+  if (selfSniff) {
+    accept(
+      { url: responseUrl.toString(), title: selfSniff.title ?? responseUrl.toString(), type: selfSniff.type, signature: selfSniff.signature },
+      { title: "", type: selfSniff.type, origin: "self", score: 110 },
+    );
+    html = "";
   }
 
   const dom = new JSDOM(html);
   const { document } = dom.window;
-  const discovered = new Map<string, DiscoveredFeed>();
   const baseHref = document.querySelector("base[href]")?.getAttribute("href");
   if (baseHref) {
     try {
@@ -329,43 +566,63 @@ async function discoverFeedsInHtml(pageUrl: string): Promise<{ feeds: Discovered
     }
   }
 
-  const linkEls = document.querySelectorAll('link[rel~="alternate"]');
-  for (const el of linkEls) {
+  for (const el of document.querySelectorAll('link[rel~="alternate"]')) {
     const type = (el.getAttribute("type") || "").toLowerCase().trim();
     const isFeedMime = type.length > 0 && FEED_MIME_TYPES.some((t) => type.startsWith(t) || t.startsWith(type.split("+")[0]));
-    if (!isFeedMime && !looksLikeFeedUrl(el.getAttribute("href") || "")) {
-      continue;
-    }
-    addCandidate(el.getAttribute("href"), el.getAttribute("title"), classifyFeedType(type), isFeedMime);
+    const href = el.getAttribute("href") || "";
+    if (!isFeedMime && !looksLikeFeedUrl(href)) continue;
+    const title = el.getAttribute("title");
+    const comments = COMMENT_WORDS.test(href) || COMMENT_WORDS.test(title ?? "");
+    addCandidate(href, title, classifyFeedType(type), "link", (isFeedMime ? 100 : 70) - (comments ? 25 : 0));
   }
 
-  document.querySelectorAll("a[href], link[href]").forEach((el) => {
-    addCandidate(el.getAttribute("href"), el.textContent?.trim() || el.getAttribute("title"), "unknown");
-  });
+  for (const el of document.querySelectorAll("a[href]")) {
+    const href = el.getAttribute("href");
+    if (!href) continue;
+    let absolute: string;
+    try {
+      absolute = new URL(href, base).toString();
+    } catch {
+      continue;
+    }
+    const text = el.textContent?.replace(/\s+/g, " ").trim() || el.getAttribute("title") || el.getAttribute("aria-label");
+    addCandidate(href, text, "unknown", "anchor", scoreFeedAnchor(el, absolute), base, anchorSaysFeed(el));
+  }
 
   for (const commonPath of COMMON_FEED_PATHS) {
     // Root-relative on purpose ("/?feed=rss2" must stay at the site root).
-    addCandidate(commonPath, `${responseUrl.hostname} feed`, "unknown", true, true, responseUrl);
+    addCandidate(commonPath, `${responseUrl.hostname} feed`, "unknown", "common", 15, responseUrl);
   }
 
-  // Verify in small parallel batches (each probe can take up to the timeout);
-  // advertised feeds come first in insertion order, so they win the 10 slots.
-  // Bounded fan-out: at most 25 advertised/anchor candidates, and the common
-  // paths always keep their slots (a page full of feed-looking anchors must not
-  // turn one request into hundreds of probes).
-  const all = [...candidateLinks.entries()];
-  const entries = [...all.filter(([, c]) => !c.commonPath).slice(0, 25), ...all.filter(([, c]) => c.commonPath)];
+  // Verify in small parallel batches (each probe can take up to the timeout),
+  // best-scored first so they win the 10 slots. Bounded fan-out: at most 25
+  // advertised/anchor candidates, then the common paths — which are skipped
+  // entirely once the page's own advertisement verified (no blind guessing
+  // when the site told us where its feed is).
+  const byScore = [...candidateLinks.entries()].sort((a, b) => b[1].score - a[1].score);
+  const advertised = byScore.filter(([, c]) => c.origin !== "common").slice(0, 25);
+  const common = byScore.filter(([, c]) => c.origin === "common");
   const BATCH = 5;
-  for (let i = 0; i < entries.length && discovered.size < 10; i += BATCH) {
-    const batch = entries.slice(i, i + BATCH);
-    const verified = await Promise.all(batch.map(([url, c]) => verifyFeedCandidate(url, c.title, c.type)));
-    verified.forEach((v, idx) => {
-      if (!v || discovered.has(v.url)) return;
-      discovered.set(v.url, { ...v, source: batch[idx][1].commonPath ? "common-path" : "html" });
-    });
-  }
+  const runBatches = async (entries: Array<[string, Candidate]>) => {
+    for (let i = 0; i < entries.length && discovered.size < 10; i += BATCH) {
+      const batch = entries.slice(i, i + BATCH);
+      const verified = await Promise.all(
+        batch.map(([url, c]) => verifyFeedCandidate(url, c.title, c.type, c.origin === "anchor" || c.origin === "common")),
+      );
+      verified.forEach((v, idx) => {
+        if (v) accept(v, batch[idx][1]);
+      });
+    }
+  };
+  await runBatches(advertised);
+  const hasAdvertised = [...discovered.values()].some((f) => f.score >= 70);
+  if (!hasAdvertised) await runBatches(common);
 
-  return { feeds: [...discovered.values()].slice(0, 10), hint };
+  const feeds = [...discovered.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10)
+    .map(({ score: _score, ...feed }) => feed);
+  return { feeds, hint, pageUrl: responseUrl.toString() };
 }
 
 /**
@@ -373,27 +630,36 @@ async function discoverFeedsInHtml(pageUrl: string): Promise<{ feeds: Discovered
  * deterministic stage first:
  *   - plain phrase → search-engine topic feeds (Google News locale-aware, Bing
  *     News, hnrss, arXiv) for the user to pick from;
- *   - URL/handle → platform rules (no scraping, no AI) → HTML discovery +
- *     common feed paths (when no platform rule produced anything) → bundled
+ *   - URL/handle → platform rules (URL-scheme converters, no scraping, no AI)
+ *     → otherwise the page's own feeds (HTML discovery + common feed paths)
+ *     → curated publisher routes only when the page yielded nothing → bundled
  *     RSSHub Radar rules on the configured RSSHub instance (if any).
  * Never throws.
  */
 export async function discoverFeeds(input: string, options: DiscoverOptions = {}): Promise<DiscoveryResult> {
-  const parsed = parseSourceInput(input);
+  // Pasted junk around an address (`<https://…>`, "example.com/feed.") is
+  // cleaned first; phrases stay phrases.
+  const cleaned = cleanUrlInput(input);
+  const parsed = parseSourceInput(cleaned);
   if (parsed.type === "empty") return { mode: "empty", feeds: [] };
   if (parsed.type === "topic") {
     return { mode: "topic", feeds: buildTopicFeeds(parsed.query, { locale: options.locale }).map((f) => toDiscovered(f, "topic")) };
   }
 
   const pageUrl = parsed.url.toString();
+  const normalized = normalizeUrlInput(cleaned);
+  const httpFallback = normalized.ok && normalized.schemeAssumed;
   const [native, radar] = await Promise.all([
-    resolveWithPlatformRules(input).catch(() => ({ matched: false, feeds: [] as DiscoveredFeed[] })),
+    resolveWithPlatformRules(cleaned).catch(() => ({ matched: false, feeds: [] as DiscoveredFeed[], curated: [] as ResolvedFeed[] })),
     resolveWithRadarRules(pageUrl),
   ]);
 
-  const html = native.feeds.length ? { feeds: [] } : await discoverFeedsInHtml(pageUrl).catch(() => ({ feeds: [] }));
+  const html: Partial<HtmlDiscovery> & { feeds: DiscoveredFeed[] } = native.feeds.length
+    ? { feeds: [] }
+    : await discoverFeedsInHtml(pageUrl, { httpFallback }).catch(() => ({ feeds: [] }));
+  const curated = !native.feeds.length && !html.feeds.length && native.curated.length ? await verifyCurated(native.curated) : [];
   const merged = new Map<string, DiscoveredFeed>();
-  for (const f of [...native.feeds, ...html.feeds, ...radar.feeds]) if (!merged.has(f.url)) merged.set(f.url, f);
+  for (const f of [...native.feeds, ...html.feeds, ...curated, ...radar.feeds]) if (!merged.has(f.url)) merged.set(f.url, f);
 
   let hint: DiscoveryHint | undefined;
   if (merged.size === 0) {
@@ -404,7 +670,7 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
     }
   }
 
-  return { mode: "url", feeds: [...merged.values()], hint };
+  return { mode: "url", feeds: [...merged.values()], hint, pageUrl: html.pageUrl ?? pageUrl };
 }
 
 /** Back-compat wrapper: feeds for a page URL (or any input `discoverFeeds` understands). */

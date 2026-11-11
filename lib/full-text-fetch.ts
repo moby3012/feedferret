@@ -5,6 +5,7 @@ import { estimateReadMinutes } from "@/lib/article-kind";
 import { fetchAndExtractReadable } from "@/lib/readability-extract";
 import { HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
 import { looksLikeTruncatedFeed } from "@/lib/full-text-mode";
+import { isTlsError } from "@/lib/url-input";
 
 /**
  * Turn a raw page-fetch error (SSRF guard, HTTP status, timeout, anti-bot
@@ -14,6 +15,10 @@ import { looksLikeTruncatedFeed } from "@/lib/full-text-mode";
  */
 export function describePageFetchError(error: unknown): string {
     const message = error instanceof Error ? error.message : "";
+
+    if (isTlsError(error)) {
+        return "The secure (HTTPS) connection to this site failed: certificate or TLS error. For your safety we don't switch to unencrypted http automatically. If you trust the site, enter the address with http:// explicitly.";
+    }
 
     if (/private IP|localhost|only supports http|URL is invalid|too large|Too many redirects/i.test(message)) {
         return message;

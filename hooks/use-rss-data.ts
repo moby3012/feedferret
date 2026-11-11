@@ -215,13 +215,13 @@ export function useGoogleNewsFeedSearch(feedId: string | null | undefined, enabl
 
 export function useSuggestFeedFromUrl() {
     return useMutation({
-        mutationFn: (url: string) => suggestFeedFromUrl(url),
+        mutationFn: ({ url, skipDiscovery }: { url: string; skipDiscovery?: boolean }) => suggestFeedFromUrl(url, { skipDiscovery }),
     })
 }
 
 export function useProposeAiFeedConfig() {
     return useMutation({
-        mutationFn: (url: string) => proposeAiFeedConfig(url),
+        mutationFn: ({ url, skipDiscovery }: { url: string; skipDiscovery?: boolean }) => proposeAiFeedConfig(url, { skipDiscovery }),
     })
 }
 

@@ -760,7 +760,8 @@
     "hints": {
       "needsRsshub": "Requires RSSHub – configure under Settings › Server",
       "rateLimited": "Try again later",
-      "blocked": "This site blocked automated access – try a native feed from the publisher"
+      "blocked": "This site blocked automated access – try a native feed from the publisher",
+      "tlsError": "The secure (HTTPS) connection to this site failed (certificate error). For your safety we don't switch to unencrypted http automatically — if you trust the site, enter the address with http://."
     },
     "kinds": {
       "videos": "Videos",
@@ -887,7 +888,12 @@
         "mostlyJunk": "{count, plural, one {One list was skipped} other {# lists were skipped}}: mostly navigation, ad or login links instead of entries.",
         "navigationChrome": "{count, plural, one {One list was skipped} other {# lists were skipped}}: it belongs to the page's navigation or footer.",
         "navigationList": "{count, plural, one {One list was skipped} other {# lists were skipped}}: it only contains short menu or filter links without dates or text."
-      }
+      },
+      "feedFound": "{count, plural, one {Feed found} other {# feeds found}}",
+      "feedFoundHint": "This page already publishes a feed. Subscribing to it is the most reliable option.",
+      "subscribe": "Subscribe",
+      "scrapeAnyway": "Build from page anyway",
+      "aiAnyway": "Let AI set it up anyway"
     },
     "rsshub": {
       "tabLabel": "From platform",
@@ -925,7 +931,29 @@
     "recentlyRead": "Recently read",
     "brokenFeeds": "Broken feeds",
     "brokenFeedsCount": "Broken feeds ({count})",
-    "viewAllBrokenFeeds": "View all broken feeds"
+    "viewAllBrokenFeeds": "View all broken feeds",
+    "addErrors": {
+      "url-empty": "Enter a web or feed address.",
+      "url-too-long": "That address is too long.",
+      "url-invalid": "That doesn't look like a web address (e.g. example.com).",
+      "url-unsupported-scheme": "Only web addresses (http/https) are supported.",
+      "not-a-feed": "That address is a web page, not a feed — pick one of the feeds found on it.",
+      "no-feed-found": "No feed found at that address. Try “From web page” to build one from the page.",
+      "page-blocked": "This site blocks automated access (bot protection). We can't read it this way.",
+      "page-not-found": "That page doesn't exist (404). Check the address.",
+      "page-rate-limited": "This site is rate-limiting requests. Try again in a bit.",
+      "page-http-error": "The site returned an error. Check the address and try again.",
+      "page-private-address": "That address points to a private or local network and can't be read.",
+      "page-too-large": "That page is too large to read.",
+      "page-unreachable": "Could not reach that site. Check the address and try again.",
+      "ai-not-configured": "AI is not set up yet. Set it up in Settings → AI.",
+      "ai-rate-limited": "Too many AI requests. Wait a bit and try again.",
+      "ai-unreadable": "The AI gave an answer we couldn't understand. Try again.",
+      "ai-no-config": "The AI couldn't find a working setup for this page. Try “Find items”.",
+      "ai-failed": "The AI request failed. Check the AI settings and try again.",
+      "page-tls-error": "The secure (HTTPS) connection to this site failed (certificate error). For your safety we don't switch to unencrypted http automatically — if you trust the site, enter the address with http://."
+    },
+    "notAFeedHint": "That address is a web page, not a feed. These feeds are linked on it:"
   },
   "articleList": {
     "newItems": "{count} new",
@@ -2439,7 +2467,8 @@
       "noneHint": {
         "needs-rsshub": "This site needs RSSHub.",
         "rate-limited": "The site throttles automated access.",
-        "blocked": "The site blocks automated access."
+        "blocked": "The site blocks automated access.",
+        "tls-error": "The site's HTTPS certificate failed, so it wasn't read (no automatic switch to http)."
       },
       "use": "Use this",
       "close": "Close",

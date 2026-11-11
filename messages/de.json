@@ -760,7 +760,8 @@
     "hints": {
       "needsRsshub": "Braucht RSSHub – unter Einstellungen › Server einrichten",
       "rateLimited": "Später erneut versuchen",
-      "blocked": "Seite blockiert automatischen Abruf – probier stattdessen einen direkten Feed des Anbieters"
+      "blocked": "Seite blockiert automatischen Abruf – probier stattdessen einen direkten Feed des Anbieters",
+      "tlsError": "Zertifikatsfehler: Die sichere Verbindung (HTTPS) zu dieser Website ist fehlgeschlagen. Aus Sicherheitsgründen wechseln wir nicht automatisch auf unverschlüsseltes http – wenn du der Seite vertraust, gib die Adresse mit http:// ein."
     },
     "kinds": {
       "videos": "Videos",
@@ -887,7 +888,12 @@
         "mostlyJunk": "{count, plural, one {Eine Liste wurde verworfen} other {# Listen wurden verworfen}}: überwiegend Navigations-, Werbe- oder Login-Links statt Einträgen.",
         "navigationChrome": "{count, plural, one {Eine Liste wurde verworfen} other {# Listen wurden verworfen}}: sie gehört zur Navigation oder Fußzeile der Seite.",
         "navigationList": "{count, plural, one {Eine Liste wurde verworfen} other {# Listen wurden verworfen}}: sie besteht nur aus kurzen Menü- oder Filter-Links ohne Datum oder Text."
-      }
+      },
+      "feedFound": "{count, plural, one {Feed gefunden} other {# Feeds gefunden}}",
+      "feedFoundHint": "Diese Seite bietet schon einen Feed an. Ihn zu abonnieren ist die zuverlässigste Wahl.",
+      "subscribe": "Abonnieren",
+      "scrapeAnyway": "Trotzdem aus der Seite bauen",
+      "aiAnyway": "Trotzdem mit KI einrichten"
     },
     "rsshub": {
       "tabLabel": "Von Plattform",
@@ -925,7 +931,29 @@
     "recentlyRead": "Zuletzt gelesen",
     "brokenFeeds": "Defekte Feeds",
     "brokenFeedsCount": "Defekte Feeds ({count})",
-    "viewAllBrokenFeeds": "Alle defekten Feeds ansehen"
+    "viewAllBrokenFeeds": "Alle defekten Feeds ansehen",
+    "addErrors": {
+      "url-empty": "Gib eine Web- oder Feed-Adresse ein.",
+      "url-too-long": "Diese Adresse ist zu lang.",
+      "url-invalid": "Das sieht nicht nach einer Webadresse aus (z. B. beispiel.de).",
+      "url-unsupported-scheme": "Nur Webadressen (http/https) werden unterstützt.",
+      "not-a-feed": "Diese Adresse ist eine Webseite, kein Feed – wähle einen der darauf gefundenen Feeds.",
+      "no-feed-found": "Unter dieser Adresse wurde kein Feed gefunden. Versuche „Von Webseite“, um aus der Seite einen zu bauen.",
+      "page-blocked": "Diese Website blockiert automatisierte Zugriffe (Bot-Schutz). So können wir sie nicht lesen.",
+      "page-not-found": "Diese Seite gibt es nicht (404). Prüfe die Adresse.",
+      "page-rate-limited": "Diese Website drosselt Anfragen. Versuche es gleich noch einmal.",
+      "page-http-error": "Die Website hat einen Fehler gemeldet. Prüfe die Adresse und versuche es erneut.",
+      "page-private-address": "Diese Adresse zeigt in ein privates oder lokales Netz und kann nicht gelesen werden.",
+      "page-too-large": "Diese Seite ist zu groß zum Lesen.",
+      "page-unreachable": "Die Website war nicht erreichbar. Prüfe die Adresse und versuche es erneut.",
+      "ai-not-configured": "Die KI ist noch nicht eingerichtet. Richte sie unter Einstellungen → KI ein.",
+      "ai-rate-limited": "Zu viele KI-Anfragen. Warte kurz und versuche es erneut.",
+      "ai-unreadable": "Die Antwort der KI war nicht verständlich. Versuche es erneut.",
+      "ai-no-config": "Die KI hat für diese Seite keine funktionierende Einrichtung gefunden. Versuche „Einträge finden“.",
+      "ai-failed": "Die KI-Anfrage ist fehlgeschlagen. Prüfe die KI-Einstellungen und versuche es erneut.",
+      "page-tls-error": "Zertifikatsfehler: Die sichere Verbindung (HTTPS) zu dieser Website ist fehlgeschlagen. Aus Sicherheitsgründen wechseln wir nicht automatisch auf unverschlüsseltes http – wenn du der Seite vertraust, gib die Adresse mit http:// ein."
+    },
+    "notAFeedHint": "Diese Adresse ist eine Webseite, kein Feed. Darauf verlinkte Feeds:"
   },
   "articleList": {
     "newItems": "{count} neu",
@@ -2439,7 +2467,8 @@
       "noneHint": {
         "needs-rsshub": "Für diese Seite wird RSSHub benötigt.",
         "rate-limited": "Die Seite bremst automatische Zugriffe aus.",
-        "blocked": "Die Seite blockiert automatische Zugriffe."
+        "blocked": "Die Seite blockiert automatische Zugriffe.",
+        "tls-error": "Das HTTPS-Zertifikat der Website ist fehlerhaft, daher wurde sie nicht gelesen (kein automatischer Wechsel auf http)."
       },
       "use": "Übernehmen",
       "close": "Schließen",

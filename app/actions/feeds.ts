@@ -10,7 +10,6 @@ import { assertSafeHttpOptionsProxy, fetchTextWithSsrfProtection, isTrustedFeedF
 import { generateOpml } from "@/lib/opml";
 import { importOpmlXml } from "@/lib/import/opml-import";
 import {
-    validateFeedUrl,
     MAX_LABEL_NAME,
     MAX_SEARCH_QUERY,
     MAX_SAVED_SEARCH_NAME,
@@ -34,6 +33,15 @@ import { AI_OPERATOR_DELETE_ERROR, ruleHasAiDeleteConflict } from "@/lib/rule-ai
 import { parseRuleActions } from "@/lib/auto-read-rules";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { describePageFetchError, refetchArticleFullText } from "@/lib/full-text-fetch";
+import {
+    discoverExistingFeeds,
+    normalizeActionUrl,
+    pageFetchErrorCode,
+    sameFeedAddress,
+    TLS_ERROR_TEXT,
+    type AddFeedErrorCode,
+} from "@/lib/add-feed-input";
+import { httpFallbackUrl, isConnectError } from "@/lib/url-input";
 import { pickFields } from "@/lib/pick-fields";
 import { clampFeedLimits } from "@/lib/feed-limits";
 import { assertOwnedCategories, MAX_REORDER_ITEMS } from "@/lib/owned-categories";
@@ -251,33 +259,45 @@ export async function deleteSavedSearch(searchId: string) {
     revalidatePath("/");
 }
 
-export async function addFeed(url: string, categoryId?: string) {
+export async function addFeed(rawUrl: string, categoryId?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
+    // Bare domains, `www.`, missing scheme, pasted junk → one https URL.
+    const normalized = normalizeActionUrl(rawUrl);
+    if (!normalized.ok) return { success: false as const, error: normalized.error, errorCode: normalized.errorCode };
+    let url = normalized.url;
+
     const parsed = CreateFeedSchema.safeParse({ url, categoryId });
     if (!parsed.success) {
-        return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+        return { success: false as const, error: parsed.error.issues[0]?.message ?? "Invalid input" };
     }
 
-    const urlError = validateFeedUrl(url);
-    if (urlError) return { success: false, error: urlError };
     // Only allowed connector routes (no /rsshub/transform/…, no all-watches feed) — N3.
     const connectorError = await connectorFeedUrlError(url);
-    if (connectorError) return { success: false, error: connectorError };
+    if (connectorError) return { success: false as const, error: connectorError };
 
     if (categoryId) {
         const category = await db.category.findFirst({
             where: { id: categoryId, userId: session.user.id },
             select: { id: true },
         });
-        if (!category) return { success: false, error: "Invalid category" };
+        if (!category) return { success: false as const, error: "Invalid category" };
     }
 
     try {
         // Stored URLs never carry connector secrets; the fetcher adds them (N3).
         url = await stripConnectorSecrets(url);
-        const remoteFeed = await fetchFeedArticles({ url });
+        let remoteFeed;
+        try {
+            remoteFeed = await fetchFeedArticles({ url });
+        } catch (error) {
+            // No scheme typed and https could not connect at all: one plain-http try.
+            const fallback = normalized.schemeAssumed && isConnectError(error) ? httpFallbackUrl(url) : null;
+            if (!fallback) throw error;
+            remoteFeed = await fetchFeedArticles({ url: fallback });
+            url = fallback;
+        }
 
         // G1: keyword feeds get "Google News: <query>" instead of Google's title.
         const googleNews = parseGoogleNewsFeedUrl(url);
@@ -293,12 +313,27 @@ export async function addFeed(url: string, categoryId?: string) {
 
         await syncFeed(session.user.id, feed.id);
         revalidatePath("/");
-        return { success: true, feed: await redactFeedForClient(stripFeedSecrets(feed)) };
+        return { success: true as const, feed: await redactFeedForClient(stripFeedSecrets(feed)) };
     } catch (error) {
         logger.error("Failed to add feed:", error);
+        // "Add directly" with a web page (not a feed): fall back to discovery
+        // and offer the page's real feeds instead of failing.
+        const discovered = await discoverExistingFeeds(session.user.id, rawUrl);
+        const others = discovered.feeds.filter((f) => !sameFeedAddress(f.url, url));
+        if (others.length) {
+            return {
+                success: false as const,
+                errorCode: "not-a-feed" as AddFeedErrorCode,
+                error: "This address is a web page, not a feed. Pick one of the feeds found on it.",
+                discovered: others,
+            };
+        }
+        if (pageFetchErrorCode(error) === "page-tls-error" || discovered.tlsError) {
+            return { success: false as const, errorCode: "page-tls-error" as AddFeedErrorCode, error: TLS_ERROR_TEXT };
+        }
         const hint = hintForFetchError(error);
-        if (hint) return { success: false, error: hint };
-        return { success: false, error: "Invalid RSS/Atom feed URL" };
+        if (hint) return { success: false as const, error: hint };
+        return { success: false as const, errorCode: "no-feed-found" as AddFeedErrorCode, error: "Invalid RSS/Atom feed URL" };
     }
 }
 
@@ -314,17 +349,40 @@ const PAGE_FEED_PREVIEW_CAP = 8;
  * protection (e.g. a Cloudflare challenge) rejected our request, which is a
  * very different situation from a broken URL and worth telling users about.
  */
-export async function suggestFeedFromUrl(url: string) {
+export async function suggestFeedFromUrl(rawUrl: string, options: { skipDiscovery?: boolean } = {}) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    const urlError = validateFeedUrl(url);
-    if (urlError) return { success: false, error: urlError };
+    const normalized = normalizeActionUrl(rawUrl);
+    if (!normalized.ok) return { success: false as const, error: normalized.error, errorCode: normalized.errorCode };
+
+    // Discovery first: a page that already publishes a feed gets that feed
+    // offered (one click), scraping stays an explicit alternative.
+    let pageUrl = normalized.url;
+    if (!options?.skipDiscovery) {
+        const existing = await discoverExistingFeeds(session.user.id, rawUrl);
+        if (existing.feeds.length) {
+            return { success: true as const, kind: "existing-feed" as const, feeds: existing.feeds, pageUrl: existing.pageUrl ?? pageUrl };
+        }
+        if (existing.tlsError) return { success: false as const, errorCode: "page-tls-error" as const, error: TLS_ERROR_TEXT };
+        if (existing.pageUrl) pageUrl = existing.pageUrl;
+    }
 
     try {
-        const { candidates, rejected } = await fetchAndSuggestFeedCandidatesDetailed(url);
+        let result;
+        try {
+            result = await fetchAndSuggestFeedCandidatesDetailed(pageUrl);
+        } catch (error) {
+            const fallback = normalized.schemeAssumed && pageUrl === normalized.url && isConnectError(error) ? httpFallbackUrl(pageUrl) : null;
+            if (!fallback) throw error;
+            result = await fetchAndSuggestFeedCandidatesDetailed(fallback);
+            pageUrl = fallback;
+        }
+        const { candidates, rejected } = result;
         return {
-            success: true,
+            success: true as const,
+            kind: "candidates" as const,
+            pageUrl,
             candidates: candidates.map((candidate) => ({
                 config: candidate.config,
                 score: candidate.score,
@@ -347,7 +405,7 @@ export async function suggestFeedFromUrl(url: string) {
         };
     } catch (error) {
         logger.error("Failed to suggest feed candidates from page:", error);
-        return { success: false, error: describePageFetchError(error) };
+        return { success: false as const, error: describePageFetchError(error), errorCode: pageFetchErrorCode(error) };
     }
 }
 
@@ -360,8 +418,9 @@ export async function createFeedFromPage(input: {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    const urlError = validateFeedUrl(input.url);
-    if (urlError) return { success: false, error: urlError };
+    const normalized = normalizeActionUrl(input?.url);
+    if (!normalized.ok) return { success: false, error: normalized.error, errorCode: normalized.errorCode };
+    const pageUrl = normalized.url;
 
     if (!input.config?.xPathItem || !input.config.xPathItem.trim()) {
         return { success: false, error: "A repeating item selector is required" };
@@ -377,7 +436,7 @@ export async function createFeedFromPage(input: {
 
     try {
         const feed = await createPageFeedForUser(session.user.id, {
-            url: input.url,
+            url: pageUrl,
             config: input.config,
             name: input.name,
             categoryId: input.categoryId,
@@ -398,29 +457,58 @@ export async function createFeedFromPage(input: {
  * UI can reuse the exact same candidate-card rendering as the heuristic
  * `suggestFeedFromUrl` path. Never returns raw HTML.
  */
-export async function proposeAiFeedConfig(url: string) {
+export async function proposeAiFeedConfig(rawUrl: string, options: { skipDiscovery?: boolean } = {}) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    const urlError = validateFeedUrl(url);
-    if (urlError) return { success: false as const, error: urlError };
-
-    const rateLimit = checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.aiFeedConfig);
-    if (!rateLimit.success) {
-        return { success: false as const, error: "Too many AI requests. Wait a bit and try again." };
-    }
+    const normalized = normalizeActionUrl(rawUrl);
+    if (!normalized.ok) return { success: false as const, error: normalized.error, errorCode: normalized.errorCode };
 
     const user = await db.user.findUnique({
         where: { id: session.user.id },
         select: { aiProvider: true, aiApiKey: true, aiModel: true, aiOllamaBaseUrl: true },
     });
     if (!user?.aiProvider) {
-        return { success: false as const, error: "AI is not configured. Set up AI in Settings → AI Summaries." };
+        return {
+            success: false as const,
+            errorCode: "ai-not-configured" as const,
+            error: "AI is not configured. Set up AI in Settings → AI Summaries.",
+        };
+    }
+
+    // Discovery first, at no AI cost: a page that already publishes a feed
+    // gets that feed offered; the AI path stays an explicit alternative.
+    let url = normalized.url;
+    if (!options?.skipDiscovery) {
+        const existing = await discoverExistingFeeds(session.user.id, rawUrl);
+        if (existing.feeds.length) {
+            return { success: true as const, mode: "existing-feed" as const, feeds: existing.feeds, pageUrl: existing.pageUrl ?? url };
+        }
+        if (existing.tlsError) return { success: false as const, errorCode: "page-tls-error" as const, error: TLS_ERROR_TEXT };
+        if (existing.pageUrl) url = existing.pageUrl;
+    }
+
+    const rateLimit = checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.aiFeedConfig);
+    if (!rateLimit.success) {
+        return { success: false as const, errorCode: "ai-rate-limited" as const, error: "Too many AI requests. Wait a bit and try again." };
     }
 
     // Captured by the injected fetchHtml below so we can reuse the same fetched
     // HTML to build a full item preview afterward without fetching the page twice.
     let fetchedHtml: string | null = null;
+    const fetchPage = async (u: string) =>
+        fetchTextWithSsrfProtection(
+            u,
+            {},
+            {
+                allowInternal: await isTrustedFeedFetchingAllowed(),
+                context: "AI feed config",
+                impersonate: true,
+                maxBytes: 2 * 1024 * 1024,
+                maxRedirects: 5,
+                timeoutMs: 12_000,
+            },
+        );
 
     try {
         const { proposeFeedConfig } = await import("@/lib/ai-feed-config");
@@ -435,18 +523,14 @@ export async function proposeAiFeedConfig(url: string) {
             },
             {
                 fetchHtml: async (u: string) => {
-                    fetchedHtml = await fetchTextWithSsrfProtection(
-                        u,
-                        {},
-                        {
-                            allowInternal: await isTrustedFeedFetchingAllowed(),
-                            context: "AI feed config",
-                            impersonate: true,
-                            maxBytes: 2 * 1024 * 1024,
-                            maxRedirects: 5,
-                            timeoutMs: 12_000,
-                        },
-                    );
+                    try {
+                        fetchedHtml = await fetchPage(u);
+                    } catch (error) {
+                        const fallback = normalized.schemeAssumed && u === normalized.url && isConnectError(error) ? httpFallbackUrl(u) : null;
+                        if (!fallback) throw error;
+                        fetchedHtml = await fetchPage(fallback);
+                        url = fallback;
+                    }
                     return fetchedHtml;
                 },
             },
@@ -461,7 +545,11 @@ export async function proposeAiFeedConfig(url: string) {
         }
 
         if (!validation.ok) {
-            return { success: false as const, error: "The AI couldn't find a working configuration for this page" };
+            return {
+                success: false as const,
+                errorCode: "ai-no-config" as const,
+                error: "The AI couldn't find a working configuration for this page",
+            };
         }
 
         let preview: { title: string; link: string; publishedAt: string | null; imageUrl: string | null }[] = [];
@@ -487,6 +575,7 @@ export async function proposeAiFeedConfig(url: string) {
         return {
             success: true as const,
             mode: "pagefeed" as const,
+            pageUrl: url,
             config: proposal.itemConfig,
             itemCount: validation.itemCount ?? 0,
             sampleTitles: validation.sampleTitles ?? [],
@@ -497,12 +586,13 @@ export async function proposeAiFeedConfig(url: string) {
         logger.error("Failed to propose AI feed config:", error);
         const message = error instanceof Error ? error.message : "";
         if (message.includes("unreadable config")) {
-            return { success: false as const, error: "The AI returned a response we couldn't understand. Try again." };
+            return { success: false as const, errorCode: "ai-unreadable" as const, error: "The AI returned a response we couldn't understand. Try again." };
         }
-        if (/Fetch failed|private IP|localhost|only supports http|URL is invalid|too large|Too many redirects/i.test(message)) {
-            return { success: false as const, error: describePageFetchError(error) };
+        if (/Fetch failed|private IP|localhost|only supports http|URL is invalid|too large|Too many redirects/i.test(message) || fetchedHtml === null) {
+            return { success: false as const, errorCode: pageFetchErrorCode(error), error: describePageFetchError(error) };
         }
-        return { success: false as const, error: message || "The AI request failed. Try again." };
+        // Raw provider messages ("Anthropic 401: …") stay in the server log.
+        return { success: false as const, errorCode: "ai-failed" as const, error: "The AI request failed. Check the AI settings and try again." };
     }
 }
 
@@ -1920,8 +2010,9 @@ export async function createChangedetectionFeed(input: { url: string; useAiSelec
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
 
-    const urlError = validateFeedUrl(input.url);
-    if (urlError) return { success: false as const, error: urlError };
+    const normalized = normalizeActionUrl(input?.url);
+    if (!normalized.ok) return { success: false as const, error: normalized.error, errorCode: normalized.errorCode };
+    input = { ...input, url: normalized.url };
 
     const { getChangedetectionConfig, createWatch, buildWatchFeedPublicUrl } = await import("@/lib/changedetection");
     const config = await getChangedetectionConfig();

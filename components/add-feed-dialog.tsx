@@ -204,6 +204,8 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
           message = t("sidebar.hints.rateLimited");
         } else if (data.hint === "blocked") {
           message = t("sidebar.hints.blocked");
+        } else if (data.hint === "tls-error") {
+          message = t("sidebar.hints.tlsError");
         }
         setDiscoveryMessage(message);
         toast.info(message);
@@ -226,8 +228,18 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
         categoryId: newFeedCategoryId === "none" ? undefined : newFeedCategoryId,
       });
       if (!result?.success) {
-        let err = result?.error;
-        if (err === "rate-limited") err = t("sidebar.hints.rateLimited");
+        // "Add directly" with a web page: the server ran discovery and found
+        // the page's real feeds — offer them instead of failing.
+        if ("discovered" in result && result.discovered?.length) {
+          setDiscoveryMode("url");
+          setDiscoveredFeeds(result.discovered);
+          setDiscoveryMessage(t("sidebar.notAFeedHint"));
+          return;
+        }
+        let err: string | undefined = result?.error;
+        const code = "errorCode" in result ? result.errorCode : undefined;
+        if (code && t.has(`sidebar.addErrors.${code}`)) err = t(`sidebar.addErrors.${code}`);
+        else if (err === "rate-limited") err = t("sidebar.hints.rateLimited");
         else if (err === "blocked") err = t("sidebar.hints.blocked");
         else if (err === "needs-rsshub") err = t("sidebar.hints.needsRsshub");
         toast.error(err || t("sidebar.errors.couldNotAdd"));
@@ -336,6 +348,11 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
 
             {discoveredFeeds.length > 0 && (
               <div className="space-y-1">
+                {discoveryMessage && (
+                  <p className="px-0.5 text-footnote text-muted-foreground" data-testid="add-feed-not-a-feed">
+                    {discoveryMessage}
+                  </p>
+                )}
                 <p className="text-footnote text-muted-foreground font-medium px-0.5">
                   {discoveryMode === "topic" ? t("sidebar.topicFeeds") : t("sidebar.foundFeeds")}
                 </p>

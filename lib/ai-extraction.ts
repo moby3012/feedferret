@@ -10,6 +10,7 @@
 
 import { type MeteredAiConfig, runAiPrompt } from "./ai-summary";
 import { reduceHtmlForPrompt } from "./ai-feed-config";
+import { redactUrlForPrompt } from "./prompt-url";
 
 const MIN_EXTRACTED_TEXT_LENGTH = 200;
 const MAX_OUTPUT_TOKENS = 2000;
@@ -18,7 +19,7 @@ export type AiExtractionResult = { title: string | null; content: string };
 
 export function buildExtractionPrompt(html: string, url: string): string {
   const snippet = reduceHtmlForPrompt(html);
-  return `You are extracting the main article content from a web page at ${url}.
+  return `You are extracting the main article content from a web page at ${redactUrlForPrompt(url)}.
 
 Find the article's title and its full body text, ignoring navigation, ads, comments, related-articles widgets, and other boilerplate. Preserve paragraph breaks, headings, and lists as Markdown. Do not summarize or shorten the article — reproduce its full text.
 

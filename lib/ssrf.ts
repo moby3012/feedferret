@@ -43,6 +43,13 @@ export type SafeFetchTextOptions = SsrfCheckOptions & {
    * accepts the head (see lib/html-prefix.ts).
    */
   untilHead?: boolean | ((headHtml: string) => boolean);
+  /**
+   * Prefix mode without the head logic: read at most `maxBytes` and return
+   * them (decoded) instead of failing on a larger body — for content sniffing
+   * (feed discovery verifies a candidate from its first bytes). The stream is
+   * cancelled once the budget is reached.
+   */
+  readPrefix?: boolean;
 };
 
 function truthy(value?: string) {
@@ -235,8 +242,8 @@ export async function fetchWithSsrfProtection(
       if (!response.ok) {
         throw new Error(`Fetch failed: ${response.status}${await errorBodySuffix(response, options.includeErrorBody)}`);
       }
-      const text = options.untilHead
-        ? await readHtmlPrefix(response, { maxBytes: options.maxBytes, contentType: response.headers.get("content-type"), stopAtHead: options.untilHead })
+      const text = options.untilHead || options.readPrefix
+        ? await readHtmlPrefix(response, { maxBytes: options.maxBytes, contentType: response.headers.get("content-type"), stopAtHead: options.untilHead || false })
         : await readTextWithLimit(response, options.maxBytes);
       // `url`: the final URL after redirects (base for relative references).
       return { notModified: false, text, etag, lastModified, headers: response.headers, status: response.status, url: current };
