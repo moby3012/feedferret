@@ -111,6 +111,8 @@ import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { SpoilerIcon } from "@/components/icons/spoiler-icon";
 import { UnreadCount } from "@/components/ui/unread-count";
 import { showsCount, type CountDisplay } from "@/lib/count-display";
+import { isDeletableEmptyCategory } from "@/lib/empty-category";
+import { DeleteEmptyCategoryDialog } from "@/components/delete-empty-category-dialog";
 
 /** Where unread numbers show (`User.countDisplay`); read by the nested rows. */
 const CountDisplayContext = createContext<CountDisplay>("all");
@@ -219,6 +221,8 @@ export function RssSidebar({
   );
 
   const [feedToDelete, setFeedToDelete] = useState<{ id: string; name: string } | null>(null);
+  // Inline "Delete category" of an empty category's "No feeds" line.
+  const [categoryToDelete, setCategoryToDelete] = useState<{ id: string; name: string } | null>(null);
   // "Mark all as read" of a feed always asks first (owner decision 2026-11-10; same as the compact Feeds screen).
   const [markAllFeed, setMarkAllFeed] = useState<{ id: string; name: string; unread: number } | null>(null);
   const signOut = useSignOut();
@@ -566,6 +570,8 @@ export function RssSidebar({
                         onToggle={() => toggleCategory(category.id)}
                         renderFeedRow={renderFeedRow}
                         onSelectCategory={onSelectCategory}
+                        canDeleteEmpty={isDeletableEmptyCategory(category.id, feeds, allCategories)}
+                        onDeleteEmpty={() => setCategoryToDelete({ id: category.id, name: category.name })}
                       />
                     );
                   })}
@@ -840,6 +846,8 @@ export function RssSidebar({
       </AlertDialogContent>
     </AlertDialog>
 
+    <DeleteEmptyCategoryDialog category={categoryToDelete} onClose={() => setCategoryToDelete(null)} />
+
     <AlertDialog open={!!feedToDelete} onOpenChange={(open) => !open && setFeedToDelete(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -897,6 +905,8 @@ function SortableCategory({
   onToggle,
   renderFeedRow,
   onSelectCategory,
+  canDeleteEmpty,
+  onDeleteEmpty,
 }: any) {
   const t = useTranslations();
   const {
@@ -985,8 +995,22 @@ function SortableCategory({
             ))}
           </SortableContext>
           {feeds.length === 0 && (
-            <p className="text-footnote text-muted-foreground px-3 py-1 italic">
-              {t("sidebar.noFeeds")}
+            <p className="text-footnote text-muted-foreground px-3 py-1">
+              <span className="italic">{t("sidebar.noFeeds")}</span>
+              {canDeleteEmpty && (
+                <>
+                  <span aria-hidden> · </span>
+                  <button
+                    type="button"
+                    data-testid="delete-empty-category"
+                    className="rounded-chip underline underline-offset-2 transition-colors hover:text-destructive focus-visible:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={t("sidebar.deleteCategoryNamed", { name: category.name })}
+                    onClick={onDeleteEmpty}
+                  >
+                    {t("sidebar.deleteCategoryAction")}
+                  </button>
+                </>
+              )}
             </p>
           )}
         </div>

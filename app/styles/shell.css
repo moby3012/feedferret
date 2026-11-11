@@ -530,6 +530,29 @@ html[data-nav-anim="none"] .ff-shell > [data-pane] {
   line-height: var(--text-footnote--line-height);
   color: var(--muted-foreground);
 }
+/* Inline "Delete category" in an empty folder: a text link, ≥44px hit area without growing the line. */
+.ff-feeds-empty-folder-action {
+  position: relative;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: var(--radius-control);
+}
+.ff-feeds-empty-folder-action::after {
+  content: "";
+  position: absolute;
+  inset-block: -16px;
+  inset-inline: -8px;
+}
+.ff-feeds-empty-folder-action:hover,
+.ff-feeds-empty-folder-action:focus-visible {
+  color: var(--destructive);
+}
+.ff-feeds-empty-folder-action:focus-visible {
+  outline: var(--focus-ring-width) solid var(--ring);
+  outline-offset: var(--focus-ring-offset);
+}
 
 /* Row "…": a mouse gets it on hover / focus; touch rows only keep a screen-reader "Aktionen" (like article rows). */
 .ff-feeds-actions {
