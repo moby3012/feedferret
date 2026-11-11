@@ -24,6 +24,8 @@ export type FetchedFeedArticle = {
   /** `itunes:duration` / `media:content@duration`, in seconds. */
   durationSecs?: number | null;
   externalId?: string | null;
+  /** The item's own guid/id as published (no link fallback); FreshRSS `sha1:*` unicity needs it. */
+  guid?: string | null;
   categories?: string[];
   /** RSS `<source>` element text (publisher name on aggregators like Google News). */
   sourceName?: string | null;

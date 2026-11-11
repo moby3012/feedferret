@@ -1469,7 +1469,8 @@
         "http-header-dropped": "HTTP-Header nicht erlaubt, nicht übernommen",
         "maxredirs-invalid": "Ungültiges Weiterleitungslimit ignoriert",
         "maxredirs-clamped": "Weiterleitungslimit angepasst",
-        "css-conditions-partial": "Volltext-Bedingungen teils nicht auswertbar: Volltext für alle Artikel"
+        "css-conditions-partial": "Volltext-Bedingungen teils nicht auswertbar: Volltext für alle Artikel",
+        "expression-too-long": "Ausdruck zu lang, nicht übernommen"
       }
     },
     "toasts": {

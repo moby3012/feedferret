@@ -10,12 +10,19 @@ export interface DedupeKeyItem {
     publishedAt?: Date | null;
     /** Only read by FreshRSS' content-based `sha1:*` criteria. */
     content?: string | null;
+    /**
+     * The item's own guid/id as published by the feed (no link fallback). Only read by
+     * the `sha1:*` criteria; when absent, the `externalId` argument is used instead.
+     */
+    guid?: string | null;
 }
 
-// FreshRSS hashed criteria (`frss:unicityCriteria`, app/Models/Feed.php
-// decideEntryGuid): sha1 over the concatenated link, Unix publish time, title and
-// content, in exactly this order. Computed the same way so a FreshRSS-migrated feed
-// keeps the identity FreshRSS gave its articles.
+// FreshRSS hashed criteria (`frss:unicityCriteria`), ported from FreshRSS
+// app/Models/Feed.php `decideEntryGuid($item, fallback: true)` as used by
+// `loadGuids`/`loadEntries`: the GUID is the bare lowercase SHA-1 hex of the
+// concatenated permalink, Unix publish time (`get_date('U')`, "" when absent),
+// title and content, in exactly the listed order. Computed identically so a
+// feed moved from FreshRSS keeps the identity FreshRSS gave its articles.
 const FRESHRSS_SHA1_CRITERIA: Record<string, ReadonlyArray<"link" | "published" | "title" | "content">> = {
     "sha1:link_published": ["link", "published"],
     "sha1:link_published_title": ["link", "published", "title"],
@@ -28,20 +35,40 @@ const FRESHRSS_SHA1_CRITERIA: Record<string, ReadonlyArray<"link" | "published" 
     "sha1:published": ["published"],
 };
 
+const sha1Hex = (value: string) => createHash("sha1").update(value).digest("hex");
+/** FreshRSS treats sha1('') as "no GUID". */
+const BLANK_SHA1 = sha1Hex("");
+
 export function isFreshRssHashedCriteria(criteria: string | null | undefined): boolean {
     return Boolean(criteria && Object.prototype.hasOwnProperty.call(FRESHRSS_SHA1_CRITERIA, criteria));
 }
 
-function freshRssHashedKey(criteria: string, item: DedupeKeyItem): string | null {
-    const fields = FRESHRSS_SHA1_CRITERIA[criteria];
-    const input = fields
-        .map((field) => {
-            if (field === "published") return item.publishedAt ? String(Math.floor(item.publishedAt.getTime() / 1000)) : "";
-            return item[field] ?? "";
-        })
-        .join("");
-    // FreshRSS treats sha1('') as "no GUID" and falls back to the item id.
-    return input ? `sha1:${createHash("sha1").update(input).digest("hex")}` : null;
+function freshRssFields(item: DedupeKeyItem) {
+    return {
+        link: item.link ?? "",
+        published: item.publishedAt ? String(Math.floor(item.publishedAt.getTime() / 1000)) : "",
+        title: item.title ?? "",
+        content: item.content ?? "",
+    };
+}
+
+/**
+ * FreshRSS `decideEntryGuid(fallback: true)` for a `sha1:*` criterion. `entryId` is
+ * SimplePie's `get_id(false, false)`: the item's own guid/id, or "" when it has none
+ * (`$fn === false` returns null, no permalink/title fallback).
+ */
+export function freshRssHashedGuid(criteria: string, item: DedupeKeyItem, externalId: string | null): string {
+    const f = freshRssFields(item);
+    let guid = sha1Hex(FRESHRSS_SHA1_CRITERIA[criteria].map((field) => f[field]).join(""));
+    if (guid === BLANK_SHA1) guid = "";
+    if (guid !== "") return guid;
+
+    const entryId = (item.guid !== undefined ? item.guid : externalId) ?? "";
+    if (entryId !== "") guid = entryId;
+    else if (f.link !== "") guid = sha1Hex(f.link + f.published);
+    else if (f.title !== "") guid = sha1Hex(f.link + f.published + f.title);
+    else guid = sha1Hex(f.link + f.published + f.title + f.content);
+    return guid === BLANK_SHA1 ? "" : guid;
 }
 
 export function buildDedupeKey(
@@ -49,9 +76,7 @@ export function buildDedupeKey(
     item: DedupeKeyItem,
     externalId: string | null,
 ): string {
-    if (isFreshRssHashedCriteria(feed.unicityCriteria)) {
-        return freshRssHashedKey(feed.unicityCriteria!, item) ?? (externalId || item.link || item.title || "");
-    }
+    if (isFreshRssHashedCriteria(feed.unicityCriteria)) return freshRssHashedGuid(feed.unicityCriteria!, item, externalId);
     const parts = (feed.unicityCriteria || "id")
         .split(":")
         .map((part) => part.trim())
@@ -69,4 +94,24 @@ export function buildDedupeKey(
     const values = parts.map(valueFor).filter(Boolean);
     if (values.length > 0) return values.join(":");
     return externalId || item.link || item.title || "";
+}
+
+/**
+ * Keys an article of a `sha1:*` feed may already be stored under from earlier
+ * FeedFerret versions, which did not know these criteria and keyed such feeds like
+ * `id` (guid, else link, else title). Pre-release builds of the FreshRSS support
+ * used a `sha1:`-prefixed digest. The sync re-keys a matching row in place instead
+ * of inserting a duplicate. Empty for every other criterion.
+ */
+export function legacyDedupeKeys(
+    feed: { unicityCriteria?: string | null },
+    item: DedupeKeyItem,
+    externalId: string | null,
+): string[] {
+    if (!isFreshRssHashedCriteria(feed.unicityCriteria)) return [];
+    const current = buildDedupeKey(feed, item, externalId);
+    const f = freshRssFields(item);
+    const input = FRESHRSS_SHA1_CRITERIA[feed.unicityCriteria!].map((field) => f[field]).join("");
+    const candidates = [externalId || item.link || item.title || "", input ? `sha1:${sha1Hex(input)}` : ""];
+    return [...new Set(candidates.filter((key) => key && key !== current))];
 }

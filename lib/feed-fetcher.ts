@@ -160,6 +160,7 @@ function buildJsonArticles(json: unknown, config: FeedExtractionConfig): Fetched
         publishedAt: dateFrom(dotGet(item, settings.jsonItemTimestamp || settings.itemTimestamp || "date_published"), settings.jsonItemTimeFormat || settings.itemTimeFormat),
         imageUrl: firstString(dotGet(item, settings.jsonItemThumbnail || settings.itemThumbnail || "image")) || firstString(dotGet(item, "banner_image")),
         externalId: firstString(dotGet(item, settings.jsonItemUid || settings.itemUid || "id")),
+        guid: firstString(dotGet(item, settings.jsonItemUid || settings.itemUid || "id")) || null,
         categories: categoriesFrom(dotGet(item, settings.jsonItemCategories || settings.itemCategories || "tags")),
       };
     }),
@@ -333,6 +334,7 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
         publishedAt: pubDate ? dateFrom(pubDate) : null,
         imageUrl: extractImageFromHtml(content) || item.enclosure?.url || item["media:content"]?.$?.url || null,
         externalId: htmlText(item.guid) || htmlText(item.id) || htmlText(item.link) || null,
+        guid: htmlText(item.guid) || htmlText(item.id) || null,
         enclosures: item.enclosure?.url ? [{ href: item.enclosure.url, type: item.enclosure.type || "", ...(Number(item.enclosure.length) > 0 ? { length: Number(item.enclosure.length) } : {}) }] : [],
         ...mediaFromItem(item),
         categories: categoriesFrom(item.categories),

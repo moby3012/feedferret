@@ -36,7 +36,7 @@ Legend — **Import**: what FeedFerret does with it. **Export**: written back.
 | `frss:priority` important / main / category | `priority`; category → `hideFromAllFeeds` | ✅ | ✅ (also: hidden-from-All-feeds → `category`) | ✅ |
 | `frss:priority` feed / hidden | `priority` + `hideFromAllFeeds` | ⚠️ approximated (still listed in its category), reported | ✅ | ✅ |
 | `frss:ttl` (s, negative = muted) | `updateFrequency` (5–10080 min), `autoMuted` | ✅; rounded/clamped values reported | ✅ signed; muted feeds without own interval use the account default | ✅ (original kept in `scraperConfig.preserved.ttl` while the interval is unchanged) |
-| `frss:unicityCriteria` id / link / `sha1:*` (all 9) | `unicityCriteria` → article identity | ✅ — `sha1:*` hashed exactly like FreshRSS | ✅ | ✅ |
+| `frss:unicityCriteria` id / link / `sha1:*` (all 9) | `unicityCriteria` → article identity | ✅ — `sha1:*` = FreshRSS `decideEntryGuid(fallback: true)`: bare SHA-1 hex, same fallback chain (guid → sha1(link·date) → sha1(link·date·title) → sha1(all)) | ✅ | ✅ |
 | `frss:unicityCriteriaForced` | `unicityCriteriaForced` | ✅ (FeedFerret never degrades criteria, i.e. always behaves as forced) | ✅ | ✅ |
 | `frss:cssFullContent` | `fullTextSelector`, `fullTextMode=selector` (never downgrades auto/ai) | ✅ | ✅ while full text is on (in FreshRSS the selector *is* the switch) | ✅ |
 | `frss:cssContentFilter` (+ legacy `frss:cssFullContentFilter`) | `fullTextRemoveSelectors` — removed from feed content **and** full text | ✅ | ✅ | ✅ |
@@ -61,19 +61,54 @@ in the feed URL in FreshRSS; FeedFerret stores it separately and API exports str
 
 ## Security
 
+### Where imported expressions run
+
+| Expression | Evaluated in | Engine | Input bounds |
+|---|---|---|---|
+| `xPathItem*`, `xPathToJson` | `lib/feed-fetcher.ts` during feed sync | jsdom `XPathEvaluator`, **main thread** of the server process (background sync runs in-process, `instrumentation.ts`) | fetched document ≤ `maxSizeKb` (default 5 MB), fetch timeout 30 s |
+| `jsonItem*` | `lib/feed-fetcher.ts` | plain dot/bracket path walk (no evaluation) | same |
+| `cssFullContent` | `lib/rss-sync.ts` `autoFetchFullTextForArticles` | jsdom `querySelector`, main thread | page ≤ 2 MB, 12 s timeout, ≤ 5 redirects, ≤ 20 articles per feed sync |
+| `cssContentFilter` | `lib/remove-selectors.ts` from `lib/rss-sync.ts` (feed items + full-text page) | jsdom `querySelectorAll`, main thread; invalid selector = no-op | feed body ≤ `maxSizeKb`; full-text page ≤ 2 MB |
+| `cssFullContentConditions`, `filtersActionRead` | `lib/full-text-conditions.ts`, `lib/feed-content-filter.ts`, auto-read rules | translated to literal substring checks and FeedFerret search (Prisma/DB queries); **no regex is ever executed** (regex lines are refused) | translated query ≤ `MAX_SEARCH_QUERY` |
+
+There is no worker thread and no per-expression CPU time limit; that is unchanged
+from manually configured Scout Studio feeds (same fields, same engine). Import limits:
+OPML ≤ 5 MB, ≤ 20 000 outlines, depth ≤ 16, no DTD/entities (XXE / billion laughs),
+each selector / XPath / JSON path / header list ≤ 2 000 characters, filter and
+condition lists ≤ 10 000 characters — longer values are not imported and reported
+(`expression-too-long`).
+
+### Network
+
 - Remote (dynamic) OPML never sets cookies, headers, proxy or POST options, never
   creates auto-read rules and never follows nested dynamic categories.
-- Imported proxies go through the same SSRF checks as feed URLs; feed URLs other than
-  http(s) are rejected.
+- Imported proxies go through the same SSRF checks as feed URLs (at import and at every
+  fetch); SOCKS is refused; feed URLs other than http(s) are rejected.
+- `Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Keep-Alive`, `Upgrade`,
+  `TE`, `Trailer`, `Expect`, `Proxy-Connection` headers are dropped; redirects ≤ 20.
 - Import reports carry header **names** only, never values of cookies, headers,
   POST bodies or proxy credentials.
-- API/GReader exports (`generateApiOpml`) omit all cURL options, the user agent,
-  unknown extensions and URL credentials, like FreshRSS' public share export.
+
+### Export variants
+
+| Variant | Where | Contains |
+|---|---|---|
+| Private (`generateOpml`) | Manage feeds → Import/Export (session, own feeds only) | everything incl. `CURLOPT_COOKIE`, `CURLOPT_HTTPHEADER`, `CURLOPT_POSTFIELDS`, `CURLOPT_PROXY` (with credentials), `CURLOPT_USERAGENT`, unknown `frss:*`; feed URLs as stored. Never: HTTP Basic auth username/password (separate fields), connector secrets (RSSHub key, changedetection token), sealed values that cannot be decrypted |
+| API (`generateApiOpml`) | REST `GET /api/v1/opml`, GReader `subscription/export` (API token) | no cURL options, no user agent, no unknown `frss:*`, credentials stripped from `xmlUrl`/`htmlUrl`/`opmlUrl`; keeps selectors, XPath/JSON, filters, ttl, priority |
+
+Starter packs have their own generator without any `frss:` attributes. FreshRSS makes
+the same split (cURL options only in private exports).
 
 ## Known upstream differences
 
 - FreshRSS' importer validates `unicityCriteria` with `^[a-z:_-]{2,64}$`, which
   rejects its own `sha1:*` values (digit). FeedFerret accepts them; importing a
   FeedFerret export into FreshRSS therefore loses `sha1:*` criteria on the FreshRSS side.
-- Changing an existing feed to a `sha1:*` criterion re-keys its future articles
-  once (same as FreshRSS).
+- Feeds that already stored a `sha1:*` criterion were keyed like `id` by earlier
+  FeedFerret versions. The sync re-keys such rows in place the first time it sees them
+  (id, read/star/labels and `updatedAt` kept; `tests/lib/frss-unicity-rekey.sqlite.test.ts`).
+- For HTML+XPath feeds without `xPathItemUid`, FreshRSS synthesises the guid
+  `urn:sha1:…` from its own processed title/content; FeedFerret has no such guid, which
+  only matters in the last-resort fallback (all hashed fields empty).
+- `sha1:*content*` criteria hash the feed's content as FeedFerret receives it; FreshRSS
+  hashes SimplePie's sanitised content, so those two can differ for the same item.

@@ -1469,7 +1469,8 @@
         "http-header-dropped": "HTTP header not allowed, not imported",
         "maxredirs-invalid": "Invalid redirect limit ignored",
         "maxredirs-clamped": "Redirect limit adjusted",
-        "css-conditions-partial": "Some full-text conditions cannot be evaluated: full text for all articles"
+        "css-conditions-partial": "Some full-text conditions cannot be evaluated: full text for all articles",
+        "expression-too-long": "Expression too long, not imported"
       }
     },
     "toasts": {

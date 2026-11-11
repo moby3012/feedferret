@@ -90,6 +90,7 @@ export function buildXPathArticlesFromDocument(
       publishedAt: dateFrom(evaluateString(xpath, settings.xPathItemTimestamp || settings.itemTimestamp, node), settings.xPathItemTimeFormat || settings.itemTimeFormat),
       imageUrl: rawImage ? new URL(rawImage, feedUrl).toString() : null,
       externalId: evaluateString(xpath, settings.xPathItemUid || settings.itemUid, node) || link,
+      guid: evaluateString(xpath, settings.xPathItemUid || settings.itemUid, node) || null,
       categories: categoriesFrom(evaluateString(xpath, settings.xPathItemCategories || settings.itemCategories, node)),
     });
   }

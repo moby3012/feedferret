@@ -138,6 +138,10 @@ const BLOCKED_HTTP_HEADERS = new Set([
   "te", "trailer", "expect", "proxy-connection",
 ]);
 const MAX_REDIRECTS = 20;
+/** Per attribute: one selector / XPath / JSON path / header list / proxy URL. */
+export const MAX_EXPRESSION_LENGTH = 2_000;
+/** Per attribute: newline-separated search expressions (read filters, full-text conditions). */
+export const MAX_FILTER_LIST_LENGTH = 10_000;
 
 function emptyReport(dryRun: boolean): OpmlImportReport {
   return {
@@ -166,10 +170,22 @@ export function mapOutlineToFeed(
     issues.push({ kind: "unsupported", code: "feed-url-invalid", subject, attribute: "xmlUrl", detail: urlError ?? "missing" });
     return null;
   }
+  const feedUrl = outline.xmlUrl;
 
-  const extensions = outline.extensions ?? {};
   const issue = (kind: ImportIssue["kind"], code: string, attribute?: string, detail?: string) =>
     issues.push({ kind, code, subject, attribute, detail });
+  // Selectors, XPath and search expressions run on the sync worker's main thread (jsdom)
+  // with no per-expression time limit, so oversized ones are refused at the door.
+  const extensions: Record<string, string> = {};
+  for (const [name, value] of Object.entries(outline.extensions ?? {})) {
+    const limit = name === "filtersActionRead" || name === "cssFullContentConditions" ? MAX_FILTER_LIST_LENGTH : MAX_EXPRESSION_LENGTH;
+    if (value.length > limit) {
+      issue("unsupported", "expression-too-long", name, `${value.length} characters (max ${limit}) — not imported`);
+      continue;
+    }
+    extensions[name] = value;
+  }
+  outline = { ...outline, extensions };
 
   const sourceType = normalizeSourceType(outline.type);
   if (outline.type && !isKnownType(outline.type)) {
@@ -327,7 +343,7 @@ export function mapOutlineToFeed(
   if (Object.keys(preserved).length) scraper.preserved = preserved;
   data.scraperConfig = stringifyNonEmpty(scraper);
 
-  return { url: outline.xmlUrl, name: outline.text, data, ruleQuery };
+  return { url: feedUrl, name: outline.text, data, ruleQuery };
 }
 
 export function planOpmlImport(outlines: OpmlOutline[], options: { trust?: ImportTrust } = {}): OpmlImportPlan {

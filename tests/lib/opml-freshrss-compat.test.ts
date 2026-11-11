@@ -8,7 +8,7 @@ vi.mock("@/lib/db", () => ({ db: {} }));
 
 import { exportPriority, exportReadFilters, exportTtl, generateApiOpml, generateOpml, parseOpml, ttlToMinutes, type OpmlOutline } from "../../lib/opml";
 import { mapOutlineToFeed, planOpmlImport, type ImportIssue, type PlannedCategory, type PlannedFeed } from "../../lib/import/opml-import";
-import { buildDedupeKey } from "../../lib/dedupe-key";
+import { buildDedupeKey, legacyDedupeKeys } from "../../lib/dedupe-key";
 import { compileFullTextConditions } from "../../lib/full-text-conditions";
 import { runInHtmlWorker } from "../../lib/html-worker";
 
@@ -312,10 +312,18 @@ describe("per-attribute mapping", () => {
 
 // ── fetch-side semantics ─────────────────────────────────────────────────────
 
-describe("FreshRSS unicity criteria in article identity", () => {
-  const item = { link: "https://e.example.com/a", title: "Hello", publishedAt: new Date("2026-01-02T03:04:05Z"), content: "<p>Body</p>" };
-  const sha1 = (value: string) => `sha1:${createHash("sha1").update(value).digest("hex")}`;
-  const unix = String(Math.floor(item.publishedAt.getTime() / 1000));
+describe("FreshRSS unicity criteria in article identity (Feed.php decideEntryGuid, fallback: true)", () => {
+  // Expected values are computed here from FreshRSS' documented concatenation with
+  // node:crypto, never through the helper under test. FreshRSS stores the bare
+  // lowercase hex digest (no prefix).
+  const item = { link: "https://e.example.com/a", title: "Hello", publishedAt: new Date("2026-01-02T03:04:05Z"), content: "<p>Body</p>", guid: "guid-1" };
+  const sha1 = (value: string) => createHash("sha1").update(value, "utf8").digest("hex");
+  const unix = "1767323045"; // get_date('U') of 2026-01-02T03:04:05Z
+  const key = (criteria: string, it: Record<string, unknown>, externalId: string | null = null) => buildDedupeKey({ unicityCriteria: criteria }, it, externalId);
+
+  it("uses the Unix timestamp FreshRSS gets from get_date('U')", () => {
+    expect(String(item.publishedAt.getTime() / 1000)).toBe(unix);
+  });
 
   it.each([
     ["sha1:link_published", item.link + unix],
@@ -327,12 +335,42 @@ describe("FreshRSS unicity criteria in article identity", () => {
     ["sha1:content", item.content],
     ["sha1:content_published", item.content + unix],
     ["sha1:published", unix],
-  ])("%s hashes like FreshRSS", (criteria, input) => {
-    expect(buildDedupeKey({ unicityCriteria: criteria }, item, "guid-1")).toBe(sha1(input));
+  ])("%s is the bare SHA-1 hex FreshRSS computes", (criteria, input) => {
+    const expected = sha1(input);
+    expect(expected).toMatch(/^[0-9a-f]{40}$/);
+    expect(key(criteria, item, "guid-1")).toBe(expected);
   });
 
-  it("falls back to the item id when the hashed fields are all empty (FreshRSS treats sha1('') as no GUID)", () => {
-    expect(buildDedupeKey({ unicityCriteria: "sha1:title" }, { link: "https://e.example.com/b" }, "guid-2")).toBe("guid-2");
+  it("matches a published SHA-1 test vector (FIPS 180: sha1(\"abc\"))", () => {
+    expect(key("sha1:title", { title: "abc" })).toBe("a9993e364706816aba3e25717850c26c9cd0d89d");
+  });
+
+  describe("fallback when the hashed fields are all empty (sha1('') counts as no GUID)", () => {
+    it("1. the item's own guid (SimplePie get_id(false, false))", () => {
+      expect(key("sha1:title", { link: "https://e.example.com/b", guid: "guid-2" })).toBe("guid-2");
+    });
+    it("2. no guid: sha1(permalink . date) — never the raw link, even if externalId fell back to it", () => {
+      const it = { link: "https://e.example.com/b", publishedAt: item.publishedAt, guid: null };
+      expect(key("sha1:title", it, "https://e.example.com/b")).toBe(sha1("https://e.example.com/b" + unix));
+    });
+    it("3. no guid, no link: sha1(permalink . date . title)", () => {
+      expect(key("sha1:content", { title: "Only title", publishedAt: item.publishedAt, guid: null })).toBe(sha1(unix + "Only title"));
+    });
+    it("4. nothing but content: sha1(permalink . date . title . content)", () => {
+      expect(key("sha1:link_published", { content: "<p>c</p>", guid: null })).toBe(sha1("<p>c</p>"));
+    });
+    it("5. nothing at all: empty GUID", () => {
+      expect(key("sha1:title", { guid: null })).toBe("");
+    });
+    it("without an explicit guid the externalId argument is the item id", () => {
+      expect(key("sha1:title", { link: "https://e.example.com/b" }, "guid-3")).toBe("guid-3");
+    });
+  });
+
+  it("lists the keys older versions stored, for in-place re-keying", () => {
+    expect(legacyDedupeKeys({ unicityCriteria: "sha1:link_published" }, item, "guid-1")).toEqual(["guid-1", `sha1:${sha1(item.link + unix)}`]);
+    expect(legacyDedupeKeys({ unicityCriteria: "link" }, item, "guid-1")).toEqual([]);
+    expect(legacyDedupeKeys({ unicityCriteria: "id" }, item, "guid-1")).toEqual([]);
   });
 
   it("leaves FeedFerret's own criteria unchanged", () => {
@@ -385,6 +423,15 @@ describe("imported HTTP options stay inside the SSRF and secrecy rules", () => {
     expect(feed.data.httpOptions).toBeNull();
     expect(codes(issues)).toContain("http-option-remote-dropped");
     expect(JSON.stringify(issues)).not.toContain("SECRET");
+  });
+
+  it("refuses oversized selector / XPath / filter expressions (evaluated on the sync thread)", () => {
+    const { feed, issues } = map({ cssFullContent: "div ".repeat(600), xPathItem: "//a" + "/b".repeat(1500), filtersActionRead: "x\n".repeat(6000), cssContentFilter: ".ok" }, "local", { type: "HTML+XPath" });
+    expect(feed.data.fullTextSelector).toBeUndefined();
+    expect(feed.data.filtersActionRead).toBeUndefined();
+    expect(JSON.parse(feed.data.scraperConfig ?? "{}").xpath).toBeUndefined();
+    expect(feed.data.fullTextRemoveSelectors).toBe(".ok");
+    expect(issues.filter((i) => i.code === "expression-too-long").map((i) => i.attribute).sort()).toEqual(["cssFullContent", "filtersActionRead", "xPathItem"]);
   });
 
   it("clamps an excessive redirect limit", () => {

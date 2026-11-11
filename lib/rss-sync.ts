@@ -8,7 +8,7 @@ import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { computeContentHash, normalizeLinkForComparison } from "./content-hash";
-import { buildDedupeKey } from "./dedupe-key";
+import { buildDedupeKey, legacyDedupeKeys } from "./dedupe-key";
 import { decryptIfValue } from "./crypto";
 import type { AiConfig, MeteredAiConfig } from "./ai-summary";
 import { logger, urlForLog } from "./logger";
@@ -58,6 +58,11 @@ export interface ArticleSyncInput {
     link: string;
     externalId: string | null;
     dedupeKey: string;
+    /**
+     * Keys this article may still be stored under from an older identity algorithm
+     * (`legacyDedupeKeys`). A row found only under one of them is re-keyed in place.
+     */
+    legacyDedupeKeys?: string[];
     contentHash: string | null;
     content: string;
     excerpt: string;
@@ -164,6 +169,74 @@ function enrichFields(article: ArticleSyncInput) {
     };
 }
 
+const EXISTING_ROW_SELECT = {
+    id: true,
+    dedupeKey: true,
+    title: true,
+    link: true,
+    externalId: true,
+    content: true,
+    excerpt: true,
+    author: true,
+    publishedAt: true,
+    imageUrl: true,
+    enclosures: true,
+    updatedAt: true,
+    feedContent: true,
+    fullTextStatus: true,
+    fullTextAttempts: true,
+    fullTextFetchedAt: true,
+} as const;
+
+type ExistingArticleRow = { id: string; dedupeKey: string | null; updatedAt: Date };
+
+/**
+ * Identity upgrade (FreshRSS `sha1:*` unicity): an article not found under its
+ * current key but stored under one of its `legacyDedupeKeys` is the same article.
+ * Its row is re-keyed in place, keeping id, read/star state and labels, and
+ * `updatedAt` (re-keying is not a content change; GReader ot/nt clocks rely on it).
+ * The update is conditional on the old key and `updatedAt`, so a concurrent sync
+ * that already moved or changed the row wins and nothing is duplicated by us.
+ * Returns the re-keyed rows (with their new key) for the regular change check.
+ */
+async function rekeyLegacyRows<Row extends ExistingArticleRow>(
+    userId: string,
+    feedId: string,
+    articles: ArticleSyncInput[],
+    found: Row[],
+): Promise<Row[]> {
+    const foundKeys = new Set(found.map((row) => row.dedupeKey));
+    const pending = articles.filter((article) => article.legacyDedupeKeys?.length && !foundKeys.has(article.dedupeKey));
+    if (!pending.length) return [];
+
+    const legacyKeys = [...new Set(pending.flatMap((article) => article.legacyDedupeKeys!))];
+    const legacyRows = (await db.article.findMany({
+        where: { userId, feedId, dedupeKey: { in: legacyKeys } },
+        select: EXISTING_ROW_SELECT,
+    })) as unknown as Row[];
+    if (!legacyRows.length) return [];
+
+    const byKey = new Map(legacyRows.map((row) => [row.dedupeKey as string, row]));
+    const claimed = new Set<string>();
+    const rekeyed: Row[] = [];
+    for (const article of pending) {
+        const row = article.legacyDedupeKeys!.map((key) => byKey.get(key)).find((candidate) => candidate && !claimed.has(candidate.id));
+        if (!row) continue;
+        claimed.add(row.id);
+        try {
+            const result = await db.article.updateMany({
+                where: { id: row.id, userId, dedupeKey: row.dedupeKey, updatedAt: row.updatedAt },
+                data: { dedupeKey: article.dedupeKey, updatedAt: row.updatedAt },
+            });
+            if (result.count === 1) rekeyed.push({ ...row, dedupeKey: article.dedupeKey });
+        } catch (error) {
+            // Unique (userId, feedId, dedupeKey) race: another sync stored the new key first.
+            logger.warn("[rss-sync] re-keying a legacy article row failed:", error);
+        }
+    }
+    return rekeyed;
+}
+
 /**
  * Folds articles that share a dedupe key within the same batch down to one entry,
  * mirroring what a sequential `upsert` loop over the same array would leave in the
@@ -251,25 +324,9 @@ export async function upsertArticleBatch(
 
     const existingRows = await db.article.findMany({
         where: { userId, feedId, dedupeKey: { in: dedupeKeys } },
-        select: {
-            id: true,
-            dedupeKey: true,
-            title: true,
-            link: true,
-            externalId: true,
-            content: true,
-            excerpt: true,
-            author: true,
-            publishedAt: true,
-            imageUrl: true,
-            enclosures: true,
-            updatedAt: true,
-            feedContent: true,
-            fullTextStatus: true,
-            fullTextAttempts: true,
-            fullTextFetchedAt: true,
-        },
+        select: EXISTING_ROW_SELECT,
     });
+    existingRows.push(...(await rekeyLegacyRows(userId, feedId, articles, existingRows)));
     const existingByDedupeKey = new Map(
         existingRows
             .filter((row) => row.dedupeKey !== null)
@@ -622,8 +679,10 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             // (`identityTitle`), so a synthesized display title never changes
             // a title-based dedupe key of an existing row.
             const identityItem = { ...item, title: item.identityTitle ?? item.title };
-            const dedupeKey = (item as GoogleNewsPreparedArticle).dedupeKey
+            const preparedKey = (item as GoogleNewsPreparedArticle).dedupeKey;
+            const dedupeKey = preparedKey
                 ?? (isGoogleNews ? googleNewsStableKey(identityItem) : buildDedupeKey(feed, identityItem, externalId));
+            const legacyKeys = preparedKey || isGoogleNews ? [] : legacyDedupeKeys(feed, identityItem, externalId);
             // Linkless items get a synthetic link from the feed URL — without
             // connector secrets (legacy rows may still carry the RSSHub key).
             const link = item.link || `${publicFeedUrl}#${encodeURIComponent(dedupeKey)}`;
@@ -654,6 +713,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 ...((item as GoogleNewsPreparedArticle).linkCosmetic ? { linkCosmetic: true } : {}),
                 externalId,
                 dedupeKey,
+                ...(legacyKeys.length ? { legacyDedupeKeys: legacyKeys } : {}),
                 contentHash: computeContentHash(link),
                 content: sanitizedContent,
                 excerpt: excerpt,
