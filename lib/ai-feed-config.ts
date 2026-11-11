@@ -12,12 +12,10 @@
 // No UI here (that's slice 2) and no network beyond what's injected via
 // `deps` in tests.
 
-import { JSDOM } from "jsdom";
 import { type MeteredAiConfig, runAiPrompt } from "./ai-summary";
-import { buildXPathArticles } from "./feed-fetcher";
-import { buildPageDigest } from "./page-digest";
+import { scrapeXPathArticles } from "./feed-fetcher";
+import { runInHtmlWorker } from "./html-worker";
 import { redactUrlForPrompt, redactUrlsInPromptText } from "./prompt-url";
-import { getSanitizer } from "./sanitize-html";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import type { SuggestedFieldConfig } from "./page-feed-suggest";
 import { findRoleMainTag, replaceComments, replaceElements } from "@/lib/linear-text";
@@ -76,9 +74,12 @@ export function reduceHtmlForPrompt(html: string): string {
   return redactUrlsInPromptText(collapsed).slice(0, MAX_PROMPT_HTML_CHARS);
 }
 
-/** Builds the strict-JSON prompt asking the model to propose a feed config. */
-export function buildFeedConfigPrompt(html: string, url: string): string {
-  const digest = buildPageDigest(html, url);
+/**
+ * Builds the strict-JSON prompt asking the model to propose a feed config. The
+ * page digest (lib/page-digest.ts) is built in the HTML worker pool.
+ */
+export async function buildFeedConfigPrompt(html: string, url: string): Promise<string> {
+  const digest = await runInHtmlWorker({ task: "digest", html, url });
   return `You are configuring a web-scraping feed reader for the page at ${redactUrlForPrompt(url)}.
 
 Decide whether this page is:
@@ -175,7 +176,7 @@ async function validatePagefeed(
     for (const [key, value] of Object.entries(itemConfig)) {
       if (value) xpath[key] = value;
     }
-    const { articles } = buildXPathArticles(html, url, { xpath }, "text/html");
+    const { articles } = await scrapeXPathArticles(html, url, { xpath }, "text/html");
     // Grounded in the actual page: enough items, each pointing somewhere
     // distinct (a selector that matches one link N times is not a list).
     const distinctLinks = new Set(articles.map((a) => a.link?.trim()).filter((l): l is string => Boolean(l)));
@@ -197,21 +198,10 @@ async function validateFulltext(
   url: string,
 ): Promise<AiFeedValidation> {
   try {
-    const dom = new JSDOM(html, { url });
-    let element: Element | null;
-    try {
-      element = dom.window.document.querySelector(fullTextSelector);
-    } catch {
-      return { ok: false, error: `Invalid CSS selector: ${fullTextSelector}` };
-    }
-    if (!element) {
-      return { ok: false, error: `Selector matched nothing: ${fullTextSelector}` };
-    }
-
-    const sanitizer = await getSanitizer();
-    const sanitized = sanitizer.sanitize(element.innerHTML);
-    const plainText = sanitized.replace(/<[^>]*>?/gm, " ").replace(/\s+/g, " ").trim();
-    const extractedTextLength = plainText.length;
+    const probe = await runInHtmlWorker({ task: "cssProbe", html, url, selector: fullTextSelector });
+    if (probe.status === "invalid") return { ok: false, error: `Invalid CSS selector: ${fullTextSelector}` };
+    if (probe.status === "nomatch") return { ok: false, error: `Selector matched nothing: ${fullTextSelector}` };
+    const extractedTextLength = probe.textLength;
     return { ok: extractedTextLength >= FULLTEXT_MIN_CHARS, extractedTextLength };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to validate fulltext config" };
@@ -255,7 +245,7 @@ export async function proposeFeedConfig(
         },
       ));
   const html = await fetchHtml(url);
-  const prompt = buildFeedConfigPrompt(html, url);
+  const prompt = await buildFeedConfigPrompt(html, url);
   const raw = await (deps?.runAi ?? ((p: string) => runAiPrompt(p, aiConfig, 800)))(prompt);
 
   const proposal = parseAiFeedProposal(raw);

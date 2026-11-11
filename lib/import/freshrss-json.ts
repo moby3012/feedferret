@@ -32,7 +32,10 @@ import { allocateExternalIds } from "@/lib/external-id-store";
 import { buildDedupeKey } from "@/lib/dedupe-key";
 import { computeContentHash } from "@/lib/content-hash";
 import { computeArticleMeta } from "@/lib/article-kind";
-import { getSanitizer } from "@/lib/sanitize-html";
+import { sanitizeFeedItemBodies } from "@/lib/feed-item-sanitize-client";
+
+/** Queue wait for the import's sanitize batches behind a busy background sync (ms). */
+const IMPORT_SANITIZE_QUEUE_WAIT_MS = 10 * 60_000;
 import { MAX_FEED_URL_LENGTH, MAX_LABEL_NAME, validateFeedUrl } from "@/lib/validation";
 import type { ImportIssue } from "./opml-import";
 
@@ -284,7 +287,6 @@ export async function importFreshRssArticles(
   };
   counts.total = rawItems.length;
 
-  const sanitizer = await getSanitizer();
   const feedCache = new Map<string, FeedRow>();
   const orphanSeen = new Set<string>();
   const labelCache = new Map<string, string>(); // name -> id
@@ -408,13 +410,27 @@ export async function importFreshRssArticles(
       // two distinct guids may legitimately share one link (and must stay two articles).
       (item.link && !item.guid ? existingRows.find((row) => row.feedId === item.feedId && row.link === item.link && !row.externalId) : undefined);
 
+    // New articles' HTML is sanitized in the HTML worker pool, one batch per
+    // chunk (an export is attacker-shapeable: deep nesting in one item must not
+    // stall the server). Background priority: interactive requests go first; the
+    // generous queue wait keeps a long import from failing behind a busy sync.
+    const sanitizedByIndex = new Map<number, { html: string; excerpt: string }>();
+    if (!dryRun) {
+      const toCreate = folded.map((item, index) => ({ item, index })).filter(({ item }) => !findExisting(item));
+      const sanitized = await sanitizeFeedItemBodies(
+        toCreate.map(({ item }) => item.content),
+        { excerptFromSanitized: true, run: { priority: "background", queueWaitMs: IMPORT_SANITIZE_QUEUE_WAIT_MS } },
+      );
+      toCreate.forEach(({ index }, i) => sanitizedByIndex.set(index, sanitized[i]));
+    }
+
     type Create = { item: (typeof folded)[number]; row: Record<string, unknown> };
     const creates: Create[] = [];
     // One pending update per existing article, however many folded items resolved to it.
     const updatesById = new Map<string, { id: string; data: Record<string, unknown>; labelIds: Set<string>; names: Set<string> }>();
     const labelId = (name: string) => labelCache.get(name);
 
-    for (const item of folded) {
+    for (const [itemIndex, item] of folded.entries()) {
       if (item.isStarred) counts.starred += 1;
       if (item.isRead) counts.read += 1;
       const existing = findExisting(item);
@@ -442,7 +458,7 @@ export async function importFreshRssArticles(
         counts.created += 1;
         counts.labelAssignments += item.labels.length;
         const link = item.link || `${item.feedUrl}#${encodeURIComponent(item.dedupeKey)}`;
-        const content = sanitizer.sanitize(item.content);
+        const { html: content, excerpt } = sanitizedByIndex.get(itemIndex)!;
         const imageUrl = item.enclosures.find((e) => e.type === "image" || e.type.startsWith("image/"))?.href ?? null;
         const meta = computeArticleMeta({ content, contentFormat: "html", title: item.title, link, imageUrl, enclosures: item.enclosures, feedUrl: item.feedUrl });
         creates.push({
@@ -456,7 +472,7 @@ export async function importFreshRssArticles(
             dedupeKey: item.dedupeKey,
             contentHash: computeContentHash(link),
             content,
-            excerpt: sanitizer.sanitize(content, { ALLOWED_TAGS: [] }).substring(0, 200),
+            excerpt,
             author: item.author,
             publishedAt: item.publishedAt,
             // Read/starred items keep FreshRSS' crawl time. Unread ones are stamped "now" (column

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildPageDigest, PAGE_DIGEST_MAX_CHARS } from "../../lib/page-digest";
 import { buildFeedConfigPrompt, reduceHtmlForPrompt } from "../../lib/ai-feed-config";
 
@@ -40,9 +40,9 @@ describe("buildPageDigest (chromie-like page: 27 KB head, feed anchors at ~188 K
     expect(digest).toMatch(/Repeating lists found by the built-in heuristic[\s\S]*xPathItem \/\/[^\n]*— 12 items/);
   });
 
-  it("the old head-prefix input never reached the body; the AI prompt now does", () => {
+  it("the old head-prefix input never reached the body; the AI prompt now does", async () => {
     // Regression guard against R3: the prompt must contain body content and the feed link.
-    const prompt = buildFeedConfigPrompt(html, URL_);
+    const prompt = await buildFeedConfigPrompt(html, URL_);
     expect(prompt).toContain("Patch-Notizen zur neuen Saison");
     expect(prompt).toContain("https://www.chronik.example/feed.xml");
     expect(prompt).toContain("<page-digest>");
@@ -67,5 +67,18 @@ describe("reduceHtmlForPrompt (AI article extraction input)", () => {
     expect(reduced.startsWith("<main>")).toBe(true);
     expect(reduced).toContain("Body text here.");
     expect(reduced).not.toContain("preload");
+  });
+
+  it("does not depend on wall-clock time (the CI equivalence failure of #281: worker vs in-process diverged under load)", () => {
+    const html = fixture("chromie-like");
+    const reference = buildPageDigest(html, URL_);
+    // A clock that jumps 10 s per reading exhausts any time budget at once.
+    let t = 0;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => (t += 10_000));
+    try {
+      expect(buildPageDigest(html, URL_)).toBe(reference);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

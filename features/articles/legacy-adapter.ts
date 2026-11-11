@@ -91,6 +91,7 @@ export function withDetail<T extends Article>(article: T, detail: ArticleDetail 
     content: detail.html,
     // `content` is already render-ready HTML (Markdown is rendered + sanitized on the server).
     contentFormat: "html",
+    htmlFallback: detail.htmlFallback === true,
     aiSummary: detail.aiSummary,
     aiSummarizedAt: detail.aiSummarizedAt,
     readAt: detail.readAt,

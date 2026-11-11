@@ -33,8 +33,8 @@ describe("prompts never carry credentials from the page", () => {
     ["feed-config prompt", () => buildFeedConfigPrompt(html, pageUrl)],
     ["extraction prompt", () => buildExtractionPrompt(html, pageUrl)],
     ["reduced html", () => reduceHtmlForPrompt(html)],
-  ])("%s", (_l, build) => {
-    const out = build();
+  ])("%s", async (_l, build) => {
+    const out = await build();
     for (const secret of SECRETS) expect(out, secret).not.toContain(secret);
     expect(out).not.toMatch(/alice|bob:/);
   });

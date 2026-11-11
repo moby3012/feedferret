@@ -1048,6 +1048,7 @@
     "aiSummaryHint": "KI-Zusammenfassungen sind möglicherweise nicht vollständig korrekt. Wichtige Informationen immer verifizieren.",
     "noContent": "Kein Inhalt",
     "noContentDescription": "Dieser Artikel hat keinen Inhalt. Original öffnen, um ihn zu lesen.",
+    "plainTextFallback": "Als Klartext angezeigt (Darstellung vorübergehend nicht möglich)",
     "openOriginal": "Original öffnen",
     "fetchFullText": "Volltext abrufen",
     "fetching": "Wird abgerufen…",

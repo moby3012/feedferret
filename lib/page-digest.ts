@@ -13,12 +13,17 @@
 //   - a skeleton outline of the body (main content first): tag#id.classes,
 //     short text / link samples, repeated siblings collapsed ("×24 more").
 // Generic: no host rules, nothing site-specific.
+//
+// Parses the untrusted page with jsdom: production code builds digests only in
+// the HTML worker pool (lib/html-worker, task `pageDigest`).
 
 import { JSDOM } from "jsdom";
-import { suggestFeedCandidates } from "./page-feed-suggest";
+import { suggestFeedCandidates } from "./page-feed-suggest-core";
 import { redactUrlForPrompt } from "./prompt-url";
 
 export const PAGE_DIGEST_MAX_CHARS = 12_000;
+/** Repeating groups the digest's list heuristic validates (largest first; the digest shows the top 3). */
+export const DIGEST_MAX_GROUPS = 12;
 
 export type PageDigestOptions = {
   /** Total character budget of the digest (default PAGE_DIGEST_MAX_CHARS). */
@@ -256,7 +261,11 @@ export function buildPageDigest(html: string, url: string, opts: PageDigestOptio
   if (opts.includeCandidates !== false) {
     let candidates: ReturnType<typeof suggestFeedCandidates> = [];
     try {
-      candidates = suggestFeedCandidates(html, url).slice(0, 3);
+      // Deterministic work bound, not the heuristic's wall-clock budget: the
+      // digest must not depend on how fast (or loaded) the machine is — the
+      // same page must give the same prompt in the worker, in tests and in CI.
+      // The worker's task timeout bounds the time.
+      candidates = suggestFeedCandidates(html, url, { timeBudgetMs: Infinity, maxGroups: DIGEST_MAX_GROUPS }).slice(0, 3);
     } catch {
       candidates = [];
     }

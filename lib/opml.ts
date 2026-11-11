@@ -1,3 +1,6 @@
+import { guardHtml } from "@/lib/html-guard";
+import { HtmlTaskFailedError, isHtmlWorkerError, runHtmlTask } from "@/lib/html-worker/pool";
+import { OpmlParseError, assertSafeOpmlXml, type OpmlOutline } from "./opml-shared";
 import { readPlainColumnOrNull } from "@/lib/secret-box";
 import {
     OPML_EXTENSION_NAMESPACE,
@@ -13,108 +16,37 @@ import {
     parseJsonObject,
 } from "./feed-extraction";
 
-/** Hard limits for untrusted OPML documents (UI upload, REST, MCP, ZIP, remote dynamic OPML). */
-export const OPML_PARSE_LIMITS = {
-    maxOutlines: 20_000,
-    maxDepth: 16,
-} as const;
-
-export class OpmlParseError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = "OpmlParseError";
-    }
-}
-
-/**
- * Rejects documents that declare entities or an internal DTD subset. That is the
- * only vector for XXE (external entities) and "billion laughs" (nested entity
- * expansion); OPML never needs either, so refusing outright is safer than
- * relying on a parser's entity handling. JSDOM never fetches external DTDs.
- */
-export function assertSafeOpmlXml(xml: string): void {
-    if (/<!ENTITY/i.test(xml) || /<!DOCTYPE[^>]*\[/i.test(xml)) {
-        throw new OpmlParseError("OPML documents with entity declarations or an internal DTD subset are not accepted");
-    }
-    // Cheap pre-check so an outline flood is refused before the (slow) DOM parse.
-    let outlines = 0;
-    for (const _ of xml.matchAll(/<outline[\s/>]/g)) {
-        if (++outlines > OPML_PARSE_LIMITS.maxOutlines) {
-            throw new OpmlParseError(`OPML contains more than ${OPML_PARSE_LIMITS.maxOutlines} outlines`);
-        }
-    }
-}
-
-export interface OpmlOutline {
-    text: string;
-    title?: string;
-    type?: string;
-    xmlUrl?: string;
-    htmlUrl?: string;
-    description?: string;
-    category?: string;
-    extensions?: Record<string, string>;
-    children?: OpmlOutline[];
-}
+// Parsing lives in lib/opml-parse-core.ts (runs in the HTML worker pool).
+export { OPML_PARSE_LIMITS, OpmlParseError, assertSafeOpmlXml, type OpmlOutline } from "./opml-shared";
 
 /**
  * Parses an OPML string into a hierarchical list of outlines, preserving Scout Studio
- * extended attributes under `outline.extensions`.
+ * extended attributes under `outline.extensions`. Cheap checks (entities / DTD,
+ * outline count, nesting / element work) run here; the jsdom parse runs in the
+ * HTML worker pool (lib/opml-parse-core.ts). Every failure is an OpmlParseError.
  */
 export async function parseOpml(xml: string): Promise<OpmlOutline[]> {
     const source = xml.charCodeAt(0) === 0xfeff ? xml.slice(1) : xml;
     assertSafeOpmlXml(source);
-    const { JSDOM } = await import("jsdom");
-    let document: Document;
-    try {
-        document = new JSDOM(source, { contentType: "text/xml" }).window.document;
-    } catch (error) {
-        throw new OpmlParseError(`Invalid OPML/XML document: ${error instanceof Error ? error.message : String(error)}`);
+    const guard = guardHtml(source, { xml: true, maxChars: Number.MAX_SAFE_INTEGER, maxDepth: 256 });
+    if (guard.truncatedBy) {
+        throw new OpmlParseError(`OPML document is too deeply nested or too complex to parse (${guard.truncatedBy})`);
     }
-    const body = document.querySelector("body");
-
-    if (!body) return [];
-
-    let outlineCount = 0;
-
-    const parseOutline = (element: Element, depth: number): OpmlOutline => {
-        if (depth > OPML_PARSE_LIMITS.maxDepth) throw new OpmlParseError(`OPML nesting deeper than ${OPML_PARSE_LIMITS.maxDepth} levels`);
-        if (++outlineCount > OPML_PARSE_LIMITS.maxOutlines) throw new OpmlParseError(`OPML contains more than ${OPML_PARSE_LIMITS.maxOutlines} outlines`);
-
-        // Every attribute in the FreshRSS extension namespace is kept (the prefix is
-        // not significant, the namespace is). Unknown names are preserved verbatim so
-        // the importer can report/preserve them instead of silently dropping them.
-        const extensions: Record<string, string> = {};
-        for (const attribute of Array.from(element.attributes)) {
-            const inNamespace = attribute.namespaceURI === OPML_EXTENSION_NAMESPACE;
-            const legacyPrefix = !attribute.namespaceURI && attribute.name.startsWith(`${OPML_EXTENSION_PREFIX}:`);
-            if (!inNamespace && !legacyPrefix) continue;
-            const name = inNamespace ? attribute.localName : attribute.name.slice(OPML_EXTENSION_PREFIX.length + 1);
-            if (attribute.value !== "") extensions[name] = attribute.value;
+    try {
+        return await runHtmlTask("parseOpml", source);
+    } catch (error) {
+        if (error instanceof HtmlTaskFailedError && error.originalName === "OpmlParseError") throw new OpmlParseError(error.message);
+        if (isHtmlWorkerError(error)) {
+            throw new OpmlParseError(
+                error.reason === "unavailable"
+                    ? "OPML parsing is unavailable on this server right now (administrator: see /api/health)"
+                    : error.reason === "busy"
+                      ? "The server is busy; try the OPML import again in a moment"
+                      : `OPML document is too complex to parse (${error.reason})`,
+            );
         }
-
-        const outline: OpmlOutline = {
-            text: element.getAttribute("text") || element.getAttribute("title") || "Untitled",
-            title: element.getAttribute("title") || undefined,
-            type: element.getAttribute("type") || undefined,
-            xmlUrl: element.getAttribute("xmlUrl") || undefined,
-            htmlUrl: element.getAttribute("htmlUrl") || undefined,
-            description: element.getAttribute("description") || undefined,
-            category: element.getAttribute("category") || undefined,
-            extensions: Object.keys(extensions).length ? extensions : undefined,
-        };
-
-        const children = Array.from(element.children).filter(el => el.tagName.toLowerCase() === "outline");
-        if (children.length > 0) {
-            outline.children = children.map((child) => parseOutline(child, depth + 1));
-        }
-
-        return outline;
-    };
-
-    return Array.from<Element>(body.children)
-        .filter((el: Element) => el.tagName.toLowerCase() === "outline")
-        .map((el) => parseOutline(el, 1));
+        throw error;
+    }
 }
 
 function attr(name: string, value: unknown) {

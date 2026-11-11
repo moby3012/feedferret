@@ -13,12 +13,14 @@ import { decryptIfValue } from "./crypto";
 import type { AiConfig, MeteredAiConfig } from "./ai-summary";
 import { logger, urlForLog } from "./logger";
 import { getConnectorSecretRules, redactConnectorTextWith, stripConnectorSecretsWith } from "./connector-secrets";
-import { getSanitizer } from "./sanitize-html";
+import { sanitizeFeedItemBodies } from "./feed-item-sanitize-client";
+import { isHtmlWorkerError, runInHtmlWorker } from "./html-worker";
+import { runAsBackgroundHtmlWork } from "./html-worker/pool";
+import type { SelectorExtractOutput } from "./selector-extract";
 import { resolveFullTextMode } from "./full-text-mode";
 import { EscalationBudgetExhaustedError, fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
-import { assessExtraction, decideFullText } from "./extraction-quality";
+import { decideFullText } from "./extraction-quality";
 import { classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
-import { normalizeLazyMedia } from "./lazy-media";
 import {
     FULL_TEXT_STATE_SELECT,
     MAX_FULL_TEXT_FETCHES_PER_SYNC,
@@ -597,16 +599,18 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         if (!feed.description && remoteFeed.description) feedPatch.description = remoteFeed.description;
         if (!feed.htmlUrl && remoteFeed.htmlUrl) feedPatch.htmlUrl = remoteFeed.htmlUrl;
 
-        const DOMPurify = await getSanitizer();
-
         const maxChars = feed.maxSizeKb ? feed.maxSizeKb * 1024 : undefined;
+        const itemContents = remoteFeed.articles.map((item) => {
+            const content = item.content || item.summary || "";
+            return maxChars && content.length > maxChars ? content.slice(0, maxChars) : content;
+        });
+        // Item bodies are attacker-controlled HTML: sanitized in the HTML
+        // worker pool on bounded input, never on the main thread.
+        const sanitizedItems = await sanitizeFeedItemBodies(itemContents);
 
-        const articles = remoteFeed.articles.map((item) => {
-            let content = item.content || item.summary || "";
-            if (maxChars && content.length > maxChars) {
-                content = content.slice(0, maxChars);
-            }
-            const excerpt = DOMPurify.sanitize(content, { ALLOWED_TAGS: [] }).substring(0, 200);
+        const articles = remoteFeed.articles.map((item, index) => {
+            const content = itemContents[index];
+            const { excerpt, html: sanitizedContent } = sanitizedItems[index];
 
             const externalId = item.externalId || item.link || null;
             // Google News: identity was fixed in the pre-pass from the raw item
@@ -621,7 +625,6 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             // connector secrets (legacy rows may still carry the RSSHub key).
             const link = item.link || `${publicFeedUrl}#${encodeURIComponent(dedupeKey)}`;
 
-            const sanitizedContent = DOMPurify.sanitize(content);
             // Fetchers already synthesized a display title (with provenance)
             // for title-less items — see resolveItemTitle().
             const title = item.title || UNTITLED;
@@ -725,6 +728,13 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
 
         return { success: true, count: articles.length, createdArticleIds };
     } catch (error) {
+        // A saturated (`busy`, incl. a background queue-wait deadline) or missing
+        // (`unavailable`) HTML worker pool says nothing about the feed: no failure
+        // streak / auto-mute, no lastFetchedAt bump — the next sync retries it.
+        if (isHtmlWorkerError(error) && (error.reason === "busy" || error.reason === "unavailable")) {
+            logger.warn(`[rss-sync] feed ${feed.id} (${urlForLog(feed.url)}) deferred: HTML worker ${error.reason}`);
+            return { success: true, skipped: true, deferred: true, count: 0, createdArticleIds: [] };
+        }
         // Log origin only: feed URLs can carry private tokens / userinfo (N15).
         logger.error(`Error syncing feed ${feed.id} (${urlForLog(feed.url)}):`, error);
         const failureUpdate = applySyncFailure(
@@ -797,6 +807,17 @@ async function deferIfHostBackingOff(article: FullTextArticleState): Promise<boo
     return true;
 }
 
+/**
+ * The page could not be parsed within the HTML worker's limits (`too_complex`:
+ * a hard failure that counts towards the retry cap), the pool was saturated
+ * (`busy`) or is missing (`unavailable`): those two are retried next sync. The
+ * article keeps its feed content in every case.
+ */
+async function recordParseAborted(article: FullTextArticleState, reason: "too_complex" | "busy" | "unavailable") {
+    if (reason === "too_complex") await recordFullTextMiss(article, "failed", "too_complex");
+    else await recordFullTextMiss(article, "deferred", reason === "busy" ? "parser_busy" : "parser_unavailable");
+}
+
 async function recordFullTextFetchError(article: FullTextArticleState, error: unknown) {
     const { kind, status } = classifyFetchFailure(error);
     const reason = status ? `http_${status}` : kind;
@@ -811,8 +832,6 @@ async function autoFetchFullTextForArticles(
         fullTextRemoveSelectors?: string | null;
     },
 ) {
-    const { JSDOM } = await import("jsdom");
-    const DOMPurify = await getSanitizer();
     const { recordHostFailure, recordHostSuccess } = await import("./host-backoff");
 
     const articles = await loadFullTextCandidates(userId, articleIds);
@@ -840,52 +859,33 @@ async function autoFetchFullTextForArticles(
                 await recordFullTextFetchError(article, error);
                 continue;
             }
-            const dom = new JSDOM(html, { url: article.link });
-            const document = dom.window.document;
-            normalizeLazyMedia(document, article.link);
-
-            // Remove unwanted elements
-            const removeSelectors = [
-                "script", "style", "nav", "footer", "header", "aside", "form", "iframe", "noscript", "svg",
-                ...(feed.fullTextRemoveSelectors
-                    ? feed.fullTextRemoveSelectors.split(",").map((s) => s.trim()).filter(Boolean)
-                    : []),
-            ];
-            document.querySelectorAll(removeSelectors.join(",")).forEach((n: Element) => n.remove());
-
-            // Resolve relative URLs
-            document.querySelectorAll("a[href], img[src]").forEach((node: Element) => {
-                const attr = node instanceof dom.window.HTMLImageElement ? "src" : "href";
-                const value = node.getAttribute(attr);
-                if (!value) return;
-                try { node.setAttribute(attr, new URL(value, article.link!).toString()); } catch { /* ignore */ }
-            });
-
-            let best: Element | undefined;
-            if (feed.fullTextSelector) {
-                best = document.querySelector(feed.fullTextSelector) ?? undefined;
-            }
-            if (!best) {
-                const candidates = ["article", "main", "[role='main']", ".post-content", ".entry-content", ".article-content", ".content"]
-                    .flatMap((s) => Array.from<Element>(document.querySelectorAll(s)))
-                    .concat(Array.from<Element>(document.body.children));
-                best = candidates
-                    .map((el: Element) => ({
-                        el,
-                        score: (el.textContent?.trim().length || 0) + el.querySelectorAll("p").length * 250 - el.querySelectorAll("a").length * 20,
-                    }))
-                    .sort((a, b) => b.score - a.score)[0]?.el;
+            // Parsing + selector evaluation of the (attacker-controlled) page
+            // runs in the HTML worker pool on bounded input.
+            let extracted: SelectorExtractOutput;
+            try {
+                extracted = await runInHtmlWorker({
+                    task: "css",
+                    html,
+                    url: article.link,
+                    selector: feed.fullTextSelector,
+                    removeSelectors: feed.fullTextRemoveSelectors,
+                    mode: "sync",
+                });
+            } catch (error) {
+                if (!isHtmlWorkerError(error)) throw error;
+                await recordParseAborted(article, error.reason === "busy" || error.reason === "unavailable" ? error.reason : "too_complex");
+                continue;
             }
 
-            if (!best) {
+            if (!extracted.html) {
                 await recordFullTextMiss(article, "rejected", "empty");
                 continue;
             }
 
-            const sanitized = DOMPurify.sanitize(best.innerHTML, { ADD_ATTR: ["target", "rel"] }).trim();
+            const sanitized = extracted.html;
             // Same generic quality gate as the engine path: walls, link lists,
             // thin pages and "no better than the feed" results are not stored.
-            const decision = decideFullText(assessExtraction(sanitized), feedBaseline(article), "auto");
+            const decision = decideFullText(extracted.quality, feedBaseline(article), "auto");
             if (!decision.accept) {
                 await recordFullTextMiss(article, "rejected", decision.reason);
                 continue;
@@ -984,6 +984,13 @@ async function autoFetchFullTextViaEngine(
                 continue;
             }
 
+            if (!result.html && result.parseAborted) {
+                // The page could not be parsed within the HTML worker's limits
+                // (lib/html-worker): a hard failure (counts towards the retry cap),
+                // or a saturated pool (retry next sync).
+                await recordParseAborted(article, result.parseAborted);
+                continue;
+            }
             const decision = decideFullText(result.quality, baselineHtml, "auto");
             if ((!decision.accept || !result.html) && result.budgetSkipped) {
                 // Escalation was cut short by the per-sync budget: retry next sync
@@ -1178,7 +1185,17 @@ export async function autoTagNewArticles(
     }
 }
 
-export async function syncUserFeeds(userId: string) {
+/**
+ * Bulk syncs (all of a user's feeds: the reader's boot sync, "refresh all";
+ * every feed: the scheduler) queue their HTML parsing as BACKGROUND work, so a
+ * user waiting on one page (manual full text, previews) is served first.
+ * Single-feed syncs (add feed, "refresh this feed") stay interactive.
+ */
+export function syncUserFeeds(userId: string) {
+    return runAsBackgroundHtmlWork(() => syncUserFeedsNow(userId));
+}
+
+async function syncUserFeedsNow(userId: string) {
     await syncDynamicOpmlCategories(userId).catch((e) =>
         logger.error("[rss-sync] dynamic OPML sync failed:", e),
     );
@@ -1247,7 +1264,11 @@ export async function syncUserFeeds(userId: string) {
     return results;
 }
 
-export async function syncAllFeeds() {
+export function syncAllFeeds() {
+    return runAsBackgroundHtmlWork(() => syncAllFeedsNow());
+}
+
+async function syncAllFeedsNow() {
     const startedAt = Date.now();
     const configuredBudget = Number(process.env.SYNC_ALL_BUDGET_MS);
     const budgetMs = Number.isFinite(configuredBudget) && configuredBudget > 0 ? configuredBudget : 240_000;

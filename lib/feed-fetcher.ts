@@ -1,5 +1,4 @@
 import Parser from "rss-parser";
-import { JSDOM } from "jsdom";
 import {
   FeedHttpOptions,
   FeedExtractionConfig,
@@ -12,10 +11,27 @@ import { assertSafeProxyUrl, fetchWithSsrfProtection, isTrustedFeedFetchingAllow
 import { logger } from "./logger";
 import { readFeedCredentials } from "./feed-secrets";
 import { isTrustedGoogleNewsOverrideUrl } from "./google-news";
-import { stripStyleBlocks } from "./html-utils";
 import { parseDurationSecs } from "./article-kind";
 import { resolveItemTitle } from "./title-synthesis";
 import { firstImgSrc } from "@/lib/linear-text";
+import { categoriesFrom, dateFrom, htmlText, type FetchedFeed, type FetchedFeedArticle } from "./feed-item-fields";
+import { runInHtmlWorker } from "./html-worker";
+
+// The XPath engine parses untrusted pages with jsdom: it lives in
+// lib/feed-parse-core.ts and runs only in the HTML worker pool
+// (`scrapeXPathArticles` below).
+export { categoriesFrom, htmlText } from "./feed-item-fields";
+export type { FetchedFeed, FetchedFeedArticle } from "./feed-item-fields";
+
+/** `buildXPathArticles` off the main thread, on the guarded (size/depth-bounded) input. */
+export async function scrapeXPathArticles(
+  raw: string,
+  feedUrl: string,
+  config: FeedExtractionConfig,
+  contentType: "text/html" | "text/xml",
+): Promise<FetchedFeed> {
+  return runInHtmlWorker({ task: "xpath", html: raw, url: feedUrl, config, contentType });
+}
 
 export type FeedFetchConfig = {
   url: string;
@@ -58,44 +74,6 @@ export type FeedFetchConfig = {
   onRedirect?: (nextUrl: string) => boolean;
 };
 
-export type FetchedFeedArticle = {
-  /** Display title; synthesized from content when the feed supplied none. */
-  title: string;
-  /** `title` was synthesized from content (provenance — never a real title). */
-  titleSynthetic?: true;
-  /**
-   * Title as stored before synthesis existed (`raw || "Untitled"`): the
-   * dedupe-key input for title-based unicityCriteria. Defaults to `title`.
-   */
-  identityTitle?: string;
-  link: string;
-  content: string;
-  summary?: string | null;
-  author?: string | null;
-  publishedAt?: Date | null;
-  imageUrl?: string | null;
-  enclosures?: Array<{ href: string; type: string; length?: number }>;
-  /** `media:content` with an audio/video type (used when there is no such enclosure). */
-  media?: { url: string; type: string } | null;
-  /** `itunes:duration` / `media:content@duration`, in seconds. */
-  durationSecs?: number | null;
-  externalId?: string | null;
-  categories?: string[];
-  /** RSS `<source>` element text (publisher name on aggregators like Google News). */
-  sourceName?: string | null;
-};
-
-export type FetchedFeed = {
-  title?: string | null;
-  description?: string | null;
-  htmlUrl?: string | null;
-  articles: FetchedFeedArticle[];
-  /** True when the server responded 304 Not Modified — `articles` will be empty and callers should skip processing. */
-  notModified?: boolean;
-  /** New `ETag`/`Last-Modified` response headers, to be persisted for the next conditional GET. */
-  etag?: string | null;
-  lastModifiedHeader?: string | null;
-};
 
 // `media:content` is collected under a private key so the existing
 // `item["media:content"]` image fallback below keeps its current behaviour.
@@ -131,23 +109,6 @@ function splitHeaderLines(value?: unknown) {
   return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
-/**
- * xml2js (used by rss-parser) represents an XML element that has BOTH
- * attributes and text content — e.g. `<category domain="...">Foo</category>`
- * — as `{ _: "Foo", $: { domain: "..." } }`, and that object has a `null`
- * prototype. `String()`/template-literal coercion on a null-prototype object
- * throws "Cannot convert object to primitive value" (no inherited
- * `toString`/`valueOf`/`Symbol.toPrimitive`), which previously crashed the
- * whole feed sync. Extract the text node explicitly instead of coercing.
- */
-export function htmlText(value: unknown) {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "object") {
-    const text = (value as { _?: unknown })._;
-    return typeof text === "string" ? text.trim() : "";
-  }
-  return String(value).trim();
-}
 
 function dotGet(input: unknown, path?: string): unknown {
   if (!path) return input;
@@ -164,28 +125,12 @@ function dotGet(input: unknown, path?: string): unknown {
   return current;
 }
 
-function dateFrom(value: unknown, format?: string) {
-  if (!value) return null;
-  const raw = htmlText(value);
-  if (!raw) return null;
-  if (format === "U") {
-    const n = Number(raw);
-    if (Number.isFinite(n)) return new Date(raw.length > 10 ? n : n * 1000);
-  }
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
 
 function firstString(value: unknown) {
   if (Array.isArray(value)) return htmlText(value[0]);
   return htmlText(value);
 }
 
-export function categoriesFrom(value: unknown) {
-  if (Array.isArray(value)) return value.map(htmlText).filter(Boolean);
-  const raw = htmlText(value);
-  return raw ? raw.split(",").map((item) => item.trim()).filter(Boolean) : [];
-}
 
 function itemContent(value: unknown) {
   if (value === null || value === undefined) return "";
@@ -221,92 +166,6 @@ function buildJsonArticles(json: unknown, config: FeedExtractionConfig): Fetched
   };
 }
 
-function evaluateString(xpath: XPathEvaluator, expression: string | undefined, context: Node) {
-  if (!expression) return "";
-  try {
-    const result = xpath.evaluate(expression, context, null, 2, null);
-    return result.stringValue.trim();
-  } catch {
-    return "";
-  }
-}
-
-function evaluateContent(xpath: XPathEvaluator, expression: string | undefined, context: Node) {
-  if (!expression) return "";
-  try {
-    const result = xpath.evaluate(expression, context, null, 0, null);
-    if (result.resultType === 4 || result.resultType === 5) {
-      const node = result.iterateNext();
-      if (!node) return "";
-      if (node.nodeType === 1) return (node as Element).innerHTML;
-      return node.textContent?.trim() ?? "";
-    }
-    if (result.resultType === 2) return result.stringValue.trim();
-    return String(result.stringValue ?? "").trim();
-  } catch {
-    return "";
-  }
-}
-
-export function buildXPathArticles(raw: string, feedUrl: string, config: FeedExtractionConfig, contentType: "text/html" | "text/xml"): FetchedFeed {
-  // Strip <style> from HTML pages so jsdom's CSS parser can't crash on
-  // `border: var(--border-width,…)` shorthands (see html-utils). XML feeds
-  // have no style blocks, so leave those untouched.
-  const source = contentType === "text/html" ? stripStyleBlocks(raw) : raw;
-  const dom = new JSDOM(source, { url: feedUrl, contentType });
-  try {
-    return buildXPathArticlesFromDocument(dom.window.document, new dom.window.XPathEvaluator(), feedUrl, config);
-  } finally {
-    dom.window.close();
-  }
-}
-
-/**
- * The XPath extraction engine over an already-parsed document. The page →
- * feed suggester validates many candidate configs against one page; parsing
- * the (up to 2 MiB) HTML once per candidate instead exhausted memory on large
- * news homepages. `buildXPathArticles` is the single-config entry point.
- */
-export function buildXPathArticlesFromDocument(
-  document: Document,
-  xpath: XPathEvaluator,
-  feedUrl: string,
-  config: FeedExtractionConfig,
-  /** Optional out-param: receives the matched item nodes (saves the caller a second evaluation). */
-  itemNodes?: Node[],
-): FetchedFeed {
-  const settings = config.xpath ?? {};
-  const itemExpression = settings.xPathItem || settings.item;
-  if (!itemExpression) return { articles: [] };
-
-  const result = xpath.evaluate(itemExpression, document, null, 7, null);
-  const articles: FetchedFeedArticle[] = [];
-  for (let i = 0; i < result.snapshotLength; i++) {
-    const node = result.snapshotItem(i);
-    if (!node) continue;
-    itemNodes?.push(node);
-    const rawLink = evaluateString(xpath, settings.xPathItemUri || settings.itemUri, node);
-    const link = rawLink ? new URL(rawLink, feedUrl).toString() : "";
-    const rawImage = evaluateString(xpath, settings.xPathItemThumbnail || settings.itemThumbnail, node);
-    const content = evaluateContent(xpath, settings.xPathItemContent || settings.itemContent, node);
-    const rawTitle = evaluateString(xpath, settings.xPathItemTitle || settings.itemTitle, node);
-    articles.push({
-      ...resolveItemTitle(rawTitle, content),
-      link,
-      content,
-      author: evaluateString(xpath, settings.xPathItemAuthor || settings.itemAuthor, node) || null,
-      publishedAt: dateFrom(evaluateString(xpath, settings.xPathItemTimestamp || settings.itemTimestamp, node), settings.xPathItemTimeFormat || settings.itemTimeFormat),
-      imageUrl: rawImage ? new URL(rawImage, feedUrl).toString() : null,
-      externalId: evaluateString(xpath, settings.xPathItemUid || settings.itemUid, node) || link,
-      categories: categoriesFrom(evaluateString(xpath, settings.xPathItemCategories || settings.itemCategories, node)),
-    });
-  }
-
-  return {
-    title: evaluateString(xpath, settings.feedTitle, document) || null,
-    articles,
-  };
-}
 
 export function extractImageFromHtml(html: string) {
   // Feed item HTML is attacker-controlled and parsed in the background sync:
@@ -501,7 +360,7 @@ export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedF
     const result = await fetchText(feed, "text/html,application/xhtml+xml,*/*");
     if (result.notModified) return notModifiedResult(result);
     return {
-      ...buildXPathArticles(result.text, feed.url, scraperConfig, "text/html"),
+      ...(await scrapeXPathArticles(result.text, feed.url, scraperConfig, "text/html")),
       etag: result.etag,
       lastModifiedHeader: result.lastModified,
     };
@@ -511,7 +370,7 @@ export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedF
     const result = await fetchText(feed, "application/xml,text/xml,*/*");
     if (result.notModified) return notModifiedResult(result);
     return {
-      ...buildXPathArticles(result.text, feed.url, scraperConfig, "text/xml"),
+      ...(await scrapeXPathArticles(result.text, feed.url, scraperConfig, "text/xml")),
       etag: result.etag,
       lastModifiedHeader: result.lastModified,
     };
@@ -520,9 +379,7 @@ export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedF
   if (sourceType === "HTML+XPath+JSON+DotNotation") {
     const result = await fetchText(feed, "text/html,application/xhtml+xml,*/*");
     if (result.notModified) return notModifiedResult(result);
-    const dom = new JSDOM(stripStyleBlocks(result.text), { url: feed.url, contentType: "text/html" });
-    const xpath = new dom.window.XPathEvaluator();
-    const jsonText = evaluateString(xpath, scraperConfig.xPathToJson, dom.window.document);
+    const jsonText = await runInHtmlWorker({ task: "xpathString", html: result.text, url: feed.url, expression: scraperConfig.xPathToJson });
     return {
       ...buildJsonArticles(JSON.parse(jsonText), scraperConfig),
       etag: result.etag,

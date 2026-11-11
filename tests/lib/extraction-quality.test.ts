@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { JSDOM } from "jsdom";
-import { assessExtraction, decideFullText, isBetterCandidate, trimEdgeBoilerplate } from "@/lib/extraction-quality";
+import { assessExtraction, decideFullText, isBetterCandidate } from "@/lib/extraction-quality";
+import { trimEdgeBoilerplate } from "@/lib/extraction-trim-core";
 import { normalizeLazyMedia } from "@/lib/lazy-media";
 
 const sentence = (n: number) =>

@@ -364,6 +364,40 @@ volumes:
 | Images / assets don't load | `AUTH_URL` misconfigured | `AUTH_URL` must exactly match the publicly reachable URL (including `https://`) |
 | Container starts, but the health check fails | The application needs longer to start | Increase `start_period` in the health check, or check logs: `docker compose logs feedferret` |
 
+#### HTML parsing workers (memory and CPU)
+
+Fetched pages, feed item bodies, newsletter mails, OPML files, imports and
+rendered Markdown are parsed only in a small pool of worker threads, never on
+the server's main event loop (a hostile page would otherwise freeze the whole
+instance). Each task has a hard time limit and each worker a heap limit; a
+page that exceeds either is recorded as "too complex" (the article keeps its
+feed content) and the worker is replaced.
+
+```env
+# Worker threads for HTML parsing. One stays reserved for interactive requests
+# (manual full text, previews); background sync uses the others.
+FEEDFERRET_HTML_WORKER_POOL_SIZE="2"
+# V8 heap limit per worker in MiB. Peak RAM for HTML work is about
+# POOL_SIZE × (HEAP_MB + ~80 MiB). 384 fits large news pages and 2 MiB
+# articles; raise it if many big pages end up "too complex".
+FEEDFERRET_HTML_WORKER_HEAP_MB="384"
+# Per-task time limit (ms). A task over it terminates its worker.
+FEEDFERRET_HTML_WORKER_TIMEOUT_MS="8000"
+```
+
+Advanced (rarely needed): `FEEDFERRET_HTML_WORKER_QUEUE` (queued tasks per
+priority lane, default 64), `FEEDFERRET_HTML_WORKER_BACKGROUND_AGING_MS`
+(a waiting background task is promoted after this, default 15000) and
+`FEEDFERRET_HTML_WORKER_BACKGROUND_WAIT_MS` (a background task gives up and is
+retried on the next sync after this, default 60000).
+
+The worker code ships as `build/html-worker/worker.cjs`, a self-contained
+bundle with all parsers (built by `pnpm run build`, included in the Docker
+image; it needs no `node_modules`). If it is missing, parsing
+fails closed: full text, page feeds, newsletter ingest and feed sync pause
+(nothing unsanitized is stored), the server logs an error at startup and
+`/api/health` reports `"htmlWorker": "unavailable"`.
+
 ---
 
 ## Docker Image Architecture

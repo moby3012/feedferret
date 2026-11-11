@@ -47,6 +47,12 @@ function ReaderBody({ article, loading, error, hideImages, onFetchFullText, isFe
   return (
     <>
       <AiSummaryCard article={article} />
+      {hasContent && article.htmlFallback && (
+        <p className="mb-3 flex items-center gap-2 text-body-sm text-muted-foreground" role="note" data-testid="reader-plain-text-fallback">
+          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+          {t("plainTextFallback")}
+        </p>
+      )}
       {hasContent ? (
         <div className={`article-content${hideImages ? " hide-images" : ""}`} dangerouslySetInnerHTML={{ __html: html }} />
       ) : (

@@ -7,6 +7,12 @@ import { fetchAndExtractReadable } from "@/lib/readability-extract";
 import { HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
 import { looksLikeTruncatedFeed } from "@/lib/full-text-mode";
 import { isTlsError } from "@/lib/url-input";
+import { isHtmlWorkerError } from "@/lib/html-worker/pool";
+
+/** A page whose parsing hit the HTML worker's time / memory limit (lib/html-worker). */
+export const PAGE_TOO_COMPLEX_MESSAGE = "Extraction aborted: this page is too complex to process safely.";
+export const PARSER_BUSY_MESSAGE = "The server is busy reading other pages right now. Try again in a moment.";
+export const PARSER_UNAVAILABLE_MESSAGE = "Page processing is unavailable on this server right now (administrator: see /api/health).";
 
 /**
  * Turn a raw page-fetch error (SSRF guard, HTTP status, timeout, anti-bot
@@ -16,6 +22,12 @@ import { isTlsError } from "@/lib/url-input";
  */
 export function describePageFetchError(error: unknown): string {
     const message = error instanceof Error ? error.message : "";
+
+    if (isHtmlWorkerError(error)) {
+        if (error.reason === "busy") return PARSER_BUSY_MESSAGE;
+        if (error.reason === "unavailable") return PARSER_UNAVAILABLE_MESSAGE;
+        return PAGE_TOO_COMPLEX_MESSAGE;
+    }
 
     if (isTlsError(error)) {
         return "The secure (HTTPS) connection to this site failed: certificate or TLS error. For your safety we don't switch to unencrypted http automatically. If you trust the site, enter the address with http:// explicitly.";
@@ -90,7 +102,12 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
         }
         throw new Error(describePageFetchError(error));
     }
-    if (!result.html) throw new Error("Could not extract article content");
+    if (!result.html) {
+        if (result.parseAborted === "too_complex") throw new Error(PAGE_TOO_COMPLEX_MESSAGE);
+        if (result.parseAborted === "busy") throw new Error(PARSER_BUSY_MESSAGE);
+        if (result.parseAborted === "unavailable") throw new Error(PARSER_UNAVAILABLE_MESSAGE);
+        throw new Error("Could not extract article content");
+    }
 
     const existingPlainLength = (article.content || "").replace(/<[^>]*>?/gm, "").length;
     const decision = decideFullText(result.quality, article.content, "manual");

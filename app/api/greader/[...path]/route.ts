@@ -1,3 +1,4 @@
+import { mapRendered } from "@/lib/markdown-render";
 import { timingSafeEqual } from "crypto";
 import { readGReaderBody } from "@/lib/bounded-body";
 import { manageGReaderTag } from "@/lib/greader-management";
@@ -457,7 +458,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
 
     if ((path.includes("stream/items/contents") || path.includes("stream/contents")) && url.searchParams.has("i")) {
       const articles = await getItemsByIds(user.id, url.searchParams.getAll("i"), url.searchParams.get("r"));
-      return NextResponse.json({ id: GREADER_READING_LIST, updated: Math.floor(Date.now() / 1000), items: await Promise.all(articles.map(toGReaderArticle)) });
+      return NextResponse.json({ id: GREADER_READING_LIST, updated: Math.floor(Date.now() / 1000), items: await mapRendered(articles, toGReaderArticle) });
     }
 
     if (path.includes("stream/items/ids")) {
@@ -480,7 +481,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
         title: getGReaderStreamTitle(streamId),
         updated: Math.floor(Date.now() / 1000),
         continuation,
-        items: await Promise.all(articles.map(toGReaderArticle)),
+        items: await mapRendered(articles, toGReaderArticle),
       });
     }
 
@@ -580,7 +581,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pat
       return NextResponse.json({
         id: "user/-/state/com.google/reading-list",
         updated: Math.floor(Date.now() / 1000),
-        items: await Promise.all(articles.map(toGReaderArticle)),
+        items: await mapRendered(articles, toGReaderArticle),
       });
     }
 

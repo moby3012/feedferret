@@ -17,7 +17,7 @@ import { handleFreshRssUpload } from "@/lib/import/freshrss-upload";
 import { importOpmlXml, OpmlImportInputError } from "@/lib/import/opml-import";
 import { normalizeActionUrl } from "@/lib/add-feed-input";
 import { logger } from "@/lib/logger";
-import { renderMarkdownToHtml } from "@/lib/markdown-render";
+import { mapRendered, renderMarkdownForDisplay } from "@/lib/markdown-render";
 import { refetchArticleFullText } from "@/lib/full-text-fetch";
 import { isRsshubConfigured, getRsshubConfig, buildRsshubPublicRouteUrl, validateRsshubRoute } from "@/lib/rsshub";
 import { connectorFeedUrlError, getConnectorSecretRules, redactFeedForClient, redactFeedsForClient, redactFeedWith, stripConnectorSecrets, stripConnectorSecretsWith } from "@/lib/connector-secrets";
@@ -36,10 +36,11 @@ const ARTICLE_INCLUDE = {
 } as const;
 
 async function articlePayload(article: any) {
-  const content =
-    article.contentFormat === "markdown" && article.content
-      ? await renderMarkdownToHtml(article.content)
-      : article.content;
+  // Markdown is rendered in the HTML worker pool; a busy / unavailable pool
+  // yields escaped plain text + a flag (never a failed article or page).
+  const rendered =
+    article.contentFormat === "markdown" && article.content ? await renderMarkdownForDisplay(article.content) : null;
+  const content = rendered ? rendered.html : article.content;
   // Connector secrets (N3): neither the link nor the feed URL may carry them.
   const rules = await getConnectorSecretRules();
   return {
@@ -50,6 +51,7 @@ async function articlePayload(article: any) {
     externalId: article.externalId,
     excerpt: article.excerpt,
     content,
+    ...(rendered?.fallback ? { contentRenderFallback: rendered.fallback } : {}),
     author: article.author,
     publishedAt: article.publishedAt,
     imageUrl: article.imageUrl,
@@ -176,7 +178,7 @@ async function listArticles(user: ApiUser, request: Request) {
   ]);
 
   return NextResponse.json({
-    items: await Promise.all(items.map(articlePayload)),
+    items: await mapRendered(items, articlePayload),
     pagination: { limit, offset, total, nextOffset: offset + items.length < total ? offset + items.length : null },
   });
 }

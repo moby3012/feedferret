@@ -27,6 +27,8 @@ export interface Article {
   excerpt: string
   content: string
   contentFormat?: "html" | "markdown"
+  /** The body is the escaped plain text of Markdown that could not be rendered right now (ArticleDetail.htmlFallback). */
+  htmlFallback?: boolean
   author: string
   publishedAt: string
   publishedAtRaw?: number
