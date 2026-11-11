@@ -1,11 +1,11 @@
-import { JSDOM } from "jsdom";
 import { fetchTextWithSsrfProtection, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { parseHttpLinkHeader } from "./http-link-header";
 import { hintForFetchError } from "./fetch-error-hint";
 import { buildTopicFeeds, parseSourceInput, platformLabel, resolveSource, type ResolvedFeed } from "./smart-url-resolver";
-import { detectSoftwareFeeds, matchPlatformAdapters, rsshubOnlyPlatform, type AdapterCandidate } from "./feed-adapters/engine";
+import { detectSoftwareFeeds, matchPlatformAdapters, rsshubOnlyPlatform, scanForAdapters, type AdapterCandidate } from "./feed-adapters/engine";
+import { scanHtml, type ScannedAnchor } from "./html-scan";
 import type { AdapterFamily } from "./feed-adapters/registry";
-import { cleanUrlInput, httpFallbackUrl, isConnectError, isTlsError, normalizeUrlInput } from "./url-input";
+import { cleanUrlInput, httpFallbackUrl, isConnectError, isTlsError, normalizeUrlInput, trimTrailing } from "./url-input";
 import { withTransportFallback } from "./transport-fallback";
 import { DiscoveryBudget, DiscoveryBudgetRefusal, type DiscoveryStopReason } from "./discovery-budget";
 
@@ -508,9 +508,16 @@ export function linkHeaderFeedType(entry: { url: string; rels: string[]; type?: 
  * before the real `<link>`.
  */
 export function headAdvertisesFeed(headHtml: string): boolean {
-  const { document } = new JSDOM(headHtml).window;
-  return [...document.querySelectorAll('link[rel~="alternate" i][href]')].some((el) =>
-    /^application\/(?:rss\+xml|atom\+xml|feed\+json)\b/i.test((el.getAttribute("type") || "").trim()));
+  return scanHtml(headHtml).links.some(
+    (l) =>
+      l.attrs.href !== undefined &&
+      relTokens(l.attrs.rel).includes("alternate") &&
+      /^application\/(?:rss\+xml|atom\+xml|feed\+json)\b/i.test((l.attrs.type || "").trim()),
+  );
+}
+
+function relTokens(rel: string | undefined): string[] {
+  return (rel ?? "").toLowerCase().split(/[\t\n\f\r ]/).filter(Boolean);
 }
 
 type CandidateOrigin = "self" | "link" | "header" | "software" | "anchor" | "common";
@@ -534,17 +541,12 @@ const COMMENT_WORDS = /comment|kommentar/i;
  * the URL looks (a plain `/feed.xml` beats `/feed.xml?filter=…` and comment
  * feeds).
  */
-export function scoreFeedAnchor(el: Element, absoluteUrl: string): number {
+export function scoreFeedAnchor(a: ScannedAnchor, absoluteUrl: string): number {
   let score = 30;
-  const label = [
-    el.textContent ?? "",
-    el.getAttribute("title") ?? "",
-    el.getAttribute("aria-label") ?? "",
-    el.getAttribute("class") ?? "",
-    ...[...el.querySelectorAll("img[alt], svg title")].map((n) => n.getAttribute("alt") ?? n.textContent ?? ""),
-  ].join(" ");
+  // `text` already includes inline SVG <title> text (it is element text).
+  const label = [a.text, a.title, a.ariaLabel, a.className, ...a.imgAlts].join(" ");
   if (FEED_WORDS.test(label)) score += 25;
-  if (el.closest("header, footer, nav, aside, [role=contentinfo], [role=banner]")) score += 10;
+  if (a.inChrome) score += 10;
   try {
     const u = new URL(absoluteUrl);
     const last = u.pathname.split("/").filter(Boolean).pop() ?? "";
@@ -558,14 +560,9 @@ export function scoreFeedAnchor(el: Element, absoluteUrl: string): number {
 }
 
 /** The element itself names a feed format (not just "subscribe", which is usually a newsletter). */
-function anchorSaysFeed(el: Element): boolean {
-  const label = [
-    el.textContent ?? "",
-    el.getAttribute("title") ?? "",
-    el.getAttribute("aria-label") ?? "",
-    ...[...el.querySelectorAll("img[alt]")].map((n) => n.getAttribute("alt") ?? ""),
-  ].join(" ");
-  return /\b(?:rss|atom)\b|\b(?:web|news)?feed\b/i.test(label) && !/^mailto:|^javascript:/i.test(el.getAttribute("href") ?? "");
+function anchorSaysFeed(a: ScannedAnchor): boolean {
+  const label = [a.text, a.title, a.ariaLabel, ...a.imgAlts].join(" ");
+  return /\b(?:rss|atom)\b|\b(?:web|news)?feed\b/i.test(label) && !/^mailto:|^javascript:/i.test(a.href);
 }
 
 /** URL identity for de-duplication: `/feed` and `/feed/`, case of the host, fragments. */
@@ -573,12 +570,15 @@ function feedUrlKey(url: string): string {
   try {
     const u = new URL(url);
     u.hash = "";
-    const path = u.pathname.length > 1 ? u.pathname.replace(/\/+$/, "") : u.pathname;
+    const path = u.pathname.length > 1 ? trimTrailing(u.pathname, "/") : u.pathname;
     return `${u.protocol}//${u.host.toLowerCase()}${path}${u.search}`;
   } catch {
     return url;
   }
 }
+
+/** Candidate addresses longer than this (from the page or built by adapters) are dropped. */
+export const MAX_CANDIDATE_URL_LENGTH = 2048;
 
 type HtmlDiscovery = { feeds: DiscoveredFeed[]; hint?: DiscoveryHint; pageUrl: string };
 
@@ -608,9 +608,11 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
     labelSaysFeed = false,
     adapter?: Candidate["adapter"],
   ) => {
-    if (!href) return;
+    // Page-supplied: an absurdly long address is never a feed we want to probe.
+    if (!href || href.length > MAX_CANDIDATE_URL_LENGTH) return;
     try {
       const feedUrl = new URL(href, resolveAgainst).toString();
+      if (feedUrl.length > MAX_CANDIDATE_URL_LENGTH) return;
       if (!/^https?:$/.test(new URL(feedUrl).protocol)) return;
       // An anchor counts when its URL looks like a feed, or when the element
       // itself says so (RSS icon `alt`, `title`, `aria-label`) at any path.
@@ -713,9 +715,11 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
     html = "";
   }
 
-  const dom = new JSDOM(html);
-  const { document } = dom.window;
-  const baseHref = document.querySelector("base[href]")?.getAttribute("href");
+  // Linear streaming scan (lib/html-scan.ts) instead of a DOM: the page is
+  // attacker-controlled, and JSDOM's synchronous tree build is unbounded in
+  // time and recursion depth on hostile markup.
+  const page = scanForAdapters(html);
+  const baseHref = page.baseHref;
   if (baseHref) {
     try {
       base = new URL(baseHref, base);
@@ -724,18 +728,19 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
     }
   }
 
-  for (const el of document.querySelectorAll('link[rel~="alternate"]')) {
-    const type = (el.getAttribute("type") || "").toLowerCase().trim();
+  for (const el of page.links) {
+    if (!relTokens(el.attrs.rel).includes("alternate")) continue;
+    const type = (el.attrs.type || "").toLowerCase().trim();
     const isFeedMime = type.length > 0 && FEED_MIME_TYPES.some((t) => type.startsWith(t) || t.startsWith(type.split("+")[0]));
-    const href = el.getAttribute("href") || "";
+    const href = el.attrs.href || "";
     if (!isFeedMime && !looksLikeFeedUrl(href)) continue;
-    const title = el.getAttribute("title");
+    const title = el.attrs.title ?? null;
     const comments = COMMENT_WORDS.test(href) || COMMENT_WORDS.test(title ?? "");
     addCandidate(href, title, classifyFeedType(type), "link", (isFeedMime ? 100 : 70) - (comments ? 25 : 0));
   }
 
-  for (const el of document.querySelectorAll("a[href]")) {
-    const href = el.getAttribute("href");
+  for (const a of page.anchors) {
+    const href = a.href;
     if (!href) continue;
     let absolute: string;
     try {
@@ -743,14 +748,14 @@ async function discoverFeedsInHtml(pageUrl: string, budget: DiscoveryBudget, opt
     } catch {
       continue;
     }
-    const text = el.textContent?.replace(/\s+/g, " ").trim() || el.getAttribute("title") || el.getAttribute("aria-label");
-    addCandidate(href, text, "unknown", "anchor", scoreFeedAnchor(el, absolute), base, anchorSaysFeed(el));
+    const text = a.text || a.title || a.ariaLabel;
+    addCandidate(href, text, "unknown", "anchor", scoreFeedAnchor(a, absolute), base, anchorSaysFeed(a));
   }
 
   // Forum / blog software recognised on the page (generator meta, markup
   // fingerprints, headers) → its native endpoints (lib/feed-adapters).
   if (html) {
-    for (const c of detectSoftwareFeeds({ document, headers: pageHeaders, url: responseUrl })) {
+    for (const c of detectSoftwareFeeds({ scan: page, headers: pageHeaders, url: responseUrl })) {
       addCandidate(c.url, c.title, "unknown", "software", c.scope === "route" ? 92 : 85, responseUrl, false, c);
     }
   }

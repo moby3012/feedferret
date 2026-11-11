@@ -392,3 +392,32 @@ describe("transport memory within a run", () => {
     ]);
   });
 });
+
+describe("hostile pages through discoverFeeds", () => {
+  it("candidate addresses over 2 KB are dropped without a request; slash-run paths stay cheap", async () => {
+    const longHref = `/feed/${"a".repeat(3000)}.xml`;
+    const slashy = `/a${"/".repeat(1500)}x/feed.xml`;
+    mocks.routes.set(
+      "https://long.example.com/",
+      `<html><head><link rel="alternate" type="application/rss+xml" href="${longHref}"><link rel="alternate" type="application/rss+xml" href="${slashy}"></head></html>`,
+    );
+    mocks.routes.set(`https://long.example.com${slashy}`, rss("Slashy"));
+    const started = performance.now();
+    const result = await discoverFeeds("https://long.example.com/", { limits: { deadlineMs: 5_000, maxRequests: 30 } });
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(mocks.calls.some((c) => c.url.includes("aaaa"))).toBe(false);
+    expect(result.feeds.map((f) => f.title)).toEqual(["Slashy"]);
+  });
+
+  it.each([
+    ["1 MiB of <div>", "<div>".repeat(210_000)],
+    ["deep nesting", "<div><span><b><i>".repeat(60_000)],
+  ])("%s: discovery finishes quickly and still finds a feed link placed before it", async (_label, junk) => {
+    mocks.routes.set("https://junk.example.com/", `<html><head><link rel="alternate" type="application/rss+xml" href="/f.xml"></head><body>${junk}</body></html>`);
+    mocks.routes.set("https://junk.example.com/f.xml", rss("Survivor"));
+    const started = performance.now();
+    const result = await discoverFeeds("https://junk.example.com/");
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(result.feeds.map((f) => f.title)).toEqual(["Survivor"]);
+  });
+});

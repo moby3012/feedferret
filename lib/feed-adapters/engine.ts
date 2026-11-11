@@ -13,6 +13,8 @@ import {
   type PlatformAdapter,
   type SoftwareAdapter,
 } from "./registry";
+import { scanHtml, type PageScan } from "../html-scan";
+import { trimTrailing } from "../url-input";
 
 export type AdapterCandidate = {
   url: string;
@@ -30,7 +32,7 @@ const MAX_PER_ADAPTER = 4;
 const SAFE_TOKEN = /^[\w.~-]{1,100}$/;
 
 /** Lower-case, no leading "www.", no trailing root dot ("moddb.com." is moddb.com). */
-const stripWww = (host: string) => host.toLowerCase().replace(/\.+$/, "").replace(/^www\./, "");
+const stripWww = (host: string) => trimTrailing(host.toLowerCase(), ".").replace(/^www\./, "");
 const hostMatches = (host: string, domains: string[]) => domains.some((d) => host === d || host.endsWith(`.${d}`));
 
 type ExpandCtx = { origin: string; base: string; domain: string; groups: string[]; query: URLSearchParams };
@@ -131,49 +133,27 @@ export function matchPlatformAdapters(url: URL, adapters: PlatformAdapter[] = PL
 /* -------------------------------------------------------------------------- */
 
 /**
- * The page as discovery already parsed it. Detection only reads the DOM
- * (selectors, attribute values) and short, capped strings — never regexes
- * over raw page HTML (ReDoS on attacker-controlled pages).
+ * The page as discovery scanned it (lib/html-scan.ts: linear streaming
+ * tokenizer, capped input). Detection only reads that scan — generator
+ * values, the first element per registry selector, a capped inline-script
+ * prefix — never regexes over raw page HTML.
  */
-export type PageSignals = { document: Document; headers?: Headers | null; url: URL };
+export type PageSignals = { scan: PageScan; headers?: Headers | null; url: URL };
 
-/** Inline-script text budget for `scriptIncludes` / base `script` patterns. */
-export const SCRIPT_TEXT_CAP = 64 * 1024;
+/** Every selector the registry uses (detection + install-base attributes): what the page scan must collect. */
+export const ADAPTER_SELECTORS: string[] = [
+  ...new Set(SOFTWARE_ADAPTERS.flatMap((a) => [...(a.detect.selectors ?? []), ...(a.base?.attrs ?? []).map((x) => x.selector)])),
+];
+
+/** Scans raw HTML for the adapter signals (convenience for callers without a scan). */
+export function scanForAdapters(html: string): PageScan {
+  return scanHtml(html, { selectors: ADAPTER_SELECTORS });
+}
+
 const ATTR_CAP = 200;
 
-/** All `<meta name="generator">` values (each capped). */
-export function generatorValues(document: Document): string[] {
-  const out: string[] = [];
-  for (const el of document.querySelectorAll("meta[name]")) {
-    if ((el.getAttribute("name") ?? "").trim().toLowerCase() !== "generator") continue;
-    const v = (el.getAttribute("content") ?? "").trim().slice(0, ATTR_CAP);
-    if (v) out.push(v);
-  }
-  return out;
-}
-
-/** Concatenated inline-script text, capped at SCRIPT_TEXT_CAP. */
-function inlineScriptText(document: Document): string {
-  let out = "";
-  for (const el of document.querySelectorAll("script:not([src])")) {
-    out += `${el.textContent ?? ""}\n`;
-    if (out.length >= SCRIPT_TEXT_CAP) return out.slice(0, SCRIPT_TEXT_CAP);
-  }
-  return out;
-}
-
-function safeMatches(document: Document, selector: string): boolean {
-  try {
-    return document.querySelector(selector) !== null;
-  } catch {
-    return false;
-  }
-}
-
 export function detectSoftware(page: PageSignals, adapters: SoftwareAdapter[] = SOFTWARE_ADAPTERS): SoftwareAdapter[] {
-  const generators = generatorValues(page.document);
-  let scripts: string | null = null;
-  const scriptText = () => (scripts ??= inlineScriptText(page.document));
+  const { generators, scriptText, selectorHits } = page.scan;
   return adapters.filter(({ detect }) => {
     if (detect.generator && generators.some((g) => detect.generator!.test(g))) return true;
     if (detect.headers) {
@@ -182,14 +162,14 @@ export function detectSoftware(page: PageSignals, adapters: SoftwareAdapter[] = 
         if (v && re.test(v)) return true;
       }
     }
-    if (detect.selectors?.some((sel) => safeMatches(page.document, sel))) return true;
-    return detect.scriptIncludes?.some((needle) => scriptText().includes(needle)) ?? false;
+    if (detect.selectors?.some((sel) => selectorHits.has(sel))) return true;
+    return detect.scriptIncludes?.some((needle) => scriptText.includes(needle)) ?? false;
   });
 }
 
 /** Install path of the software on the page's host ("" = site root, else "/forum"). */
 export function resolveBasePath(adapter: SoftwareAdapter, page: PageSignals): string {
-  const clean = (p: string) => p.replace(/\/+$/, "");
+  const clean = (p: string) => trimTrailing(p, "/");
   const fromValue = (raw: string, stripSuffix?: string): string | null => {
     const value = raw.replace(/\\\//g, "/").trim().slice(0, 500);
     try {
@@ -204,19 +184,13 @@ export function resolveBasePath(adapter: SoftwareAdapter, page: PageSignals): st
     }
   };
   for (const { selector, attr, stripSuffix } of adapter.base?.attrs ?? []) {
-    let el: Element | null = null;
-    try {
-      el = page.document.querySelector(selector);
-    } catch {
-      el = null;
-    }
-    const raw = el?.getAttribute(attr);
-    if (raw === null || raw === undefined) continue;
+    const raw = page.scan.selectorHits.get(selector)?.attrs[attr];
+    if (raw === undefined) continue;
     const path = fromValue(raw, stripSuffix);
     if (path !== null) return path;
   }
   if (adapter.base?.script?.length) {
-    const text = inlineScriptText(page.document);
+    const text = page.scan.scriptText;
     for (const re of adapter.base.script) {
       const raw = re.exec(text)?.[1];
       if (raw === undefined) continue;

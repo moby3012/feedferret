@@ -1,15 +1,16 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import {
   detectSoftware,
   detectSoftwareFeeds,
+  ADAPTER_SELECTORS,
   expandTemplate,
-  generatorValues,
   matchPlatformAdapters,
   rsshubOnlyPlatform,
+  scanForAdapters,
 } from "../../lib/feed-adapters/engine";
+import { compileSelector } from "../../lib/html-scan";
 import { PLATFORM_ADAPTERS, SOFTWARE_ADAPTERS } from "../../lib/feed-adapters/registry";
 import { matchRadarRules } from "../../lib/rsshub-radar-rules";
 
@@ -21,10 +22,9 @@ import { matchRadarRules } from "../../lib/rsshub-radar-rules";
 
 const fixture = (name: string) => readFileSync(path.join(__dirname, "../fixtures/adapters", `${name}.html`), "utf8");
 const urls = (list: Array<{ url: string }>) => list.map((c) => c.url);
-/** The page as discovery sees it: parsed once (lib/feed-discovery.ts builds the same JSDOM document). */
-const doc = (html: string) => new JSDOM(html).window.document;
+/** The page as discovery sees it: one linear scan (lib/html-scan.ts), same call as lib/feed-discovery.ts. */
 const pageOf = (html: string, url: string, headers?: Record<string, string>) => ({
-  document: doc(html),
+  scan: scanForAdapters(html),
   headers: headers ? new Headers(headers) : null,
   url: new URL(url),
 });
@@ -317,11 +317,16 @@ describe("software adapters (page fixtures)", () => {
 });
 
 describe("engine helpers", () => {
-  it("generatorValues reads every generator meta, any attribute order / quoting", () => {
-    expect(generatorValues(doc(`<meta content='blogger' name='generator'/><meta name="Generator" content="WordPress 6.6">`))).toEqual([
+  it("the scan reads every generator meta, any attribute order / quoting / case", () => {
+    expect(scanForAdapters(`<meta content='blogger' name='generator'/><meta name="Generator" content="WordPress 6.6">`).generators).toEqual([
       "blogger",
       "WordPress 6.6",
     ]);
+  });
+
+  it("every registry selector is in the supported simple-selector subset", () => {
+    for (const sel of ADAPTER_SELECTORS) expect(() => compileSelector(sel), sel).not.toThrow();
+    expect(() => compileSelector("div > a")).toThrow();
   });
 
   it("expandTemplate refuses non-http results and missing values", () => {
@@ -381,14 +386,13 @@ describe("hostile pages (ReDoS guard: detection must stay linear on attacker HTM
     fn();
     return performance.now() - t0;
   };
-  // Parsing is measured separately: discovery parses the page once anyway.
-  const run = (html: string, url = "https://evil.example/forum/") => {
-    const page = pageOf(html, url);
-    return timed(() => {
+  // Scan + detection, timed together (what discovery runs per page).
+  const run = (html: string, url = "https://evil.example/forum/") =>
+    timed(() => {
+      const page = pageOf(html, url);
       detectSoftwareFeeds(page);
       for (const a of SOFTWARE_ADAPTERS) detectSoftware(page, [a]);
     });
-  };
 
   it.each([
     ["unterminated <meta ×100k", "<meta ".repeat(100_000)],
