@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, BellOff, CheckCircle2, Loader2, Pencil, RefreshCw, Trash2, Wrench } from "lucide-react";
+import { AlertTriangle, Archive, BellOff, CheckCircle2, Loader2, Pencil, RefreshCw, Trash2, Wrench } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,29 +20,60 @@ import { ChipLabel } from "@/components/ui/chip";
 import { Empty, EmptyContent, EmptyDescription, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InactiveFeeds } from "@/components/inactive-feeds";
 import { FeedFavicon } from "@/components/list/feed-favicon";
 import {
   applyFeedRepair,
+  archiveFeeds,
   proposeFeedRepair,
+  restoreFeeds,
   removeStaleBrokenFeeds,
   retestBrokenFeed,
   unmuteBrokenFeed,
   type BrokenFeedDto,
   type RepairProposal,
 } from "@/app/actions/broken-feeds";
-import { BROKEN_FEEDS_KEY, useBrokenFeeds } from "@/hooks/use-broken-feeds";
+import { BROKEN_FEEDS_KEY, invalidateFeedLists, useBrokenFeeds, useInactiveFeeds } from "@/hooks/use-broken-feeds";
 import { useDeleteFeed, useFeeds } from "@/hooks/use-rss-data";
-import { invalidateCounts } from "@/features/articles/cache";
 import { cn } from "@/lib/utils";
 
 /** Feeds re-tested at once by "Alle erneut testen" (each one is a real fetch). */
 const BULK_CONCURRENCY = 3;
 
-type Busy = "test" | "unmute" | "repair" | "apply" | "remove";
+type Busy = "test" | "unmute" | "repair" | "apply" | "remove" | "archive";
 type Notice = { tone: "error" | "info"; text: string };
 type RepairState = { feedId: string; loading: boolean; proposal: RepairProposal | null; failed: boolean; applying: string | null };
 
+/**
+ * "Defekte Feeds": two groups with different remedies. "Kaputt" = the fetch fails (HTTP 4xx/5xx, DNS, parse,
+ * blocked); "Inaktiv" = the fetch works but nothing new was published for a long time. Both can be archived.
+ */
 export function BrokenFeeds({ onEdit }: { onEdit: (feed: any) => void }) {
+  const t = useTranslations("brokenFeeds");
+  const [group, setGroup] = useState<"broken" | "inactive">("broken");
+  const { data: brokenFeeds } = useBrokenFeeds();
+  const { data: inactive } = useInactiveFeeds();
+  const brokenCount = brokenFeeds?.length;
+  const inactiveCount = inactive?.feeds.length;
+  return (
+    <div className="flex h-full flex-col" data-testid="feed-health-groups">
+      <Tabs value={group} onValueChange={(v) => setGroup(v === "inactive" ? "inactive" : "broken")} className="px-6 pt-4 sm:px-8">
+        <TabsList aria-label={t("groups.label")}>
+          <TabsTrigger value="broken" data-testid="health-group-broken">
+            {brokenCount === undefined ? t("groups.broken") : t("groups.brokenCount", { count: brokenCount })}
+          </TabsTrigger>
+          <TabsTrigger value="inactive" data-testid="health-group-inactive">
+            {inactiveCount === undefined ? t("groups.inactive") : t("groups.inactiveCount", { count: inactiveCount })}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+      <div className="min-h-0 flex-1">{group === "broken" ? <BrokenList onEdit={onEdit} /> : <InactiveFeeds onEdit={onEdit} />}</div>
+    </div>
+  );
+}
+
+function BrokenList({ onEdit }: { onEdit: (feed: any) => void }) {
   const t = useTranslations("brokenFeeds");
   const format = useFormatter();
   const queryClient = useQueryClient();
@@ -92,11 +123,7 @@ export function BrokenFeeds({ onEdit }: { onEdit: (feed: any) => void }) {
     },
     [queryClient],
   );
-  const refreshShell = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["feeds"] });
-    void queryClient.invalidateQueries({ queryKey: ["feed-health"] });
-    invalidateCounts(queryClient);
-  }, [queryClient]);
+  const refreshShell = useCallback(() => invalidateFeedLists(queryClient), [queryClient]);
 
   const categoryLabel = (feed: BrokenFeedDto) => t(`categories.${feed.category}`);
   const date = (iso: string) => format.dateTime(new Date(iso), { dateStyle: "medium" });
@@ -237,6 +264,25 @@ export function BrokenFeeds({ onEdit }: { onEdit: (feed: any) => void }) {
     });
   };
 
+  const archive = async (feed: BrokenFeedDto) => {
+    setBusyFor(feed.id, "archive");
+    try {
+      await archiveFeeds([feed.id]);
+      patchList(feed.id, null);
+      refreshShell();
+      toast.success(t("archive.done", { name: feed.name }), {
+        action: {
+          label: t("archive.undo"),
+          onClick: () => void restoreFeeds([feed.id]).then(refreshShell, () => toast.error(t("archive.failed"))),
+        },
+      });
+    } catch {
+      toast.error(t("archive.failed"));
+    } finally {
+      setBusyFor(feed.id, null);
+    }
+  };
+
   const removeStale = async () => {
     setConfirmStale(false);
     try {
@@ -366,9 +412,26 @@ export function BrokenFeeds({ onEdit }: { onEdit: (feed: any) => void }) {
                           )}
                         </div>
                         <p className="truncate text-footnote text-muted-foreground">{feed.host || "—"}</p>
-                        <p className="mt-2 text-body-sm font-medium text-destructive" data-testid="broken-category">
-                          {categoryLabel(feed)}
-                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <p className="text-body-sm font-medium text-destructive" data-testid="broken-category">
+                            {categoryLabel(feed)}
+                          </p>
+                          {feed.kind !== "error" && (
+                            <ChipLabel tone={feed.kind === "blocked" ? "warning" : "muted"} data-testid="broken-kind" data-kind={feed.kind}>
+                              {t(`kinds.${feed.kind}`)}
+                            </ChipLabel>
+                          )}
+                        </div>
+                        {feed.kind === "blocked" && (
+                          <p className="mt-1 text-footnote text-muted-foreground" data-testid="broken-kind-hint">
+                            {t("kindHints.blocked")}
+                          </p>
+                        )}
+                        {feed.kind === "gone" && (
+                          <p className="mt-1 text-footnote text-muted-foreground" data-testid="broken-kind-hint">
+                            {t("kindHints.gone")}
+                          </p>
+                        )}
                         {feed.detail && (
                           <details className="mt-1 text-footnote text-muted-foreground">
                             <summary className="cursor-pointer select-none">{t("technicalDetail")}</summary>
@@ -432,6 +495,18 @@ export function BrokenFeeds({ onEdit }: { onEdit: (feed: any) => void }) {
                               {t("actions.unmute")}
                             </Button>
                           )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-panel"
+                            onClick={() => void archive(feed)}
+                            disabled={!!state || bulkRunning}
+                            title={t("archive.hint")}
+                            data-testid="broken-archive"
+                          >
+                            {state === "archive" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Archive className="size-3.5" aria-hidden />}
+                            {t("actions.archive")}
+                          </Button>
                           <Button
                             size="sm"
                             variant="outline"

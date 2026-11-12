@@ -179,6 +179,9 @@ Listet Feeds inkl. Kategorie, Unread Count und der **vollständigen Feed-Konfigu
 (Fetch-/HTTP-Optionen, Full-Text-/Feed-Intelligence-Einstellungen, Reader-/Anzeige-Overrides,
 Health-Status). Das Auth-Passwort wird nie zurückgegeben.
 
+Archivierte Feeds (Sync gestoppt, Artikel bleiben) sind standardmäßig ausgeblendet; Argument
+`archived`: `exclude` (Standard), `only` oder `include`.
+
 ```json
 {}
 ```
@@ -259,6 +262,7 @@ Unterstützte Felder:
 - **Metadaten/Zeitplan:** `name`, `icon`, `categoryId`, `priority`, `updateFrequency`, `retentionDays`, `keepMinArticles`
 - **Fetch/HTTP:** `customUserAgent`, `fetchTimeoutSecs`, `sslVerify`, `maxSizeKb`, `authType`, `authUsername`, `authPassword` (write-only)
 - **Full-Text (Feed Intelligence):** `fullTextMode` (`off`/`auto`/`selector`/`ai`), `fullTextSelector`, `fullTextRemoveSelectors`, `fullTextConditions`, `autoFetchFullText`, `defaultContentFormat` (`html`/`markdown`)
+- **Archiv:** `archived` (`true` archiviert, `false` stellt wieder her; archivierte Feeds werden nicht mehr synchronisiert und verschwinden aus Reader und Abo-Listen, ihre Artikel bleiben)
 - **Content-Filter:** `filtersActionRead` (durch Zeilenumbrüche getrennte Stichwörter; passende neue Artikel werden beim Abruf als gelesen markiert)
 - **Reader-/Anzeige-Overrides (nullable, `null` = User-Default erben):** `hideArticleImage`, `hideFromAllFeeds`, `readerFontSizeOverride`, `readerWidthOverride`, `openOriginalOverride`
 - **Muting:** `autoMuted`

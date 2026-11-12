@@ -37,6 +37,12 @@ Missing or `x` action tokens are accepted for client compatibility, like FreshRS
 a supplied T token must match the current user/version. Authorization is always
 required, including for raw OPML imports.
 
+## Archived feeds
+
+Feeds archived in FeedFerret (stopped syncing, kept articles) are not subscriptions for GReader
+clients: they are absent from `subscription/list`, `subscription/export`, `unread-count` and from every
+item stream (`reading-list`, labels, `starred`, `feed/…`). Restoring the feed brings them back.
+
 ## Management contracts
 
 - `rename-tag`: `s=user/-/label/Old&dest=user/-/label/New`.

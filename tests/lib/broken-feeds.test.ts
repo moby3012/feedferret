@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  brokenKindOf,
   categorizeFeedError,
   compareBrokenFeeds,
   countBrokenFeeds,
+  DEFAULT_INACTIVE_FEED_DAYS,
+  daysSince,
   failingSinceOf,
   feedHost,
   isBrokenFeed,
+  isInactiveFeed,
   isStaleBroken,
+  lastItemAtOf,
+  normalizeInactiveDays,
 } from "../../lib/broken-feeds";
 
 describe("categorizeFeedError", () => {
@@ -117,5 +123,88 @@ describe("failingSinceOf / isStaleBroken", () => {
 
   it("an unknown start is never stale (understate rather than delete)", () => {
     expect(isStaleBroken({ autoMuted: true, consecutiveFailureCount: 10, failingSince: null, lastFetchedAt: null }, now)).toBe(false);
+  });
+});
+
+describe("brokenKindOf", () => {
+  const kind = (error: string, url?: string) => brokenKindOf(categorizeFeedError(error, url), error);
+  it.each([
+    ["Error: Fetch failed: 404", "gone"],
+    ["Error: Fetch failed: 410", "gone"],
+    ["Error: Fetch failed: 403", "blocked"],
+    ["Error: Fetch failed: 429", "blocked"],
+    ["Error: Fetch failed: 401", "error"], // wrong / missing credentials is not bot protection
+    ["Error: Fetch failed: 407", "error"],
+    ["Error: Fetch failed: 500", "error"],
+    ["Error: Fetch failed: 503", "error"],
+    ["TypeError: fetch failed", "error"],
+    ["Error: getaddrinfo ENOTFOUND example.invalid", "error"],
+    ["Error: Non-whitespace before first tag.", "error"],
+    ["Error: something odd", "error"],
+  ])("%s → %s", (error, expected) => {
+    expect(kind(error)).toBe(expected);
+  });
+
+  it("keeps RSSHub failures out of the blocked / gone buckets", () => {
+    expect(kind("Error: Fetch failed: 404", "http://rsshub:1200/twitter/user/x")).toBe("error");
+    expect(kind("Error: Fetch failed: 403", "https://rsshub.example.org/x")).toBe("blocked");
+  });
+
+  it("is secret-safe: the error text is redacted before the status is read", () => {
+    expect(kind("Error: Fetch failed: 403 https://u:pw@h.example/f?token=abc")).toBe("blocked");
+  });
+});
+
+describe("normalizeInactiveDays", () => {
+  it("clamps to the supported range and falls back to the default for garbage", () => {
+    expect(normalizeInactiveDays(180)).toBe(180);
+    expect(normalizeInactiveDays(2)).toBe(7);
+    expect(normalizeInactiveDays(100_000)).toBe(3650);
+    expect(normalizeInactiveDays(45.6)).toBe(46);
+    expect(normalizeInactiveDays(undefined)).toBe(DEFAULT_INACTIVE_FEED_DAYS);
+    expect(normalizeInactiveDays(null)).toBe(7); // Number(null) = 0 → clamped up, never throws
+    expect(normalizeInactiveDays("abc")).toBe(DEFAULT_INACTIVE_FEED_DAYS);
+    expect(normalizeInactiveDays(NaN)).toBe(DEFAULT_INACTIVE_FEED_DAYS);
+  });
+});
+
+describe("isInactiveFeed", () => {
+  const now = new Date("2026-11-12T12:00:00Z");
+  const daysBefore = (n: number) => new Date(now.getTime() - n * 86_400_000);
+  const healthy = { sourceType: "rss", autoMuted: false, consecutiveFailureCount: 0, lastFetchedAt: daysBefore(0), createdAt: daysBefore(1000) };
+
+  it("flags a working feed whose newest item is older than the threshold", () => {
+    expect(isInactiveFeed(healthy, daysBefore(181), now, 180)).toBe(true);
+    expect(isInactiveFeed(healthy, daysBefore(179), now, 180)).toBe(false);
+    expect(isInactiveFeed(healthy, daysBefore(180), now, 180)).toBe(false); // exactly the threshold is still active
+  });
+
+  it("honours a custom threshold", () => {
+    expect(isInactiveFeed(healthy, daysBefore(40), now, 30)).toBe(true);
+    expect(isInactiveFeed(healthy, daysBefore(40), now, 90)).toBe(false);
+  });
+
+  it("never calls a broken, muted, archived, newsletter or never-fetched feed inactive", () => {
+    const old = daysBefore(500);
+    expect(isInactiveFeed({ ...healthy, consecutiveFailureCount: 2 }, old, now, 180)).toBe(false);
+    expect(isInactiveFeed({ ...healthy, autoMuted: true }, old, now, 180)).toBe(false);
+    expect(isInactiveFeed({ ...healthy, archivedAt: daysBefore(3) }, old, now, 180)).toBe(false);
+    expect(isInactiveFeed({ ...healthy, sourceType: "newsletter" }, old, now, 180)).toBe(false);
+    expect(isInactiveFeed({ ...healthy, lastFetchedAt: null }, old, now, 180)).toBe(false);
+  });
+
+  it("falls back to the creation date for a feed that never delivered an item", () => {
+    expect(isInactiveFeed(healthy, null, now, 180)).toBe(true); // created 1000 days ago, nothing since
+    expect(isInactiveFeed({ ...healthy, createdAt: daysBefore(20) }, null, now, 180)).toBe(false);
+    expect(lastItemAtOf(null, healthy)).toEqual(healthy.createdAt);
+    expect(lastItemAtOf(daysBefore(5), healthy)).toEqual(daysBefore(5));
+  });
+});
+
+describe("daysSince", () => {
+  it("counts whole days and never goes negative", () => {
+    const now = new Date("2026-11-12T12:00:00Z");
+    expect(daysSince(new Date("2026-11-01T13:00:00Z"), now)).toBe(10);
+    expect(daysSince(new Date("2026-12-01T00:00:00Z"), now)).toBe(0);
   });
 });

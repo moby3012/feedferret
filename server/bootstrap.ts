@@ -1,5 +1,6 @@
 import { parseCountDisplay } from "@/lib/count-display";
 import { cache } from "react";
+import { DEFAULT_INACTIVE_FEED_DAYS, normalizeInactiveDays } from "@/lib/broken-feeds";
 import { db } from "@/lib/db";
 import type { Counts } from "@/features/bootstrap/types";
 import { FEED_CLIENT_SELECT } from "@/lib/feed-secrets";
@@ -17,8 +18,10 @@ export async function loadFeeds(userId: string) {
   const [feeds, unreadCounts] = await Promise.all([
     // Explicit allowlist (N4): this payload is embedded in every page's SSR
     // HTML, so credentials, fetch options and connector secrets stay out.
+    // Archived feeds are not part of the reader shell (sidebar, counts, "Defekte Feeds");
+    // Manage Feeds → "Archiviert" loads them separately via loadArchivedFeeds.
     db.feed.findMany({
-      where: { userId },
+      where: { userId, archivedAt: null },
       select: { ...FEED_CLIENT_SELECT, category: true },
       orderBy: [{ order: "asc" }, { name: "asc" }],
     }),
@@ -36,6 +39,24 @@ export async function loadFeeds(userId: string) {
       ...feed,
       _count: { articles: unreadByFeed.get(feed.id) ?? 0 },
     })),
+  );
+}
+
+/** Archived feeds with their article / unread counts (Manage Feeds → "Archiviert"). Same client-safe shape as loadFeeds. */
+export async function loadArchivedFeeds(userId: string) {
+  const [feeds, articleCounts, unreadCounts] = await Promise.all([
+    db.feed.findMany({
+      where: { userId, archivedAt: { not: null } },
+      select: { ...FEED_CLIENT_SELECT, category: true },
+      orderBy: [{ archivedAt: "desc" }, { name: "asc" }],
+    }),
+    db.article.groupBy({ by: ["feedId"], where: { userId, feed: { archivedAt: { not: null } } }, _count: { _all: true } }),
+    db.article.groupBy({ by: ["feedId"], where: { userId, isRead: false, isSpoiler: false, feed: { archivedAt: { not: null } } }, _count: { _all: true } }),
+  ]);
+  const total = new Map<string, number>(articleCounts.map((r: { feedId: string; _count: { _all: number } }) => [r.feedId, r._count._all]));
+  const unread = new Map<string, number>(unreadCounts.map((r: { feedId: string; _count: { _all: number } }) => [r.feedId, r._count._all]));
+  return redactFeedsForClient(
+    feeds.map((feed) => ({ ...feed, articleCount: total.get(feed.id) ?? 0, unreadCount: unread.get(feed.id) ?? 0 })),
   );
 }
 
@@ -112,6 +133,7 @@ export async function loadReadingPreferences(userId: string) {
       uiLanguage: true,
       displayTimezone: true,
       autoMuteFailingFeedsAfter: true,
+      inactiveFeedDays: true,
     },
   });
   return {
@@ -135,6 +157,7 @@ export async function loadReadingPreferences(userId: string) {
     uiLanguage: user?.uiLanguage ?? "en",
     displayTimezone: user?.displayTimezone ?? null,
     autoMuteFailingFeedsAfter: user?.autoMuteFailingFeedsAfter ?? 10,
+    inactiveFeedDays: normalizeInactiveDays(user?.inactiveFeedDays ?? DEFAULT_INACTIVE_FEED_DAYS),
   };
 }
 
@@ -159,7 +182,7 @@ export async function getCounts(userId: string): Promise<Counts> {
   if (user?.hideDuplicates ?? true) visible.NOT = { isDuplicate: true, duplicateOf: { not: null } };
 
   const [feeds, unreadByFeed, unreadByLabel, later, starred, spoiler, notifications] = await Promise.all([
-    db.feed.findMany({ where: { userId }, select: { id: true, hideFromAllFeeds: true, category: { select: { hideFromAllFeeds: true } } } }),
+    db.feed.findMany({ where: { userId }, select: { id: true, archivedAt: true, hideFromAllFeeds: true, category: { select: { hideFromAllFeeds: true } } } }),
     db.article.groupBy({ by: ["feedId"], where: { ...visible, isRead: false }, _count: { _all: true } }),
     db.articleLabel.groupBy({ by: ["labelId"], where: { userId, article: { ...visible, isRead: false } }, _count: { _all: true } }),
     db.article.count({ where: { ...visible, isReadLater: true } }),
@@ -175,7 +198,8 @@ export async function getCounts(userId: string): Promise<Counts> {
 
   let unreadTotal = 0;
   for (const feed of feeds) {
-    if (feed.hideFromAllFeeds || feed.category?.hideFromAllFeeds) continue;
+    // Archived feeds keep their articles but never count towards the unread total.
+    if (feed.archivedAt || feed.hideFromAllFeeds || feed.category?.hideFromAllFeeds) continue;
     unreadTotal += byFeed[feed.id] ?? 0;
   }
   return { unreadTotal, byFeed, byLabel, later, starred, spoiler, notifications };

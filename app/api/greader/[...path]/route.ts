@@ -418,7 +418,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
 
     if (path.endsWith("subscription/export")) {
       const [feeds, categories] = await Promise.all([
-        db.feed.findMany({ where: { userId: user.id }, include: { category: true } }),
+        db.feed.findMany({ where: { userId: user.id, archivedAt: null }, include: { category: true } }),
         db.category.findMany({ where: { userId: user.id } }),
       ]);
       return new NextResponse(generateApiOpml(await redactFeedsForClient(feeds), categories), { headers: { "content-type": "text/x-opml; charset=utf-8", "content-disposition": 'attachment; filename="subscriptions.opml"' } });
@@ -426,7 +426,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
     if (path.endsWith("subscription/list")) {
       // Connector secrets (RSSHub key, changedetection token) never leave the server (N3).
       const feeds = await redactFeedsForClient(await db.feed.findMany({
-        where: { userId: user.id },
+        where: { userId: user.id, archivedAt: null },
         include: { category: true },
         orderBy: [{ order: "asc" }, { name: "asc" }],
       }));

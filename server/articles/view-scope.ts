@@ -114,6 +114,13 @@ export async function buildViewScope(userId: string, scope: ViewScopeInput, sear
       break;
   }
 
+  // Archived feeds keep their articles but leave the aggregate views (All, categories, New Articles), so
+  // these lists always match the sidebar counts (server/bootstrap.ts getCounts). They stay reachable via
+  // the feed's own view, starred / read-later / labels and search (global search spans every feed).
+  if (!isSearching && (scope.kind === "all" || scope.kind === "category" || scope.kind === "category-name" || scope.kind === "unread-only")) {
+    and({ feed: { archivedAt: null } });
+  }
+
   // Spoiler flag is opt-in: filter spoilers out of every view that is not the
   // dedicated Spoiler view so users do not accidentally read them.
   if (!isSpoilerView && where.isSpoiler !== true) and({ isSpoiler: false });

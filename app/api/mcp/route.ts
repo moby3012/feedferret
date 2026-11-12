@@ -42,6 +42,13 @@ function textContent(data: unknown) {
 // Feed credentials, fetch options and connector secrets must never leave the
 // server: strip the secret columns (lib/feed-secrets.ts) and redact connector
 // keys from URLs / errors (lib/connector-secrets.ts) on every feed output.
+/** `archived` argument → Feed filter: archived feeds are hidden unless asked for. */
+function archivedFeedFilter(mode: unknown): { archivedAt?: null | { not: null } } {
+  if (mode === "only") return { archivedAt: { not: null } };
+  if (mode === "include") return {};
+  return { archivedAt: null };
+}
+
 async function clientFeed<T>(value: T): Promise<T> {
   if (!value || typeof value !== "object") return value;
   const stripped = stripFeedSecrets(value);
@@ -104,7 +111,7 @@ const tools = [
   { name: "feedferret.get_article", description: "Get one full article by ID.", inputSchema: { type: "object", properties: { articleId: { type: "string" } }, required: ["articleId"] } },
   { name: "feedferret.fetch_full_text", description: "Fetch and extract the full readable text of an article from its source page, and persist it onto the article if it's a genuine improvement over the current (often truncated) feed content. Returns the updated article. Throws a clean message if the page can't be read or the result wouldn't improve the article.", inputSchema: { type: "object", properties: { articleId: { type: "string" } }, required: ["articleId"] } },
   { name: "feedferret.update_article_state", description: "Update read/starred/read-later state on an article.", inputSchema: { type: "object", properties: { articleId: { type: "string" }, isRead: { type: "boolean" }, isStarred: { type: "boolean" }, isReadLater: { type: "boolean" } }, required: ["articleId"] } },
-  { name: "feedferret.list_feeds", description: "List RSS feeds with category, unread counts and full per-feed configuration (fetch/HTTP options, full-text settings, reader/display overrides, health). The auth password is never included.", inputSchema: { type: "object", properties: {} } },
+  { name: "feedferret.list_feeds", description: "List RSS feeds with category, unread counts and full per-feed configuration (fetch/HTTP options, full-text settings, reader/display overrides, health). The auth password is never included.", inputSchema: { type: "object", properties: { archived: { type: "string", enum: ["exclude", "only", "include"], description: "Archived feeds (stopped syncing, hidden from the reader): exclude (default), only, or include." } } } },
   { name: "feedferret.get_feed", description: "Get one feed by ID with its full configuration (fetch/HTTP options, full-text/Feed Intelligence settings, reader/display overrides, health, unread count). The auth password is never included.", inputSchema: { type: "object", properties: { feedId: { type: "string" } }, required: ["feedId"] } },
   { name: "feedferret.add_feed", description: "Add a new RSS/Atom feed and optionally sync it immediately.", inputSchema: { type: "object", properties: { url: { type: "string" }, name: { type: "string" }, icon: { type: "string" }, categoryId: { type: "string" }, sync: { type: "boolean" } }, required: ["url"] } },
   { name: "feedferret.sync_feeds", description: "Sync all feeds or one feed when feedId is supplied.", inputSchema: { type: "object", properties: { feedId: { type: "string" } } } },
@@ -153,6 +160,7 @@ const tools = [
         openOriginalOverride: { type: ["boolean", "null"] },
         // Muting
         autoMuted: { type: "boolean", description: "Mute/unmute the feed (suppresses notifications & unread counting)." },
+        archived: { type: "boolean", description: "Archive (true) or restore (false) the feed. Archived feeds stop syncing and leave the reader / API subscription lists but keep their articles." },
       },
       required: ["feedId"],
     },
@@ -323,7 +331,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       return { updated: 1 };
     }
     case "feedferret.list_feeds":
-      return clientFeed(await db.feed.findMany({ where: { userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } }, orderBy: [{ order: "asc" }, { name: "asc" }] }));
+      return clientFeed(await db.feed.findMany({ where: { userId: user.id, ...archivedFeedFilter(args.archived) }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } }, orderBy: [{ order: "asc" }, { name: "asc" }] }));
     case "feedferret.get_feed": {
       const feed = await db.feed.findFirst({ where: { id: String(args.feedId), userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } } });
       if (!feed) throw new Error("Feed not found");
@@ -370,8 +378,16 @@ async function callTool(user: ApiUser, name: string, args: any) {
       }
       if (data.categoryId) await assertOwnedCategories(user.id, [data.categoryId]);
       clampFeedLimits(data);
-      const result = await db.feed.updateMany({ where: { id: String(args.feedId), userId: user.id }, data });
-      if (!result.count) throw new Error("Feed not found");
+      if (typeof args.archived === "boolean") {
+        // Keep the original archive date when archiving an already archived feed.
+        if (args.archived) await db.feed.updateMany({ where: { id: String(args.feedId), userId: user.id, archivedAt: null }, data: { archivedAt: new Date() } });
+        else data.archivedAt = null;
+      }
+      // An archive-only call leaves `data` empty (Prisma matches nothing then): existence is checked instead.
+      const matched = Object.keys(data).length
+        ? (await db.feed.updateMany({ where: { id: String(args.feedId), userId: user.id }, data })).count
+        : await db.feed.count({ where: { id: String(args.feedId), userId: user.id } });
+      if (!matched) throw new Error("Feed not found");
       const feed = await db.feed.findFirst({ where: { id: String(args.feedId), userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } } });
       return clientFeed(feed);
     }

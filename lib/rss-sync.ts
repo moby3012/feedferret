@@ -1303,7 +1303,8 @@ async function syncUserFeedsNow(userId: string) {
     const userDefaultUpdateFrequency = user?.defaultUpdateFrequency ?? 60;
 
     const feeds = await db.feed.findMany({
-        where: { userId, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
+        // Archived feeds are never fetched in the background (restore re-enables them).
+        where: { userId, archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
         select: {
             id: true,
             userId: true,
@@ -1374,7 +1375,7 @@ async function syncAllFeedsNow() {
     );
 
     const feeds = await db.feed.findMany({
-        where: { sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
+        where: { archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
         select: {
             id: true,
             userId: true,

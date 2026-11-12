@@ -361,6 +361,12 @@ Feed object:
 Lists all feeds including category, health/status, unread count, and the full
 per-feed configuration shown above.
 
+**Archived feeds.** A feed can be archived (UI: Defekte Feeds → *Archivieren*): it stops syncing,
+disappears from the reader sidebar and unread counts, and keeps all of its articles. Every feed
+object carries `archived` (boolean) and `archivedAt` (ISO date or `null`). `GET /feeds` returns
+active feeds only by default; `?archived=only` lists just the archived ones, `?archived=include`
+both. `PATCH /feeds/{id}` accepts `"archived": true|false` to archive or restore.
+
 ### `POST /api/v1/feeds`
 
 Adds a feed and syncs it immediately by default.
@@ -457,6 +463,9 @@ Example — switch a feed to selector-based markdown extraction and mute it:
   "autoMuted": true
 }
 ```
+
+`archived` (boolean) archives (`true`) or restores (`false`) the feed; it is not a field of the
+configuration table above. Archiving does not touch any article.
 
 ### `DELETE /api/v1/feeds/{id}`
 

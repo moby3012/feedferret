@@ -44,6 +44,7 @@ export const FEED_CLIENT_SELECT = {
   lastError: true,
   consecutiveFailureCount: true,
   autoMuted: true,
+  archivedAt: true,
   authType: true,
   customUserAgent: true,
   fetchTimeoutSecs: true,

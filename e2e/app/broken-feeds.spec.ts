@@ -1,4 +1,4 @@
-import { allowInternalFeedUrls, brokenFeedState, insertBrokenFeed } from "../helpers/db";
+import { allowInternalFeedUrls, brokenFeedState, feedArchiveState, insertBrokenFeed, insertInactiveFeed } from "../helpers/db";
 import { test, expect } from "../helpers/test";
 
 /**
@@ -208,4 +208,170 @@ test("edit opens the feed's settings dialog", async ({ app, page }) => {
   await app.activate(card(page, "Editable").getByTestId("broken-edit"));
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("dialog")).toContainText("Editable");
+});
+
+// --- kaputt vs. inaktiv, blockiert vs. weg, archive ---------------------------------------------------
+
+const inactiveCard = (page: import("@playwright/test").Page, name: string) =>
+  page.getByTestId("inactive-feed").filter({ has: page.getByRole("heading", { name, exact: true }) });
+const openInactive = async (app: { activate: (l: import("@playwright/test").Locator) => Promise<void> }, page: import("@playwright/test").Page) => {
+  await app.activate(page.getByTestId("health-group-inactive"));
+  await expect(page.getByTestId("inactive-feeds")).toBeVisible();
+};
+
+test("tells a blocked feed (403/429, bot protection) apart from a gone one (404/410)", async ({ app, page }) => {
+  track(insertBrokenFeed(app.userKey, { name: "Bot wall", url: "https://broken-bot.e2e.test/feed.xml", failures: 3, lastError: "Error: Fetch failed: 429", failingDays: 2 }));
+  track(insertBrokenFeed(app.userKey, { name: "Forbidden site", url: "https://broken-403.e2e.test/feed.xml", failures: 3, lastError: "Error: Fetch failed: 403", failingDays: 2 }));
+  track(insertBrokenFeed(app.userKey, { name: "Vanished", url: "https://broken-410.e2e.test/feed.xml", failures: 3, lastError: "Error: Fetch failed: 410", failingDays: 2 }));
+  track(insertBrokenFeed(app.userKey, { name: "Server down", url: "https://broken-500.e2e.test/feed.xml", failures: 3, lastError: "Error: Fetch failed: 500", failingDays: 2 }));
+  await page.goto(PAGE);
+
+  for (const name of ["Bot wall", "Forbidden site"]) {
+    await expect(card(page, name).getByTestId("broken-kind")).toHaveText("Blocked");
+    await expect(card(page, name).getByTestId("broken-kind")).toHaveAttribute("data-kind", "blocked");
+    await expect(card(page, name).getByTestId("broken-kind-hint")).toContainText("may still work from another network");
+  }
+  await expect(card(page, "Vanished").getByTestId("broken-kind")).toHaveText("Gone");
+  await expect(card(page, "Vanished").getByTestId("broken-kind-hint")).toContainText("no longer exists");
+  await expect(card(page, "Server down").getByTestId("broken-kind")).toHaveCount(0);
+  await expect(page.getByTestId("health-group-broken")).toHaveText("Broken (4)");
+});
+
+test("inactive group: feeds that fetch fine but stopped publishing, with the last item date; broken and fresh feeds are not in it", async ({ app, page }) => {
+  track(insertInactiveFeed(app.userKey, { name: "Quiet since spring", url: "https://inactive-a.e2e.test/feed.xml", lastItemDaysAgo: 300 }));
+  track(insertInactiveFeed(app.userKey, { name: "Quiet for years", url: "https://inactive-b.e2e.test/feed.xml", lastItemDaysAgo: 800 }));
+  track(insertInactiveFeed(app.userKey, { name: "Never posted", url: "https://inactive-c.e2e.test/feed.xml", lastItemDaysAgo: null, createdDaysAgo: 400 }));
+  track(insertInactiveFeed(app.userKey, { name: "Still active", url: "https://inactive-d.e2e.test/feed.xml", lastItemDaysAgo: 4 }));
+  track(insertBrokenFeed(app.userKey, { name: "Broken and quiet", url: "https://inactive-e.e2e.test/feed.xml", failures: 3, lastError: "Error: Fetch failed: 500" }));
+  await page.goto(PAGE);
+
+  // the broken group does not contain the quiet feeds (and vice versa)
+  await expect(page.getByTestId("broken-feed")).toHaveCount(1);
+  await expect(card(page, "Broken and quiet")).toBeVisible();
+  await expect(page.getByTestId("health-group-inactive")).toHaveText("Inactive (3)");
+
+  await openInactive(app, page);
+  const cards = page.getByTestId("inactive-feed");
+  await expect(cards).toHaveCount(3);
+  expect(await cards.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.feedName))).toEqual(["Quiet for years", "Never posted", "Quiet since spring"]);
+  await expect(inactiveCard(page, "Quiet since spring").getByTestId("inactive-reason")).toContainText("Last item:");
+  await expect(inactiveCard(page, "Quiet since spring").getByTestId("inactive-reason")).toContainText("300 days ago");
+  await expect(inactiveCard(page, "Never posted").getByTestId("inactive-reason")).toContainText("Never published an item");
+  await expect(inactiveCard(page, "Still active")).toHaveCount(0);
+  await expect(page.getByTestId("inactive-feeds-summary")).toHaveText("3 inactive feeds");
+  await expect(page.getByTestId("inactive-threshold")).toContainText("180 days");
+});
+
+test("a re-tested feed that works again but never publishes moves from broken to inactive (stale fixture)", async ({ app, page }) => {
+  track(insertBrokenFeed(app.userKey, { name: "Silent revival", url: `${fixture}/broken/stale.xml`, failures: 3, lastError: "Error: Fetch failed: 500", failingDays: 2 }));
+  await page.goto(PAGE);
+  await app.activate(card(page, "Silent revival").getByTestId("broken-retest"));
+  await expect(card(page, "Silent revival")).toHaveCount(0);
+  await expect(page.getByText("“Silent revival” works again and is reactivated.")).toBeVisible();
+
+  await openInactive(app, page);
+  await expect(inactiveCard(page, "Silent revival")).toBeVisible();
+  await expect(inactiveCard(page, "Silent revival").getByTestId("inactive-reason")).toContainText("400 days ago");
+  await expect(inactiveCard(page, "Silent revival")).toContainText("1 article stored");
+});
+
+test("archive one inactive feed: it leaves the list, sidebar and counts but keeps its articles", async ({ app, page }) => {
+  const quiet = track(insertInactiveFeed(app.userKey, { name: "Quiet archive me", url: "https://inactive-f.e2e.test/feed.xml", lastItemDaysAgo: 500 }));
+  const before = feedArchiveState(quiet.id);
+  expect(before).toMatchObject({ archived: false, articleCount: 1 });
+
+  await app.open();
+  const unreadBefore = await app.sidebarCount("All articles");
+  await app.openSidebar();
+  await expect(app.sidebar().getByRole("button", { name: /Quiet archive me/ }).first()).toBeVisible();
+
+  await page.goto(PAGE);
+  await openInactive(app, page);
+  await app.activate(inactiveCard(page, "Quiet archive me").getByTestId("inactive-archive"));
+  await expect(inactiveCard(page, "Quiet archive me")).toHaveCount(0);
+  await expect(page.getByText("“Quiet archive me” archived.")).toBeVisible();
+  await expect.poll(() => feedArchiveState(quiet.id).archived).toBe(true);
+  // articles untouched, including their updatedAt
+  expect(feedArchiveState(quiet.id)).toMatchObject({ articleCount: 1, articlesUpdatedAt: before.articlesUpdatedAt });
+
+  await app.open();
+  expect(await app.sidebarCount("All articles")).toBe(unreadBefore - 1);
+  await app.openSidebar();
+  await expect(app.sidebar().getByRole("button", { name: /Quiet archive me/ })).toHaveCount(0);
+
+});
+
+test("the toast's Undo restores a just-archived feed", async ({ app, page }) => {
+  const quiet = track(insertInactiveFeed(app.userKey, { name: "Quiet undo me", url: "https://inactive-k.e2e.test/feed.xml", lastItemDaysAgo: 500 }));
+  await page.goto(PAGE);
+  await openInactive(app, page);
+  await app.activate(inactiveCard(page, "Quiet undo me").getByTestId("inactive-archive"));
+  await expect.poll(() => feedArchiveState(quiet.id).archived).toBe(true);
+  await app.activate(page.getByRole("button", { name: "Undo" }));
+  await expect.poll(() => feedArchiveState(quiet.id).archived).toBe(false);
+  await expect(inactiveCard(page, "Quiet undo me")).toBeVisible();
+});
+
+test("an archived feed's articles stay reachable through its own view", async ({ app, page }) => {
+  const quiet = track(insertInactiveFeed(app.userKey, { name: "Quiet but readable", url: "https://inactive-l.e2e.test/feed.xml", lastItemDaysAgo: 500, archived: true }));
+  await page.goto("/manage-feeds");
+  await app.activate(page.getByTestId("feed-filter-archived"));
+  const row = page.getByTestId("archived-feed").filter({ hasText: "Quiet but readable" });
+  await expect(row).toContainText("1 article kept");
+  await app.activate(row.getByTestId("archived-open"));
+  await expect(page).toHaveURL(new RegExp(`feed=${quiet.id}`));
+  await expect(page.getByText("Quiet but readable last post").first()).toBeVisible();
+});
+
+test("'Archive all inactive' confirms with the count, archives only inactive feeds and leaves broken and active ones", async ({ app, page }) => {
+  const a = track(insertInactiveFeed(app.userKey, { name: "Bulk quiet A", url: "https://inactive-g.e2e.test/feed.xml", lastItemDaysAgo: 250 }));
+  const b = track(insertInactiveFeed(app.userKey, { name: "Bulk quiet B", url: "https://inactive-h.e2e.test/feed.xml", lastItemDaysAgo: 600 }));
+  const active = track(insertInactiveFeed(app.userKey, { name: "Bulk active", url: "https://inactive-i.e2e.test/feed.xml", lastItemDaysAgo: 3 }));
+  const broken = track(insertBrokenFeed(app.userKey, { name: "Bulk broken", url: "https://inactive-j.e2e.test/feed.xml", failures: 4 }));
+  await page.goto(PAGE);
+  await openInactive(app, page);
+
+  const button = page.getByTestId("inactive-archive-all");
+  await expect(button).toHaveText("Archive all inactive (2)");
+  await app.activate(button);
+  const dialog = page.getByTestId("inactive-archive-all-confirm");
+  await expect(dialog).toContainText("Archive 2 feeds?");
+  await expect(dialog).toContainText("more than 180 days");
+  await app.activate(dialog.getByRole("button", { name: "Cancel" }));
+  expect(feedArchiveState(a.id).archived).toBe(false);
+
+  await app.activate(button);
+  await app.activate(page.getByTestId("inactive-archive-all-confirm-button"));
+  await expect(page.getByText("2 feeds archived.")).toBeVisible();
+  await expect(page.getByTestId("inactive-feeds-empty")).toBeVisible();
+  await expect.poll(() => feedArchiveState(a.id).archived).toBe(true);
+  expect(feedArchiveState(b.id).archived).toBe(true);
+  expect(feedArchiveState(active.id).archived).toBe(false);
+  expect(brokenFeedState(broken.id).exists).toBe(true);
+  expect(feedArchiveState(a.id).articleCount).toBe(1);
+});
+
+test("a broken feed can be archived too; the 'Archived' filter in Manage feeds lists it and 'Restore' brings it back", async ({ app, page }) => {
+  const dead = track(insertBrokenFeed(app.userKey, { name: "Dead for good", url: "https://broken-archive.e2e.test/feed.xml", failures: 8, lastError: "Error: Fetch failed: 410", failingDays: 90 }));
+  await page.goto(PAGE);
+  await app.activate(card(page, "Dead for good").getByTestId("broken-archive"));
+  await expect(card(page, "Dead for good")).toHaveCount(0);
+  await expect.poll(() => feedArchiveState(dead.id).archived).toBe(true);
+  expect(brokenFeedState(dead.id).exists).toBe(true); // archived, not deleted
+
+  await page.goto("/manage-feeds");
+  await app.activate(page.getByTestId("feed-filter-archived"));
+  const row = page.getByTestId("archived-feed").filter({ hasText: "Dead for good" });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText("Archived");
+  await expect(page.getByTestId("feed-filter-archived")).toContainText("Archived (1)");
+
+  await app.activate(row.getByTestId("archived-restore"));
+  await expect(page.getByText("“Dead for good” restored.")).toBeVisible();
+  await expect(page.getByTestId("archived-feeds-empty")).toBeVisible();
+  await expect.poll(() => feedArchiveState(dead.id).archived).toBe(false);
+
+  // back in the broken list (the failure bookkeeping was never touched)
+  await page.goto(PAGE);
+  await expect(card(page, "Dead for good")).toBeVisible();
 });

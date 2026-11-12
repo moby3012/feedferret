@@ -10,6 +10,18 @@ import { NEWSLETTER_SOURCE_TYPE } from "./newsletter-constants";
 
 export const STALE_BROKEN_FEED_DAYS = 30;
 
+/** Default for `User.inactiveFeedDays`: a feed that fetches fine but published nothing for this long is "inactive". */
+export const DEFAULT_INACTIVE_FEED_DAYS = 180;
+export const MIN_INACTIVE_FEED_DAYS = 7;
+export const MAX_INACTIVE_FEED_DAYS = 3650;
+
+/** Clamps a stored / submitted threshold to the supported range (garbage falls back to the default). */
+export function normalizeInactiveDays(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_INACTIVE_FEED_DAYS;
+  return Math.min(MAX_INACTIVE_FEED_DAYS, Math.max(MIN_INACTIVE_FEED_DAYS, Math.round(n)));
+}
+
 export type BrokenFeedCategory =
   | "access"
   | "not-found"
@@ -50,7 +62,7 @@ export function compareBrokenFeeds(
 }
 
 /** HTTP status our fetchers put into their errors ("Fetch failed: 404 …", "Status code 500", "HTTP 403"). */
-function statusFromError(text: string): number | null {
+export function statusFromError(text: string): number | null {
   const m =
     /Fetch failed: (\d{3})\b/.exec(text) ??
     /\b(?:HTTP(?:\/[\d.]+)?|status(?: code)?|response)[\s:]+(\d{3})\b/i.exec(text) ??
@@ -91,6 +103,25 @@ export function categorizeFeedError(lastError: string | null | undefined, url?: 
   return "unknown";
 }
 
+/**
+ * How a broken feed fails, coarser than {@link BrokenFeedCategory}:
+ * - `gone`: the address answers 404/410 — the feed moved or was removed (repair / remove).
+ * - `blocked`: 403/429, typically bot protection or rate limiting against this server's IP. The feed
+ *   may still work from elsewhere, but delivers nothing new here — worth a retry or a proxy, not a repair.
+ * - `error`: everything else (5xx, DNS/TLS/timeouts, unparsable body, bad credentials …).
+ */
+export type BrokenFeedKind = "gone" | "blocked" | "error";
+
+export function brokenKindOf(category: BrokenFeedCategory, lastError: string | null | undefined): BrokenFeedKind {
+  if (category === "not-found") return "gone";
+  if (category === "rate-limited") return "blocked";
+  if (category === "access") {
+    const status = statusFromError(redact(lastError ?? ""));
+    return status === 403 ? "blocked" : "error";
+  }
+  return "error";
+}
+
 /** Host of a feed URL for display. Never includes userinfo, path or query (those can carry credentials). */
 export function feedHost(url: string | null | undefined): string {
   if (!url) return "";
@@ -127,4 +158,43 @@ export function isStaleBroken(
   const since = failingSinceOf(feed);
   if (!since) return false;
   return now.getTime() - since.getTime() > days * 86_400_000;
+}
+
+// --- Inactive feeds: they fetch fine, they just never publish anything new. -------------------------
+
+export type InactiveFeedLike = BrokenFeedLike & {
+  archivedAt?: Date | null;
+  lastFetchedAt?: Date | null;
+  createdAt: Date;
+};
+
+/**
+ * Newest item date of a feed, falling back to the feed's creation date when it never delivered an
+ * item (we have then known it for that long without receiving anything).
+ */
+export function lastItemAtOf(newestPublishedAt: Date | null | undefined, feed: { createdAt: Date }): Date {
+  return newestPublishedAt ?? feed.createdAt;
+}
+
+/**
+ * Inactive = healthy (no failure streak, not muted), already fetched at least once, not archived, and
+ * the newest item is older than `days`. Broken feeds are never inactive: their silence is explained
+ * by the error, which is the more actionable diagnosis.
+ */
+export function isInactiveFeed(
+  feed: InactiveFeedLike,
+  newestPublishedAt: Date | null | undefined,
+  now: Date,
+  days: number,
+): boolean {
+  if (feed.sourceType === NEWSLETTER_SOURCE_TYPE) return false;
+  if (feed.archivedAt) return false;
+  if (isBrokenFeed(feed)) return false;
+  if (!feed.lastFetchedAt) return false;
+  return now.getTime() - lastItemAtOf(newestPublishedAt, feed).getTime() > normalizeInactiveDays(days) * 86_400_000;
+}
+
+/** Whole days between `date` and `now` (never negative). */
+export function daysSince(date: Date, now: Date): number {
+  return Math.max(0, Math.floor((now.getTime() - date.getTime()) / 86_400_000));
 }

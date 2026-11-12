@@ -871,7 +871,8 @@ export async function getFeedHealth() {
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     const feeds = await db.feed.findMany({
-        where: { userId: session.user.id },
+        // Archived feeds are not synced anymore: they have no health to report.
+        where: { userId: session.user.id, archivedAt: null },
         select: {
             ...FEED_CLIENT_SELECT,
             category: true,
