@@ -26,12 +26,6 @@ export function ReadingSettings() {
         <Switch aria-label={t("settings.mediaProxyImages")} checked={prefs?.mediaProxyImages ?? false}
           onCheckedChange={(checked) => update({ mediaProxyImages: checked })} />
       </PrefRow>
-      <PrefRow icon={Globe} title={t("settings.mediaYoutubeFrontend")} description={t("settings.mediaFrontendsDescription")}>
-        <Select value={prefs?.mediaYoutubeFrontend ?? "invidious"} onValueChange={value => update({ mediaYoutubeFrontend: value })}>
-          <SelectTrigger aria-label={t("settings.mediaYoutubeFrontend")}><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="invidious">Invidious</SelectItem><SelectItem value="piped">Piped</SelectItem></SelectContent>
-        </Select>
-      </PrefRow>
       {(["mediaYoutubeInstance", "mediaRedditFrontend", "mediaTwitterInstance"] as const).map(field => (
         <PrefRow key={field} icon={ExternalLink} title={t(`settings.${field}`)} description={t(field === "mediaRedditFrontend" ? "settings.mediaRedditDescription" : "settings.mediaInstanceDescription")}>
           <Input key={prefs?.[field] ?? ""} aria-label={t(`settings.${field}`)} defaultValue={prefs?.[field] ?? ""}

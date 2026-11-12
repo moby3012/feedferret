@@ -29,6 +29,7 @@ export function nonceCsp(nonce: string, development = false): string {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
+    "media-src 'self' https://v.redd.it",
     "font-src 'self' data:",
     "connect-src 'self'",
     // The old `blob:` worker allowance is unused (push runs in /sw.js).

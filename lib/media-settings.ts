@@ -43,14 +43,13 @@ export async function mediaProxyEnabled(userId: string): Promise<boolean> {
   return user.value;
 }
 
-
 export async function mediaFrontends(userId: string): Promise<Frontends & { uiLanguage?: string | null }> {
   const cache = store.frontends ??= new Map();
   const old = cache.get(userId);
   if (old && old.until > Date.now()) return old.value;
   if (cache.size >= 10_000) cache.clear();
   const value = db.user.findUnique({ where: { id: userId }, select: {
-    uiLanguage: true, mediaYoutubeFrontend: true, mediaYoutubeInstance: true, mediaRedditFrontend: true, mediaTwitterInstance: true,
+    uiLanguage: true, mediaYoutubeInstance: true, mediaRedditFrontend: true, mediaTwitterInstance: true,
   } }).then(row => row ?? {});
   const entry = { until: Date.now() + TTL, value };
   cache.set(userId, entry);

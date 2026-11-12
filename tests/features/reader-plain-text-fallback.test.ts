@@ -28,3 +28,11 @@ describe("reader plain-text fallback", () => {
     expect(en.articleReader.plainTextFallback).toBe("Shown as plain text (formatting temporarily unavailable)");
   });
 });
+
+
+it("keeps the original link for sharing/icons while passing the private open destination", () => {
+  const original = { ...article, link: "https://x.com/person/status/123" };
+  const presented = withDetail(original, detail({ openLink: "https://social.private.example/person/status/123" }));
+  expect(presented.link).toBe(original.link);
+  expect(presented.openLink).toBe("https://social.private.example/person/status/123");
+});

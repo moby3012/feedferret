@@ -32,15 +32,31 @@ Custom frontend destinations and arbitrary PeerTube instances open in a new
 tab with noopener/noreferrer. They deliberately do not use iframes: neither the
 static enforced legacy CSP nor a future enforced nonce CSP can enumerate
 per-user or per-article origins safely. Both policies have the same explicit
-frame-src list for fixed providers. The nonce policy remains report-only.
+frame-src list for fixed providers and media-src allowing self and v.redd.it. The nonce policy remains report-only.
 Adding arbitrary https: to frame-src would weaken that restriction.
 
 Reddit RSS gallery/preview links to preview.redd.it and i.redd.it become inline
-images (signed when the proxy is enabled). Only images actually exposed in RSS
+images only when the proxy is enabled. Otherwise they remain links. Only images actually exposed in RSS
 are available; a gallery page URL alone cannot reveal missing images without
 an extra discovery request. v.redd.it is click-to-load native video: explicit
 media paths are preserved, and bare video IDs use DASH_720.mp4 (which can be
 unavailable or silent on some posts). No stored-content normalization occurs.
+
+The app keeps the canonical article link for Copy link, Share and favicon lookup.
+A separate app-only openLink is used solely by open-original actions.
+
+The worker is skipped for ordinary articles unless the proxy is enabled, a
+frontend is configured, or a cheap string check finds a supported media candidate.
+Markdown output carries its renderer provenance so both sanitization passes
+preserve KaTeX metrics without trusting publisher-supplied KaTeX classes.
+
+Ingest sanitization currently strips iframe-only embeds. The presentation worker
+can transform iframes in legacy/render-time inputs, but cannot reconstruct an
+iframe already removed at ingest. Converting those to links at ingest is deferred
+to avoid changing stored-content behavior in this render-only work package.
+
+The player sandbox intentionally omits allow-popups. Provider controls that open
+new windows may not function; users can use the reader's open-original action.
 
 The worker sanitizes before and after rewriting, strips publisher-supplied
 control markers and never preserves active iframes. The click handler rechecks

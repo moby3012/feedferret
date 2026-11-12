@@ -350,7 +350,7 @@ export function ArticleListView(props: ArticleListViewProps) {
         icon: ExternalLink,
         separated: true,
         onSelect: () => {
-          if (a.link) window.open(a.link, "_blank", "noopener,noreferrer");
+          if (a.link) window.open(a.openLink ?? a.link, "_blank", "noopener,noreferrer");
         },
       },
       {

@@ -2,7 +2,7 @@ import { JSDOM } from "jsdom";
 import { alternativeUrl, videoFor, type Frontends } from "./video-providers";
 import { signedMediaUrl } from "./media-url";
 
-export type MediaRewriteInput = { html: string; base: string; keyHex: string; frontends?: Frontends; playLabel?: string };
+export type MediaRewriteInput = { html: string; base: string; keyHex: string; frontends?: Frontends; playLabel?: string; trustedRendererHtml?: boolean };
 
 /** Runs only in the bounded HTML worker. Never writes stored article content. */
 export function rewriteMediaInProcess({ html, base, keyHex, frontends = {}, playLabel = "Load video" }: MediaRewriteInput): string {
@@ -13,6 +13,7 @@ export function rewriteMediaInProcess({ html, base, keyHex, frontends = {}, play
     const key = Buffer.from(keyHex, "hex");
     // Discard publisher-supplied control markers, including nested/spoofed buttons.
     for (const el of body.querySelectorAll("[data-ff-video]")) el.removeAttribute("data-ff-video");
+    const generatedThumbnails = new WeakSet<Element>();
     const seen = new Set<string>();
     const placeholder = (raw: string) => {
       const video = videoFor(raw);
@@ -25,6 +26,7 @@ export function rewriteMediaInProcess({ html, base, keyHex, frontends = {}, play
         const img = dom.window.document.createElement("img");
         img.src = signedMediaUrl(video.thumbnail, key, base);
         img.alt = "";
+        generatedThumbnails.add(img);
         box.append(img);
       }
       const control = dom.window.document.createElement(alternative !== raw || !video.embed && !["Twitch", "Reddit video"].includes(video.provider) ? "a" : "button");
@@ -56,8 +58,7 @@ export function rewriteMediaInProcess({ html, base, keyHex, frontends = {}, play
           link.rel = "noopener noreferrer";
           el.replaceWith(link);
         } else el.remove();
-      }
-      else if (el.tagName === "A") {
+      } else if (el.tagName === "A") {
         const alternative = alternativeUrl(absolute, frontends);
         if (alternative !== absolute) { el.setAttribute("href", alternative); el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener noreferrer"); }
       }
@@ -68,7 +69,7 @@ export function rewriteMediaInProcess({ html, base, keyHex, frontends = {}, play
     }
     // Reddit RSS exposes gallery media as preview/image links. No JSON or page scraping.
     const reddit = (() => { try { return new URL(base).hostname.endsWith(".reddit.com") || new URL(base).hostname === "reddit.com"; } catch { return false; } })();
-    if (reddit) {
+    if (reddit && keyHex) {
       const images = new Set(Array.from(body.querySelectorAll("img[src]"), el => el.getAttribute("src")));
       for (const a of body.querySelectorAll("a[href]")) {
         try {
@@ -94,7 +95,7 @@ export function rewriteMediaInProcess({ html, base, keyHex, frontends = {}, play
     }
     for (const el of body.querySelectorAll('img, input[type="image" i], picture source, video[poster]')) {
       const attr = el.tagName === "VIDEO" ? "poster" : "src";
-      if (el.hasAttribute(attr) && !el.getAttribute(attr)!.startsWith("/api/media?")) el.setAttribute(attr, rewrite(el.getAttribute(attr)!));
+      if (el.hasAttribute(attr) && !generatedThumbnails.has(el)) el.setAttribute(attr, rewrite(el.getAttribute(attr)!));
       if (el.hasAttribute("srcset")) {
         // HTTP image candidates cannot contain whitespace. Commas inside URL
         // tokens are retained; trailing commas delimit descriptor-less URLs.

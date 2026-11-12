@@ -20,7 +20,7 @@ import {
 } from "@/lib/selector-extract";
 import { buildNewsletterBody, type NewsletterBodyInput } from "@/lib/newsletter-html";
 import { sanitizeFeedItemsInProcess, type SanitizeFeedItemsInput } from "@/lib/feed-item-sanitize";
-import { getSanitizer } from "@/lib/sanitize-html";
+import { getSanitizer, sanitizeTrustedRendererHtml } from "@/lib/sanitize-html";
 import { parseOpmlInProcess } from "@/lib/opml-parse-core";
 import { extractCatalogOpmlEntries } from "@/lib/catalog-opml-core";
 import { renderMarkdownToHtmlInProcess } from "@/lib/markdown-render-core";
@@ -42,8 +42,13 @@ function assertTestTasksEnabled() {
 export const htmlTasks = {
   rewriteMedia: async (input: Parameters<typeof rewriteMediaInProcess>[0]) => {
     const sanitizer = await getSanitizer();
-    const html = sanitizer.sanitize(input.html, { ADD_TAGS: ["iframe"], ADD_ATTR: ["src"] });
-    return sanitizer.sanitize(rewriteMediaInProcess({ ...input, html }), { ADD_ATTR: ["target"] });
+    // This flag comes only from server-rendered Markdown (html:false, KaTeX trust:false),
+    // never from publisher classes/attributes. Preserve that renderer's layout metrics.
+    const html = input.trustedRendererHtml ? await sanitizeTrustedRendererHtml(input.html) :
+      sanitizer.sanitize(input.html, { ADD_TAGS: ["iframe"], ADD_ATTR: ["src"] });
+    const rewritten = rewriteMediaInProcess({ ...input, html });
+    return input.trustedRendererHtml ? sanitizeTrustedRendererHtml(rewritten) :
+      sanitizer.sanitize(rewritten, { ADD_ATTR: ["target"] });
   },
   telegram: parseTelegramPreview,
   /** Loads the parsers and the sanitizer's window (boot warm-up). */

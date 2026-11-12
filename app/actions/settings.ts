@@ -209,7 +209,6 @@ const GLOBAL_SETTINGS_TYPES = {
   secondaryColor: "string",
   hideDuplicates: "boolean",
   mediaProxyImages: "boolean",
-  mediaYoutubeFrontend: "string",
   mediaYoutubeInstance: "string",
   mediaRedditFrontend: "string",
   mediaTwitterInstance: "string",
@@ -240,7 +239,6 @@ export async function updateGlobalSettings(data: {
   secondaryColor?: string;
   hideDuplicates?: boolean;
   mediaProxyImages?: boolean;
-  mediaYoutubeFrontend?: string;
   mediaYoutubeInstance?: string;
   mediaRedditFrontend?: string;
   mediaTwitterInstance?: string;
@@ -294,7 +292,6 @@ export async function updateGlobalSettings(data: {
       updateData[field] = field === "mediaRedditFrontend" && updateData[field] === "old" ? "old" : validateInstance(updateData[field]);
     }
   }
-  if ("mediaYoutubeFrontend" in updateData && !["invidious", "piped"].includes(String(updateData.mediaYoutubeFrontend))) throw new Error("Invalid YouTube frontend");
   await db.user.update({
     where: { id: session.user.id },
     data: updateData,
@@ -556,12 +553,6 @@ export async function updateDigestSettings(data: {
     }
   }
 
-  for (const field of ["mediaYoutubeInstance", "mediaRedditFrontend", "mediaTwitterInstance"] as const) {
-    if (field in updateData) {
-      updateData[field] = field === "mediaRedditFrontend" && updateData[field] === "old" ? "old" : validateInstance(updateData[field]);
-    }
-  }
-  if ("mediaYoutubeFrontend" in updateData && !["invidious", "piped"].includes(String(updateData.mediaYoutubeFrontend))) throw new Error("Invalid YouTube frontend");
   await db.user.update({
     where: { id: session.user.id },
     data: updateData,

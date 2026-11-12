@@ -1,6 +1,5 @@
 /** Pure URL rules shared by the worker and click handler. No discovery requests. */
 export type Frontends = {
-  mediaYoutubeFrontend?: string;
   mediaYoutubeInstance?: string;
   mediaRedditFrontend?: string;
   mediaTwitterInstance?: string;

@@ -14,7 +14,7 @@ describe("declarative providers", () => {
   it("rewrites frontends without selecting a default", () => {
     const url = "https://youtu.be/abc";
     expect(alternativeUrl(url, {})).toBe(url);
-    for (const kind of ["invidious", "piped"]) expect(alternativeUrl(url, { mediaYoutubeFrontend: kind, mediaYoutubeInstance: "https://video.example" })).toBe("https://video.example/watch?v=abc");
+    expect(alternativeUrl(url, { mediaYoutubeInstance: "https://video.example" })).toBe("https://video.example/watch?v=abc");
     expect(alternativeUrl("https://www.reddit.com/r/test?a=b", { mediaRedditFrontend: "old" })).toBe("https://old.reddit.com/r/test?a=b");
     expect(alternativeUrl("https://x.com/test/status/1", { mediaTwitterInstance: "https://social.example" })).toBe("https://social.example/test/status/1");
   });
@@ -59,4 +59,30 @@ describe("sanitized presentation pipeline", () => {
     const html = await render(payload);
     expect(html).not.toMatch(/data-ff-video|<script|onerror|<iframe/);
   });
+});
+
+it("keeps all renderer KaTeX metrics while applying media transforms", async () => {
+  const html = await runHtmlTaskInProcess("renderMarkdown", String.raw`$\frac{a}{b}$ ![Image](https://images.example/picture.png) [Video](https://youtu.be/abc)`);
+  const metrics = html.match(/style="[^"]*"/g)!;
+  expect(metrics.length).toBeGreaterThan(1);
+  const rewritten = await runHtmlTaskInProcess("rewriteMedia", { html, base: "https://news.example/article", keyHex: "01".repeat(32), trustedRendererHtml: true });
+  expect(rewritten.match(/style="[^"]*"/g)).toEqual(metrics);
+  expect(rewritten).toContain('src="/api/media?');
+  expect(rewritten).toContain("data-ff-video");
+});
+it("does not elevate publisher KaTeX classes to renderer trust", async () => {
+  const html = await runHtmlTaskInProcess("rewriteMedia", { html: '<span class="katex"><span style="width:50px;position:relative;top:20px">fake</span></span>', base: "https://news.example", keyHex: "" });
+  expect(html).not.toMatch(/width:|position:|top:/);
+});
+it("does not turn Reddit gallery links into hotlinks when the proxy is off", async () => {
+  const html = await runHtmlTaskInProcess("rewriteMedia", { html: '<a href="https://preview.redd.it/a.jpg">preview</a><a href="https://i.redd.it/b.jpg">image</a>', base: "https://reddit.com/r/test/comments/abc", keyHex: "" });
+  expect(html).not.toContain("<img");
+  expect(html).toContain('href="https://preview.redd.it/a.jpg"');
+  expect(html).toContain('href="https://i.redd.it/b.jpg"');
+});
+it("only exempts generated thumbnails from signing, never publisher proxy-looking paths", async () => {
+  const html = await runHtmlTaskInProcess("rewriteMedia", { html: '<img src="/api/media?u=publisher"><a href="https://youtu.be/abc">video</a>', base: "https://news.example/article", keyHex: "01".repeat(32) });
+  expect(html).toContain("u=https%3A%2F%2Fnews.example%2Fapi%2Fmedia%3Fu%3Dpublisher");
+  expect(html).toContain("u=https%3A%2F%2Fi.ytimg.com");
+  expect(html).not.toContain("u=https%3A%2F%2Fnews.example%2Fapi%2Fmedia%3Fu%3Dhttps");
 });

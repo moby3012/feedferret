@@ -95,3 +95,26 @@ it("returns safe text and a signed thumbnail if the rewrite worker fails", async
   expect(result.html).not.toContain("<video");
   expect(result.imageUrl).toMatch(/^\/api\/media\?/);
 });
+
+it("leaves ordinary HTML unchanged without admitting work to a saturated pool", async () => {
+  vi.mocked(db.globalSettings.findUnique).mockResolvedValue({ mediaProxyMode: "off" } as never);
+  vi.mocked(db.user.findUnique).mockResolvedValue({} as never);
+  vi.mocked(runHtmlTask).mockRejectedValue(new Error("saturated"));
+  const input = [{ link: "https://news.example/post", imageUrl: null, html: '<p style="text-align:center">Ordinary prose</p>' }];
+  expect(await presentMedia(input, "u")).toEqual(input);
+  expect(runHtmlTask).not.toHaveBeenCalled();
+});
+it("preserves canonical URLs and exposes a separate open-original destination", async () => {
+  vi.mocked(db.globalSettings.findUnique).mockResolvedValue({ mediaProxyMode: "off" } as never);
+  vi.mocked(db.user.findUnique).mockResolvedValue({ mediaTwitterInstance: "https://social.private.example" } as never);
+  const [result] = await presentMedia([{ link: "https://x.com/person/status/123", imageUrl: null }], "u");
+  expect(result.link).toBe("https://x.com/person/status/123");
+  expect(result).toHaveProperty("openLink", "https://social.private.example/person/status/123");
+});
+it("carries renderer provenance to the worker while still proxying Markdown images", async () => {
+  vi.mocked(db.globalSettings.findUnique).mockResolvedValue({ mediaProxyMode: "on" } as never);
+  vi.mocked(db.user.findUnique).mockResolvedValue({} as never);
+  vi.mocked(runHtmlTask).mockResolvedValue("<p>rendered</p>");
+  await presentMedia([{ link: "https://news.example/post", imageUrl: null, html: "<p>rendered</p>", contentFormat: "markdown" }], "u");
+  expect(runHtmlTask).toHaveBeenCalledWith("rewriteMedia", expect.objectContaining({ trustedRendererHtml: true, keyHex: expect.stringMatching(/^[a-f0-9]{64}$/) }));
+});

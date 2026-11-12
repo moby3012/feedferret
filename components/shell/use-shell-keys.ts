@@ -95,7 +95,7 @@ export function useShellKeys(shell: ShellActions) {
       else if (e.key === "l") shell.toggleLater(current);
       else if (e.key === "m") shell.toggleRead(current);
       else if (e.key === "o") {
-        const link = articles[at]?.link;
+        const link = articles[at]?.openLink ?? articles[at]?.link;
         if (link) window.open(link, "_blank", "noopener,noreferrer");
       }
     };

@@ -91,7 +91,6 @@ model User {
   storyClustering         Boolean   @default(true)
   clusterReadMode         String    @default("story")    // "story" | "article" — "story" since the story card UI (PR 6)
   mediaProxyImages Boolean @default(false)
-  mediaYoutubeFrontend String @default("invidious")
   mediaYoutubeInstance String @default("")
   mediaRedditFrontend String @default("")
   mediaTwitterInstance String @default("")

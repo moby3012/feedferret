@@ -34,3 +34,40 @@ test("video remains inert until the reader clicks load", async ({ app, page }) =
     db.close();
   }
 });
+
+test("Reddit click-to-load media is allowed by enforced and report-only CSP", async ({ app, page }) => {
+  const db = new Database(manifest().dbPath);
+  const id = manifest().users[app.userKey].firstArticleId;
+  const original = db.prepare('SELECT content FROM "Article" WHERE id = ?').get(id) as { content: string };
+  db.prepare('UPDATE "Article" SET content = ? WHERE id = ?').run('<p>Reddit video fixture</p><a href="https://v.redd.it/fixture">video</a>', id);
+  const mediaRequests: string[] = [];
+  await page.route("https://v.redd.it/**", route => {
+    mediaRequests.push(route.request().url());
+    // Only request admission is under test; no external media is downloaded.
+    return route.fulfill({ contentType: "video/mp4", body: Buffer.alloc(0) });
+  });
+  try {
+    const response = await page.request.get("/");
+    expect(response.headers()["content-security-policy"]).toContain("media-src 'self' https://v.redd.it");
+    expect(response.headers()["content-security-policy-report-only"]).toContain("media-src 'self' https://v.redd.it");
+    await app.open();
+    await app.activate(app.row(1));
+    await page.evaluate(() => {
+      const violations: string[] = [];
+      Object.assign(window, { mediaCspViolations: violations });
+      document.addEventListener("securitypolicyviolation", event => { if (event.effectiveDirective === "media-src") violations.push(event.blockedURI); });
+    });
+    const button = page.locator('.article-content button[data-ff-video]');
+    await expect(button).toBeVisible();
+    expect(mediaRequests).toEqual([]);
+    await button.click();
+    const video = page.locator(".article-content video");
+    await expect(video).toHaveAttribute("src", "https://v.redd.it/fixture/DASH_720.mp4");
+    await video.evaluate(el => { void (el as HTMLVideoElement).play().catch(() => {}); });
+    await expect.poll(() => mediaRequests.length).toBeGreaterThan(0);
+    expect(await page.evaluate(() => (window as unknown as { mediaCspViolations: string[] }).mediaCspViolations)).toEqual([]);
+  } finally {
+    db.prepare('UPDATE "Article" SET content = ? WHERE id = ?').run(original.content, id);
+    db.close();
+  }
+});

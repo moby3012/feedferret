@@ -83,7 +83,7 @@ export interface ShellData {
 
 export interface ShellActions {
   activeList: ActiveListStore;
-  selectArticle(article: { id: string; feedId: string; link?: string }): void;
+  selectArticle(article: { id: string; feedId: string; link?: string; openLink?: string }): void;
   /** `story`: the row is a story card (the server cascades the read to its cluster). */
   toggleRead(id: string, opts?: { story?: boolean }): void;
   toggleStar(id: string): void;
@@ -184,7 +184,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
         const { feeds: fs, prefs: p } = live.current;
         const feed = fs.find((f: any) => f.id === article.feedId);
         const openOriginal = feed?.openOriginalOverride ?? p?.openOriginalByDefault;
-        if (openOriginal && article.link) window.open(article.link, "_blank", "noopener,noreferrer");
+        if (openOriginal && article.link) window.open(article.openLink ?? article.link, "_blank", "noopener,noreferrer");
         markArticleOpen(article.id);
         void nav.openArticle(article.id);
       },
