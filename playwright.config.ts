@@ -89,7 +89,7 @@ export default defineConfig({
       // Seed a fresh DB, then serve the production build (run `pnpm run build`
       // first). `next start` directly -- NOT `pnpm run start`, whose
       // `prisma db push --accept-data-loss` would run against the seeded DB.
-      command: `node scripts/e2e-seed.mjs && npx next start -p ${PORT}`,
+      command: `node scripts/e2e-seed.mjs && node --require ./e2e/fixtures/media-transport.cjs node_modules/next/dist/bin/next start -p ${PORT}`,
       url: `${BASE_URL}/login`,
       // Always a fresh seed: a leftover server would hold stale state.
       reuseExistingServer: false,

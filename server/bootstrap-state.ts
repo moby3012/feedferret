@@ -1,3 +1,4 @@
+import { presentMedia } from "@/lib/media-proxy";
 import { QueryClient, dehydrate, type DehydratedState } from "@tanstack/react-query";
 import { qk } from "@/features/articles/keys";
 import { PAGE_SIZE } from "@/features/articles/api";
@@ -56,8 +57,8 @@ export async function buildBootstrapState(userId: string, href: string): Promise
           })
       : null,
   ]);
-  if (key && page) qc.setQueryData(qk.list(key), { pages: [page], pageParams: [null] });
-  if (loc.articleId && detail) qc.setQueryData(qk.article(loc.articleId), detail);
+  if (key && page) qc.setQueryData(qk.list(key), { pages: [{ ...page, items: await presentMedia(page.items, userId) }], pageParams: [null] });
+  if (loc.articleId && detail) qc.setQueryData(qk.article(loc.articleId), (await presentMedia([detail], userId))[0]);
   if (briefing) qc.setQueryData(briefingKey("new"), briefing);
 
   return dehydrate(qc);

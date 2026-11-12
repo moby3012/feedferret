@@ -21,6 +21,10 @@ export function ReadingSettings() {
 
   return (
     <>
+      <PrefRow icon={Globe} title={t("settings.mediaProxyImages")} description={t("settings.mediaProxyImagesDescription")}>
+        <Switch aria-label={t("settings.mediaProxyImages")} checked={prefs?.mediaProxyImages ?? false}
+          onCheckedChange={(checked) => update({ mediaProxyImages: checked })} />
+      </PrefRow>
       {/* Default sort order */}
       <PrefRow
         icon={ArrowDownAZ}

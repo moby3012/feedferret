@@ -172,7 +172,9 @@
       "feedsHintReset": "The tip shows again on the Feeds screen."
     },
     "sectionsNav": "Settings sections",
-    "backToSettings": "Settings"
+    "backToSettings": "Settings",
+    "mediaProxyImages": "Load images through FeedFerret (privacy)",
+    "mediaProxyImagesDescription": "Applies when the administrator allows optional image proxying. Always on applies to everyone."
   },
   "profile": {
     "changePassword": "Change password",
@@ -1969,7 +1971,12 @@
       "failedToGenerateKeys": "Could not generate keys",
       "copied": "Copied {label}",
       "couldNotCopy": "Could not copy {label}"
-    }
+    },
+    "mediaProxyMode": "Image proxy",
+    "mediaProxyDescription": "Off: direct images. Optional: personal preference. Always on: every user. Off by default.",
+    "mediaProxyOff": "Off",
+    "mediaProxyOptIn": "Opt-in",
+    "mediaProxyOn": "Always on"
   },
   "accessibility": {
     "title": "Accessibility Statement",

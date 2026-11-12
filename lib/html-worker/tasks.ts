@@ -1,3 +1,4 @@
+import { rewriteMediaInProcess } from "@/lib/media-rewrite-core";
 // The HTML tasks the worker pool (lib/html-worker/pool.ts) can run. Everything
 // reachable from here is bundled into build/html-worker/worker.cjs, so this
 // graph must stay free of I/O modules (db, ssrf, auth, next): the bundle
@@ -39,6 +40,7 @@ function assertTestTasksEnabled() {
 }
 
 export const htmlTasks = {
+  rewriteMedia: rewriteMediaInProcess,
   telegram: parseTelegramPreview,
   /** Loads the parsers and the sanitizer's window (boot warm-up). */
   async warm(_input: null): Promise<true> {

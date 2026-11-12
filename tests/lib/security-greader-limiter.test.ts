@@ -5,7 +5,8 @@ vi.mock("bcryptjs", () => ({ default: { compare: mocks.compare } }));
 vi.mock("@/lib/markdown-render", () => ({ renderMarkdownToHtml: vi.fn() }));
 import { authenticateGReaderPassword } from "../../lib/greader";
 import { checkRateLimit, rateLimitStoreSize, RATE_LIMITS } from "../../lib/rate-limit";
-const user = { id: "u1", password: "hash", isActive: true, twoFactorEnabled: false };
+// failedApiLoginWindowEnd: the running lockout window that reserveLoginAttempt reads and charges.
+const user = { id: "u1", password: "hash", isActive: true, twoFactorEnabled: false, failedApiLoginWindowEnd: new Date("2099-01-01T00:00:00Z") };
 beforeEach(() => { vi.clearAllMocks(); mocks.update.mockResolvedValue({ count: 1 }); mocks.user.mockResolvedValue(user); mocks.compare.mockResolvedValue(true); });
 const request = (ip: string) => new Request("https://example.test", { headers: { "x-forwarded-for": ip } });
 it("successful polling never consumes failed-attempt budgets or writes audit rows", async () => {

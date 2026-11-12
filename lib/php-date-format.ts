@@ -69,7 +69,7 @@ function expandShorthands(format: string): string {
       out += ch + (format[i + 1] ?? "");
       i++;
     } else if (ch === "c") {
-      out += "Y-m-d\\TH:i:sP";
+      out += "Y-m-d\u0000H:i:sP"; // Internal token: ISO separator accepts T or t.
     } else if (ch === "r") {
       out += "D, d M Y H:i:s O";
     } else {
@@ -145,12 +145,18 @@ export function parsePhpDate(input: string, format: string, options: PhpDatePars
 
   /** Consume an optional "." after an abbreviated name unless the format wants a literal "." next. */
   const optionalDot = (fi: number) => {
-    if (text[p] === "." && fmt[fi + 1] !== ".") p++;
+    if (text[p] === "." && fmt[fi + 1] !== "." && !(fmt[fi + 1] === "\\" && fmt[fi + 2] === ".")) p++;
   };
 
   for (let fi = 0; fi < fmt.length; fi++) {
     const ch = fmt[fi];
     switch (ch) {
+      case "\u0000": if (text[p] !== "T" && text[p] !== "t") return null; p++; break;
+      case " ":
+        if (text[p] !== " ") return null;
+        p++;
+        while (fmt[fi + 1] === " ") fi++;
+        break;
       case "d": case "j": { const v = digits(1, 2); if (v === null) return null; f.day = v; break; }
       case "m": case "n": { const v = digits(1, 2); if (v === null) return null; f.month = v; break; }
       case "y": {

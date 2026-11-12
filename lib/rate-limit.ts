@@ -171,12 +171,24 @@ export function checkRateLimit(
   };
 }
 
-/** Inspect failed-attempt budgets without consuming a request. */
+/**
+ * Inspect failed-attempt budgets without consuming a request. A key that is not tracked yet counts as
+ * limited while its fail-safe (`critical`, `overflow: "refuse"`) store is saturated, exactly like
+ * `checkRateLimit` would refuse it: otherwise a caller that peeks BEFORE the work and only charges
+ * failures afterwards (the signature webhook) would let every untracked client through forever once
+ * the store is full.
+ */
 export function peekRateLimit(identifier: string, config: RateLimitConfig): RateLimitResult {
   const now = Date.now();
-  const entry = namespaces.get(config.prefix)?.entries.get(identifier);
-  const count = entry && entry.resetAt >= now ? entry.count : 0;
-  const resetAt = entry && entry.resetAt >= now ? entry.resetAt : now + config.windowSecs * 1000;
+  const ns = namespaces.get(config.prefix);
+  const entry = ns?.entries.get(identifier);
+  const live = entry && entry.resetAt >= now ? entry : undefined;
+  if (!entry && ns?.critical && ns.overflow === "refuse" && !makeRoom(ns, now)) {
+    const resetAt = Math.max(ns.saturatedUntil, now + 1000);
+    return { success: false, remaining: 0, resetAt, retryAfterSecs: Math.ceil((resetAt - now) / 1000) };
+  }
+  const count = live ? live.count : 0;
+  const resetAt = live ? live.resetAt : now + config.windowSecs * 1000;
   return { success: count < config.limit, remaining: Math.max(0, config.limit - count), resetAt };
 }
 

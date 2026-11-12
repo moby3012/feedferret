@@ -158,6 +158,19 @@ afterEach(async () => {
   pages.length = 0;
 });
 
+it("embeds cached proxy images as data URLs for the opaque sandbox", async () => {
+  const scope = await claim("A");
+  const article = detail("proxy", { html: '<p>SECRET body</p><picture><source srcset="/api/media?u=a&amp;s=b 1x"><img src="/api/media?u=a&amp;s=b"></picture>' });
+  await saveArticle(scope, article, { readLater: true });
+  const page = openPage();
+  Object.assign(page.win, { caches: { match: async () => ({ ok: true, blob: async () => new page.win.Blob(["pixels"], { type: "image/png" }) }) } });
+  await settle(() => expect(page.items().length).toBeGreaterThan(0));
+  await openFirstArticle(page);
+  const srcdoc = page.$("body").getAttribute("srcdoc")!;
+  expect(srcdoc).toContain("data:image/png;base64,");
+  expect(srcdoc).not.toContain("/api/media?");
+});
+
 describe("offline reader: authorization policy", () => {
   it("shows the stored lists of the verified account", async () => {
     await seed("A", ["1", "2"]);

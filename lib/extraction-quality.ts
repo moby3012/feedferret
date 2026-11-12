@@ -12,7 +12,7 @@
 // lib/extraction-trim-core.ts (HTML worker only).
 
 import { htmlToPlainText } from "@/lib/article-kind";
-import { iterElementInners } from "@/lib/linear-text";
+import { iterElementInners, replaceElements } from "@/lib/linear-text";
 
 export type QualityVerdict = "good" | "thin" | "wall" | "boilerplate" | "empty";
 
@@ -206,6 +206,27 @@ export function textWords(text: string): string[] {
     return text.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
+/** Slice before plain-text conversion: long article tails need no decoding or tokenisation. */
+function leadHtml(html: string): string {
+    const source = replaceElements(html, ["script", "style"], " ");
+    let words = 0;
+    let inWord = false;
+    for (let i = 0; i < source.length; i++) {
+        if (source[i] === "<") {
+            const end = source.indexOf(">", i + 1);
+            if (end === -1) return source.slice(0, i);
+            i = end;
+            inWord = false;
+        } else if (/\s/.test(source[i])) {
+            inWord = false;
+        } else if (!inWord) {
+            if (++words > 200) return source.slice(0, i);
+            inWord = true;
+        }
+    }
+    return source;
+}
+
 // One extraction result is checked repeatedly during escalation and storage.
 // Weak keys release the cached words with the result rather than retaining pages.
 const leadMemo = new WeakMap<ExtractionQuality, { baseline: string; html: string; coverage: number | null }>();
@@ -213,9 +234,10 @@ export function leadCoverage(baseline: string, html: string, quality?: Extractio
     const cached = quality && leadMemo.get(quality);
     if (cached && cached.baseline === baseline && cached.html === html) return cached.coverage;
     let coverage: number | null = null;
-    if (htmlToPlainText(baseline).length >= 300) {
-        const lead = textWords(htmlToPlainText(baseline)).slice(0, 40).filter((word) => word.length >= 4);
-        const words = textWords(htmlToPlainText(html)).slice(0, 200);
+    const baselineText = htmlToPlainText(baseline);
+    if (baselineText.length >= 300) {
+        const lead = textWords(baselineText).slice(0, 40).filter((word) => word.length >= 4);
+        const words = textWords(htmlToPlainText(leadHtml(html))).slice(0, 200);
         if (lead.length >= 8) {
             coverage = 0;
             for (let i = 0; i < words.length; i += 10) {

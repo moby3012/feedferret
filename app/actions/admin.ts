@@ -4,6 +4,7 @@ import { redact } from "@/lib/redact";
 import { auth } from "@/auth";
 import { requireAdmin } from "@/lib/admin-auth";
 import { db } from "@/lib/db";
+import { clearMediaProxySettingsCache } from "@/lib/media-settings";
 import { getConfiguredMailProviders, sendTestSystemEmail, type MailProviderId } from "@/lib/mail";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import { revalidatePath } from "next/cache";
@@ -119,6 +120,11 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
     } else {
       next.starterPacksJson = null;
     }
+  }
+
+  if ("mediaProxyMode" in data) {
+    if (!["off", "opt-in", "on"].includes(String(data.mediaProxyMode))) throw new Error("Invalid media proxy mode");
+    next.mediaProxyMode = data.mediaProxyMode;
   }
 
   // Misc
@@ -303,6 +309,7 @@ export async function updateGlobalSettings(data: Record<string, unknown>) {
     update: sanitized,
     create: { id: "global", ...sanitized },
   });
+  if ("mediaProxyMode" in sanitized) clearMediaProxySettingsCache();
   // Connector base URL / key / token changes take effect for the fetcher's
   // secret injection and output redaction immediately, not after the 15 s memo.
   if (Object.keys(sanitized).some((key) => key.startsWith("rsshub") || key.startsWith("changedetection"))) {

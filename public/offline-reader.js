@@ -323,6 +323,47 @@
     img.replaceWith(span);
   }
 
+  // The sandbox has an opaque origin: CORP same-origin images cannot load
+  // there directly. Read only already-cached proxy bytes in the authorized
+  // parent, then embed data URLs; never relax sandbox permissions or CORP.
+  async function offlineMediaHtml(html) {
+    if (!html.includes("/api/media?") || !window.caches) return html;
+    var template = document.createElement("template");
+    template.innerHTML = html;
+    async function embed(raw) {
+      try {
+        var url = new URL(raw, location.origin);
+        if (url.origin !== location.origin || url.pathname !== "/api/media") return raw;
+        var cached = await caches.match(url.href);
+        if (!cached || !cached.ok) return "";
+        var blob = await cached.blob();
+        return await new Promise(function (resolve) {
+          var reader = new FileReader();
+          reader.onload = function () { resolve(reader.result); };
+          reader.onerror = function () { resolve(""); };
+          reader.readAsDataURL(blob);
+        });
+      } catch { return ""; }
+    }
+    for (var el of template.content.querySelectorAll('img, input[type="image" i], picture source, video[poster]')) {
+      for (var attr of ["src", "poster"]) {
+        if (el.hasAttribute(attr)) el.setAttribute(attr, await embed(el.getAttribute(attr)));
+      }
+      if (el.hasAttribute("srcset")) {
+        // Render-time proxy output contains encoded URL tokens + descriptors.
+        var candidates = el.getAttribute("srcset").split(", ");
+        var result = [];
+        for (var candidate of candidates) {
+          var parts = candidate.split(" ");
+          var embedded = await embed(parts[0]);
+          if (embedded) result.push(embedded + (parts[1] ? " " + parts[1] : ""));
+        }
+        el.setAttribute("srcset", result.join(", "));
+      }
+    }
+    return template.innerHTML;
+  }
+
   function frameDoc(html) {
     return (
       '<!doctype html><html><head><meta charset="utf-8">' +
@@ -416,7 +457,7 @@
 
   function showArticle(row) {
     var scope = view.scope;
-    return openBody(row).then(function (res) {
+    return openBody(row).then(async function (res) {
       if (scope !== view.scope) return; // locked / re-rendered while the body was read
       if (!res.ok) {
         // The DB no longer says this session is valid: lock now, then find out why.
@@ -444,7 +485,9 @@
           });
           frame.style.height = doc.documentElement.scrollHeight + "px";
         };
-        frame.srcdoc = frameDoc(detail.html || "");
+        var offlineHtml = await offlineMediaHtml(detail.html || "");
+        if (view.scope !== scope) return;
+        frame.srcdoc = frameDoc(offlineHtml);
         window.scrollTo(0, 0);
       }
       // Re-check against the server in the background (the local check above already passed).
