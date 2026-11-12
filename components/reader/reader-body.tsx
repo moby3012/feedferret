@@ -9,6 +9,7 @@ import { useOnline } from "@/features/bootstrap/online";
 import { useAiSettings, useSummarizeArticle } from "@/hooks/use-rss-data";
 import type { Article } from "@/lib/rss-data";
 import { SUMMARIZE_EVENT } from "./reader-events";
+import { PodcastPlayer } from "./podcast-player";
 // KaTeX math (fonts + layout CSS; no colours of its own — it inherits
 // .article-content's theme-aware text colour) and the syntax-highlighting
 // theme of fenced code blocks (one dark theme: prose code blocks have a fixed
@@ -45,8 +46,17 @@ function ReaderBody({ article, loading, error, hideImages, onFetchFullText, isFe
   if (error) return <BodyError error={error} hasLink={!!article.link} onOpenOriginal={onOpenOriginal} />;
   const html = article.content ?? "";
   const hasContent = html.trim().length > 0;
+  const audioUrl =
+    article.media?.url &&
+    (article.kind === "audio" ||
+      /audio\//i.test(article.media.type ?? "") ||
+      /\.(mp3|m4a|ogg|opus|aac|wav)(\?|$)/i.test(article.media.url))
+      ? article.media.url
+      : null;
+
   return (
     <>
+      {audioUrl && <PodcastPlayer article={article} src={audioUrl} durationSecs={article.media?.durationSecs} />}
       <AiSummaryCard article={article} />
       {hasContent && article.htmlFallback && (
         <p className="mb-3 flex items-center gap-2 text-body-sm text-muted-foreground" role="note" data-testid="reader-plain-text-fallback">
